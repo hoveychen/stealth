@@ -1196,6 +1196,10 @@ pub fn documentIsComplete(self: *Frame) void {
 
 fn _documentIsComplete(self: *Frame) !void {
     self.document._ready_state = .complete;
+    // chrome.csi() and chrome.loadTimes() both report when the load event
+    // fired; recording it here is what keeps those values real instead of
+    // invented.
+    self.window._load_epoch_ms = lp.datetime.DateTime.now().unix(.milliseconds);
     try self.dispatchReadyStateChange();
 
     // Run element load/error events before window.load.

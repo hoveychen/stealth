@@ -34,6 +34,12 @@ pub fn registerTypes() []const type {
 const Performance = @This();
 
 _time_origin: u64,
+
+// Wall-clock epoch milliseconds at the same instant as _time_origin. The
+// monotonic clock above is boot-relative, so it can't be turned into a date
+// after the fact; chrome.csi() and chrome.loadTimes() both report the
+// navigation start as an epoch timestamp and need this.
+_epoch_origin_ms: i64,
 _entries: std.ArrayList(*Entry) = .empty,
 _timing: PerformanceTiming = .{},
 _navigation: PerformanceNavigation = .{},
@@ -56,6 +62,7 @@ pub fn highResTimestamp() u64 {
 pub fn init() Performance {
     return .{
         ._time_origin = highResTimestamp(),
+        ._epoch_origin_ms = lp.datetime.DateTime.now().unix(.milliseconds),
     };
 }
 

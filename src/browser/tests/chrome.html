@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=chrome_shape>
+  // window.chrome is an ordinary object in Chrome, not a platform object. Every
+  // assertion here was measured on Chrome 150 — see Chrome.zig.
+  testing.expectEqual('object', typeof window.chrome);
+  testing.expectEqual('[object Object]', Object.prototype.toString.call(window.chrome));
+  testing.expectEqual(true, Object.getPrototypeOf(window.chrome) === Object.prototype);
+  testing.expectEqual(true, window.chrome.constructor === Object);
+  testing.expectEqual(0, Object.getOwnPropertySymbols(window.chrome).length);
+
+  // Own properties, in Chrome's order, all plain data properties.
+  testing.expectEqual(['loadTimes', 'csi', 'app'], Object.getOwnPropertyNames(window.chrome));
+  testing.expectEqual(['loadTimes', 'csi', 'app'], Object.keys(window.chrome));
+  for (const name of ['loadTimes', 'csi', 'app']) {
+    const desc = Object.getOwnPropertyDescriptor(window.chrome, name);
+    testing.expectEqual(true, desc.enumerable);
+    testing.expectEqual(true, desc.configurable);
+    testing.expectEqual(true, desc.writable);
+    testing.expectEqual(undefined, desc.get);
+  }
+
+  // Only extensions get chrome.runtime; a plain page must not have it.
+  testing.expectEqual('undefined', typeof window.chrome.runtime);
+
+  // Same object on every read.
+  testing.expectEqual(true, window.chrome === window.chrome);
+
+  // csi and loadTimes must look native. A shim compiled from a source string
+  // would print its body here, which is exactly what bot checks look for.
+  testing.expectEqual('function () { [native code] }', String(window.chrome.csi));
+  testing.expectEqual('function () { [native code] }', String(window.chrome.loadTimes));
+  testing.expectEqual('', window.chrome.csi.name);
+  testing.expectEqual(0, window.chrome.csi.length);
+</script>
+
+<script id=chrome_app>
+  const app = window.chrome.app;
+  testing.expectEqual('[object Object]', Object.prototype.toString.call(app));
+  testing.expectEqual(true, Object.getPrototypeOf(app) === Object.prototype);
+  testing.expectEqual(
+    ['isInstalled', 'getDetails', 'getIsInstalled', 'installState', 'runningState',
+     'InstallState', 'RunningState'],
+    Object.getOwnPropertyNames(app),
+  );
+
+  testing.expectEqual(false, app.isInstalled);
+  testing.expectEqual(null, app.getDetails());
+  testing.expectEqual(false, app.getIsInstalled());
+  // Reports through a callback, so the direct return value is undefined.
+  testing.expectEqual(undefined, app.installState());
+  testing.expectEqual('cannot_run', app.runningState());
+
+  testing.expectEqual(
+    {DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed'},
+    app.InstallState,
+  );
+  testing.expectEqual(
+    {CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running'},
+    app.RunningState,
+  );
+
+  // Chrome's exact serialisation: the functions drop out, the rest stays.
+  testing.expectEqual(
+    '{"app":{"isInstalled":false,"InstallState":{"DISABLED":"disabled","INSTALLED":"installed","NOT_INSTALLED":"not_installed"},"RunningState":{"CANNOT_RUN":"cannot_run","READY_TO_RUN":"ready_to_run","RUNNING":"running"}}}',
+    JSON.stringify(window.chrome),
+  );
+</script>
+
+<script id=chrome_csi>
+  const csi = window.chrome.csi();
+  testing.expectEqual('[object Object]', Object.prototype.toString.call(csi));
+  testing.expectEqual(['startE', 'onloadT', 'pageT', 'tran'], Object.keys(csi));
+  testing.expectEqual(15, csi.tran);
+
+  // startE and onloadT are epoch milliseconds — plain numbers, not BigInts,
+  // and not the boot-relative clock performance.timeOrigin runs on.
+  testing.expectEqual('number', typeof csi.startE);
+  testing.expectEqual('number', typeof csi.onloadT);
+  testing.expectEqual(true, csi.startE > 1700000000000);
+  testing.expectEqual(true, csi.startE < 4000000000000);
+  testing.expectEqual(true, csi.onloadT >= csi.startE);
+  testing.expectEqual(true, csi.pageT >= 0);
+
+  // The load timestamp is recorded once, so it doesn't drift between calls.
+  testing.expectEqual(window.chrome.csi().onloadT, csi.onloadT);
+</script>
+
+<script id=chrome_loadTimes>
+  const lt = window.chrome.loadTimes();
+  testing.expectEqual(
+    ['requestTime', 'startLoadTime', 'commitLoadTime', 'finishDocumentLoadTime',
+     'finishLoadTime', 'firstPaintTime', 'firstPaintAfterLoadTime', 'navigationType',
+     'wasFetchedViaSpdy', 'wasNpnNegotiated', 'npnNegotiatedProtocol',
+     'wasAlternateProtocolAvailable', 'connectionInfo'],
+    Object.keys(lt),
+  );
+
+  // Epoch seconds here, unlike csi()'s milliseconds.
+  testing.expectEqual(true, lt.requestTime > 1700000000);
+  testing.expectEqual(true, lt.requestTime < 4000000000);
+  testing.expectEqual(true, lt.finishLoadTime >= lt.requestTime);
+  testing.expectEqual(0, lt.firstPaintAfterLoadTime);
+  testing.expectEqual('Other', lt.navigationType);
+  testing.expectEqual(true, lt.wasFetchedViaSpdy);
+  testing.expectEqual(true, lt.wasNpnNegotiated);
+  testing.expectEqual('h2', lt.npnNegotiatedProtocol);
+  testing.expectEqual(false, lt.wasAlternateProtocolAvailable);
+  testing.expectEqual('h2', lt.connectionInfo);
+</script>
