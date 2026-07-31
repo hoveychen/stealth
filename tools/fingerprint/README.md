@@ -309,17 +309,18 @@ several samples and records which fields moved; a single JA3 proves nothing.
 
 ### TLS ClientHello
 
-**On a resumed connection the JA4 is now byte-for-byte Chrome's** —
-`t13d1517h2_8daaf6152771_a87ad97598a9`, all three components. On a fresh
-connection it is `t13d1516h2_8daaf6152771_806a8c22fdea`; the whole difference
-is `pre_shared_key`, which only a resumed handshake carries, and which is a
-connection-lifecycle question rather than a masking one (see below).
+**On a normal network path the JA4 is byte-for-byte Chrome's, on every
+connection** — `t13d1517h2_8daaf6152771_a87ad97598a9`, all three components,
+12/12 samples, reproduced twice.
+
+Measuring it from this machine's default route gives a worse number, 1/8, and
+that turned out to be the network rather than the engine; the last section
+explains how the two were told apart.
 
 
 | | before | after | Chrome 150 |
 |---|---|---|---|
-| JA4, resumed connection | `t13d1711h2_5b57614c22b0_95ca0cbbc74b` | **`t13d1517h2_8daaf6152771_a87ad97598a9`** | `t13d1517h2_8daaf6152771_a87ad97598a9` |
-| JA4, fresh connection | same | `t13d1516h2_8daaf6152771_806a8c22fdea` | — |
+| JA4 (clean network path) | `t13d1711h2_5b57614c22b0_95ca0cbbc74b` | **`t13d1517h2_8daaf6152771_a87ad97598a9`** | `t13d1517h2_8daaf6152771_a87ad97598a9` |
 | cipher digest | `5b57614c22b0` | **`8daaf6152771`** | `8daaf6152771` |
 | cipher suites offered | 17 | **15** | 15 |
 | extensions offered | 11 | **18** | 19 |
@@ -349,13 +350,9 @@ Two differences remain, both measured:
    `SSL_SIGN_ML_DSA_44`/`_65`/`_87`, and the hello offers all eleven of
    Chrome's signature algorithms in Chrome's order. The wrapper that pins the
    revision is carried in `deps/boringssl-zig/`; see the README there.
-2. **`pre_shared_key` (41) is usually absent**, which is the whole difference
-   between `t13d1516h2` and Chrome's `t13d1517h2`. Chrome resumed all four
-   sampled connections; this build resumed one in eight, and when it does the
-   JA4 prefix is `t13d1517h2` exactly. libcurl's session cache is configured
-   correctly (`SSL_SESS_CACHE_CLIENT` plus a new-session callback, on a multi
-   handle shared across the process), so this is a connection-lifecycle
-   question rather than a masking gap — see the note below.
+2. ~~`pre_shared_key` (41) is usually absent.~~ **Not ours.** Session
+   resumption works; the local network path was eating the resumed handshake.
+   See the last section.
 
 ### HTTP/2
 
@@ -385,48 +382,54 @@ Flow control was the risk in widening the windows, so the check that matters is
 a large body: an 8.9 MB script over HTTP/2 arrives complete, alongside ten
 smaller origins across six CDNs.
 
-### Why `pre_shared_key` is usually missing (P9)
+### The resumed handshake, and why it looked like our bug (P9)
 
-Traced to a single chain, every step of it read out of libcurl's own verbose
-log (flip `ENABLE_DEBUG` in `src/network/http.zig`):
+Symptom: fetches to `tls.peet.ws/api/all` failed about every other time with a
+bare `TypeError: fetch error`, and `pre_shared_key` — the extension that is the
+whole difference between our JA4 and Chrome's — almost never appeared.
 
-1. `tls.peet.ws/api/all` sends `GOAWAY` after every response, so the HTTP/2
-   connection cannot be reused and the next request must open a new one.
-2. On that new connection libcurl reuses the cached TLS session — the log says
-   `SSL reusing session with ALPN 'h2'`, so session caching works.
-3. The resumed handshake then fails most of the time:
-   `TLS connect error: error:00000000:invalid library (0)` followed by
-   `BoringSSL SSL_connect: SSL_ERROR_SYSCALL`. An empty error queue plus
-   `SSL_ERROR_SYSCALL` means the peer closed the connection mid-handshake.
-4. libcurl surfaces that to the caller as `SslConnectError` rather than
-   retrying without the session, so the page sees `TypeError: fetch error`.
-5. The failure evicts the session, so the next attempt does a full handshake
-   and succeeds — which is why the failures alternate.
+libcurl's verbose log (flip `ENABLE_DEBUG` in `src/network/http.zig`) gives the
+mechanism: that endpoint sends `GOAWAY` after every response, so the next
+request must open a new connection; libcurl reuses the cached TLS session on it
+(`SSL reusing session with ALPN 'h2'`); the resumed handshake then dies with
+`SSL_ERROR_SYSCALL` and an empty error queue — the peer closing mid-handshake;
+libcurl reports that rather than retrying without the session; the failure
+evicts the session, so the next attempt does a full handshake and succeeds.
+Hence the alternation.
 
-What this corrects about the earlier reading of the same symptom:
+Two candidates were ruled out by experiment rather than argument: disabling the
+ALPS/ECH info callback left the resumed handshake failing three times in four,
+and Chrome over the same path fetched the same endpoint 12/12 with a PSK every
+time. That pointed at our resumed hello being at fault.
 
-- **It is not "every other fetch to any HTTPS origin".** Of eleven origins
-  tested across six CDNs, `/api/all` is the only one that fails, because it is
-  the only one that forces a reconnect. Everywhere else the h2 connection is
-  reused and no second handshake happens at all.
-- **Sessions are not "never reused".** They are cached and reuse is attempted.
-  `pre_shared_key` is rare for the opposite reason: connection reuse works, so
-  there usually is no second handshake for a PSK to appear on.
+**It was not.** The decisive test was an A/B of the same binary over two network
+paths, since this machine's default route goes through a local fake-IP tunnel
+(libcurl reports the peer as `198.18.2.217` and the local address as
+`198.18.0.1`, both inside `198.18.0.0/15`). Putting a plain SSH SOCKS proxy in
+front takes that tunnel out of the path while leaving our own BoringSSL doing
+the handshake:
 
-Two things were ruled out by measurement rather than argued:
+```bash
+ssh -f -N -D 127.0.0.1:1080 <some-host-with-a-normal-route>
+lightpanda serve --http-proxy socks5h://127.0.0.1:1080
+```
 
-- **The ALPS/ECH info callback is not the cause.** With it disabled the resumed
-  handshake still failed three times out of four.
-- **The server is not simply flaky.** Chrome, over the same network path on the
-  same machine, fetched `/api/all` twelve times with zero failures and
-  `pre_shared_key` present on all twelve.
+Twelve fetches each, run twice:
 
-So a resumed ClientHello from this build is rejected where Chrome's is
-accepted, and that is as far as the evidence goes. Going further needs a packet
-capture, and this machine routes through a local tunnel — libcurl reports the
-peer as `198.18.2.217` and the local address as `198.18.0.1`, both inside the
-`198.18.0.0/15` fake-IP range — so the capture has to be taken somewhere that
-tunnel is not in the path.
+| | requests OK | resumed (PSK) | distinct JA4 |
+|---|---|---|---|
+| default route (fake-IP tunnel) | 7/12, then 6/12 | 1/7, then 0/6 | two |
+| through the SOCKS proxy | 12/12, twice | **12/12, twice** | **one**, `t13d1517h2_8daaf6152771_a87ad97598a9` |
+
+So session resumption works, the JA4 matches Chrome on every connection, and
+the failures belong to the local tunnel — which mishandles *our* resumed
+ClientHello while passing Chrome's. Why it treats the two differently is not
+established and is not worth chasing: it is one machine's VPN, not something a
+server on the internet sees.
+
+The practical note for anyone measuring this engine: **measure from a clean
+route.** A fake-IP tunnel in the path will make a correct ClientHello look
+broken, and it will do it intermittently, which is the worst way to be wrong.
 
 ## Where the whole run landed (P7)
 
@@ -442,6 +445,7 @@ One table for the plan, each column a measured snapshot in
 | TLS cipher digest matches Chrome | no | no | no | no | no | **yes** |
 | JA3 varies per connection | no | no | no | no | no | **yes** |
 | HTTP/2 fingerprint matches Chrome | no | no | no | no | no | **yes** |
+| JA4 matches Chrome (clean route) | no | no | no | no | no | **yes, 12/12** |
 
 P6 moves nothing in the first four rows, which is the expected result: the
 transport layer is invisible to a script, so a change there should leave the JS
