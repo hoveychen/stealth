@@ -2668,11 +2668,16 @@ pub const Transfer = struct {
 
         conn.transport = .{ .http = self };
 
-        // Per-request timeout override (e.g. XHR timeout)
+        // Per-request timeout override (e.g. XHR timeout). Set on every
+        // request rather than relying on the value `Connection.reset` left
+        // behind, so the transfer's timeout is decided here and not by
+        // whatever the pooled connection was last used for.
         if (req.timeout_ms > 0) {
             try conn.setTimeout(req.timeout_ms);
         } else if (req.streaming) {
             try conn.setTimeout(0);
+        } else {
+            try conn.setTimeout(client.network.config.httpTimeout());
         }
 
         // add credentials

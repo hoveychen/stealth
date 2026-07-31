@@ -631,7 +631,15 @@ fn handleError(self: *XMLHttpRequest, err: anyerror) void {
 }
 fn _handleError(self: *XMLHttpRequest, err: anyerror) !void {
     const is_abort = err == error.Abort;
-    const is_timeout = err == error.OperationTimedout;
+
+    // curl reports both the request's own timeout and the engine-wide
+    // --http-timeout as OperationTimedout, but only the former is the page's
+    // timeout. With `xhr.timeout` left at 0 the spec has no timeout to fire,
+    // so giving up is an ordinary network error:
+    // https://xhr.spec.whatwg.org/#handle-errors. Dispatching `timeout` here
+    // makes axios report "timeout of 0ms exceeded" (it formats the message
+    // from xhr.timeout), which is what kept amiunique.org from rendering.
+    const is_timeout = err == error.OperationTimedout and self._timeout > 0;
 
     const new_state: ReadyState = if (is_abort) .unsent else .done;
     if (new_state != self._ready_state) {
@@ -730,6 +738,10 @@ pub const JsApi = struct {
 const testing = @import("../../../testing.zig");
 test "WebApi: XHR" {
     try testing.htmlRunner("net/xhr.html", .{});
+}
+
+test "WebApi: XHR timeout" {
+    try testing.htmlRunner("net/xhr_timeout.html", .{ .http_timeout_ms = 400, .timeout_ms = 4000 });
 }
 
 test "WebApi: XHR in worker" {

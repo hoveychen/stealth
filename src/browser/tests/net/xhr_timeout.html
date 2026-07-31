@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Runs with --http-timeout shortened to 400ms (see the htmlRunner opts in
+  XMLHttpRequest.zig), so /xhr/slow — which never answers — trips the
+  engine-wide timeout well inside the test budget.
+-->
+
+<script id=xhr_timeout_unset type=module>
+  {
+    // xhr.timeout is 0, so per https://xhr.spec.whatwg.org/#handle-errors
+    // giving up is a *network error*: `error` fires, never `timeout`. The
+    // engine hitting its own --http-timeout is not the page's timeout.
+    // Real-world symptom of getting this wrong: axios reports
+    // "timeout of 0ms exceeded" and amiunique.org renders nothing.
+    const state = await testing.async();
+
+    const req = new XMLHttpRequest();
+    const events = [];
+    req.addEventListener('error', (e) => events.push(e.type));
+    req.addEventListener('timeout', (e) => events.push(e.type));
+    req.addEventListener('loadend', (e) => { events.push(e.type); state.resolve(); });
+
+    req.open('GET', 'http://127.0.0.1:9582/xhr/slow');
+    req.send();
+
+    await state.done(() => {
+      testing.expectEqual('error,loadend', events.join(','));
+      testing.expectEqual(0, req.timeout);
+      testing.expectEqual(4, req.readyState);
+      testing.expectEqual(0, req.status);
+    });
+  }
+</script>
+
+<script id=xhr_timeout_set type=module>
+  {
+    // The mirror case: an explicit xhr.timeout that elapses fires `timeout`,
+    // and `error` must not follow it.
+    const state = await testing.async();
+
+    const req = new XMLHttpRequest();
+    const events = [];
+    req.addEventListener('error', (e) => events.push(e.type));
+    req.addEventListener('timeout', (e) => events.push(e.type));
+    req.addEventListener('loadend', (e) => { events.push(e.type); state.resolve(); });
+
+    req.timeout = 100;
+    req.open('GET', 'http://127.0.0.1:9582/xhr/slow');
+    req.send();
+
+    await state.done(() => {
+      testing.expectEqual('timeout,loadend', events.join(','));
+      testing.expectEqual(100, req.timeout);
+      testing.expectEqual(4, req.readyState);
+    });
+  }
+</script>

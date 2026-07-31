@@ -435,6 +435,22 @@ The practical note for anyone measuring this engine: **measure from a clean
 route.** A fake-IP tunnel in the path will make a correct ClientHello look
 broken, and it will do it intermittently, which is the worst way to be wrong.
 
+Two later findings, both from the detector sweep, sharpen that:
+
+- **It is not only the resumed handshake.** A first connection to a host with no
+  cached session fails the same way, `SSL_ERROR_SYSCALL` with an empty error
+  queue, and the host it lands on drifts over the day.
+- **Do not try to bisect it against the TLS profile.** Toggling
+  `SSL_set_enable_ech_grease` looked like a clean isolation here — all three
+  randomisation switches off gave 3/3 successful navigations, ECH GREASE alone
+  gave failures again, and GREASE plus extension permutation without ECH gave
+  4/4. Then restoring the file byte-for-byte and rebuilding gave 12/12
+  successes on the same route. The baseline moves on its own, so nothing was
+  isolated; the earlier claim in this section that disabling the ALPS/ECH
+  callback "left the resumed handshake failing three times in four" is no more
+  reliable than its opposite. Any A/B against this route needs the route itself
+  as the control, which is what the SOCKS table above does.
+
 ## How far the detectors actually get
 
 Everything above measures *values* — probe keys against real Chrome, JA4, the
@@ -457,6 +473,17 @@ only the child's stdio disposition changed.
 That is worth stating plainly because the wrong conclusion was the confident
 one: it reproduced identically on three consecutive runs.
 
+**Second: run the sweep through a proxy.** `--proxy socks5h://…` is passed to
+both engines, and on a machine whose default route is a fake-IP tunnel it is
+mandatory, for the reason the previous section gives: the tunnel drops a
+handshake now and then, the engine reports `SslConnectError`, and the site that
+happens to be unlucky gets written down as broken. That is not a stable
+attribution — over one afternoon here it hit browserscan five times out of nine
+and browserleaks twice out of twelve, on the same binary, and a sweep an hour
+later had neither. Through a plain SSH SOCKS proxy the same sequence navigated
+24/24 with no TLS failure at all. **A `SslConnectError` in a sweep taken over
+the default route is a measurement, not a finding.**
+
 Both engines then walk the same list with the same settle times, Chrome 150 as
 the control. `nodes` is elements in the document, `text` is `innerText` length.
 
@@ -464,18 +491,20 @@ the control. `nodes` is elements in the document, `text` is `innerText` length.
 |---|---|---|---|
 | bot.sannysoft.com | 290 nodes / 15179 | 291 / 11377 | completes, 0 FAIL rows |
 | CreepJS | 3756 / 4698 | 3724 / 41457 | completes, real FP ID (was 246 / 1347) |
-| bot-detector.rebrowser.net | 98 / 1541 | 100 / 1663 | full table, 10 tests (was header only) |
-| iphey.com | 487 / 7115 | 480 / 7031 | completes; both engines get `Looks Unreliable` |
+| bot-detector.rebrowser.net | 98 / 1541 | 100 / 1664 | full table, 10 tests (was header only) |
+| iphey.com | 487 / 7115 | 484 / 7099 | completes; both engines get `Looks Unreliable` |
 | pixelscan.net | 1485 / 10607 | 1827 / 14653 | completes |
+| amiunique.org/fingerprint | 1550 / 5836 | 1494 / 5741 | completes (was 381 / 1292) |
+| tls.browserleaks.com/json | 7 / 1271 | 5 / 1263 | completes on a clean route |
 | deviceandbrowserinfo.com/are_you_a_bot | 263 / 5780, `"isBot": true` | 235 / 5326 | renders the legend, not the verdict |
 | browserscan.net | 1965 / 4071 | 1231 / 2073 | partial |
-| browserleaks.com/javascript | 1180 / 9968 | 853 / 3484 | partial |
-| amiunique.org/fingerprint | 1550 / 5836 | 381 / 1292 | partial |
-| tls.browserleaks.com/json | 7 / 1271 | intermittent | see below |
+| browserleaks.com/javascript | 1180 / 9968 | 853 / 3486 | partial |
 | arh.antoinevastel.com (×2) | 8 / 37 | 8 / 37 | endpoints are dead, not a datapoint |
 
-**Six of ten live detectors now run to completion, none hangs the engine.**
-Baselines: `results/detectors-chrome.json`, `results/detectors-after-lightpanda.json`.
+**Eight of ten live detectors now run to completion, none hangs the engine.**
+Baselines: `results/detectors-chrome.json`,
+`results/detectors-partial-lightpanda.json` (clean route, current),
+`results/detectors-after-lightpanda.json` (the earlier default-route sweep).
 
 CreepJS is the one that now says something, since it finally renders its own
 verdict: `25% like headless`, `0% headless`, `0% stealth`, with a stable
@@ -488,8 +517,23 @@ whether the script that reads them survives.
 
 ### What was actually broken, and how it was found
 
-Three engine gaps, each found by reading the page's own error rather than
+Four engine gaps, each found by reading the page's own error rather than
 guessing, and each verified by isolation before writing any Zig:
+
+- **A request that outlived `--http-timeout` was reported to the page as its
+  own timeout, and the default was 5s.** Two bugs stacked, and amiunique needed
+  both fixed. curl answers `CURLE_OPERATION_TIMEDOUT` for the request's own
+  timeout and for the engine-wide ceiling alike, and `XMLHttpRequest` dispatched
+  `timeout` for both; with `xhr.timeout` left at 0 the spec has no timeout to
+  fire and giving up is an ordinary network error. axios builds its message from
+  `xhr.timeout`, so the page reported `timeout of 0ms exceeded` — a 0ms timeout
+  is a contradiction, and that is what made it findable. Fixing the event type
+  changed the symptom to a plain `Network Error` and nothing else, because the
+  request really was being cut off: amiunique answers
+  `POST /api/fingerprints` in ~21s. Chrome waits it out on the same route
+  (20975ms there, 20661ms here) and puts no comparable ceiling on an ordinary
+  request, so the default moved to 30s. The page now renders 1494 nodes against
+  Chrome's 1550, up from 381.
 
 - **The table mutation API did not exist.** `HTMLTableElement`,
   `HTMLTableSectionElement` and `HTMLTableRowElement` had their read side
@@ -515,7 +559,9 @@ guessing, and each verified by isolation before writing any Zig:
 ### What is still short, with the cause where it is known
 
 - **CreepJS `audio`**: no `AudioContext` / `OfflineAudioContext` at all. Its
-  audio sub-test cannot start. This is a Web Audio stub of its own size.
+  audio sub-test cannot start. This is a Web Audio stub of its own size, and it
+  is now the widest single gap left: deviceandbrowserinfo's entire verdict
+  hinges on the same absence (see below).
 - **CreepJS `speech`**: no `speechSynthesis` / `SpeechSynthesisUtterance`.
   iphey trips on the same gap — it `alert()`s
   `ReferenceError: speechSynthesis is not defined` while still completing.
@@ -526,16 +572,34 @@ guessing, and each verified by isolation before writing any Zig:
 - **rebrowser's `bypassCsp` is red**: it declares a CSP the engine ignores, and
   rebrowser calls that "invalid behavior for a normal browser". Chrome is green
   there. Found only because the table started rendering.
-- **`tls.browserleaks.com/json` navigation is intermittent** — 4 of 7 full
-  sweeps left the page on the previous URL, and all three of the runs with
-  `--log-level debug` (a slower engine) did. It loads 3/3 in `fetch` mode and
-  navigates in 766ms when driven with just its predecessor page, so it is not
-  the host: something about the state a long sweep accumulates. Unexplained.
-- **deviceandbrowserinfo, amiunique, browserleaks.com/javascript and
-  browserscan render partially.** Not yet diagnosed; the method that worked
-  three times above is to hook `unhandledrejection` plus `console.error` before
-  the page's scripts run (`Page.addScriptToEvaluateOnNewDocument`) and read
-  what the page itself complains about.
+- ~~**`tls.browserleaks.com/json` navigation is intermittent**~~ **Closed: it
+  was the route.** The failing navigations report `SslConnectError`, which is
+  the fake-IP tunnel dropping a handshake — the same mechanism as P9, and it
+  lands on whichever host is unlucky rather than on a particular one. Through a
+  SOCKS proxy it commits every time. Nothing about a long sweep accumulating
+  state was involved; the earlier note guessed at that and was wrong.
+- **deviceandbrowserinfo renders the legend, not the verdict**: no
+  `AudioContext`. `collectFingerprint()` reads
+  `window.AudioContext || window.webkitAudioContext` and, two `try` blocks deep,
+  does `if ("function" != typeof E) return void (r.audioFingerprint = t)`. That
+  early return is why the function comes back `undefined` without throwing,
+  which then makes `computeFingerprintHash(undefined)` throw
+  `Cannot read properties of undefined (reading 'userAgent')` and the whole
+  verdict panel never mounts. Found by planting recording getters on the
+  `window.*` / `navigator.*` properties the body reads at known offsets and
+  seeing which ones stop firing: the last was `AudioContext` at body offset
+  14624, and `navigator.webdriver` at 15641 was never reached. Reading the
+  minified source for top-level `return`s had missed it, because it is nested
+  inside `try { try { … } } `. Same gap as the CreepJS `audio` item above, so
+  one Web Audio stub closes both.
+- **browserleaks.com/javascript renders 853 nodes against Chrome's 1180** with
+  zero page errors and zero failed requests. It is not a broken script — the
+  page renders one section per API family and the ones we do not implement come
+  out empty. Closing it is API coverage measured section by section, not a bug
+  to fix.
+- **browserscan.net renders 1231 nodes against Chrome's 1965.** Navigation and
+  scripts are fine on a clean route; what is missing has not been attributed to
+  named APIs yet.
 
 Two oddities worth keeping in view, neither of them a verdict:
 
