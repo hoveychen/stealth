@@ -23,8 +23,13 @@
   testing.expectEqual(true, navigator.hardwareConcurrency > 0);
   testing.expectEqual(4, navigator.hardwareConcurrency);
   testing.expectEqual(0, navigator.maxTouchPoints);
-  testing.expectEqual('', navigator.vendor);
+  // Fixed strings in every Chromium build; upstream left vendor empty, which
+  // contradicts a Chrome user-agent sitting right next to it.
+  testing.expectEqual('Google Inc.', navigator.vendor);
+  testing.expectEqual('', navigator.vendorSub);
   testing.expectEqual('Gecko', navigator.product);
+  testing.expectEqual('20030107', navigator.productSub);
+  testing.expectEqual(true, navigator.pdfViewerEnabled);
   testing.expectEqual(false, navigator.javaEnabled());
   testing.expectEqual(false, navigator.webdriver);
 
@@ -40,7 +45,8 @@
   for (const name of [
     'userAgent', 'appName', 'appCodeName', 'appVersion', 'platform',
     'language', 'languages', 'onLine', 'cookieEnabled', 'hardwareConcurrency',
-    'deviceMemory', 'maxTouchPoints', 'vendor', 'product', 'webdriver',
+    'deviceMemory', 'maxTouchPoints', 'vendor', 'vendorSub', 'product',
+    'productSub', 'pdfViewerEnabled', 'webdriver',
     'plugins', 'doNotTrack', 'globalPrivacyControl',
   ]) {
     const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, name);

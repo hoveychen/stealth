@@ -114,8 +114,28 @@ pub fn getMaxTouchPoints(_: *const Navigator) u32 {
     return 0;
 }
 
+// The next three are fixed strings in every Chromium build — they don't vary
+// by platform or version. Values taken from the Chrome 150 capture in
+// tools/fingerprint/results/reference-chrome-headed.json, not from memory.
+// An empty vendor next to a Chrome user-agent is a direct contradiction, and
+// a missing productSub is what several bot checks probe for.
 pub fn getVendor(_: *const Navigator) []const u8 {
+    return "Google Inc.";
+}
+
+pub fn getProductSub(_: *const Navigator) []const u8 {
+    return "20030107";
+}
+
+pub fn getVendorSub(_: *const Navigator) []const u8 {
     return "";
+}
+
+// Chrome ships the PDF viewer, so this is true on every desktop build. It
+// pairs with navigator.plugins, which is still empty here — see the plan's
+// remaining P4 items.
+pub fn getPdfViewerEnabled(_: *const Navigator) bool {
+    return true;
 }
 
 pub fn getProduct(_: *const Navigator) []const u8 {
@@ -268,7 +288,10 @@ pub const JsApi = struct {
     pub const deviceMemory = bridge.accessor(Navigator.getDeviceMemory, null, .{});
     pub const maxTouchPoints = bridge.accessor(Navigator.getMaxTouchPoints, null, .{});
     pub const vendor = bridge.accessor(Navigator.getVendor, null, .{});
+    pub const vendorSub = bridge.accessor(Navigator.getVendorSub, null, .{});
     pub const product = bridge.accessor(Navigator.getProduct, null, .{});
+    pub const productSub = bridge.accessor(Navigator.getProductSub, null, .{});
+    pub const pdfViewerEnabled = bridge.accessor(Navigator.getPdfViewerEnabled, null, .{});
     pub const webdriver = bridge.accessor(Navigator.getWebdriver, null, .{});
     pub const doNotTrack = bridge.accessor(Navigator.getDoNotTrack, null, .{});
     pub const globalPrivacyControl = bridge.accessor(Navigator.getGlobalPrivacyControl, null, .{});
