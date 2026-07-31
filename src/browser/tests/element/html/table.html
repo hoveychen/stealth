@@ -79,3 +79,123 @@
     testing.expectEqual('b2', bodies[0].id);
   }
 </script>
+
+<script id="sectionInsertRow">
+  {
+    const section = document.createElement('tbody');
+    testing.expectEqual('function', typeof section.insertRow);
+
+    // No argument appends, and the new row is a real tr in the section.
+    const first = section.insertRow();
+    testing.expectEqual('TR', first.tagName);
+    testing.expectEqual(section, first.parentNode);
+    testing.expectEqual(1, section.rows.length);
+
+    // -1 appends too.
+    const last = section.insertRow(-1);
+    testing.expectEqual(last, section.rows[1]);
+
+    // An in-range index inserts before the row currently at that index.
+    const middle = section.insertRow(1);
+    testing.expectEqual(middle, section.rows[1]);
+    testing.expectEqual(last, section.rows[2]);
+
+    // index === rows.length appends rather than throwing.
+    const appended = section.insertRow(3);
+    testing.expectEqual(appended, section.rows[3]);
+
+    // Out of range in either direction throws.
+    testing.expectError('IndexSizeError', () => section.insertRow(5));
+    testing.expectError('IndexSizeError', () => section.insertRow(-2));
+
+    // Non-tr children are ignored by the rows collection and by the index.
+    const stray = document.createElement('div');
+    section.insertBefore(stray, section.rows[0]);
+    testing.expectEqual(4, section.rows.length);
+    const afterStray = section.insertRow(0);
+    testing.expectEqual(afterStray, section.rows[0]);
+  }
+</script>
+
+<script id="tableInsertRow">
+  {
+    // An empty table grows a tbody to hold the first row.
+    const table = document.createElement('table');
+    testing.expectEqual('function', typeof table.insertRow);
+
+    const first = table.insertRow();
+    testing.expectEqual('TR', first.tagName);
+    testing.expectEqual('TBODY', first.parentNode.tagName);
+    testing.expectEqual(table, first.parentNode.parentNode);
+    testing.expectEqual(1, table.tBodies.length);
+
+    // A second row joins the same tbody rather than creating another.
+    const second = table.insertRow();
+    testing.expectEqual(first.parentNode, second.parentNode);
+    testing.expectEqual(1, table.tBodies.length);
+
+    // Rows are counted in spec order — thead first, tfoot last — even when
+    // tree order disagrees, so an index resolves against that order.
+    const wild = document.createElement('table');
+    const foot = document.createElement('tfoot');
+    const footRow = document.createElement('tr');
+    foot.appendChild(footRow);
+    wild.appendChild(foot);
+    const head = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    head.appendChild(headRow);
+    wild.appendChild(head);
+    // Spec order is headRow, footRow, so index 1 lands before footRow.
+    const inserted = wild.insertRow(1);
+    testing.expectEqual(foot, inserted.parentNode);
+    testing.expectEqual(footRow, inserted.nextSibling);
+
+    // index === row count appends next to the last row in spec order.
+    const appended = wild.insertRow(3);
+    testing.expectEqual(foot, appended.parentNode);
+    testing.expectEqual(null, appended.nextSibling);
+
+    // Out of range in either direction throws.
+    testing.expectError('IndexSizeError', () => wild.insertRow(5));
+    testing.expectError('IndexSizeError', () => wild.insertRow(-2));
+
+    // With rows present but no tbody, -1 appends beside the last row.
+    testing.expectEqual(0, wild.tBodies.length);
+  }
+</script>
+
+<script id="rowInsertCell">
+  {
+    const row = document.createElement('tr');
+    testing.expectEqual('function', typeof row.insertCell);
+
+    const first = row.insertCell();
+    testing.expectEqual('TD', first.tagName);
+    testing.expectEqual(row, first.parentNode);
+    testing.expectEqual(1, row.cells.length);
+
+    const last = row.insertCell(-1);
+    testing.expectEqual(last, row.cells[1]);
+
+    const middle = row.insertCell(1);
+    testing.expectEqual(middle, row.cells[1]);
+    testing.expectEqual(last, row.cells[2]);
+
+    // index === cells.length appends.
+    const appended = row.insertCell(3);
+    testing.expectEqual(appended, row.cells[3]);
+
+    testing.expectError('IndexSizeError', () => row.insertCell(5));
+    testing.expectError('IndexSizeError', () => row.insertCell(-2));
+
+    // th counts as a cell, other children do not.
+    const th = document.createElement('th');
+    row.insertBefore(th, row.cells[0]);
+    testing.expectEqual(5, row.cells.length);
+    const stray = document.createElement('span');
+    row.insertBefore(stray, row.cells[0]);
+    testing.expectEqual(5, row.cells.length);
+    const afterStray = row.insertCell(0);
+    testing.expectEqual(afterStray, row.cells[0]);
+  }
+</script>

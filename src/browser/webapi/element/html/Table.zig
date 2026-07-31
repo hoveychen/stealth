@@ -26,7 +26,8 @@ pub fn deleteRow(self: *Table, index: i32, frame: *Frame) !void {
     if (index < -1) {
         return error.IndexSizeError;
     }
-    const row = self.findRow(index) orelse {
+    var scan: RowScan = .{ .index = index };
+    const row = self.findRow(index, &scan) orelse {
         if (index == -1) {
             // deleteRow(-1) on a rowless table is a no-op.
             return;
@@ -36,12 +37,60 @@ pub fn deleteRow(self: *Table, index: i32, frame: *Frame) !void {
     _ = try row.parentNode().?.removeChild(row, frame);
 }
 
+pub fn insertRow(self: *Table, index_: ?i32, frame: *Frame) !*Node {
+    const index = index_ orelse -1;
+    if (index < -1) {
+        return error.IndexSizeError;
+    }
+
+    var scan: RowScan = .{ .index = index };
+    const at = self.findRow(index, &scan);
+    // A full walk leaves scan.count holding the row total and scan.last the
+    // last row in spec order; a hit short-circuits before either is complete,
+    // but then the index is in range by construction.
+    if (index >= 0 and at == null and index > scan.count) {
+        return error.IndexSizeError;
+    }
+
+    const row = try Frame.node_factory.createElementNS(frame, .html, "tr", null);
+
+    if (index >= 0) {
+        if (at) |before| {
+            _ = try before.parentNode().?.insertBefore(row, before, frame);
+            return row;
+        }
+    }
+
+    // index is -1 or exactly the row count: the new row goes next to the last
+    // one, wherever that lives.
+    if (scan.last) |last| {
+        _ = try last.parentNode().?.appendChild(row, frame);
+        return row;
+    }
+
+    // A table with no rows at all puts it in the last tbody, growing one if
+    // the table hasn't got one yet.
+    const self_node = self.asNode();
+    var last_tbody: ?*Node = null;
+    var it = self_node.childrenIterator();
+    while (it.next()) |child| {
+        const element = child.is(Element) orelse continue;
+        if (element.getTag() == .tbody) {
+            last_tbody = child;
+        }
+    }
+    const section = last_tbody orelse blk: {
+        const tbody = try Frame.node_factory.createElementNS(frame, .html, "tbody", null);
+        break :blk try self_node.appendChild(tbody, frame);
+    };
+    _ = try section.appendChild(row, frame);
+    return row;
+}
+
 // Finds the index-th row (or the last row for -1) in spec order: thead, tr,
 // tbody then tfoot
-fn findRow(self: *Table, index: i32) ?*Node {
-    var scan: RowScan = .{ .index = index };
-
-    if (self.scanSectionRows(.thead, &scan)) |row| {
+fn findRow(self: *Table, index: i32, scan: *RowScan) ?*Node {
+    if (self.scanSectionRows(.thead, scan)) |row| {
         return row;
     }
 
@@ -52,14 +101,14 @@ fn findRow(self: *Table, index: i32) ?*Node {
             .tr => if (scan.check(child)) |row| {
                 return row;
             },
-            .tbody => if (scanChildRows(child, &scan)) |row| {
+            .tbody => if (scanChildRows(child, scan)) |row| {
                 return row;
             },
             else => {},
         }
     }
 
-    if (self.scanSectionRows(.tfoot, &scan)) |row| {
+    if (self.scanSectionRows(.tfoot, scan)) |row| {
         return row;
     }
     if (index == -1) {
@@ -121,6 +170,7 @@ pub const JsApi = struct {
 
     pub const tBodies = bridge.accessor(Table.getTBodies, null, .{});
     pub const deleteRow = bridge.function(Table.deleteRow, .{ .ce_reactions = true });
+    pub const insertRow = bridge.function(Table.insertRow, .{ .ce_reactions = true });
 };
 
 const testing = @import("../../../../testing.zig");

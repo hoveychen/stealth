@@ -6,6 +6,7 @@ const Frame = @import("../../../Frame.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 const collections = @import("../../collections.zig");
+const table_insert = @import("table_insert.zig");
 
 const String = lp.String;
 
@@ -28,6 +29,10 @@ pub fn getRows(self: *TableSection, frame: *Frame) collections.NodeLive(.child_t
     return collections.NodeLive(.child_tag).init(self.asNode(), .tr, frame);
 }
 
+pub fn insertRow(self: *TableSection, index_: ?i32, frame: *Frame) !*Node {
+    return table_insert.insertAt(self.asNode(), .row, index_ orelse -1, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(TableSection);
 
@@ -38,4 +43,5 @@ pub const JsApi = struct {
     };
 
     pub const rows = bridge.accessor(TableSection.getRows, null, .{});
+    pub const insertRow = bridge.function(TableSection.insertRow, .{ .ce_reactions = true });
 };
