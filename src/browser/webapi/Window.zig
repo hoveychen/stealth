@@ -241,6 +241,30 @@ pub fn setInnerHeight(self: *Window, value: js.Value) void {
     self.replaceGlobalProperty(value, "innerHeight");
 }
 
+pub fn setOuterWidth(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "outerWidth");
+}
+
+pub fn setOuterHeight(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "outerHeight");
+}
+
+pub fn setScreenX(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "screenX");
+}
+
+pub fn setScreenY(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "screenY");
+}
+
+pub fn setScreenLeft(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "screenLeft");
+}
+
+pub fn setScreenTop(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "screenTop");
+}
+
 pub fn setScrollX(self: *Window, value: js.Value) void {
     self.replaceGlobalProperty(value, "scrollX");
 }
@@ -942,6 +966,26 @@ pub fn getInnerHeight(_: *const Window, frame: *Frame) u32 {
     return frame._page.getViewport().height;
 }
 
+// The viewport is the whole screen here, so the window box is the viewport and
+// the window sits at the origin. Real browsers always answer these; scripts
+// read them bare (`outerWidth`, not `window.outerWidth`), so leaving them out
+// turns a fingerprinting probe into a ReferenceError that kills its caller.
+pub fn getOuterWidth(_: *const Window, frame: *Frame) u32 {
+    return frame._page.getViewport().width;
+}
+
+pub fn getOuterHeight(_: *const Window, frame: *Frame) u32 {
+    return frame._page.getViewport().height;
+}
+
+pub fn getScreenX(_: *const Window) u32 {
+    return 0;
+}
+
+pub fn getScreenY(_: *const Window) u32 {
+    return 0;
+}
+
 const ScrollToOpts = union(enum) {
     x: i32,
     opts: Opts,
@@ -1268,6 +1312,13 @@ pub const JsApi = struct {
     // the attribute rather than throwing.
     pub const innerWidth = bridge.accessor(Window.getInnerWidth, Window.setInnerWidth, .{});
     pub const innerHeight = bridge.accessor(Window.getInnerHeight, Window.setInnerHeight, .{});
+    pub const outerWidth = bridge.accessor(Window.getOuterWidth, Window.setOuterWidth, .{});
+    pub const outerHeight = bridge.accessor(Window.getOuterHeight, Window.setOuterHeight, .{});
+    pub const screenX = bridge.accessor(Window.getScreenX, Window.setScreenX, .{});
+    pub const screenY = bridge.accessor(Window.getScreenY, Window.setScreenY, .{});
+    // screenLeft/screenTop are the legacy aliases of screenX/screenY.
+    pub const screenLeft = bridge.accessor(Window.getScreenX, Window.setScreenLeft, .{});
+    pub const screenTop = bridge.accessor(Window.getScreenY, Window.setScreenTop, .{});
     pub const devicePixelRatio = bridge.property(1, .{ .template = false, .readonly = false });
 
     pub const opener = bridge.accessor(Window.getOpener, Window.setOpener, .{});

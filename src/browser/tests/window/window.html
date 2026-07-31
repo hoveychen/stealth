@@ -12,6 +12,25 @@
   testing.expectEqual(1920, innerWidth);
 </script>
 
+<script id=window-box>
+  // The window box and its position on screen. Scripts read these bare, so an
+  // absent one is a ReferenceError that takes the whole caller down rather than
+  // producing a suspicious value — which is how CreepJS's screen panel died.
+  testing.expectEqual(1920, window.outerWidth);
+  testing.expectEqual(1080, window.outerHeight);
+
+  // The viewport fills the screen, so the window has no chrome around it and
+  // sits at the origin.
+  testing.expectEqual(innerWidth, outerWidth);
+  testing.expectEqual(innerHeight, outerHeight);
+  testing.expectEqual(0, window.screenX);
+  testing.expectEqual(0, window.screenY);
+
+  // screenLeft/screenTop are the older aliases of screenX/screenY.
+  testing.expectEqual(window.screenX, window.screenLeft);
+  testing.expectEqual(window.screenY, window.screenTop);
+</script>
+
 <script id=load>
   let call1 = 0;
   let call2 = 0;
