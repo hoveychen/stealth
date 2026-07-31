@@ -378,23 +378,48 @@ Flow control was the risk in widening the windows, so the check that matters is
 a large body: an 8.9 MB script over HTTP/2 arrives complete, alongside ten
 smaller origins across six CDNs.
 
-### A connection-lifecycle finding, not a fingerprint one
+### Why `pre_shared_key` is usually missing (P9)
 
-Two things turned up while measuring that are engine behaviour rather than
-masking, recorded here because the harness reproduces both:
+Traced to a single chain, every step of it read out of libcurl's own verbose
+log (flip `ENABLE_DEBUG` in `src/network/http.zig`):
 
-- **Roughly every other cross-request `fetch()` to the same HTTPS origin fails**
-  with a bare `TypeError: fetch error`, then succeeds on retry. Reproducible
-  with four sequential awaited fetches to one origin; `collect-tls.mjs` retries
-  around it.
-- **TLS sessions almost never get reused.** Each `fetch()` to an origin already
-  visited opens a fresh connection *and* a fresh handshake. A browser reuses
-  both, which is why Chrome shows `pre_shared_key` on essentially every
-  connection and this build does not.
+1. `tls.peet.ws/api/all` sends `GOAWAY` after every response, so the HTTP/2
+   connection cannot be reused and the next request must open a new one.
+2. On that new connection libcurl reuses the cached TLS session — the log says
+   `SSL reusing session with ALPN 'h2'`, so session caching works.
+3. The resumed handshake then fails most of the time:
+   `TLS connect error: error:00000000:invalid library (0)` followed by
+   `BoringSSL SSL_connect: SSL_ERROR_SYSCALL`. An empty error queue plus
+   `SSL_ERROR_SYSCALL` means the peer closed the connection mid-handshake.
+4. libcurl surfaces that to the caller as `SslConnectError` rather than
+   retrying without the session, so the page sees `TypeError: fetch error`.
+5. The failure evicts the session, so the next attempt does a full handshake
+   and succeeds — which is why the failures alternate.
 
-Both smell like the same root — connections being discarded rather than
-pooled — and fixing that would close the last ClientHello difference as a side
-effect.
+What this corrects about the earlier reading of the same symptom:
+
+- **It is not "every other fetch to any HTTPS origin".** Of eleven origins
+  tested across six CDNs, `/api/all` is the only one that fails, because it is
+  the only one that forces a reconnect. Everywhere else the h2 connection is
+  reused and no second handshake happens at all.
+- **Sessions are not "never reused".** They are cached and reuse is attempted.
+  `pre_shared_key` is rare for the opposite reason: connection reuse works, so
+  there usually is no second handshake for a PSK to appear on.
+
+Two things were ruled out by measurement rather than argued:
+
+- **The ALPS/ECH info callback is not the cause.** With it disabled the resumed
+  handshake still failed three times out of four.
+- **The server is not simply flaky.** Chrome, over the same network path on the
+  same machine, fetched `/api/all` twelve times with zero failures and
+  `pre_shared_key` present on all twelve.
+
+So a resumed ClientHello from this build is rejected where Chrome's is
+accepted, and that is as far as the evidence goes. Going further needs a packet
+capture, and this machine routes through a local tunnel — libcurl reports the
+peer as `198.18.2.217` and the local address as `198.18.0.1`, both inside the
+`198.18.0.0/15` fake-IP range — so the capture has to be taken somewhere that
+tunnel is not in the path.
 
 ## Where the whole run landed (P7)
 
