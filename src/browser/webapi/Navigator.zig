@@ -31,6 +31,8 @@ const StorageManager = @import("StorageManager.zig");
 const NavigatorUAData = @import("NavigatorUAData.zig");
 const ModelContext = @import("ModelContext.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
+const MediaDevices = @import("media/MediaDevices.zig");
+const BatteryManager = @import("BatteryManager.zig");
 
 const Navigator = @This();
 _pad: bool = false,
@@ -207,6 +209,31 @@ pub fn getConnection(_: *const Navigator, frame: *Frame) *NetworkInformation {
     return frame.window._connection;
 }
 
+pub fn getMediaDevices(_: *const Navigator, frame: *Frame) !*MediaDevices {
+    if (frame.window._media_devices) |media_devices| {
+        return media_devices;
+    }
+    const media_devices = try frame._factory.eventTarget(MediaDevices{
+        ._proto = undefined,
+    });
+    frame.window._media_devices = media_devices;
+    return media_devices;
+}
+
+// Chrome hands back the same BatteryManager on every call, so it's cached.
+pub fn getBattery(_: *const Navigator, exec: *const Execution) !js.Promise {
+    // Window-only, so the global is always a Frame.
+    const frame = exec.js.global.frame;
+    const battery = frame.window._battery orelse blk: {
+        const created = try frame._factory.eventTarget(BatteryManager{
+            ._proto = undefined,
+        });
+        frame.window._battery = created;
+        break :blk created;
+    };
+    return exec.js.local.?.resolvePromise(battery);
+}
+
 pub fn registerProtocolHandler(_: *const Navigator, scheme: []const u8, url: [:0]const u8, frame: *const Frame) !void {
     try validateProtocolHandlerScheme(scheme);
     try validateProtocolHandlerURL(url, frame);
@@ -317,6 +344,8 @@ pub const JsApi = struct {
     pub const mimeTypes = bridge.accessor(Navigator.getMimeTypes, null, .{ .exposed = .window });
     pub const modelContext = bridge.accessor(Navigator.getModelContext, null, .{ .exposed = .window });
     pub const connection = bridge.accessor(Navigator.getConnection, null, .{ .exposed = .window });
+    pub const mediaDevices = bridge.accessor(Navigator.getMediaDevices, null, .{ .exposed = .window });
+    pub const getBattery = bridge.function(Navigator.getBattery, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
 };

@@ -47,7 +47,8 @@
     'language', 'languages', 'onLine', 'cookieEnabled', 'hardwareConcurrency',
     'deviceMemory', 'maxTouchPoints', 'vendor', 'vendorSub', 'product',
     'productSub', 'pdfViewerEnabled', 'webdriver',
-    'plugins', 'mimeTypes', 'doNotTrack', 'globalPrivacyControl',
+    'plugins', 'mimeTypes', 'connection', 'mediaDevices', 'doNotTrack',
+    'globalPrivacyControl',
   ]) {
     const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, name);
     testing.expectEqual('function', typeof desc.get); // accessor on prototype
@@ -253,9 +254,33 @@
 </script>
 
 <script id=getBattery type=module>
-  // Like Firefox, we don't expose navigator.getBattery. Sites already
-  // have to handle it being undefined, so this is a real-browser shape
-  // rather than a stub that always rejects.
-  testing.expectEqual('undefined', typeof navigator.getBattery);
-</script>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof navigator.getBattery);
+    const p = navigator.getBattery();
+    testing.expectTrue(p instanceof Promise);
+    const b = await p;
+    const again = await navigator.getBattery();
+    state.resolve();
 
+    // A desktop on mains power, which is what the reference Chrome reported.
+    await state.done(() => {
+      testing.expectEqual('[object BatteryManager]', Object.prototype.toString.call(b));
+      testing.expectEqual(true, b instanceof EventTarget);
+      testing.expectEqual(true, b.charging);
+      testing.expectEqual(0, b.chargingTime);
+      testing.expectEqual(Infinity, b.dischargingTime);
+      testing.expectEqual(1, b.level);
+
+      testing.expectEqual(
+        ['charging', 'chargingTime', 'constructor', 'dischargingTime', 'level',
+         'onchargingchange', 'onchargingtimechange', 'ondischargingtimechange',
+         'onlevelchange'],
+        Object.getOwnPropertyNames(BatteryManager.prototype).sort(),
+      );
+
+      // Chrome hands back the same object every call.
+      testing.expectEqual(b, again);
+    });
+  }
+</script>

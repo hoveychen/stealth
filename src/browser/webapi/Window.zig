@@ -33,6 +33,8 @@ const ModelContext = @import("ModelContext.zig");
 const Screen = @import("Screen.zig");
 const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
+const MediaDevices = @import("media/MediaDevices.zig");
+const BatteryManager = @import("BatteryManager.zig");
 const Performance = @import("Performance.zig");
 const Chrome = @import("Chrome.zig");
 const Document = @import("Document.zig");
@@ -78,6 +80,12 @@ _model_context: ModelContext = .init,
 _screen: *Screen,
 _visual_viewport: *VisualViewport,
 _connection: *NetworkInformation,
+
+// navigator.mediaDevices and the BatteryManager navigator.getBattery()
+// resolves with. Both are built on first use: pages that never ask shouldn't
+// pay for them, and getBattery() has to hand back the same object every call.
+_media_devices: ?*MediaDevices = null,
+_battery: ?*BatteryManager = null,
 _performance: Performance,
 // Epoch milliseconds at which the load event fired, or 0 before that. Only
 // chrome.csi() / chrome.loadTimes() read it — both report the load timestamp,

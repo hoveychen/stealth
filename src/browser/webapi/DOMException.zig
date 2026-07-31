@@ -65,6 +65,7 @@ pub fn fromError(err: anyerror) ?DOMException {
         error.VersionError => .{ ._code = .version_error },
         error.TransactionInactiveError => .{ ._code = .transaction_inactive_error },
         error.ReadOnlyError => .{ ._code = .read_only_error },
+        error.NotAllowedError => .{ ._code = .not_allowed_error },
         else => null,
     };
 }
@@ -72,7 +73,7 @@ pub fn fromError(err: anyerror) ?DOMException {
 pub fn getCode(self: *const DOMException) u8 {
     return switch (self._code) {
         // no legacy numeric code
-        .operation_error, .data_error, .constraint_error, .version_error, .transaction_inactive_error, .read_only_error => 0,
+        .operation_error, .data_error, .constraint_error, .version_error, .transaction_inactive_error, .read_only_error, .not_allowed_error => 0,
         else => @intFromEnum(self._code),
     };
 }
@@ -111,6 +112,7 @@ pub fn getName(self: *const DOMException) []const u8 {
         .version_error => "VersionError",
         .transaction_inactive_error => "TransactionInactiveError",
         .read_only_error => "ReadOnlyError",
+        .not_allowed_error => "NotAllowedError",
     };
 }
 
@@ -147,6 +149,7 @@ pub fn getMessage(self: *const DOMException) []const u8 {
         .version_error => "An attempt was made to open a database using a lower version than the existing version",
         .transaction_inactive_error => "A request was placed against a transaction which is currently not active, or which is finished",
         .read_only_error => "A mutation operation was attempted in a read-only transaction",
+        .not_allowed_error => "The request is not allowed by the user agent or the platform in the current context",
     };
 }
 
@@ -198,6 +201,9 @@ const Code = enum(u8) {
     transaction_inactive_error = 0xFB,
     /// Defined by IndexedDB; no legacy code, exposed via name only.
     read_only_error = 0xFA,
+    /// No legacy code, exposed via name only. What Chrome rejects
+    /// getUserMedia / getDisplayMedia with when permission is refused.
+    not_allowed_error = 0xF9,
 
     /// Maps a standard error name to its legacy code
     /// Returns .none (code 0) for non-legacy error names
@@ -230,6 +236,7 @@ const Code = enum(u8) {
             .{ "VersionError", .version_error },
             .{ "TransactionInactiveError", .transaction_inactive_error },
             .{ "ReadOnlyError", .read_only_error },
+            .{ "NotAllowedError", .not_allowed_error },
         });
         return lookup.get(name) orelse .none;
     }
