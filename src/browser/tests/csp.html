@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<meta http-equiv="Content-Security-Policy" content="script-src 'self'">
+<script src="./testing.js"></script>
+
+<script id=csp_loaded>
+{
+  // testing.js itself is same-origin, so script-src 'self' allows it. If this
+  // records nothing, the policy blocked the harness rather than the test target.
+  testing.expectEqual('object', typeof testing);
+}
+</script>
+
+<script id=csp_blocks_cross_origin type=module>
+{
+  // script-src 'self' and a cross-origin src: a real browser fires error and
+  // never issues the request. Firing load instead is exactly what rebrowser's
+  // bypassCsp test reports on — see Csp.zig.
+  const state = await testing.async();
+  const s = document.createElement('script');
+  s.src = 'http://example.com/blocked.js';
+  let fired = null;
+  s.onload = () => { fired = 'load'; };
+  s.onerror = () => { fired = 'error'; };
+  document.head.appendChild(s);
+  // Queued, not dispatched inside appendChild.
+  const firedInline = fired;
+  await new Promise((r) => setTimeout(r, 50));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(null, firedInline);
+    testing.expectEqual('error', fired);
+  });
+}
+</script>
+
+<script id=csp_allows_same_origin type=module>
+{
+  // The same insertion with a same-origin src loads normally, so the block
+  // above is the policy talking and not a broken script path.
+  //
+  // Deliberately not ./testing.js: re-executing the harness resets the
+  // observations it has already recorded and the whole file reports as empty.
+  const state = await testing.async();
+  const s = document.createElement('script');
+  s.src = './worker/defer-noop.js';
+  let fired = null;
+  s.onload = () => { fired = 'load'; };
+  s.onerror = () => { fired = 'error'; };
+  document.head.appendChild(s);
+  await new Promise((r) => setTimeout(r, 300));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual('load', fired);
+    testing.expectEqual(1, window.deferNoop);
+  });
+}
+</script>

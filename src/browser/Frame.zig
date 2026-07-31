@@ -35,6 +35,7 @@ const h5e = @import("parser/html5ever.zig");
 const CustomElementReactions = @import("CustomElementReactions.zig");
 
 const URL = @import("URL.zig");
+const Csp = @import("Csp.zig");
 const Blob = @import("webapi/Blob.zig");
 const FileList = @import("webapi/FileList.zig");
 const Node = @import("webapi/Node.zig");
@@ -337,6 +338,10 @@ _navigated_options: ?NavigatedOpts = null,
 _http_status: ?u16 = null,
 _http_headers: std.ArrayList(HttpHeader) = .empty,
 
+// The document's Content-Security-Policy, built on first use from the response
+// headers plus the <meta http-equiv> tags in the DOM, and cleared on navigation.
+_csp: ?Csp = null,
+
 pub const HttpHeader = struct {
     name: []const u8,
     value: []const u8,
@@ -580,6 +585,54 @@ pub fn base(self: *const Frame) [:0]const u8 {
     return self.base_url orelse self.url;
 }
 
+/// The document's Content-Security-Policy, built once and cached. Sources: the
+/// `Content-Security-Policy` response headers, then every
+/// `<meta http-equiv="Content-Security-Policy">` in the document.
+///
+/// Built lazily rather than at the end of head parsing, which is a small
+/// divergence: per spec a meta CSP inserted by script afterwards is ignored,
+/// whereas one inserted before the first script load would be honoured here.
+/// It can only ever make the engine stricter than the spec, never a bypass.
+pub fn csp(self: *Frame) *const Csp {
+    if (self._csp) |*cached| {
+        return cached;
+    }
+
+    var policies: std.ArrayList(Csp.Policy) = .empty;
+    self.collectCsp(&policies) catch |err| {
+        // A policy we could not build is not a policy we may guess at: log and
+        // enforce nothing rather than block the page's own scripts.
+        log.warn(.frame, "csp parse", .{ .url = self.url, .err = err });
+        self._csp = .empty;
+        return &self._csp.?;
+    };
+
+    self._csp = .init(policies.items);
+    return &self._csp.?;
+}
+
+fn collectCsp(self: *Frame, policies: *std.ArrayList(Csp.Policy)) !void {
+    for (self._http_headers.items) |header| {
+        // Report-Only never blocks, so it must not be picked up by a prefix match.
+        if (std.ascii.eqlIgnoreCase(header.name, "content-security-policy")) {
+            try Csp.parseInto(self.arena, policies, header.value);
+        }
+    }
+
+    var tw = @import("webapi/TreeWalker.zig").Full.Elements.init(self.window._document.asNode(), .{});
+    while (tw.next()) |element| {
+        if (element.getTag() != .meta) {
+            continue;
+        }
+        const http_equiv = element.getAttributeSafe(comptime .wrap("http-equiv")) orelse continue;
+        if (!std.ascii.eqlIgnoreCase(http_equiv, "content-security-policy")) {
+            continue;
+        }
+        const content = element.getAttributeSafe(comptime .wrap("content")) orelse continue;
+        try Csp.parseInto(self.arena, policies, content);
+    }
+}
+
 pub fn getTitle(self: *Frame) !?[]const u8 {
     if (self.window._document.is(Document.HTMLDocument)) |html_doc| {
         return try html_doc.getTitle(self);
@@ -767,6 +820,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
 
     self._http_status = null;
     self._http_headers = .empty;
+    self._csp = null;
 
     self.url = blk: {
         if (URL.isCompleteHTTPUrl(request_url)) {
