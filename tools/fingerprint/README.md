@@ -207,13 +207,91 @@ Known deviations from Chrome at this layer, all deliberate:
    find it on `window`. No `webglcontextlost` event is ever fired either, since
    the context is never lost.
 
-The canvas-2D half of P5 — `toDataURL`, a real pixel buffer behind
-`getImageData`, and `measureText` — is not done yet. The measurements it needs
-are already in `results/reference-chrome-graphics.json`: the `canvas2d` section
-has Chrome's exact PNG bytes for empty and solid-fill canvases at four sizes,
-and the `text` section has per-character advance widths for all four distinct
-font-metric families. Two facts from that data shape the implementation:
-`measureText` is *exactly* linear in font size, and a string's width is the
-plain sum of its characters' advances except across a kerning pair (`AV`, `To`),
-so a scaled advance table reproduces `mmmmmmmmmmlli` and `Cwm fjordbank glyphs
-vext quiz` to the last bit.
+## Graphics layer (after P5, canvas-2D half)
+
+Measured with `after-p5-lightpanda.json` against `reference-chrome-headed.json`;
+the full table is `after-p5-vs-chrome.md`.
+
+| | after navigator | after graphics |
+|---|---|---|
+| probe keys identical to Chrome | 52/90 | **59/90** |
+| bot.sannysoft.com FAIL rows | 7 | **0** |
+| `CanvasRenderingContext2D.prototype` own properties | 42 (6 of them data properties) | **73, the same as Chrome, none a data property** |
+| `canvas.toDataURL` | `TypeError: not a function` | `data:image/png;base64,iVBORw0K…` |
+| `ctx.measureText` | `TypeError: not a function` | `89.9658203125` for `mmmmmmmmmmlli`, bit-identical to Chrome |
+| `getImageData` after a red `fillRect` | `[0,0,0,0]` | `[255,0,0,255]` |
+
+`subresource-check.mjs` still reports 8/8 destinations, so nothing regressed at
+the network layer.
+
+Three pieces landed:
+
+- **A minimal rasteriser** (`webapi/canvas/raster.zig`). An RGBA8 buffer,
+  `fillRect` / `clearRect` / `strokeRect` compositing into it source-over, and
+  `getImageData` reading back out of it. Not a renderer and not becoming one.
+- **A PNG writer** (`webapi/canvas/png.zig`) behind `toDataURL`, `toBlob` and
+  `OffscreenCanvas.convertToBlob`.
+- **Chrome's text metrics** (`src/browser/font_metrics.zig`, generated from the
+  dump). `measureText` and `TextMetrics` reproduce Chrome exactly for printable
+  ASCII, and the `font` attribute is parsed and normalised the way Chrome
+  normalises it.
+
+Verifying the PNG output deliberately used two decoders that are not ours:
+node's `zlib` inflates the IDAT to bytes identical to what `getImageData`
+reports for the same canvas, and macOS ImageIO (`sips`) reads the file back as
+a 4x3 RGBA png.
+
+Known deviations at this layer, all deliberate and all measured:
+
+1. **Text does not rasterise, so a text-based canvas hash still differs.**
+   sannysoft's Canvas1..Canvas5 went from `Canvas failed` to a hash, and the
+   hash is stable and identical across all five the way Chrome's is — but it is
+   our hash, not Chrome's. Landing Chrome's would need Chrome's font
+   rasteriser. This is the trade-off accepted when option B was chosen over
+   emitting a fixed PNG: two different drawings now produce two different
+   strings, which is what every real browser does.
+2. **The PNG bytes are ours, not Chrome's**, even for an empty canvas. Chrome
+   drives libpng with a per-row filter heuristic, zlib at level 1 and a sync
+   flush between passes; we write one IDAT, filter None, default level.
+   Matching would mean reimplementing zlib's match finder for no gain while (1)
+   stands.
+3. **Only PNG is encoded.** `toDataURL('image/jpeg')` falls back to
+   `image/png`, which the spec allows for an unsupported type but Chrome — with
+   a JPEG encoder — does not do.
+4. **No kerning.** `measureText('AV')` is 13.33984375 where Chrome kerns it to
+   12.6025390625. None of the strings canvas fingerprints actually use are
+   kerned; `mmmmmmmmmmlli`, `Hello, world!` and `Cwm fjordbank glyphs vext quiz`
+   are all exact.
+5. **Outside U+0020..U+007E there is no table**, so those glyphs are charged the
+   family's mean ASCII advance. That number is a guess, and the only one in this
+   layer.
+6. **Rectangle edges snap to whole pixels** instead of antialiasing, so a
+   fractional `fillRect` covers one pixel differently from Chrome.
+7. **`ex` / `ch` / `q` and viewport units in a font shorthand are rejected**,
+   as are the system font keywords (`caption`, `menu`, …). Chrome accepts them.
+   Supporting them needs numbers we did not measure.
+8. **`HTMLCanvasElement.captureStream` is still missing** — it needs a
+   `MediaStream`, which does not exist in this engine.
+
+### Regenerating the graphics ground truth
+
+`dump-graphics.mjs` now also records, per family, every printable ASCII glyph's
+advance *and ink box* at 100px, a sweep of `fontBoundingBox` across 1..120px,
+the default value of all 28 2D context accessors, and how Chrome normalises 40
+font shorthands. `src/browser/font_metrics.zig` is generated from it and says so
+at the top; re-run the dumper before editing it by hand.
+
+Two things the measurement caught that reasoning would not have:
+
+- **`fontBoundingBox` is not linear in font size.** CoreText quantises it per
+  size: 16px sans-serif reports an ascent of 14, where scaling the 100px value
+  of 92 says 15. Hence the swept table rather than a ratio.
+- **`hangingBaseline` is computed in single precision.** Chrome answers
+  `10.399999618530273`, not `10.4`, for an ascent of 13 — so ours round-trips
+  through `f32` on purpose.
+
+Advances *are* exactly linear, and a string's width is the plain sum of its
+glyphs', which is why one 100px table per family is enough. Accumulate at the
+100px basis and scale once at the end: scaling each glyph first drifts by an ulp
+over a long string, which is how the Arial pangram first came out
+`196.86132812500003` instead of `196.861328125`.
