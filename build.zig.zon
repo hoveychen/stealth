@@ -22,11 +22,11 @@
             .url = "https://github.com/nghttp2/nghttp2/releases/download/v1.69.0/nghttp2-1.69.0.tar.gz",
             .hash = "N-V-__8AAMHpvwChC6orFCDB8MeiumT6OlfmKfmrWlak7Int",
         },
-        .@"boringssl-zig" = .{
-            .url = "git+https://github.com/lightpanda-io/boringssl-zig.git#f07cc58fa4a051eb0985287e691db5dbb0e7e76f",
-            .hash = "boringssl-0.1.0-VtJeWd1OAAAQ5AuNOZGP5a_5ZyNn5BfeE-jiKqEm2gsE",
-        },
-        // .@"boringssl-zig" = .{ .path = "../boringssl-zig" },
+        // Carried in-tree rather than fetched: the ClientHello has to offer
+        // Chrome's ML-DSA signature algorithms, and the revision the upstream
+        // wrapper pins predates those code points. deps/boringssl-zig/README.md
+        // says what differs from the wrapper and how to re-sync it.
+        .@"boringssl-zig" = .{ .path = "deps/boringssl-zig" },
         .curl = .{
             .url = "https://github.com/curl/curl/releases/download/curl-8_20_0/curl-8.20.0.tar.gz",
             .hash = "N-V-__8AAHM9RQHjzJo8Wn4dbGPqNOC21zZJJA9PcCj7FPF5",
