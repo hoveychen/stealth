@@ -545,10 +545,17 @@ pub fn httpConnectTimeout(self: *const Config) u31 {
     };
 }
 
+/// Ceiling on a whole transfer, and the last resort that keeps a stalled
+/// request from holding a pooled connection forever. Real fingerprinting APIs
+/// are slow — amiunique.org takes ~21s to answer its POST, which Chrome waits
+/// out — so this has to be generous enough not to be mistaken for the page's
+/// own timeout. See `--http-timeout` to tighten it for a crawl.
+const DEFAULT_HTTP_TIMEOUT_MS = 30_000;
+
 pub fn httpTimeout(self: *const Config) u31 {
     return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_timeout orelse 5000,
-        .version => 5000,
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_timeout orelse DEFAULT_HTTP_TIMEOUT_MS,
+        .version => DEFAULT_HTTP_TIMEOUT_MS,
         else => unreachable,
     };
 }
@@ -1289,6 +1296,22 @@ test "Config: --sec-ch-ua drives both the header and the brand list" {
     try std.testing.expectEqualStrings("8", h.brands[0].version);
     try std.testing.expectEqualStrings("Google Chrome", h.brands[2].brand);
     try std.testing.expectEqualStrings("150", h.brands[2].version);
+}
+
+test "Config: httpTimeout leaves room for a slow real API" {
+    // amiunique.org answers POST /api/fingerprints in ~21s — Chrome waits it
+    // out and renders, measured on the same route. A 5s cap killed the request
+    // mid-flight and the page stayed blank, and Chrome has no comparable fixed
+    // ceiling on an ordinary request, so the default cannot be that tight.
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(std.testing.allocator);
+    try std.testing.expectEqual(30000, config.httpTimeout());
+
+    var explicit = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .http_timeout = 1234,
+    } });
+    defer explicit.deinit(std.testing.allocator);
+    try std.testing.expectEqual(1234, explicit.httpTimeout());
 }
 
 test "Config: a Chrome User-Agent is accepted" {
