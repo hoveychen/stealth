@@ -21,6 +21,7 @@ const Frame = @import("../../../Frame.zig");
 const text_measure = @import("../../../text_measure.zig");
 
 const Node = @import("../../Node.zig");
+const DOMRect = @import("../../DOMRect.zig");
 const Element = @import("../../Element.zig");
 
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
@@ -87,6 +88,25 @@ pub fn getSubStringLength(self: *TextContent, charnum: u32, nchars: u32, frame: 
     return text_measure.substringWidth(self.text(frame), charnum, nchars, self.fontSize(frame));
 }
 
+// One character's glyph cell, measured from the same fallback metrics as
+// getComputedTextLength. Browsers place the cell in the element's user space
+// and sit it on the font's ascent; we have neither a resolved text origin nor
+// vertical metrics, so the box starts at the text's own origin and is one em
+// tall — a size rather than a placement, consistent with getBBox answering an
+// empty box for text.
+pub fn getExtentOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*DOMRect {
+    const content = self.text(frame);
+    const font_size = self.fontSize(frame);
+    const offset = try text_measure.substringWidth(content, 0, charnum, font_size);
+    const advance = try text_measure.substringWidth(content, charnum, 1, font_size);
+    return DOMRect.create(.{
+        .x = offset,
+        .y = 0,
+        .width = advance,
+        .height = font_size,
+    }, frame._factory);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(TextContent);
     pub const Meta = struct {
@@ -104,4 +124,5 @@ pub const JsApi = struct {
     pub const getNumberOfChars = bridge.function(TextContent.getNumberOfChars, .{});
     pub const getComputedTextLength = bridge.function(TextContent.getComputedTextLength, .{});
     pub const getSubStringLength = bridge.function(TextContent.getSubStringLength, .{});
+    pub const getExtentOfChar = bridge.function(TextContent.getExtentOfChar, .{});
 };

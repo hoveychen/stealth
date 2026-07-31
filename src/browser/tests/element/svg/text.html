@@ -59,6 +59,32 @@
 }
 </script>
 
+<!-- Same deterministic fallback metrics as above: real browsers shape text and
+     answer with different numbers. -->
+<script id=extentOfChar>
+{
+  const text = $('#text');
+  testing.expectEqual('function', typeof text.getExtentOfChar);
+
+  // x is how far into the string the character starts, width is its own
+  // advance, and the cell is one em tall sitting on the text's own origin.
+  testing.expectEqual(0, text.getExtentOfChar(0).x);
+  testing.expectEqual(12, text.getExtentOfChar(0).width);
+  testing.expectEqual(0, text.getExtentOfChar(0).y);
+  testing.expectEqual(20, text.getExtentOfChar(0).height);
+
+  testing.expectEqual(48, text.getExtentOfChar(4).x);
+  testing.expectEqual(12, text.getExtentOfChar(4).width);
+
+  // Addressing either half of the surrogate pair measures the whole emoji.
+  testing.expectEqual(60, text.getExtentOfChar(5).x);
+  testing.expectEqual(20, text.getExtentOfChar(5).width);
+  testing.expectEqual(20, text.getExtentOfChar(6).width);
+
+  testing.expectError('IndexSizeError', () => text.getExtentOfChar(7));
+}
+</script>
+
 <script id=textReflection>
 {
   const text = $('#text');
