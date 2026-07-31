@@ -1214,6 +1214,14 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/XPathExpression.zig"),
     @import("../webapi/XPathEvaluator.zig"),
     @import("../webapi/collections/DOMStringList.zig"),
+    // Web Audio: window-only in Chrome (no AudioContext in workers).
+    @import("../webapi/audio/BaseAudioContext.zig"),
+    @import("../webapi/audio/AudioContext.zig"),
+    @import("../webapi/audio/AudioNode.zig"),
+    @import("../webapi/audio/AudioDestinationNode.zig"),
+    @import("../webapi/audio/AnalyserNode.zig"),
+    @import("../webapi/audio/AudioListener.zig"),
+    @import("../webapi/audio/AudioParam.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,

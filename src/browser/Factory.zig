@@ -512,6 +512,25 @@ pub fn xhrEventTarget(_: *const Factory, allocator: Allocator, child: anytype) !
     ).create(allocator, child);
 }
 
+// {EventTarget, AudioNode, Leaf}. The leaf's `_context` is set by the caller
+// once the chain exists — the middle can only be default-initialised here.
+pub fn audioNode(self: *Factory, child: anytype) !*@TypeOf(child) {
+    const AudioNode = @import("webapi/audio/AudioNode.zig");
+
+    return try AutoPrototypeChain(
+        &.{ EventTarget, AudioNode, @TypeOf(child) },
+    ).create(self._slab.allocator(), child);
+}
+
+// {EventTarget, BaseAudioContext, AudioContext}.
+pub fn audioContext(self: *Factory, child: anytype) !*@TypeOf(child) {
+    const BaseAudioContext = @import("webapi/audio/BaseAudioContext.zig");
+
+    return try AutoPrototypeChain(
+        &.{ EventTarget, BaseAudioContext, @TypeOf(child) },
+    ).create(self._slab.allocator(), child);
+}
+
 pub fn textTrackCue(self: *Factory, child: anytype) !*@TypeOf(child) {
     const allocator = self._slab.allocator();
     const TextTrackCue = @import("webapi/media/TextTrackCue.zig");

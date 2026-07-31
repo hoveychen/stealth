@@ -62,6 +62,8 @@ pub const Type = union(enum) {
     idb_database: *@import("storage/idb/IDBDatabase.zig"),
     idb_transaction: *@import("storage/idb/IDBTransaction.zig"),
     notification: *@import("Notification.zig"),
+    audio_node: *@import("audio/AudioNode.zig"),
+    base_audio_context: *@import("audio/BaseAudioContext.zig"),
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -244,6 +246,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .idb_transaction => writer.writeAll("<IDBTransaction>"),
         .notification => writer.writeAll("<Notification>"),
         .navigation_history_entry => writer.writeAll("<NavigationHistoryEntry>"),
+        .audio_node => writer.writeAll("<AudioNode>"),
+        .base_audio_context => writer.writeAll("<BaseAudioContext>"),
     };
 }
 
@@ -278,6 +282,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .idb_transaction => return "[object IDBTransaction]",
         .notification => return "[object Notification]",
         .navigation_history_entry => return "[object NavigationHistoryEntry]",
+        .audio_node => return "[object AudioNode]",
+        .base_audio_context => return "[object BaseAudioContext]",
     };
 }
 
