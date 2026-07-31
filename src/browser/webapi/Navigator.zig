@@ -19,6 +19,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const Allocator = std.mem.Allocator;
+
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const Execution = js.Execution;
@@ -42,8 +44,38 @@ pub fn getUserAgent(_: *const Navigator, exec: *const Execution) []const u8 {
     return exec.session.browser.http_client.getUserAgent();
 }
 
-pub fn getLanguages(_: *const Navigator) [2][]const u8 {
-    return .{ "en-US", "en" };
+// navigator.languages is the Accept-Language header, parsed. Hardcoding
+// en-US here while the wire carried whatever --accept-language said made the
+// two contradict each other, and a page can read both: a request advertising
+// de-DE from a navigator claiming en-US is a louder signal than either value
+// on its own.
+//
+// Read through http_client rather than off the config so a CDP
+// acceptLanguage override is reflected too.
+pub fn getLanguages(_: *const Navigator, exec: *const Execution) ![]const []const u8 {
+    return parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages());
+}
+
+pub fn getLanguage(_: *const Navigator, exec: *const Execution) ![]const u8 {
+    const tags = try parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages());
+    // navigator.language is the first entry of navigator.languages.
+    return if (tags.len == 0) "" else tags[0];
+}
+
+// Splits an Accept-Language value into its bare tags, dropping the q-weights:
+// "de-DE,de;q=0.9,en;q=0.8" -> { "de-DE", "de", "en" }. Chrome exposes the
+// tags in the header's own order and never shows the weights.
+fn parseLanguages(allocator: Allocator, header: []const u8) ![]const []const u8 {
+    var tags: std.ArrayList([]const u8) = .empty;
+    var it = std.mem.splitScalar(u8, header, ',');
+    while (it.next()) |part| {
+        // Everything from the first ';' on is parameters (q-weight).
+        const bare = part[0 .. std.mem.indexOfScalar(u8, part, ';') orelse part.len];
+        const tag = std.mem.trim(u8, bare, " \t");
+        if (tag.len == 0) continue;
+        try tags.append(allocator, tag);
+    }
+    return tags.items;
 }
 
 pub fn getDoNotTrack(_: *const Navigator) ?[]const u8 {
@@ -60,10 +92,6 @@ pub fn getAppCodeName(_: *const Navigator) []const u8 {
 
 pub fn getAppVersion(_: *const Navigator) []const u8 {
     return "1.0";
-}
-
-pub fn getLanguage(_: *const Navigator) []const u8 {
-    return "en-US";
 }
 
 pub fn getOnLine(_: *const Navigator) bool {
@@ -261,4 +289,32 @@ pub const JsApi = struct {
 const testing = @import("../../testing.zig");
 test "WebApi: Navigator" {
     try testing.htmlRunner("navigator", .{});
+}
+
+test "Navigator: parseLanguages drops q-weights and keeps header order" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const expectTags = struct {
+        fn f(expected: []const []const u8, actual: []const []const u8) !void {
+            try testing.expectEqual(expected.len, actual.len);
+            for (expected, actual) |e, got| {
+                try testing.expectString(e, got);
+            }
+        }
+    }.f;
+
+    // The default, which is also what Chrome reports out of the box.
+    try expectTags(&.{ "en-US", "en" }, try parseLanguages(a, "en-US,en;q=0.9"));
+
+    try expectTags(&.{ "de-DE", "de", "en" }, try parseLanguages(a, "de-DE,de;q=0.9,en;q=0.8"));
+
+    // Whitespace after the commas is legal in the header and must not survive
+    // into the tag.
+    try expectTags(&.{ "fr-FR", "fr" }, try parseLanguages(a, "fr-FR, fr;q=0.5"));
+
+    // Degenerate values shouldn't produce empty tags.
+    try testing.expectEqual(@as(usize, 0), (try parseLanguages(a, "")).len);
+    try testing.expectEqual(@as(usize, 0), (try parseLanguages(a, " , ")).len);
 }
