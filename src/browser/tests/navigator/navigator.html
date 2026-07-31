@@ -47,7 +47,7 @@
     'language', 'languages', 'onLine', 'cookieEnabled', 'hardwareConcurrency',
     'deviceMemory', 'maxTouchPoints', 'vendor', 'vendorSub', 'product',
     'productSub', 'pdfViewerEnabled', 'webdriver',
-    'plugins', 'doNotTrack', 'globalPrivacyControl',
+    'plugins', 'mimeTypes', 'doNotTrack', 'globalPrivacyControl',
   ]) {
     const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, name);
     testing.expectEqual('function', typeof desc.get); // accessor on prototype
@@ -148,6 +148,108 @@
       testing.expectEqual('Desktop', v.formFactor[0]);
     });
   }
+</script>
+
+<script id=plugins>
+  // Chrome's hardcoded PDF-viewer list. Values measured from Chrome 150, see
+  // PluginArray.zig. An empty list next to pdfViewerEnabled === true is a
+  // combination no real Chrome produces.
+  testing.expectEqual(5, navigator.plugins.length);
+  testing.expectEqual(
+    ['PDF Viewer', 'Chrome PDF Viewer', 'Chromium PDF Viewer',
+     'Microsoft Edge PDF Viewer', 'WebKit built-in PDF'],
+    Array.from(navigator.plugins).map((p) => p.name),
+  );
+  testing.expectEqual('[object PluginArray]', Object.prototype.toString.call(navigator.plugins));
+  testing.expectEqual('[object Plugin]', Object.prototype.toString.call(navigator.plugins[0]));
+
+  // Every entry describes the same built-in viewer.
+  for (const p of navigator.plugins) {
+    testing.expectEqual('Portable Document Format', p.description);
+    testing.expectEqual('internal-pdf-viewer', p.filename);
+    testing.expectEqual(2, p.length);
+    testing.expectEqual(['application/pdf', 'text/pdf'], Array.from(p).map((m) => m.type));
+    testing.expectEqual(p, p[0].enabledPlugin);
+  }
+
+  // Lookups: by index, by item(), by name.
+  testing.expectEqual(navigator.plugins[0], navigator.plugins.item(0));
+  testing.expectEqual(navigator.plugins[0], navigator.plugins.namedItem('PDF Viewer'));
+  testing.expectEqual(navigator.plugins[0], navigator.plugins['PDF Viewer']);
+  testing.expectEqual(undefined, navigator.plugins[5]);
+  testing.expectEqual(null, navigator.plugins.item(5));
+  testing.expectEqual(null, navigator.plugins.namedItem('nope'));
+  testing.expectEqual(undefined, navigator.plugins['nope']);
+  testing.expectEqual('function', typeof navigator.plugins.refresh);
+
+  // Stable across reads, and refresh() doesn't rebuild the list.
+  testing.expectEqual(true, navigator.plugins === navigator.plugins);
+  const firstPlugin = navigator.plugins[0];
+  navigator.plugins.refresh();
+  testing.expectEqual(true, firstPlugin === navigator.plugins[0]);
+
+  // Chrome reports the indices *and* the names as own properties, but only the
+  // indices are enumerable ([LegacyUnenumerableNamedProperties]) — so
+  // Object.keys and JSON.stringify see numbers only. Attributes measured on
+  // Chrome 150.
+  testing.expectEqual(['0', '1', '2', '3', '4'], Object.keys(navigator.plugins));
+  const pluginOwn = Object.getOwnPropertyNames(navigator.plugins);
+  testing.expectEqual(true, pluginOwn.includes('0'));
+  testing.expectEqual(true, pluginOwn.includes('PDF Viewer'));
+
+  const indexDesc = Object.getOwnPropertyDescriptor(navigator.plugins, '0');
+  testing.expectEqual(true, indexDesc.enumerable);
+  testing.expectEqual(true, indexDesc.configurable);
+  testing.expectEqual(false, indexDesc.writable);
+
+  const nameDesc = Object.getOwnPropertyDescriptor(navigator.plugins, 'PDF Viewer');
+  testing.expectEqual(false, nameDesc.enumerable);
+  testing.expectEqual(true, nameDesc.configurable);
+  testing.expectEqual(false, nameDesc.writable);
+
+  // Chrome's exact serialisation: five numeric keys, each holding two.
+  testing.expectEqual(
+    '{"0":{"0":{},"1":{}},"1":{"0":{},"1":{}},"2":{"0":{},"1":{}},"3":{"0":{},"1":{}},"4":{"0":{},"1":{}}}',
+    JSON.stringify(navigator.plugins),
+  );
+</script>
+
+<script id=mimeTypes>
+  testing.expectEqual(2, navigator.mimeTypes.length);
+  testing.expectEqual('[object MimeTypeArray]', Object.prototype.toString.call(navigator.mimeTypes));
+  testing.expectEqual('[object MimeType]', Object.prototype.toString.call(navigator.mimeTypes[0]));
+  testing.expectEqual(['application/pdf', 'text/pdf'], Array.from(navigator.mimeTypes).map((m) => m.type));
+
+  for (const m of navigator.mimeTypes) {
+    testing.expectEqual('pdf', m.suffixes);
+    testing.expectEqual('Portable Document Format', m.description);
+    // Measured: both entries name the *first* plugin, and it is the very
+    // object navigator.plugins[0] hands out.
+    testing.expectEqual(navigator.plugins[0], m.enabledPlugin);
+  }
+
+  testing.expectEqual(navigator.mimeTypes[0], navigator.mimeTypes.item(0));
+  testing.expectEqual(navigator.mimeTypes[0], navigator.mimeTypes.namedItem('application/pdf'));
+  testing.expectEqual(navigator.mimeTypes[0], navigator.mimeTypes['application/pdf']);
+  testing.expectEqual(undefined, navigator.mimeTypes[2]);
+  testing.expectEqual(null, navigator.mimeTypes.item(2));
+  testing.expectEqual(null, navigator.mimeTypes.namedItem('nope'));
+
+  // Measured: a plugin's own MimeType objects are distinct from these.
+  testing.expectEqual(false, navigator.plugins[0][0] === navigator.mimeTypes[0]);
+
+  testing.expectEqual(['0', '1'], Object.keys(navigator.mimeTypes));
+  const mimeOwn = Object.getOwnPropertyNames(navigator.mimeTypes);
+  testing.expectEqual(true, mimeOwn.includes('application/pdf'));
+  testing.expectEqual(
+    false,
+    Object.getOwnPropertyDescriptor(navigator.mimeTypes, 'application/pdf').enumerable,
+  );
+
+  // All three collections are iterable, like Chrome's.
+  testing.expectEqual(5, Array.from(navigator.plugins).length);
+  testing.expectEqual(2, Array.from(navigator.mimeTypes).length);
+  testing.expectEqual(2, Array.from(navigator.plugins[0]).length);
 </script>
 
 <script id=getBattery type=module>

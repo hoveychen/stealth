@@ -34,6 +34,7 @@ const ModelContext = @import("ModelContext.zig");
 const Navigator = @This();
 _pad: bool = false,
 _plugins: PluginArray = .{},
+_mime_types: PluginArray.MimeTypeArray = .{},
 _permissions: Permissions = .{},
 _storage: StorageManager = .{},
 _ua_data: NavigatorUAData = .{},
@@ -132,8 +133,8 @@ pub fn getVendorSub(_: *const Navigator) []const u8 {
 }
 
 // Chrome ships the PDF viewer, so this is true on every desktop build. It
-// pairs with navigator.plugins, which is still empty here — see the plan's
-// remaining P4 items.
+// pairs with navigator.plugins / navigator.mimeTypes, which describe that same
+// viewer — see PluginArray.zig.
 pub fn getPdfViewerEnabled(_: *const Navigator) bool {
     return true;
 }
@@ -179,6 +180,10 @@ pub fn sendBeacon(_: *const Navigator, url: js.Value, data: ?js.Value) bool {
 
 pub fn getPlugins(self: *Navigator) *PluginArray {
     return &self._plugins;
+}
+
+pub fn getMimeTypes(self: *Navigator) *PluginArray.MimeTypeArray {
+    return &self._mime_types;
 }
 
 pub fn getPermissions(self: *Navigator) *Permissions {
@@ -304,6 +309,7 @@ pub const JsApi = struct {
 
     // window only
     pub const plugins = bridge.accessor(Navigator.getPlugins, null, .{ .exposed = .window });
+    pub const mimeTypes = bridge.accessor(Navigator.getMimeTypes, null, .{ .exposed = .window });
     pub const modelContext = bridge.accessor(Navigator.getModelContext, null, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
