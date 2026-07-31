@@ -295,3 +295,98 @@ glyphs', which is why one 100px table per family is enough. Accumulate at the
 100px basis and scale once at the end: scaling each glyph first drifts by an ulp
 over a long string, which is how the Arial pangram first came out
 `196.86132812500003` instead of `196.861328125`.
+
+## Transport layer (P6)
+
+Everything above is what a *script* can read. A server sees a layer below that
+one — the TLS ClientHello and the HTTP/2 preface — before a byte of HTTP is
+exchanged, and JA3/JA4 and the Akamai HTTP/2 fingerprint turn it into an
+identifier that no amount of `navigator` work can touch.
+
+Measured with `collect-tls.mjs` against Chrome 150 on this machine. Because
+Chrome permutes its ClientHello extensions per connection, every run takes
+several samples and records which fields moved; a single JA3 proves nothing.
+
+### TLS ClientHello
+
+| | before | after | Chrome 150 |
+|---|---|---|---|
+| JA4 | `t13d1711h2_5b57614c22b0_95ca0cbbc74b` | `t13d1516h2_8daaf6152771_d8a2da3f94cd` | `t13d1517h2_8daaf6152771_a87ad97598a9` |
+| cipher digest | `5b57614c22b0` | **`8daaf6152771`** | `8daaf6152771` |
+| cipher suites offered | 17 | **15** | 15 |
+| extensions offered | 11 | **18** | 19 |
+| supported groups | X25519, P-256, P-384 | **GREASE, X25519MLKEM768, X25519, P-256, P-384** | same |
+| GREASE | absent | **present** | present |
+| JA3 across N connections | one value | **N values** | N values |
+
+The cipher list, the cipher order and the supported-groups list are now
+byte-identical to Chrome's, and JA3 varies per connection the way Chrome's
+does — GREASE and extension permutation are switched on in BoringSSL rather
+than simulated, so the variation has Chrome's distribution and not ours.
+
+Seven extensions were added, six of which libcurl has no reason to send:
+`status_request` (5), `signed_certificate_timestamp` (18),
+`compress_certificate` (27, Brotli), `session_ticket` (35),
+`application_settings` (0x44cd, the newer ALPS code point Chrome uses) and a
+GREASE `encrypted_client_hello` (0xfe0d). The `padding` (21) extension libcurl
+was sending and Chrome was not disappears on its own once the hello is long
+enough. Two of these — ALPS and ECH — have no `SSL_CTX`-level setter, so they
+are applied from an info callback at `SSL_CB_HANDSHAKE_START`, which BoringSSL
+runs before the hello is built.
+
+Two differences remain, both measured:
+
+1. **Chrome offers ML-DSA signature algorithms** (`0x0904`/`0x0905`/`0x0906`)
+   ahead of the eight classical ones. The pinned BoringSSL
+   (`lightpanda-io/boringssl-zig` at `f07cc58`) predates those code points, and
+   `set_sigalg_prefs` rejects the *entire* list if one entry is unknown — so
+   they are left off, and the JA4 signature digest differs by exactly those
+   three entries. Closing it needs a newer BoringSSL, not a different call.
+2. **`pre_shared_key` (41) is usually absent**, which is the whole difference
+   between `t13d1516h2` and Chrome's `t13d1517h2`. Chrome resumed all four
+   sampled connections; this build resumed one in eight, and when it does the
+   JA4 prefix is `t13d1517h2` exactly. libcurl's session cache is configured
+   correctly (`SSL_SESS_CACHE_CLIENT` plus a new-session callback, on a multi
+   handle shared across the process), so this is a connection-lifecycle
+   question rather than a masking gap — see the note below.
+
+### HTTP/2 — unchanged, and not reachable from our code
+
+| | this build | Chrome 150 |
+|---|---|---|
+| Akamai fingerprint | `3:100;4:65536;2:0\|1048510465\|0\|m,s,a,p` | `1:65536;2:0;4:6291456;6:262144\|15663105\|0\|m,a,s,p` |
+| SETTINGS | MAX_CONCURRENT_STREAMS=100, INITIAL_WINDOW_SIZE=65536, ENABLE_PUSH=0 | HEADER_TABLE_SIZE=65536, ENABLE_PUSH=0, INITIAL_WINDOW_SIZE=6291456, MAX_HEADER_LIST_SIZE=262144 |
+| connection WINDOW_UPDATE | 1048510465 | 15663105 |
+| pseudo-header order | `:method :scheme :authority :path` | `:method :authority :scheme :path` |
+
+All three values are hardcoded in libcurl and have no runtime option:
+
+- `lib/http2.c`, `populate_settings()` — the three SETTINGS entries.
+- `lib/http2.c`, `HTTP2_HUGE_WINDOW_SIZE` — the connection window, hence the
+  WINDOW_UPDATE increment (Chrome's 15663105 is a 15 MiB window minus the
+  65535 default).
+- `lib/http.c`, `Curl_http_req_to_h2()` — emits `:scheme` before `:authority`.
+
+Changing them means carrying a patched libcurl: either vendoring those two
+files, or forking curl the way BoringSSL is already forked. Both are decisions
+about the dependency set rather than about this code, so neither was taken
+here. Until one is, the HTTP/2 preface identifies the engine as libcurl even
+though the ClientHello above it does not.
+
+### A connection-lifecycle finding, not a fingerprint one
+
+Two things turned up while measuring that are engine behaviour rather than
+masking, recorded here because the harness reproduces both:
+
+- **Roughly every other cross-request `fetch()` to the same HTTPS origin fails**
+  with a bare `TypeError: fetch error`, then succeeds on retry. Reproducible
+  with four sequential awaited fetches to one origin; `collect-tls.mjs` retries
+  around it.
+- **TLS sessions almost never get reused.** Each `fetch()` to an origin already
+  visited opens a fresh connection *and* a fresh handshake. A browser reuses
+  both, which is why Chrome shows `pre_shared_key` on essentially every
+  connection and this build does not.
+
+Both smell like the same root — connections being discarded rather than
+pooled — and fixing that would close the last ClientHello difference as a side
+effect.
