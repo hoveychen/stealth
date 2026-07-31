@@ -82,6 +82,19 @@ try {
     console.log(`\n${EXPECTED.length - missing.length}/${EXPECTED.length} destinations requested.`);
     if (missing.length) console.log(`missing: ${missing.join(', ')}`);
 
+    // Chrome asks for exactly one favicon per top-level navigation and none
+    // for a subframe, so a count is part of the check: the INDEX page embeds
+    // an iframe, and a per-frame favicon would show up as a second hit.
+    const favicons = echo.records.filter((r) => r.path === '/favicon.ico').length;
+    console.log(`\nfavicon requests for one navigation (expect 1, no subframe copy): ${favicons}`);
+    if (favicons !== 1) missing.push(`favicon-count=${favicons}`);
+
+    // A declared <link rel="shortcut icon"> should replace the implicit path.
+    await goto(cdp, sessionId, `http://127.0.0.1:${echo.port}/declared-icon.html`, { settleMs: 2000 });
+    const declared = echo.records.find((r) => r.path === '/brand.ico');
+    console.log(`declared <link rel=icon> honoured: ${declared ? 'yes' : 'NO'}`);
+    if (!declared) missing.push('declared-icon');
+
     await echo.close();
     cdp.close();
 } finally {

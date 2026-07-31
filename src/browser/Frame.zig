@@ -1227,6 +1227,9 @@ fn _documentIsComplete(self: *Frame) !void {
         log.debug(.frame, "load", .{ .url = self.url, .type = self._type });
     }
 
+    // Last, after every other subresource, which is where Chrome puts it.
+    self.requestFavicon();
+
     self.notifyParentLoadComplete();
 }
 
@@ -2312,12 +2315,18 @@ pub fn loadImage(self: *Frame, src: []const u8) !void {
         return;
     }
 
-    const session = self._session;
-
     const resolved = URL.resolve(self.arena, self.base(), src, .{ .encoding = self.charset }) catch |err| {
         log.warn(.http, "image resolve", .{ .err = err, .src = src });
         return;
     };
+
+    return self.requestImage(resolved);
+}
+
+// Shared tail of loadImage and the favicon fetch: same destination, same
+// discarded body, only the URL resolution differs.
+fn requestImage(self: *Frame, resolved: [:0]const u8) !void {
+    const session = self._session;
 
     var headers = try session.browser.http_client.newHeaders();
     errdefer headers.deinit();
@@ -2342,6 +2351,81 @@ pub fn loadImage(self: *Frame, src: []const u8) !void {
         // the element, but we have no decode result to report either way.
         log.warn(.http, "image fetch", .{ .err = err, .url = resolved });
     };
+}
+
+// Ask for the page's favicon, the way Chrome does once a top-level document
+// has finished loading.
+//
+// Measured against real Chrome 150 (tools/fingerprint/results/
+// reference-chrome-headed.json): the request carries exactly the same fetch
+// metadata as any other image -- Accept: image/avif,..., Sec-Fetch-Dest:
+// image, Mode: no-cors -- so it goes out as resource_type .image rather than
+// needing a destination of its own. It appears once per top-level navigation,
+// after every other subresource, and never for a subframe.
+//
+// Chrome asks even when the page declares no icon, which is the case that
+// matters here: /favicon.ico is the single most reliably logged request on the
+// web, and never making it is a strong tell on its own.
+fn requestFavicon(self: *Frame) void {
+    if (self.isGoingAway()) {
+        return;
+    }
+
+    // Subframes don't get one; only the tab's own document does.
+    if (self.parent != null) {
+        return;
+    }
+
+    // about:blank, data: and friends have no origin to hang a favicon off.
+    if (!std.mem.startsWith(u8, self.url, "http")) {
+        return;
+    }
+
+    // A declared <link rel=icon> wins over the implicit path. Chrome collects
+    // every icon link and ranks them by size and type; with no rendering to
+    // size anything for, take the last declared, which is what a page
+    // overriding an earlier default expects.
+    var href: ?[]const u8 = null;
+    var tw = @import("webapi/TreeWalker.zig").Full.Elements.init(self.document.asNode(), .{});
+    while (tw.next()) |el| {
+        if (el.is(Element.Html.Link) == null) continue;
+        const rel = el.getAttributeSafe(comptime .wrap("rel")) orelse continue;
+        if (!relHasIcon(rel)) continue;
+        const candidate = el.getAttributeSafe(comptime .wrap("href")) orelse continue;
+        if (candidate.len == 0) continue;
+        href = candidate;
+    }
+
+    // A declared href resolves against <base>, per the usual link rules; the
+    // implicit one is origin-relative and ignores <base> entirely.
+    const resolved = if (href) |h|
+        URL.resolve(self.arena, self.base(), h, .{ .encoding = self.charset }) catch |err| {
+            log.warn(.http, "favicon resolve", .{ .err = err, .href = h });
+            return;
+        }
+    else
+        URL.resolve(self.arena, self.url, "/favicon.ico", .{ .encoding = self.charset }) catch |err| {
+            log.warn(.http, "favicon resolve", .{ .err = err, .url = self.url });
+            return;
+        };
+
+    self.requestImage(resolved) catch |err| {
+        log.warn(.http, "favicon fetch", .{ .err = err, .url = resolved });
+    };
+}
+
+// True when a rel attribute carries the "icon" token, as in rel="icon" or
+// rel="shortcut icon". Tokens are whitespace-separated and
+// ASCII-case-insensitive. "apple-touch-icon" is a different token and does
+// not match, which is also how Chrome treats it for the page favicon.
+fn relHasIcon(rel: []const u8) bool {
+    var it = std.mem.tokenizeAny(u8, rel, " \t\n\r\x0c");
+    while (it.next()) |token| {
+        if (std.ascii.eqlIgnoreCase(token, "icon")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn fireElementEvent(self: *Frame, el: *Element, name: String) !void {
@@ -3525,6 +3609,21 @@ test "Frame: urlBasename" {
     try testing.expectEqualSlices(u8, "report.csv", (try urlBasename(a, "http://x.com/a/b/report.csv")).?);
     try testing.expectEqualSlices(u8, "report.csv", (try urlBasename(a, "http://x.com/report.csv?v=1#x")).?);
     try testing.expect((try urlBasename(a, "http://x.com/")) == null);
+}
+
+test "Frame: relHasIcon matches only a whole icon token" {
+    try testing.expect(relHasIcon("icon"));
+    try testing.expect(relHasIcon("shortcut icon"));
+    try testing.expect(relHasIcon("ICON"));
+    // Tokens are whitespace-separated, so order and padding don't matter.
+    try testing.expect(relHasIcon("  icon\tshortcut "));
+
+    try testing.expect(relHasIcon("") == false);
+    try testing.expect(relHasIcon("stylesheet") == false);
+    // "apple-touch-icon" is its own token, not the "icon" token: Chrome does
+    // not use it as the page favicon.
+    try testing.expect(relHasIcon("apple-touch-icon") == false);
+    try testing.expect(relHasIcon("iconic") == false);
 }
 
 test "WebApi: Frame" {

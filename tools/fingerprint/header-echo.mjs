@@ -23,11 +23,23 @@ var x = new XMLHttpRequest(); x.open('GET', '/api/xhr', true); x.send();
 </script>
 </body></html>`;
 
+// A page that declares its own icon, to tell the two favicon paths apart: the
+// implicit /favicon.ico the INDEX page gets, and an explicit <link rel>. The
+// "shortcut icon" spelling is the one legacy pages use.
+const DECLARED_ICON = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>icon</title>
+<link rel="shortcut icon" href="/brand.ico">
+</head><body>i</body></html>`;
+
 function body(path) {
     switch (path) {
         case '/':
         case '/nav':
             return ['text/html; charset=utf-8', Buffer.from(INDEX)];
+        case '/declared-icon.html':
+            return ['text/html; charset=utf-8', Buffer.from(DECLARED_ICON)];
+        case '/brand.ico':
+            return ['image/x-icon', PIXEL];
         case '/frame.html':
             return ['text/html; charset=utf-8', Buffer.from('<!DOCTYPE html><html><body>f</body></html>')];
         case '/asset.css':
