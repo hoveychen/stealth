@@ -342,6 +342,9 @@ const HtmlRunnerOpts = struct {
     timeout_ms: u32 = 2000,
     inject_script: ?[]const u8 = null,
     load_external_stylesheets: bool = false,
+    // Shortens the engine-wide request timeout (normally 5s) for the duration
+    // of the run, so a test can reach it without stalling the suite.
+    http_timeout_ms: ?u31 = null,
 };
 
 // Create a fresh page on `test_session` and return its root frame — for tests
@@ -369,6 +372,12 @@ pub fn htmlRunner(comptime path: []const u8, opts: HtmlRunnerOpts) !void {
 
     test_session.load_external_stylesheets = opts.load_external_stylesheets;
     defer test_session.load_external_stylesheets = false;
+
+    const previous_http_timeout = test_config.mode.serve.http_timeout;
+    if (opts.http_timeout_ms) |http_timeout_ms| {
+        test_config.mode.serve.http_timeout = http_timeout_ms;
+    }
+    defer test_config.mode.serve.http_timeout = previous_http_timeout;
 
     const root = try std.fs.path.joinZ(arena_allocator, &.{ WEB_API_TEST_ROOT, path });
     const stat = std.Io.Dir.cwd().statFile(io, root, .{}) catch |err| {
@@ -638,6 +647,14 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
                 .{ .name = "Content-Type", .value = "text/html; charset=utf-8" },
             },
         });
+    }
+
+    // Never answers: the caller is expected to give up first, either from
+    // xhr.timeout or from the engine-wide --http-timeout. Used by
+    // net/xhr_timeout.html to tell those two apart.
+    if (std.mem.eql(u8, path, "/xhr/slow")) {
+        lp.io.sleep(.fromMilliseconds(1500), .awake) catch {};
+        return;
     }
 
     if (std.mem.eql(u8, path, "/xhr_empty")) {
