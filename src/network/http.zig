@@ -25,6 +25,7 @@ const libcurl = @import("../sys/libcurl.zig");
 const crypto = @import("../sys/libcrypto.zig");
 
 const IpFilter = @import("IpFilter.zig");
+const tls_client_hello = @import("tls_client_hello.zig");
 
 const log = @import("lightpanda").log;
 
@@ -545,28 +546,38 @@ pub const Connection = struct {
             try libcurl.curl_easy_setopt(self._easy, .proxy, null);
         }
 
-        // TLS.
-        if (config.tlsVerifyHost()) {
-            // Provide certificate store to connection's SSL_CTX.
-            try libcurl.curl_easy_setopt(self._easy, .ssl_ctx_function, &(struct {
-                fn wrap(
-                    _: *libcurl.Curl,
-                    raw_ssl_ctx: *anyopaque,
-                    raw_x509_store: *anyopaque,
-                ) callconv(.c) libcurl.CurlCode {
-                    const ssl_ctx: *crypto.SSL_CTX = @ptrCast(raw_ssl_ctx);
-                    const store: *crypto.X509_STORE = @ptrCast(raw_x509_store);
+        // TLS. The SSL_CTX callback runs after libcurl has finished its own
+        // setup, which makes it the one place that can both hand over our
+        // certificate store and give the ClientHello a browser's shape. It is
+        // installed either way; only the store is conditional, and the
+        // callback reads a null store as "verification is off".
+        try libcurl.curl_easy_setopt(self._easy, .ssl_ctx_function, &(struct {
+            fn wrap(
+                _: *libcurl.Curl,
+                raw_ssl_ctx: *anyopaque,
+                raw_x509_store: ?*anyopaque,
+            ) callconv(.c) libcurl.CurlCode {
+                const ssl_ctx: *crypto.SSL_CTX = @ptrCast(raw_ssl_ctx);
 
-                    const result = crypto.SSL_CTX_set1_verify_cert_store(ssl_ctx, store);
-                    if (result != 1) {
+                tls_client_hello.configure(ssl_ctx) catch {
+                    return libcurl.CURLE.ABORTED_BY_CALLBACK;
+                };
+
+                if (raw_x509_store) |raw_store| {
+                    const store: *crypto.X509_STORE = @ptrCast(raw_store);
+                    if (crypto.SSL_CTX_set1_verify_cert_store(ssl_ctx, store) != 1) {
                         return libcurl.CURLE.ABORTED_BY_CALLBACK;
                     }
-                    return libcurl.CURLE.OK;
                 }
-            }).wrap);
+                return libcurl.CURLE.OK;
+            }
+        }).wrap);
+
+        if (config.tlsVerifyHost()) {
             // Pass our store to CURLOPT_SSL_CTX_FUNCTION.
             try libcurl.curl_easy_setopt(self._easy, .ssl_ctx_data, x509_store);
         } else {
+            try libcurl.curl_easy_setopt(self._easy, .ssl_ctx_data, null);
             try libcurl.curl_easy_setopt(self._easy, .ssl_verify_host, false);
             try libcurl.curl_easy_setopt(self._easy, .ssl_verify_peer, false);
 

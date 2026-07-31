@@ -45,7 +45,7 @@ pub const curl_writefunc_error: usize = c.CURL_WRITEFUNC_ERROR;
 pub const curl_readfunc_pause: usize = c.CURL_READFUNC_PAUSE;
 pub const CurlReadFunction = *const fn ([*]u8, usize, usize, *anyopaque) callconv(.c) usize;
 pub const CurlOpenSocketFunction = *const fn (?*anyopaque, c_uint, [*c]CurlSockAddr) callconv(.c) CurlSocket;
-pub const CurlSslCtxFunction = *const fn (*Curl, *anyopaque, *anyopaque) callconv(.c) CurlCode;
+pub const CurlSslCtxFunction = *const fn (*Curl, *anyopaque, ?*anyopaque) callconv(.c) CurlCode;
 pub const CurlDebugFunction = *const fn (*Curl, CurlInfoType, [*c]u8, usize, ?*anyopaque) callconv(.c) c_int;
 
 pub const CurlSockType = enum(c.curlsocktype) {
@@ -634,7 +634,7 @@ pub fn curl_easy_setopt(easy: *Curl, comptime option: CurlOption, value: anytype
         .opensocket_data,
         => @as(?*anyopaque, @ptrCast(value)),
 
-        .ssl_ctx_data => @as(*crypto.X509_STORE, value),
+        .ssl_ctx_data => @as(?*crypto.X509_STORE, value),
 
         .debug_function => @as(CurlDebugFunction, value),
         .opensocket_function => @as(CurlOpenSocketFunction, value),
