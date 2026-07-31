@@ -29,6 +29,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `probe.js` | One async expression collecting ~90 fingerprint surface values. Every read is wrapped, so "this property throws" is recorded as data instead of aborting the run. |
 | `header-echo.mjs` | Raw-TCP HTTP server that records the byte-exact request head. `node:http` reorders headers, and header order is itself part of the fingerprint. Serves a page pulling one of every fetch destination (document, style, script, image, iframe, fetch, xhr). |
 | `sites.mjs` | URLs + in-page extractors for bot.sannysoft.com and CreepJS. |
+| `subresource-check.mjs` | Answers "did the request happen at all", per fetch destination. Exits non-zero on a miss. Takes engine flags after `--`. |
 | `collect-*.mjs` | Spawn the engine, run the four steps, write one JSON snapshot. |
 | `diff.mjs` | Renders a candidate/reference markdown comparison. |
 
@@ -72,10 +73,35 @@ Three gaps remain at this layer, all measured rather than assumed:
    The first three are now in Chrome's order, but advertising `zstd` when the
    bundled libcurl may not have it means a response we cannot decode.
 
-Two engine-level gaps also show up in the capture and are not header bugs:
-stylesheets and images are **never requested at all** (no `/asset.css`,
-`/asset.png`, `/favicon.ico` hit the server), and a client that never fetches
-CSS or images is trivially separable from a browser server-side.
+## Subresource status (after S1–S3)
+
+The two engine-level gaps P3 turned up — stylesheets and images never being
+requested *at all* — are closed. `subresource-check.mjs` drives a page pulling
+one of every fetch destination and reports what reaches the server:
+
+| | after P3 | after S1–S3 |
+|---|---|---|
+| destinations requested | 5/8 | **8/8** |
+| missing | `stylesheet`, `image`, `favicon` | none |
+
+- **stylesheet** — the fetch already existed but was opt-in. The flag was
+  inverted to `--disable-external-stylesheets` so CSS loads by default.
+- **image** — new. `ResourceType.image` plus `Frame.loadImage`, which requests
+  and discards the body; there is no decoder and none is needed.
+- **favicon** — new. Requested once per top-level navigation after everything
+  else, honouring `<link rel=icon>` and otherwise falling back to
+  `/favicon.ico`.
+
+Header values on those requests match the Chrome reference exactly: across all
+eight destinations, all 40 compared values (`Accept`, `Sec-Fetch-Dest/Mode/Site`,
+`Referer`) are identical to `reference-chrome-headed.json`, and no destination
+sends a header Chrome doesn't.
+
+The three gaps above are unchanged by this work and are the only remaining
+differences on subresource requests too: every one still lacks `Connection`,
+still orders headers differently, and still omits `zstd`. Nothing in the JS
+probe moved either (33/90, 11 sannysoft FAILs) — this was a network-layer
+change only.
 
 ## Reference caveats
 
