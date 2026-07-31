@@ -171,3 +171,184 @@
   testing.expectEqual(undefined, ctx.drawImage(src, 0, 0, 10, 10, 0, 0, 10, 10));
 }
 </script>
+
+<script id="CanvasRenderingContext2D#fillRect paints">
+{
+  const element = document.createElement('canvas');
+  element.width = 4;
+  element.height = 4;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+
+  const data = ctx.getImageData(0, 0, 4, 4).data;
+  // Top-left 2x2 is opaque red.
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(0, 4)));
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(4, 8)));
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(16, 20)));
+  // Third column of the first row was never painted.
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice(8, 12)));
+
+  // A different fill gives different pixels: two canvases no longer hash the
+  // same, which is the whole point of the raster.
+  ctx.fillStyle = '#0000ff';
+  ctx.fillRect(2, 2, 2, 2);
+  const after = ctx.getImageData(2, 2, 1, 1).data;
+  testing.expectEqual([0, 0, 255, 255], Array.from(after));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#fillRect normalises and clips">
+{
+  const element = document.createElement('canvas');
+  element.width = 4;
+  element.height = 4;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = 'lime';
+  // Negative extents are normalised; the part outside the canvas is dropped.
+  ctx.fillRect(2, 2, -4, -4);
+
+  const data = ctx.getImageData(0, 0, 4, 4).data;
+  testing.expectEqual([0, 255, 0, 255], Array.from(data.slice(0, 4)));
+  // (2,2) is outside the normalised [0,2)x[0,2) rect.
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice((2 * 4 + 2) * 4, (2 * 4 + 2) * 4 + 4)));
+
+  // Wholly off-canvas draws nothing and does not throw.
+  ctx.fillRect(-50, -50, 10, 10);
+  ctx.fillRect(NaN, 0, 4, 4);
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(3, 3, 1, 1).data));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#clearRect">
+{
+  const element = document.createElement('canvas');
+  element.width = 2;
+  element.height = 2;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual([255, 255, 255, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  ctx.clearRect(0, 0, 1, 1);
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+  // The rest of the canvas survives.
+  testing.expectEqual([255, 255, 255, 255], Array.from(ctx.getImageData(1, 1, 1, 1).data));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#globalAlpha">
+{
+  const element = document.createElement('canvas');
+  element.width = 1;
+  element.height = 1;
+  const ctx = element.getContext('2d');
+
+  testing.expectEqual(1, ctx.globalAlpha);
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 1, 1);
+
+  ctx.globalAlpha = 0.5;
+  testing.expectEqual(0.5, ctx.globalAlpha);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 1, 1);
+  // Half-opaque white over opaque red.
+  testing.expectEqual([255, 128, 128, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // Out-of-range assignments are ignored rather than clamped.
+  ctx.globalAlpha = 4;
+  testing.expectEqual(0.5, ctx.globalAlpha);
+  ctx.globalAlpha = -1;
+  testing.expectEqual(0.5, ctx.globalAlpha);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#strokeRect">
+{
+  const element = document.createElement('canvas');
+  element.width = 5;
+  element.height = 5;
+  const ctx = element.getContext('2d');
+
+  testing.expectEqual('#000000', ctx.strokeStyle);
+  testing.expectEqual(1, ctx.lineWidth);
+
+  ctx.strokeStyle = 'blue';
+  testing.expectEqual('#0000ff', ctx.strokeStyle);
+  // Centred on the path, so a 1px stroke of [1,4] covers [0.5,4.5] -> [1,4].
+  ctx.strokeRect(1.5, 1.5, 2, 2);
+
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+  testing.expectEqual([0, 0, 255, 255], at(1, 1));
+  testing.expectEqual([0, 0, 255, 255], at(3, 1));
+  testing.expectEqual([0, 0, 255, 255], at(1, 3));
+  // The interior is untouched.
+  testing.expectEqual([0, 0, 0, 0], at(2, 2));
+  // As is everything outside.
+  testing.expectEqual([0, 0, 0, 0], at(0, 0));
+
+  ctx.lineWidth = 0;
+  testing.expectEqual(1, ctx.lineWidth);
+  ctx.lineWidth = 3;
+  testing.expectEqual(3, ctx.lineWidth);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#getImageData window">
+{
+  const element = document.createElement('canvas');
+  element.width = 3;
+  element.height = 3;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(2, 2, 1, 1);
+
+  // A window straddling the bottom-right corner: only one pixel overlaps.
+  const data = ctx.getImageData(2, 2, 2, 2).data;
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(0, 4)));
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice(4, 8)));
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice(8, 12)));
+
+  // A negative origin pushes the canvas into the middle of the window.
+  const shifted = ctx.getImageData(-1, -1, 4, 4).data;
+  const index = ((2 + 1) * 4 + (2 + 1)) * 4;
+  testing.expectEqual([255, 0, 0, 255], Array.from(shifted.slice(index, index + 4)));
+  testing.expectEqual([0, 0, 0, 0], Array.from(shifted.slice(0, 4)));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#resize clears">
+{
+  const element = document.createElement('canvas');
+  element.width = 2;
+  element.height = 2;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual([255, 0, 0, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // Re-assigning the same width still resets the bitmap.
+  element.width = 2;
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  ctx.fillRect(0, 0, 2, 2);
+  element.height = 8;
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#drawing state accessors">
+{
+  const proto = CanvasRenderingContext2D.prototype;
+  for (const name of ['fillStyle', 'strokeStyle', 'lineWidth', 'globalAlpha']) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+    testing.expectEqual('function', typeof descriptor.get);
+    testing.expectEqual('function', typeof descriptor.set);
+  }
+}
+</script>

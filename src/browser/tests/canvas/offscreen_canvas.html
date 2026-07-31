@@ -85,3 +85,27 @@
   testing.expectError('Index or size', () => ctx.getImageData(0, 0, 10, -5));
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#fillRect paints">
+{
+  const canvas = new OffscreenCanvas(4, 4);
+  const ctx = canvas.getContext('2d');
+
+  // The same context object comes back, so drawn pixels survive the call.
+  testing.expectTrue(ctx === canvas.getContext('2d'));
+  testing.expectEqual(canvas, ctx.canvas);
+
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual([255, 0, 0, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(3, 3, 1, 1).data));
+
+  ctx.clearRect(0, 0, 1, 1);
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // Resizing clears the bitmap.
+  ctx.fillRect(0, 0, 4, 4);
+  canvas.width = 4;
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+}
+</script>

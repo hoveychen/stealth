@@ -54,6 +54,7 @@ pub fn getWidth(self: *const Canvas) u32 {
 pub fn setWidth(self: *Canvas, value: u32, frame: *Frame) !void {
     const str = try std.fmt.allocPrint(frame.local_arena, "{d}", .{value});
     try self.asElement().setAttributeSafe(comptime .wrap("width"), .wrap(str), frame);
+    self.resetSurface();
 }
 
 pub fn getHeight(self: *const Canvas) u32 {
@@ -64,6 +65,18 @@ pub fn getHeight(self: *const Canvas) u32 {
 pub fn setHeight(self: *Canvas, value: u32, frame: *Frame) !void {
     const str = try std.fmt.allocPrint(frame.local_arena, "{d}", .{value});
     try self.asElement().setAttributeSafe(comptime .wrap("height"), .wrap(str), frame);
+    self.resetSurface();
+}
+
+/// Assigning to `width` or `height` clears the bitmap even when the value is
+/// unchanged. Going through the attribute instead (`setAttribute("width", …)`)
+/// is caught later, when the raster notices the dimensions moved.
+fn resetSurface(self: *Canvas) void {
+    const cached = self._cached orelse return;
+    switch (cached) {
+        .@"2d" => |context| context._surface.reset(),
+        .webgl, .webgl2 => {},
+    }
 }
 
 /// Since there's no base class rendering contexts inherit from,
@@ -86,7 +99,10 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
 
     const drawing_context: DrawingContext = blk: {
         if (std.mem.eql(u8, context_type, "2d")) {
-            const ctx = try frame._factory.create(CanvasRenderingContext2D{ ._canvas = self });
+            const ctx = try frame._factory.create(CanvasRenderingContext2D{
+                ._canvas = self,
+                ._surface = .{ .arena = frame.arena },
+            });
             break :blk .{ .@"2d" = ctx };
         }
 

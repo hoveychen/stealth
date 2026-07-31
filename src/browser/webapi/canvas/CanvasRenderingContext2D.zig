@@ -24,6 +24,7 @@ const color = @import("../../color.zig");
 
 const Canvas = @import("../element/html/Canvas.zig");
 const ImageData = @import("../ImageData.zig");
+const Surface = @import("raster.zig");
 
 const Execution = js.Execution;
 
@@ -34,9 +35,16 @@ const CanvasRenderingContext2D = @This();
 /// Reference to the parent canvas element.
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/canvas
 _canvas: *Canvas,
+/// The pixels this context has actually painted. See `raster.zig` for what
+/// this does and does not attempt.
+_surface: Surface,
 /// Fill color.
 /// TODO: Add support for `CanvasGradient` and `CanvasPattern`.
 _fill_style: color.RGBA = color.RGBA.Named.black,
+/// Stroke color, same caveat.
+_stroke_style: color.RGBA = color.RGBA.Named.black,
+_line_width: f64 = 1,
+_global_alpha: f64 = 1,
 
 pub fn getCanvas(self: *const CanvasRenderingContext2D) *Canvas {
     return self._canvas;
@@ -54,6 +62,38 @@ pub fn setFillStyle(
 ) !void {
     // Prefer the same fill_style if fails.
     self._fill_style = color.RGBA.parse(value) catch self._fill_style;
+}
+
+pub fn getStrokeStyle(self: *const CanvasRenderingContext2D, exec: *Execution) ![]const u8 {
+    var w = std.Io.Writer.Allocating.init(exec.local_arena);
+    try self._stroke_style.format(&w.writer);
+    return w.written();
+}
+
+pub fn setStrokeStyle(self: *CanvasRenderingContext2D, value: []const u8) void {
+    self._stroke_style = color.RGBA.parse(value) catch self._stroke_style;
+}
+
+pub fn getLineWidth(self: *const CanvasRenderingContext2D) f64 {
+    return self._line_width;
+}
+
+/// Zero, negative and non-finite widths are ignored rather than applied.
+pub fn setLineWidth(self: *CanvasRenderingContext2D, value: f64) void {
+    if (std.math.isFinite(value) and value > 0) {
+        self._line_width = value;
+    }
+}
+
+pub fn getGlobalAlpha(self: *const CanvasRenderingContext2D) f64 {
+    return self._global_alpha;
+}
+
+/// Out-of-range and non-finite values are ignored, per the spec.
+pub fn setGlobalAlpha(self: *CanvasRenderingContext2D, value: f64) void {
+    if (std.math.isFinite(value) and value >= 0 and value <= 1) {
+        self._global_alpha = value;
+    }
 }
 
 const WidthOrImageData = union(enum) {
@@ -88,9 +128,9 @@ pub fn putImageData(_: *const CanvasRenderingContext2D, _: *ImageData, _: f64, _
 pub fn drawImage(_: *const CanvasRenderingContext2D, _: js.Value, _: f64, _: f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64) void {}
 
 pub fn getImageData(
-    _: *const CanvasRenderingContext2D,
-    _: i32, // sx
-    _: i32, // sy
+    self: *const CanvasRenderingContext2D,
+    sx: i32,
+    sy: i32,
     sw: i32,
     sh: i32,
     exec: *Execution,
@@ -98,7 +138,21 @@ pub fn getImageData(
     if (sw <= 0 or sh <= 0) {
         return error.IndexSizeError;
     }
-    return ImageData.init(@intCast(sw), @intCast(sh), null, exec);
+
+    const image_data = try ImageData.init(@intCast(sw), @intCast(sh), null, exec);
+    // Freshly created, so it is already transparent black: `readPixels` only
+    // has to overwrite the part of the window that overlaps the canvas.
+    const out = image_data._data.local(exec.js.local.?).slice();
+    self._surface.readPixels(
+        self._canvas.getWidth(),
+        self._canvas.getHeight(),
+        sx,
+        sy,
+        @intCast(sw),
+        @intCast(sh),
+        out,
+    );
+    return image_data;
 }
 
 pub fn save(_: *CanvasRenderingContext2D) void {}
@@ -109,10 +163,37 @@ pub fn translate(_: *CanvasRenderingContext2D, _: f64, _: f64) void {}
 pub fn transform(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) void {}
 pub fn setTransform(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) void {}
 pub fn resetTransform(_: *CanvasRenderingContext2D) void {}
-pub fn setStrokeStyle(_: *CanvasRenderingContext2D, _: []const u8) void {}
-pub fn clearRect(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn fillRect(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn strokeRect(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64) void {}
+pub fn clearRect(self: *CanvasRenderingContext2D, x: f64, y: f64, w: f64, h: f64) void {
+    self._surface.clearRect(self._canvas.getWidth(), self._canvas.getHeight(), x, y, w, h);
+}
+
+pub fn fillRect(self: *CanvasRenderingContext2D, x: f64, y: f64, w: f64, h: f64) void {
+    self._surface.fillRect(
+        self._canvas.getWidth(),
+        self._canvas.getHeight(),
+        x,
+        y,
+        w,
+        h,
+        self._fill_style,
+        self._global_alpha,
+    );
+}
+
+pub fn strokeRect(self: *CanvasRenderingContext2D, x: f64, y: f64, w: f64, h: f64) void {
+    self._surface.strokeRect(
+        self._canvas.getWidth(),
+        self._canvas.getHeight(),
+        x,
+        y,
+        w,
+        h,
+        self._line_width,
+        self._stroke_style,
+        self._global_alpha,
+    );
+}
+
 pub fn beginPath(_: *CanvasRenderingContext2D) void {}
 pub fn closePath(_: *CanvasRenderingContext2D) void {}
 pub fn moveTo(_: *CanvasRenderingContext2D, _: f64, _: f64) void {}
@@ -140,17 +221,23 @@ pub const JsApi = struct {
 
     pub const canvas = bridge.accessor(CanvasRenderingContext2D.getCanvas, null, .{});
     pub const font = bridge.property("10px sans-serif", .{ .template = false, .readonly = false });
-    pub const globalAlpha = bridge.property(1.0, .{ .template = false, .readonly = false });
     pub const globalCompositeOperation = bridge.property("source-over", .{ .template = false, .readonly = false });
-    pub const strokeStyle = bridge.property("#000000", .{ .template = false, .readonly = false });
-    pub const lineWidth = bridge.property(1.0, .{ .template = false, .readonly = false });
     pub const lineCap = bridge.property("butt", .{ .template = false, .readonly = false });
     pub const lineJoin = bridge.property("miter", .{ .template = false, .readonly = false });
     pub const miterLimit = bridge.property(10.0, .{ .template = false, .readonly = false });
     pub const textAlign = bridge.property("start", .{ .template = false, .readonly = false });
     pub const textBaseline = bridge.property("alphabetic", .{ .template = false, .readonly = false });
 
+    // These three back the rasteriser, so unlike the rest of the drawing
+    // state they have to be readable from Zig. Chrome exposes every one of
+    // its 2D context attributes as a prototype accessor, so this is also a
+    // step towards the right shape; the remaining `bridge.property` entries
+    // above are still plain data properties, which Chrome never has.
     pub const fillStyle = bridge.accessor(CanvasRenderingContext2D.getFillStyle, CanvasRenderingContext2D.setFillStyle, .{});
+    pub const strokeStyle = bridge.accessor(CanvasRenderingContext2D.getStrokeStyle, CanvasRenderingContext2D.setStrokeStyle, .{});
+    pub const lineWidth = bridge.accessor(CanvasRenderingContext2D.getLineWidth, CanvasRenderingContext2D.setLineWidth, .{});
+    pub const globalAlpha = bridge.accessor(CanvasRenderingContext2D.getGlobalAlpha, CanvasRenderingContext2D.setGlobalAlpha, .{});
+
     pub const createImageData = bridge.function(CanvasRenderingContext2D.createImageData, .{});
 
     pub const putImageData = bridge.function(CanvasRenderingContext2D.putImageData, .{ .noop = true });
@@ -164,9 +251,9 @@ pub const JsApi = struct {
     pub const transform = bridge.function(CanvasRenderingContext2D.transform, .{ .noop = true });
     pub const setTransform = bridge.function(CanvasRenderingContext2D.setTransform, .{ .noop = true });
     pub const resetTransform = bridge.function(CanvasRenderingContext2D.resetTransform, .{ .noop = true });
-    pub const clearRect = bridge.function(CanvasRenderingContext2D.clearRect, .{ .noop = true });
-    pub const fillRect = bridge.function(CanvasRenderingContext2D.fillRect, .{ .noop = true });
-    pub const strokeRect = bridge.function(CanvasRenderingContext2D.strokeRect, .{ .noop = true });
+    pub const clearRect = bridge.function(CanvasRenderingContext2D.clearRect, .{});
+    pub const fillRect = bridge.function(CanvasRenderingContext2D.fillRect, .{});
+    pub const strokeRect = bridge.function(CanvasRenderingContext2D.strokeRect, .{});
     pub const beginPath = bridge.function(CanvasRenderingContext2D.beginPath, .{ .noop = true });
     pub const closePath = bridge.function(CanvasRenderingContext2D.closePath, .{ .noop = true });
     pub const moveTo = bridge.function(CanvasRenderingContext2D.moveTo, .{ .noop = true });
