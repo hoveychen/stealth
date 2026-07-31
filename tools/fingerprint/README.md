@@ -309,9 +309,17 @@ several samples and records which fields moved; a single JA3 proves nothing.
 
 ### TLS ClientHello
 
+**On a resumed connection the JA4 is now byte-for-byte Chrome's** —
+`t13d1517h2_8daaf6152771_a87ad97598a9`, all three components. On a fresh
+connection it is `t13d1516h2_8daaf6152771_806a8c22fdea`; the whole difference
+is `pre_shared_key`, which only a resumed handshake carries, and which is a
+connection-lifecycle question rather than a masking one (see below).
+
+
 | | before | after | Chrome 150 |
 |---|---|---|---|
-| JA4 | `t13d1711h2_5b57614c22b0_95ca0cbbc74b` | `t13d1516h2_8daaf6152771_d8a2da3f94cd` | `t13d1517h2_8daaf6152771_a87ad97598a9` |
+| JA4, resumed connection | `t13d1711h2_5b57614c22b0_95ca0cbbc74b` | **`t13d1517h2_8daaf6152771_a87ad97598a9`** | `t13d1517h2_8daaf6152771_a87ad97598a9` |
+| JA4, fresh connection | same | `t13d1516h2_8daaf6152771_806a8c22fdea` | — |
 | cipher digest | `5b57614c22b0` | **`8daaf6152771`** | `8daaf6152771` |
 | cipher suites offered | 17 | **15** | 15 |
 | extensions offered | 11 | **18** | 19 |
@@ -336,12 +344,11 @@ runs before the hello is built.
 
 Two differences remain, both measured:
 
-1. **Chrome offers ML-DSA signature algorithms** (`0x0904`/`0x0905`/`0x0906`)
-   ahead of the eight classical ones. The pinned BoringSSL
-   (`lightpanda-io/boringssl-zig` at `f07cc58`) predates those code points, and
-   `set_sigalg_prefs` rejects the *entire* list if one entry is unknown — so
-   they are left off, and the JA4 signature digest differs by exactly those
-   three entries. Closing it needs a newer BoringSSL, not a different call.
+1. ~~Chrome offers ML-DSA signature algorithms this BoringSSL cannot name.~~
+   **Closed.** BoringSSL is now pinned at `7515be5c`, which has
+   `SSL_SIGN_ML_DSA_44`/`_65`/`_87`, and the hello offers all eleven of
+   Chrome's signature algorithms in Chrome's order. The wrapper that pins the
+   revision is carried in `deps/boringssl-zig/`; see the README there.
 2. **`pre_shared_key` (41) is usually absent**, which is the whole difference
    between `t13d1516h2` and Chrome's `t13d1517h2`. Chrome resumed all four
    sampled connections; this build resumed one in eight, and when it does the
