@@ -350,28 +350,33 @@ Two differences remain, both measured:
    handle shared across the process), so this is a connection-lifecycle
    question rather than a masking gap — see the note below.
 
-### HTTP/2 — unchanged, and not reachable from our code
+### HTTP/2
 
-| | this build | Chrome 150 |
-|---|---|---|
-| Akamai fingerprint | `3:100;4:65536;2:0\|1048510465\|0\|m,s,a,p` | `1:65536;2:0;4:6291456;6:262144\|15663105\|0\|m,a,s,p` |
-| SETTINGS | MAX_CONCURRENT_STREAMS=100, INITIAL_WINDOW_SIZE=65536, ENABLE_PUSH=0 | HEADER_TABLE_SIZE=65536, ENABLE_PUSH=0, INITIAL_WINDOW_SIZE=6291456, MAX_HEADER_LIST_SIZE=262144 |
-| connection WINDOW_UPDATE | 1048510465 | 15663105 |
-| pseudo-header order | `:method :scheme :authority :path` | `:method :authority :scheme :path` |
+| | before | after | Chrome 150 |
+|---|---|---|---|
+| Akamai fingerprint | `3:100;4:65536;2:0\|1048510465\|0\|m,s,a,p` | `1:65536;2:0;4:6291456;6:262144\|15663105\|0\|m,a,s,p` | identical to after |
+| Akamai hash | — | **`52d84b11737d980aef856699f885ca86`** | `52d84b11737d980aef856699f885ca86` |
+| SETTINGS | MAX_CONCURRENT_STREAMS=100, INITIAL_WINDOW_SIZE=65536, ENABLE_PUSH=0 | **HEADER_TABLE_SIZE=65536, ENABLE_PUSH=0, INITIAL_WINDOW_SIZE=6291456, MAX_HEADER_LIST_SIZE=262144** | same |
+| connection WINDOW_UPDATE | 1048510465 | **15663105** | 15663105 |
+| pseudo-header order | `:method :scheme :authority :path` | **`:method :authority :scheme :path`** | same |
 
-All three values are hardcoded in libcurl and have no runtime option:
+All three values are hardcoded in libcurl with no runtime option, so this
+needed a patched libcurl. Two files are carried in `deps/curl-patched/` and
+swapped into the build in place of the dependency's copies:
 
-- `lib/http2.c`, `populate_settings()` — the three SETTINGS entries.
-- `lib/http2.c`, `HTTP2_HUGE_WINDOW_SIZE` — the connection window, hence the
-  WINDOW_UPDATE increment (Chrome's 15663105 is a 15 MiB window minus the
-  65535 default).
-- `lib/http.c`, `Curl_http_req_to_h2()` — emits `:scheme` before `:authority`.
+- `lib/http2.c`, `populate_settings()` — Chrome's four SETTINGS entries in
+  Chrome's order instead of upstream's three.
+- `lib/http2.c`, `H2_STREAM_WINDOW_SIZE_INITIAL` and `HTTP2_HUGE_WINDOW_SIZE`
+  — the stream and connection windows, hence the announced
+  `INITIAL_WINDOW_SIZE` and the `WINDOW_UPDATE` increment.
+- `lib/http.c`, `Curl_http_req_to_h2()` — `:authority` before `:scheme`.
 
-Changing them means carrying a patched libcurl: either vendoring those two
-files, or forking curl the way BoringSSL is already forked. Both are decisions
-about the dependency set rather than about this code, so neither was taken
-here. Until one is, the HTTP/2 preface identifies the engine as libcurl even
-though the ClientHello above it does not.
+Each hunk is marked `LIGHTPANDA:` in the source and explained, with re-sync
+instructions, in `deps/curl-patched/README.md`.
+
+Flow control was the risk in widening the windows, so the check that matters is
+a large body: an 8.9 MB script over HTTP/2 arrives complete, alongside ten
+smaller origins across six CDNs.
 
 ### A connection-lifecycle finding, not a fingerprint one
 
@@ -404,7 +409,7 @@ One table for the plan, each column a measured snapshot in
 | subresource destinations requested | 5/8 | 8/8 | 8/8 | 8/8 | 8/8 | **8/8** |
 | TLS cipher digest matches Chrome | no | no | no | no | no | **yes** |
 | JA3 varies per connection | no | no | no | no | no | **yes** |
-| HTTP/2 fingerprint matches Chrome | no | no | no | no | no | no |
+| HTTP/2 fingerprint matches Chrome | no | no | no | no | no | **yes** |
 
 P6 moves nothing in the first four rows, which is the expected result: the
 transport layer is invisible to a script, so a change there should leave the JS
