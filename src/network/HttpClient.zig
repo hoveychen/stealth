@@ -440,6 +440,7 @@ fn addFetchMetadata(req: *Request) !void {
         try headers.add(switch (req.resource_type) {
             .document => H.Accept.document,
             .stylesheet => H.Accept.style,
+            .image => H.Accept.image,
             .eventsource => H.Accept.event_stream,
             .script, .fetch, .xhr => H.Accept.any,
         });
@@ -450,6 +451,7 @@ fn addFetchMetadata(req: *Request) !void {
     try headers.set(switch (req.resource_type) {
         .document => if (req.nav) |n| (if (n.subframe) "Sec-Fetch-Dest: iframe" else "Sec-Fetch-Dest: document") else "Sec-Fetch-Dest: document",
         .stylesheet => "Sec-Fetch-Dest: style",
+        .image => "Sec-Fetch-Dest: image",
         .script => "Sec-Fetch-Dest: script",
         // fetch(), XHR and EventSource all report an empty destination.
         .fetch, .xhr, .eventsource => "Sec-Fetch-Dest: empty",
@@ -459,7 +461,7 @@ fn addFetchMetadata(req: *Request) !void {
         .document => "Sec-Fetch-Mode: navigate",
         // Subresources the parser pulls in are no-cors; script-issued fetches
         // and XHR go through the CORS protocol.
-        .stylesheet, .script => "Sec-Fetch-Mode: no-cors",
+        .stylesheet, .script, .image => "Sec-Fetch-Mode: no-cors",
         .fetch, .xhr, .eventsource => "Sec-Fetch-Mode: cors",
     });
 
@@ -1766,6 +1768,7 @@ pub const Request = struct {
         script,
         fetch,
         stylesheet,
+        image,
         eventsource,
 
         // Allowed Values: Document, Stylesheet, Image, Media, Font, Script,
@@ -1779,6 +1782,7 @@ pub const Request = struct {
                 .script => "Script",
                 .fetch => "Fetch",
                 .stylesheet => "Stylesheet",
+                .image => "Image",
                 .eventsource => "EventSource",
             };
         }
@@ -3296,6 +3300,33 @@ test "HttpClient: addFetchMetadata labels a same-origin script and leaves a call
     // Subresources carry neither of the navigation-only headers.
     try testing.expectString("", findHeaderValue(&req.headers, "Sec-Fetch-User"));
     try testing.expectString("", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+}
+
+test "HttpClient: addFetchMetadata labels a cross-origin image" {
+    var req: Request = undefined;
+    req.headers = .{ .headers = null };
+    defer req.headers.deinit();
+    req.resource_type = .image;
+    req.url = "https://cdn.example.net/logo.png";
+    req.cookie_origin = "https://example.com/";
+    req.nav = null;
+
+    try addFetchMetadata(&req);
+
+    try testing.expectString(
+        "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        findHeaderValue(&req.headers, "Accept"),
+    );
+    try testing.expectString("image", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
+    // Parser-initiated, so no-cors rather than the cors an XHR would get.
+    try testing.expectString("no-cors", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
+    try testing.expectString("cross-site", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
+    try testing.expectString("", findHeaderValue(&req.headers, "Sec-Fetch-User"));
+    try testing.expectString("", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+}
+
+test "HttpClient: ResourceType.image reports Chrome's CDP name" {
+    try testing.expectString("Image", Request.ResourceType.image.string());
 }
 
 test "HttpClient: addFetchMetadata does not clobber a caller-supplied Accept" {

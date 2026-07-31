@@ -605,6 +605,9 @@ fn initialPriority(resource_type: HttpClient.Request.ResourceType) []const u8 {
     return switch (resource_type) {
         .document, .stylesheet => "VeryHigh",
         .script, .xhr, .fetch, .eventsource => "High",
+        // Chrome starts images at Low and only boosts them once layout finds
+        // them in the viewport, which this engine never does.
+        .image => "Low",
     };
 }
 

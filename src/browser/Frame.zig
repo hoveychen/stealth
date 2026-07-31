@@ -2289,6 +2289,61 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     try self.fireElementEvent(element, comptime .wrap("load"));
 }
 
+// Fetch an `<img src>` and throw the bytes away.
+//
+// Nothing here decodes: there is no raster pipeline, so `naturalWidth` and
+// friends stay 0 either way. The request itself is the point. A client that
+// pulls the HTML, the CSS and the scripts but never once asks for an image is
+// separable server-side with a single log query, and no amount of correct
+// header spelling hides it.
+//
+// Unlike `loadExternalStylesheet` this is asynchronous. Stylesheets block
+// because their rules have to be in `document.styleSheets` before script runs;
+// image bytes are never read, so there is nothing to wait for, and a page with
+// fifty images would otherwise serialise fifty blocking round-trips.
+pub fn loadImage(self: *Frame, src: []const u8) !void {
+    if (self.isGoingAway() or src.len == 0) {
+        return;
+    }
+
+    // Matches loadExternalStylesheet: fragment-parsed nodes (innerHTML,
+    // DOMParser) are not attached to this frame's document.
+    if (self._parse_mode == .fragment) {
+        return;
+    }
+
+    const session = self._session;
+
+    const resolved = URL.resolve(self.arena, self.base(), src, .{ .encoding = self.charset }) catch |err| {
+        log.warn(.http, "image resolve", .{ .err = err, .src = src });
+        return;
+    };
+
+    var headers = try session.browser.http_client.newHeaders();
+    errdefer headers.deinit();
+    try self.headersForRequest(&headers);
+
+    // Accept and the Sec-Fetch-* set come from addFetchMetadata via
+    // resource_type = .image. The default callbacks discard the body, which
+    // is exactly what we want.
+    self.makeRequest(.{
+        .url = resolved,
+        .method = .GET,
+        .frame_id = self._frame_id,
+        .loader_id = self._loader_id,
+        .headers = headers,
+        .cookie_jar = &session.cookie_jar,
+        .cookie_origin = self.url,
+        .resource_type = .image,
+        .notification = session.notification,
+        .shutdown_callback = HttpClient.noopShutdown,
+    }) catch |err| {
+        // A failed image never blocks the page; Chrome would fire `error` on
+        // the element, but we have no decode result to report either way.
+        log.warn(.http, "image fetch", .{ .err = err, .url = resolved });
+    };
+}
+
 fn fireElementEvent(self: *Frame, el: *Element, name: String) !void {
     const event = try Event.initTrusted(name, .{}, self._page);
     try self._event_manager.dispatch(el.asEventTarget(), event);
