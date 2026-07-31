@@ -113,28 +113,50 @@ pub const Header = struct {
 pub const Headers = struct {
     headers: ?*libcurl.CurlSList,
 
-    pub fn init(user_agent: [:0]const u8) !Headers {
-        const header_list = libcurl.curl_slist_append(null, user_agent);
-        if (header_list == null) {
-            return error.OutOfMemory;
-        }
-        // libcurl leaves the list intact when curl_slist_append fails, so we own it.
-        errdefer libcurl.curl_slist_free_all(header_list);
+    /// The wire form of the values a CDP Emulation.setUserAgentOverride can
+    /// replace. Each is a full "Name: Value" string.
+    pub const Overridable = struct {
+        user_agent: [:0]const u8,
+        accept_language: [:0]const u8,
+        platform: [:0]const u8,
+    };
 
-        // Always add sec-CH-UA header
-        const with_sec_ch_ua = libcurl.curl_slist_append(header_list, Config.HttpHeaders.sec_ch_ua);
-        if (with_sec_ch_ua == null) {
-            return error.OutOfMemory;
+    /// Baseline headers every page request carries. Emitted in the order real
+    /// Chrome uses (client hints, then User-Agent, then Accept-Language), since
+    /// header order is itself a fingerprint. The per-destination `Accept` and
+    /// the Sec-Fetch-* set are added later, by HttpClient.newRequest, which is
+    /// the only place that knows the request's destination and initiator.
+    pub fn init(http_headers: *const Config.HttpHeaders, over: Overridable) !Headers {
+        var self: Headers = .{ .headers = null };
+        errdefer self.deinit();
+
+        for ([_][:0]const u8{
+            http_headers.sec_ch_ua,
+            Config.HttpHeaders.sec_ch_ua_mobile,
+            over.platform,
+            over.user_agent,
+            // Omitting Accept-Language triggers bot-protection on some CDNs
+            // (Akamai) when Accept-Encoding is present.
+            over.accept_language,
+        }) |header| {
+            try self.add(header.ptr);
         }
 
-        // Always add Accept-Language. Omitting it triggers bot-protection on
-        // some CDNs (Akamai) when Accept-Encoding is present.
-        const updated_headers = libcurl.curl_slist_append(with_sec_ch_ua, Config.HttpHeaders.accept_language);
-        if (updated_headers == null) {
-            return error.OutOfMemory;
-        }
+        return self;
+    }
 
-        return .{ .headers = updated_headers };
+    /// True when a header with this (case-insensitive) name is already present.
+    /// Used to let a caller-supplied header win over a default without
+    /// producing the duplicate that libcurl silently collapses.
+    pub fn has(self: *const Headers, name: []const u8) bool {
+        var node = self.headers;
+        while (node) |n| : (node = n.*.next) {
+            const data = @as([*:0]const u8, @ptrCast(n.*.data));
+            if (parseHeader(std.mem.span(data))) |existing| {
+                if (std.ascii.eqlIgnoreCase(existing.name, name)) return true;
+            }
+        }
+        return false;
     }
 
     pub fn deinit(self: *const Headers) void {
@@ -507,8 +529,13 @@ pub const Connection = struct {
 
         // compression, don't remove this. CloudFront will send gzip content
         // even if we don't support it, and then it won't be decompressed.
-        // empty string means: use whatever's available
-        try libcurl.curl_easy_setopt(self._easy, .accept_encoding, "");
+        //
+        // An explicit list rather than "" (whatever curl supports), because ""
+        // emits curl's own ordering — "deflate, gzip, br" — and Chrome sends
+        // "gzip, deflate, br, zstd". These three are named in Chrome's order;
+        // zstd is left off deliberately, since advertising an encoding curl
+        // wasn't built with means a response we can't decode.
+        try libcurl.curl_easy_setopt(self._easy, .accept_encoding, "gzip, deflate, br");
 
         // proxy
         const http_proxy = config.httpProxy();
@@ -686,7 +713,11 @@ pub const Connection = struct {
     }
 
     pub fn request(self: *const Connection, http_headers: *const Config.HttpHeaders) !u16 {
-        var header_list = try Headers.init(http_headers.user_agent_header);
+        var header_list = try Headers.init(http_headers, .{
+            .user_agent = http_headers.user_agent_header,
+            .accept_language = http_headers.accept_language,
+            .platform = http_headers.sec_ch_ua_platform,
+        });
         defer header_list.deinit();
         try self.secretHeaders(&header_list, http_headers);
         try self.setHeaders(&header_list);
@@ -996,8 +1027,9 @@ fn findHeader(headers: Headers, name: []const u8) struct { count: usize, value: 
 }
 
 test "Headers.set replaces an existing header instead of duplicating it" {
-    var headers = try Headers.init("User-Agent: Lightpanda/1.0");
+    var headers = Headers{ .headers = null };
     defer headers.deinit();
+    try headers.add("User-Agent: Lightpanda/1.0");
 
     try headers.set("User-Agent: Custom/1.0");
 
@@ -1007,7 +1039,8 @@ test "Headers.set replaces an existing header instead of duplicating it" {
 }
 
 test "Headers.set matches header names case-insensitively" {
-    var headers = try Headers.init("User-Agent: Lightpanda/1.0");
+    var headers = Headers{ .headers = null };
+    try headers.add("User-Agent: Lightpanda/1.0");
     defer headers.deinit();
 
     try headers.set("user-agent: Custom/1.0");
@@ -1017,9 +1050,11 @@ test "Headers.set matches header names case-insensitively" {
     try testing.expectString("Custom/1.0", ua.value);
 }
 
-test "Headers.set adds a new header and preserves defaults" {
-    var headers = try Headers.init("User-Agent: Lightpanda/1.0");
+test "Headers.set adds a new header and preserves the existing ones" {
+    var headers = Headers{ .headers = null };
     defer headers.deinit();
+    try headers.add("User-Agent: Lightpanda/1.0");
+    try headers.add("Accept-Language: en-US,en;q=0.9");
 
     try headers.set("X-Custom: yes");
 

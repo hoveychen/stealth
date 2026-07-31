@@ -392,10 +392,25 @@
     \\  --storage-sqlite-path <PATH>
     \\          Path to the SQLite database file for persistent storage.
     \\          Use ":memory:" for in-memory storage.
+    \\  --accept-language <STRING>
+    \\          Value of the Accept-Language header.
+    \\          Defaults to "en-US,en;q=0.9".
+    \\  --sec-ch-ua <STRING>
+    \\          Value of the Sec-Ch-Ua client-hint header, in the header's own
+    \\          syntax. navigator.userAgentData.brands is derived from the same
+    \\          value, so the two cannot disagree.
+    \\          e.g. --sec-ch-ua '"Chromium";v="150", "Google Chrome";v="150"'
+    \\          Defaults to "Lightpanda";v="1".
+    \\  --sec-ch-ua-platform <STRING>
+    \\          Value of the Sec-Ch-Ua-Platform client-hint header, also reported
+    \\          by navigator.userAgentData.platform.
+    \\          e.g. --sec-ch-ua-platform macOS
+    \\          Defaults to the host OS.
     \\  --user-agent <STRING>
-    \\          Override the User-Agent header entirely. Must not impersonate other
-    \\          browsers; any value containing "Mozilla" is forbidden. The browser
-    \\          still sends Sec-Ch-Ua. Incompatible with --user-agent-suffix.
+    \\          Override the User-Agent header entirely. Incompatible with
+    \\          --user-agent-suffix. Set --sec-ch-ua and --sec-ch-ua-platform to
+    \\          match: a User-Agent that disagrees with the client hints is more
+    \\          conspicuous than either value on its own.
     \\  --user-agent-suffix <STRING>
     \\          Suffix appended to the Lightpanda/X.Y User-Agent.
     \\  --v8-flags-unsafe <FLAGS>

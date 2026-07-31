@@ -147,25 +147,25 @@ pub fn setUserAgentOverride(cmd: *CDP.Command) !void {
         platform: ?[]const u8 = null,
     })) orelse return error.InvalidParams;
 
-    if (params.acceptLanguage) |v| {
-        log.warn(.not_implemented, "Emulation.setUserAgentOverride", .{ .param = "acceptLanguage", .value = v });
-    }
-    if (params.platform) |v| {
-        log.warn(.not_implemented, "Emulation.setUserAgentOverride", .{ .param = "platform", .value = v });
-    }
-
     const ua = params.userAgent;
     Config.validateUserAgent(ua) catch |err| switch (err) {
         error.NonPrintable => return cmd.sendError(-32602, "User agent contains non-printable characters", .{}),
-        error.Reserved => {
-            log.warn(.not_implemented, "Emulation.setUserAgentOverride", .{ .param = "userAgent", .value = ua, .info = "User agent must not contain Mozilla" });
-            return cmd.sendResult(null, .{});
-        },
     };
 
     const bc = cmd.browser_context orelse return error.BrowserContextNotLoaded;
     const http_client = &cmd.cdp.browser.http_client;
     try http_client.setUserAgentOverride(ua);
+
+    // acceptLanguage and platform used to be logged as not_implemented and
+    // dropped, which left a UA claiming one thing while Accept-Language and the
+    // platform client hint said another — the inconsistency a fingerprinter
+    // looks for. Both now take effect.
+    if (params.acceptLanguage) |v| {
+        try http_client.setAcceptLanguageOverride(v);
+    }
+    if (params.platform) |v| {
+        try http_client.setPlatformOverride(v);
+    }
     bc.user_agent_changed = true;
 
     return cmd.sendResult(null, .{});
@@ -187,9 +187,9 @@ test "cdp.Emulation: setUserAgentOverride with valid user agent" {
     try ctx.expectSentResult(null, .{ .id = 1 });
 }
 
-test "cdp.Emulation: setUserAgentOverride ignores mozilla" {
-    testing.silenceLog(&.{.not_implemented});
-
+test "cdp.Emulation: setUserAgentOverride applies a Chrome user agent" {
+    // Upstream dropped any UA containing "Mozilla" and left user_agent_changed
+    // false. Impersonating Chrome is this fork's purpose, so it has to apply.
     var ctx = try testing.context();
     defer ctx.deinit();
     _ = try ctx.loadBrowserContext(.{ .id = "BID-UA2" });
@@ -197,16 +197,16 @@ test "cdp.Emulation: setUserAgentOverride ignores mozilla" {
     try ctx.processMessage(.{
         .id = 2,
         .method = "Emulation.setUserAgentOverride",
-        .params = .{ .userAgent = "Mozilla/5.0 (Windows NT 10.0)" },
+        .params = .{ .userAgent = "Mozilla/5.0 (Windows NT 10.0) Chrome/150.0.0.0" },
     });
 
     try ctx.expectSentResult(null, .{});
-    try testing.expectEqual(false, ctx.cdp().browser_context.?.user_agent_changed);
+    try testing.expectEqual(true, ctx.cdp().browser_context.?.user_agent_changed);
 }
 
-test "cdp.Emulation: setUserAgentOverride ignores mozilla case insensitive" {
-    testing.silenceLog(&.{.not_implemented});
-
+test "cdp.Emulation: setUserAgentOverride applies acceptLanguage and platform" {
+    // Both used to be logged as not_implemented and discarded, which left the
+    // UA disagreeing with Accept-Language and the platform client hint.
     var ctx = try testing.context();
     defer ctx.deinit();
     _ = try ctx.loadBrowserContext(.{ .id = "BID-UA3" });
@@ -214,11 +214,17 @@ test "cdp.Emulation: setUserAgentOverride ignores mozilla case insensitive" {
     try ctx.processMessage(.{
         .id = 3,
         .method = "Emulation.setUserAgentOverride",
-        .params = .{ .userAgent = "MOZILLA/5.0 test" },
+        .params = .{
+            .userAgent = "Mozilla/5.0 (Macintosh) Chrome/150.0.0.0",
+            .acceptLanguage = "de-DE,de;q=0.9",
+            .platform = "Windows",
+        },
     });
 
     try ctx.expectSentResult(null, .{});
-    try testing.expectEqual(false, ctx.cdp().browser_context.?.user_agent_changed);
+    const client = &ctx.cdp().browser.http_client;
+    try std.testing.expectEqualStrings("de-DE,de;q=0.9", client.getLanguages());
+    try std.testing.expectEqualStrings("Windows", client.getPlatform());
 }
 
 test "cdp.Emulation: setUserAgentOverride rejects non-printable characters" {

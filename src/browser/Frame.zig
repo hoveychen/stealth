@@ -791,6 +791,18 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = opts.initiator_url orelse self.url,
         .resource_type = .document,
+        .nav = .{
+            // An address-bar / bookmark navigation has no initiator document,
+            // which Sec-Fetch-Site reports as "none".
+            .initiator_origin = opts.initiator_origin orelse opts.initiator_url,
+            .subframe = self.parent != null,
+            // Script-driven navigations and a frame's own initial load carry no
+            // user gesture; anchors, forms, history and the address bar do.
+            .user_activated = switch (opts.reason) {
+                .script, .initialFrameNavigation => false,
+                .anchor, .address_bar, .form, .history, .navigation => true,
+            },
+        },
         .notification = self._session.notification,
         .header_callback = frameHeaderDoneCallback,
         .data_callback = frameDataCallback,
@@ -804,7 +816,8 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
     {
         // Ours until submit; clean up if header setup fails.
         errdefer transfer.deinit();
-        try transfer.req.headers.add(lp.Config.HttpHeaders.navigation_accept);
+        // Accept and the Sec-Fetch-* set come from HttpClient.addFetchMetadata,
+        // which derives them from resource_type + nav.
         if (opts.header) |hdr| {
             try transfer.req.headers.add(hdr);
         }
@@ -2196,8 +2209,8 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // the frame while it's registered (they'd run JS on the parser's stack)
     // and delivers them on the next tick after the sync fetch returns.
 
+    // Accept comes from addFetchMetadata via resource_type = .stylesheet.
     var headers = try http_client.newHeaders();
-    try headers.add("Accept: text/css,*/*;q=0.1");
     try self.headersForRequest(&headers);
 
     // Set the script-manager `is_evaluating` flag for the same reason

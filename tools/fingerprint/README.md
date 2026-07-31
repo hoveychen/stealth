@@ -43,6 +43,40 @@ harness reads the DOM or the wire instead.
 `Target.createBrowserContext` fails with `Cannot have more than one browser
 context at a time`, so the collectors reuse a single page across all four steps.
 
+## Header-layer status (after P3)
+
+On the document request, 13 of Chrome's 14 headers are now present, up from 6:
+
+| | before | after |
+|---|---|---|
+| headers present | 6/14 | 13/14 |
+| missing | `Connection`, `Sec-Ch-Ua-Mobile`, `Sec-Ch-Ua-Platform`, `Upgrade-Insecure-Requests`, `Sec-Fetch-Site/Mode/User/Dest` | `Connection` |
+| headers Chrome doesn't send | none | none |
+
+Three gaps remain at this layer, all measured rather than assumed:
+
+1. **Header order still differs.** Chrome sends
+   `host connection sec-ch-ua sec-ch-ua-mobile sec-ch-ua-platform upgrade-insecure-requests user-agent accept sec-fetch-site sec-fetch-mode sec-fetch-user sec-fetch-dest accept-encoding accept-language`;
+   we send
+   `host accept-encoding sec-ch-ua sec-ch-ua-mobile sec-ch-ua-platform user-agent accept-language accept sec-fetch-dest sec-fetch-mode sec-fetch-site upgrade-insecure-requests sec-fetch-user`.
+   libcurl emits `Host` and `Accept-Encoding` from its own slots and appends the
+   caller's slist after them, so the interleaving Chrome produces isn't
+   reachable by ordering the slist alone. Closing this means either taking over
+   curl's internal headers (supply `Host:` explicitly, blank out curl's
+   defaults) or moving off libcurl for page requests.
+2. **`Connection: keep-alive` is deliberately absent.** Chrome sends it on
+   HTTP/1.1 only — the header is illegal in HTTP/2. Headers are built before
+   the protocol version is known, so emitting it unconditionally would put an
+   illegal header on every h2 request. Needs a version-aware hook.
+3. **`Accept-Encoding` omits `zstd`.** Chrome sends `gzip, deflate, br, zstd`.
+   The first three are now in Chrome's order, but advertising `zstd` when the
+   bundled libcurl may not have it means a response we cannot decode.
+
+Two engine-level gaps also show up in the capture and are not header bugs:
+stylesheets and images are **never requested at all** (no `/asset.css`,
+`/asset.png`, `/favicon.ico` hit the server), and a client that never fetches
+CSS or images is trivially separable from a browser server-side.
+
 ## Reference caveats
 
 `--headless=new` Chrome 150 on this machine differs from headed Chrome in

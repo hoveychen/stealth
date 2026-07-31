@@ -260,8 +260,9 @@ test "signRequest: adds headers with correct names" {
     };
     defer auth.deinit(allocator);
 
-    var headers = try Http.Headers.init("User-Agent: Test-Agent");
+    var headers = Http.Headers{ .headers = null };
     defer headers.deinit();
+    try headers.add("User-Agent: Test-Agent");
 
     try auth.signRequest(allocator, &headers, "example.com");
 

@@ -672,9 +672,9 @@ test "cdp.network setExtraHTTPHeaders rejects non-printable User-Agent" {
     try testing.expectEqual("x-custom: hi", std.mem.span(bc.extra_headers.items[0]));
 }
 
-test "cdp.network setExtraHTTPHeaders rejects a Mozilla User-Agent" {
-    testing.silenceLog(&.{.not_implemented});
-
+test "cdp.network setExtraHTTPHeaders accepts a Chrome User-Agent" {
+    // Upstream rejected any UA containing "Mozilla". This fork presents a
+    // Chrome-consistent fingerprint, so a real browser's UA has to get through.
     var ctx = try testing.context();
     defer ctx.deinit();
 
@@ -683,11 +683,11 @@ test "cdp.network setExtraHTTPHeaders rejects a Mozilla User-Agent" {
     try ctx.processMessage(.{
         .id = 3,
         .method = "Network.setExtraHTTPHeaders",
-        .params = .{ .headers = .{ .@"User-Agent" = "Mozilla/5.0" } },
+        .params = .{ .headers = .{ .@"User-Agent" = "Mozilla/5.0 (Macintosh) Chrome/150.0.0.0" } },
     });
 
     const bc = ctx.cdp().browser_context.?;
-    try testing.expectEqual(bc.extra_headers.items.len, 0);
+    try testing.expectEqual(bc.extra_headers.items.len, 1);
 }
 
 test "cdp.network setExtraHTTPHeaders accepts valid User-Agent" {
@@ -706,7 +706,7 @@ test "cdp.network setExtraHTTPHeaders accepts valid User-Agent" {
     try testing.expectEqual(bc.extra_headers.items.len, 1);
 }
 
-test "cdp.network setExtraHTTPHeaders rejects a Mozilla User-Agent smuggled via a colon in the key" {
+test "cdp.network setExtraHTTPHeaders rejects a non-printable User-Agent smuggled via a colon in the key" {
     testing.silenceLog(&.{.not_implemented});
 
     var ctx = try testing.context();
@@ -715,12 +715,15 @@ test "cdp.network setExtraHTTPHeaders rejects a Mozilla User-Agent smuggled via 
     _ = try ctx.loadBrowserContext(.{ .id = "NID-UA4", .session_id = "NESI-UA4" });
 
     // A colon in the key desyncs the raw key from the first-colon parse that
-    // req.headers.set/libcurl use: "User-Agent:Mozilla/5.0 (X: Y)" parses to
-    // name="User-Agent", value="Mozilla/5.0 (X: Y)" on the wire.
+    // req.headers.set/libcurl use: "User-Agent:Bot/1 (X: Y)" parses to
+    // name="User-Agent", value="Bot/1 (X: Y)" on the wire. The UA validation
+    // has to see that parsed value, not the raw key — checked here with a
+    // non-printable byte, which is still forbidden (unlike "Mozilla", which
+    // this fork now allows).
     try ctx.processMessage(.{
         .id = 3,
         .method = "Network.setExtraHTTPHeaders",
-        .params = .{ .headers = .{ .@"User-Agent:Mozilla/5.0 (X" = "Y)" } },
+        .params = .{ .headers = .{ .@"User-Agent:Bot\x7f/1 (X" = "Y)" } },
     });
 
     const bc = ctx.cdp().browser_context.?;
