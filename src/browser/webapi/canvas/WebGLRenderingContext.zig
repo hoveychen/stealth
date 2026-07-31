@@ -21,6 +21,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const Canvas = @import("../element/html/Canvas.zig");
+const objects = @import("webgl_objects.zig");
 
 const Execution = js.Execution;
 
@@ -641,6 +642,338 @@ pub fn getSupportedExtensions(_: *const WebGLRenderingContext) []const []const u
     return std.meta.fieldNames(Extension.Kind);
 }
 
+// ---------------------------------------------------------------------------
+// The calls. Nothing here touches a GPU: object-creating calls hand back a
+// fresh opaque handle, queries answer what the reference Chrome answers for a
+// context in this (never-drawn-into, nothing-bound) state, and the ~100 pure
+// state setters below are no-ops. The point is that none of them throw — a
+// consumer that feature-detects WebGL and then drives it gets a context that
+// silently does nothing, instead of a TypeError on the first call.
+
+pub fn createBuffer(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLBuffer {
+    return frame._factory.create(objects.WebGLBuffer{});
+}
+
+pub fn createFramebuffer(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLFramebuffer {
+    return frame._factory.create(objects.WebGLFramebuffer{});
+}
+
+pub fn createProgram(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLProgram {
+    return frame._factory.create(objects.WebGLProgram{});
+}
+
+pub fn createRenderbuffer(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLRenderbuffer {
+    return frame._factory.create(objects.WebGLRenderbuffer{});
+}
+
+pub fn createShader(_: *const WebGLRenderingContext, _: u32, frame: *Frame) !*objects.WebGLShader {
+    return frame._factory.create(objects.WebGLShader{});
+}
+
+pub fn createTexture(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLTexture {
+    return frame._factory.create(objects.WebGLTexture{});
+}
+
+/// We never bind anything, so there is nothing to be incomplete about.
+pub fn checkFramebufferStatus(_: *const WebGLRenderingContext, _: u32) u32 {
+    return FRAMEBUFFER_COMPLETE;
+}
+
+/// No call of ours can fail, so there is never a pending error. Chrome reaches
+/// INVALID_OPERATION here once a script misuses the API; we do not validate.
+pub fn getError(_: *const WebGLRenderingContext) u32 {
+    return NO_ERROR;
+}
+
+pub fn isContextLost(_: *const WebGLRenderingContext) bool {
+    return false;
+}
+
+/// DITHER is the one capability enabled by default; see the getParameter
+/// booleans above, which come from the same measurement.
+pub fn isEnabled(_: *const WebGLRenderingContext, cap: u32) bool {
+    return cap == DITHER;
+}
+
+// Chrome answers true only once the object has been bound at least once. We
+// have no binding state, so any live handle reads as valid.
+pub fn isBuffer(_: *const WebGLRenderingContext, buffer: ?*objects.WebGLBuffer) bool {
+    return buffer != null;
+}
+
+pub fn isFramebuffer(_: *const WebGLRenderingContext, framebuffer: ?*objects.WebGLFramebuffer) bool {
+    return framebuffer != null;
+}
+
+pub fn isProgram(_: *const WebGLRenderingContext, program: ?*objects.WebGLProgram) bool {
+    return program != null;
+}
+
+pub fn isRenderbuffer(_: *const WebGLRenderingContext, renderbuffer: ?*objects.WebGLRenderbuffer) bool {
+    return renderbuffer != null;
+}
+
+pub fn isShader(_: *const WebGLRenderingContext, shader: ?*objects.WebGLShader) bool {
+    return shader != null;
+}
+
+pub fn isTexture(_: *const WebGLRenderingContext, texture: ?*objects.WebGLTexture) bool {
+    return texture != null;
+}
+
+/// Nothing we hand out ever compiles or links, so every log is empty and every
+/// status is false — which is what Chrome reports for a fresh, un-compiled
+/// shader and a fresh, un-linked program too.
+pub fn getShaderInfoLog(_: *const WebGLRenderingContext, _: ?*objects.WebGLShader) []const u8 {
+    return "";
+}
+
+pub fn getProgramInfoLog(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram) []const u8 {
+    return "";
+}
+
+pub fn getShaderSource(_: *const WebGLRenderingContext, _: ?*objects.WebGLShader) []const u8 {
+    return "";
+}
+
+pub fn getShaderParameter(_: *const WebGLRenderingContext, _: ?*objects.WebGLShader, pname: u32) ?Parameter {
+    return switch (pname) {
+        SHADER_TYPE => .{ .number = VERTEX_SHADER },
+        DELETE_STATUS, COMPILE_STATUS => .{ .boolean = false },
+        else => null,
+    };
+}
+
+pub fn getProgramParameter(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram, pname: u32) ?Parameter {
+    return switch (pname) {
+        DELETE_STATUS, LINK_STATUS, VALIDATE_STATUS => .{ .boolean = false },
+        ATTACHED_SHADERS, ACTIVE_UNIFORMS, ACTIVE_ATTRIBUTES => .{ .number = 0 },
+        else => null,
+    };
+}
+
+pub fn getBufferParameter(_: *const WebGLRenderingContext, _: u32, pname: u32) ?Parameter {
+    return switch (pname) {
+        BUFFER_SIZE => .{ .number = 0 },
+        BUFFER_USAGE => .{ .number = STATIC_DRAW },
+        else => null,
+    };
+}
+
+/// The default sampler state of a freshly bound 2D texture.
+pub fn getTexParameter(_: *const WebGLRenderingContext, _: u32, pname: u32) ?Parameter {
+    return switch (pname) {
+        TEXTURE_MAG_FILTER => .{ .number = LINEAR },
+        TEXTURE_MIN_FILTER => .{ .number = NEAREST_MIPMAP_LINEAR },
+        TEXTURE_WRAP_S, TEXTURE_WRAP_T => .{ .number = REPEAT },
+        else => null,
+    };
+}
+
+/// A renderbuffer with no storage allocated yet.
+pub fn getRenderbufferParameter(_: *const WebGLRenderingContext, _: u32, pname: u32) ?Parameter {
+    return switch (pname) {
+        RENDERBUFFER_WIDTH,
+        RENDERBUFFER_HEIGHT,
+        RENDERBUFFER_RED_SIZE,
+        RENDERBUFFER_GREEN_SIZE,
+        RENDERBUFFER_BLUE_SIZE,
+        RENDERBUFFER_ALPHA_SIZE,
+        RENDERBUFFER_DEPTH_SIZE,
+        RENDERBUFFER_STENCIL_SIZE,
+        => .{ .number = 0 },
+        RENDERBUFFER_INTERNAL_FORMAT => .{ .number = RGBA4 },
+        else => null,
+    };
+}
+
+/// The default state of a generic vertex attribute array.
+pub fn getVertexAttrib(_: *const WebGLRenderingContext, _: u32, pname: u32, exec: *Execution) ?Parameter {
+    return switch (pname) {
+        VERTEX_ATTRIB_ARRAY_ENABLED, VERTEX_ATTRIB_ARRAY_NORMALIZED => .{ .boolean = false },
+        VERTEX_ATTRIB_ARRAY_SIZE => .{ .number = 4 },
+        VERTEX_ATTRIB_ARRAY_STRIDE => .{ .number = 0 },
+        VERTEX_ATTRIB_ARRAY_TYPE => .{ .number = FLOAT },
+        CURRENT_VERTEX_ATTRIB => floatArray(exec, &.{ 0, 0, 0, 1 }),
+        else => null,
+    };
+}
+
+pub fn getVertexAttribOffset(_: *const WebGLRenderingContext, _: u32, _: u32) u32 {
+    return 0;
+}
+
+pub fn getShaderPrecisionFormat(
+    _: *const WebGLRenderingContext,
+    _: u32,
+    precision_type: u32,
+    frame: *Frame,
+) !?*objects.WebGLShaderPrecisionFormat {
+    const format: objects.WebGLShaderPrecisionFormat = switch (precision_type) {
+        LOW_FLOAT, MEDIUM_FLOAT, HIGH_FLOAT => .float,
+        LOW_INT, MEDIUM_INT, HIGH_INT => .int,
+        else => return null,
+    };
+    return try frame._factory.create(format);
+}
+
+// Nothing is ever linked, so a program has no active attributes, no active
+// uniforms, and no attached shaders to report. Chrome answers exactly this for
+// an un-linked program.
+pub fn getActiveAttrib(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram, _: u32) ?*objects.WebGLActiveInfo {
+    return null;
+}
+
+pub fn getActiveUniform(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram, _: u32) ?*objects.WebGLActiveInfo {
+    return null;
+}
+
+pub fn getAttachedShaders(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram) []const *objects.WebGLShader {
+    return &.{};
+}
+
+pub fn getAttribLocation(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram, _: []const u8) i32 {
+    return -1;
+}
+
+pub fn getUniformLocation(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram, _: []const u8) ?*objects.WebGLUniformLocation {
+    return null;
+}
+
+/// Chrome raises a TypeError when the location isn't a WebGLUniformLocation,
+/// which is unreachable for us since getUniformLocation always answers null.
+pub fn getUniform(_: *const WebGLRenderingContext, _: ?*objects.WebGLProgram, _: ?*objects.WebGLUniformLocation) ?Parameter {
+    return null;
+}
+
+pub fn getFramebufferAttachmentParameter(_: *const WebGLRenderingContext, _: u32, _: u32, _: u32) ?Parameter {
+    return null;
+}
+
+/// The attributes of a context created with no options, measured from Chrome.
+/// Field order is the key order a script sees from JSON.stringify.
+const ContextAttributes = struct {
+    alpha: bool = true,
+    antialias: bool = true,
+    depth: bool = true,
+    desynchronized: bool = false,
+    failIfMajorPerformanceCaveat: bool = false,
+    powerPreference: []const u8 = "default",
+    premultipliedAlpha: bool = true,
+    preserveDrawingBuffer: bool = false,
+    stencil: bool = false,
+    xrCompatible: bool = false,
+};
+
+pub fn getContextAttributes(_: *const WebGLRenderingContext) ContextAttributes {
+    return .{};
+}
+
+// The state setters. Their arguments are never read — the parameter count is
+// all that is JS-visible, through Function.prototype.length.
+pub fn activeTexture(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn attachShader(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn bindAttribLocation(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn bindBuffer(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn bindFramebuffer(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn bindRenderbuffer(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn bindTexture(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn blendColor(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn blendEquation(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn blendEquationSeparate(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn blendFunc(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn blendFuncSeparate(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn bufferData(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn bufferSubData(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn clear(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn clearColor(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn clearDepth(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn clearStencil(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn colorMask(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn compileShader(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn compressedTexImage2D(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn compressedTexSubImage2D(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn copyTexImage2D(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn copyTexSubImage2D(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn cullFace(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn deleteBuffer(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn deleteFramebuffer(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn deleteProgram(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn deleteRenderbuffer(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn deleteShader(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn deleteTexture(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn depthFunc(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn depthMask(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn depthRange(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn detachShader(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn disable(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn disableVertexAttribArray(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn drawArrays(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn drawElements(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn drawingBufferStorage(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn enable(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn enableVertexAttribArray(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn finish(_: *const WebGLRenderingContext) void {}
+pub fn flush(_: *const WebGLRenderingContext) void {}
+pub fn framebufferRenderbuffer(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn framebufferTexture2D(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn frontFace(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn generateMipmap(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn hint(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn lineWidth(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn linkProgram(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn pixelStorei(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn polygonOffset(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn renderbufferStorage(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn sampleCoverage(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn scissor(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn shaderSource(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn stencilFunc(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn stencilFuncSeparate(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn stencilMask(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn stencilMaskSeparate(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn stencilOp(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn stencilOpSeparate(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn texImage2D(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn texParameterf(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn texParameteri(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn texSubImage2D(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniform1f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform1fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform1i(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform1iv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform2f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniform2fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform2i(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniform2iv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform3f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniform3fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform3i(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniform3iv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform4f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniform4fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniform4i(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniform4iv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn uniformMatrix2fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniformMatrix3fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn uniformMatrix4fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn useProgram(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn validateProgram(_: *const WebGLRenderingContext, _: js.Value) void {}
+pub fn vertexAttrib1f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn vertexAttrib1fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn vertexAttrib2f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn vertexAttrib2fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn vertexAttrib3f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn vertexAttrib3fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn vertexAttrib4f(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn vertexAttrib4fv(_: *const WebGLRenderingContext, _: js.Value, _: js.Value) void {}
+pub fn vertexAttribPointer(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn viewport(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+
+/// Chrome leaves the destination buffer at zero for a never-drawn-into context,
+/// so not writing to it reproduces the observable result.
+pub fn readPixels(_: *const WebGLRenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(WebGLRenderingContext);
 
@@ -662,6 +995,141 @@ pub const JsApi = struct {
     pub const getParameter = bridge.function(WebGLRenderingContext.getParameter, .{});
     pub const getExtension = bridge.function(WebGLRenderingContext.getExtension, .{});
     pub const getSupportedExtensions = bridge.function(WebGLRenderingContext.getSupportedExtensions, .{});
+    pub const createBuffer = bridge.function(WebGLRenderingContext.createBuffer, .{});
+    pub const createFramebuffer = bridge.function(WebGLRenderingContext.createFramebuffer, .{});
+    pub const createProgram = bridge.function(WebGLRenderingContext.createProgram, .{});
+    pub const createRenderbuffer = bridge.function(WebGLRenderingContext.createRenderbuffer, .{});
+    pub const createShader = bridge.function(WebGLRenderingContext.createShader, .{});
+    pub const createTexture = bridge.function(WebGLRenderingContext.createTexture, .{});
+    pub const checkFramebufferStatus = bridge.function(WebGLRenderingContext.checkFramebufferStatus, .{});
+    pub const getError = bridge.function(WebGLRenderingContext.getError, .{});
+    pub const isContextLost = bridge.function(WebGLRenderingContext.isContextLost, .{});
+    pub const isEnabled = bridge.function(WebGLRenderingContext.isEnabled, .{});
+    pub const isBuffer = bridge.function(WebGLRenderingContext.isBuffer, .{});
+    pub const isFramebuffer = bridge.function(WebGLRenderingContext.isFramebuffer, .{});
+    pub const isProgram = bridge.function(WebGLRenderingContext.isProgram, .{});
+    pub const isRenderbuffer = bridge.function(WebGLRenderingContext.isRenderbuffer, .{});
+    pub const isShader = bridge.function(WebGLRenderingContext.isShader, .{});
+    pub const isTexture = bridge.function(WebGLRenderingContext.isTexture, .{});
+    pub const getShaderInfoLog = bridge.function(WebGLRenderingContext.getShaderInfoLog, .{});
+    pub const getProgramInfoLog = bridge.function(WebGLRenderingContext.getProgramInfoLog, .{});
+    pub const getShaderSource = bridge.function(WebGLRenderingContext.getShaderSource, .{});
+    pub const getShaderParameter = bridge.function(WebGLRenderingContext.getShaderParameter, .{});
+    pub const getProgramParameter = bridge.function(WebGLRenderingContext.getProgramParameter, .{});
+    pub const getBufferParameter = bridge.function(WebGLRenderingContext.getBufferParameter, .{});
+    pub const getTexParameter = bridge.function(WebGLRenderingContext.getTexParameter, .{});
+    pub const getRenderbufferParameter = bridge.function(WebGLRenderingContext.getRenderbufferParameter, .{});
+    pub const getVertexAttrib = bridge.function(WebGLRenderingContext.getVertexAttrib, .{});
+    pub const getVertexAttribOffset = bridge.function(WebGLRenderingContext.getVertexAttribOffset, .{});
+    pub const getShaderPrecisionFormat = bridge.function(WebGLRenderingContext.getShaderPrecisionFormat, .{});
+    pub const getActiveAttrib = bridge.function(WebGLRenderingContext.getActiveAttrib, .{});
+    pub const getActiveUniform = bridge.function(WebGLRenderingContext.getActiveUniform, .{});
+    pub const getAttachedShaders = bridge.function(WebGLRenderingContext.getAttachedShaders, .{});
+    pub const getAttribLocation = bridge.function(WebGLRenderingContext.getAttribLocation, .{});
+    pub const getUniformLocation = bridge.function(WebGLRenderingContext.getUniformLocation, .{});
+    pub const getUniform = bridge.function(WebGLRenderingContext.getUniform, .{});
+    pub const getFramebufferAttachmentParameter = bridge.function(WebGLRenderingContext.getFramebufferAttachmentParameter, .{});
+    pub const getContextAttributes = bridge.function(WebGLRenderingContext.getContextAttributes, .{});
+
+    pub const activeTexture = bridge.function(WebGLRenderingContext.activeTexture, .{ .noop = true });
+    pub const attachShader = bridge.function(WebGLRenderingContext.attachShader, .{ .noop = true });
+    pub const bindAttribLocation = bridge.function(WebGLRenderingContext.bindAttribLocation, .{ .noop = true });
+    pub const bindBuffer = bridge.function(WebGLRenderingContext.bindBuffer, .{ .noop = true });
+    pub const bindFramebuffer = bridge.function(WebGLRenderingContext.bindFramebuffer, .{ .noop = true });
+    pub const bindRenderbuffer = bridge.function(WebGLRenderingContext.bindRenderbuffer, .{ .noop = true });
+    pub const bindTexture = bridge.function(WebGLRenderingContext.bindTexture, .{ .noop = true });
+    pub const blendColor = bridge.function(WebGLRenderingContext.blendColor, .{ .noop = true });
+    pub const blendEquation = bridge.function(WebGLRenderingContext.blendEquation, .{ .noop = true });
+    pub const blendEquationSeparate = bridge.function(WebGLRenderingContext.blendEquationSeparate, .{ .noop = true });
+    pub const blendFunc = bridge.function(WebGLRenderingContext.blendFunc, .{ .noop = true });
+    pub const blendFuncSeparate = bridge.function(WebGLRenderingContext.blendFuncSeparate, .{ .noop = true });
+    pub const bufferData = bridge.function(WebGLRenderingContext.bufferData, .{ .noop = true });
+    pub const bufferSubData = bridge.function(WebGLRenderingContext.bufferSubData, .{ .noop = true });
+    pub const clear = bridge.function(WebGLRenderingContext.clear, .{ .noop = true });
+    pub const clearColor = bridge.function(WebGLRenderingContext.clearColor, .{ .noop = true });
+    pub const clearDepth = bridge.function(WebGLRenderingContext.clearDepth, .{ .noop = true });
+    pub const clearStencil = bridge.function(WebGLRenderingContext.clearStencil, .{ .noop = true });
+    pub const colorMask = bridge.function(WebGLRenderingContext.colorMask, .{ .noop = true });
+    pub const compileShader = bridge.function(WebGLRenderingContext.compileShader, .{ .noop = true });
+    pub const compressedTexImage2D = bridge.function(WebGLRenderingContext.compressedTexImage2D, .{ .noop = true });
+    pub const compressedTexSubImage2D = bridge.function(WebGLRenderingContext.compressedTexSubImage2D, .{ .noop = true });
+    pub const copyTexImage2D = bridge.function(WebGLRenderingContext.copyTexImage2D, .{ .noop = true });
+    pub const copyTexSubImage2D = bridge.function(WebGLRenderingContext.copyTexSubImage2D, .{ .noop = true });
+    pub const cullFace = bridge.function(WebGLRenderingContext.cullFace, .{ .noop = true });
+    pub const deleteBuffer = bridge.function(WebGLRenderingContext.deleteBuffer, .{ .noop = true });
+    pub const deleteFramebuffer = bridge.function(WebGLRenderingContext.deleteFramebuffer, .{ .noop = true });
+    pub const deleteProgram = bridge.function(WebGLRenderingContext.deleteProgram, .{ .noop = true });
+    pub const deleteRenderbuffer = bridge.function(WebGLRenderingContext.deleteRenderbuffer, .{ .noop = true });
+    pub const deleteShader = bridge.function(WebGLRenderingContext.deleteShader, .{ .noop = true });
+    pub const deleteTexture = bridge.function(WebGLRenderingContext.deleteTexture, .{ .noop = true });
+    pub const depthFunc = bridge.function(WebGLRenderingContext.depthFunc, .{ .noop = true });
+    pub const depthMask = bridge.function(WebGLRenderingContext.depthMask, .{ .noop = true });
+    pub const depthRange = bridge.function(WebGLRenderingContext.depthRange, .{ .noop = true });
+    pub const detachShader = bridge.function(WebGLRenderingContext.detachShader, .{ .noop = true });
+    pub const disable = bridge.function(WebGLRenderingContext.disable, .{ .noop = true });
+    pub const disableVertexAttribArray = bridge.function(WebGLRenderingContext.disableVertexAttribArray, .{ .noop = true });
+    pub const drawArrays = bridge.function(WebGLRenderingContext.drawArrays, .{ .noop = true });
+    pub const drawElements = bridge.function(WebGLRenderingContext.drawElements, .{ .noop = true });
+    pub const drawingBufferStorage = bridge.function(WebGLRenderingContext.drawingBufferStorage, .{ .noop = true });
+    pub const enable = bridge.function(WebGLRenderingContext.enable, .{ .noop = true });
+    pub const enableVertexAttribArray = bridge.function(WebGLRenderingContext.enableVertexAttribArray, .{ .noop = true });
+    pub const finish = bridge.function(WebGLRenderingContext.finish, .{ .noop = true });
+    pub const flush = bridge.function(WebGLRenderingContext.flush, .{ .noop = true });
+    pub const framebufferRenderbuffer = bridge.function(WebGLRenderingContext.framebufferRenderbuffer, .{ .noop = true });
+    pub const framebufferTexture2D = bridge.function(WebGLRenderingContext.framebufferTexture2D, .{ .noop = true });
+    pub const frontFace = bridge.function(WebGLRenderingContext.frontFace, .{ .noop = true });
+    pub const generateMipmap = bridge.function(WebGLRenderingContext.generateMipmap, .{ .noop = true });
+    pub const hint = bridge.function(WebGLRenderingContext.hint, .{ .noop = true });
+    pub const lineWidth = bridge.function(WebGLRenderingContext.lineWidth, .{ .noop = true });
+    pub const linkProgram = bridge.function(WebGLRenderingContext.linkProgram, .{ .noop = true });
+    pub const pixelStorei = bridge.function(WebGLRenderingContext.pixelStorei, .{ .noop = true });
+    pub const polygonOffset = bridge.function(WebGLRenderingContext.polygonOffset, .{ .noop = true });
+    pub const renderbufferStorage = bridge.function(WebGLRenderingContext.renderbufferStorage, .{ .noop = true });
+    pub const sampleCoverage = bridge.function(WebGLRenderingContext.sampleCoverage, .{ .noop = true });
+    pub const scissor = bridge.function(WebGLRenderingContext.scissor, .{ .noop = true });
+    pub const shaderSource = bridge.function(WebGLRenderingContext.shaderSource, .{ .noop = true });
+    pub const stencilFunc = bridge.function(WebGLRenderingContext.stencilFunc, .{ .noop = true });
+    pub const stencilFuncSeparate = bridge.function(WebGLRenderingContext.stencilFuncSeparate, .{ .noop = true });
+    pub const stencilMask = bridge.function(WebGLRenderingContext.stencilMask, .{ .noop = true });
+    pub const stencilMaskSeparate = bridge.function(WebGLRenderingContext.stencilMaskSeparate, .{ .noop = true });
+    pub const stencilOp = bridge.function(WebGLRenderingContext.stencilOp, .{ .noop = true });
+    pub const stencilOpSeparate = bridge.function(WebGLRenderingContext.stencilOpSeparate, .{ .noop = true });
+    pub const texImage2D = bridge.function(WebGLRenderingContext.texImage2D, .{ .noop = true });
+    pub const texParameterf = bridge.function(WebGLRenderingContext.texParameterf, .{ .noop = true });
+    pub const texParameteri = bridge.function(WebGLRenderingContext.texParameteri, .{ .noop = true });
+    pub const texSubImage2D = bridge.function(WebGLRenderingContext.texSubImage2D, .{ .noop = true });
+    pub const uniform1f = bridge.function(WebGLRenderingContext.uniform1f, .{ .noop = true });
+    pub const uniform1fv = bridge.function(WebGLRenderingContext.uniform1fv, .{ .noop = true });
+    pub const uniform1i = bridge.function(WebGLRenderingContext.uniform1i, .{ .noop = true });
+    pub const uniform1iv = bridge.function(WebGLRenderingContext.uniform1iv, .{ .noop = true });
+    pub const uniform2f = bridge.function(WebGLRenderingContext.uniform2f, .{ .noop = true });
+    pub const uniform2fv = bridge.function(WebGLRenderingContext.uniform2fv, .{ .noop = true });
+    pub const uniform2i = bridge.function(WebGLRenderingContext.uniform2i, .{ .noop = true });
+    pub const uniform2iv = bridge.function(WebGLRenderingContext.uniform2iv, .{ .noop = true });
+    pub const uniform3f = bridge.function(WebGLRenderingContext.uniform3f, .{ .noop = true });
+    pub const uniform3fv = bridge.function(WebGLRenderingContext.uniform3fv, .{ .noop = true });
+    pub const uniform3i = bridge.function(WebGLRenderingContext.uniform3i, .{ .noop = true });
+    pub const uniform3iv = bridge.function(WebGLRenderingContext.uniform3iv, .{ .noop = true });
+    pub const uniform4f = bridge.function(WebGLRenderingContext.uniform4f, .{ .noop = true });
+    pub const uniform4fv = bridge.function(WebGLRenderingContext.uniform4fv, .{ .noop = true });
+    pub const uniform4i = bridge.function(WebGLRenderingContext.uniform4i, .{ .noop = true });
+    pub const uniform4iv = bridge.function(WebGLRenderingContext.uniform4iv, .{ .noop = true });
+    pub const uniformMatrix2fv = bridge.function(WebGLRenderingContext.uniformMatrix2fv, .{ .noop = true });
+    pub const uniformMatrix3fv = bridge.function(WebGLRenderingContext.uniformMatrix3fv, .{ .noop = true });
+    pub const uniformMatrix4fv = bridge.function(WebGLRenderingContext.uniformMatrix4fv, .{ .noop = true });
+    pub const useProgram = bridge.function(WebGLRenderingContext.useProgram, .{ .noop = true });
+    pub const validateProgram = bridge.function(WebGLRenderingContext.validateProgram, .{ .noop = true });
+    pub const vertexAttrib1f = bridge.function(WebGLRenderingContext.vertexAttrib1f, .{ .noop = true });
+    pub const vertexAttrib1fv = bridge.function(WebGLRenderingContext.vertexAttrib1fv, .{ .noop = true });
+    pub const vertexAttrib2f = bridge.function(WebGLRenderingContext.vertexAttrib2f, .{ .noop = true });
+    pub const vertexAttrib2fv = bridge.function(WebGLRenderingContext.vertexAttrib2fv, .{ .noop = true });
+    pub const vertexAttrib3f = bridge.function(WebGLRenderingContext.vertexAttrib3f, .{ .noop = true });
+    pub const vertexAttrib3fv = bridge.function(WebGLRenderingContext.vertexAttrib3fv, .{ .noop = true });
+    pub const vertexAttrib4f = bridge.function(WebGLRenderingContext.vertexAttrib4f, .{ .noop = true });
+    pub const vertexAttrib4fv = bridge.function(WebGLRenderingContext.vertexAttrib4fv, .{ .noop = true });
+    pub const vertexAttribPointer = bridge.function(WebGLRenderingContext.vertexAttribPointer, .{ .noop = true });
+    pub const viewport = bridge.function(WebGLRenderingContext.viewport, .{ .noop = true });
+    pub const readPixels = bridge.function(WebGLRenderingContext.readPixels, .{ .noop = true });
 
     // Web IDL constants live on both the interface object and the interface
     // prototype object, which is what `.template = true` gets us here.

@@ -191,3 +191,143 @@
   testing.expectEqual(0x8058, ctx.drawingBufferFormat);
 }
 </script>
+
+<script id=WebGLRenderingContext#objects>
+{
+  const gl = document.createElement("canvas").getContext("webgl");
+
+  // create* hands back a distinct, correctly tagged object every call.
+  const a = gl.createBuffer();
+  const b = gl.createBuffer();
+  testing.expectEqual(false, a === b);
+  testing.expectEqual("[object WebGLBuffer]", Object.prototype.toString.call(a));
+  testing.expectEqual(true, a instanceof WebGLBuffer);
+  testing.expectEqual("[object WebGLTexture]", Object.prototype.toString.call(gl.createTexture()));
+  testing.expectEqual("[object WebGLProgram]", Object.prototype.toString.call(gl.createProgram()));
+  testing.expectEqual("[object WebGLShader]", Object.prototype.toString.call(gl.createShader(gl.VERTEX_SHADER)));
+  testing.expectEqual("[object WebGLFramebuffer]", Object.prototype.toString.call(gl.createFramebuffer()));
+  testing.expectEqual("[object WebGLRenderbuffer]", Object.prototype.toString.call(gl.createRenderbuffer()));
+
+  testing.expectEqual(true, gl.isBuffer(a));
+  testing.expectEqual(false, gl.isBuffer(null));
+  testing.expectEqual(true, gl.isTexture(gl.createTexture()));
+  testing.expectEqual(false, gl.isContextLost());
+  testing.expectEqual(0, gl.getError());
+  testing.expectEqual(36053, gl.checkFramebufferStatus(gl.FRAMEBUFFER));
+
+  // DITHER is the one capability on by default.
+  testing.expectEqual(true, gl.isEnabled(gl.DITHER));
+  testing.expectEqual(false, gl.isEnabled(gl.BLEND));
+}
+</script>
+
+<script id=WebGLRenderingContext#queries>
+{
+  const gl = document.createElement("canvas").getContext("webgl");
+  const program = gl.createProgram();
+  const shader = gl.createShader(gl.VERTEX_SHADER);
+
+  testing.expectEqual("", gl.getProgramInfoLog(program));
+  testing.expectEqual("", gl.getShaderInfoLog(shader));
+  testing.expectEqual("", gl.getShaderSource(shader));
+  testing.expectEqual(false, gl.getProgramParameter(program, gl.LINK_STATUS));
+  testing.expectEqual(0, gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS));
+  testing.expectEqual(false, gl.getShaderParameter(shader, gl.COMPILE_STATUS));
+  testing.expectEqual(35633, gl.getShaderParameter(shader, gl.SHADER_TYPE));
+  testing.expectEqual(-1, gl.getAttribLocation(program, "aPos"));
+  testing.expectEqual(null, gl.getUniformLocation(program, "uColor"));
+  testing.expectEqual(0, gl.getAttachedShaders(program).length);
+  testing.expectEqual(null, gl.getActiveAttrib(program, 0));
+
+  // Default sampler and buffer state.
+  testing.expectEqual(9729, gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER));
+  testing.expectEqual(9986, gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER));
+  testing.expectEqual(10497, gl.getTexParameter(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S));
+  testing.expectEqual(0, gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE));
+  testing.expectEqual(35044, gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_USAGE));
+  testing.expectEqual(32854, gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_INTERNAL_FORMAT));
+
+  // Default generic vertex attribute.
+  testing.expectEqual(4, gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_SIZE));
+  testing.expectEqual(5126, gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_TYPE));
+  testing.expectEqual(false, gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_ENABLED));
+  const current = gl.getVertexAttrib(0, gl.CURRENT_VERTEX_ATTRIB);
+  testing.expectEqual(true, current instanceof Float32Array);
+  testing.expectEqual(1, current[3]);
+  testing.expectEqual(0, gl.getVertexAttribOffset(0, gl.VERTEX_ATTRIB_ARRAY_POINTER));
+
+  const high = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT);
+  testing.expectEqual("[object WebGLShaderPrecisionFormat]", Object.prototype.toString.call(high));
+  testing.expectEqual(127, high.rangeMin);
+  testing.expectEqual(127, high.rangeMax);
+  testing.expectEqual(23, high.precision);
+  const int = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_INT);
+  testing.expectEqual(31, int.rangeMin);
+  testing.expectEqual(30, int.rangeMax);
+  testing.expectEqual(0, int.precision);
+
+  const attrs = gl.getContextAttributes();
+  testing.expectEqual(true, attrs.alpha);
+  testing.expectEqual(true, attrs.antialias);
+  testing.expectEqual("default", attrs.powerPreference);
+  testing.expectEqual(false, attrs.xrCompatible);
+}
+</script>
+
+<script id=WebGLRenderingContext#doesNotThrow>
+{
+  // The whole point of the stub: a consumer that feature-detects WebGL and then
+  // drives it must not hit "is not a function" or an exception anywhere.
+  const gl = document.createElement("canvas").getContext("webgl");
+
+  const program = gl.createProgram();
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(vs, "void main() { gl_Position = vec4(0.0); }");
+  gl.compileShader(vs);
+  gl.shaderSource(fs, "void main() { gl_FragColor = vec4(1.0); }");
+  gl.compileShader(fs);
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  gl.useProgram(program);
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, document.createElement("canvas"));
+
+  gl.viewport(0, 0, 300, 150);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.finish();
+  gl.flush();
+
+  // readPixels leaves the destination alone, as Chrome does for a context that
+  // has never been drawn into.
+  const pixels = new Uint8Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  testing.expectEqual(0, pixels[0]);
+  testing.expectEqual(0, pixels[3]);
+
+  gl.deleteBuffer(buffer);
+  gl.deleteTexture(texture);
+  gl.deleteShader(vs);
+  gl.deleteProgram(program);
+
+  // Chrome's arity, which a script can read off Function.prototype.length.
+  testing.expectEqual(2, gl.blendFunc.length);
+  testing.expectEqual(4, gl.clearColor.length);
+  testing.expectEqual(6, gl.vertexAttribPointer.length);
+  testing.expectEqual(1, gl.clear.length);
+}
+</script>
