@@ -402,7 +402,7 @@
     \\          syntax. navigator.userAgentData.brands is derived from the same
     \\          value, so the two cannot disagree.
     \\          e.g. --sec-ch-ua '"Chromium";v="150", "Google Chrome";v="150"'
-    \\          Defaults to "Lightpanda";v="1".
+    \\          Defaults to Chrome's own brand list, GREASE entry included.
     \\  --sec-ch-ua-platform <STRING>
     \\          Value of the Sec-Ch-Ua-Platform client-hint header, also reported
     \\          by navigator.userAgentData.platform.
@@ -414,7 +414,7 @@
     \\          match: a User-Agent that disagrees with the client hints is more
     \\          conspicuous than either value on its own.
     \\  --user-agent-suffix <STRING>
-    \\          Suffix appended to the Lightpanda/X.Y User-Agent.
+    \\          Suffix appended to the default Chrome User-Agent.
     \\  --v8-flags-unsafe <FLAGS>
     \\          Flags passed as-is to the V8 JavaScript engine, space-separated.
     \\          e.g. --v8-flags-unsafe "--expose-gc --stack-size 1000".

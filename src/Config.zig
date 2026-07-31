@@ -817,16 +817,44 @@ pub const WaitUntil = enum {
 /// Pre-formatted HTTP headers for reuse across Http and Client.
 /// Must be initialized with an allocator that outlives all HTTP connections.
 pub const HttpHeaders = struct {
-    const user_agent_base: [:0]const u8 = "Lightpanda/1.0";
+    /// The version we claim to be. One constant so the User-Agent's
+    /// "Chrome/150.0.0.0" and the Sec-Ch-Ua brands' v="150" can't drift apart —
+    /// a mismatch between the two is a stronger signal than either value alone.
+    const chrome_major = "150";
+    const chrome_reduced_version = chrome_major ++ ".0.0.0";
+
+    /// Default User-Agent. Since Chrome's user-agent reduction the string is
+    /// frozen apart from the major version and a platform token from a closed
+    /// set, so this is a complete Chrome UA rather than an approximation of one.
+    ///
+    /// The macOS line is byte-for-byte what the Chrome 150 install on the
+    /// reference machine sent (tools/fingerprint/results/reference-chrome-headed.json).
+    /// The other three carry that same frozen string with their platform's
+    /// token substituted; those tokens are from Chrome's reduction rules and are
+    /// NOT measured here, because there is no Windows, Linux or FreeBSD Chrome
+    /// on this machine to measure.
+    const user_agent_base: [:0]const u8 = "Mozilla/5.0 (" ++ switch (builtin.os.tag) {
+        .macos => "Macintosh; Intel Mac OS X 10_15_7",
+        .windows => "Windows NT 10.0; Win64; x64",
+        .linux => "X11; Linux x86_64",
+        .freebsd => "X11; FreeBSD amd64",
+        else => "X11; Linux x86_64",
+    } ++ ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" ++ chrome_reduced_version ++ " Safari/537.36";
 
     pub const Brand = struct {
         brand: []const u8,
         version: []const u8,
     };
 
-    /// Brands used when --sec-ch-ua isn't given.
+    /// Brands used when --sec-ch-ua isn't given. Measured from the reference
+    /// Chrome 150, GREASE entry included: Chrome deliberately ships one
+    /// deliberately-odd brand so servers can't hardcode the list, and omitting
+    /// it is itself distinctive. The versions track chrome_major so the header
+    /// and the User-Agent agree.
     pub const default_brands = [_]Brand{
-        .{ .brand = "Lightpanda", .version = "1" },
+        .{ .brand = "Not;A=Brand", .version = "8" },
+        .{ .brand = "Chromium", .version = chrome_major },
+        .{ .brand = "Google Chrome", .version = chrome_major },
     };
 
     /// Accept values real Chrome sends, keyed by fetch destination. Measured
@@ -847,7 +875,7 @@ pub const HttpHeaders = struct {
     /// Mobile-ness of the client hint. Desktop Chrome sends "?0".
     pub const sec_ch_ua_mobile: [:0]const u8 = "Sec-Ch-Ua-Mobile: ?0";
 
-    user_agent: [:0]const u8, // User agent value (e.g. "Lightpanda/1.0")
+    user_agent: [:0]const u8, // Full User-Agent value
     user_agent_header: [:0]const u8,
 
     /// Source of truth for client-hints brand data. Both the Sec-Ch-Ua HTTP
@@ -1142,15 +1170,39 @@ test "Config: blockedUrlPatterns splits comma-separated patterns" {
     try std.testing.expectEqual(null, patterns.next());
 }
 
-test "Config: HttpHeaders defaults to the Lightpanda brand" {
+test "Config: HttpHeaders default to Chrome's identity" {
     var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
     defer config.deinit(std.testing.allocator);
 
     const h = config.http_headers;
-    try std.testing.expectEqualStrings("Sec-Ch-Ua: \"Lightpanda\";v=\"1\"", h.sec_ch_ua);
+    try std.testing.expectEqualStrings(
+        "Sec-Ch-Ua: \"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
+        h.sec_ch_ua,
+    );
     try std.testing.expectEqualStrings("Accept-Language: en-US,en;q=0.9", h.accept_language);
-    try std.testing.expectEqual(@as(usize, 1), h.brands.len);
-    try std.testing.expectEqualStrings("Lightpanda", h.brands[0].brand);
+    try std.testing.expectEqual(@as(usize, 3), h.brands.len);
+    try std.testing.expectEqualStrings("Not;A=Brand", h.brands[0].brand);
+    try std.testing.expectEqualStrings("Google Chrome", h.brands[2].brand);
+
+    // The default User-Agent is a whole Chrome string, and its version has to
+    // be the one the brands above carry.
+    try std.testing.expectEqual(true, std.mem.startsWith(u8, h.user_agent, "Mozilla/5.0 ("));
+    try std.testing.expectEqual(true, std.mem.endsWith(u8, h.user_agent, " Safari/537.36"));
+    try std.testing.expectEqual(
+        true,
+        std.mem.indexOf(u8, h.user_agent, "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0") != null,
+    );
+    try std.testing.expectEqual(null, std.mem.indexOf(u8, h.user_agent, "Lightpanda"));
+}
+
+test "Config: --user-agent-suffix appends to the Chrome default" {
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .user_agent_suffix = "marker",
+    } });
+    defer config.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(true, std.mem.startsWith(u8, config.http_headers.user_agent, "Mozilla/5.0 ("));
+    try std.testing.expectEqual(true, std.mem.endsWith(u8, config.http_headers.user_agent, " Safari/537.36 marker"));
 }
 
 test "Config: --sec-ch-ua drives both the header and the brand list" {

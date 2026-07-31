@@ -94,8 +94,14 @@ pub fn getAppCodeName(_: *const Navigator) []const u8 {
     return "Mozilla";
 }
 
-pub fn getAppVersion(_: *const Navigator) []const u8 {
-    return "1.0";
+// Chrome's appVersion is its user-agent with the leading "Mozilla/" removed —
+// not an independent version number. Returning "1.0" next to a Chrome
+// user-agent was a direct contradiction, and it is one a page reads in a single
+// expression.
+pub fn getAppVersion(_: *const Navigator, exec: *const Execution) []const u8 {
+    const ua = exec.session.browser.http_client.getUserAgent();
+    const prefix = "Mozilla/";
+    return if (std.mem.startsWith(u8, ua, prefix)) ua[prefix.len..] else ua;
 }
 
 pub fn getOnLine(_: *const Navigator) bool {
@@ -106,8 +112,16 @@ pub fn getCookieEnabled(_: *const Navigator) bool {
     return true;
 }
 
+// Fixed rather than read off the host. Reporting the real core count and RAM
+// would look more like a specific real Chrome, but it makes the same build
+// fingerprint differently on every machine; a fixed pair is stable across a
+// fleet at the cost of being shared by it. 8 cores is an unremarkable desktop
+// in a way 4 no longer is.
+//
+// deviceMemory is already coarse by design: Chrome rounds it to a power of two,
+// so 8 is a value a real Chrome reports rather than an invented one.
 pub fn getHardwareConcurrency(_: *const Navigator) u32 {
-    return 4;
+    return 8;
 }
 
 pub fn getDeviceMemory(_: *const Navigator) f64 {

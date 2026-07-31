@@ -148,7 +148,9 @@
     console.warn('Pending count:', Array.from(async_pending.keys()));
   }
 
-  const IS_TEST_RUNNER = window.navigator.userAgent.startsWith("Lightpanda/");
+  // The default User-Agent is a plain Chrome string, so the runner is
+  // recognised by the suffix testing.zig appends to it, not by the product name.
+  const IS_TEST_RUNNER = window.navigator.userAgent.endsWith("internal-tester");
 
   window.testing = {
     fail: fail,

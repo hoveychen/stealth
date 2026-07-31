@@ -4,10 +4,14 @@
 <script id=navigator>
   // Navigator should be accessible from window
   testing.expectEqual(navigator, window.navigator);
-  testing.expectEqual(true, navigator.userAgent.length > 0);
-  testing.expectEqual(true, navigator.userAgent.includes('Lightpanda'));
+  // The default user-agent is Chrome's own frozen string; the test runner adds
+  // an "internal-tester" suffix so testing.js can still tell it apart.
+  testing.expectEqual(true, navigator.userAgent.startsWith('Mozilla/5.0 ('));
+  testing.expectEqual(true, navigator.userAgent.includes('AppleWebKit/537.36 (KHTML, like Gecko) Chrome/'));
+  testing.expectEqual(false, navigator.userAgent.includes('Lightpanda'));
   testing.expectEqual('Netscape', navigator.appName);
-  testing.expectEqual('1.0', navigator.appVersion);
+  // appVersion is the user-agent minus "Mozilla/", not a version of its own.
+  testing.expectEqual(navigator.userAgent.slice('Mozilla/'.length), navigator.appVersion);
   testing.expectEqual(true, navigator.platform.length > 0);
 
   // Platform should be one of the known values
@@ -21,7 +25,7 @@
   testing.expectEqual(true, navigator.onLine);
   testing.expectEqual(true, navigator.cookieEnabled);
   testing.expectEqual(true, navigator.hardwareConcurrency > 0);
-  testing.expectEqual(4, navigator.hardwareConcurrency);
+  testing.expectEqual(8, navigator.hardwareConcurrency);
   testing.expectEqual(0, navigator.maxTouchPoints);
   // Fixed strings in every Chromium build; upstream left vendor empty, which
   // contradicts a Chrome user-agent sitting right next to it.
@@ -116,8 +120,15 @@
   const validUAPlatforms = ['macOS', 'Windows', 'Linux', 'FreeBSD', 'Unknown'];
   testing.expectEqual(true, validUAPlatforms.includes(navigator.userAgentData.platform));
 
-  testing.expectEqual(1, navigator.userAgentData.brands.length);
-  testing.expectEqual({brand: 'Lightpanda', version: "1"}, navigator.userAgentData.brands[0]);
+  // Chrome's own brand list, GREASE entry first. Derived from the same value
+  // the Sec-Ch-Ua header carries, so the two cannot disagree.
+  testing.expectEqual(3, navigator.userAgentData.brands.length);
+  testing.expectEqual({brand: 'Not;A=Brand', version: "8"}, navigator.userAgentData.brands[0]);
+  testing.expectEqual({brand: 'Chromium', version: "150"}, navigator.userAgentData.brands[1]);
+  testing.expectEqual({brand: 'Google Chrome', version: "150"}, navigator.userAgentData.brands[2]);
+
+  // The brand version has to be the one the user-agent string carries.
+  testing.expectEqual(true, navigator.userAgent.includes('Chrome/150.'));
 
   // Same instance returned on repeated access
   testing.expectEqual(true, navigator.userAgentData === navigator.userAgentData);
@@ -126,7 +137,7 @@
   testing.expectEqual(false, json.mobile);
   testing.expectEqual(navigator.userAgentData.platform, json.platform);
   testing.expectEqual(true, Array.isArray(json.brands));
-  testing.expectEqual('Lightpanda', json.brands[0].brand);
+  testing.expectEqual('Not;A=Brand', json.brands[0].brand);
 </script>
 
 <script id=userAgentData_highEntropy type=module>
@@ -142,7 +153,7 @@
       testing.expectEqual(navigator.userAgentData.platform, v.platform);
       testing.expectEqual(true, Array.isArray(v.brands));
       testing.expectEqual(true, Array.isArray(v.fullVersionList));
-      testing.expectEqual('Lightpanda', v.fullVersionList[0].brand);
+      testing.expectEqual('Not;A=Brand', v.fullVersionList[0].brand);
       testing.expectEqual('1.0.0.0', v.uaFullVersion);
       testing.expectEqual(false, v.wow64);
       testing.expectEqual(true, Array.isArray(v.formFactor));
