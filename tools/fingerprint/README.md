@@ -17,6 +17,9 @@ node tools/fingerprint/diff.mjs \
   tools/fingerprint/results/before-lightpanda.json \
   tools/fingerprint/results/reference-chrome-headed.json \
   --out tools/fingerprint/results/before-vs-chrome.md
+
+node tools/fingerprint/detector-sweep.mjs lightpanda   # -> results/detectors-lightpanda.json
+node tools/fingerprint/detector-sweep.mjs chrome       # -> results/detectors-chrome.json
 ```
 
 Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
@@ -28,7 +31,8 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `cdp.mjs` | ~100-line raw CDP client. Both engines go through it, so a difference in the snapshot comes from the engine, not from a driver. |
 | `probe.js` | One async expression collecting ~90 fingerprint surface values. Every read is wrapped, so "this property throws" is recorded as data instead of aborting the run. |
 | `header-echo.mjs` | Raw-TCP HTTP server that records the byte-exact request head. `node:http` reorders headers, and header order is itself part of the fingerprint. Serves a page pulling one of every fetch destination (document, style, script, image, iframe, fetch, xhr). |
-| `sites.mjs` | URLs + in-page extractors for bot.sannysoft.com and CreepJS. |
+| `sites.mjs` | URLs + in-page extractors for bot.sannysoft.com and CreepJS, plus the twelve-site detector list the sweep walks. |
+| `detector-sweep.mjs` | Walks every detector in `sites.mjs` and records how far each page got — nodes, text length, verdict words, and whether the navigation happened at all. Answers "does the detector finish", which the collectors do not. |
 | `subresource-check.mjs` | Answers "did the request happen at all", per fetch destination. Exits non-zero on a miss. Takes engine flags after `--`. |
 | `collect-*.mjs` | Spawn the engine, run the four steps, write one JSON snapshot. |
 | `dump-graphics.mjs` | Dumps Chrome's *whole* graphics API surface — every GLenum, every method's arity, every `getParameter` answer, every character's advance width. `probe.js` asks "what does a fingerprinting script see"; this asks "what exactly should we report". The Zig code under `src/browser/webapi/canvas/` is transcribed from its output. |
