@@ -435,57 +435,117 @@ The practical note for anyone measuring this engine: **measure from a clean
 route.** A fake-IP tunnel in the path will make a correct ClientHello look
 broken, and it will do it intermittently, which is the worst way to be wrong.
 
-## How narrow the end-to-end evidence actually is
+## How far the detectors actually get
 
 Everything above measures *values* — probe keys against real Chrome, JA4, the
-Akamai fingerprint. Those do not depend on any detector agreeing with us. But
-the claim "detectors do not flag this engine" rested on **one** site,
-bot.sannysoft.com, which is the oldest and most permissive of them.
+Akamai fingerprint. Those do not depend on any detector agreeing with us. The
+separate question is whether a detector page even runs to the end here, and it
+gets its own tool (`detector-sweep.mjs`) because a browser that never returns a
+fingerprint is a louder signal than one whose fingerprint is slightly wrong.
 
-Swept twelve public detectors with Chrome 150 as the control. Both engines
-navigated the same list with the same settle times; the measure is coarse on
-purpose — did the page finish, and did it produce a verdict — because the first
-question is not what score we get, it is whether we get one at all.
+**First: three of the failures recorded here were the harness, not the engine.**
+The original sweep was a script outside the repo that spawned lightpanda with
+`stdio: ['ignore', 'pipe', 'pipe']` and never read the pipes. The engine logs
+~550KB at the default level over twelve sites; a pipe nobody reads fills at
+64KB, and the engine's next write blocks it for good. What that looks like from
+the client is `Page.navigate` no longer returning and `Runtime.evaluate` timing
+out — so iphey, pixelscan and browserscan were written down as sites that hang
+the engine. They do not. Draining the two streams (one line) makes all three
+finish, and the isolation is direct: same binary, same site order, same script,
+only the child's stdio disposition changed.
 
-| site | Chrome | this engine |
-|---|---|---|
-| bot.sannysoft.com | completes | **completes, 0 FAIL rows** |
-| deviceandbrowserinfo.com/are_you_a_bot | completes (and calls headless Chrome a bot) | navigation chrome only, never reaches a verdict |
-| CreepJS | fingerprint ID rendered | ID stays `Computing…`, 1347 chars of text against 4716 |
-| bot-detector.rebrowser.net | full result table | table header, no rows |
-| amiunique.org/fingerprint | 5841 chars | 1292, navigation only |
-| browserleaks.com/javascript | 9971 chars | 3484, partial |
-| tls.browserleaks.com/json | JSON returned | **navigation never happened**, page stayed on the previous URL |
-| iphey.com | completes | `Runtime.evaluate` times out |
-| pixelscan.net | completes | `Page.navigate` times out |
-| browserscan.net | completes | `Page.navigate` times out |
-| arh.antoinevastel.com (×2) | 37 chars | 37 chars — endpoints are dead, not a datapoint |
+That is worth stating plainly because the wrong conclusion was the confident
+one: it reproduced identically on three consecutive runs.
 
-**One of ten live detectors completes.** Three hang the engine outright.
+Both engines then walk the same list with the same settle times, Chrome 150 as
+the control. `nodes` is elements in the document, `text` is `innerText` length.
 
-That matters more than any single property being off, because a browser that
-never returns a fingerprint is a louder signal than one whose fingerprint is
-slightly wrong. At this point the limit is engine completeness, not masking.
+| site | Chrome | this engine | |
+|---|---|---|---|
+| bot.sannysoft.com | 290 nodes / 15179 | 291 / 11377 | completes, 0 FAIL rows |
+| CreepJS | 3756 / 4698 | 3724 / 41457 | completes, real FP ID (was 246 / 1347) |
+| bot-detector.rebrowser.net | 98 / 1541 | 100 / 1663 | full table, 10 tests (was header only) |
+| iphey.com | 487 / 7115 | 480 / 7031 | completes; both engines get `Looks Unreliable` |
+| pixelscan.net | 1485 / 10607 | 1827 / 14653 | completes |
+| deviceandbrowserinfo.com/are_you_a_bot | 263 / 5780, `"isBot": true` | 235 / 5326 | renders the legend, not the verdict |
+| browserscan.net | 1965 / 4071 | 1231 / 2073 | partial |
+| browserleaks.com/javascript | 1180 / 9968 | 853 / 3484 | partial |
+| amiunique.org/fingerprint | 1550 / 5836 | 381 / 1292 | partial |
+| tls.browserleaks.com/json | 7 / 1271 | intermittent | see below |
+| arh.antoinevastel.com (×2) | 8 / 37 | 8 / 37 | endpoints are dead, not a datapoint |
 
-### What the failures are, so far
+**Six of ten live detectors now run to completion, none hangs the engine.**
+Baselines: `results/detectors-chrome.json`, `results/detectors-after-lightpanda.json`.
 
-Console and exception capture during the load (`Runtime.exceptionThrown` plus
-`Runtime.consoleAPICalled`) rules out the obvious explanation for two of them:
+CreepJS is the one that now says something, since it finally renders its own
+verdict: `25% like headless`, `0% headless`, `0% stealth`, with a stable
+fingerprint ID. The `computed` flag in the collector snapshot goes from `false`
+("Computing…") at P6 to `true`. The value-side numbers are unchanged by this
+work — 59/90 probe keys and 0 sannysoft FAIL rows, same as P6
+(`results/after-detectors-vs-chrome.md`) — which is the expected result: nothing
+here changed a value Chrome and this engine already agreed on, it changed
+whether the script that reads them survives.
 
-- **CreepJS raises no uncaught exception and does finish computing** — its own
-  log says `Fingerprinting complete in 164.05ms`, then
-  `loose fingerprint passed` and `stable fingerprint passed`. Five of its
-  sub-tests report failure (`audio`, `webgl`, `speech`, `svg`, `headless`) and
-  one `console.error` fires, but the fingerprint itself is produced. So what is
-  missing is the last step that puts the ID into the DOM, not the measurement.
-  Worth knowing that `webgl` is among the failures despite the WebGL work.
-- **rebrowser raises no uncaught exception either**, and emits exactly one
-  `addDetection` where Chrome emits many. Its tests barely start.
+### What was actually broken, and how it was found
 
-The three hard hangs (`iphey`, `pixelscan`, `browserscan`) are a different and
-more serious class: `Page.navigate` itself never returns, so nothing about the
-page has run yet. They are the ones to chase first — one cause may account for
-all three.
+Three engine gaps, each found by reading the page's own error rather than
+guessing, and each verified by isolation before writing any Zig:
+
+- **The table mutation API did not exist.** `HTMLTableElement`,
+  `HTMLTableSectionElement` and `HTMLTableRowElement` had their read side
+  (`tBodies`, `rows`, `cells`, `deleteRow`) and none of the insertion methods.
+  rebrowser's `renderDetections()` calls `tbody.insertRow(-1)` then
+  `row.insertCell(n)`, which threw inside its first `addDetection` and aborted
+  `window.onload` — one detection logged, empty table, nine tests never run.
+  Confirmed before implementing by injecting a three-method JS polyfill: the
+  full table appeared. `insertRow` / `insertCell` are now native.
+- **`window.outerWidth` and friends were missing.** CreepJS computed its whole
+  fingerprint (`Fingerprinting complete in 145ms`, `loose fingerprint passed`,
+  `stable fingerprint passed`) and then painted none of it, because its screen
+  panel reads `outerWidth` bare — an absent attribute is a ReferenceError, not
+  a suspicious value, so the render pipeline died after the measurement
+  succeeded. This is why "no uncaught exception, yet nothing rendered" looked
+  contradictory: the throw was inside a promise chain. `outerWidth`,
+  `outerHeight`, `screenX`, `screenY`, `screenLeft` and `screenTop` are now
+  answered; CreepJS renders 3724 nodes with a real ID and its `headless`
+  sub-test flipped to passing, since that one read `outerHeight` too.
+- **`SVGTextContentElement.getExtentOfChar` was missing**, the one method
+  CreepJS's `svg` sub-test calls that we did not have.
+
+### What is still short, with the cause where it is known
+
+- **CreepJS `audio`**: no `AudioContext` / `OfflineAudioContext` at all. Its
+  audio sub-test cannot start. This is a Web Audio stub of its own size.
+- **CreepJS `speech`**: no `speechSynthesis` / `SpeechSynthesisUtterance`.
+  iphey trips on the same gap — it `alert()`s
+  `ReferenceError: speechSynthesis is not defined` while still completing.
+- **CreepJS `webgl`**: not the WebGL work — CreepJS asks
+  `new OffscreenCanvas(256, 256).getContext('webgl')`, and `OffscreenCanvas`
+  only serves `2d`. `HTMLCanvasElement.getContext('webgl')` works; routing
+  OffscreenCanvas to the same context closes it.
+- **rebrowser's `bypassCsp` is red**: it declares a CSP the engine ignores, and
+  rebrowser calls that "invalid behavior for a normal browser". Chrome is green
+  there. Found only because the table started rendering.
+- **`tls.browserleaks.com/json` navigation is intermittent** — 4 of 7 full
+  sweeps left the page on the previous URL, and all three of the runs with
+  `--log-level debug` (a slower engine) did. It loads 3/3 in `fetch` mode and
+  navigates in 766ms when driven with just its predecessor page, so it is not
+  the host: something about the state a long sweep accumulates. Unexplained.
+- **deviceandbrowserinfo, amiunique, browserleaks.com/javascript and
+  browserscan render partially.** Not yet diagnosed; the method that worked
+  three times above is to hook `unhandledrejection` plus `console.error` before
+  the page's scripts run (`Page.addScriptToEvaluateOnNewDocument`) and read
+  what the page itself complains about.
+
+Two oddities worth keeping in view, neither of them a verdict:
+
+- CreepJS's `innerText` here is 41457 characters against Chrome's 4698. More
+  text, not less — the engine is very likely including content Chrome hides.
+- `screen.width/height` are the viewport, so `innerWidth === screen.width` and
+  `visualViewport` covers the screen exactly. CreepJS's `hasVvpScreenRes`
+  headless heuristic fires on that regardless of what `outerHeight` says, which
+  is why the window box was made to match the viewport (a fullscreen window)
+  rather than inventing chrome that would not fit on the screen.
 
 ## Where the whole run landed (P7)
 

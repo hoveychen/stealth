@@ -1,0 +1,1678 @@
+{
+  "engine": "lightpanda",
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.42+e4866a28b",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9223/"
+  },
+  "steps": {
+    "localHeaders": {
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/",
+          "requestLine": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "document"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "none"
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "Sec-Fetch-User",
+              "?1"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.js",
+          "requestLine": "GET /asset.js HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "script"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.css",
+          "requestLine": "GET /asset.css HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/"
+            ],
+            [
+              "Accept",
+              "text/css,*/*;q=0.1"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "style"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.png",
+          "requestLine": "GET /asset.png HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "iframe"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/fetch",
+          "requestLine": "GET /api/fetch HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/xhr",
+          "requestLine": "GET /api/xhr HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/favicon.ico",
+          "requestLine": "GET /favicon.ico HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/nav",
+          "requestLine": "GET /nav HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "document"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "none"
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "Sec-Fetch-User",
+              "?1"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.js",
+          "requestLine": "GET /asset.js HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/nav"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "script"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.css",
+          "requestLine": "GET /asset.css HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/nav"
+            ],
+            [
+              "Accept",
+              "text/css,*/*;q=0.1"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "style"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.png",
+          "requestLine": "GET /asset.png HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/nav"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "iframe"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/nav"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/fetch",
+          "requestLine": "GET /api/fetch HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/nav"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/xhr",
+          "requestLine": "GET /api/xhr HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/nav"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/favicon.ico",
+          "requestLine": "GET /favicon.ico HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/nav"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "document"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "none"
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "Sec-Fetch-User",
+              "?1"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/favicon.ico",
+          "requestLine": "GET /favicon.ico HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:61845"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "Sec-Ch-Ua-Mobile",
+              "?0"
+            ],
+            [
+              "Sec-Ch-Ua-Platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:61845/frame.html"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ]
+          ]
+        }
+      ]
+    },
+    "probe": {
+      "navigator.userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "navigator.appCodeName": "Mozilla",
+      "navigator.appName": "Netscape",
+      "navigator.appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "navigator.platform": "MacIntel",
+      "navigator.product": "Gecko",
+      "navigator.productSub": "20030107",
+      "navigator.vendor": "Google Inc.",
+      "navigator.vendorSub": "",
+      "navigator.oscpu": {
+        "__undefined": true
+      },
+      "navigator.language": "en-US",
+      "navigator.languages": [
+        "en-US",
+        "en"
+      ],
+      "navigator.hardwareConcurrency": 8,
+      "navigator.deviceMemory": 8,
+      "navigator.maxTouchPoints": 0,
+      "navigator.webdriver": false,
+      "navigator.pdfViewerEnabled": true,
+      "navigator.cookieEnabled": true,
+      "navigator.doNotTrack": null,
+      "navigator.onLine": true,
+      "navigator.ownPropertyNames": [
+        "appCodeName",
+        "appName",
+        "appVersion",
+        "connection",
+        "constructor",
+        "cookieEnabled",
+        "deviceMemory",
+        "doNotTrack",
+        "getBattery",
+        "globalPrivacyControl",
+        "hardwareConcurrency",
+        "javaEnabled",
+        "language",
+        "languages",
+        "maxTouchPoints",
+        "mediaDevices",
+        "mimeTypes",
+        "modelContext",
+        "onLine",
+        "pdfViewerEnabled",
+        "permissions",
+        "platform",
+        "plugins",
+        "product",
+        "productSub",
+        "registerProtocolHandler",
+        "sendBeacon",
+        "storage",
+        "unregisterProtocolHandler",
+        "userAgent",
+        "userAgentData",
+        "vendor",
+        "vendorSub",
+        "webdriver"
+      ],
+      "navigator.plugins.length": 5,
+      "navigator.plugins.names": [
+        "PDF Viewer",
+        "Chrome PDF Viewer",
+        "Chromium PDF Viewer",
+        "Microsoft Edge PDF Viewer",
+        "WebKit built-in PDF"
+      ],
+      "navigator.mimeTypes.length": 2,
+      "navigator.userAgentData.brands": [
+        {
+          "brand": "Not;A=Brand",
+          "version": "8"
+        },
+        {
+          "brand": "Chromium",
+          "version": "150"
+        },
+        {
+          "brand": "Google Chrome",
+          "version": "150"
+        }
+      ],
+      "navigator.userAgentData.mobile": false,
+      "navigator.userAgentData.platform": "macOS",
+      "navigator.userAgentData.highEntropy": {
+        "brands": [
+          {
+            "brand": "Not;A=Brand",
+            "version": "8"
+          },
+          {
+            "brand": "Chromium",
+            "version": "150"
+          },
+          {
+            "brand": "Google Chrome",
+            "version": "150"
+          }
+        ],
+        "mobile": false,
+        "platform": "macOS",
+        "architecture": "arm",
+        "bitness": "64",
+        "model": "",
+        "platformVersion": "",
+        "uaFullVersion": "150.0.7871.187",
+        "fullVersionList": [
+          {
+            "brand": "Not;A=Brand",
+            "version": "8.0.0.0"
+          },
+          {
+            "brand": "Chromium",
+            "version": "150.0.7871.187"
+          },
+          {
+            "brand": "Google Chrome",
+            "version": "150.0.7871.187"
+          }
+        ],
+        "wow64": false
+      },
+      "navigator.permissions.notifications": "prompt",
+      "navigator.connection": {
+        "effectiveType": "4g",
+        "rtt": 100,
+        "downlink": 1.45,
+        "saveData": false
+      },
+      "navigator.mediaDevices": "function",
+      "navigator.getBattery": "function",
+      "navigator.storage.estimate": "number",
+      "window.chrome": "object",
+      "window.chrome.keys": [
+        "app",
+        "csi",
+        "loadTimes"
+      ],
+      "window.chrome.runtime": "undefined",
+      "window.chrome.csi": "function",
+      "window.chrome.loadTimes": "function",
+      "window.chrome.app.isInstalled": false,
+      "tell.cdc_props": [],
+      "tell.documentElement.webdriver": null,
+      "tell.eval.toString.length": 33,
+      "tell.Function.toString.native": "function toString() { [native code] }",
+      "tell.navigator.toStringTag": "[object Navigator]",
+      "tell.error.stack.shape": "TypeError: Cannot read properties of null (reading 'f') |     at <anonymous>:74:18 |     at get (<anonymous>:12:29)",
+      "tell.Notification.permission": "default",
+      "tell.outerdim.zero": false,
+      "screen.width": 1920,
+      "screen.height": 1080,
+      "screen.availWidth": 1920,
+      "screen.availHeight": 1040,
+      "screen.availLeft": {
+        "__undefined": true
+      },
+      "screen.availTop": {
+        "__undefined": true
+      },
+      "screen.colorDepth": 24,
+      "screen.pixelDepth": 24,
+      "screen.orientation": {
+        "type": "landscape-primary",
+        "angle": 0
+      },
+      "window.innerWidth": 1920,
+      "window.innerHeight": 1080,
+      "window.outerWidth": 1920,
+      "window.outerHeight": 1080,
+      "window.devicePixelRatio": 1,
+      "window.screenX": 0,
+      "window.screenY": 0,
+      "window.toolbar.visible": {
+        "__err": "Cannot read properties of undefined (reading 'visible')"
+      },
+      "intl.timeZone": "Asia/Shanghai",
+      "intl.locale": "en-US",
+      "date.timezoneOffset": -480,
+      "date.toString": "Thu Jan 01 1970 08:00:00 GMT+0800 (China Standard Time)",
+      "canvas.getContext2d": "object",
+      "canvas.toDataURL.type": "function",
+      "canvas.toDataURL.fingerprint": {
+        "len": 370,
+        "prefix": "data:image/png;base64,iVBORw0K",
+        "hash": -546904589
+      },
+      "canvas.getImageData.nonzero": {
+        "first4": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "anyNonZero": true
+      },
+      "canvas.measureText": 89.9658203125,
+      "webgl.getContext.webgl": "ok",
+      "webgl.getContext.webgl2": "ok",
+      "webgl.getContext.experimental-webgl": "ok",
+      "webgl.params": {
+        "VENDOR": "WebKit",
+        "RENDERER": "WebKit WebGL",
+        "VERSION": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+        "SHADING_LANGUAGE_VERSION": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+        "UNMASKED_VENDOR": "Google Inc. (Apple)",
+        "UNMASKED_RENDERER": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+        "MAX_TEXTURE_SIZE": 16384,
+        "extensions": 39
+      },
+      "audio.AudioContext": "undefined",
+      "audio.sampleRate": {
+        "__err": "(window.AudioContext || window.webkitAudioContext) is not a constructor"
+      },
+      "audio.OfflineAudioContext": "undefined",
+      "fonts.api": "function",
+      "fonts.widths": {
+        "monospace": 5,
+        "sans-serif": 5,
+        "serif": 5,
+        "Arial": 5,
+        "Helvetica Neue": 5,
+        "Times New Roman": 5
+      },
+      "media.canPlayType": {
+        "h264": "probably",
+        "webm": "probably",
+        "ogg": "probably"
+      },
+      "rtc.RTCPeerConnection": "undefined",
+      "perf.memory": null,
+      "speech.voices.length": {
+        "__err": "Cannot read properties of undefined (reading 'getVoices')"
+      },
+      "matchMedia.dark": false,
+      "matchMedia.coarsePointer": false,
+      "matchMedia.hover": false,
+      "window.ownPropertyNames.count": 492
+    },
+    "sannysoft": {
+      "title": "Antibot",
+      "rowCount": 58,
+      "rows": [
+        {
+          "name": "Test Name",
+          "value": "Result",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "User Agent (Old)",
+          "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+          "status": "result passed",
+          "id": "user-agent-result"
+        },
+        {
+          "name": "WebDriver (New)",
+          "value": "missing (passed)",
+          "status": "result passed",
+          "id": "webdriver-result"
+        },
+        {
+          "name": "WebDriver Advanced",
+          "value": "passed",
+          "status": "result passed",
+          "id": "advanced-webdriver-result"
+        },
+        {
+          "name": "Chrome (New)",
+          "value": "present (passed)",
+          "status": "result passed",
+          "id": "chrome-result"
+        },
+        {
+          "name": "Permissions (New)",
+          "value": "prompt",
+          "status": "result passed",
+          "id": "permissions-result"
+        },
+        {
+          "name": "Plugins Length (Old)",
+          "value": "5",
+          "status": "result passed",
+          "id": "plugins-length-result"
+        },
+        {
+          "name": "Plugins is of type PluginArray",
+          "value": "passed",
+          "status": "result passed",
+          "id": "plugins-type-result"
+        },
+        {
+          "name": "Languages (Old)",
+          "value": "en-US,en",
+          "status": "result passed",
+          "id": "languages-result"
+        },
+        {
+          "name": "WebGL Vendor",
+          "value": "Google Inc. (Apple)",
+          "status": "passed",
+          "id": "webgl-vendor"
+        },
+        {
+          "name": "WebGL Renderer",
+          "value": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+          "status": "passed",
+          "id": "webgl-renderer"
+        },
+        {
+          "name": "Broken Image Dimensions",
+          "value": "",
+          "status": "",
+          "id": "broken-image-dimensions"
+        },
+        {
+          "name": "PHANTOM_UA",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_PROPERTIES",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_ETSL",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_LANGUAGE",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_WEBSOCKET",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "MQ_SCREEN",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_OVERFLOW",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_WINDOW_HEIGHT",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_UA",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_CHROME_OBJ",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_PERMISSIONS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_PLUGINS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_IFRAME",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_DEBUG_TOOLS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "SELENIUM_DRIVER",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_BATTERY",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_MEMORY",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "TRANSPARENT_PIXEL",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "SEQUENTUM",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "VIDEO_CODECS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "navigator.cookieEnabled",
+          "value": "document.write(navigator.cookieEnabled);\n            true",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.doNotTrack",
+          "value": "document.write(navigator.doNotTrack);\n            null",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.msDoNotTrack",
+          "value": "document.write(navigator.msDoNotTrack);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.sendBeacon",
+          "value": "document.write(navigator.sendBeacon());\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.cookieEnabled",
+          "value": "document.write(navigator.cookieEnabled);\n            true",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.userAgent",
+          "value": "document.write(navigator.userAgent);\n            Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.appName",
+          "value": "document.write(navigator.appName);\n            Netscape",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.vendor",
+          "value": "document.write(navigator.vendor);\n            Google Inc.",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.appCodeName",
+          "value": "document.write(navigator.appCodeName);\n            Mozilla",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.getUserMedia",
+          "value": "document.write(navigator.getUserMedia());",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.sayswho",
+          "value": "document.write(navigator.sayswho);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.javaEnabled",
+          "value": "document.write(navigator.javaEnabled());\n            false",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.plugins",
+          "value": "document.write(JSON.stringify(navigator.plugins));\n            {\"0\":{\"0\":{},\"1\":{}},\"1\":{\"0\":{},\"1\":{}},\"2\":{\"0\":{},\"1\":{}},\"3\":{\"0\":{},\"1\":{}},\"4\":{\"0\":{},\"1\":{}}}",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.width",
+          "value": "document.write(screen.width);\n            1920",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.height",
+          "value": "document.write(screen.height);\n            1080",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.colorDepth",
+          "value": "document.write(screen.colorDepth);\n            24",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.language",
+          "value": "document.write(navigator.language);\n            en-US",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.loadPurpose",
+          "value": "document.write(navigator.loadPurpose);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.platform",
+          "value": "document.write(navigator.platform);\n            MacIntel",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.mediaDevices",
+          "value": "audioinput:  id = videoinput:  id = audiooutput:  id =",
+          "status": "",
+          "id": "media1"
+        },
+        {
+          "name": "navigator.getBattery details",
+          "value": "Charging: trueLevel: 1",
+          "status": "",
+          "id": "battery1"
+        },
+        {
+          "name": "Canvas1",
+          "value": "Hash: 2068257366",
+          "status": "",
+          "id": "canvas1"
+        },
+        {
+          "name": "Canvas2",
+          "value": "Hash: 2068257366",
+          "status": "",
+          "id": "canvas2"
+        },
+        {
+          "name": "Canvas3 (iframe sandbox)",
+          "value": "Hash: 2068257366",
+          "status": "",
+          "id": "canvas3"
+        },
+        {
+          "name": "Canvas4 (iframe sandbox)",
+          "value": "Hash: 2068257366",
+          "status": "",
+          "id": "canvas4"
+        },
+        {
+          "name": "Canvas5 (iframe)",
+          "value": "Hash: 2068257366",
+          "status": "",
+          "id": "canvas5"
+        }
+      ]
+    },
+    "creepjs": {
+      "title": "CreepJS",
+      "computed": true,
+      "fpId": "e0d350fd39365fb5d40549ca68974115f05dbc15a5ed20160b59f6daa1acab8e",
+      "fuzzy": "e21ff2993b29318847390dba4c8ebfff3fa54d6c9f6bbfff2e29000000000000",
+      "likeHeadless": "25%",
+      "headlessPct": "0%",
+      "stealthPct": "0%",
+      "chromium": null,
+      "platformHints": "50:40:50:40:60",
+      "lies": null,
+      "textLength": 41459,
+      "text": "FP ID: e0d350fd39365fb5d40549ca68974115f05dbc15a5ed20160b59f6daa1acab8e\nFuzzy: e21ff2993b29318847390dba4c8ebfff3fa54d6c9f6bbfff2e29000000000000\n251.35 ms\nWebRTC52734092\nhost connection:\nblocked\nfoundation/ip:\nunsupported\nblocked\nsdp capabilities: blocked\nstun connection:\nblocked\ndevices (3):\nmic, audio, webcam\n3.45ms Timezonefbcc341a\nChina Standard Time\nAsia, Shanghai\n-27028713943000\n-480\n13.27ms Intl18395b2f\nen-US\nJuly at China Standard Time\nAmerican English\n21 million\nnext year\n0 or 1\none\n0.81ms Headlessc281c216\nchromium: true\n25% like headless:ee515a87 ×\nLike Headless\n\nnoChrome: false\nhasPermissionsBug: false\nnoPlugins: false\nnoMimeTypes: false\nnotificationIsDenied: false\nhasKnownBgColor: false\nprefersLightColor: false\nuaDataIsBlank: false\npdfIsDisabled: false\nnoTaskbar: false\nhasVvpScreenRes: true\nhasSwiftShader: false\nnoWebShare: true\nnoContentIndex: true\nnoContactsManager: false\nnoDownlinkMax: true\n0% headless:52defe05 ×\nHeadless\n\nwebDriverIsOn: false\nhasHeadlessUA: false\nhasHeadlessWorkerUA: false\n0% stealth:295d4148 ×\nStealth\n\nhasIframeProxy: false\nhasHighChromeIndex: false\nhasBadChromeRuntime: false\nhasToStringProxy: false\nhasBadWebGL: undefined\nplatform hints:\n50:40:50:40:60\n\n0.61ms Resistanceb1ed8efa\nprivacy: unknown\nsecurity: unknown\nmode: unknown\nextension:c2eca9de ×\nPattern\n\navailHeight: dfd41ab4\ncolorDepth: dfd41ab4\npixelDepth: dfd41ab4\n169.04ms SharedWorkerGlobalScope\nWorkereb027179\nlang/timezone:\nen-US (1 US dollar)\nAsia/Shanghai (-480)\ngpu:\nunsupported\nuserAgent:ua reduction\nMozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36\ndevice:\nMac (MacIntel)\nmacOS Catalina\ncores: 8, ram: 8\nuserAgentData:\nGoogle Chrome 150 (150.0.7871.187)\nmacOS arm_64\nWebGL\nimages: blocked\npixels: blocked\nparams (0): blocked\nexts (0): blocked\ngpu:\nblocked\n0.26ms Screen130fdf6f\n...screen: 1920 x 1080\n....avail: 1920 x 1040\ntouch: false\ndepth: 24|24\nviewport:\n1920 1920 1920 1080 1080 1080 undefined landscape landscape-primary 1\n12.29ms Canvas 2d3b75e0db\ndata:07fcf110 ×\n\ntext: c2d3dfd8\n\n\n\nemoji: c2d3dfd8\n\n\n\npaint (GPU): cf076e8a\n\n\n\npaint (CPU): cf076e8a\n\n\n\ncombined: cf076e8a\nrendering: 16% rgba noise\ntextMetrics:\n0.0021954687500000004  😀🤵‍♂️🏳️‍⚧️🧑‍🦰👩‍❤️‍💋‍👨👨‍👩‍👧‍👦\n13.01ms Fonts71c399b8\nload (0/51): Like undefined\napps: unsupported\nunsupported\n\nunsupported\n😀\n17.89ms DOMRectd0e4e22c\nelems A: 0.00011760000000000001\nelems B: 0.00011760000000000001\nrange A: 0.00006\nrange B: 0.00006\n0.0001 😀\n21.39ms SVGRectbe1dd2a5\nbBox: blocked\nchar: 0.0032\nsubs: 0.0016\ntext: 0.0016\n0.002528 😀☺🤵‍♂️🧑‍🦰🧑‍🤝‍🧑👩‍❤️‍💋‍👨👨‍👩‍👧‍👦\nAudio\nsum: blocked\ngain: blocked\nfreq: blocked\ntime: blocked\ntrap: blocked\nunique: blocked\ndata: blocked\ncopy: blocked\nvalues: blocked\nSpeech\nlocal (0): blocked\nremote (0): blocked\nlang (0): blocked\ndefault:\nblocked\n0.97ms Media44136fa3\nmimes (0/12): blocked\n1.99ms\nFeatures: 93+\nJS/DOM:9f2d1642 ×\ndiffs from 115:\nObject.groupBy\nSymbol.dispose\nSymbol.asyncDispose\nError.isError\nMath.f16round\nMath.sumPrecise\nRegExp.escape\nArray.fromAsync\nMap.groupBy\nMap.getOrInsert\nMap.getOrInsertComputed\nSet.difference\nSet.intersection\nSet.isSubsetOf\nSet.isSupersetOf\nSet.isDisjointFrom\nSet.symmetricDifference\nSet.union\nWeakMap.getOrInsert\nWeakMap.getOrInsertComputed\nAtomics.pause\nPromise.withResolvers\nPromise.try\nIntl.DurationFormat\nWebAssembly.JSTag\nWebAssembly.Suspending\nWebAssembly.promising\nWebAssembly.SuspendError\nDocument.ontouchstart\nDocument.ontouchend\nDocument.ontouchmove\nDocument.ontouchcancel\nDocument.location\nDocument.moveBefore\nElement.innerText\nElement.dir\nElement.dataset\nElement.style\nElement.setHTMLUnsafe\nElement.moveBefore\nElement.offsetTop\nElement.offsetLeft\nElement.offsetWidth\nElement.offsetHeight\nElement.offsetParent\nElement.focus\nElement.blur\nWebAssembly.compileStreaming\nWebAssembly.instantiateStreaming\nDocument.xmlEncoding\nDocument.xmlVersion\nDocument.xmlStandalone\nDocument.title\nDocument.dir\nDocument.body\nDocument.head\nDocument.images\nDocument.embeds\nDocument.plugins\nDocument.links\nDocument.forms\nDocument.scripts\nDocument.currentScript\nDocument.designMode\nDocument.onreadystatechange\nDocument.anchors\nDocument.applets\nDocument.fgColor\nDocument.linkColor\nDocument.vlinkColor\nDocument.alinkColor\nDocument.bgColor\nDocument.all\nDocument.onpointerlockchange\nDocument.onpointerlockerror\nDocument.wasDiscarded\nDocument.featurePolicy\nDocument.webkitVisibilityState\nDocument.webkitHidden\nDocument.onbeforecopy\nDocument.onbeforecut\nDocument.onbeforepaste\nDocument.onfreeze\nDocument.onprerenderingchange\nDocument.onresume\nDocument.onsearch\nDocument.onvisibilitychange\nDocument.fullscreenEnabled\nDocument.fullscreen\nDocument.onfullscreenchange\nDocument.onfullscreenerror\nDocument.webkitIsFullScreen\nDocument.webkitCurrentFullScreenElement\nDocument.webkitFullscreenEnabled\nDocument.webkitFullscreenElement\nDocument.onwebkitfullscreenchange\nDocument.onwebkitfullscreenerror\nDocument.rootElement\nDocument.pictureInPictureEnabled\nDocument.pictureInPictureElement\nDocument.onbeforexrselect\nDocument.onabort\nDocument.onbeforeinput\nDocument.onblur\nDocument.oncancel\nDocument.oncanplay\nDocument.oncanplaythrough\nDocument.onchange\nDocument.onclose\nDocument.oncontextlost\nDocument.oncontextmenu\nDocument.oncontextrestored\nDocument.oncuechange\nDocument.ondblclick\nDocument.ondrag\nDocument.ondragend\nDocument.ondragenter\nDocument.ondragleave\nDocument.ondragover\nDocument.ondragstart\nDocument.ondrop\nDocument.ondurationchange\nDocument.onemptied\nDocument.onended\nDocument.onerror\nDocument.onfocus\nDocument.onformdata\nDocument.oninput\nDocument.oninvalid\nDocument.onkeydown\nDocument.onkeypress\nDocument.onkeyup\nDocument.onload\nDocument.onloadeddata\nDocument.onloadedmetadata\nDocument.onloadstart\nDocument.onmousedown\nDocument.onmouseenter\nDocument.onmouseleave\nDocument.onmousemove\nDocument.onmouseout\nDocument.onmouseover\nDocument.onmouseup\nDocument.onmousewheel\nDocument.onpause\nDocument.onplay\nDocument.onplaying\nDocument.onprogress\nDocument.onratechange\nDocument.onreset\nDocument.onresize\nDocument.onscroll\nDocument.onsecuritypolicyviolation\nDocument.onseeked\nDocument.onseeking\nDocument.onselect\nDocument.onslotchange\nDocument.onstalled\nDocument.onsubmit\nDocument.onsuspend\nDocument.ontimeupdate\nDocument.ontoggle\nDocument.onvolumechange\nDocument.onwaiting\nDocument.onwebkitanimationend\nDocument.onwebkitanimationiteration\nDocument.onwebkitanimationstart\nDocument.onwebkittransitionend\nDocument.onwheel\nDocument.onauxclick\nDocument.ongotpointercapture\nDocument.onlostpointercapture\nDocument.onpointerdown\nDocument.onpointermove\nDocument.onpointerrawupdate\nDocument.onpointerup\nDocument.onpointercancel\nDocument.onpointerover\nDocument.onpointerout\nDocument.onpointerenter\nDocument.onpointerleave\nDocument.onselectstart\nDocument.onanimationend\nDocument.onanimationiteration\nDocument.onanimationstart\nDocument.ontransitionrun\nDocument.ontransitionstart\nDocument.ontransitionend\nDocument.ontransitioncancel\nDocument.oncopy\nDocument.oncut\nDocument.onpaste\nDocument.pointerLockElement\nDocument.fullscreenElement\nDocument.captureEvents\nDocument.caretRangeFromPoint\nDocument.clear\nDocument.execCommand\nDocument.exitFullscreen\nDocument.exitPictureInPicture\nDocument.exitPointerLock\nDocument.queryCommandEnabled\nDocument.queryCommandIndeterm\nDocument.queryCommandState\nDocument.queryCommandSupported\nDocument.queryCommandValue\nDocument.releaseEvents\nDocument.webkitCancelFullScreen\nDocument.webkitExitFullscreen\nDocument.fragmentDirective\nDocument.onbeforematch\nDocument.onbeforetoggle\nDocument.timeline\nDocument.oncontentvisibilityautostatechange\nDocument.onscrollend\nDocument.getAnimations\nDocument.startViewTransition\nElement.part\nElement.onbeforecopy\nElement.onbeforecut\nElement.onbeforepaste\nElement.onsearch\nElement.elementTiming\nElement.onfullscreenchange\nElement.onfullscreenerror\nElement.onwebkitfullscreenchange\nElement.onwebkitfullscreenerror\nElement.role\nElement.ariaAutoComplete\nElement.ariaBusy\nElement.ariaBrailleLabel\nElement.ariaBrailleRoleDescription\nElement.ariaChecked\nElement.ariaColCount\nElement.ariaColIndex\nElement.ariaColSpan\nElement.ariaCurrent\nElement.ariaDescription\nElement.ariaDisabled\nElement.ariaExpanded\nElement.ariaHasPopup\nElement.ariaHidden\nElement.ariaInvalid\nElement.ariaKeyShortcuts\nElement.ariaLabel\nElement.ariaLevel\nElement.ariaModal\nElement.ariaMultiLine\nElement.ariaMultiSelectable\nElement.ariaOrientation\nElement.ariaPlaceholder\nElement.ariaPosInSet\nElement.ariaPressed\nElement.ariaReadOnly\nElement.ariaRelevant\nElement.ariaRequired\nElement.ariaRoleDescription\nElement.ariaRowCount\nElement.ariaRowIndex\nElement.ariaRowSpan\nElement.ariaSelected\nElement.ariaSetSize\nElement.ariaSort\nElement.ariaValueMax\nElement.ariaValueMin\nElement.ariaValueNow\nElement.ariaValueText\nElement.computedStyleMap\nElement.getAttributeNodeNS\nElement.getInnerHTML\nElement.hasPointerCapture\nElement.releasePointerCapture\nElement.removeAttributeNS\nElement.requestFullscreen\nElement.requestPointerLock\nElement.setAttributeNodeNS\nElement.setPointerCapture\nElement.webkitMatchesSelector\nElement.webkitRequestFullScreen\nElement.webkitRequestFullscreen\nElement.setHTML\n114-115:\nJSON.rawJSON\nJSON.isRawJSON\n112-113:\nRegExp.unicodeSets\n111:\nString.isWellFormed\nString.toWellFormed\nDocument.startViewTransition\n110:\nArray.toReversed\nArray.toSorted\nArray.toSpliced\nArray.with\n107-109:\nElement.ariaBrailleLabel\nElement.ariaBrailleRoleDescription\n103-106:\nElement.role\n102:\nElement.ariaInvalid\nDocument.onbeforematch\n99-101:\nIntl.supportedValuesOf\nDocument.oncontextlost\nDocument.oncontextrestored\n97-98:\nArray.findLast\nArray.findLastIndex\nDocument.onslotchange\n95-96:\nWebAssembly.Exception\nWebAssembly.Tag\n94:\n!Error.cause\nObject.hasOwn\n93:\nError.cause\nObject.hasOwn\n92:\nArray.at\nString.at\n91:\nElement.getInnerHTML\n90:\nDocument.onbeforexrselect\nRegExp.hasIndices\n!Element.onbeforexrselect\n87-89:\nAtomics.waitAsync\nDocument.ontransitioncancel\nDocument.ontransitionrun\nDocument.ontransitionstart\nIntl.Segmenter\n86:\nDocument.fragmentDirective\nDocument.replaceChildren\nElement.replaceChildren\n!Atomics.wake\n85:\nPromise.any\nString.replaceAll\n84:\nDocument.getAnimations\nDocument.timeline\nElement.ariaSetSize\nElement.getAnimations\n83:\nElement.ariaDescription\nElement.onbeforexrselect\n81:\nDocument.onwebkitanimationend\nDocument.onwebkitanimationiteration\nDocument.onwebkitanimationstart\nDocument.onwebkittransitionend\nElement.ariaAtomic\nElement.ariaAutoComplete\nElement.ariaBusy\nElement.ariaChecked\nElement.ariaColCount\nElement.ariaColIndex\nElement.ariaColSpan\nElement.ariaCurrent\nElement.ariaDisabled\nElement.ariaExpanded\nElement.ariaHasPopup\nElement.ariaHidden\nElement.ariaKeyShortcuts\nElement.ariaLabel\nElement.ariaLevel\nElement.ariaLive\nElement.ariaModal\nElement.ariaMultiLine\nElement.ariaMultiSelectable\nElement.ariaOrientation\nElement.ariaPlaceholder\nElement.ariaPosInSet\nElement.ariaPressed\nElement.ariaReadOnly\nElement.ariaRelevant\nElement.ariaRequired\nElement.ariaRoleDescription\nElement.ariaRowCount\nElement.ariaRowIndex\nElement.ariaRowSpan\nElement.ariaSelected\nElement.ariaSort\nElement.ariaValueMax\nElement.ariaValueMin\nElement.ariaValueNow\nElement.ariaValueText\nIntl.DisplayNames\n80:\n!Document.registerElement\n!Element.createShadowRoot\n!Element.getDestinationInsertionPoints\n79:\nDocument.onanimationend\nDocument.onanimationiteration\nDocument.onanimationstart\nDocument.ontransitionend\n78:\nElement.elementTiming\n77:\nDocument.onformdata\nDocument.onpointerrawupdate\n76:\nDocument.onsecuritypolicyviolation\nPromise.allSettled\n(v114-115)\nCSS: unknown\nWindow:0b6cffe2 ×\ndiffs from 115:\nIterator\nsetImmediate\nclearImmediate\ndispatchEvent\naddEventListener\nremoveEventListener\nConsole\nStorageEstimate\nCss\nCSSStyleProperties\nFontFaceSet\nSVGGenericElement\nModelContext\nModelContextClient\nReadableStreamAsyncIterator\nIDBRecord\nCrossOriginWindow\nNavigationActivation\nSuppressedError\nDisposableStack\nAsyncDisposableStack\nFloat16Array\nSharedArrayBuffer\nconsole\nOption\nwebkitURL\nwebkitRTCPeerConnection\nwebkitMediaStream\nWebKitMutationObserver\nWebKitCSSMatrix\nXSLTProcessor\nWebGLContextEvent\nWaveShaperNode\nVirtualKeyboardGeometryChangeEvent\nUserActivation\nURLPattern\nTrustedTypePolicyFactory\nTrustedTypePolicy\nTrustedScriptURL\nTrustedScript\nTrustedHTML\nTransitionEvent\nTrackEvent\nTouchList\nTouch\nTimeRanges\nTextTrackList\nTextTrackCueList\nTextTrack\nTaskSignal\nTaskPriorityChangeEvent\nTaskController\nTaskAttributionTiming\nSyncManager\nStyleSheet\nStylePropertyMapReadOnly\nStylePropertyMap\nStereoPannerNode\nSourceBufferList\nSourceBuffer\nSecurityPolicyViolationEvent\nScriptProcessorNode\nScheduling\nScheduler\nSVGUnitTypes\nSVGStyleElement\nSVGSetElement\nSVGScriptElement\nSVGRect\nSVGPoint\nSVGNumberList\nSVGMatrix\nSVGMPathElement\nSVGLengthList\nSVGFilterElement\nSVGFETurbulenceElement\nSVGFETileElement\nSVGFESpotLightElement\nSVGFESpecularLightingElement\nSVGFEPointLightElement\nSVGFEOffsetElement\nSVGFEMorphologyElement\nSVGFEMergeNodeElement\nSVGFEMergeElement\nSVGFEImageElement\nSVGFEGaussianBlurElement\nSVGFEFuncRElement\nSVGFEFuncGElement\nSVGFEFuncBElement\nSVGFEFuncAElement\nSVGFEFloodElement\nSVGFEDropShadowElement\nSVGFEDistantLightElement\nSVGFEDisplacementMapElement\nSVGFEDiffuseLightingElement\nSVGFEConvolveMatrixElement\nSVGFECompositeElement\nSVGFEComponentTransferElement\nSVGFEColorMatrixElement\nSVGFEBlendElement\nSVGComponentTransferFunctionElement\nSVGAnimationElement\nSVGAnimatedRect\nSVGAnimatedNumberList\nSVGAnimatedLengthList\nSVGAnimatedInteger\nSVGAnimatedBoolean\nSVGAnimatedAngle\nSVGAnimateTransformElement\nSVGAnimateMotionElement\nSVGAnimateElement\nReportingObserver\nReadableStreamBYOBRequest\nReadableStreamBYOBReader\nReadableByteStreamController\nRTCTrackEvent\nRTCStatsReport\nRTCSessionDescription\nRTCSctpTransport\nRTCRtpTransceiver\nRTCRtpSender\nRTCRtpReceiver\nRTCPeerConnectionIceEvent\nRTCPeerConnectionIceErrorEvent\nRTCPeerConnection\nRTCIceTransport\nRTCIceCandidate\nRTCErrorEvent\nRTCError\nRTCEncodedVideoFrame\nRTCEncodedAudioFrame\nRTCDtlsTransport\nRTCDataChannelEvent\nRTCDataChannel\nRTCDTMFToneChangeEvent\nRTCDTMFSender\nRTCCertificate\nProfiler\nPictureInPictureWindow\nPictureInPictureEvent\nPeriodicWave\nPerformanceServerTiming\nPerformanceResourceTiming\nPerformancePaintTiming\nPerformanceNavigationTiming\nPerformanceLongTaskTiming\nPerformanceEventTiming\nPerformanceElementTiming\nPath2D\nPannerNode\nOverconstrainedError\nOscillatorNode\nOfflineAudioContext\nOfflineAudioCompletionEvent\nNavigationTransition\nNavigationDestination\nNavigateEvent\nMutationEvent\nMediaStreamTrackProcessor\nMediaStreamTrackGenerator\nMediaStreamTrackEvent\nMediaStreamTrack\nMediaStreamEvent\nMediaStreamAudioSourceNode\nMediaStreamAudioDestinationNode\nMediaStream\nMediaSourceHandle\nMediaSource\nMediaRecorder\nMediaQueryListEvent\nMediaList\nMediaEncryptedEvent\nMediaElementAudioSourceNode\nMediaCapabilities\nLayoutShiftAttribution\nLayoutShift\nLargestContentfulPaint\nKeyframeEffect\nInputDeviceCapabilities\nImageCapture\nImageBitmapRenderingContext\nImageBitmap\nIIRFilterNode\nIDBOpenDBRequest\nHTMLMenuElement\nHTMLFrameElement\nGeolocationPositionError\nGeolocationPosition\nGeolocationCoordinates\nGeolocation\nGamepadHapticActuator\nGamepadButton\nGamepad\nGainNode\nFontFaceSetLoadEvent\nFeaturePolicy\nExternal\nElementInternals\nDynamicsCompressorNode\nDelayNode\nDecompressionStream\nDOMRectList\nDOMQuad\nDOMError\nCustomStateSet\nCountQueuingStrategy\nConvolverNode\nConstantSourceNode\nCompressionStream\nClipboardEvent\nChannelSplitterNode\nChannelMergerNode\nCanvasCaptureMediaStreamTrack\nCSSVariableReferenceValue\nCSSUnparsedValue\nCSSUnitValue\nCSSTranslate\nCSSTransformValue\nCSSTransformComponent\nCSSSupportsRule\nCSSStyleValue\nCSSSkewY\nCSSSkewX\nCSSSkew\nCSSScale\nCSSRotate\nCSSPropertyRule\nCSSPositionValue\nCSSPerspective\nCSSPageRule\nCSSNumericValue\nCSSNumericArray\nCSSNamespaceRule\nCSSMediaRule\nCSSMatrixComponent\nCSSMathValue\nCSSMathSum\nCSSMathProduct\nCSSMathNegate\nCSSMathMin\nCSSMathMax\nCSSMathInvert\nCSSMathClamp\nCSSLayerStatementRule\nCSSLayerBlockRule\nCSSKeywordValue\nCSSKeyframesRule\nCSSKeyframeRule\nCSSImportRule\nCSSImageValue\nCSSGroupingRule\nCSSFontPaletteValuesRule\nCSSFontFaceRule\nCSSCounterStyleRule\nCSSContainerRule\nCSSConditionRule\nByteLengthQueuingStrategy\nBlobEvent\nBiquadFilterNode\nBeforeInstallPromptEvent\nBaseAudioContext\nBarProp\nAudioWorkletNode\nAudioSinkInfo\nAudioScheduledSourceNode\nAudioProcessingEvent\nAudioParamMap\nAudioParam\nAudioNode\nAudioListener\nAudioDestinationNode\nAudioContext\nAudioBufferSourceNode\nAudioBuffer\nAnimationEvent\nAnimationEffect\nAnalyserNode\nlocationbar\nmenubar\npersonalbar\nscrollbars\nstatusbar\ntoolbar\nstatus\nexternal\ndevicePixelRatio\nclientInformation\noffscreenBuffering\nstyleMedia\nonsearch\nisSecureContext\ntrustedTypes\nonappinstalled\nonbeforeinstallprompt\nonbeforexrselect\nonabort\nonbeforeinput\noncancel\noncanplay\noncanplaythrough\nonchange\nonclose\noncontextlost\noncontextmenu\noncontextrestored\noncuechange\nondblclick\nondrag\nondragend\nondragenter\nondragleave\nondragover\nondragstart\nondrop\nondurationchange\nonemptied\nonended\nonformdata\noninput\noninvalid\nonkeydown\nonkeypress\nonkeyup\nonloadeddata\nonloadedmetadata\nonloadstart\nonmousedown\nonmouseenter\nonmouseleave\nonmousemove\nonmouseout\nonmouseover\nonmouseup\nonmousewheel\nonpause\nonplay\nonplaying\nonprogress\nonratechange\nonreset\nonsecuritypolicyviolation\nonseeked\nonseeking\nonselect\nonslotchange\nonstalled\nonsubmit\nonsuspend\nontimeupdate\nontoggle\nonvolumechange\nonwaiting\nonwebkitanimationend\nonwebkitanimationiteration\nonwebkitanimationstart\nonwebkittransitionend\nonwheel\nonauxclick\nongotpointercapture\nonlostpointercapture\nonpointerdown\nonpointermove\nonpointerrawupdate\nonpointerup\nonpointercancel\nonpointerover\nonpointerout\nonpointerenter\nonpointerleave\nonselectstart\nonselectionchange\nonanimationend\nonanimationiteration\nonanimationstart\nontransitionrun\nontransitionstart\nontransitionend\nontransitioncancel\nonafterprint\nonbeforeprint\nonbeforeunload\nonlanguagechange\nonmessageerror\nonoffline\nononline\nonpagehide\nonstorage\nonunload\ncrossOriginIsolated\nscheduler\ncaptureEvents\ncreateImageBitmap\nfind\nmoveBy\nmoveTo\nprint\nreleaseEvents\nresizeBy\nresizeTo\nstop\nwebkitCancelAnimationFrame\nwebkitRequestAnimationFrame\ncredentialless\ncaches\nondevicemotion\nondeviceorientation\nondeviceorientationabsolute\nlaunchQueue\nonbeforematch\nonbeforetoggle\nAbsoluteOrientationSensor\nAccelerometer\nAudioWorklet\nCache\nCacheStorage\nClipboard\nClipboardItem\nCookieStoreManager\nCredential\nCredentialsContainer\nDeviceMotionEventAcceleration\nDeviceMotionEventRotationRate\nFederatedCredential\nGravitySensor\nGyroscope\nKeyboard\nKeyboardLayoutMap\nLinearAccelerationSensor\nLock\nLockManager\nMIDIAccess\nMIDIConnectionEvent\nMIDIInput\nMIDIInputMap\nMIDIMessageEvent\nMIDIOutput\nMIDIOutputMap\nMIDIPort\nMediaKeyMessageEvent\nMediaKeySession\nMediaKeyStatusMap\nMediaKeySystemAccess\nMediaKeys\nNavigationPreloadManager\nNavigatorManagedData\nOrientationSensor\nPasswordCredential\nRelativeOrientationSensor\nSanitizer\nScreenDetailed\nScreenDetails\nSensor\nSensorErrorEvent\nServiceWorker\nServiceWorkerContainer\nServiceWorkerRegistration\nVirtualKeyboard\nWebTransport\nWebTransportBidirectionalStream\nWebTransportDatagramDuplexStream\nWebTransportError\nWorklet\nXRDOMOverlayState\nXRLayer\nXRWebGLBinding\nAudioData\nEncodedAudioChunk\nEncodedVideoChunk\nImageTrack\nImageTrackList\nVideoColorSpace\nVideoFrame\nAudioDecoder\nAudioEncoder\nImageDecoder\nVideoDecoder\nVideoEncoder\nAuthenticatorAssertionResponse\nAuthenticatorAttestationResponse\nAuthenticatorResponse\nPublicKeyCredential\nBluetooth\nBluetoothCharacteristicProperties\nBluetoothDevice\nBluetoothRemoteGATTCharacteristic\nBluetoothRemoteGATTDescriptor\nBluetoothRemoteGATTServer\nBluetoothRemoteGATTService\nCaptureController\nEyeDropper\nFileSystemDirectoryHandle\nFileSystemFileHandle\nFileSystemHandle\nFileSystemWritableFileStream\nFontData\nFragmentDirective\nGPU\nGPUAdapter\nGPUAdapterInfo\nGPUBindGroup\nGPUBindGroupLayout\nGPUBuffer\nGPUBufferUsage\nGPUCanvasContext\nGPUColorWrite\nGPUCommandBuffer\nGPUCommandEncoder\nGPUCompilationInfo\nGPUCompilationMessage\nGPUComputePassEncoder\nGPUComputePipeline\nGPUDevice\nGPUDeviceLostInfo\nGPUError\nGPUExternalTexture\nGPUInternalError\nGPUMapMode\nGPUOutOfMemoryError\nGPUPipelineError\nGPUPipelineLayout\nGPUQuerySet\nGPUQueue\nGPURenderBundle\nG"
+    }
+  },
+  "serverLog": [
+    "WebAssembly.JSTag",
+    "WebAssembly.Suspending",
+    "WebAssembly.promising",
+    "WebAssembly.SuspendError",
+    "Document.ontouchstart",
+    "Document.ontouchend",
+    "Document.ontouchmove",
+    "Document.ontouchcancel",
+    "Document.location",
+    "Document.moveBefore",
+    "Element.innerText",
+    "Element.dir",
+    "Element.dataset",
+    "Element.style",
+    "Element.setHTMLUnsafe",
+    "Element.moveBefore",
+    "Element.offsetTop",
+    "Element.offsetLeft",
+    "Element.offsetWidth",
+    "Element.offsetHeight",
+    "Element.offsetParent",
+    "Element.focus",
+    "Element.blur (string)",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+15.658s]",
+    "      0 = ",
+    "  arg(1): Object.assign, Object.getOwnPropertyDescriptor, Object.getOwnPropertyDescriptors, Object.getOwnPropertyNames, Object.getOwnPropertySymbols, Object.hasOwn, Object.is, Object.preventExtensions, Object.seal, Object.create, Object.defineProperties, Object.defineProperty, Object.freeze, Object.getPrototypeOf, Object.setPrototypeOf, Object.isExtensible, Object.isFrozen, Object.isSealed, Object.keys, Object.entries, Object.fromEntries, Object.values, Object.groupBy, Object.__defineGetter__, Object.__defineSetter__, Object.hasOwnProperty, Object.__lookupGetter__, Object.__lookupSetter__, Object.isPrototypeOf, Object.propertyIsEnumerable, Object.toString, Object.valueOf, Object.__proto__, Object.toLocaleString, Function.apply, Function.bind, Function.call, Function.toString, Boolean.toString, Boolean.valueOf, Symbol.for, Symbol.keyFor, Symbol.asyncIterator, Symbol.hasInstance, Symbol.isConcatSpreadable, Symbol.iterator, Symbol.match, Symbol.matchAll, Symbol.replace, Symbol.search, Symbol.species, Symbol.split, Symbol.toPrimitive, Symbol.toStringTag, Symbol.unscopables, Symbol.dispose, Symbol.asyncDispose, Symbol.toString, Symbol.valueOf, Symbol.description, Error.captureStackTrace, Error.isError, Error.stackTraceLimit, Error.message, Error.toString, Number.isFinite, Number.isInteger, Number.isNaN, Number.isSafeInteger, Number.parseFloat, Number.parseInt, Number.MAX_VALUE, Number.MIN_VALUE, Number.NaN, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER, Number.EPSILON, Number.toExponential, Number.toFixed, Number.toPrecision, Number.toString, Number.valueOf, Number.toLocaleString, BigInt.asUintN, BigInt.asIntN, BigInt.toLocaleString, BigInt.toString, BigInt.valueOf, Math.abs, Math.acos, Math.acosh, Math.asin, Math.asinh, Math.atan, Math.atanh, Math.atan2, Math.ceil, Math.cbrt, Math.expm1, Math.clz32, Math.cos, Math.cosh, Math.exp, Math.floor, Math.fround, Math.hypot, Math.imul, Math.log, Math.log1p, Math.log2, Math.log10, Math ... (truncated) (string)",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+15.797s]",
+    "      url = about:blank",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+15.818s]",
+    "      source = fetch",
+    "      url = https://abrahamjuliot.github.io/creepjs/creep.js",
+    "      status = 200",
+    "      len = 550117",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+18.392s]",
+    "      0 = ",
+    "  arg(1): 170 API properties analyzed in 37.97ms (5 corrupted) (string)"
+  ]
+}
