@@ -23,6 +23,9 @@ const js = @import("../../js/js.zig");
 const color = @import("../../color.zig");
 
 const Canvas = @import("../element/html/Canvas.zig");
+const Font = @import("font.zig");
+const TextMetrics = @import("TextMetrics.zig");
+const text_measure = @import("../../text_measure.zig");
 const ImageData = @import("../ImageData.zig");
 const Surface = @import("raster.zig");
 
@@ -45,6 +48,8 @@ _fill_style: color.RGBA = color.RGBA.Named.black,
 _stroke_style: color.RGBA = color.RGBA.Named.black,
 _line_width: f64 = 1,
 _global_alpha: f64 = 1,
+/// The parsed `font` attribute. Drives measureText; see font.zig.
+_font: Font = Font.default,
 
 pub fn getCanvas(self: *const CanvasRenderingContext2D) *Canvas {
     return self._canvas;
@@ -83,6 +88,23 @@ pub fn setLineWidth(self: *CanvasRenderingContext2D, value: f64) void {
     if (std.math.isFinite(value) and value > 0) {
         self._line_width = value;
     }
+}
+
+pub fn getFont(self: *const CanvasRenderingContext2D) []const u8 {
+    return self._font.css;
+}
+
+/// An unparseable value leaves the previous font in place, which is what
+/// Chrome does — it does not fall back to the default.
+pub fn setFont(self: *CanvasRenderingContext2D, value: []const u8, exec: *Execution) void {
+    self._font = Font.parse(exec.arena, value) orelse self._font;
+}
+
+/// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/measureText
+pub fn measureText(self: *const CanvasRenderingContext2D, text: []const u8, exec: *Execution) !*TextMetrics {
+    return exec._factory.create(TextMetrics{
+        ._metrics = text_measure.measure(self._font.family, text, self._font.size),
+    });
 }
 
 pub fn getGlobalAlpha(self: *const CanvasRenderingContext2D) f64 {
@@ -220,7 +242,6 @@ pub const JsApi = struct {
     };
 
     pub const canvas = bridge.accessor(CanvasRenderingContext2D.getCanvas, null, .{});
-    pub const font = bridge.property("10px sans-serif", .{ .template = false, .readonly = false });
     pub const globalCompositeOperation = bridge.property("source-over", .{ .template = false, .readonly = false });
     pub const lineCap = bridge.property("butt", .{ .template = false, .readonly = false });
     pub const lineJoin = bridge.property("miter", .{ .template = false, .readonly = false });
@@ -237,8 +258,10 @@ pub const JsApi = struct {
     pub const strokeStyle = bridge.accessor(CanvasRenderingContext2D.getStrokeStyle, CanvasRenderingContext2D.setStrokeStyle, .{});
     pub const lineWidth = bridge.accessor(CanvasRenderingContext2D.getLineWidth, CanvasRenderingContext2D.setLineWidth, .{});
     pub const globalAlpha = bridge.accessor(CanvasRenderingContext2D.getGlobalAlpha, CanvasRenderingContext2D.setGlobalAlpha, .{});
+    pub const font = bridge.accessor(CanvasRenderingContext2D.getFont, CanvasRenderingContext2D.setFont, .{});
 
     pub const createImageData = bridge.function(CanvasRenderingContext2D.createImageData, .{});
+    pub const measureText = bridge.function(CanvasRenderingContext2D.measureText, .{});
 
     pub const putImageData = bridge.function(CanvasRenderingContext2D.putImageData, .{ .noop = true });
     pub const drawImage = bridge.function(CanvasRenderingContext2D.drawImage, .{ .noop = true });

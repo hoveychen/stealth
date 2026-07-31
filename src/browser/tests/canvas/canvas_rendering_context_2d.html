@@ -427,3 +427,109 @@
     testing.expectEqual(atob(expected).length, blob.size);
   });
 </script>
+
+<script id="CanvasRenderingContext2D#font normalisation">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+  testing.expectEqual('10px sans-serif', ctx.font);
+
+  // Every pair here is a measured Chrome answer.
+  const cases = [
+    ['14px Arial', '14px Arial'],
+    ['bold 12px serif', 'bold 12px serif'],
+    ['italic 700 16px/1.5 "Times New Roman", serif', 'italic bold 16px "Times New Roman", serif'],
+    ['small-caps 20px monospace', 'small-caps 20px monospace'],
+    ['12pt serif', '16px serif'],
+    ['xx-large serif', '32px serif'],
+    ['2rem serif', '32px serif'],
+    ['150% serif', '15px serif'],
+    ['lighter 16px serif', '100 16px serif'],
+    ['oblique 16px serif', 'italic 16px serif'],
+    ['16px Foo Bar', '16px "Foo Bar"'],
+    ["16px 'Single'", '16px Single'],
+    ['italic small-caps bold 16px serif', 'italic bold small-caps 16px serif'],
+  ];
+  for (const [input, expected] of cases) {
+    ctx.font = input;
+    testing.expectEqual(expected, ctx.font);
+  }
+
+  // A value Chrome rejects keeps the previous font rather than resetting.
+  ctx.font = '33px monospace';
+  for (const bad of ['not-a-font', '', '16px', 'bold serif', 'condensed 16px serif', 'oblique 30deg 16px serif']) {
+    ctx.font = bad;
+    testing.expectEqual('33px monospace', ctx.font);
+  }
+
+  // Relative sizes resolve against the canvas default, not the current font.
+  ctx.font = '1em sans-serif';
+  testing.expectEqual('10px sans-serif', ctx.font);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#measureText">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  // Chrome's own numbers, for the strings canvas fingerprints actually use.
+  testing.expectEqual(89.9658203125, ctx.measureText('mmmmmmmmmmlli').width);
+  testing.expectEqual(140.615234375, ctx.measureText('Cwm fjordbank glyphs vext quiz').width);
+  testing.expectEqual(55.01953125, ctx.measureText('Hello, world!').width);
+  testing.expectEqual(0, ctx.measureText('').width);
+
+  // Exactly linear in the font size.
+  ctx.font = '100px sans-serif';
+  testing.expectEqual(899.658203125, ctx.measureText('mmmmmmmmmmlli').width);
+
+  // A different family measures differently — this is the signal a font
+  // fingerprint reads.
+  ctx.font = '100px monospace';
+  const mono = ctx.measureText('mmmmmmmmmmlli').width;
+  ctx.font = '100px serif';
+  const serif = ctx.measureText('mmmmmmmmmmlli').width;
+  testing.expectTrue(mono !== serif);
+  testing.expectTrue(mono !== 899.658203125);
+
+  // An unresolvable family falls back to the standard font, as Chrome's does.
+  ctx.font = '100px NoSuchFamily12345';
+  testing.expectEqual(serif, ctx.measureText('mmmmmmmmmmlli').width);
+}
+</script>
+
+<script id="TextMetrics">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+  const metrics = ctx.measureText('mmmmmmmmmmlli');
+  testing.expectEqual(true, metrics instanceof TextMetrics);
+
+  // The full set Chrome reports for 10px sans-serif.
+  testing.expectEqual(89.9658203125, metrics.width);
+  testing.expectEqual(-0.64453125, metrics.actualBoundingBoxLeft);
+  testing.expectEqual(89.2822265625, metrics.actualBoundingBoxRight);
+  testing.expectEqual(10, metrics.fontBoundingBoxAscent);
+  testing.expectEqual(2, metrics.fontBoundingBoxDescent);
+  testing.expectEqual(7.1728515625, metrics.actualBoundingBoxAscent);
+  testing.expectEqual(0, metrics.actualBoundingBoxDescent);
+  testing.expectEqual(8, metrics.hangingBaseline);
+  testing.expectEqual(0, metrics.alphabeticBaseline);
+  testing.expectEqual(-2, metrics.ideographicBaseline);
+
+  ctx.font = '14px Arial';
+  const arial = ctx.measureText('Cwm fjordbank glyphs vext quiz');
+  testing.expectEqual(196.861328125, arial.width);
+  testing.expectEqual(-0.697265625, arial.actualBoundingBoxLeft);
+  testing.expectEqual(196.560546875, arial.actualBoundingBoxRight);
+  testing.expectEqual(10.1923828125, arial.actualBoundingBoxAscent);
+  testing.expectEqual(2.9462890625, arial.actualBoundingBoxDescent);
+  testing.expectEqual(10.399999618530273, arial.hangingBaseline);
+
+  // Chrome exposes all ten as prototype accessors and nothing else.
+  const names = Object.getOwnPropertyNames(TextMetrics.prototype).filter((n) => n !== 'constructor');
+  testing.expectEqual(10, names.length);
+  for (const name of names) {
+    const descriptor = Object.getOwnPropertyDescriptor(TextMetrics.prototype, name);
+    testing.expectEqual('function', typeof descriptor.get);
+    testing.expectEqual(undefined, descriptor.set);
+  }
+}
+</script>

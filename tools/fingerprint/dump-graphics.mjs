@@ -245,11 +245,92 @@ const SECTIONS = {
     for (const k of Object.getOwnPropertyNames(Object.getPrototypeOf(m))) if (k !== 'constructor') rec[k] = m[k];
     out.fullMetrics[font + '|' + text] = rec;
   }
+  // Everything TextMetrics reports for a single glyph, so a string's ink box
+  // can be reconstructed: left/right are the bearings from the pen position,
+  // ascent/descent the ink extent above/below the alphabetic baseline. Same
+  // 100px basis as the advances, for the same reason.
+  out.glyphMetricsAt100px = {};
+  for (const f of families) {
+    ctx.font = '100px ' + f;
+    const glyphs = {};
+    for (let c = 32; c < 127; c++) {
+      const m = ctx.measureText(String.fromCharCode(c));
+      glyphs[c] = [m.width, m.actualBoundingBoxLeft, m.actualBoundingBoxRight, m.actualBoundingBoxAscent, m.actualBoundingBoxDescent];
+    }
+    out.glyphMetricsAt100px[f] = { resolvedFont: ctx.font, order: ['width', 'left', 'right', 'ascent', 'descent'], glyphs };
+  }
+
+  // Font-level metrics do not depend on the text, only on the family and size.
+  // Sampled at several sizes to show how Chrome rounds them.
+  out.fontLevelMetrics = {};
+  for (const f of families.concat(['NoSuchFamily12345'])) {
+    const bySize = {};
+    for (const size of [10, 14, 16, 100]) {
+      ctx.font = size + 'px ' + f;
+      const m = ctx.measureText('x');
+      bySize[size] = {
+        resolvedFont: ctx.font,
+        fontBoundingBoxAscent: m.fontBoundingBoxAscent,
+        fontBoundingBoxDescent: m.fontBoundingBoxDescent,
+        hangingBaseline: m.hangingBaseline,
+        alphabeticBaseline: m.alphabeticBaseline,
+        ideographicBaseline: m.ideographicBaseline,
+        emHeightAscent: m.emHeightAscent,
+        emHeightDescent: m.emHeightDescent,
+      };
+    }
+    out.fontLevelMetrics[f] = bySize;
+  }
+
+  // fontBoundingBox is NOT linear in size: CoreText quantises it per size, so
+  // 16px sans-serif reports an ascent of 14 where scaling 100px's 92 would say
+  // 15. Sweep every size a page is likely to ask for and store the answers.
+  out.fontBoundingBoxBySize = {};
+  for (const f of families) {
+    const ascents = [], descents = [];
+    for (let size = 1; size <= 120; size++) {
+      ctx.font = size + 'px ' + f;
+      const m = ctx.measureText('x');
+      ascents.push(m.fontBoundingBoxAscent);
+      descents.push(m.fontBoundingBoxDescent);
+    }
+    out.fontBoundingBoxBySize[f] = { from: 1, to: 120, ascents, descents };
+  }
+
+  // Which of the measured families, if any, an unresolvable one falls back to.
+  out.fallbackFamilyAdvances = {};
+  for (const f of ['NoSuchFamily12345', 'cursive', 'fantasy', 'system-ui', 'Times', 'Courier']) {
+    ctx.font = '100px ' + f;
+    const widths = {};
+    for (let c = 32; c < 127; c++) widths[c] = ctx.measureText(String.fromCharCode(c)).width;
+    out.fallbackFamilyAdvances[f] = widths;
+  }
+
+  // An unresolvable family still measures - as whatever Chrome falls back to.
+  out.unknownFamilyAdvances = {};
+  for (const f of ['NoSuchFamily12345', 'cursive', 'fantasy', 'system-ui']) {
+    ctx.font = '100px ' + f;
+    out.unknownFamilyAdvances[f] = { resolvedFont: ctx.font, m: ctx.measureText('m').width, sample: ctx.measureText('mmmmmmmmmmlli').width };
+  }
+
   out.fontShorthandRoundTrip = {};
   for (const f of ['10px sans-serif', '14px Arial', 'bold 12px serif', 'italic 700 16px/1.5 "Times New Roman", serif', 'small-caps 20px monospace', '1em sans-serif', 'not-a-font']) {
     ctx.font = '10px sans-serif';
     ctx.font = f;
     out.fontShorthandRoundTrip[f] = ctx.font;
+  }
+  // Same list, but starting from a non-default font, which separates "parsed
+  // and happened to resolve to the default" from "rejected, kept the old one".
+  out.fontShorthandFromNonDefault = {};
+  for (const f of ['1em sans-serif', 'not-a-font', '', '12pt serif', 'xx-large serif', '16px', 'bold serif', '16px Arial, sans-serif',
+      '900 16px serif', '100 16px serif', 'lighter 16px serif', 'bolder 16px serif', 'oblique 16px serif', 'oblique 30deg 16px serif',
+      'condensed 16px serif', 'normal normal normal 16px serif', '16px "Foo Bar"', "16px 'Single'", '16px Foo Bar',
+      '2rem serif', '150% serif', 'larger serif', 'smaller serif', 'xx-small serif', 'x-small serif', 'small serif',
+      'medium serif', 'large serif', 'x-large serif', 'xxx-large serif', '16.5px serif', 'italic small-caps bold 16px serif',
+      '1.5ex serif', '10ch serif', '1in serif', '1cm serif', '10mm serif', '1pc serif', 'inherit', 'caption', '  16px   serif  ']) {
+    ctx.font = '33px monospace';
+    ctx.font = f;
+    out.fontShorthandFromNonDefault[f] = ctx.font;
   }
   return JSON.stringify(out);
 })()`,
