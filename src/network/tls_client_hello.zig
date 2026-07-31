@@ -70,13 +70,14 @@ const CURVE_LIST = "X25519MLKEM768:X25519:P-256:P-384";
 
 /// Chrome's signature_algorithms, in order.
 ///
-/// Chrome additionally offers 0x0904/0x0905/0x0906 (ML-DSA-44/65/87) ahead of
-/// these. This BoringSSL predates those code points and rejects them —
-/// `set_sigalg_prefs` fails the whole call on an algorithm it cannot name — so
-/// they are left off, and the JA4 signature-algorithm digest differs from
-/// Chrome's by exactly those three entries. Closing that needs a newer
-/// BoringSSL, not a different call here.
+/// The three ML-DSA entries come first, as they do in Chrome's hello.
+/// BoringSSL rejects the whole list if it contains one code point it cannot
+/// name, so these are the reason `deps/boringssl-zig` pins a revision newer
+/// than the upstream wrapper's.
 const SIGNATURE_ALGORITHMS = [_]u16{
+    0x0904, // ML-DSA-44
+    0x0905, // ML-DSA-65
+    0x0906, // ML-DSA-87
     0x0403, // ecdsa_secp256r1_sha256
     0x0804, // rsa_pss_rsae_sha256
     0x0401, // rsa_pkcs1_sha256

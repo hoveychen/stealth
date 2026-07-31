@@ -1,0 +1,20 @@
+.{
+    .name = .boringssl,
+    .version = "0.1.0",
+    .fingerprint = 0x5f0947d2595ed256,
+    .minimum_zig_version = "0.16.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+    .dependencies = .{
+        .ssl = .{
+            // Bumped from 535cc391 (2025-06-24) for SSL_SIGN_ML_DSA_44/_65/_87
+            // (code points 0x0904-0x0906), which Chrome offers and which the
+            // older revision does not know. Source lists regenerated from this
+            // revision's gen/sources.json by gen-sources.py.
+            .url = "git+https://github.com/google/boringssl#7515be5ccd601ae0433d3682ba7737592b402014",
+            .hash = "N-V-__8AAAIFeA5gQfeIpRTOGFQzDL4GX8JBwyRuvbZOTSoQ",
+        },
+    },
+}
