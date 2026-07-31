@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=connection>
+  // Values measured on Chrome 150 — see NetworkInformation.zig.
+  testing.expectEqual('object', typeof navigator.connection);
+  testing.expectEqual('[object NetworkInformation]', Object.prototype.toString.call(navigator.connection));
+  testing.expectEqual('4g', navigator.connection.effectiveType);
+  testing.expectEqual(100, navigator.connection.rtt);
+  testing.expectEqual(1.45, navigator.connection.downlink);
+  testing.expectEqual(false, navigator.connection.saveData);
+
+  // Chrome's desktop NetworkInformation carries exactly these five members;
+  // `type` and `downlinkMax` are mobile-only and must stay absent.
+  testing.expectEqual(
+    ['constructor', 'downlink', 'effectiveType', 'onchange', 'rtt', 'saveData'],
+    Object.getOwnPropertyNames(NetworkInformation.prototype).sort(),
+  );
+
+  // It is an EventTarget, and onchange is a settable handler.
+  testing.expectEqual(true, navigator.connection instanceof EventTarget);
+  testing.expectEqual(true, navigator.connection instanceof NetworkInformation);
+  testing.expectEqual('function', typeof navigator.connection.addEventListener);
+  testing.expectEqual(null, navigator.connection.onchange);
+  const handler = () => {};
+  navigator.connection.onchange = handler;
+  testing.expectEqual(handler, navigator.connection.onchange);
+  navigator.connection.onchange = null;
+  testing.expectEqual(null, navigator.connection.onchange);
+
+  // Same object on every read.
+  testing.expectEqual(true, navigator.connection === navigator.connection);
+</script>

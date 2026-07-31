@@ -32,6 +32,7 @@ const Navigator = @import("Navigator.zig");
 const ModelContext = @import("ModelContext.zig");
 const Screen = @import("Screen.zig");
 const VisualViewport = @import("VisualViewport.zig");
+const NetworkInformation = @import("NetworkInformation.zig");
 const Performance = @import("Performance.zig");
 const Chrome = @import("Chrome.zig");
 const Document = @import("Document.zig");
@@ -76,6 +77,7 @@ _navigator: Navigator = .init,
 _model_context: ModelContext = .init,
 _screen: *Screen,
 _visual_viewport: *VisualViewport,
+_connection: *NetworkInformation,
 _performance: Performance,
 // Epoch milliseconds at which the load event fired, or 0 before that. Only
 // chrome.csi() / chrome.loadTimes() read it — both report the load timestamp,

@@ -30,6 +30,7 @@ const Permissions = @import("Permissions.zig");
 const StorageManager = @import("StorageManager.zig");
 const NavigatorUAData = @import("NavigatorUAData.zig");
 const ModelContext = @import("ModelContext.zig");
+const NetworkInformation = @import("NetworkInformation.zig");
 
 const Navigator = @This();
 _pad: bool = false,
@@ -202,6 +203,10 @@ pub fn getModelContext(_: *const Navigator, frame: *Frame) *ModelContext {
     return &frame.window._model_context;
 }
 
+pub fn getConnection(_: *const Navigator, frame: *Frame) *NetworkInformation {
+    return frame.window._connection;
+}
+
 pub fn registerProtocolHandler(_: *const Navigator, scheme: []const u8, url: [:0]const u8, frame: *const Frame) !void {
     try validateProtocolHandlerScheme(scheme);
     try validateProtocolHandlerURL(url, frame);
@@ -311,6 +316,7 @@ pub const JsApi = struct {
     pub const plugins = bridge.accessor(Navigator.getPlugins, null, .{ .exposed = .window });
     pub const mimeTypes = bridge.accessor(Navigator.getMimeTypes, null, .{ .exposed = .window });
     pub const modelContext = bridge.accessor(Navigator.getModelContext, null, .{ .exposed = .window });
+    pub const connection = bridge.accessor(Navigator.getConnection, null, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
 };

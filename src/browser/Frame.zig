@@ -49,6 +49,7 @@ const ShadowRoot = @import("webapi/ShadowRoot.zig");
 const Performance = @import("webapi/Performance.zig");
 const Screen = @import("webapi/Screen.zig");
 const VisualViewport = @import("webapi/VisualViewport.zig");
+const NetworkInformation = @import("webapi/NetworkInformation.zig");
 const AbstractRange = @import("webapi/AbstractRange.zig");
 const DOMNodeIterator = @import("webapi/DOMNodeIterator.zig");
 const Worker = @import("webapi/Worker.zig");
@@ -421,6 +422,11 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._performance = .init(),
         ._screen = screen,
         ._visual_viewport = visual_viewport,
+        // Not shared with the parent frame the way screen and visualViewport
+        // are: in Chrome an iframe's navigator.connection is its own object.
+        ._connection = try factory.eventTarget(NetworkInformation{
+            ._proto = undefined,
+        }),
         ._cross_origin_wrapper = undefined,
     };
 
