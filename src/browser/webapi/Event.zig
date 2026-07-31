@@ -96,6 +96,7 @@ pub const Type = union(enum) {
     cookie_change_event: *@import("event/CookieChangeEvent.zig"),
     idb_version_change_event: *@import("storage/idb/IDBVersionChangeEvent.zig"),
     toggle_event: *@import("event/ToggleEvent.zig"),
+    speech_synthesis_event: *@import("speech/SpeechSynthesisEvent.zig"),
 };
 
 pub const Options = struct {
@@ -211,6 +212,12 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .toggle_event => |e| return if (T == @import("event/ToggleEvent.zig")) e else null,
         .ui_event => |e| {
             if (T == @import("event/UIEvent.zig")) {
+                return e;
+            }
+            return e.is(T);
+        },
+        .speech_synthesis_event => |e| {
+            if (T == @import("speech/SpeechSynthesisEvent.zig")) {
                 return e;
             }
             return e.is(T);

@@ -1222,6 +1222,13 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/audio/AnalyserNode.zig"),
     @import("../webapi/audio/AudioListener.zig"),
     @import("../webapi/audio/AudioParam.zig"),
+    // Web Speech synthesis: window-only in Chrome, like the audio types
+    // (measured: typeof self.speechSynthesis === 'undefined' in a worker).
+    @import("../webapi/speech/SpeechSynthesis.zig"),
+    @import("../webapi/speech/SpeechSynthesisUtterance.zig"),
+    @import("../webapi/speech/SpeechSynthesisVoice.zig"),
+    @import("../webapi/speech/SpeechSynthesisEvent.zig"),
+    @import("../webapi/speech/SpeechSynthesisErrorEvent.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,

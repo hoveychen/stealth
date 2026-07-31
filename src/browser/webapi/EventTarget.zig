@@ -64,6 +64,8 @@ pub const Type = union(enum) {
     notification: *@import("Notification.zig"),
     audio_node: *@import("audio/AudioNode.zig"),
     base_audio_context: *@import("audio/BaseAudioContext.zig"),
+    speech_synthesis: *@import("speech/SpeechSynthesis.zig"),
+    speech_synthesis_utterance: *@import("speech/SpeechSynthesisUtterance.zig"),
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -248,6 +250,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .navigation_history_entry => writer.writeAll("<NavigationHistoryEntry>"),
         .audio_node => writer.writeAll("<AudioNode>"),
         .base_audio_context => writer.writeAll("<BaseAudioContext>"),
+        .speech_synthesis => writer.writeAll("<SpeechSynthesis>"),
+        .speech_synthesis_utterance => writer.writeAll("<SpeechSynthesisUtterance>"),
     };
 }
 
@@ -284,6 +288,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .navigation_history_entry => return "[object NavigationHistoryEntry]",
         .audio_node => return "[object AudioNode]",
         .base_audio_context => return "[object BaseAudioContext]",
+        .speech_synthesis => return "[object SpeechSynthesis]",
+        .speech_synthesis_utterance => return "[object SpeechSynthesisUtterance]",
     };
 }
 

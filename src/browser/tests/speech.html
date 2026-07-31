@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=speech_synthesis>
+{
+  // Every shape here is measured off Chrome 150 — see speech/SpeechSynthesis.zig.
+  testing.expectEqual('object', typeof speechSynthesis);
+  testing.expectEqual('function', typeof SpeechSynthesis);
+  testing.expectEqual('[object SpeechSynthesis]', Object.prototype.toString.call(speechSynthesis));
+  testing.expectEqual(true, speechSynthesis instanceof SpeechSynthesis);
+  testing.expectEqual(true, speechSynthesis instanceof EventTarget);
+  testing.expectEqual(false, speechSynthesis.pending);
+  testing.expectEqual(false, speechSynthesis.speaking);
+  testing.expectEqual(false, speechSynthesis.paused);
+  testing.expectEqual(null, speechSynthesis.onvoiceschanged);
+
+  // Same object on every read, and not constructible.
+  testing.expectEqual(true, speechSynthesis === window.speechSynthesis);
+  let threw = null;
+  try { new SpeechSynthesis(); } catch (e) { threw = e.name; }
+  testing.expectEqual('TypeError', threw);
+
+  testing.expectEqual(
+    ['cancel', 'constructor', 'getVoices', 'onvoiceschanged', 'pause', 'paused', 'pending', 'resume', 'speak', 'speaking'],
+    Object.getOwnPropertyNames(SpeechSynthesis.prototype).sort(),
+  );
+  testing.expectEqual(1, SpeechSynthesis.prototype.speak.length);
+  testing.expectEqual(0, SpeechSynthesis.prototype.getVoices.length);
+
+  speechSynthesis.pause();
+  testing.expectEqual(true, speechSynthesis.paused);
+  speechSynthesis.resume();
+  testing.expectEqual(false, speechSynthesis.paused);
+}
+</script>
+
+<script id=speech_voices>
+{
+  // The macOS system voice list Chrome reports, carried verbatim. An empty
+  // getVoices() is the headless tell this closes.
+  const voices = speechSynthesis.getVoices();
+  testing.expectEqual(199, voices.length);
+  testing.expectEqual('[object SpeechSynthesisVoice]', Object.prototype.toString.call(voices[0]));
+  testing.expectEqual('Samantha', voices[0].name);
+  testing.expectEqual('Samantha', voices[0].voiceURI);
+  testing.expectEqual('en-US', voices[0].lang);
+  testing.expectEqual(true, voices[0].localService);
+  testing.expectEqual(true, voices[0].default);
+
+  // Exactly one default voice; 180 macOS system voices followed by the 19
+  // Google remote ones, which is the split Chrome reports.
+  testing.expectEqual(1, voices.filter((v) => v.default).length);
+  testing.expectEqual(180, voices.filter((v) => v.localService).length);
+  testing.expectEqual(19, voices.filter((v) => !v.localService).length);
+  testing.expectEqual('Google 國語（臺灣）', voices[198].name);
+  testing.expectEqual(51, new Set(voices.map((v) => v.lang)).size);
+
+  // Identity is stable across calls: scripts compare voices with ===.
+  testing.expectEqual(true, speechSynthesis.getVoices()[3] === voices[3]);
+
+  testing.expectEqual(
+    ['constructor', 'default', 'lang', 'localService', 'name', 'voiceURI'],
+    Object.getOwnPropertyNames(SpeechSynthesisVoice.prototype).sort(),
+  );
+}
+</script>
+
+<script id=speech_utterance>
+{
+  const u = new SpeechSynthesisUtterance('hello');
+  testing.expectEqual('[object SpeechSynthesisUtterance]', Object.prototype.toString.call(u));
+  testing.expectEqual(true, u instanceof EventTarget);
+  testing.expectEqual('hello', u.text);
+  testing.expectEqual('', u.lang);
+  testing.expectEqual(null, u.voice);
+  testing.expectEqual(1, u.volume);
+  testing.expectEqual(1, u.rate);
+  testing.expectEqual(1, u.pitch);
+
+  // `text` is optional, so the constructor reports length 0 and defaults to "".
+  testing.expectEqual(0, SpeechSynthesisUtterance.length);
+  testing.expectEqual('', new SpeechSynthesisUtterance().text);
+
+  u.text = 'world';
+  u.lang = 'en-GB';
+  u.volume = 0.5;
+  u.rate = 2;
+  u.pitch = 0.25;
+  u.voice = speechSynthesis.getVoices()[1];
+  testing.expectEqual(['world', 'en-GB', 0.5, 2, 0.25, 'Albert'], [u.text, u.lang, u.volume, u.rate, u.pitch, u.voice.name]);
+
+  testing.expectEqual(
+    ['constructor', 'lang', 'onboundary', 'onend', 'onerror', 'onmark', 'onpause', 'onresume', 'onstart', 'pitch', 'rate', 'text', 'voice', 'volume'],
+    Object.getOwnPropertyNames(SpeechSynthesisUtterance.prototype).sort(),
+  );
+}
+</script>
+
+<script id=speech_events>
+{
+  // SpeechSynthesisErrorEvent -> SpeechSynthesisEvent -> Event, like Chrome,
+  // and both constructors take two required arguments.
+  testing.expectEqual(2, SpeechSynthesisEvent.length);
+  testing.expectEqual(2, SpeechSynthesisErrorEvent.length);
+  testing.expectEqual(SpeechSynthesisErrorEvent.prototype.__proto__, SpeechSynthesisEvent.prototype);
+  testing.expectEqual(SpeechSynthesisEvent.prototype.__proto__, Event.prototype);
+
+  const u = new SpeechSynthesisUtterance('x');
+  const e = new SpeechSynthesisEvent('boundary', { utterance: u, charIndex: 2, charLength: 3, elapsedTime: 1.5, name: 'word' });
+  testing.expectEqual('[object SpeechSynthesisEvent]', Object.prototype.toString.call(e));
+  testing.expectEqual(true, e instanceof Event);
+  testing.expectEqual('boundary', e.type);
+  testing.expectEqual(true, e.utterance === u);
+  testing.expectEqual([2, 3, 1.5, 'word'], [e.charIndex, e.charLength, e.elapsedTime, e.name]);
+
+  const err = new SpeechSynthesisErrorEvent('error', { utterance: u, error: 'synthesis-failed' });
+  testing.expectEqual('[object SpeechSynthesisErrorEvent]', Object.prototype.toString.call(err));
+  testing.expectEqual(true, err instanceof SpeechSynthesisEvent);
+  testing.expectEqual(true, err instanceof Event);
+  testing.expectEqual('synthesis-failed', err.error);
+  testing.expectEqual(true, err.utterance === u);
+  testing.expectEqual(['constructor', 'error'], Object.getOwnPropertyNames(SpeechSynthesisErrorEvent.prototype).sort());
+}
+</script>
+
+<script id=speech_speak type=module>
+{
+  // There is no synthesiser, but speak() still delivers Chrome's success pair
+  // (start then end) so a page that waits for onend continues.
+  const state = await testing.async();
+  const u = new SpeechSynthesisUtterance('hello');
+  const seen = [];
+  u.onstart = (e) => seen.push(['onstart', e.type, e.utterance === u, speechSynthesis.speaking]);
+  u.addEventListener('end', (e) => seen.push(['listener-end', e.type, Object.prototype.toString.call(e)]));
+  u.onend = () => seen.push(['onend', speechSynthesis.speaking]);
+
+  speechSynthesis.speak(u);
+  const speakingRightAfter = speechSynthesis.speaking;
+  await new Promise((r) => setTimeout(r, 50));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(true, speakingRightAfter);
+    // start before end, and both the inline handler and the addEventListener
+    // one see the end event. Their relative order is deliberately not asserted:
+    // this engine runs the inline `on*` handler ahead of registered listeners
+    // for every webapi, not just this one.
+    testing.expectEqual(3, seen.length);
+    testing.expectEqual(['onstart', 'start', true, true], seen[0]);
+    testing.expectEqual(['onend', false], seen.find((s) => s[0] === 'onend'));
+    testing.expectEqual(['listener-end', 'end', '[object SpeechSynthesisEvent]'], seen.find((s) => s[0] === 'listener-end'));
+    testing.expectEqual(false, speechSynthesis.speaking);
+  });
+}
+</script>
+
+<script id=speech_cancel type=module>
+{
+  // cancel() before the task runs suppresses both events.
+  const state = await testing.async();
+  const u = new SpeechSynthesisUtterance('hello');
+  let fired = 0;
+  u.onstart = () => fired++;
+  u.onend = () => fired++;
+  speechSynthesis.speak(u);
+  speechSynthesis.cancel();
+  await new Promise((r) => setTimeout(r, 50));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(0, fired);
+    testing.expectEqual(false, speechSynthesis.speaking);
+  });
+}
+</script>
