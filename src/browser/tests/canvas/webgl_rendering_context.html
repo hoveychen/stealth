@@ -70,8 +70,8 @@
   testing.expectEqual(UNMASKED_VENDOR_WEBGL, 0x9245);
   testing.expectEqual(UNMASKED_RENDERER_WEBGL, 0x9246);
 
-  testing.expectEqual("", ctx.getParameter(UNMASKED_VENDOR_WEBGL));
-  testing.expectEqual("", ctx.getParameter(UNMASKED_RENDERER_WEBGL));
+  testing.expectEqual("Google Inc. (Apple)", ctx.getParameter(UNMASKED_VENDOR_WEBGL));
+  testing.expectEqual("ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)", ctx.getParameter(UNMASKED_RENDERER_WEBGL));
 }
 
 // WEBGL_lose_context
@@ -93,5 +93,101 @@
 
   testing.expectTrue(ctx === element.getContext('webgl'));
   testing.expectEqual(null, element.getContext('2d'));
+}
+</script>
+
+<script id=WebGLRenderingContext#getParameter>
+{
+  const element = document.createElement("canvas");
+  element.width = 240;
+  element.height = 60;
+  const ctx = element.getContext("webgl");
+
+  // Strings a fingerprinting script reads first. These are the values the real
+  // Chrome on the reference host reports; see tools/fingerprint/results/.
+  testing.expectEqual("WebKit", ctx.getParameter(ctx.VENDOR));
+  testing.expectEqual("WebKit WebGL", ctx.getParameter(ctx.RENDERER));
+  testing.expectEqual("WebGL 1.0 (OpenGL ES 2.0 Chromium)", ctx.getParameter(ctx.VERSION));
+  testing.expectEqual(
+    "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+    ctx.getParameter(ctx.SHADING_LANGUAGE_VERSION),
+  );
+
+  // Numeric limits.
+  testing.expectEqual(16384, ctx.getParameter(ctx.MAX_TEXTURE_SIZE));
+  testing.expectEqual(16, ctx.getParameter(ctx.MAX_VERTEX_ATTRIBS));
+  testing.expectEqual(4, ctx.getParameter(ctx.SAMPLES));
+  testing.expectEqual(24, ctx.getParameter(ctx.DEPTH_BITS));
+
+  // Booleans.
+  testing.expectEqual(true, ctx.getParameter(ctx.DITHER));
+  testing.expectEqual(false, ctx.getParameter(ctx.BLEND));
+  testing.expectEqual(true, ctx.getParameter(ctx.DEPTH_WRITEMASK));
+
+  // Typed arrays.
+  const range = ctx.getParameter(ctx.ALIASED_POINT_SIZE_RANGE);
+  testing.expectEqual(true, range instanceof Float32Array);
+  testing.expectEqual(2, range.length);
+  testing.expectEqual(1, range[0]);
+  testing.expectEqual(511, range[1]);
+
+  const dims = ctx.getParameter(ctx.MAX_VIEWPORT_DIMS);
+  testing.expectEqual(true, dims instanceof Int32Array);
+  testing.expectEqual(16384, dims[0]);
+
+  // The viewport defaults to the whole drawing buffer.
+  const viewport = ctx.getParameter(ctx.VIEWPORT);
+  testing.expectEqual(0, viewport[0]);
+  testing.expectEqual(0, viewport[1]);
+  testing.expectEqual(240, viewport[2]);
+  testing.expectEqual(60, viewport[3]);
+
+  const formats = ctx.getParameter(ctx.COMPRESSED_TEXTURE_FORMATS);
+  testing.expectEqual(true, formats instanceof Uint32Array);
+  testing.expectEqual(0, formats.length);
+
+  const writemask = ctx.getParameter(ctx.COLOR_WRITEMASK);
+  testing.expectEqual(true, Array.isArray(writemask));
+  testing.expectEqual(4, writemask.length);
+  testing.expectEqual(true, writemask[0]);
+
+  // Enums that aren't gettable state answer null, as they do in Chrome.
+  testing.expectEqual(null, ctx.getParameter(ctx.TRIANGLES));
+  testing.expectEqual(null, ctx.getParameter(ctx.RGBA));
+}
+</script>
+
+<script id=WebGLRenderingContext#constants>
+{
+  const ctx = document.createElement("canvas").getContext("webgl");
+
+  // Web IDL puts constants on both the interface object and the prototype.
+  testing.expectEqual(0x0DE1, WebGLRenderingContext.TEXTURE_2D);
+  testing.expectEqual(0x0DE1, WebGLRenderingContext.prototype.TEXTURE_2D);
+  testing.expectEqual(0x0DE1, ctx.TEXTURE_2D);
+  testing.expectEqual(0x8B31, ctx.VERTEX_SHADER);
+  testing.expectEqual(0x8B30, ctx.FRAGMENT_SHADER);
+  testing.expectEqual(0x1F00, ctx.VENDOR);
+
+  // They are readonly and own properties of the prototype, not the instance.
+  testing.expectEqual(false, Object.prototype.hasOwnProperty.call(ctx, "TEXTURE_2D"));
+  const d = Object.getOwnPropertyDescriptor(WebGLRenderingContext.prototype, "TEXTURE_2D");
+  testing.expectEqual(false, d.writable);
+}
+</script>
+
+<script id=WebGLRenderingContext#drawingBuffer>
+{
+  const element = document.createElement("canvas");
+  element.width = 240;
+  element.height = 60;
+  const ctx = element.getContext("webgl");
+
+  testing.expectTrue(ctx.canvas === element);
+  testing.expectEqual(240, ctx.drawingBufferWidth);
+  testing.expectEqual(60, ctx.drawingBufferHeight);
+  testing.expectEqual("srgb", ctx.drawingBufferColorSpace);
+  testing.expectEqual("srgb", ctx.unpackColorSpace);
+  testing.expectEqual(0x8058, ctx.drawingBufferFormat);
 }
 </script>

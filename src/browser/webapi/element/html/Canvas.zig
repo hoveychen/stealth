@@ -87,17 +87,22 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
             break :blk .{ .@"2d" = ctx };
         }
 
-        // We only stub a tiny slice of the WebGL API (getParameter,
-        // getExtension, getSupportedExtensions). Real WebGL consumers like
-        // Three.js immediately call createTexture/createBuffer/etc. and
-        // throw `TypeError: e.createTexture is not a function`. Pretending
-        // WebGL works until the first non-stubbed call is the worst of both
-        // worlds: pages that have an error boundary above the WebGL widget
-        // catch the throw, reset, re-render, and loop forever.
-        // Spec-correct signal for "no WebGL" is null, so apps that check
-        // (Three.js does) can degrade gracefully.
+        // We rasterize nothing here: the WebGL context is a stub whose state
+        // calls are no-ops and whose getters answer with the values a real
+        // Chrome reports. This used to return null instead, on the grounds
+        // that a *partial* stub is worse than none — a consumer like Three.js
+        // would call createTexture, hit `TypeError: not a function`, and a
+        // page with an error boundary above the widget would catch, reset,
+        // re-render and loop forever. That objection is about throwing, not
+        // about existing, so the stub is now wide enough not to throw (see
+        // WebGLRenderingContext). The trade-off we accept in exchange: a page
+        // that waits for WebGL output before showing content now waits
+        // forever instead of taking its no-WebGL path. Absent WebGL is itself
+        // a loud signal — `getContext('webgl') === null` happens on no real
+        // browser on this hardware.
         if (std.mem.eql(u8, context_type, "webgl") or std.mem.eql(u8, context_type, "experimental-webgl")) {
-            return null;
+            const ctx = try frame._factory.create(WebGLRenderingContext{ ._canvas = self });
+            break :blk .{ .webgl = ctx };
         }
         return null;
     };
