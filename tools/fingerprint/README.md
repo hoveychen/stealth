@@ -31,6 +31,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `sites.mjs` | URLs + in-page extractors for bot.sannysoft.com and CreepJS. |
 | `subresource-check.mjs` | Answers "did the request happen at all", per fetch destination. Exits non-zero on a miss. Takes engine flags after `--`. |
 | `collect-*.mjs` | Spawn the engine, run the four steps, write one JSON snapshot. |
+| `dump-graphics.mjs` | Dumps Chrome's *whole* graphics API surface — every GLenum, every method's arity, every `getParameter` answer, every character's advance width. `probe.js` asks "what does a fingerprinting script see"; this asks "what exactly should we report". The Zig code under `src/browser/webapi/canvas/` is transcribed from its output. |
 | `diff.mjs` | Renders a candidate/reference markdown comparison. |
 
 ## Two things to know before trusting a result
@@ -161,3 +162,58 @@ target:
 WebGL is *not* one of them: headless Chrome on macOS still reports the real
 Metal/ANGLE renderer, so the GPU strings in either reference file are usable
 targets.
+
+## Graphics layer (after P5, WebGL half)
+
+`getContext('webgl')` used to answer `null`, so bot.sannysoft.com failed *WebGL
+Vendor* and *WebGL Renderer* outright, and `webgl.params` was absent from the
+probe. All three now match Chrome:
+
+| | before | after |
+|---|---|---|
+| `getContext('webgl' / 'webgl2' / 'experimental-webgl')` | `null`, `null`, `null` | `ok`, `ok`, `ok` |
+| `getParameter(VENDOR)` | `""` | `WebKit` |
+| `getParameter(UNMASKED_RENDERER_WEBGL)` | `""` | `ANGLE (Apple, ANGLE Metal Renderer: Apple M4, …)` |
+| `getSupportedExtensions().length` | 39 (1.0 only) | 39 for 1.0, 36 for 2.0 |
+| `WebGLRenderingContext.prototype` own properties | 4 | 441, the same as Chrome |
+| `WebGL2RenderingContext` | absent | 790 own properties, the same as Chrome |
+| sannysoft hard failures | WebGL Vendor, WebGL Renderer | none |
+
+**Every value is measured, none recalled.** The WebGL spec pins the enum
+numbering but says nothing about what a driver answers for `MAX_TEXTURE_SIZE`,
+`SAMPLES` or the ANGLE renderer string — and those are exactly the values that
+identify a machine. Run `dump-graphics.mjs` to regenerate
+`results/reference-chrome-graphics.json`, then update the Zig to match. Two
+values came out the *opposite* of what reasoning suggested, and only the
+measurement caught them: a fence sync nothing was queued behind reports
+`UNSIGNALED`, not `SIGNALED`, and a zero-timeout wait on it reports
+`TIMEOUT_EXPIRED`, not `ALREADY_SIGNALED`.
+
+Known deviations from Chrome at this layer, all deliberate:
+
+1. **The handle types inherit from `Object`, not from `WebGLObject`.** In Chrome
+   `Object.getPrototypeOf(WebGLBuffer.prototype) === WebGLObject.prototype`, and
+   a `WebGLObject` global exists. Reproducing that means a chained-factory
+   allocation per handle for a prototype link nothing calls.
+2. **`isQuery` / `isVertexArray` / `isTransformFeedback` always answer `false`,
+   and `isBuffer` / `isTexture` / … always answer `true` for a live handle.**
+   Chrome's answer depends on whether the object was ever bound; we keep no
+   binding state. The constants match the measured never-bound case.
+3. **Nothing rasterizes.** A page that waits for WebGL output before revealing
+   content waits forever rather than taking its no-WebGL path. This is the
+   trade-off accepted in exchange for not being the only browser on the machine
+   without WebGL; see the comment in `element/html/Canvas.zig`.
+4. **`WebGLContextEvent` is not exposed**, so a script cannot construct one or
+   find it on `window`. No `webglcontextlost` event is ever fired either, since
+   the context is never lost.
+
+The canvas-2D half of P5 — `toDataURL`, a real pixel buffer behind
+`getImageData`, and `measureText` — is not done yet. The measurements it needs
+are already in `results/reference-chrome-graphics.json`: the `canvas2d` section
+has Chrome's exact PNG bytes for empty and solid-fill canvases at four sizes,
+and the `text` section has per-character advance widths for all four distinct
+font-metric families. Two facts from that data shape the implementation:
+`measureText` is *exactly* linear in font size, and a string's width is the
+plain sum of its characters' advances except across a kerning pair (`AV`, `To`),
+so a scaled advance table reproduces `mmmmmmmmmmlli` and `Cwm fjordbank glyphs
+vext quiz` to the last bit.
