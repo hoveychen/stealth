@@ -390,3 +390,27 @@ masking, recorded here because the harness reproduces both:
 Both smell like the same root — connections being discarded rather than
 pooled — and fixing that would close the last ClientHello difference as a side
 effect.
+
+## Where the whole run landed (P7)
+
+One table for the plan, each column a measured snapshot in
+`results/`, all compared against the same `reference-chrome-headed.json`.
+
+| | before | +subresources | +headers (P3) | +navigator (P4) | +graphics (P5) | +transport (P6) |
+|---|---|---|---|---|---|---|
+| probe keys identical to Chrome | 33/90 | 33/90 | 33/90 | 52/90 | 59/90 | **59/90** |
+| bot.sannysoft.com FAIL rows | 11 | 11 | 11 | 7 | 0 | **0** |
+| document headers present | 6/14 | 6/14 | 13/14 | 13/14 | 13/14 | **13/14** |
+| subresource destinations requested | 5/8 | 8/8 | 8/8 | 8/8 | 8/8 | **8/8** |
+| TLS cipher digest matches Chrome | no | no | no | no | no | **yes** |
+| JA3 varies per connection | no | no | no | no | no | **yes** |
+| HTTP/2 fingerprint matches Chrome | no | no | no | no | no | no |
+
+P6 moves nothing in the first four rows, which is the expected result: the
+transport layer is invisible to a script, so a change there should leave the JS
+surface untouched. It is listed to show it caused no regression.
+
+The remaining 31 probe keys are enumerated in `after-p6-vs-chrome.md`; the
+per-layer sections above say which are deliberate (`hardwareConcurrency`,
+`deviceMemory`), which are missing APIs (`RTCPeerConnection`, `AudioContext`,
+`speechSynthesis`), and which are known gaps with a measured cost.
