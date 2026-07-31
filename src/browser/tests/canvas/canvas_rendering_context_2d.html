@@ -533,3 +533,117 @@
   }
 }
 </script>
+
+<script id="CanvasRenderingContext2D#interface shape">
+{
+  const proto = CanvasRenderingContext2D.prototype;
+  const names = Object.getOwnPropertyNames(proto).filter((n) => n !== 'constructor');
+  // Chrome has exactly 73 own properties here: 45 methods and 28 accessors,
+  // and not one plain data property. Measured, see tools/fingerprint.
+  testing.expectEqual(73, names.length);
+
+  let accessors = 0;
+  let methods = 0;
+  for (const name of names) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+    if (descriptor.get) {
+      accessors += 1;
+    } else {
+      testing.expectEqual('function', typeof descriptor.value);
+      methods += 1;
+    }
+  }
+  testing.expectEqual(28, accessors);
+  testing.expectEqual(45, methods);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#drawing state defaults">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+  // Every default here was read off a fresh Chrome context.
+  const defaults = {
+    lang: 'inherit', font: '10px sans-serif', textAlign: 'start', textBaseline: 'alphabetic',
+    direction: 'ltr', fontKerning: 'auto', fontStretch: 'normal', fontVariantCaps: 'normal',
+    letterSpacing: '0px', textRendering: 'auto', wordSpacing: '0px',
+    globalCompositeOperation: 'source-over', filter: 'none', imageSmoothingQuality: 'low',
+    strokeStyle: '#000000', fillStyle: '#000000', shadowColor: 'rgba(0, 0, 0, 0)',
+    lineCap: 'butt', lineJoin: 'miter', globalAlpha: 1, imageSmoothingEnabled: true,
+    shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0, lineWidth: 1, miterLimit: 10,
+    lineDashOffset: 0,
+  };
+  for (const [name, value] of Object.entries(defaults)) {
+    testing.expectEqual(value, ctx[name]);
+  }
+  testing.expectEqual(ctx.canvas.constructor.name, 'HTMLCanvasElement');
+
+  // Keyword attributes take what they recognise and ignore the rest.
+  ctx.textAlign = 'center';
+  testing.expectEqual('center', ctx.textAlign);
+  ctx.textAlign = 'sideways';
+  testing.expectEqual('center', ctx.textAlign);
+  ctx.lineJoin = 'bevel';
+  testing.expectEqual('bevel', ctx.lineJoin);
+  ctx.globalCompositeOperation = 'multiply';
+  testing.expectEqual('multiply', ctx.globalCompositeOperation);
+  ctx.globalCompositeOperation = 'not-an-operation';
+  testing.expectEqual('multiply', ctx.globalCompositeOperation);
+  ctx.shadowBlur = 4;
+  testing.expectEqual(4, ctx.shadowBlur);
+  ctx.shadowBlur = NaN;
+  testing.expectEqual(4, ctx.shadowBlur);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#stubbed queries">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  testing.expectEqual(false, ctx.isContextLost());
+  testing.expectEqual(false, ctx.isPointInPath(0, 0));
+  testing.expectEqual(false, ctx.isPointInStroke(0, 0));
+
+  const attributes = ctx.getContextAttributes();
+  testing.expectEqual(true, attributes.alpha);
+  testing.expectEqual('srgb', attributes.colorSpace);
+  testing.expectEqual('unorm8', attributes.colorType);
+  testing.expectEqual(false, attributes.desynchronized);
+  testing.expectEqual(false, attributes.willReadFrequently);
+  testing.expectEqual('standard', attributes.toneMapping.mode);
+
+  testing.expectEqual([], ctx.getLineDash());
+  ctx.setLineDash([1, 2]);
+  testing.expectEqual([1, 2], ctx.getLineDash());
+  // An odd-length list is repeated, and an invalid one is dropped whole.
+  ctx.setLineDash([3, 4, 5]);
+  testing.expectEqual([3, 4, 5, 3, 4, 5], ctx.getLineDash());
+  ctx.setLineDash([1, -1]);
+  testing.expectEqual([3, 4, 5, 3, 4, 5], ctx.getLineDash());
+
+  testing.expectEqual('DOMMatrix', ctx.getTransform().constructor.name);
+  testing.expectEqual(1, ctx.getTransform().a);
+  testing.expectEqual(0, ctx.getTransform().b);
+
+  // Gradients and patterns are handles that carry no paint, but they exist.
+  const gradient = ctx.createLinearGradient(0, 0, 1, 1);
+  testing.expectEqual(true, gradient instanceof CanvasGradient);
+  testing.expectEqual(undefined, gradient.addColorStop(0.5, 'red'));
+  testing.expectError('Index or size', () => gradient.addColorStop(2, 'red'));
+  testing.expectEqual(true, ctx.createRadialGradient(0, 0, 0, 1, 1, 1) instanceof CanvasGradient);
+  testing.expectEqual(true, ctx.createConicGradient(0, 0, 0) instanceof CanvasGradient);
+  testing.expectEqual(true, ctx.createPattern(document.createElement('canvas'), 'repeat') instanceof CanvasPattern);
+
+  // reset() drops both the bitmap and the drawing state.
+  const canvas = document.createElement('canvas');
+  canvas.width = 2;
+  canvas.height = 2;
+  const drawn = canvas.getContext('2d');
+  drawn.fillStyle = 'red';
+  drawn.font = '30px monospace';
+  drawn.fillRect(0, 0, 2, 2);
+  drawn.reset();
+  testing.expectEqual('#000000', drawn.fillStyle);
+  testing.expectEqual('10px sans-serif', drawn.font);
+  testing.expectEqual([0, 0, 0, 0], Array.from(drawn.getImageData(0, 0, 1, 1).data));
+}
+</script>

@@ -7110,6 +7110,52 @@
     "image/webp": "data:image/webp;base64,UklGRk4",
     "image/bogus": "data:image/png;base64,iVBORw0K"
    },
+   "accessorDefaults": {
+    "canvas": "[object HTMLCanvasElement]",
+    "lang": "inherit",
+    "font": "10px sans-serif",
+    "textAlign": "start",
+    "textBaseline": "alphabetic",
+    "direction": "ltr",
+    "fontKerning": "auto",
+    "fontStretch": "normal",
+    "fontVariantCaps": "normal",
+    "letterSpacing": "0px",
+    "textRendering": "auto",
+    "wordSpacing": "0px",
+    "globalCompositeOperation": "source-over",
+    "filter": "none",
+    "imageSmoothingQuality": "low",
+    "strokeStyle": "#000000",
+    "fillStyle": "#000000",
+    "shadowColor": "rgba(0, 0, 0, 0)",
+    "lineCap": "butt",
+    "lineJoin": "miter",
+    "globalAlpha": 1,
+    "imageSmoothingEnabled": true,
+    "shadowOffsetX": 0,
+    "shadowOffsetY": 0,
+    "shadowBlur": 0,
+    "lineWidth": 1,
+    "miterLimit": 10,
+    "lineDashOffset": 0
+   },
+   "gradientTypes": {
+    "linear": "CanvasGradient",
+    "pattern": "CanvasPattern",
+    "transform": "DOMMatrix",
+    "isPointInPath": false,
+    "isPointInStroke": false,
+    "lineDash": []
+   },
+   "gradientProto": [
+    "addColorStop",
+    "constructor"
+   ],
+   "patternProto": [
+    "setTransform",
+    "constructor"
+   ],
    "getImageDataAfterRedFill": {
     "first4": [
      255,

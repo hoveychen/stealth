@@ -201,6 +201,30 @@ const SECTIONS = {
     for (const t of ['image/png', 'image/jpeg', 'image/webp', 'image/bogus']) r[t] = c.toDataURL(t).slice(0, 30);
     return r;
   })();
+  // Every 2D context attribute's default, so the stubs report Chrome's values
+  // rather than plausible-looking ones.
+  out.accessorDefaults = {};
+  {
+    const fresh = document.createElement('canvas').getContext('2d');
+    for (const name of Object.getOwnPropertyNames(CanvasRenderingContext2D.prototype)) {
+      if (name === 'constructor') continue;
+      const d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, name);
+      if (!d.get) continue;
+      let v;
+      try { v = fresh[name]; } catch (e) { v = '__throws__'; }
+      out.accessorDefaults[name] = (v && typeof v === 'object') ? ('[object ' + v.constructor.name + ']') : v;
+    }
+    out.gradientTypes = {
+      linear: fresh.createLinearGradient(0, 0, 1, 1).constructor.name,
+      pattern: String(fresh.createPattern(document.createElement('canvas'), 'repeat')?.constructor.name),
+      transform: fresh.getTransform().constructor.name,
+      isPointInPath: fresh.isPointInPath(0, 0),
+      isPointInStroke: fresh.isPointInStroke(0, 0),
+      lineDash: fresh.getLineDash(),
+    };
+    out.gradientProto = Object.getOwnPropertyNames(CanvasGradient.prototype);
+    out.patternProto = Object.getOwnPropertyNames(CanvasPattern.prototype);
+  }
   out.getImageDataAfterRedFill = (() => {
     const c = document.createElement('canvas'); c.width = 10; c.height = 10;
     const x = c.getContext('2d'); x.fillStyle = '#ff0000'; x.fillRect(0, 0, 10, 10);

@@ -24,6 +24,13 @@ const color = @import("../../color.zig");
 const ImageData = @import("../ImageData.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
 const Font = @import("font.zig");
+const state = @import("context_state.zig");
+const canvas_objects = @import("canvas_objects.zig");
+const DOMMatrix = @import("../DOMMatrix.zig");
+const DOMMatrixReadOnly = @import("../DOMMatrixReadOnly.zig");
+
+const CanvasGradient = canvas_objects.CanvasGradient;
+const CanvasPattern = canvas_objects.CanvasPattern;
 const TextMetrics = @import("TextMetrics.zig");
 const text_measure = @import("../../text_measure.zig");
 const Surface = @import("raster.zig");
@@ -47,6 +54,9 @@ _line_width: f64 = 1,
 _global_alpha: f64 = 1,
 /// The parsed `font` attribute. Drives measureText; see font.zig.
 _font: Font = Font.default,
+/// Drawing state the rasteriser does not read. See context_state.zig for
+/// why it is here at all.
+_state: state.State = .{},
 
 pub fn getCanvas(self: *const OffscreenCanvasRenderingContext2D) *OffscreenCanvas {
     return self._canvas;
@@ -168,13 +178,81 @@ pub fn getImageData(
     return image_data;
 }
 
+/// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getContextAttributes
+pub fn getContextAttributes(_: *const OffscreenCanvasRenderingContext2D) state.ContextAttributes {
+    return .{};
+}
+
+/// We never lose the context: there is no GPU behind it to lose.
+pub fn isContextLost(_: *const OffscreenCanvasRenderingContext2D) bool {
+    return false;
+}
+
+pub fn getLineDash(self: *const OffscreenCanvasRenderingContext2D) []const f64 {
+    return self._state.line_dash;
+}
+
+pub fn setLineDash(self: *OffscreenCanvasRenderingContext2D, segments: []const f64, exec: *Execution) void {
+    self._state.line_dash = state.normaliseLineDash(exec.arena, segments) orelse self._state.line_dash;
+}
+
+/// Always the identity: we do not implement transforms, so there is never
+/// anything else to report.
+pub fn getTransform(_: *const OffscreenCanvasRenderingContext2D, exec: *Execution) !*DOMMatrix {
+    return DOMMatrix.create(DOMMatrixReadOnly.identity(), true, exec.page);
+}
+
+/// Drops the bitmap and every piece of drawing state, as `reset()` does.
+pub fn reset(self: *OffscreenCanvasRenderingContext2D) void {
+    self._surface.reset();
+    self._fill_style = color.RGBA.Named.black;
+    self._stroke_style = color.RGBA.Named.black;
+    self._line_width = 1;
+    self._global_alpha = 1;
+    self._font = Font.default;
+    self._state.reset();
+}
+
+// Path geometry we accept and discard, like the rest of the path API.
+pub fn roundRect(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: ?js.Value) void {}
+pub fn ellipse(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64, _: ?bool) void {}
+pub fn drawFocusIfNeeded(_: *OffscreenCanvasRenderingContext2D, _: js.Value, _: ?js.Value) void {}
+
+/// No path is ever built, so nothing is ever inside one.
+pub fn isPointInPath(_: *const OffscreenCanvasRenderingContext2D, _: js.Value, _: f64, _: ?js.Value) bool {
+    return false;
+}
+
+pub fn isPointInStroke(_: *const OffscreenCanvasRenderingContext2D, _: js.Value, _: f64) bool {
+    return false;
+}
+
+// The gradient and pattern handles. They carry no paint — see
+// canvas_objects.zig — but a script that builds one gets an object back
+// rather than a TypeError.
+pub fn createLinearGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
+    return exec._factory.create(CanvasGradient{});
+}
+
+pub fn createRadialGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
+    return exec._factory.create(CanvasGradient{});
+}
+
+pub fn createConicGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
+    return exec._factory.create(CanvasGradient{});
+}
+
+pub fn createPattern(_: *OffscreenCanvasRenderingContext2D, _: js.Value, _: js.Value, exec: *Execution) !*CanvasPattern {
+    return exec._factory.create(CanvasPattern{});
+}
+
 pub fn save(_: *OffscreenCanvasRenderingContext2D) void {}
 pub fn restore(_: *OffscreenCanvasRenderingContext2D) void {}
 pub fn scale(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64) void {}
 pub fn rotate(_: *OffscreenCanvasRenderingContext2D, _: f64) void {}
 pub fn translate(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64) void {}
 pub fn transform(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn setTransform(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) void {}
+pub fn setTransform(_: *OffscreenCanvasRenderingContext2D, _: ?js.Value, _: ?f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64) void {}
 pub fn resetTransform(_: *OffscreenCanvasRenderingContext2D) void {}
 pub fn clearRect(self: *OffscreenCanvasRenderingContext2D, x: f64, y: f64, w: f64, h: f64) void {
     self._surface.clearRect(self._canvas.getWidth(), self._canvas.getHeight(), x, y, w, h);
@@ -221,6 +299,8 @@ pub fn clip(_: *OffscreenCanvasRenderingContext2D) void {}
 pub fn fillText(_: *OffscreenCanvasRenderingContext2D, _: []const u8, _: f64, _: f64, _: ?f64) void {}
 pub fn strokeText(_: *OffscreenCanvasRenderingContext2D, _: []const u8, _: f64, _: f64, _: ?f64) void {}
 
+const attr = state.Accessors(OffscreenCanvasRenderingContext2D);
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(OffscreenCanvasRenderingContext2D);
 
@@ -232,20 +312,54 @@ pub const JsApi = struct {
     };
 
     pub const canvas = bridge.accessor(OffscreenCanvasRenderingContext2D.getCanvas, null, .{});
-    pub const globalCompositeOperation = bridge.property("source-over", .{ .template = false, .readonly = false });
-    pub const lineCap = bridge.property("butt", .{ .template = false, .readonly = false });
-    pub const lineJoin = bridge.property("miter", .{ .template = false, .readonly = false });
-    pub const miterLimit = bridge.property(10.0, .{ .template = false, .readonly = false });
-    pub const textAlign = bridge.property("start", .{ .template = false, .readonly = false });
-    pub const textBaseline = bridge.property("alphabetic", .{ .template = false, .readonly = false });
 
     pub const fillStyle = bridge.accessor(OffscreenCanvasRenderingContext2D.getFillStyle, OffscreenCanvasRenderingContext2D.setFillStyle, .{});
     pub const strokeStyle = bridge.accessor(OffscreenCanvasRenderingContext2D.getStrokeStyle, OffscreenCanvasRenderingContext2D.setStrokeStyle, .{});
     pub const lineWidth = bridge.accessor(OffscreenCanvasRenderingContext2D.getLineWidth, OffscreenCanvasRenderingContext2D.setLineWidth, .{});
     pub const globalAlpha = bridge.accessor(OffscreenCanvasRenderingContext2D.getGlobalAlpha, OffscreenCanvasRenderingContext2D.setGlobalAlpha, .{});
     pub const font = bridge.accessor(OffscreenCanvasRenderingContext2D.getFont, OffscreenCanvasRenderingContext2D.setFont, .{});
+
+    // The rest of the drawing state. Chrome exposes all 28 of its 2D context
+    // attributes as prototype accessors, so all of ours are accessors too.
+    pub const lang = bridge.accessor(attr.freeform("lang").get, attr.freeform("lang").set, .{});
+    pub const textAlign = bridge.accessor(attr.keyword("text_align", &state.text_aligns).get, attr.keyword("text_align", &state.text_aligns).set, .{});
+    pub const textBaseline = bridge.accessor(attr.keyword("text_baseline", &state.text_baselines).get, attr.keyword("text_baseline", &state.text_baselines).set, .{});
+    pub const direction = bridge.accessor(attr.keyword("direction", &state.directions).get, attr.keyword("direction", &state.directions).set, .{});
+    pub const fontKerning = bridge.accessor(attr.keyword("font_kerning", &state.font_kernings).get, attr.keyword("font_kerning", &state.font_kernings).set, .{});
+    pub const fontStretch = bridge.accessor(attr.keyword("font_stretch", &state.font_stretches).get, attr.keyword("font_stretch", &state.font_stretches).set, .{});
+    pub const fontVariantCaps = bridge.accessor(attr.keyword("font_variant_caps", &state.font_variant_caps_values).get, attr.keyword("font_variant_caps", &state.font_variant_caps_values).set, .{});
+    pub const letterSpacing = bridge.accessor(attr.freeform("letter_spacing").get, attr.freeform("letter_spacing").set, .{});
+    pub const textRendering = bridge.accessor(attr.keyword("text_rendering", &state.text_renderings).get, attr.keyword("text_rendering", &state.text_renderings).set, .{});
+    pub const wordSpacing = bridge.accessor(attr.freeform("word_spacing").get, attr.freeform("word_spacing").set, .{});
+    pub const globalCompositeOperation = bridge.accessor(attr.keyword("global_composite_operation", &state.composite_operations).get, attr.keyword("global_composite_operation", &state.composite_operations).set, .{});
+    pub const filter = bridge.accessor(attr.freeform("filter").get, attr.freeform("filter").set, .{});
+    pub const imageSmoothingQuality = bridge.accessor(attr.keyword("image_smoothing_quality", &state.smoothing_qualities).get, attr.keyword("image_smoothing_quality", &state.smoothing_qualities).set, .{});
+    pub const imageSmoothingEnabled = bridge.accessor(attr.boolean("image_smoothing_enabled").get, attr.boolean("image_smoothing_enabled").set, .{});
+    pub const shadowColor = bridge.accessor(attr.freeform("shadow_color").get, attr.freeform("shadow_color").set, .{});
+    pub const shadowOffsetX = bridge.accessor(attr.number("shadow_offset_x").get, attr.number("shadow_offset_x").set, .{});
+    pub const shadowOffsetY = bridge.accessor(attr.number("shadow_offset_y").get, attr.number("shadow_offset_y").set, .{});
+    pub const shadowBlur = bridge.accessor(attr.number("shadow_blur").get, attr.number("shadow_blur").set, .{});
+    pub const lineCap = bridge.accessor(attr.keyword("line_cap", &state.line_caps).get, attr.keyword("line_cap", &state.line_caps).set, .{});
+    pub const lineJoin = bridge.accessor(attr.keyword("line_join", &state.line_joins).get, attr.keyword("line_join", &state.line_joins).set, .{});
+    pub const miterLimit = bridge.accessor(attr.number("miter_limit").get, attr.number("miter_limit").set, .{});
+    pub const lineDashOffset = bridge.accessor(attr.number("line_dash_offset").get, attr.number("line_dash_offset").set, .{});
     pub const createImageData = bridge.function(OffscreenCanvasRenderingContext2D.createImageData, .{});
     pub const measureText = bridge.function(OffscreenCanvasRenderingContext2D.measureText, .{});
+    pub const getContextAttributes = bridge.function(OffscreenCanvasRenderingContext2D.getContextAttributes, .{});
+    pub const isContextLost = bridge.function(OffscreenCanvasRenderingContext2D.isContextLost, .{});
+    pub const getLineDash = bridge.function(OffscreenCanvasRenderingContext2D.getLineDash, .{});
+    pub const setLineDash = bridge.function(OffscreenCanvasRenderingContext2D.setLineDash, .{});
+    pub const getTransform = bridge.function(OffscreenCanvasRenderingContext2D.getTransform, .{});
+    pub const reset = bridge.function(OffscreenCanvasRenderingContext2D.reset, .{});
+    pub const roundRect = bridge.function(OffscreenCanvasRenderingContext2D.roundRect, .{ .noop = true });
+    pub const ellipse = bridge.function(OffscreenCanvasRenderingContext2D.ellipse, .{ .noop = true });
+    pub const drawFocusIfNeeded = bridge.function(OffscreenCanvasRenderingContext2D.drawFocusIfNeeded, .{ .noop = true });
+    pub const isPointInPath = bridge.function(OffscreenCanvasRenderingContext2D.isPointInPath, .{});
+    pub const isPointInStroke = bridge.function(OffscreenCanvasRenderingContext2D.isPointInStroke, .{});
+    pub const createLinearGradient = bridge.function(OffscreenCanvasRenderingContext2D.createLinearGradient, .{});
+    pub const createRadialGradient = bridge.function(OffscreenCanvasRenderingContext2D.createRadialGradient, .{});
+    pub const createConicGradient = bridge.function(OffscreenCanvasRenderingContext2D.createConicGradient, .{});
+    pub const createPattern = bridge.function(OffscreenCanvasRenderingContext2D.createPattern, .{});
 
     pub const putImageData = bridge.function(OffscreenCanvasRenderingContext2D.putImageData, .{ .noop = true });
     pub const getImageData = bridge.function(OffscreenCanvasRenderingContext2D.getImageData, .{});
