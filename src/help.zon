@@ -324,6 +324,13 @@
     \\  --cookie-jar <PATH>
     \\          Path to a JSON file to save cookies to on exit (write-only).
     \\          Defaults to no cookie saving.
+    \\  --disable-external-stylesheets
+    \\          Skip fetching external <link rel=stylesheet> resources. Their rules
+    \\          then never reach computed styles, so visibility checks that depend on
+    \\          them (display, visibility, opacity, pointer-events) see only inline and
+    \\          embedded CSS. Saves a request and the style computation per sheet, at
+    \\          the cost of looking unlike a browser to the server.
+    \\          Defaults to false.
     \\  --disable-subframes
     \\          Skip loading <iframe> elements. The parser still registers them in the
     \\          DOM, but no child frame or Page.frameAttached events are produced.
@@ -333,11 +340,6 @@
     \\          returns a Worker object, but no script fetch is initiated and its scope
     \\          never runs.
     \\          Defaults to false.
-    \\  --enable-external-stylesheets
-    \\          Fetch external <link rel=stylesheet> resources so their rules
-    \\          contribute to computed styles (and therefore to visibility checks like
-    \\          display, visibility, opacity, pointer-events).
-    \\          Defaults to false, except in agent mode with an LLM, where it is on.
     \\  --http-cache-dir <PATH>
     \\          Directory used as a filesystem cache for network resources. Omitting
     \\          this disables caching.

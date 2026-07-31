@@ -108,13 +108,16 @@ worker_loading_enabled: bool = true,
 _console_messages: std.Io.Writer.Allocating,
 _console_capture: bool = false,
 
-// Opt-in fetch of external <link rel=stylesheet> resources. Defaults to
-// false to preserve the current rendering-free fast path: drivers that
-// don't need accurate visibility checks pay nothing. Set from the
-// `--enable-external-stylesheets` CLI flag at session init; the
-// LP.configureLoading CDP method can flip it per-session. When true,
+// Fetch external <link rel=stylesheet> resources. Set from the
+// `--disable-external-stylesheets` CLI flag at session init, where it is on
+// unless opted out: skipping CSS entirely is what makes this client
+// separable server-side, and it also costs accurate visibility checks. The
+// LP.configureLoading CDP method can flip it per-session, so a driver that
+// wants the rendering-free fast path can still have it. When true,
 // `Link.linkAddedCallback` routes to `Frame.loadExternalStylesheet`
 // (synchronous fetch + parse + register on `document.styleSheets`).
+// The `false` here is only the bare-struct default — every real session is
+// assigned from config in `init` below.
 load_external_stylesheets: bool = false,
 
 /// Caller-supplied cancellation probe. `Runner._wait` polls it between

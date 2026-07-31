@@ -209,7 +209,7 @@ const CommonOptions = .{
     .{ .name = "storage_sqlite_path", .type = ?[:0]const u8 },
     .{ .name = "disable_subframes", .type = bool },
     .{ .name = "disable_workers", .type = bool },
-    .{ .name = "enable_external_stylesheets", .type = bool },
+    .{ .name = "disable_external_stylesheets", .type = bool },
     .{ .name = "v8_flags_unsafe", .type = ?[]const u8 },
     .{ .name = "v8_max_heap_mb", .type = ?u32 },
     .{ .name = "watchdog_ms", .type = ?u32 },
@@ -484,9 +484,12 @@ pub fn watchdogMs(self: *const Config) ?u32 {
     };
 }
 
+// Stylesheets load unless asked not to: a client that never fetches CSS is
+// separable server-side on that alone, whatever its headers look like. The
+// callers all want the positive sense, so invert here rather than at each one.
 pub fn enableExternalStylesheets(self: *const Config) bool {
     return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.enable_external_stylesheets,
+        inline .serve, .fetch, .mcp, .agent => |opts| !opts.disable_external_stylesheets,
         else => unreachable,
     };
 }
@@ -1111,6 +1114,20 @@ pub fn parseArgs(allocator: Allocator, proc_args: std.process.Args) !Config {
     var config = try Config.init(allocator, exec_name, command);
     config.command = invoked;
     return config;
+}
+
+test "Config: external stylesheets load by default" {
+    // A client that never fetches CSS is trivially separable server-side, so
+    // the default has to be on; the flag exists to opt back out.
+    var on = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
+    defer on.deinit(std.testing.allocator);
+    try std.testing.expectEqual(true, on.enableExternalStylesheets());
+
+    var off = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .disable_external_stylesheets = true,
+    } });
+    defer off.deinit(std.testing.allocator);
+    try std.testing.expectEqual(false, off.enableExternalStylesheets());
 }
 
 test "Config: blockedUrlPatterns splits comma-separated patterns" {

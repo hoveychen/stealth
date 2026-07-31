@@ -805,28 +805,29 @@ test "cdp.lp: configureLoading toggles externalStylesheets independently" {
     const bc = try ctx.loadBrowserContext(.{});
     _ = try bc.session.createPage();
 
-    // Default is opt-in: off unless the CLI flag or CDP toggle enables it.
-    try testing.expectEqual(false, bc.session.load_external_stylesheets);
+    // The session inherits the CLI default, which is on: not fetching CSS is
+    // itself a fingerprint. All three loading toggles start enabled.
+    try testing.expectEqual(true, bc.session.load_external_stylesheets);
 
-    // Enable via CDP; the other two loading toggles stay at their defaults.
+    // Disable via CDP; the other two loading toggles stay at their defaults.
     try ctx.processMessage(.{
         .id = 1,
         .method = "LP.configureLoading",
-        .params = .{ .externalStylesheets = true },
+        .params = .{ .externalStylesheets = false },
     });
     try ctx.expectSentResult(null, .{ .id = 1 });
-    try testing.expectEqual(true, bc.session.load_external_stylesheets);
+    try testing.expectEqual(false, bc.session.load_external_stylesheets);
     try testing.expectEqual(true, bc.session.subframe_loading_enabled);
     try testing.expectEqual(true, bc.session.worker_loading_enabled);
 
-    // Flip back off; partial params must not reset the other fields.
+    // Flip back on; partial params must not reset the other fields.
     try ctx.processMessage(.{
         .id = 2,
         .method = "LP.configureLoading",
-        .params = .{ .externalStylesheets = false },
+        .params = .{ .externalStylesheets = true },
     });
     try ctx.expectSentResult(null, .{ .id = 2 });
-    try testing.expectEqual(false, bc.session.load_external_stylesheets);
+    try testing.expectEqual(true, bc.session.load_external_stylesheets);
     try testing.expectEqual(true, bc.session.subframe_loading_enabled);
     try testing.expectEqual(true, bc.session.worker_loading_enabled);
 }
