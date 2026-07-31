@@ -3,7 +3,7 @@
 /.lp-history
 /.lp-history.js
 /.lp-agent.zon
-/zig-pkg/
+zig-pkg/
 zig-out
 lightpanda.id
 /src/html5ever/target/
