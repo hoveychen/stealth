@@ -37,7 +37,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(libfips);
 
     const libcrypto = blk: {
-            const mod = b.createModule(.{
+        const mod = b.createModule(.{
             .target = target,
             .optimize = optimize,
             .link_libc = true,
@@ -163,6 +163,7 @@ const pki_sources = &.{
     "pki/general_names.cc",
     "pki/input.cc",
     "pki/ip_util.cc",
+    "pki/merkle_tree.cc",
     "pki/name_constraints.cc",
     "pki/ocsp.cc",
     "pki/parse_certificate.cc",
@@ -201,7 +202,6 @@ const bssl_sources = &.{
     "tool/rand.cc",
     "tool/server.cc",
     "tool/sign.cc",
-    "tool/speed.cc",
     "tool/tool.cc",
     "tool/transport_common.cc",
 };
@@ -345,18 +345,17 @@ const crypto_sources = &.{
     "crypto/evp/evp.cc",
     "crypto/evp/evp_asn1.cc",
     "crypto/evp/evp_ctx.cc",
+    "crypto/evp/evp_kem.cc",
     "crypto/evp/p_dh.cc",
-    "crypto/evp/p_dh_asn1.cc",
-    "crypto/evp/p_dsa_asn1.cc",
+    "crypto/evp/p_dsa.cc",
     "crypto/evp/p_ec.cc",
-    "crypto/evp/p_ec_asn1.cc",
     "crypto/evp/p_ed25519.cc",
-    "crypto/evp/p_ed25519_asn1.cc",
     "crypto/evp/p_hkdf.cc",
+    "crypto/evp/p_mldsa.cc",
+    "crypto/evp/p_mlkem.cc",
     "crypto/evp/p_rsa.cc",
-    "crypto/evp/p_rsa_asn1.cc",
     "crypto/evp/p_x25519.cc",
-    "crypto/evp/p_x25519_asn1.cc",
+    "crypto/evp/p_xwing.cc",
     "crypto/evp/pbkdf.cc",
     "crypto/evp/print.cc",
     "crypto/evp/scrypt.cc",
@@ -397,7 +396,6 @@ const crypto_sources = &.{
     "crypto/rand/forkunsafe.cc",
     "crypto/rand/getentropy.cc",
     "crypto/rand/ios.cc",
-    "crypto/rand/passive.cc",
     "crypto/rand/rand.cc",
     "crypto/rand/trusty.cc",
     "crypto/rand/urandom.cc",
@@ -489,7 +487,6 @@ const crypto_sources = &.{
     "crypto/x509/x_req.cc",
     "crypto/x509/x_sig.cc",
     "crypto/x509/x_spki.cc",
-    "crypto/x509/x_val.cc",
     "crypto/x509/x_x509.cc",
     "crypto/x509/x_x509a.cc",
     "crypto/xwing/xwing.cc",
@@ -518,7 +515,6 @@ const decrepit_sources = &.{
 
 const fipsmodule_sources = &.{
     "crypto/fipsmodule/bcm.cc",
-    "crypto/fipsmodule/fips_shared_support.cc",
 };
 
 const generated_fipsmodule_sources = &.{
