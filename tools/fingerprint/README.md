@@ -431,6 +431,58 @@ The practical note for anyone measuring this engine: **measure from a clean
 route.** A fake-IP tunnel in the path will make a correct ClientHello look
 broken, and it will do it intermittently, which is the worst way to be wrong.
 
+## How narrow the end-to-end evidence actually is
+
+Everything above measures *values* — probe keys against real Chrome, JA4, the
+Akamai fingerprint. Those do not depend on any detector agreeing with us. But
+the claim "detectors do not flag this engine" rested on **one** site,
+bot.sannysoft.com, which is the oldest and most permissive of them.
+
+Swept twelve public detectors with Chrome 150 as the control. Both engines
+navigated the same list with the same settle times; the measure is coarse on
+purpose — did the page finish, and did it produce a verdict — because the first
+question is not what score we get, it is whether we get one at all.
+
+| site | Chrome | this engine |
+|---|---|---|
+| bot.sannysoft.com | completes | **completes, 0 FAIL rows** |
+| deviceandbrowserinfo.com/are_you_a_bot | completes (and calls headless Chrome a bot) | navigation chrome only, never reaches a verdict |
+| CreepJS | fingerprint ID rendered | ID stays `Computing…`, 1347 chars of text against 4716 |
+| bot-detector.rebrowser.net | full result table | table header, no rows |
+| amiunique.org/fingerprint | 5841 chars | 1292, navigation only |
+| browserleaks.com/javascript | 9971 chars | 3484, partial |
+| tls.browserleaks.com/json | JSON returned | **navigation never happened**, page stayed on the previous URL |
+| iphey.com | completes | `Runtime.evaluate` times out |
+| pixelscan.net | completes | `Page.navigate` times out |
+| browserscan.net | completes | `Page.navigate` times out |
+| arh.antoinevastel.com (×2) | 37 chars | 37 chars — endpoints are dead, not a datapoint |
+
+**One of ten live detectors completes.** Three hang the engine outright.
+
+That matters more than any single property being off, because a browser that
+never returns a fingerprint is a louder signal than one whose fingerprint is
+slightly wrong. At this point the limit is engine completeness, not masking.
+
+### What the failures are, so far
+
+Console and exception capture during the load (`Runtime.exceptionThrown` plus
+`Runtime.consoleAPICalled`) rules out the obvious explanation for two of them:
+
+- **CreepJS raises no uncaught exception and does finish computing** — its own
+  log says `Fingerprinting complete in 164.05ms`, then
+  `loose fingerprint passed` and `stable fingerprint passed`. Five of its
+  sub-tests report failure (`audio`, `webgl`, `speech`, `svg`, `headless`) and
+  one `console.error` fires, but the fingerprint itself is produced. So what is
+  missing is the last step that puts the ID into the DOM, not the measurement.
+  Worth knowing that `webgl` is among the failures despite the WebGL work.
+- **rebrowser raises no uncaught exception either**, and emits exactly one
+  `addDetection` where Chrome emits many. Its tests barely start.
+
+The three hard hangs (`iphey`, `pixelscan`, `browserscan`) are a different and
+more serious class: `Page.navigate` itself never returns, so nothing about the
+page has run yet. They are the ones to chase first — one cause may account for
+all three.
+
 ## Where the whole run landed (P7)
 
 One table for the plan, each column a measured snapshot in
