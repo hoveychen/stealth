@@ -1,0 +1,188 @@
+// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
+//
+// Francis Bouvier <francis@lightpanda.io>
+// Pierre Tachoire <pierre@lightpanda.io>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//! Shapes the TLS ClientHello like Chrome's instead of like libcurl's.
+//!
+//! Nothing above the socket can hide this layer: a server sees the cipher
+//! list, the extension list, the named groups and the signature algorithms
+//! before a single byte of HTTP is exchanged, and JA3/JA4 turn exactly those
+//! into a fingerprint. Out of the box libcurl offers two ciphers Chrome
+//! dropped, no GREASE, and nine fewer extensions, so the hello is recognisable
+//! as "not a browser" regardless of what the User-Agent says.
+//!
+//! We share BoringSSL with Chrome, so most of this is calling the same knobs
+//! Chrome calls. The values below are transcribed from a measured Chrome
+//! ClientHello (`tools/fingerprint/collect-tls.mjs`), not from memory.
+//!
+//! Two things here are deliberately *not* fixed values. GREASE (RFC 8701) and
+//! extension permutation both make Chrome's hello differ connection to
+//! connection; reproducing Chrome means reproducing that variation, so JA3 is
+//! expected to change per connection while JA4 — which sorts extensions and
+//! drops GREASE — stays put.
+
+const std = @import("std");
+
+const brotli = @import("../sys/libbrotli.zig");
+const crypto = @import("../sys/libcrypto.zig");
+
+pub const Error = error{TlsProfileRejected};
+
+/// TLS 1.2-and-below cipher suites, in Chrome's order. BoringSSL always emits
+/// its three TLS 1.3 suites first and does not take them from this list.
+///
+/// Against libcurl's default this drops ECDHE-ECDSA-AES128-SHA (0xc009) and
+/// ECDHE-ECDSA-AES256-SHA (0xc00a), the only two Chrome does not offer. Their
+/// presence is why libcurl's hello counts 17 ciphers where Chrome counts 15.
+const CIPHER_LIST =
+    "ECDHE-ECDSA-AES128-GCM-SHA256:" ++
+    "ECDHE-RSA-AES128-GCM-SHA256:" ++
+    "ECDHE-ECDSA-AES256-GCM-SHA384:" ++
+    "ECDHE-RSA-AES256-GCM-SHA384:" ++
+    "ECDHE-ECDSA-CHACHA20-POLY1305:" ++
+    "ECDHE-RSA-CHACHA20-POLY1305:" ++
+    "ECDHE-RSA-AES128-SHA:" ++
+    "ECDHE-RSA-AES256-SHA:" ++
+    "AES128-GCM-SHA256:" ++
+    "AES256-GCM-SHA384:" ++
+    "AES128-SHA:" ++
+    "AES256-SHA";
+
+/// Chrome's supported_groups, in order. The post-quantum hybrid comes first;
+/// libcurl offers only the three classical curves, and a missing
+/// X25519MLKEM768 is on its own a strong "not Chrome" signal now that every
+/// shipping Chrome offers it.
+const CURVE_LIST = "X25519MLKEM768:X25519:P-256:P-384";
+
+/// Chrome's signature_algorithms, in order.
+///
+/// Chrome additionally offers 0x0904/0x0905/0x0906 (ML-DSA-44/65/87) ahead of
+/// these. This BoringSSL predates those code points and rejects them —
+/// `set_sigalg_prefs` fails the whole call on an algorithm it cannot name — so
+/// they are left off, and the JA4 signature-algorithm digest differs from
+/// Chrome's by exactly those three entries. Closing that needs a newer
+/// BoringSSL, not a different call here.
+const SIGNATURE_ALGORITHMS = [_]u16{
+    0x0403, // ecdsa_secp256r1_sha256
+    0x0804, // rsa_pss_rsae_sha256
+    0x0401, // rsa_pkcs1_sha256
+    0x0503, // ecdsa_secp384r1_sha384
+    0x0805, // rsa_pss_rsae_sha384
+    0x0501, // rsa_pkcs1_sha384
+    0x0806, // rsa_pss_rsae_sha512
+    0x0601, // rsa_pkcs1_sha512
+};
+
+/// The one ALPN protocol Chrome offers application settings for.
+const ALPS_PROTO = "h2";
+
+/// Applies the profile to a connection's `SSL_CTX`. Call this from libcurl's
+/// `CURLOPT_SSL_CTX_FUNCTION`, which runs after libcurl has finished its own
+/// setup, so every value here wins.
+pub fn configure(ssl_ctx: *crypto.SSL_CTX) Error!void {
+    if (crypto.SSL_CTX_set_min_proto_version(ssl_ctx, crypto.TLS1_2_VERSION) != 1) {
+        return error.TlsProfileRejected;
+    }
+    if (crypto.SSL_CTX_set_max_proto_version(ssl_ctx, crypto.TLS1_3_VERSION) != 1) {
+        return error.TlsProfileRejected;
+    }
+    if (crypto.SSL_CTX_set_cipher_list(ssl_ctx, CIPHER_LIST) != 1) {
+        return error.TlsProfileRejected;
+    }
+    if (crypto.SSL_CTX_set1_curves_list(ssl_ctx, CURVE_LIST) != 1) {
+        return error.TlsProfileRejected;
+    }
+    if (crypto.SSL_CTX_set_verify_algorithm_prefs(
+        ssl_ctx,
+        &SIGNATURE_ALGORITHMS,
+        SIGNATURE_ALGORITHMS.len,
+    ) != 1) {
+        return error.TlsProfileRejected;
+    }
+
+    // status_request (5) and signed_certificate_timestamp (18). Chrome asks
+    // for both; libcurl asks for neither.
+    crypto.SSL_CTX_enable_ocsp_stapling(ssl_ctx);
+    crypto.SSL_CTX_enable_signed_cert_timestamps(ssl_ctx);
+
+    // compress_certificate (27), advertising Brotli. Only the decompressor is
+    // needed: a client compresses nothing, it just has to be able to read a
+    // compressed certificate back, which it now can be sent because we asked.
+    if (crypto.SSL_CTX_add_cert_compression_alg(
+        ssl_ctx,
+        crypto.TLSEXT_cert_compression_brotli,
+        null,
+        decompressCertificate,
+    ) != 1) {
+        return error.TlsProfileRejected;
+    }
+
+    // session_ticket (35). libcurl sets SSL_OP_NO_TICKET during its own setup,
+    // which suppresses the extension outright; browsers send it.
+    _ = crypto.SSL_CTX_clear_options(ssl_ctx, crypto.SSL_OP_NO_TICKET);
+
+    crypto.SSL_CTX_set_grease_enabled(ssl_ctx, 1);
+    crypto.SSL_CTX_set_permute_extensions(ssl_ctx, 1);
+
+    // application_settings (17613) and encrypted_client_hello (65037) have no
+    // SSL_CTX-level setter, so they are applied per handshake instead.
+    crypto.SSL_CTX_set_info_callback(ssl_ctx, onHandshakeStart);
+}
+
+/// BoringSSL hands us the `SSL` here and nowhere else. `SSL_CB_HANDSHAKE_START`
+/// fires at the top of the client's `do_start_connect`, before the ECH config
+/// is selected and before any extension is written, so this is early enough to
+/// add extensions to the hello.
+fn onHandshakeStart(ssl: *crypto.SSL, where: c_int, _: c_int) callconv(.c) void {
+    if (where != crypto.SSL_CB_HANDSHAKE_START) {
+        return;
+    }
+
+    // A GREASE ECH extension, which is what Chrome sends whenever it has no
+    // real ECHConfig for the host — i.e. almost always.
+    crypto.SSL_set_enable_ech_grease(ssl, 1);
+
+    // ALPS on h2, at the newer 0x44cd code point Chrome uses. An empty
+    // settings value is correct for the ClientHello: the extension body there
+    // is only the list of protocols that support ALPS.
+    crypto.SSL_set_alps_use_new_codepoint(ssl, 1);
+    _ = crypto.SSL_add_application_settings(ssl, ALPS_PROTO, ALPS_PROTO.len, "", 0);
+}
+
+/// RFC 8879 certificate decompression. The result has to be exactly
+/// `uncompressed_len` bytes; anything else is a protocol error and the
+/// handshake should fail rather than proceed on a truncated chain.
+fn decompressCertificate(
+    _: *crypto.SSL,
+    out: **crypto.CRYPTO_BUFFER,
+    uncompressed_len: usize,
+    in: [*]const u8,
+    in_len: usize,
+) callconv(.c) c_int {
+    var data: [*]u8 = undefined;
+    const buffer = crypto.CRYPTO_BUFFER_alloc(&data, uncompressed_len) orelse return 0;
+
+    var written = uncompressed_len;
+    const result = brotli.BrotliDecoderDecompress(in_len, in, &written, data);
+    if (result != brotli.BROTLI_DECODER_RESULT_SUCCESS or written != uncompressed_len) {
+        crypto.CRYPTO_BUFFER_free(buffer);
+        return 0;
+    }
+
+    out.* = buffer;
+    return 1;
+}

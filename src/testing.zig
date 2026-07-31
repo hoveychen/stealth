@@ -618,6 +618,17 @@ var serve_counts = [_]struct { name: []const u8, count: u32 = 0 }{
     .{ .name = "prescan_module" },
 };
 
+// Smallest valid PNG: a single transparent pixel. Served for any image request
+// the tests make; see the image branch at the end of `testHTTPHandler`.
+const ONE_PIXEL_PNG = [_]u8{
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+    0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xfc, 0xcf, 0xc0, 0x50,
+    0x0f, 0x00, 0x04, 0x85, 0x01, 0x80, 0x84, 0xa9, 0x8c, 0x21, 0x00, 0x00,
+    0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+};
+
 fn testHTTPHandler(req: *std.http.Server.Request) !void {
     const path = req.head.target;
 
@@ -1035,6 +1046,23 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         }
         // strip off leading / so that it's relative to CWD
         return TestHTTPServer.sendFile(req, path[1..]);
+    }
+
+    // `<img src>` is fetched for real now (see `Frame.loadImage`), so any test
+    // page carrying an image reaches this handler. Nothing decodes the bytes,
+    // so one placeholder answers every image path rather than each test having
+    // to register a fixture.
+    {
+        const without_query = path[0 .. std.mem.indexOfScalar(u8, path, '?') orelse path.len];
+        for ([_][]const u8{ ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".svg" }) |ext| {
+            if (std.mem.endsWith(u8, without_query, ext)) {
+                return req.respond(&ONE_PIXEL_PNG, .{
+                    .extra_headers = &.{
+                        .{ .name = "Content-Type", .value = "image/png" },
+                    },
+                });
+            }
+        }
     }
 
     std.debug.print("TestHTTPServer was asked to serve an unknown file: {s}\n", .{path});

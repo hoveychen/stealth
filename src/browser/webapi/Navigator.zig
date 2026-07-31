@@ -19,6 +19,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const Allocator = std.mem.Allocator;
+
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const Execution = js.Execution;
@@ -28,10 +30,14 @@ const Permissions = @import("Permissions.zig");
 const StorageManager = @import("StorageManager.zig");
 const NavigatorUAData = @import("NavigatorUAData.zig");
 const ModelContext = @import("ModelContext.zig");
+const NetworkInformation = @import("NetworkInformation.zig");
+const MediaDevices = @import("media/MediaDevices.zig");
+const BatteryManager = @import("BatteryManager.zig");
 
 const Navigator = @This();
 _pad: bool = false,
 _plugins: PluginArray = .{},
+_mime_types: PluginArray.MimeTypeArray = .{},
 _permissions: Permissions = .{},
 _storage: StorageManager = .{},
 _ua_data: NavigatorUAData = .{},
@@ -42,8 +48,38 @@ pub fn getUserAgent(_: *const Navigator, exec: *const Execution) []const u8 {
     return exec.session.browser.http_client.getUserAgent();
 }
 
-pub fn getLanguages(_: *const Navigator) [2][]const u8 {
-    return .{ "en-US", "en" };
+// navigator.languages is the Accept-Language header, parsed. Hardcoding
+// en-US here while the wire carried whatever --accept-language said made the
+// two contradict each other, and a page can read both: a request advertising
+// de-DE from a navigator claiming en-US is a louder signal than either value
+// on its own.
+//
+// Read through http_client rather than off the config so a CDP
+// acceptLanguage override is reflected too.
+pub fn getLanguages(_: *const Navigator, exec: *const Execution) ![]const []const u8 {
+    return parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages());
+}
+
+pub fn getLanguage(_: *const Navigator, exec: *const Execution) ![]const u8 {
+    const tags = try parseLanguages(exec.call_arena, exec.session.browser.http_client.getLanguages());
+    // navigator.language is the first entry of navigator.languages.
+    return if (tags.len == 0) "" else tags[0];
+}
+
+// Splits an Accept-Language value into its bare tags, dropping the q-weights:
+// "de-DE,de;q=0.9,en;q=0.8" -> { "de-DE", "de", "en" }. Chrome exposes the
+// tags in the header's own order and never shows the weights.
+fn parseLanguages(allocator: Allocator, header: []const u8) ![]const []const u8 {
+    var tags: std.ArrayList([]const u8) = .empty;
+    var it = std.mem.splitScalar(u8, header, ',');
+    while (it.next()) |part| {
+        // Everything from the first ';' on is parameters (q-weight).
+        const bare = part[0 .. std.mem.indexOfScalar(u8, part, ';') orelse part.len];
+        const tag = std.mem.trim(u8, bare, " \t");
+        if (tag.len == 0) continue;
+        try tags.append(allocator, tag);
+    }
+    return tags.items;
 }
 
 pub fn getDoNotTrack(_: *const Navigator) ?[]const u8 {
@@ -58,12 +94,14 @@ pub fn getAppCodeName(_: *const Navigator) []const u8 {
     return "Mozilla";
 }
 
-pub fn getAppVersion(_: *const Navigator) []const u8 {
-    return "1.0";
-}
-
-pub fn getLanguage(_: *const Navigator) []const u8 {
-    return "en-US";
+// Chrome's appVersion is its user-agent with the leading "Mozilla/" removed —
+// not an independent version number. Returning "1.0" next to a Chrome
+// user-agent was a direct contradiction, and it is one a page reads in a single
+// expression.
+pub fn getAppVersion(_: *const Navigator, exec: *const Execution) []const u8 {
+    const ua = exec.session.browser.http_client.getUserAgent();
+    const prefix = "Mozilla/";
+    return if (std.mem.startsWith(u8, ua, prefix)) ua[prefix.len..] else ua;
 }
 
 pub fn getOnLine(_: *const Navigator) bool {
@@ -74,8 +112,16 @@ pub fn getCookieEnabled(_: *const Navigator) bool {
     return true;
 }
 
+// Fixed rather than read off the host. Reporting the real core count and RAM
+// would look more like a specific real Chrome, but it makes the same build
+// fingerprint differently on every machine; a fixed pair is stable across a
+// fleet at the cost of being shared by it. 8 cores is an unremarkable desktop
+// in a way 4 no longer is.
+//
+// deviceMemory is already coarse by design: Chrome rounds it to a power of two,
+// so 8 is a value a real Chrome reports rather than an invented one.
 pub fn getHardwareConcurrency(_: *const Navigator) u32 {
-    return 4;
+    return 8;
 }
 
 pub fn getDeviceMemory(_: *const Navigator) f64 {
@@ -86,8 +132,28 @@ pub fn getMaxTouchPoints(_: *const Navigator) u32 {
     return 0;
 }
 
+// The next three are fixed strings in every Chromium build — they don't vary
+// by platform or version. Values taken from the Chrome 150 capture in
+// tools/fingerprint/results/reference-chrome-headed.json, not from memory.
+// An empty vendor next to a Chrome user-agent is a direct contradiction, and
+// a missing productSub is what several bot checks probe for.
 pub fn getVendor(_: *const Navigator) []const u8 {
+    return "Google Inc.";
+}
+
+pub fn getProductSub(_: *const Navigator) []const u8 {
+    return "20030107";
+}
+
+pub fn getVendorSub(_: *const Navigator) []const u8 {
     return "";
+}
+
+// Chrome ships the PDF viewer, so this is true on every desktop build. It
+// pairs with navigator.plugins / navigator.mimeTypes, which describe that same
+// viewer — see PluginArray.zig.
+pub fn getPdfViewerEnabled(_: *const Navigator) bool {
+    return true;
 }
 
 pub fn getProduct(_: *const Navigator) []const u8 {
@@ -133,6 +199,10 @@ pub fn getPlugins(self: *Navigator) *PluginArray {
     return &self._plugins;
 }
 
+pub fn getMimeTypes(self: *Navigator) *PluginArray.MimeTypeArray {
+    return &self._mime_types;
+}
+
 pub fn getPermissions(self: *Navigator) *Permissions {
     return &self._permissions;
 }
@@ -147,6 +217,35 @@ pub fn getUserAgentData(self: *Navigator) *NavigatorUAData {
 
 pub fn getModelContext(_: *const Navigator, frame: *Frame) *ModelContext {
     return &frame.window._model_context;
+}
+
+pub fn getConnection(_: *const Navigator, frame: *Frame) *NetworkInformation {
+    return frame.window._connection;
+}
+
+pub fn getMediaDevices(_: *const Navigator, frame: *Frame) !*MediaDevices {
+    if (frame.window._media_devices) |media_devices| {
+        return media_devices;
+    }
+    const media_devices = try frame._factory.eventTarget(MediaDevices{
+        ._proto = undefined,
+    });
+    frame.window._media_devices = media_devices;
+    return media_devices;
+}
+
+// Chrome hands back the same BatteryManager on every call, so it's cached.
+pub fn getBattery(_: *const Navigator, exec: *const Execution) !js.Promise {
+    // Window-only, so the global is always a Frame.
+    const frame = exec.js.global.frame;
+    const battery = frame.window._battery orelse blk: {
+        const created = try frame._factory.eventTarget(BatteryManager{
+            ._proto = undefined,
+        });
+        frame.window._battery = created;
+        break :blk created;
+    };
+    return exec.js.local.?.resolvePromise(battery);
 }
 
 pub fn registerProtocolHandler(_: *const Navigator, scheme: []const u8, url: [:0]const u8, frame: *const Frame) !void {
@@ -240,7 +339,10 @@ pub const JsApi = struct {
     pub const deviceMemory = bridge.accessor(Navigator.getDeviceMemory, null, .{});
     pub const maxTouchPoints = bridge.accessor(Navigator.getMaxTouchPoints, null, .{});
     pub const vendor = bridge.accessor(Navigator.getVendor, null, .{});
+    pub const vendorSub = bridge.accessor(Navigator.getVendorSub, null, .{});
     pub const product = bridge.accessor(Navigator.getProduct, null, .{});
+    pub const productSub = bridge.accessor(Navigator.getProductSub, null, .{});
+    pub const pdfViewerEnabled = bridge.accessor(Navigator.getPdfViewerEnabled, null, .{});
     pub const webdriver = bridge.accessor(Navigator.getWebdriver, null, .{});
     pub const doNotTrack = bridge.accessor(Navigator.getDoNotTrack, null, .{});
     pub const globalPrivacyControl = bridge.accessor(Navigator.getGlobalPrivacyControl, null, .{});
@@ -253,7 +355,11 @@ pub const JsApi = struct {
 
     // window only
     pub const plugins = bridge.accessor(Navigator.getPlugins, null, .{ .exposed = .window });
+    pub const mimeTypes = bridge.accessor(Navigator.getMimeTypes, null, .{ .exposed = .window });
     pub const modelContext = bridge.accessor(Navigator.getModelContext, null, .{ .exposed = .window });
+    pub const connection = bridge.accessor(Navigator.getConnection, null, .{ .exposed = .window });
+    pub const mediaDevices = bridge.accessor(Navigator.getMediaDevices, null, .{ .exposed = .window });
+    pub const getBattery = bridge.function(Navigator.getBattery, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
 };
@@ -261,4 +367,32 @@ pub const JsApi = struct {
 const testing = @import("../../testing.zig");
 test "WebApi: Navigator" {
     try testing.htmlRunner("navigator", .{});
+}
+
+test "Navigator: parseLanguages drops q-weights and keeps header order" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const expectTags = struct {
+        fn f(expected: []const []const u8, actual: []const []const u8) !void {
+            try testing.expectEqual(expected.len, actual.len);
+            for (expected, actual) |e, got| {
+                try testing.expectString(e, got);
+            }
+        }
+    }.f;
+
+    // The default, which is also what Chrome reports out of the box.
+    try expectTags(&.{ "en-US", "en" }, try parseLanguages(a, "en-US,en;q=0.9"));
+
+    try expectTags(&.{ "de-DE", "de", "en" }, try parseLanguages(a, "de-DE,de;q=0.9,en;q=0.8"));
+
+    // Whitespace after the commas is legal in the header and must not survive
+    // into the tag.
+    try expectTags(&.{ "fr-FR", "fr" }, try parseLanguages(a, "fr-FR, fr;q=0.5"));
+
+    // Degenerate values shouldn't produce empty tags.
+    try testing.expectEqual(@as(usize, 0), (try parseLanguages(a, "")).len);
+    try testing.expectEqual(@as(usize, 0), (try parseLanguages(a, " , ")).len);
 }

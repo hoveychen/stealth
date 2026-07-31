@@ -113,8 +113,9 @@ pub fn getNaturalHeight(_: *const Image) u32 {
 pub fn getComplete(_: *const Image) bool {
     // Per spec, complete is true when: no src/srcset, src is empty,
     // image is fully available, or image is broken (with no pending request).
-    // Since we never fetch images, they are in the "broken" state, which has
-    // complete=true. This is consistent with naturalWidth/naturalHeight=0.
+    // We fetch the bytes but never decode them (see `Frame.loadImage`), so
+    // images stay in the "broken" state, which has complete=true. This is
+    // consistent with naturalWidth/naturalHeight=0.
     return true;
 }
 
@@ -129,6 +130,10 @@ pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
     // Exit if src not set.
     const src = element.getAttributeSafe(comptime .wrap("src")) orelse return;
     if (src.len == 0) return;
+
+    // Request the bytes without decoding them. Never fetching images at all is
+    // a server-visible tell; see `Frame.loadImage`.
+    try frame.loadImage(src);
 
     try frame.queueLoad(self._proto);
 }

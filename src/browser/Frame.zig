@@ -49,6 +49,7 @@ const ShadowRoot = @import("webapi/ShadowRoot.zig");
 const Performance = @import("webapi/Performance.zig");
 const Screen = @import("webapi/Screen.zig");
 const VisualViewport = @import("webapi/VisualViewport.zig");
+const NetworkInformation = @import("webapi/NetworkInformation.zig");
 const AbstractRange = @import("webapi/AbstractRange.zig");
 const DOMNodeIterator = @import("webapi/DOMNodeIterator.zig");
 const Worker = @import("webapi/Worker.zig");
@@ -421,6 +422,11 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._performance = .init(),
         ._screen = screen,
         ._visual_viewport = visual_viewport,
+        // Not shared with the parent frame the way screen and visualViewport
+        // are: in Chrome an iframe's navigator.connection is its own object.
+        ._connection = try factory.eventTarget(NetworkInformation{
+            ._proto = undefined,
+        }),
         ._cross_origin_wrapper = undefined,
     };
 
@@ -791,6 +797,18 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = opts.initiator_url orelse self.url,
         .resource_type = .document,
+        .nav = .{
+            // An address-bar / bookmark navigation has no initiator document,
+            // which Sec-Fetch-Site reports as "none".
+            .initiator_origin = opts.initiator_origin orelse opts.initiator_url,
+            .subframe = self.parent != null,
+            // Script-driven navigations and a frame's own initial load carry no
+            // user gesture; anchors, forms, history and the address bar do.
+            .user_activated = switch (opts.reason) {
+                .script, .initialFrameNavigation => false,
+                .anchor, .address_bar, .form, .history, .navigation => true,
+            },
+        },
         .notification = self._session.notification,
         .header_callback = frameHeaderDoneCallback,
         .data_callback = frameDataCallback,
@@ -804,7 +822,8 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
     {
         // Ours until submit; clean up if header setup fails.
         errdefer transfer.deinit();
-        try transfer.req.headers.add(lp.Config.HttpHeaders.navigation_accept);
+        // Accept and the Sec-Fetch-* set come from HttpClient.addFetchMetadata,
+        // which derives them from resource_type + nav.
         if (opts.header) |hdr| {
             try transfer.req.headers.add(hdr);
         }
@@ -1183,6 +1202,10 @@ pub fn documentIsComplete(self: *Frame) void {
 
 fn _documentIsComplete(self: *Frame) !void {
     self.document._ready_state = .complete;
+    // chrome.csi() and chrome.loadTimes() both report when the load event
+    // fired; recording it here is what keeps those values real instead of
+    // invented.
+    self.window._load_epoch_ms = lp.datetime.DateTime.now().unix(.milliseconds);
     try self.dispatchReadyStateChange();
 
     // Run element load/error events before window.load.
@@ -1213,6 +1236,9 @@ fn _documentIsComplete(self: *Frame) !void {
     if (comptime IS_DEBUG) {
         log.debug(.frame, "load", .{ .url = self.url, .type = self._type });
     }
+
+    // Last, after every other subresource, which is where Chrome puts it.
+    self.requestFavicon();
 
     self.notifyParentLoadComplete();
 }
@@ -2196,8 +2222,8 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // the frame while it's registered (they'd run JS on the parser's stack)
     // and delivers them on the next tick after the sync fetch returns.
 
+    // Accept comes from addFetchMetadata via resource_type = .stylesheet.
     var headers = try http_client.newHeaders();
-    try headers.add("Accept: text/css,*/*;q=0.1");
     try self.headersForRequest(&headers);
 
     // Set the script-manager `is_evaluating` flag for the same reason
@@ -2274,6 +2300,142 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     sheet._href = try self.arena.dupe(u8, resolved);
 
     try self.fireElementEvent(element, comptime .wrap("load"));
+}
+
+// Fetch an `<img src>` and throw the bytes away.
+//
+// Nothing here decodes: there is no raster pipeline, so `naturalWidth` and
+// friends stay 0 either way. The request itself is the point. A client that
+// pulls the HTML, the CSS and the scripts but never once asks for an image is
+// separable server-side with a single log query, and no amount of correct
+// header spelling hides it.
+//
+// Unlike `loadExternalStylesheet` this is asynchronous. Stylesheets block
+// because their rules have to be in `document.styleSheets` before script runs;
+// image bytes are never read, so there is nothing to wait for, and a page with
+// fifty images would otherwise serialise fifty blocking round-trips.
+pub fn loadImage(self: *Frame, src: []const u8) !void {
+    if (self.isGoingAway() or src.len == 0) {
+        return;
+    }
+
+    // Matches loadExternalStylesheet: fragment-parsed nodes (innerHTML,
+    // DOMParser) are not attached to this frame's document.
+    if (self._parse_mode == .fragment) {
+        return;
+    }
+
+    const resolved = URL.resolve(self.arena, self.base(), src, .{ .encoding = self.charset }) catch |err| {
+        log.warn(.http, "image resolve", .{ .err = err, .src = src });
+        return;
+    };
+
+    return self.requestImage(resolved);
+}
+
+// Shared tail of loadImage and the favicon fetch: same destination, same
+// discarded body, only the URL resolution differs.
+fn requestImage(self: *Frame, resolved: [:0]const u8) !void {
+    const session = self._session;
+
+    var headers = try session.browser.http_client.newHeaders();
+    errdefer headers.deinit();
+    try self.headersForRequest(&headers);
+
+    // Accept and the Sec-Fetch-* set come from addFetchMetadata via
+    // resource_type = .image. The default callbacks discard the body, which
+    // is exactly what we want.
+    self.makeRequest(.{
+        .url = resolved,
+        .method = .GET,
+        .frame_id = self._frame_id,
+        .loader_id = self._loader_id,
+        .headers = headers,
+        .cookie_jar = &session.cookie_jar,
+        .cookie_origin = self.url,
+        .resource_type = .image,
+        .notification = session.notification,
+        .shutdown_callback = HttpClient.noopShutdown,
+    }) catch |err| {
+        // A failed image never blocks the page; Chrome would fire `error` on
+        // the element, but we have no decode result to report either way.
+        log.warn(.http, "image fetch", .{ .err = err, .url = resolved });
+    };
+}
+
+// Ask for the page's favicon, the way Chrome does once a top-level document
+// has finished loading.
+//
+// Measured against real Chrome 150 (tools/fingerprint/results/
+// reference-chrome-headed.json): the request carries exactly the same fetch
+// metadata as any other image -- Accept: image/avif,..., Sec-Fetch-Dest:
+// image, Mode: no-cors -- so it goes out as resource_type .image rather than
+// needing a destination of its own. It appears once per top-level navigation,
+// after every other subresource, and never for a subframe.
+//
+// Chrome asks even when the page declares no icon, which is the case that
+// matters here: /favicon.ico is the single most reliably logged request on the
+// web, and never making it is a strong tell on its own.
+fn requestFavicon(self: *Frame) void {
+    if (self.isGoingAway()) {
+        return;
+    }
+
+    // Subframes don't get one; only the tab's own document does.
+    if (self.parent != null) {
+        return;
+    }
+
+    // about:blank, data: and friends have no origin to hang a favicon off.
+    if (!std.mem.startsWith(u8, self.url, "http")) {
+        return;
+    }
+
+    // A declared <link rel=icon> wins over the implicit path. Chrome collects
+    // every icon link and ranks them by size and type; with no rendering to
+    // size anything for, take the last declared, which is what a page
+    // overriding an earlier default expects.
+    var href: ?[]const u8 = null;
+    var tw = @import("webapi/TreeWalker.zig").Full.Elements.init(self.document.asNode(), .{});
+    while (tw.next()) |el| {
+        if (el.is(Element.Html.Link) == null) continue;
+        const rel = el.getAttributeSafe(comptime .wrap("rel")) orelse continue;
+        if (!relHasIcon(rel)) continue;
+        const candidate = el.getAttributeSafe(comptime .wrap("href")) orelse continue;
+        if (candidate.len == 0) continue;
+        href = candidate;
+    }
+
+    // A declared href resolves against <base>, per the usual link rules; the
+    // implicit one is origin-relative and ignores <base> entirely.
+    const resolved = if (href) |h|
+        URL.resolve(self.arena, self.base(), h, .{ .encoding = self.charset }) catch |err| {
+            log.warn(.http, "favicon resolve", .{ .err = err, .href = h });
+            return;
+        }
+    else
+        URL.resolve(self.arena, self.url, "/favicon.ico", .{ .encoding = self.charset }) catch |err| {
+            log.warn(.http, "favicon resolve", .{ .err = err, .url = self.url });
+            return;
+        };
+
+    self.requestImage(resolved) catch |err| {
+        log.warn(.http, "favicon fetch", .{ .err = err, .url = resolved });
+    };
+}
+
+// True when a rel attribute carries the "icon" token, as in rel="icon" or
+// rel="shortcut icon". Tokens are whitespace-separated and
+// ASCII-case-insensitive. "apple-touch-icon" is a different token and does
+// not match, which is also how Chrome treats it for the page favicon.
+fn relHasIcon(rel: []const u8) bool {
+    var it = std.mem.tokenizeAny(u8, rel, " \t\n\r\x0c");
+    while (it.next()) |token| {
+        if (std.ascii.eqlIgnoreCase(token, "icon")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn fireElementEvent(self: *Frame, el: *Element, name: String) !void {
@@ -3457,6 +3619,21 @@ test "Frame: urlBasename" {
     try testing.expectEqualSlices(u8, "report.csv", (try urlBasename(a, "http://x.com/a/b/report.csv")).?);
     try testing.expectEqualSlices(u8, "report.csv", (try urlBasename(a, "http://x.com/report.csv?v=1#x")).?);
     try testing.expect((try urlBasename(a, "http://x.com/")) == null);
+}
+
+test "Frame: relHasIcon matches only a whole icon token" {
+    try testing.expect(relHasIcon("icon"));
+    try testing.expect(relHasIcon("shortcut icon"));
+    try testing.expect(relHasIcon("ICON"));
+    // Tokens are whitespace-separated, so order and padding don't matter.
+    try testing.expect(relHasIcon("  icon\tshortcut "));
+
+    try testing.expect(relHasIcon("") == false);
+    try testing.expect(relHasIcon("stylesheet") == false);
+    // "apple-touch-icon" is its own token, not the "icon" token: Chrome does
+    // not use it as the page favicon.
+    try testing.expect(relHasIcon("apple-touch-icon") == false);
+    try testing.expect(relHasIcon("iconic") == false);
 }
 
 test "WebApi: Frame" {

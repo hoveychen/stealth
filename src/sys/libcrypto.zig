@@ -175,7 +175,70 @@ pub extern fn X509_STORE_load_locations(store: *X509_STORE, file: ?[*:0]const u8
 
 pub const struct_ssl_ctx_st = opaque {};
 pub const SSL_CTX = struct_ssl_ctx_st;
+pub const struct_ssl_st = opaque {};
+pub const SSL = struct_ssl_st;
+pub const struct_crypto_buffer_st = opaque {};
+pub const CRYPTO_BUFFER = struct_crypto_buffer_st;
+
 pub extern fn SSL_CTX_set1_verify_cert_store(ctx: ?*SSL_CTX, store: ?*X509_STORE) c_int;
+
+// The rest of the SSL surface exists so the ClientHello can be shaped to look
+// like a browser's rather than like libcurl's; see network/tls_client_hello.zig.
+
+pub const TLS1_2_VERSION = 0x0303;
+pub const TLS1_3_VERSION = 0x0304;
+pub const SSL_OP_NO_TICKET = 0x00004000;
+pub const SSL_CB_HANDSHAKE_START = 0x10;
+
+/// IANA certificate compression algorithm id, from RFC 8879.
+pub const TLSEXT_cert_compression_brotli = 2;
+
+pub extern fn SSL_CTX_set_cipher_list(ctx: *SSL_CTX, str: [*:0]const u8) c_int;
+pub extern fn SSL_CTX_set1_curves_list(ctx: *SSL_CTX, curves: [*:0]const u8) c_int;
+pub extern fn SSL_CTX_set_verify_algorithm_prefs(ctx: *SSL_CTX, prefs: [*]const u16, num_prefs: usize) c_int;
+pub extern fn SSL_CTX_set_grease_enabled(ctx: *SSL_CTX, enabled: c_int) void;
+pub extern fn SSL_CTX_set_permute_extensions(ctx: *SSL_CTX, enabled: c_int) void;
+pub extern fn SSL_CTX_enable_ocsp_stapling(ctx: *SSL_CTX) void;
+pub extern fn SSL_CTX_enable_signed_cert_timestamps(ctx: *SSL_CTX) void;
+pub extern fn SSL_CTX_clear_options(ctx: *SSL_CTX, options: u32) u32;
+pub extern fn SSL_CTX_set_min_proto_version(ctx: *SSL_CTX, version: u16) c_int;
+pub extern fn SSL_CTX_set_max_proto_version(ctx: *SSL_CTX, version: u16) c_int;
+
+/// Registers a certificate compression algorithm. Either callback may be null;
+/// a client only needs to decompress.
+pub const CertCompressFn = *const fn (ssl: *SSL, out: *anyopaque, in: [*]const u8, in_len: usize) callconv(.c) c_int;
+pub const CertDecompressFn = *const fn (
+    ssl: *SSL,
+    out: **CRYPTO_BUFFER,
+    uncompressed_len: usize,
+    in: [*]const u8,
+    in_len: usize,
+) callconv(.c) c_int;
+pub extern fn SSL_CTX_add_cert_compression_alg(
+    ctx: *SSL_CTX,
+    alg_id: u16,
+    compress: ?CertCompressFn,
+    decompress: ?CertDecompressFn,
+) c_int;
+
+/// Fires with `SSL_CB_HANDSHAKE_START` before the ClientHello is built, which
+/// is the only hook BoringSSL gives us onto the `SSL` — a handful of the
+/// extensions a browser sends have no `SSL_CTX`-level setter.
+pub const InfoCallbackFn = *const fn (ssl: *SSL, where: c_int, ret: c_int) callconv(.c) void;
+pub extern fn SSL_CTX_set_info_callback(ctx: *SSL_CTX, cb: ?InfoCallbackFn) void;
+
+pub extern fn SSL_add_application_settings(
+    ssl: *SSL,
+    proto: [*]const u8,
+    proto_len: usize,
+    settings: [*]const u8,
+    settings_len: usize,
+) c_int;
+pub extern fn SSL_set_alps_use_new_codepoint(ssl: *SSL, use_new: c_int) void;
+pub extern fn SSL_set_enable_ech_grease(ssl: *SSL, enable: c_int) void;
+
+pub extern fn CRYPTO_BUFFER_alloc(out_data: *[*]u8, len: usize) ?*CRYPTO_BUFFER;
+pub extern fn CRYPTO_BUFFER_free(buf: ?*CRYPTO_BUFFER) void;
 
 /// Returns the desired digest by its name.
 pub fn findDigest(name: []const u8) error{Invalid}!*const EVP_MD {

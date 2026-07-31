@@ -30,6 +30,7 @@ const URL = @import("../browser/URL.zig");
 const WebSocket = @import("../browser/webapi/net/WebSocket.zig");
 const CookieJar = @import("../browser/webapi/storage/Cookie.zig").Jar;
 
+const Config = @import("../Config.zig");
 const http = @import("http.zig");
 const Network = @import("Network.zig");
 const Cache = @import("cache/Cache.zig");
@@ -142,6 +143,16 @@ tls_verify: bool = true,
 // Both fields are allocated from self.allocator when set, null otherwise.
 user_agent_override: ?[:0]const u8 = null,
 user_agent_header_override: ?[:0]const u8 = null,
+
+// Accept-Language / platform overrides, also from Emulation.setUserAgentOverride.
+// Kept alongside the UA override so all three move together: a Chrome UA next
+// to a stale platform hint is a worse fingerprint than either alone.
+// `*_header_override` holds the wire form, the other the bare value the JS side
+// reports.
+accept_language_override: ?[:0]const u8 = null,
+accept_language_header_override: ?[:0]const u8 = null,
+platform_override: ?[:0]const u8 = null,
+platform_header_override: ?[:0]const u8 = null,
 
 // The CDP layer we dispatch inbox messages to. Set in CDP.init for
 // `serve` mode; null in all other modes. Since this is set early, BEFORE the
@@ -289,16 +300,42 @@ pub fn setUserAgentOverride(self: *Client, ua: []const u8) !void {
     self.user_agent_header_override = header;
 }
 
+pub fn setAcceptLanguageOverride(self: *Client, value: []const u8) !void {
+    const bare = try self.allocator.dupeZ(u8, value);
+    errdefer self.allocator.free(bare);
+    const header = try std.fmt.allocPrintSentinel(self.allocator, "Accept-Language: {s}", .{value}, 0);
+
+    self.clearOverride(&self.accept_language_override, &self.accept_language_header_override);
+    self.accept_language_override = bare;
+    self.accept_language_header_override = header;
+}
+
+pub fn setPlatformOverride(self: *Client, value: []const u8) !void {
+    const bare = try self.allocator.dupeZ(u8, value);
+    errdefer self.allocator.free(bare);
+    const header = try std.fmt.allocPrintSentinel(self.allocator, "Sec-Ch-Ua-Platform: \"{s}\"", .{value}, 0);
+
+    self.clearOverride(&self.platform_override, &self.platform_header_override);
+    self.platform_override = bare;
+    self.platform_header_override = header;
+}
+
+fn clearOverride(self: *Client, bare: *?[:0]const u8, header: *?[:0]const u8) void {
+    if (bare.*) |v| {
+        self.allocator.free(v);
+        bare.* = null;
+    }
+    if (header.*) |v| {
+        self.allocator.free(v);
+        header.* = null;
+    }
+}
+
 // Clear any user agent override, restoring the default from config.
 pub fn clearUserAgentOverride(self: *Client) void {
-    if (self.user_agent_override) |ua| {
-        self.allocator.free(ua);
-        self.user_agent_override = null;
-    }
-    if (self.user_agent_header_override) |uah| {
-        self.allocator.free(uah);
-        self.user_agent_header_override = null;
-    }
+    self.clearOverride(&self.user_agent_override, &self.user_agent_header_override);
+    self.clearOverride(&self.accept_language_override, &self.accept_language_header_override);
+    self.clearOverride(&self.platform_override, &self.platform_header_override);
 }
 
 // Enable TLS verification on all connections.
@@ -389,13 +426,133 @@ fn isUrlBlocked(self: *const Client, url: []const u8, internal: bool) bool {
     return blocklist.isBlocked(url);
 }
 
+// Adds the destination's `Accept` plus the Sec-Fetch-* set, which real Chrome
+// sends on every request and which this engine previously sent on none.
+//
+// Sec-Fetch-* are forbidden header names: page JS cannot set them, so we always
+// win and use set(). `Accept` is different — fetch()/XHR may legitimately
+// specify it, so a caller-supplied value is left alone.
+fn addFetchMetadata(req: *Request) !void {
+    const H = Config.HttpHeaders;
+    const headers = &req.headers;
+
+    if (!headers.has("Accept")) {
+        try headers.add(switch (req.resource_type) {
+            .document => H.Accept.document,
+            .stylesheet => H.Accept.style,
+            .image => H.Accept.image,
+            .eventsource => H.Accept.event_stream,
+            .script, .fetch, .xhr => H.Accept.any,
+        });
+    }
+
+    // Chrome labels a subframe navigation "iframe" and a top-level one
+    // "document"; everything else is named after the destination.
+    try headers.set(switch (req.resource_type) {
+        .document => if (req.nav) |n| (if (n.subframe) "Sec-Fetch-Dest: iframe" else "Sec-Fetch-Dest: document") else "Sec-Fetch-Dest: document",
+        .stylesheet => "Sec-Fetch-Dest: style",
+        .image => "Sec-Fetch-Dest: image",
+        .script => "Sec-Fetch-Dest: script",
+        // fetch(), XHR and EventSource all report an empty destination.
+        .fetch, .xhr, .eventsource => "Sec-Fetch-Dest: empty",
+    });
+
+    try headers.set(switch (req.resource_type) {
+        .document => "Sec-Fetch-Mode: navigate",
+        // Subresources the parser pulls in are no-cors; script-issued fetches
+        // and XHR go through the CORS protocol.
+        .stylesheet, .script, .image => "Sec-Fetch-Mode: no-cors",
+        .fetch, .xhr, .eventsource => "Sec-Fetch-Mode: cors",
+    });
+
+    // "none" is not "unknown": it specifically means the request had no
+    // initiator document (address bar, bookmark). Anything with an initiator
+    // gets an origin comparison.
+    const initiator: ?[]const u8 = if (req.resource_type == .document)
+        if (req.nav) |n| n.initiator_origin else null
+    else
+        req.cookie_origin;
+
+    try headers.set(if (initiator) |origin|
+        switch (fetchSite(origin, req.url)) {
+            .same_origin => "Sec-Fetch-Site: same-origin",
+            .same_site => "Sec-Fetch-Site: same-site",
+            .cross_site => "Sec-Fetch-Site: cross-site",
+        }
+    else
+        "Sec-Fetch-Site: none");
+
+    // Only navigations carry these two, and Sec-Fetch-User only when the
+    // navigation came from a user gesture rather than from script.
+    if (req.resource_type == .document) {
+        try headers.set(H.upgrade_insecure_requests);
+        if (req.nav) |n| {
+            if (n.user_activated) try headers.set("Sec-Fetch-User: ?1");
+        }
+    }
+}
+
+const FetchSite = enum { same_origin, same_site, cross_site };
+
+// Compares an initiator origin against a request URL the way Sec-Fetch-Site
+// does. `same-site` means the registrable domain matches but scheme/host/port
+// don't — approximated here by "the initiator host is a suffix of the request
+// host or vice versa", which is right for the common `a.example.com` ->
+// `example.com` case without shipping a public-suffix list.
+fn fetchSite(initiator: []const u8, url: []const u8) FetchSite {
+    const a = originOf(initiator);
+    const b = originOf(url);
+    if (std.mem.eql(u8, a.scheme, b.scheme) and std.mem.eql(u8, a.host, b.host)) {
+        return .same_origin;
+    }
+    const shorter, const longer = if (a.host.len < b.host.len) .{ a.host, b.host } else .{ b.host, a.host };
+    if (shorter.len > 0 and std.mem.endsWith(u8, longer, shorter)) {
+        // Require a dot boundary so "example.com" doesn't match "notexample.com".
+        if (shorter.len == longer.len or longer[longer.len - shorter.len - 1] == '.') {
+            return .same_site;
+        }
+    }
+    return .cross_site;
+}
+
+const Origin = struct { scheme: []const u8, host: []const u8 };
+
+fn originOf(url: []const u8) Origin {
+    const scheme_end = std.mem.indexOf(u8, url, "://") orelse return .{ .scheme = "", .host = url };
+    const rest = url[scheme_end + 3 ..];
+    const host_end = std.mem.indexOfAny(u8, rest, "/?#") orelse rest.len;
+    return .{ .scheme = url[0..scheme_end], .host = rest[0..host_end] };
+}
+
 pub fn newHeaders(self: *const Client) !http.Headers {
-    const ua_header = self.user_agent_header_override orelse self.network.config.http_headers.user_agent_header;
-    return http.Headers.init(ua_header);
+    const http_headers = &self.network.config.http_headers;
+    return http.Headers.init(http_headers, .{
+        .user_agent = self.user_agent_header_override orelse http_headers.user_agent_header,
+        .accept_language = self.accept_language_header_override orelse http_headers.accept_language,
+        .platform = self.platform_header_override orelse http_headers.sec_ch_ua_platform,
+    });
+}
+
+// Bare (non-header) values the JS side reports, with CDP overrides applied.
+pub fn getPlatform(self: *const Client) []const u8 {
+    return self.platform_override orelse self.httpHeaders().platform;
+}
+
+pub fn getLanguages(self: *const Client) []const u8 {
+    return self.accept_language_override orelse self.httpHeaders().languages;
 }
 
 pub fn getUserAgent(self: *const Client) [:0]const u8 {
     return self.user_agent_override orelse self.network.config.http_headers.user_agent;
+}
+
+// The resolved header/client-hint values. The JS side (navigator.userAgentData,
+// navigator.platform, navigator.languages) reads the same struct the wire
+// headers are built from, so the two can't disagree — which is the whole point:
+// a Sec-Ch-Ua saying Chrome next to a userAgentData saying something else is a
+// louder signal than either value alone.
+pub fn httpHeaders(self: *const Client) *const Config.HttpHeaders {
+    return &self.network.config.http_headers;
 }
 
 pub fn abort(self: *Client) void {
@@ -585,6 +742,13 @@ pub fn newRequest(self: *Client, req: Request, owner: ?*Owner) anyerror!*Transfe
             // configureConn) so redirect/auth retries don't append duplicates.
             try owned.headers.add("Expect:");
         }
+
+        // Fetch metadata + the destination's Accept. This is the only place
+        // that knows both the destination (resource_type) and the initiator
+        // (cookie_origin), which is what Sec-Fetch-Site needs. Doing it here
+        // rather than at each of the eight newHeaders() call sites also keeps
+        // the eight from drifting apart.
+        try addFetchMetadata(&owned);
 
         const t = try arena.create(Transfer);
         t.* = .{
@@ -1604,6 +1768,7 @@ pub const Request = struct {
         script,
         fetch,
         stylesheet,
+        image,
         eventsource,
 
         // Allowed Values: Document, Stylesheet, Image, Media, Font, Script,
@@ -1617,6 +1782,7 @@ pub const Request = struct {
                 .script => "Script",
                 .fetch => "Fetch",
                 .stylesheet => "Stylesheet",
+                .image => "Image",
                 .eventsource => "EventSource",
             };
         }
@@ -1625,6 +1791,21 @@ pub const Request = struct {
     // Fetch request redirect mode. `.follow` keeps navigations, XHR and
     // internal requests transparently following redirects.
     pub const RedirectMode = enum { follow, manual, @"error" };
+
+    // Fetch-metadata inputs for a document request that only the navigating
+    // frame knows. Absent on subresources, where cookie_origin and
+    // resource_type are enough.
+    pub const Navigation = struct {
+        // null means the navigation had no initiator document — an address-bar
+        // or bookmark navigation — which is what Sec-Fetch-Site: none reports.
+        // Distinct from a same-origin navigation, so it cannot be derived from
+        // cookie_origin (which falls back to the target URL).
+        initiator_origin: ?[]const u8 = null,
+        // Sec-Fetch-Dest: iframe rather than document.
+        subframe: bool = false,
+        // Sec-Fetch-User: ?1 — set when a user gesture caused the navigation.
+        user_activated: bool = false,
+    };
 
     frame_id: u32,
     loader_id: u32,
@@ -1637,6 +1818,8 @@ pub const Request = struct {
     cookie_jar: ?*CookieJar,
     cookie_origin: [:0]const u8,
     resource_type: ResourceType,
+    // Only meaningful when resource_type == .document.
+    nav: ?Navigation = null,
     redirect: RedirectMode = .follow,
     credentials: ?[:0]const u8 = null,
     notification: *Notification,
@@ -3064,6 +3247,115 @@ const Synthetic = struct {
 };
 
 const testing = @import("../testing.zig");
+
+test "HttpClient: fetchSite classifies initiator against request URL" {
+    try testing.expectEqual(FetchSite.same_origin, fetchSite("https://example.com/a", "https://example.com/b"));
+    // Scheme is part of the origin, so http -> https is not same-origin. It is
+    // same-site, because the registrable domain is unchanged.
+    try testing.expectEqual(FetchSite.same_site, fetchSite("http://example.com/a", "https://example.com/b"));
+    try testing.expectEqual(FetchSite.same_site, fetchSite("https://cdn.example.com/a", "https://example.com/b"));
+    try testing.expectEqual(FetchSite.cross_site, fetchSite("https://example.com/a", "https://other.org/b"));
+    // A suffix match without a dot boundary is a different site.
+    try testing.expectEqual(FetchSite.cross_site, fetchSite("https://example.com/a", "https://notexample.com/b"));
+}
+
+test "HttpClient: addFetchMetadata sends Chrome's set for a top-level navigation" {
+    var req: Request = undefined;
+    req.headers = .{ .headers = null };
+    defer req.headers.deinit();
+    req.resource_type = .document;
+    req.url = "https://example.com/";
+    req.cookie_origin = "https://example.com/";
+    // No initiator document: an address-bar navigation.
+    req.nav = .{ .initiator_origin = null, .subframe = false, .user_activated = true };
+
+    try addFetchMetadata(&req);
+
+    try testing.expectString(
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        findHeaderValue(&req.headers, "Accept"),
+    );
+    try testing.expectString("document", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
+    try testing.expectString("navigate", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
+    try testing.expectString("none", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
+    try testing.expectString("?1", findHeaderValue(&req.headers, "Sec-Fetch-User"));
+    try testing.expectString("1", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+}
+
+test "HttpClient: addFetchMetadata labels a same-origin script and leaves a caller's Accept" {
+    var req: Request = undefined;
+    req.headers = .{ .headers = null };
+    defer req.headers.deinit();
+    req.resource_type = .script;
+    req.url = "https://example.com/app.js";
+    req.cookie_origin = "https://example.com/";
+    req.nav = null;
+
+    try addFetchMetadata(&req);
+
+    try testing.expectString("*/*", findHeaderValue(&req.headers, "Accept"));
+    try testing.expectString("script", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
+    try testing.expectString("no-cors", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
+    try testing.expectString("same-origin", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
+    // Subresources carry neither of the navigation-only headers.
+    try testing.expectString("", findHeaderValue(&req.headers, "Sec-Fetch-User"));
+    try testing.expectString("", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+}
+
+test "HttpClient: addFetchMetadata labels a cross-origin image" {
+    var req: Request = undefined;
+    req.headers = .{ .headers = null };
+    defer req.headers.deinit();
+    req.resource_type = .image;
+    req.url = "https://cdn.example.net/logo.png";
+    req.cookie_origin = "https://example.com/";
+    req.nav = null;
+
+    try addFetchMetadata(&req);
+
+    try testing.expectString(
+        "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        findHeaderValue(&req.headers, "Accept"),
+    );
+    try testing.expectString("image", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
+    // Parser-initiated, so no-cors rather than the cors an XHR would get.
+    try testing.expectString("no-cors", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
+    try testing.expectString("cross-site", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
+    try testing.expectString("", findHeaderValue(&req.headers, "Sec-Fetch-User"));
+    try testing.expectString("", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+}
+
+test "HttpClient: ResourceType.image reports Chrome's CDP name" {
+    try testing.expectString("Image", Request.ResourceType.image.string());
+}
+
+test "HttpClient: addFetchMetadata does not clobber a caller-supplied Accept" {
+    var req: Request = undefined;
+    req.headers = .{ .headers = null };
+    defer req.headers.deinit();
+    try req.headers.add("Accept: application/json");
+    req.resource_type = .fetch;
+    req.url = "https://api.other.org/v1";
+    req.cookie_origin = "https://example.com/";
+    req.nav = null;
+
+    try addFetchMetadata(&req);
+
+    // fetch() may legitimately set Accept, so ours must not win.
+    try testing.expectString("application/json", findHeaderValue(&req.headers, "Accept"));
+    try testing.expectString("empty", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
+    try testing.expectString("cors", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
+    try testing.expectString("cross-site", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
+}
+
+// "" when absent, so a test can assert absence as well as a value.
+fn findHeaderValue(headers: *const http.Headers, name: []const u8) []const u8 {
+    var it = headers.iterator();
+    while (it.next()) |h| {
+        if (std.ascii.eqlIgnoreCase(h.name, name)) return h.value;
+    }
+    return "";
+}
 
 test "HttpClient: isFetchInterceptionMethod matches the four Fetch methods" {
     try testing.expect(isFetchInterceptionMethod("Fetch.continueRequest"));

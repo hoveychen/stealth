@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<script id=WebGL2RenderingContext#getContext>
+{
+  const element = document.createElement("canvas");
+  element.width = 240;
+  element.height = 60;
+  const ctx = element.getContext("webgl2");
+
+  testing.expectEqual(true, ctx instanceof WebGL2RenderingContext);
+  testing.expectTrue(ctx === element.getContext("webgl2"));
+  // Chrome hands out one context kind per canvas.
+  testing.expectEqual(null, element.getContext("webgl"));
+  testing.expectEqual(null, element.getContext("2d"));
+
+  testing.expectTrue(ctx.canvas === element);
+  testing.expectEqual(240, ctx.drawingBufferWidth);
+  testing.expectEqual(60, ctx.drawingBufferHeight);
+
+  // 2.0 is its own interface in Chrome, not a subclass of 1.0.
+  testing.expectEqual(false, ctx instanceof WebGLRenderingContext);
+  testing.expectTrue(Object.getPrototypeOf(WebGL2RenderingContext.prototype) === Object.prototype);
+}
+</script>
+
+<script id=WebGL2RenderingContext#getParameter>
+{
+  const gl = document.createElement("canvas").getContext("webgl2");
+
+  testing.expectEqual("WebKit", gl.getParameter(gl.VENDOR));
+  testing.expectEqual("WebKit WebGL", gl.getParameter(gl.RENDERER));
+  testing.expectEqual("WebGL 2.0 (OpenGL ES 3.0 Chromium)", gl.getParameter(gl.VERSION));
+  testing.expectEqual(
+    "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+    gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+  );
+
+  testing.expectEqual(16384, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+  testing.expectEqual(16, gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+
+  // 2.0-only limits.
+  testing.expectEqual(2048, gl.getParameter(gl.MAX_3D_TEXTURE_SIZE));
+  testing.expectEqual(8, gl.getParameter(gl.MAX_DRAW_BUFFERS));
+  testing.expectEqual(8, gl.getParameter(gl.MAX_COLOR_ATTACHMENTS));
+
+  testing.expectEqual(true, gl.getParameter(gl.DITHER));
+  testing.expectEqual(false, gl.getParameter(gl.RASTERIZER_DISCARD));
+
+  const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+  testing.expectEqual("Google Inc. (Apple)", gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
+  testing.expectEqual(
+    "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL),
+  );
+
+  // The signed sentinel, which is -1 rather than an unsigned wrap-around.
+  testing.expectEqual(-1, gl.TIMEOUT_IGNORED);
+
+  testing.expectEqual(null, gl.getParameter(gl.TRIANGLES));
+}
+</script>
+
+<script id=WebGL2RenderingContext#getSupportedExtensions>
+{
+  const gl = document.createElement("canvas").getContext("webgl2");
+  const extensions = gl.getSupportedExtensions();
+
+  // 2.0 advertises a different set than 1.0: some names became core and
+  // dropped off, others only exist here.
+  testing.expectEqual(36, extensions.length);
+  testing.expectEqual("EXT_clip_control", extensions[0]);
+  testing.expectEqual(true, extensions.includes("EXT_color_buffer_float"));
+  testing.expectEqual(true, extensions.includes("WEBGL_clip_cull_distance"));
+  testing.expectEqual(false, extensions.includes("ANGLE_instanced_arrays"));
+  testing.expectEqual(false, extensions.includes("OES_vertex_array_object"));
+
+  testing.expectEqual(null, gl.getExtension("ANGLE_instanced_arrays"));
+  testing.expectEqual(true, gl.getExtension("EXT_color_buffer_float") !== null);
+  testing.expectEqual(
+    true,
+    gl.getExtension("WEBGL_lose_context") instanceof WEBGL_lose_context,
+  );
+}
+</script>
+
+<script id=WebGL2RenderingContext#objects>
+{
+  const gl = document.createElement("canvas").getContext("webgl2");
+
+  testing.expectEqual("[object WebGLQuery]", Object.prototype.toString.call(gl.createQuery()));
+  testing.expectEqual("[object WebGLSampler]", Object.prototype.toString.call(gl.createSampler()));
+  testing.expectEqual(
+    "[object WebGLVertexArrayObject]",
+    Object.prototype.toString.call(gl.createVertexArray()),
+  );
+  testing.expectEqual(
+    "[object WebGLTransformFeedback]",
+    Object.prototype.toString.call(gl.createTransformFeedback()),
+  );
+  const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  testing.expectEqual("[object WebGLSync]", Object.prototype.toString.call(sync));
+
+  // Chrome answers true for a sampler or sync the moment it exists, and false
+  // for a query, vertex array or transform feedback until it has been bound.
+  testing.expectEqual(true, gl.isSampler(gl.createSampler()));
+  testing.expectEqual(true, gl.isSync(sync));
+  testing.expectEqual(false, gl.isQuery(gl.createQuery()));
+  testing.expectEqual(false, gl.isVertexArray(gl.createVertexArray()));
+
+  // Chrome reports a fresh fence sync as UNSIGNALED (0x9118), and a
+  // zero-timeout wait on it as TIMEOUT_EXPIRED (0x911B).
+  testing.expectEqual(37144, gl.getSyncParameter(sync, gl.SYNC_STATUS));
+  testing.expectEqual(37142, gl.getSyncParameter(sync, gl.OBJECT_TYPE));
+  testing.expectEqual(37147, gl.clientWaitSync(sync, 0, 0));
+
+  const program = gl.createProgram();
+  testing.expectEqual(4294967295, gl.getUniformBlockIndex(program, "Block"));
+  testing.expectEqual(-1, gl.getFragDataLocation(program, "color"));
+  testing.expectEqual(null, gl.getActiveUniformBlockName(program, 0));
+  testing.expectEqual(null, gl.getTransformFeedbackVarying(program, 0));
+
+  const indices = gl.getUniformIndices(program, ["a", "b"]);
+  testing.expectEqual(2, indices.length);
+  testing.expectEqual(4294967295, indices[0]);
+
+  const samples = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA8, gl.SAMPLES);
+  testing.expectEqual(true, samples instanceof Int32Array);
+  testing.expectEqual(4, samples[0]);
+  testing.expectEqual(2, samples[1]);
+
+  testing.expectEqual(9729, gl.getSamplerParameter(gl.createSampler(), gl.TEXTURE_MAG_FILTER));
+}
+</script>
+
+<script id=WebGL2RenderingContext#doesNotThrow>
+{
+  const gl = document.createElement("canvas").getContext("webgl2");
+
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 1]), gl.STATIC_DRAW);
+  gl.vertexAttribIPointer(0, 2, gl.INT, 0, 0);
+  gl.vertexAttribDivisor(0, 1);
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, texture);
+  gl.texStorage3D(gl.TEXTURE_3D, 1, gl.RGBA8, 2, 2, 2);
+
+  const query = gl.createQuery();
+  gl.beginQuery(gl.ANY_SAMPLES_PASSED, query);
+  gl.endQuery(gl.ANY_SAMPLES_PASSED);
+
+  const feedback = gl.createTransformFeedback();
+  gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, feedback);
+  gl.beginTransformFeedback(gl.TRIANGLES);
+  gl.pauseTransformFeedback();
+  gl.resumeTransformFeedback();
+  gl.endTransformFeedback();
+
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 2);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+  gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 1]);
+  gl.blitFramebuffer(0, 0, 1, 1, 0, 0, 1, 1, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.invalidateFramebuffer(gl.FRAMEBUFFER, [gl.COLOR_ATTACHMENT0]);
+  gl.uniform1ui(null, 1);
+
+  // Both buffer-filling calls leave the destination at zero, as Chrome does for
+  // a context that has never been drawn into.
+  const pixels = new Uint8Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  testing.expectEqual(0, pixels[0]);
+  const readback = new Uint8Array(4);
+  gl.getBufferSubData(gl.ARRAY_BUFFER, 0, readback);
+  testing.expectEqual(0, readback[0]);
+
+  gl.deleteQuery(query);
+  gl.deleteVertexArray(vao);
+  gl.deleteTransformFeedback(feedback);
+  gl.deleteSync(gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0));
+
+  testing.expectEqual(0, gl.getError());
+  testing.expectEqual(4, gl.drawArraysInstanced.length);
+  testing.expectEqual(5, gl.vertexAttribIPointer.length);
+}
+</script>

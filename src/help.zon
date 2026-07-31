@@ -324,6 +324,13 @@
     \\  --cookie-jar <PATH>
     \\          Path to a JSON file to save cookies to on exit (write-only).
     \\          Defaults to no cookie saving.
+    \\  --disable-external-stylesheets
+    \\          Skip fetching external <link rel=stylesheet> resources. Their rules
+    \\          then never reach computed styles, so visibility checks that depend on
+    \\          them (display, visibility, opacity, pointer-events) see only inline and
+    \\          embedded CSS. Saves a request and the style computation per sheet, at
+    \\          the cost of looking unlike a browser to the server.
+    \\          Defaults to false.
     \\  --disable-subframes
     \\          Skip loading <iframe> elements. The parser still registers them in the
     \\          DOM, but no child frame or Page.frameAttached events are produced.
@@ -333,11 +340,6 @@
     \\          returns a Worker object, but no script fetch is initiated and its scope
     \\          never runs.
     \\          Defaults to false.
-    \\  --enable-external-stylesheets
-    \\          Fetch external <link rel=stylesheet> resources so their rules
-    \\          contribute to computed styles (and therefore to visibility checks like
-    \\          display, visibility, opacity, pointer-events).
-    \\          Defaults to false, except in agent mode with an LLM, where it is on.
     \\  --http-cache-dir <PATH>
     \\          Directory used as a filesystem cache for network resources. Omitting
     \\          this disables caching.
@@ -392,12 +394,27 @@
     \\  --storage-sqlite-path <PATH>
     \\          Path to the SQLite database file for persistent storage.
     \\          Use ":memory:" for in-memory storage.
+    \\  --accept-language <STRING>
+    \\          Value of the Accept-Language header.
+    \\          Defaults to "en-US,en;q=0.9".
+    \\  --sec-ch-ua <STRING>
+    \\          Value of the Sec-Ch-Ua client-hint header, in the header's own
+    \\          syntax. navigator.userAgentData.brands is derived from the same
+    \\          value, so the two cannot disagree.
+    \\          e.g. --sec-ch-ua '"Chromium";v="150", "Google Chrome";v="150"'
+    \\          Defaults to Chrome's own brand list, GREASE entry included.
+    \\  --sec-ch-ua-platform <STRING>
+    \\          Value of the Sec-Ch-Ua-Platform client-hint header, also reported
+    \\          by navigator.userAgentData.platform.
+    \\          e.g. --sec-ch-ua-platform macOS
+    \\          Defaults to the host OS.
     \\  --user-agent <STRING>
-    \\          Override the User-Agent header entirely. Must not impersonate other
-    \\          browsers; any value containing "Mozilla" is forbidden. The browser
-    \\          still sends Sec-Ch-Ua. Incompatible with --user-agent-suffix.
+    \\          Override the User-Agent header entirely. Incompatible with
+    \\          --user-agent-suffix. Set --sec-ch-ua and --sec-ch-ua-platform to
+    \\          match: a User-Agent that disagrees with the client hints is more
+    \\          conspicuous than either value on its own.
     \\  --user-agent-suffix <STRING>
-    \\          Suffix appended to the Lightpanda/X.Y User-Agent.
+    \\          Suffix appended to the default Chrome User-Agent.
     \\  --v8-flags-unsafe <FLAGS>
     \\          Flags passed as-is to the V8 JavaScript engine, space-separated.
     \\          e.g. --v8-flags-unsafe "--expose-gc --stack-size 1000".

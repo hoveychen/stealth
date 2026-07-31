@@ -20,6 +20,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 
 const Blob = @import("../Blob.zig");
+const png = @import("png.zig");
 const OffscreenCanvasRenderingContext2D = @import("OffscreenCanvasRenderingContext2D.zig");
 
 const Execution = js.Execution;
@@ -31,6 +32,7 @@ pub const _prototype_root = true;
 
 _width: u32,
 _height: u32,
+_cached: ?DrawingContext = null,
 
 /// Since there's no base class rendering contexts inherit from,
 /// we're using tagged union.
@@ -51,6 +53,7 @@ pub fn getWidth(self: *const OffscreenCanvas) u32 {
 
 pub fn setWidth(self: *OffscreenCanvas, value: u32) void {
     self._width = value;
+    self.resetSurface();
 }
 
 pub fn getHeight(self: *const OffscreenCanvas) u32 {
@@ -59,21 +62,50 @@ pub fn getHeight(self: *const OffscreenCanvas) u32 {
 
 pub fn setHeight(self: *OffscreenCanvas, value: u32) void {
     self._height = value;
+    self.resetSurface();
 }
 
-pub fn getContext(_: *OffscreenCanvas, context_type: []const u8, exec: *Execution) !?DrawingContext {
-    if (std.mem.eql(u8, context_type, "2d")) {
-        const ctx = try exec._factory.create(OffscreenCanvasRenderingContext2D{});
-        return .{ .@"2d" = ctx };
+/// Resizing clears the bitmap, even when the value does not change.
+fn resetSurface(self: *OffscreenCanvas) void {
+    const cached = self._cached orelse return;
+    switch (cached) {
+        .@"2d" => |context| context._surface.reset(),
+    }
+}
+
+pub fn getContext(self: *OffscreenCanvas, context_type: []const u8, exec: *Execution) !?DrawingContext {
+    const is_2d = std.mem.eql(u8, context_type, "2d");
+
+    // A canvas hands back the same context object every time, so the pixels a
+    // caller drew are still there on the next `getContext`.
+    if (self._cached) |cached| {
+        return if (is_2d) cached else null;
+    }
+    if (is_2d == false) {
+        return null;
     }
 
-    return null;
+    const ctx = try exec._factory.create(OffscreenCanvasRenderingContext2D{
+        ._canvas = self,
+        ._surface = .{ .arena = exec.arena },
+    });
+    self._cached = .{ .@"2d" = ctx };
+    return self._cached;
 }
 
-/// Returns a Promise that resolves to a Blob containing the image.
-/// Since we have no actual rendering, this returns an empty blob.
-pub fn convertToBlob(_: *OffscreenCanvas, exec: *Execution) !js.Promise {
-    const blob = try Blob.init(null, null, exec.page);
+/// Returns a Promise that resolves to a PNG Blob of the canvas' pixels.
+/// The requested type is ignored; see `HTMLCanvasElement.toDataURL`.
+pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js.Promise {
+    if (self._width == 0 or self._height == 0) {
+        return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.IndexSizeError } });
+    }
+
+    const pixels: ?[]const u8 = if (self._cached) |cached| switch (cached) {
+        .@"2d" => |context| context._surface.peek(self._width, self._height),
+    } else null;
+
+    const bytes = try png.encode(exec.call_arena, self._width, self._height, pixels);
+    const blob = try Blob.initFromBytes(bytes, "image/png", exec.page);
     return exec.js.local.?.resolvePromise(blob);
 }
 

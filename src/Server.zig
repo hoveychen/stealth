@@ -287,15 +287,22 @@ fn buildJSONVersionResponse(app: *const App, port: u16) ![]const u8 {
             .message = "when --host is set to 0.0.0.0 consider setting --advertise-host to a reachable address",
         });
     }
+    // User-Agent has to be the one we actually send: drivers read it from here
+    // (Playwright derives the browser's UA from this endpoint), so a stale
+    // literal would contradict navigator.userAgent. Browser still names the
+    // engine — a driver connecting over CDP knows what it is talking to, and
+    // this field is not visible to pages.
+    const user_agent = app.config.http_headers.user_agent;
     const body_format =
         "{{" ++
         "\"Browser\": \"Lightpanda/1.0\", " ++
         "\"Protocol-Version\": \"1.3\", " ++
-        "\"User-Agent\": \"Lightpanda/1.0\", " ++
+        "\"User-Agent\": \"{[user_agent]s}\", " ++
         "\"Lightpanda-Version\": \"" ++ lp.build_config.version ++ "\", " ++
-        "\"webSocketDebuggerUrl\": \"ws://{s}:{d}/\"" ++
+        "\"webSocketDebuggerUrl\": \"ws://{[host]s}:{[port]d}/\"" ++
         "}}";
-    const body_len = std.fmt.count(body_format, .{ host, port });
+    const body_args = .{ .user_agent = user_agent, .host = host, .port = port };
+    const body_len = std.fmt.count(body_format, body_args);
 
     // We send a Connection: Close (and actually close the connection)
     // because chromedp (Go driver) sends a request to /json/version and then
@@ -305,11 +312,16 @@ fn buildJSONVersionResponse(app: *const App, port: u16) ![]const u8 {
     // always close HTTP requests.
     const response_format =
         "HTTP/1.1 200 OK\r\n" ++
-        "Content-Length: {d}\r\n" ++
+        "Content-Length: {[body_len]d}\r\n" ++
         "Connection: Close\r\n" ++
         "Content-Type: application/json; charset=UTF-8\r\n\r\n" ++
         body_format;
-    return try std.fmt.allocPrint(app.allocator, response_format, .{ body_len, host, port });
+    return try std.fmt.allocPrint(app.allocator, response_format, .{
+        .body_len = body_len,
+        .user_agent = user_agent,
+        .host = host,
+        .port = port,
+    });
 }
 
 const testing = @import("testing.zig");
@@ -325,7 +337,7 @@ test "server: buildJSONVersionResponse" {
     // Verify all required JSON fields are present in the body
     try testing.expect(std.mem.indexOf(u8, res, "\"Browser\": \"Lightpanda/") != null);
     try testing.expect(std.mem.indexOf(u8, res, "\"Protocol-Version\": \"1.3\"") != null);
-    try testing.expect(std.mem.indexOf(u8, res, "\"User-Agent\": \"Lightpanda/") != null);
+    try testing.expect(std.mem.indexOf(u8, res, "\"User-Agent\": \"Mozilla/5.0 (") != null);
     try testing.expect(std.mem.indexOf(u8, res, "\"Lightpanda-Version\": \"" ++ lp.build_config.version ++ "\"") != null);
     try testing.expect(std.mem.indexOf(u8, res, "\"webSocketDebuggerUrl\": \"ws://127.0.0.1:9222/\"") != null);
 }

@@ -42,9 +42,13 @@
     testing.expectEqual(testing.ORIGIN + '/absolute/path.png', img.src);
     testing.expectEqual('/absolute/path.png', img.getAttribute('src'));
 
-    img.src = 'https://example.com/image.png';
-    testing.expectEqual('https://example.com/image.png', img.src);
-    testing.expectEqual('https://example.com/image.png', img.getAttribute('src'));
+    // A fully-qualified URL passes through instead of resolving against base.
+    // Kept on the test origin on purpose: setting src now issues a real
+    // request (see Frame.loadImage), and a public hostname here would make the
+    // suite depend on the network.
+    img.src = testing.ORIGIN + '/qualified/image.png';
+    testing.expectEqual(testing.ORIGIN + '/qualified/image.png', img.src);
+    testing.expectEqual(testing.ORIGIN + '/qualified/image.png', img.getAttribute('src'));
 
     img.alt = 'Test image';
     testing.expectEqual('Test image', img.alt);

@@ -175,8 +175,8 @@ fn connect(self: *EventSource) !void {
     self._id_buf.clearRetainingCapacity();
     try self._id_buf.appendSlice(self._arena.allocator(), self._last_event_id.items);
 
+    // Accept comes from addFetchMetadata via resource_type = .eventsource.
     var headers = try http_client.newHeaders();
-    try headers.add("Accept: text/event-stream");
     try headers.add("Cache-Control: no-cache");
     if (self._last_event_id.items.len > 0) {
         // headers.add copies the value, so the local arena's lifetime is enough

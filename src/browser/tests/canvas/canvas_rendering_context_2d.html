@@ -171,3 +171,479 @@
   testing.expectEqual(undefined, ctx.drawImage(src, 0, 0, 10, 10, 0, 0, 10, 10));
 }
 </script>
+
+<script id="CanvasRenderingContext2D#fillRect paints">
+{
+  const element = document.createElement('canvas');
+  element.width = 4;
+  element.height = 4;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+
+  const data = ctx.getImageData(0, 0, 4, 4).data;
+  // Top-left 2x2 is opaque red.
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(0, 4)));
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(4, 8)));
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(16, 20)));
+  // Third column of the first row was never painted.
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice(8, 12)));
+
+  // A different fill gives different pixels: two canvases no longer hash the
+  // same, which is the whole point of the raster.
+  ctx.fillStyle = '#0000ff';
+  ctx.fillRect(2, 2, 2, 2);
+  const after = ctx.getImageData(2, 2, 1, 1).data;
+  testing.expectEqual([0, 0, 255, 255], Array.from(after));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#fillRect normalises and clips">
+{
+  const element = document.createElement('canvas');
+  element.width = 4;
+  element.height = 4;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = 'lime';
+  // Negative extents are normalised; the part outside the canvas is dropped.
+  ctx.fillRect(2, 2, -4, -4);
+
+  const data = ctx.getImageData(0, 0, 4, 4).data;
+  testing.expectEqual([0, 255, 0, 255], Array.from(data.slice(0, 4)));
+  // (2,2) is outside the normalised [0,2)x[0,2) rect.
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice((2 * 4 + 2) * 4, (2 * 4 + 2) * 4 + 4)));
+
+  // Wholly off-canvas draws nothing and does not throw.
+  ctx.fillRect(-50, -50, 10, 10);
+  ctx.fillRect(NaN, 0, 4, 4);
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(3, 3, 1, 1).data));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#clearRect">
+{
+  const element = document.createElement('canvas');
+  element.width = 2;
+  element.height = 2;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual([255, 255, 255, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  ctx.clearRect(0, 0, 1, 1);
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+  // The rest of the canvas survives.
+  testing.expectEqual([255, 255, 255, 255], Array.from(ctx.getImageData(1, 1, 1, 1).data));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#globalAlpha">
+{
+  const element = document.createElement('canvas');
+  element.width = 1;
+  element.height = 1;
+  const ctx = element.getContext('2d');
+
+  testing.expectEqual(1, ctx.globalAlpha);
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 1, 1);
+
+  ctx.globalAlpha = 0.5;
+  testing.expectEqual(0.5, ctx.globalAlpha);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, 1, 1);
+  // Half-opaque white over opaque red.
+  testing.expectEqual([255, 128, 128, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // Out-of-range assignments are ignored rather than clamped.
+  ctx.globalAlpha = 4;
+  testing.expectEqual(0.5, ctx.globalAlpha);
+  ctx.globalAlpha = -1;
+  testing.expectEqual(0.5, ctx.globalAlpha);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#strokeRect">
+{
+  const element = document.createElement('canvas');
+  element.width = 5;
+  element.height = 5;
+  const ctx = element.getContext('2d');
+
+  testing.expectEqual('#000000', ctx.strokeStyle);
+  testing.expectEqual(1, ctx.lineWidth);
+
+  ctx.strokeStyle = 'blue';
+  testing.expectEqual('#0000ff', ctx.strokeStyle);
+  // Centred on the path, so a 1px stroke of [1,4] covers [0.5,4.5] -> [1,4].
+  ctx.strokeRect(1.5, 1.5, 2, 2);
+
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+  testing.expectEqual([0, 0, 255, 255], at(1, 1));
+  testing.expectEqual([0, 0, 255, 255], at(3, 1));
+  testing.expectEqual([0, 0, 255, 255], at(1, 3));
+  // The interior is untouched.
+  testing.expectEqual([0, 0, 0, 0], at(2, 2));
+  // As is everything outside.
+  testing.expectEqual([0, 0, 0, 0], at(0, 0));
+
+  ctx.lineWidth = 0;
+  testing.expectEqual(1, ctx.lineWidth);
+  ctx.lineWidth = 3;
+  testing.expectEqual(3, ctx.lineWidth);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#getImageData window">
+{
+  const element = document.createElement('canvas');
+  element.width = 3;
+  element.height = 3;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(2, 2, 1, 1);
+
+  // A window straddling the bottom-right corner: only one pixel overlaps.
+  const data = ctx.getImageData(2, 2, 2, 2).data;
+  testing.expectEqual([255, 0, 0, 255], Array.from(data.slice(0, 4)));
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice(4, 8)));
+  testing.expectEqual([0, 0, 0, 0], Array.from(data.slice(8, 12)));
+
+  // A negative origin pushes the canvas into the middle of the window.
+  const shifted = ctx.getImageData(-1, -1, 4, 4).data;
+  const index = ((2 + 1) * 4 + (2 + 1)) * 4;
+  testing.expectEqual([255, 0, 0, 255], Array.from(shifted.slice(index, index + 4)));
+  testing.expectEqual([0, 0, 0, 0], Array.from(shifted.slice(0, 4)));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#resize clears">
+{
+  const element = document.createElement('canvas');
+  element.width = 2;
+  element.height = 2;
+  const ctx = element.getContext('2d');
+
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual([255, 0, 0, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // Re-assigning the same width still resets the bitmap.
+  element.width = 2;
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  ctx.fillRect(0, 0, 2, 2);
+  element.height = 8;
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#drawing state accessors">
+{
+  const proto = CanvasRenderingContext2D.prototype;
+  for (const name of ['fillStyle', 'strokeStyle', 'lineWidth', 'globalAlpha']) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+    testing.expectEqual('function', typeof descriptor.get);
+    testing.expectEqual('function', typeof descriptor.set);
+  }
+}
+</script>
+
+<script id="HTMLCanvasElement#toDataURL">
+{
+  const element = document.createElement('canvas');
+  element.width = 4;
+  element.height = 4;
+
+  const empty = element.toDataURL();
+  testing.expectTrue(empty.startsWith('data:image/png;base64,iVBORw0KGgo'));
+
+  // A canvas with no 2D context at all encodes the same transparent image as
+  // one whose context never drew.
+  const untouched = document.createElement('canvas');
+  untouched.width = 4;
+  untouched.height = 4;
+  untouched.getContext('2d');
+  testing.expectEqual(empty, untouched.toDataURL());
+
+  // Drawing changes the bytes, and drawing something else changes them again.
+  const ctx = element.getContext('2d');
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+  const red = element.toDataURL();
+  testing.expectTrue(red !== empty);
+
+  ctx.fillStyle = 'blue';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectTrue(element.toDataURL() !== red);
+
+  // Same pixels, same string.
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual(red, element.toDataURL());
+
+  // We only encode PNG, so a request for another type falls back to it —
+  // Chrome would answer 'data:image/jpeg;base64,/9j/...' here.
+  testing.expectTrue(element.toDataURL('image/jpeg').startsWith('data:image/png;base64,'));
+  testing.expectTrue(element.toDataURL('image/bogus').startsWith('data:image/png;base64,'));
+
+  // A canvas with no area has no image.
+  const degenerate = document.createElement('canvas');
+  degenerate.width = 0;
+  testing.expectEqual('data:,', degenerate.toDataURL());
+}
+</script>
+
+<script id="HTMLCanvasElement#toBlob" type=module>
+  const state = await testing.async();
+
+  const element = document.createElement('canvas');
+  element.width = 3;
+  element.height = 3;
+  const ctx = element.getContext('2d');
+  ctx.fillStyle = '#00ff00';
+  ctx.fillRect(0, 0, 3, 3);
+
+  let synchronous = true;
+  let blob = null;
+  let calledSynchronously = null;
+  element.toBlob((result) => {
+    blob = result;
+    calledSynchronously = synchronous;
+    state.resolve();
+  });
+  synchronous = false;
+
+  await state.done(() => {
+    testing.expectEqual(false, calledSynchronously);
+    testing.expectEqual(true, blob instanceof Blob);
+    testing.expectEqual('image/png', blob.type);
+    // The same bytes toDataURL would have base64'd.
+    const expected = element.toDataURL().slice('data:image/png;base64,'.length);
+    testing.expectEqual(atob(expected).length, blob.size);
+  });
+</script>
+
+<script id="CanvasRenderingContext2D#font normalisation">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+  testing.expectEqual('10px sans-serif', ctx.font);
+
+  // Every pair here is a measured Chrome answer.
+  const cases = [
+    ['14px Arial', '14px Arial'],
+    ['bold 12px serif', 'bold 12px serif'],
+    ['italic 700 16px/1.5 "Times New Roman", serif', 'italic bold 16px "Times New Roman", serif'],
+    ['small-caps 20px monospace', 'small-caps 20px monospace'],
+    ['12pt serif', '16px serif'],
+    ['xx-large serif', '32px serif'],
+    ['2rem serif', '32px serif'],
+    ['150% serif', '15px serif'],
+    ['lighter 16px serif', '100 16px serif'],
+    ['oblique 16px serif', 'italic 16px serif'],
+    ['16px Foo Bar', '16px "Foo Bar"'],
+    ["16px 'Single'", '16px Single'],
+    ['italic small-caps bold 16px serif', 'italic bold small-caps 16px serif'],
+  ];
+  for (const [input, expected] of cases) {
+    ctx.font = input;
+    testing.expectEqual(expected, ctx.font);
+  }
+
+  // A value Chrome rejects keeps the previous font rather than resetting.
+  ctx.font = '33px monospace';
+  for (const bad of ['not-a-font', '', '16px', 'bold serif', 'condensed 16px serif', 'oblique 30deg 16px serif']) {
+    ctx.font = bad;
+    testing.expectEqual('33px monospace', ctx.font);
+  }
+
+  // Relative sizes resolve against the canvas default, not the current font.
+  ctx.font = '1em sans-serif';
+  testing.expectEqual('10px sans-serif', ctx.font);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#measureText">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  // Chrome's own numbers, for the strings canvas fingerprints actually use.
+  testing.expectEqual(89.9658203125, ctx.measureText('mmmmmmmmmmlli').width);
+  testing.expectEqual(140.615234375, ctx.measureText('Cwm fjordbank glyphs vext quiz').width);
+  testing.expectEqual(55.01953125, ctx.measureText('Hello, world!').width);
+  testing.expectEqual(0, ctx.measureText('').width);
+
+  // Exactly linear in the font size.
+  ctx.font = '100px sans-serif';
+  testing.expectEqual(899.658203125, ctx.measureText('mmmmmmmmmmlli').width);
+
+  // A different family measures differently — this is the signal a font
+  // fingerprint reads.
+  ctx.font = '100px monospace';
+  const mono = ctx.measureText('mmmmmmmmmmlli').width;
+  ctx.font = '100px serif';
+  const serif = ctx.measureText('mmmmmmmmmmlli').width;
+  testing.expectTrue(mono !== serif);
+  testing.expectTrue(mono !== 899.658203125);
+
+  // An unresolvable family falls back to the standard font, as Chrome's does.
+  ctx.font = '100px NoSuchFamily12345';
+  testing.expectEqual(serif, ctx.measureText('mmmmmmmmmmlli').width);
+}
+</script>
+
+<script id="TextMetrics">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+  const metrics = ctx.measureText('mmmmmmmmmmlli');
+  testing.expectEqual(true, metrics instanceof TextMetrics);
+
+  // The full set Chrome reports for 10px sans-serif.
+  testing.expectEqual(89.9658203125, metrics.width);
+  testing.expectEqual(-0.64453125, metrics.actualBoundingBoxLeft);
+  testing.expectEqual(89.2822265625, metrics.actualBoundingBoxRight);
+  testing.expectEqual(10, metrics.fontBoundingBoxAscent);
+  testing.expectEqual(2, metrics.fontBoundingBoxDescent);
+  testing.expectEqual(7.1728515625, metrics.actualBoundingBoxAscent);
+  testing.expectEqual(0, metrics.actualBoundingBoxDescent);
+  testing.expectEqual(8, metrics.hangingBaseline);
+  testing.expectEqual(0, metrics.alphabeticBaseline);
+  testing.expectEqual(-2, metrics.ideographicBaseline);
+
+  ctx.font = '14px Arial';
+  const arial = ctx.measureText('Cwm fjordbank glyphs vext quiz');
+  testing.expectEqual(196.861328125, arial.width);
+  testing.expectEqual(-0.697265625, arial.actualBoundingBoxLeft);
+  testing.expectEqual(196.560546875, arial.actualBoundingBoxRight);
+  testing.expectEqual(10.1923828125, arial.actualBoundingBoxAscent);
+  testing.expectEqual(2.9462890625, arial.actualBoundingBoxDescent);
+  testing.expectEqual(10.399999618530273, arial.hangingBaseline);
+
+  // Chrome exposes all ten as prototype accessors and nothing else.
+  const names = Object.getOwnPropertyNames(TextMetrics.prototype).filter((n) => n !== 'constructor');
+  testing.expectEqual(10, names.length);
+  for (const name of names) {
+    const descriptor = Object.getOwnPropertyDescriptor(TextMetrics.prototype, name);
+    testing.expectEqual('function', typeof descriptor.get);
+    testing.expectEqual(undefined, descriptor.set);
+  }
+}
+</script>
+
+<script id="CanvasRenderingContext2D#interface shape">
+{
+  const proto = CanvasRenderingContext2D.prototype;
+  const names = Object.getOwnPropertyNames(proto).filter((n) => n !== 'constructor');
+  // Chrome has exactly 73 own properties here: 45 methods and 28 accessors,
+  // and not one plain data property. Measured, see tools/fingerprint.
+  testing.expectEqual(73, names.length);
+
+  let accessors = 0;
+  let methods = 0;
+  for (const name of names) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+    if (descriptor.get) {
+      accessors += 1;
+    } else {
+      testing.expectEqual('function', typeof descriptor.value);
+      methods += 1;
+    }
+  }
+  testing.expectEqual(28, accessors);
+  testing.expectEqual(45, methods);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#drawing state defaults">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+  // Every default here was read off a fresh Chrome context.
+  const defaults = {
+    lang: 'inherit', font: '10px sans-serif', textAlign: 'start', textBaseline: 'alphabetic',
+    direction: 'ltr', fontKerning: 'auto', fontStretch: 'normal', fontVariantCaps: 'normal',
+    letterSpacing: '0px', textRendering: 'auto', wordSpacing: '0px',
+    globalCompositeOperation: 'source-over', filter: 'none', imageSmoothingQuality: 'low',
+    strokeStyle: '#000000', fillStyle: '#000000', shadowColor: 'rgba(0, 0, 0, 0)',
+    lineCap: 'butt', lineJoin: 'miter', globalAlpha: 1, imageSmoothingEnabled: true,
+    shadowOffsetX: 0, shadowOffsetY: 0, shadowBlur: 0, lineWidth: 1, miterLimit: 10,
+    lineDashOffset: 0,
+  };
+  for (const [name, value] of Object.entries(defaults)) {
+    testing.expectEqual(value, ctx[name]);
+  }
+  testing.expectEqual(ctx.canvas.constructor.name, 'HTMLCanvasElement');
+
+  // Keyword attributes take what they recognise and ignore the rest.
+  ctx.textAlign = 'center';
+  testing.expectEqual('center', ctx.textAlign);
+  ctx.textAlign = 'sideways';
+  testing.expectEqual('center', ctx.textAlign);
+  ctx.lineJoin = 'bevel';
+  testing.expectEqual('bevel', ctx.lineJoin);
+  ctx.globalCompositeOperation = 'multiply';
+  testing.expectEqual('multiply', ctx.globalCompositeOperation);
+  ctx.globalCompositeOperation = 'not-an-operation';
+  testing.expectEqual('multiply', ctx.globalCompositeOperation);
+  ctx.shadowBlur = 4;
+  testing.expectEqual(4, ctx.shadowBlur);
+  ctx.shadowBlur = NaN;
+  testing.expectEqual(4, ctx.shadowBlur);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#stubbed queries">
+{
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  testing.expectEqual(false, ctx.isContextLost());
+  testing.expectEqual(false, ctx.isPointInPath(0, 0));
+  testing.expectEqual(false, ctx.isPointInStroke(0, 0));
+
+  const attributes = ctx.getContextAttributes();
+  testing.expectEqual(true, attributes.alpha);
+  testing.expectEqual('srgb', attributes.colorSpace);
+  testing.expectEqual('unorm8', attributes.colorType);
+  testing.expectEqual(false, attributes.desynchronized);
+  testing.expectEqual(false, attributes.willReadFrequently);
+  testing.expectEqual('standard', attributes.toneMapping.mode);
+
+  testing.expectEqual([], ctx.getLineDash());
+  ctx.setLineDash([1, 2]);
+  testing.expectEqual([1, 2], ctx.getLineDash());
+  // An odd-length list is repeated, and an invalid one is dropped whole.
+  ctx.setLineDash([3, 4, 5]);
+  testing.expectEqual([3, 4, 5, 3, 4, 5], ctx.getLineDash());
+  ctx.setLineDash([1, -1]);
+  testing.expectEqual([3, 4, 5, 3, 4, 5], ctx.getLineDash());
+
+  testing.expectEqual('DOMMatrix', ctx.getTransform().constructor.name);
+  testing.expectEqual(1, ctx.getTransform().a);
+  testing.expectEqual(0, ctx.getTransform().b);
+
+  // Gradients and patterns are handles that carry no paint, but they exist.
+  const gradient = ctx.createLinearGradient(0, 0, 1, 1);
+  testing.expectEqual(true, gradient instanceof CanvasGradient);
+  testing.expectEqual(undefined, gradient.addColorStop(0.5, 'red'));
+  testing.expectError('Index or size', () => gradient.addColorStop(2, 'red'));
+  testing.expectEqual(true, ctx.createRadialGradient(0, 0, 0, 1, 1, 1) instanceof CanvasGradient);
+  testing.expectEqual(true, ctx.createConicGradient(0, 0, 0) instanceof CanvasGradient);
+  testing.expectEqual(true, ctx.createPattern(document.createElement('canvas'), 'repeat') instanceof CanvasPattern);
+
+  // reset() drops both the bitmap and the drawing state.
+  const canvas = document.createElement('canvas');
+  canvas.width = 2;
+  canvas.height = 2;
+  const drawn = canvas.getContext('2d');
+  drawn.fillStyle = 'red';
+  drawn.font = '30px monospace';
+  drawn.fillRect(0, 0, 2, 2);
+  drawn.reset();
+  testing.expectEqual('#000000', drawn.fillStyle);
+  testing.expectEqual('10px sans-serif', drawn.font);
+  testing.expectEqual([0, 0, 0, 0], Array.from(drawn.getImageData(0, 0, 1, 1).data));
+}
+</script>

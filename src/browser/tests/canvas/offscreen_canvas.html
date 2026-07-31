@@ -43,10 +43,11 @@
   const canvas = new OffscreenCanvas(64, 64);
   const promise = canvas.convertToBlob();
   testing.expectEqual(true, promise instanceof Promise);
-  // The promise should resolve to a Blob (even if empty)
+  // The promise resolves to a PNG of the (transparent) canvas.
   promise.then(blob => {
     testing.expectEqual(true, blob instanceof Blob);
-    testing.expectEqual(blob.size, 0); // Empty since no rendering
+    testing.expectEqual('image/png', blob.type);
+    testing.expectTrue(blob.size > 0);
   });
 }
 </script>
@@ -84,4 +85,62 @@
   testing.expectError('Index or size', () => ctx.getImageData(0, 0, 0, 10));
   testing.expectError('Index or size', () => ctx.getImageData(0, 0, 10, -5));
 }
+</script>
+
+<script id="OffscreenCanvasRenderingContext2D#fillRect paints">
+{
+  const canvas = new OffscreenCanvas(4, 4);
+  const ctx = canvas.getContext('2d');
+
+  // The same context object comes back, so drawn pixels survive the call.
+  testing.expectTrue(ctx === canvas.getContext('2d'));
+  testing.expectEqual(canvas, ctx.canvas);
+
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual([255, 0, 0, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(3, 3, 1, 1).data));
+
+  ctx.clearRect(0, 0, 1, 1);
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // Resizing clears the bitmap.
+  ctx.fillRect(0, 0, 4, 4);
+  canvas.width = 4;
+  testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+}
+</script>
+
+<script id="OffscreenCanvas#convertToBlob png" type=module>
+  const state = await testing.async();
+
+  const canvas = new OffscreenCanvas(3, 3);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 3, 3);
+
+  const blob = await canvas.convertToBlob();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+
+  let rejected = null;
+  const empty = new OffscreenCanvas(0, 0);
+  try {
+    await empty.convertToBlob();
+  } catch (err) {
+    rejected = err;
+  }
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('image/png', blob.type);
+    testing.expectTrue(blob.size > 0);
+    // PNG signature.
+    testing.expectEqual([137, 80, 78, 71, 13, 10, 26, 10], Array.from(bytes.slice(0, 8)));
+    // IHDR carries the real dimensions.
+    testing.expectEqual([0, 0, 0, 3], Array.from(bytes.slice(16, 20)));
+    testing.expectEqual([0, 0, 0, 3], Array.from(bytes.slice(20, 24)));
+
+    testing.expectTrue(rejected !== null);
+    testing.expectTrue(rejected.toString().includes('Index or size'));
+  });
 </script>

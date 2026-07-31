@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=media_devices_shape>
+  // Measured on Chrome 150 — see media/MediaDevices.zig.
+  testing.expectEqual('object', typeof navigator.mediaDevices);
+  testing.expectEqual('[object MediaDevices]', Object.prototype.toString.call(navigator.mediaDevices));
+  testing.expectEqual(true, navigator.mediaDevices instanceof EventTarget);
+  testing.expectEqual(true, navigator.mediaDevices === navigator.mediaDevices);
+
+  testing.expectEqual(
+    ['constructor', 'enumerateDevices', 'getDisplayMedia', 'getSupportedConstraints',
+     'getUserMedia', 'ondevicechange', 'setCaptureHandleConfig'],
+    Object.getOwnPropertyNames(MediaDevices.prototype).sort(),
+  );
+
+  testing.expectEqual(null, navigator.mediaDevices.ondevicechange);
+  const handler = () => {};
+  navigator.mediaDevices.ondevicechange = handler;
+  testing.expectEqual(handler, navigator.mediaDevices.ondevicechange);
+  navigator.mediaDevices.ondevicechange = null;
+
+  // The dictionary only lists supported constraints, so every value is true.
+  const c = navigator.mediaDevices.getSupportedConstraints();
+  testing.expectEqual(36, Object.keys(c).length);
+  testing.expectEqual(true, Object.values(c).every((v) => v === true));
+  testing.expectEqual(true, c.width);
+  testing.expectEqual(true, c.deviceId);
+  testing.expectEqual(true, c.restrictOwnAudio);
+
+  testing.expectEqual(undefined, navigator.mediaDevices.setCaptureHandleConfig());
+</script>
+
+<script id=media_devices_enumerate type=module>
+  {
+    const state = await testing.async();
+    const p = navigator.mediaDevices.enumerateDevices();
+    testing.expectTrue(p instanceof Promise);
+    const devices = await p;
+    const again = await navigator.mediaDevices.enumerateDevices();
+    state.resolve();
+
+    await state.done(() => {
+      // Chrome without media permission: three entries, order audio in /
+      // video in / audio out, every identifying field blank. Zero devices is
+      // the headless tell we're avoiding.
+      testing.expectEqual(3, devices.length);
+      testing.expectEqual(['audioinput', 'videoinput', 'audiooutput'], devices.map((d) => d.kind));
+
+      for (const d of devices) {
+        testing.expectEqual('', d.deviceId);
+        testing.expectEqual('', d.label);
+        testing.expectEqual('', d.groupId);
+        testing.expectEqual(true, d instanceof MediaDeviceInfo);
+      }
+
+      // The two inputs are InputDeviceInfo, which subclasses MediaDeviceInfo
+      // and only adds getCapabilities().
+      testing.expectEqual('[object InputDeviceInfo]', Object.prototype.toString.call(devices[0]));
+      testing.expectEqual('[object InputDeviceInfo]', Object.prototype.toString.call(devices[1]));
+      testing.expectEqual('[object MediaDeviceInfo]', Object.prototype.toString.call(devices[2]));
+      testing.expectEqual(true, devices[0] instanceof InputDeviceInfo);
+      testing.expectEqual(false, devices[2] instanceof InputDeviceInfo);
+      testing.expectEqual({}, devices[0].getCapabilities());
+
+      // toJSON's key order is Chrome's, not the prototype's.
+      testing.expectEqual(
+        '{"deviceId":"","kind":"audioinput","label":"","groupId":""}',
+        JSON.stringify(devices[0]),
+      );
+
+      testing.expectEqual(
+        ['constructor', 'deviceId', 'groupId', 'kind', 'label', 'toJSON'],
+        Object.getOwnPropertyNames(MediaDeviceInfo.prototype).sort(),
+      );
+      testing.expectEqual(
+        ['constructor', 'getCapabilities'],
+        Object.getOwnPropertyNames(InputDeviceInfo.prototype).sort(),
+      );
+
+      // Same device objects on a second call.
+      testing.expectEqual(devices[0], again[0]);
+    });
+  }
+</script>
+
+<script id=media_devices_reject type=module>
+  {
+    const state = await testing.async();
+    let userMediaError = null;
+    let displayMediaError = null;
+    try {
+      await navigator.mediaDevices.getUserMedia({audio: true});
+    } catch (e) {
+      userMediaError = e;
+    }
+    try {
+      await navigator.mediaDevices.getDisplayMedia();
+    } catch (e) {
+      displayMediaError = e;
+    }
+    state.resolve();
+
+    // There is no media stack, so both reject — with the same error Chrome
+    // gives a user who clicked "Block".
+    await state.done(() => {
+      testing.expectEqual('NotAllowedError', userMediaError.name);
+      testing.expectEqual(true, userMediaError instanceof DOMException);
+      testing.expectEqual('NotAllowedError', displayMediaError.name);
+    });
+  }
+</script>

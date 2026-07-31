@@ -32,7 +32,11 @@ const Navigator = @import("Navigator.zig");
 const ModelContext = @import("ModelContext.zig");
 const Screen = @import("Screen.zig");
 const VisualViewport = @import("VisualViewport.zig");
+const NetworkInformation = @import("NetworkInformation.zig");
+const MediaDevices = @import("media/MediaDevices.zig");
+const BatteryManager = @import("BatteryManager.zig");
 const Performance = @import("Performance.zig");
+const Chrome = @import("Chrome.zig");
 const Document = @import("Document.zig");
 const Location = @import("Location.zig");
 const Fetch = @import("net/Fetch.zig");
@@ -75,7 +79,18 @@ _navigator: Navigator = .init,
 _model_context: ModelContext = .init,
 _screen: *Screen,
 _visual_viewport: *VisualViewport,
+_connection: *NetworkInformation,
+
+// navigator.mediaDevices and the BatteryManager navigator.getBattery()
+// resolves with. Both are built on first use: pages that never ask shouldn't
+// pay for them, and getBattery() has to hand back the same object every call.
+_media_devices: ?*MediaDevices = null,
+_battery: ?*BatteryManager = null,
 _performance: Performance,
+// Epoch milliseconds at which the load event fired, or 0 before that. Only
+// chrome.csi() / chrome.loadTimes() read it — both report the load timestamp,
+// and the alternative was inventing one.
+_load_epoch_ms: i64 = 0,
 _cookie_store: ?*CookieStore = null,
 _idb_factory: ?*idb.IDBFactory = null,
 _on_load: ?js.Function.Global = null,
@@ -276,6 +291,14 @@ pub fn getCSS(self: *Window) *CSS {
 
 pub fn getPerformance(self: *Window) *Performance {
     return &self._performance;
+}
+
+// window.chrome. Assembled on first read and cached, so it keeps its identity
+// across reads the way Chrome's does. Chrome exposes it as a data property
+// rather than an accessor; the bridge has no way to install one whose value is
+// built at runtime, so the descriptor is the one visible difference.
+pub fn getChrome(_: *Window, exec: *const js.Execution) !js.Object {
+    return Chrome.build(exec);
 }
 
 pub fn setPerformance(self: *Window, value: js.Value) void {
@@ -1175,6 +1198,7 @@ pub const JsApi = struct {
     pub const screen = bridge.accessor(Window.getScreen, Window.setScreen, .{});
     pub const visualViewport = bridge.accessor(Window.getVisualViewport, Window.setVisualViewport, .{});
     pub const performance = bridge.accessor(Window.getPerformance, Window.setPerformance, .{});
+    pub const chrome = bridge.accessor(Window.getChrome, null, .{ .cache = .{ .internal = 2 } });
     pub const localStorage = bridge.accessor(Window.getLocalStorage, null, .{});
     pub const sessionStorage = bridge.accessor(Window.getSessionStorage, null, .{});
     pub const cookieStore = bridge.accessor(Window.getCookieStore, null, .{});

@@ -197,6 +197,9 @@ const CommonOptions = .{
     .{ .name = "web_bot_auth_keyid", .type = ?[]const u8 },
     .{ .name = "web_bot_auth_domain", .type = ?[]const u8 },
     .{ .name = "user_agent", .type = ?[]const u8 },
+    .{ .name = "sec_ch_ua", .type = ?[]const u8 },
+    .{ .name = "sec_ch_ua_platform", .type = ?[]const u8 },
+    .{ .name = "accept_language", .type = ?[]const u8 },
     .{ .name = "block_private_networks", .type = bool },
     .{ .name = "block_cidrs", .type = ?[]const u8 },
     .{ .name = "block_urls", .type = ?[]const u8 },
@@ -206,7 +209,7 @@ const CommonOptions = .{
     .{ .name = "storage_sqlite_path", .type = ?[:0]const u8 },
     .{ .name = "disable_subframes", .type = bool },
     .{ .name = "disable_workers", .type = bool },
-    .{ .name = "enable_external_stylesheets", .type = bool },
+    .{ .name = "disable_external_stylesheets", .type = bool },
     .{ .name = "v8_flags_unsafe", .type = ?[]const u8 },
     .{ .name = "v8_max_heap_mb", .type = ?u32 },
     .{ .name = "watchdog_ms", .type = ?u32 },
@@ -481,9 +484,12 @@ pub fn watchdogMs(self: *const Config) ?u32 {
     };
 }
 
+// Stylesheets load unless asked not to: a client that never fetches CSS is
+// separable server-side on that alone, whatever its headers look like. The
+// callers all want the positive sense, so invert here rather than at each one.
 pub fn enableExternalStylesheets(self: *const Config) bool {
     return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.enable_external_stylesheets,
+        inline .serve, .fetch, .mcp, .agent => |opts| !opts.disable_external_stylesheets,
         else => unreachable,
     };
 }
@@ -624,6 +630,27 @@ pub fn userAgentSuffix(self: *const Config) ?[]const u8 {
 pub fn userAgent(self: *const Config) ?[]const u8 {
     return switch (self.mode) {
         inline .serve, .fetch, .mcp, .agent => |opts| opts.user_agent,
+        else => null,
+    };
+}
+
+pub fn secChUa(self: *const Config) ?[]const u8 {
+    return switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.sec_ch_ua,
+        else => null,
+    };
+}
+
+pub fn secChUaPlatform(self: *const Config) ?[]const u8 {
+    return switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.sec_ch_ua_platform,
+        else => null,
+    };
+}
+
+pub fn acceptLanguage(self: *const Config) ?[]const u8 {
+    return switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.accept_language,
         else => null,
     };
 }
@@ -790,42 +817,116 @@ pub const WaitUntil = enum {
 /// Pre-formatted HTTP headers for reuse across Http and Client.
 /// Must be initialized with an allocator that outlives all HTTP connections.
 pub const HttpHeaders = struct {
-    const user_agent_base: [:0]const u8 = "Lightpanda/1.0";
+    /// The version we claim to be. One constant so the User-Agent's
+    /// "Chrome/150.0.0.0" and the Sec-Ch-Ua brands' v="150" can't drift apart —
+    /// a mismatch between the two is a stronger signal than either value alone.
+    const chrome_major = "150";
+    const chrome_reduced_version = chrome_major ++ ".0.0.0";
+    /// The build number the reference Chrome 150 reported. Only
+    /// navigator.userAgentData.getHighEntropyValues carries it: the user-agent
+    /// string zeroes everything after the major (that is what Chrome's
+    /// user-agent reduction does), so a Chrome whose UA says 150.0.0.0 and
+    /// whose uaFullVersion says 150.0.7871.187 is not contradicting itself —
+    /// it's the normal shape, and a full version ending .0.0.0 is the anomaly.
+    const chrome_full_version = chrome_major ++ ".0.7871.187";
 
-    const Brand = struct {
-        brand: [:0]const u8,
-        version: [:0]const u8,
+    /// Default User-Agent. Since Chrome's user-agent reduction the string is
+    /// frozen apart from the major version and a platform token from a closed
+    /// set, so this is a complete Chrome UA rather than an approximation of one.
+    ///
+    /// The macOS line is byte-for-byte what the Chrome 150 install on the
+    /// reference machine sent (tools/fingerprint/results/reference-chrome-headed.json).
+    /// The other three carry that same frozen string with their platform's
+    /// token substituted; those tokens are from Chrome's reduction rules and are
+    /// NOT measured here, because there is no Windows, Linux or FreeBSD Chrome
+    /// on this machine to measure.
+    const user_agent_base: [:0]const u8 = "Mozilla/5.0 (" ++ switch (builtin.os.tag) {
+        .macos => "Macintosh; Intel Mac OS X 10_15_7",
+        .windows => "Windows NT 10.0; Win64; x64",
+        .linux => "X11; Linux x86_64",
+        .freebsd => "X11; FreeBSD amd64",
+        else => "X11; Linux x86_64",
+    } ++ ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" ++ chrome_reduced_version ++ " Safari/537.36";
+
+    pub const Brand = struct {
+        brand: []const u8,
+        version: []const u8,
     };
 
-    /// Source of truth for client-hints brand data. Both the Sec-Ch-Ua
-    /// HTTP header and navigator.userAgentData.brands derive from this
-    /// list, so the two sides cannot drift.
-    pub const brands = [_]Brand{
-        .{ .brand = "Lightpanda", .version = "1" },
+    /// Brands used when --sec-ch-ua isn't given. Measured from the reference
+    /// Chrome 150, GREASE entry included: Chrome deliberately ships one
+    /// deliberately-odd brand so servers can't hardcode the list, and omitting
+    /// it is itself distinctive. The versions track chrome_major so the header
+    /// and the User-Agent agree.
+    pub const default_brands = [_]Brand{
+        .{ .brand = "Not;A=Brand", .version = "8" },
+        .{ .brand = "Chromium", .version = chrome_major },
+        .{ .brand = "Google Chrome", .version = chrome_major },
     };
 
-    pub const sec_ch_ua: [:0]const u8 = blk: {
-        var out: [:0]const u8 = "Sec-Ch-Ua:";
-        for (brands, 0..) |b, i| {
-            const sep = if (i == 0) " " else ", ";
-            out = out ++ sep ++ "\"" ++ b.brand ++ "\";v=\"" ++ b.version ++ "\"";
-        }
-        break :blk out;
+    /// The same brands with the four-part versions the high-entropy hints
+    /// carry. Measured alongside default_brands.
+    pub const default_full_version_brands = [_]Brand{
+        .{ .brand = "Not;A=Brand", .version = "8.0.0.0" },
+        .{ .brand = "Chromium", .version = chrome_full_version },
+        .{ .brand = "Google Chrome", .version = chrome_full_version },
     };
+
+    /// Accept values real Chrome sends, keyed by fetch destination. Measured
+    /// rather than recalled — see tools/fingerprint/results/reference-chrome-*.json
+    /// for the capture these came from.
+    pub const Accept = struct {
+        pub const document: [:0]const u8 = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
+        pub const style: [:0]const u8 = "Accept: text/css,*/*;q=0.1";
+        pub const image: [:0]const u8 = "Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
+        pub const event_stream: [:0]const u8 = "Accept: text/event-stream";
+        /// script, fetch and xhr all send this.
+        pub const any: [:0]const u8 = "Accept: */*";
+    };
+
+    /// Chrome sends this on every top-level and iframe navigation.
+    pub const upgrade_insecure_requests: [:0]const u8 = "Upgrade-Insecure-Requests: 1";
+
+    /// Mobile-ness of the client hint. Desktop Chrome sends "?0".
+    pub const sec_ch_ua_mobile: [:0]const u8 = "Sec-Ch-Ua-Mobile: ?0";
+
+    user_agent: [:0]const u8, // Full User-Agent value
+    user_agent_header: [:0]const u8,
+
+    /// Source of truth for client-hints brand data. Both the Sec-Ch-Ua HTTP
+    /// header and navigator.userAgentData.brands derive from this list, so the
+    /// two sides cannot drift. Owned by `allocator` unless it aliases
+    /// `default_brands`.
+    brands: []const Brand,
+    /// Same brands, four-part versions, for
+    /// navigator.userAgentData.getHighEntropyValues. Padded from `brands` when
+    /// --sec-ch-ua is given, since a bare major is all that flag carries.
+    full_version_brands: []const Brand,
+    sec_ch_ua: [:0]const u8,
+    sec_ch_ua_platform: [:0]const u8,
+    /// Bare value (e.g. "macOS"), for navigator.userAgentData.platform.
+    platform: []const u8,
 
     // Some bot-protection frontends (e.g. Akamai on canada.ca) RST the HTTP/2
     // stream when a client sends Accept-Encoding without Accept-Language,
     // treating it as a bot signal. Ship a neutral default so we look like a
     // normal client.
-    pub const accept_language: [:0]const u8 = "Accept-Language: en-US,en;q=0.9";
-
-    // Document-navigation Accept value Chrome sends.
-    pub const navigation_accept: [:0]const u8 = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
-
-    user_agent: [:0]const u8, // User agent value (e.g. "Lightpanda/1.0")
-    user_agent_header: [:0]const u8,
+    accept_language: [:0]const u8,
+    /// Bare value (e.g. "en-US,en;q=0.9"), for navigator.languages.
+    languages: []const u8,
 
     proxy_bearer_header: ?[:0]const u8,
+
+    /// Host OS, in the spelling the Sec-Ch-Ua-Platform hint and
+    /// navigator.userAgentData.platform use.
+    const default_platform = switch (builtin.os.tag) {
+        .macos => "macOS",
+        .windows => "Windows",
+        .linux => "Linux",
+        .freebsd => "FreeBSD",
+        else => "Unknown",
+    };
+    const default_languages = "en-US,en;q=0.9";
 
     pub fn init(allocator: Allocator, config: *const Config) !HttpHeaders {
         const user_agent: [:0]const u8 = if (config.userAgent()) |ua|
@@ -834,10 +935,36 @@ pub const HttpHeaders = struct {
             try std.fmt.allocPrintSentinel(allocator, "{s} {s}", .{ user_agent_base, suffix }, 0)
         else
             user_agent_base;
-        errdefer if (config.userAgent() != null or config.userAgentSuffix() != null) allocator.free(user_agent);
+        errdefer if (user_agent.ptr != user_agent_base.ptr) allocator.free(user_agent);
 
         const user_agent_header = try std.fmt.allocPrintSentinel(allocator, "User-Agent: {s}", .{user_agent}, 0);
         errdefer allocator.free(user_agent_header);
+
+        // --sec-ch-ua takes the header's own wire syntax, so one flag drives
+        // both the header and navigator.userAgentData without a bespoke format
+        // to learn, and whatever is passed round-trips verbatim.
+        const brands: []const Brand = if (config.secChUa()) |raw|
+            try parseBrands(allocator, raw)
+        else
+            &default_brands;
+        errdefer if (brands.ptr != &default_brands) allocator.free(brands);
+
+        const full_version_brands: []const Brand = if (config.secChUa() == null)
+            &default_full_version_brands
+        else
+            try padBrandVersions(allocator, brands);
+        errdefer if (full_version_brands.ptr != &default_full_version_brands) freeBrands(allocator, full_version_brands);
+
+        const sec_ch_ua = try formatSecChUa(allocator, brands);
+        errdefer allocator.free(sec_ch_ua);
+
+        const platform = config.secChUaPlatform() orelse default_platform;
+        const sec_ch_ua_platform = try std.fmt.allocPrintSentinel(allocator, "Sec-Ch-Ua-Platform: \"{s}\"", .{platform}, 0);
+        errdefer allocator.free(sec_ch_ua_platform);
+
+        const languages = config.acceptLanguage() orelse default_languages;
+        const accept_language = try std.fmt.allocPrintSentinel(allocator, "Accept-Language: {s}", .{languages}, 0);
+        errdefer allocator.free(accept_language);
 
         const proxy_bearer_header: ?[:0]const u8 = if (config.proxyBearerToken()) |token|
             try std.fmt.allocPrintSentinel(allocator, "Proxy-Authorization: Bearer {s}", .{token}, 0)
@@ -847,13 +974,105 @@ pub const HttpHeaders = struct {
         return .{
             .user_agent = user_agent,
             .user_agent_header = user_agent_header,
+            .brands = brands,
+            .full_version_brands = full_version_brands,
+            .sec_ch_ua = sec_ch_ua,
+            .sec_ch_ua_platform = sec_ch_ua_platform,
+            .platform = platform,
+            .accept_language = accept_language,
+            .languages = languages,
             .proxy_bearer_header = proxy_bearer_header,
         };
+    }
+
+    /// Parses the Sec-Ch-Ua wire syntax: `"Brand";v="1", "Other";v="2"`.
+    /// Anything that doesn't look like a quoted brand followed by v="…" is
+    /// skipped rather than fatal — a malformed flag degrades to fewer brands,
+    /// it doesn't take the browser down.
+    // Turns each brand's version into the four-part form the high-entropy
+    // hints use. A version that already carries a dot is copied as-is, so a
+    // --sec-ch-ua giving full versions round-trips untouched.
+    fn padBrandVersions(allocator: Allocator, brands: []const Brand) ![]const Brand {
+        const out = try allocator.alloc(Brand, brands.len);
+        var built: usize = 0;
+        errdefer {
+            for (out[0..built]) |b| {
+                allocator.free(b.brand);
+                allocator.free(b.version);
+            }
+            allocator.free(out);
+        }
+
+        for (brands, out) |brand, *entry| {
+            const name = try allocator.dupe(u8, brand.brand);
+            errdefer allocator.free(name);
+            const version = if (std.mem.indexOfScalar(u8, brand.version, '.') != null)
+                try allocator.dupe(u8, brand.version)
+            else
+                try std.fmt.allocPrint(allocator, "{s}.0.0.0", .{brand.version});
+            entry.* = .{ .brand = name, .version = version };
+            built += 1;
+        }
+        return out;
+    }
+
+    fn freeBrands(allocator: Allocator, brands: []const Brand) void {
+        for (brands) |b| {
+            allocator.free(b.brand);
+            allocator.free(b.version);
+        }
+        allocator.free(brands);
+    }
+
+    fn parseBrands(allocator: Allocator, raw: []const u8) ![]const Brand {
+        var list: std.ArrayList(Brand) = .empty;
+        errdefer list.deinit(allocator);
+
+        var rest = raw;
+        while (std.mem.indexOfScalar(u8, rest, '"')) |open| {
+            rest = rest[open + 1 ..];
+            const close = std.mem.indexOfScalar(u8, rest, '"') orelse break;
+            const brand = rest[0..close];
+            rest = rest[close + 1 ..];
+
+            // v="…" — the version follows the brand's closing quote.
+            const v = std.mem.indexOf(u8, rest, "v=\"") orelse break;
+            rest = rest[v + 3 ..];
+            const v_close = std.mem.indexOfScalar(u8, rest, '"') orelse break;
+            const version = rest[0..v_close];
+            rest = rest[v_close + 1 ..];
+
+            if (brand.len == 0) continue;
+            try list.append(allocator, .{
+                .brand = try allocator.dupe(u8, brand),
+                .version = try allocator.dupe(u8, version),
+            });
+        }
+        return list.toOwnedSlice(allocator);
+    }
+
+    fn formatSecChUa(allocator: Allocator, brands: []const Brand) ![:0]const u8 {
+        var aw: std.Io.Writer.Allocating = .init(allocator);
+        defer aw.deinit();
+        try aw.writer.writeAll("Sec-Ch-Ua:");
+        for (brands, 0..) |b, i| {
+            try aw.writer.print("{s}\"{s}\";v=\"{s}\"", .{ if (i == 0) " " else ", ", b.brand, b.version });
+        }
+        return aw.toOwnedSliceSentinel(0);
     }
 
     pub fn deinit(self: *const HttpHeaders, allocator: Allocator) void {
         if (self.proxy_bearer_header) |hdr| {
             allocator.free(hdr);
+        }
+        allocator.free(self.accept_language);
+        allocator.free(self.sec_ch_ua_platform);
+        allocator.free(self.sec_ch_ua);
+        if (self.brands.ptr != &default_brands) {
+            freeBrands(allocator, self.brands);
+        }
+        if (self.full_version_brands.ptr != &default_full_version_brands) {
+            freeBrands(allocator, self.full_version_brands);
         }
         allocator.free(self.user_agent_header);
         if (self.user_agent.ptr != user_agent_base.ptr) {
@@ -985,6 +1204,20 @@ pub fn parseArgs(allocator: Allocator, proc_args: std.process.Args) !Config {
     return config;
 }
 
+test "Config: external stylesheets load by default" {
+    // A client that never fetches CSS is trivially separable server-side, so
+    // the default has to be on; the flag exists to opt back out.
+    var on = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
+    defer on.deinit(std.testing.allocator);
+    try std.testing.expectEqual(true, on.enableExternalStylesheets());
+
+    var off = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .disable_external_stylesheets = true,
+    } });
+    defer off.deinit(std.testing.allocator);
+    try std.testing.expectEqual(false, off.enableExternalStylesheets());
+}
+
 test "Config: blockedUrlPatterns splits comma-separated patterns" {
     var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
         .block_urls = "*doubleclick*,*://*/*.png",
@@ -997,15 +1230,84 @@ test "Config: blockedUrlPatterns splits comma-separated patterns" {
     try std.testing.expectEqual(null, patterns.next());
 }
 
+test "Config: HttpHeaders default to Chrome's identity" {
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(std.testing.allocator);
+
+    const h = config.http_headers;
+    try std.testing.expectEqualStrings(
+        "Sec-Ch-Ua: \"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
+        h.sec_ch_ua,
+    );
+    try std.testing.expectEqualStrings("Accept-Language: en-US,en;q=0.9", h.accept_language);
+    try std.testing.expectEqual(@as(usize, 3), h.brands.len);
+    try std.testing.expectEqualStrings("Not;A=Brand", h.brands[0].brand);
+    try std.testing.expectEqualStrings("Google Chrome", h.brands[2].brand);
+
+    // The default User-Agent is a whole Chrome string, and its version has to
+    // be the one the brands above carry.
+    try std.testing.expectEqual(true, std.mem.startsWith(u8, h.user_agent, "Mozilla/5.0 ("));
+    try std.testing.expectEqual(true, std.mem.endsWith(u8, h.user_agent, " Safari/537.36"));
+    try std.testing.expectEqual(
+        true,
+        std.mem.indexOf(u8, h.user_agent, "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0") != null,
+    );
+    try std.testing.expectEqual(null, std.mem.indexOf(u8, h.user_agent, "Lightpanda"));
+}
+
+test "Config: --user-agent-suffix appends to the Chrome default" {
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .user_agent_suffix = "marker",
+    } });
+    defer config.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(true, std.mem.startsWith(u8, config.http_headers.user_agent, "Mozilla/5.0 ("));
+    try std.testing.expectEqual(true, std.mem.endsWith(u8, config.http_headers.user_agent, " Safari/537.36 marker"));
+}
+
+test "Config: --sec-ch-ua drives both the header and the brand list" {
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .sec_ch_ua = "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
+        .sec_ch_ua_platform = "Windows",
+        .accept_language = "de-DE,de;q=0.9",
+    } });
+    defer config.deinit(std.testing.allocator);
+
+    const h = config.http_headers;
+    // The header round-trips the flag verbatim, so what was asked for is what
+    // goes on the wire.
+    try std.testing.expectEqualStrings(
+        "Sec-Ch-Ua: \"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
+        h.sec_ch_ua,
+    );
+    try std.testing.expectEqualStrings("Sec-Ch-Ua-Platform: \"Windows\"", h.sec_ch_ua_platform);
+    try std.testing.expectEqualStrings("Accept-Language: de-DE,de;q=0.9", h.accept_language);
+
+    // ...and navigator.userAgentData.brands reads this same list.
+    try std.testing.expectEqual(@as(usize, 3), h.brands.len);
+    try std.testing.expectEqualStrings("Not;A=Brand", h.brands[0].brand);
+    try std.testing.expectEqualStrings("8", h.brands[0].version);
+    try std.testing.expectEqualStrings("Google Chrome", h.brands[2].brand);
+    try std.testing.expectEqualStrings("150", h.brands[2].version);
+}
+
+test "Config: a Chrome User-Agent is accepted" {
+    // Upstream rejected this outright; the fork's whole purpose needs it.
+    try validateUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/150.0.0.0");
+    try std.testing.expectError(error.NonPrintable, validateUserAgent("Chrome/150\r\nX: y"));
+}
+
+// Upstream lightpanda additionally rejected any User-Agent containing
+// "Mozilla", as a deliberate no-impersonation policy. This fork exists to
+// present a Chrome-consistent fingerprint, so that check is gone: every real
+// browser's UA starts with "Mozilla/5.0", and forbidding it forbids the goal.
+// The non-printable check stays — that one is wire safety (header injection),
+// not policy.
 pub fn validateUserAgent(ua: []const u8) !void {
     for (ua) |c| {
         if (!std.ascii.isPrint(c)) {
             return error.NonPrintable;
         }
-    }
-
-    if (std.ascii.indexOfIgnoreCase(ua, "mozilla") != null) {
-        return error.Reserved;
     }
 }
 
