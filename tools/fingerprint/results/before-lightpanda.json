@@ -1,0 +1,1017 @@
+{
+  "engine": "lightpanda",
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Lightpanda/1.0",
+    "Lightpanda-Version": "1.0.0-dev.2+9a5018a7",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9223/"
+  },
+  "steps": {
+    "localHeaders": {
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/",
+          "requestLine": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.js",
+          "requestLine": "GET /asset.js HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/fetch",
+          "requestLine": "GET /api/fetch HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/xhr",
+          "requestLine": "GET /api/xhr HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/nav",
+          "requestLine": "GET /nav HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.js",
+          "requestLine": "GET /asset.js HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/nav"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/nav"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/fetch",
+          "requestLine": "GET /api/fetch HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/nav"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/xhr",
+          "requestLine": "GET /api/xhr HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:56860/nav"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:56860"
+            ],
+            [
+              "Accept-Encoding",
+              "deflate, gzip, br"
+            ],
+            [
+              "User-Agent",
+              "Lightpanda/1.0"
+            ],
+            [
+              "Sec-Ch-Ua",
+              "\"Lightpanda\";v=\"1\""
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            ]
+          ]
+        }
+      ]
+    },
+    "probe": {
+      "navigator.userAgent": "Lightpanda/1.0",
+      "navigator.appCodeName": "Mozilla",
+      "navigator.appName": "Netscape",
+      "navigator.appVersion": "1.0",
+      "navigator.platform": "MacIntel",
+      "navigator.product": "Gecko",
+      "navigator.productSub": {
+        "__undefined": true
+      },
+      "navigator.vendor": "",
+      "navigator.vendorSub": {
+        "__undefined": true
+      },
+      "navigator.oscpu": {
+        "__undefined": true
+      },
+      "navigator.language": "en-US",
+      "navigator.languages": [
+        "en-US",
+        "en"
+      ],
+      "navigator.hardwareConcurrency": 4,
+      "navigator.deviceMemory": 8,
+      "navigator.maxTouchPoints": 0,
+      "navigator.webdriver": false,
+      "navigator.pdfViewerEnabled": {
+        "__undefined": true
+      },
+      "navigator.cookieEnabled": true,
+      "navigator.doNotTrack": null,
+      "navigator.onLine": true,
+      "navigator.ownPropertyNames": [
+        "appCodeName",
+        "appName",
+        "appVersion",
+        "constructor",
+        "cookieEnabled",
+        "deviceMemory",
+        "doNotTrack",
+        "globalPrivacyControl",
+        "hardwareConcurrency",
+        "javaEnabled",
+        "language",
+        "languages",
+        "maxTouchPoints",
+        "modelContext",
+        "onLine",
+        "permissions",
+        "platform",
+        "plugins",
+        "product",
+        "registerProtocolHandler",
+        "sendBeacon",
+        "storage",
+        "unregisterProtocolHandler",
+        "userAgent",
+        "userAgentData",
+        "vendor",
+        "webdriver"
+      ],
+      "navigator.plugins.length": 0,
+      "navigator.plugins.names": [],
+      "navigator.mimeTypes.length": {
+        "__err": "Cannot read properties of undefined (reading 'length')"
+      },
+      "navigator.userAgentData.brands": [
+        {
+          "brand": "Lightpanda",
+          "version": "1"
+        }
+      ],
+      "navigator.userAgentData.mobile": false,
+      "navigator.userAgentData.platform": "macOS",
+      "navigator.userAgentData.highEntropy": {
+        "brands": [
+          {
+            "brand": "Lightpanda",
+            "version": "1"
+          }
+        ],
+        "mobile": false,
+        "platform": "macOS",
+        "architecture": "arm",
+        "bitness": "64",
+        "model": "",
+        "platformVersion": "",
+        "uaFullVersion": "1.0.0.0",
+        "fullVersionList": [
+          {
+            "brand": "Lightpanda",
+            "version": "1"
+          }
+        ],
+        "wow64": false,
+        "formFactor": [
+          "Desktop"
+        ]
+      },
+      "navigator.permissions.notifications": "prompt",
+      "navigator.connection": {
+        "__err": "Cannot read properties of undefined (reading 'effectiveType')"
+      },
+      "navigator.mediaDevices": {
+        "__err": "Cannot read properties of undefined (reading 'enumerateDevices')"
+      },
+      "navigator.getBattery": "undefined",
+      "navigator.storage.estimate": "number",
+      "window.chrome": "undefined",
+      "window.chrome.keys": null,
+      "window.chrome.runtime": {
+        "__err": "Cannot read properties of undefined (reading 'runtime')"
+      },
+      "window.chrome.csi": {
+        "__err": "Cannot read properties of undefined (reading 'csi')"
+      },
+      "window.chrome.loadTimes": {
+        "__err": "Cannot read properties of undefined (reading 'loadTimes')"
+      },
+      "window.chrome.app.isInstalled": {
+        "__err": "Cannot read properties of undefined (reading 'app')"
+      },
+      "tell.cdc_props": [],
+      "tell.documentElement.webdriver": null,
+      "tell.eval.toString.length": 33,
+      "tell.Function.toString.native": "function toString() { [native code] }",
+      "tell.navigator.toStringTag": "[object Navigator]",
+      "tell.error.stack.shape": "TypeError: Cannot read properties of null (reading 'f') |     at <anonymous>:74:18 |     at get (<anonymous>:12:29)",
+      "tell.Notification.permission": "default",
+      "tell.outerdim.zero": false,
+      "screen.width": 1920,
+      "screen.height": 1080,
+      "screen.availWidth": 1920,
+      "screen.availHeight": 1040,
+      "screen.availLeft": {
+        "__undefined": true
+      },
+      "screen.availTop": {
+        "__undefined": true
+      },
+      "screen.colorDepth": 24,
+      "screen.pixelDepth": 24,
+      "screen.orientation": {
+        "type": "landscape-primary",
+        "angle": 0
+      },
+      "window.innerWidth": 1920,
+      "window.innerHeight": 1080,
+      "window.outerWidth": {
+        "__undefined": true
+      },
+      "window.outerHeight": {
+        "__undefined": true
+      },
+      "window.devicePixelRatio": 1,
+      "window.screenX": {
+        "__undefined": true
+      },
+      "window.screenY": {
+        "__undefined": true
+      },
+      "window.toolbar.visible": {
+        "__err": "Cannot read properties of undefined (reading 'visible')"
+      },
+      "intl.timeZone": "Asia/Shanghai",
+      "intl.locale": "en-US",
+      "date.timezoneOffset": -480,
+      "date.toString": "Thu Jan 01 1970 08:00:00 GMT+0800 (China Standard Time)",
+      "canvas.getContext2d": "object",
+      "canvas.toDataURL.type": "undefined",
+      "canvas.toDataURL.fingerprint": {
+        "__err": "c.toDataURL is not a function"
+      },
+      "canvas.getImageData.nonzero": {
+        "first4": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "anyNonZero": false
+      },
+      "canvas.measureText": {
+        "__err": "document.createElement(...).getContext(...).measureText is not a function"
+      },
+      "webgl.getContext.webgl": null,
+      "webgl.getContext.webgl2": null,
+      "webgl.getContext.experimental-webgl": null,
+      "webgl.params": null,
+      "audio.AudioContext": "undefined",
+      "audio.sampleRate": {
+        "__err": "(window.AudioContext || window.webkitAudioContext) is not a constructor"
+      },
+      "audio.OfflineAudioContext": "undefined",
+      "fonts.api": "function",
+      "fonts.widths": {
+        "monospace": 5,
+        "sans-serif": 5,
+        "serif": 5,
+        "Arial": 5,
+        "Helvetica Neue": 5,
+        "Times New Roman": 5
+      },
+      "media.canPlayType": {
+        "h264": "probably",
+        "webm": "probably",
+        "ogg": "probably"
+      },
+      "rtc.RTCPeerConnection": "undefined",
+      "perf.memory": null,
+      "speech.voices.length": {
+        "__err": "Cannot read properties of undefined (reading 'getVoices')"
+      },
+      "matchMedia.dark": false,
+      "matchMedia.coarsePointer": false,
+      "matchMedia.hover": false,
+      "window.ownPropertyNames.count": 460
+    },
+    "sannysoft": {
+      "title": "Antibot",
+      "rowCount": 58,
+      "rows": [
+        {
+          "name": "Test Name",
+          "value": "Result",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "User Agent (Old)",
+          "value": "Lightpanda/1.0",
+          "status": "result passed",
+          "id": "user-agent-result"
+        },
+        {
+          "name": "WebDriver (New)",
+          "value": "missing (passed)",
+          "status": "result passed",
+          "id": "webdriver-result"
+        },
+        {
+          "name": "WebDriver Advanced",
+          "value": "passed",
+          "status": "result passed",
+          "id": "advanced-webdriver-result"
+        },
+        {
+          "name": "Chrome (New)",
+          "value": "missing (failed)",
+          "status": "failed result",
+          "id": "chrome-result"
+        },
+        {
+          "name": "Permissions (New)",
+          "value": "prompt",
+          "status": "result passed",
+          "id": "permissions-result"
+        },
+        {
+          "name": "Plugins Length (Old)",
+          "value": "0",
+          "status": "failed result",
+          "id": "plugins-length-result"
+        },
+        {
+          "name": "Plugins is of type PluginArray",
+          "value": "failed",
+          "status": "failed result",
+          "id": "plugins-type-result"
+        },
+        {
+          "name": "Languages (Old)",
+          "value": "en-US,en",
+          "status": "result passed",
+          "id": "languages-result"
+        },
+        {
+          "name": "WebGL Vendor",
+          "value": "Canvas has no webgl context",
+          "status": "failed",
+          "id": "webgl-vendor"
+        },
+        {
+          "name": "WebGL Renderer",
+          "value": "Canvas has no webgl context",
+          "status": "failed",
+          "id": "webgl-renderer"
+        },
+        {
+          "name": "Broken Image Dimensions",
+          "value": "",
+          "status": "",
+          "id": "broken-image-dimensions"
+        },
+        {
+          "name": "PHANTOM_UA",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_PROPERTIES",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_ETSL",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_LANGUAGE",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_WEBSOCKET",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "MQ_SCREEN",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_OVERFLOW",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_WINDOW_HEIGHT",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_UA",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_CHROME_OBJ",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_PERMISSIONS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_PLUGINS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_IFRAME",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_DEBUG_TOOLS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "SELENIUM_DRIVER",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_BATTERY",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_MEMORY",
+          "value": "FAIL",
+          "status": "failed",
+          "id": ""
+        },
+        {
+          "name": "TRANSPARENT_PIXEL",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "SEQUENTUM",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "VIDEO_CODECS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "navigator.cookieEnabled",
+          "value": "document.write(navigator.cookieEnabled);\n            true",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.doNotTrack",
+          "value": "document.write(navigator.doNotTrack);\n            null",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.msDoNotTrack",
+          "value": "document.write(navigator.msDoNotTrack);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.sendBeacon",
+          "value": "document.write(navigator.sendBeacon());\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.cookieEnabled",
+          "value": "document.write(navigator.cookieEnabled);\n            true",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.userAgent",
+          "value": "document.write(navigator.userAgent);\n            Lightpanda/1.0",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.appName",
+          "value": "document.write(navigator.appName);\n            Netscape",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.vendor",
+          "value": "document.write(navigator.vendor);",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.appCodeName",
+          "value": "document.write(navigator.appCodeName);\n            Mozilla",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.getUserMedia",
+          "value": "document.write(navigator.getUserMedia());",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.sayswho",
+          "value": "document.write(navigator.sayswho);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.javaEnabled",
+          "value": "document.write(navigator.javaEnabled());\n            false",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.plugins",
+          "value": "document.write(JSON.stringify(navigator.plugins));\n            {}",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.width",
+          "value": "document.write(screen.width);\n            1920",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.height",
+          "value": "document.write(screen.height);\n            1080",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.colorDepth",
+          "value": "document.write(screen.colorDepth);\n            24",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.language",
+          "value": "document.write(navigator.language);\n            en-US",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.loadPurpose",
+          "value": "document.write(navigator.loadPurpose);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.platform",
+          "value": "document.write(navigator.platform);\n            MacIntel",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.mediaDevices",
+          "value": "const med = document.getElementById('media1');\n              ( async () => {\n                let devices = await navigator.mediaDevices.enumerateDevices();\n\n                let str = \"\";\n             ",
+          "status": "",
+          "id": "media1"
+        },
+        {
+          "name": "navigator.getBattery details",
+          "value": "const battery1 = document.getElementById('battery1');\n              ( async () => {\n                const b = await navigator.getBattery();\n                battery1.innerHTML = \"Charging: \" + b.chargi",
+          "status": "",
+          "id": "battery1"
+        },
+        {
+          "name": "Canvas1",
+          "value": "Canvas failed",
+          "status": "",
+          "id": "canvas1"
+        },
+        {
+          "name": "Canvas2",
+          "value": "Canvas failed",
+          "status": "",
+          "id": "canvas2"
+        },
+        {
+          "name": "Canvas3 (iframe sandbox)",
+          "value": "Canvas failed",
+          "status": "",
+          "id": "canvas3"
+        },
+        {
+          "name": "Canvas4 (iframe sandbox)",
+          "value": "Canvas failed",
+          "status": "",
+          "id": "canvas4"
+        },
+        {
+          "name": "Canvas5 (iframe)",
+          "value": "Canvas failed",
+          "status": "",
+          "id": "canvas5"
+        }
+      ]
+    },
+    "creepjs": {
+      "title": "CreepJS",
+      "computed": false,
+      "fpId": "Computing...",
+      "fuzzy": "0000000000000000000000000000000000000000000000000000000000000000",
+      "likeHeadless": "0%",
+      "headlessPct": "0%",
+      "stealthPct": "0%",
+      "chromium": "0% like headless:",
+      "platformHints": "Resistance",
+      "lies": null,
+      "textLength": 1347,
+      "text": "FP ID: Computing...\nFuzzy: 0000000000000000000000000000000000000000000000000000000000000000\n0 ms\nWebRTC\nhost connection:\nfoundation/ip:\nsdp capabilities:\nstun connection:\ndevices (0):\nTimezone\nIntl\nHeadless\nchromium:\n0% like headless:\n0% headless:\n0% stealth:\nplatform hints:\nResistance\nprivacy:\nsecurity:\nmode:\nextension:\nWorker\nlang/timezone:\ngpu:\nuserAgent:\ndevice:\nuserAgentData:\nWebGL\nimages:\npixels:\nparams (0):\nexts (0):\ngpu:\nScreen\n...screen:\n....avail:\ntouch:\ndepth:\nviewport:\nCanvas 2d\ndata:\nrendering:\ntextMetrics:\nFonts\nload (0):\napps:\nDOMRect\nelems A:\nelems B:\nrange A:\nrange B:\nSVGRect\nbBox:\nchar:\nsubs:\ntext:\nAudio\nsum:\ngain:\nfreq:\ntime:\ntrap:\nunique:\ndata:\ncopy:\nvalues:\nSpeech\nlocal (0):\nremote (0):\nlang (0):\ndefault:\nMedia\nmimes (0):\ndevices (0):\nFeatures:\nJS/DOM:\nCSS:\nWindow:\nCSS Media Queries\n@media:\nmatchMedia:\ntouch device:\nscreen query:\nComputed Style\nkeys (0):\nsystem styles:\nsystem\nMath\nresults:\n0% of engine\nError\nresults:\n0% of engine\nWindow\nkeys (0):\n0% of version\nHTMLElement\nkeys (0):\n0% engine\nNavigator\nproperties (0):\ndnt:\ngpc:\nlang:\nmimeTypes (0):\npermissions (0):\nplugins (0):\nvendor:\nwebgpu:\nuserAgentData:\ndevice:\nua parsed:\nuserAgent:\nappVersion:\nStatus\nnetwork:\nbattery:\navailable:\nTests\nWorkers\nIframes\nFonts\nTimezone\nWindow Version\nScreen\nPrototype\nDOMRect\nEmojis\nMath\nMachine\nChrome Extensions\nJS Proxy"
+    }
+  },
+  "serverLog": [
+    " (string)",
+    "  arg(2): {",
+    "\t\"media\": {",
+    "\t\t\"$hash\": \"44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a\"",
+    "\t},",
+    "\t\"cssMedia\": {",
+    "\t\t\"screenQuery\": {",
+    "\t\t\t\"width\": 0,",
+    "\t\t\t\"height\": 0",
+    "\t\t}",
+    "\t},",
+    "\t\"css\": [",
+    "\t\t{",
+    "\t\t\t\"caption\": \" \"",
+    "\t\t},",
+    "\t\t{",
+    "\t\t\t\"icon\": \" \"",
+    "\t\t},",
+    "\t\t{",
+    "\t\t\t\"menu\": \" \"",
+    "\t\t},",
+    "\t\t{",
+    "\t\t\t\"message-box\": \" \"",
+    "\t\t},",
+    "\t\t{",
+    "\t\t\t\"small-caption\": \" \"",
+    "\t\t},",
+    "\t\t{",
+    "\t\t\t\"status-bar\": \" \"",
+    "\t\t}",
+    "\t],",
+    "\t\"timezone\": {",
+    "\t\t\"locationMeasured\": \"Asia, Shanghai\",",
+    "\t\t\"lied\": false",
+    "\t},",
+    "\t\"forceRenew\": 1737085481442",
+    "} (string)",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+17.001s]",
+    "      0 = ",
+    "  arg(1): 136 API properties analyzed in 19.43ms (7 corrupted) (string)"
+  ]
+}

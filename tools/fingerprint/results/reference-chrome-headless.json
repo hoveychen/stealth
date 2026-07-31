@@ -1,0 +1,1777 @@
+{
+  "engine": "chrome-headless",
+  "flags": [
+    "--remote-debugging-port=9333",
+    "--user-data-dir=/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/fp-chrome-gzY9Wn",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--headless=new"
+  ],
+  "version": {
+    "Browser": "Chrome/150.0.7871.187",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+    "V8-Version": "15.0.245.21",
+    "WebKit-Version": "537.36 (@30f6543ae91e6a860e73b76e3216b663b050f4e5)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9333/devtools/browser/4516e6f6-ddbc-45c4-aa89-611e47a43a8c"
+  },
+  "steps": {
+    "localHeaders": {
+      "requests": [
+        {
+          "method": "GET",
+          "path": "/",
+          "requestLine": "GET / HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "none"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-User",
+              "?1"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "document"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.css",
+          "requestLine": "GET /asset.css HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "text/css,*/*;q=0.1"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "style"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.js",
+          "requestLine": "GET /asset.js HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "script"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.png",
+          "requestLine": "GET /asset.png HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/fetch",
+          "requestLine": "GET /api/fetch HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/xhr",
+          "requestLine": "GET /api/xhr HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "iframe"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/favicon.ico",
+          "requestLine": "GET /favicon.ico HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/nav",
+          "requestLine": "GET /nav HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "none"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-User",
+              "?1"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "document"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.css",
+          "requestLine": "GET /asset.css HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "text/css,*/*;q=0.1"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "style"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/nav"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.js",
+          "requestLine": "GET /asset.js HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "script"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/nav"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/asset.png",
+          "requestLine": "GET /asset.png HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/nav"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/fetch",
+          "requestLine": "GET /api/fetch HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/nav"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/api/xhr",
+          "requestLine": "GET /api/xhr HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "*/*"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "empty"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/nav"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "iframe"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/nav"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/favicon.ico",
+          "requestLine": "GET /favicon.ico HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/nav"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/frame.html",
+          "requestLine": "GET /frame.html HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "Upgrade-Insecure-Requests",
+              "1"
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "Accept",
+              "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "none"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "navigate"
+            ],
+            [
+              "Sec-Fetch-User",
+              "?1"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "document"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        },
+        {
+          "method": "GET",
+          "path": "/favicon.ico",
+          "requestLine": "GET /favicon.ico HTTP/1.1",
+          "headers": [
+            [
+              "Host",
+              "127.0.0.1:57040"
+            ],
+            [
+              "Connection",
+              "keep-alive"
+            ],
+            [
+              "sec-ch-ua-platform",
+              "\"macOS\""
+            ],
+            [
+              "User-Agent",
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36"
+            ],
+            [
+              "sec-ch-ua",
+              "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+            ],
+            [
+              "sec-ch-ua-mobile",
+              "?0"
+            ],
+            [
+              "Accept",
+              "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+            ],
+            [
+              "Sec-Fetch-Site",
+              "same-origin"
+            ],
+            [
+              "Sec-Fetch-Mode",
+              "no-cors"
+            ],
+            [
+              "Sec-Fetch-Dest",
+              "image"
+            ],
+            [
+              "Referer",
+              "http://127.0.0.1:57040/frame.html"
+            ],
+            [
+              "Accept-Encoding",
+              "gzip, deflate, br, zstd"
+            ],
+            [
+              "Accept-Language",
+              "en-US,en;q=0.9"
+            ]
+          ]
+        }
+      ]
+    },
+    "probe": {
+      "navigator.userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+      "navigator.appCodeName": "Mozilla",
+      "navigator.appName": "Netscape",
+      "navigator.appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+      "navigator.platform": "MacIntel",
+      "navigator.product": "Gecko",
+      "navigator.productSub": "20030107",
+      "navigator.vendor": "Google Inc.",
+      "navigator.vendorSub": "",
+      "navigator.oscpu": {
+        "__undefined": true
+      },
+      "navigator.language": "en-US",
+      "navigator.languages": [
+        "en-US",
+        "en"
+      ],
+      "navigator.hardwareConcurrency": 10,
+      "navigator.deviceMemory": 16,
+      "navigator.maxTouchPoints": 0,
+      "navigator.webdriver": false,
+      "navigator.pdfViewerEnabled": true,
+      "navigator.cookieEnabled": true,
+      "navigator.doNotTrack": null,
+      "navigator.onLine": true,
+      "navigator.ownPropertyNames": [
+        "adAuctionComponents",
+        "appCodeName",
+        "appName",
+        "appVersion",
+        "bluetooth",
+        "canLoadAdAuctionFencedFrame",
+        "canShare",
+        "clearAppBadge",
+        "clearOriginJoinedAdInterestGroups",
+        "clipboard",
+        "connection",
+        "constructor",
+        "cookieEnabled",
+        "createAuctionNonce",
+        "credentials",
+        "deprecatedReplaceInURN",
+        "deprecatedRunAdAuctionEnforcesKAnonymity",
+        "deprecatedURNToURL",
+        "deviceMemory",
+        "devicePosture",
+        "doNotTrack",
+        "geolocation",
+        "getBattery",
+        "getGamepads",
+        "getInstalledRelatedApps",
+        "getInterestGroupAdAuctionData",
+        "getUserMedia",
+        "gpu",
+        "hardwareConcurrency",
+        "hid",
+        "ink",
+        "javaEnabled",
+        "joinAdInterestGroup",
+        "keyboard",
+        "language",
+        "languages",
+        "leaveAdInterestGroup",
+        "locks",
+        "login",
+        "managed",
+        "maxTouchPoints",
+        "mediaCapabilities",
+        "mediaDevices",
+        "mediaSession",
+        "mimeTypes",
+        "onLine",
+        "pdfViewerEnabled",
+        "permissions",
+        "platform",
+        "plugins",
+        "presentation",
+        "product",
+        "productSub",
+        "protectedAudience",
+        "registerProtocolHandler",
+        "requestMIDIAccess",
+        "requestMediaKeySystemAccess",
+        "runAdAuction",
+        "scheduling",
+        "sendBeacon",
+        "serial",
+        "serviceWorker",
+        "setAppBadge",
+        "share",
+        "storage",
+        "storageBuckets",
+        "unregisterProtocolHandler",
+        "updateAdInterestGroups",
+        "usb",
+        "userActivation",
+        "userAgent",
+        "userAgentData",
+        "vendor",
+        "vendorSub",
+        "vibrate",
+        "virtualKeyboard",
+        "wakeLock",
+        "webdriver",
+        "webkitGetUserMedia",
+        "webkitPersistentStorage",
+        "webkitTemporaryStorage",
+        "windowControlsOverlay",
+        "xr"
+      ],
+      "navigator.plugins.length": 5,
+      "navigator.plugins.names": [
+        "PDF Viewer",
+        "Chrome PDF Viewer",
+        "Chromium PDF Viewer",
+        "Microsoft Edge PDF Viewer",
+        "WebKit built-in PDF"
+      ],
+      "navigator.mimeTypes.length": 2,
+      "navigator.userAgentData.brands": [
+        {
+          "brand": "Not;A=Brand",
+          "version": "8"
+        },
+        {
+          "brand": "Chromium",
+          "version": "150"
+        },
+        {
+          "brand": "Google Chrome",
+          "version": "150"
+        }
+      ],
+      "navigator.userAgentData.mobile": false,
+      "navigator.userAgentData.platform": "macOS",
+      "navigator.userAgentData.highEntropy": {
+        "architecture": "arm",
+        "bitness": "64",
+        "brands": [
+          {
+            "brand": "Not;A=Brand",
+            "version": "8"
+          },
+          {
+            "brand": "Chromium",
+            "version": "150"
+          },
+          {
+            "brand": "Google Chrome",
+            "version": "150"
+          }
+        ],
+        "fullVersionList": [
+          {
+            "brand": "Not;A=Brand",
+            "version": "8.0.0.0"
+          },
+          {
+            "brand": "Chromium",
+            "version": "150.0.7871.187"
+          },
+          {
+            "brand": "Google Chrome",
+            "version": "150.0.7871.187"
+          }
+        ],
+        "mobile": false,
+        "model": "",
+        "platform": "macOS",
+        "platformVersion": "26.3.1",
+        "uaFullVersion": "150.0.7871.187",
+        "wow64": false
+      },
+      "navigator.permissions.notifications": "prompt",
+      "navigator.connection": {
+        "effectiveType": "4g",
+        "rtt": 100,
+        "downlink": 1.5,
+        "saveData": false
+      },
+      "navigator.mediaDevices": "function",
+      "navigator.getBattery": "function",
+      "navigator.storage.estimate": "number",
+      "window.chrome": "object",
+      "window.chrome.keys": [
+        "app",
+        "csi",
+        "loadTimes"
+      ],
+      "window.chrome.runtime": "undefined",
+      "window.chrome.csi": "function",
+      "window.chrome.loadTimes": "function",
+      "window.chrome.app.isInstalled": false,
+      "tell.cdc_props": [],
+      "tell.documentElement.webdriver": null,
+      "tell.eval.toString.length": 33,
+      "tell.Function.toString.native": "function toString() { [native code] }",
+      "tell.navigator.toStringTag": "[object Navigator]",
+      "tell.error.stack.shape": "TypeError: Cannot read properties of null (reading 'f') |     at <anonymous>:74:18 |     at get (<anonymous>:12:29)",
+      "tell.Notification.permission": "default",
+      "tell.outerdim.zero": false,
+      "screen.width": 800,
+      "screen.height": 600,
+      "screen.availWidth": 800,
+      "screen.availHeight": 600,
+      "screen.availLeft": 0,
+      "screen.availTop": 0,
+      "screen.colorDepth": 24,
+      "screen.pixelDepth": 24,
+      "screen.orientation": {
+        "type": "landscape-primary",
+        "angle": 0
+      },
+      "window.innerWidth": 756,
+      "window.innerHeight": 469,
+      "window.outerWidth": 756,
+      "window.outerHeight": 556,
+      "window.devicePixelRatio": 1,
+      "window.screenX": 22,
+      "window.screenY": 22,
+      "window.toolbar.visible": true,
+      "intl.timeZone": "Asia/Shanghai",
+      "intl.locale": "en-US",
+      "date.timezoneOffset": -480,
+      "date.toString": "Thu Jan 01 1970 08:00:00 GMT+0800 (China Standard Time)",
+      "canvas.getContext2d": "object",
+      "canvas.toDataURL.type": "function",
+      "canvas.toDataURL.fingerprint": {
+        "len": 7614,
+        "prefix": "data:image/png;base64,iVBORw0K",
+        "hash": 725900497
+      },
+      "canvas.getImageData.nonzero": {
+        "first4": [
+          255,
+          0,
+          0,
+          255
+        ],
+        "anyNonZero": true
+      },
+      "canvas.measureText": 89.9658203125,
+      "webgl.getContext.webgl": "ok",
+      "webgl.getContext.webgl2": "ok",
+      "webgl.getContext.experimental-webgl": "ok",
+      "webgl.params": {
+        "VENDOR": "WebKit",
+        "RENDERER": "WebKit WebGL",
+        "VERSION": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+        "SHADING_LANGUAGE_VERSION": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+        "UNMASKED_VENDOR": "Google Inc. (Apple)",
+        "UNMASKED_RENDERER": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+        "MAX_TEXTURE_SIZE": 16384,
+        "extensions": 39
+      },
+      "audio.AudioContext": "function",
+      "audio.sampleRate": 48000,
+      "audio.OfflineAudioContext": "function",
+      "fonts.api": "function",
+      "fonts.widths": {
+        "monospace": 620,
+        "sans-serif": 620,
+        "serif": 620,
+        "Arial": 648,
+        "Helvetica Neue": 662,
+        "Times New Roman": 620
+      },
+      "media.canPlayType": {
+        "h264": "probably",
+        "webm": "probably",
+        "ogg": ""
+      },
+      "rtc.RTCPeerConnection": "function",
+      "perf.memory": [],
+      "speech.voices.length": 0,
+      "matchMedia.dark": false,
+      "matchMedia.coarsePointer": false,
+      "matchMedia.hover": true,
+      "window.ownPropertyNames.count": 1233
+    },
+    "sannysoft": {
+      "title": "Antibot",
+      "rowCount": 58,
+      "rows": [
+        {
+          "name": "Test Name",
+          "value": "Result",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "User Agent (Old)",
+          "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+          "status": "failed result",
+          "id": "user-agent-result"
+        },
+        {
+          "name": "WebDriver (New)",
+          "value": "missing (passed)",
+          "status": "result passed",
+          "id": "webdriver-result"
+        },
+        {
+          "name": "WebDriver Advanced",
+          "value": "passed",
+          "status": "result passed",
+          "id": "advanced-webdriver-result"
+        },
+        {
+          "name": "Chrome (New)",
+          "value": "present (passed)",
+          "status": "result passed",
+          "id": "chrome-result"
+        },
+        {
+          "name": "Permissions (New)",
+          "value": "prompt",
+          "status": "result passed",
+          "id": "permissions-result"
+        },
+        {
+          "name": "Plugins Length (Old)",
+          "value": "5",
+          "status": "result passed",
+          "id": "plugins-length-result"
+        },
+        {
+          "name": "Plugins is of type PluginArray",
+          "value": "passed",
+          "status": "result passed",
+          "id": "plugins-type-result"
+        },
+        {
+          "name": "Languages (Old)",
+          "value": "en-US,en",
+          "status": "result passed",
+          "id": "languages-result"
+        },
+        {
+          "name": "WebGL Vendor",
+          "value": "Google Inc. (Apple)",
+          "status": "passed",
+          "id": "webgl-vendor"
+        },
+        {
+          "name": "WebGL Renderer",
+          "value": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+          "status": "passed",
+          "id": "webgl-renderer"
+        },
+        {
+          "name": "Broken Image Dimensions",
+          "value": "16x16",
+          "status": "passed",
+          "id": "broken-image-dimensions"
+        },
+        {
+          "name": "PHANTOM_UA",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_PROPERTIES",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_ETSL",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_LANGUAGE",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_WEBSOCKET",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "MQ_SCREEN",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_OVERFLOW",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "PHANTOM_WINDOW_HEIGHT",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_UA",
+          "value": "FAIL",
+          "status": "failed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_CHROME_OBJ",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_PERMISSIONS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_PLUGINS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "HEADCHR_IFRAME",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_DEBUG_TOOLS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "SELENIUM_DRIVER",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_BATTERY",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "CHR_MEMORY",
+          "value": "FAIL",
+          "status": "failed",
+          "id": ""
+        },
+        {
+          "name": "TRANSPARENT_PIXEL",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "SEQUENTUM",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "VIDEO_CODECS",
+          "value": "ok",
+          "status": "passed",
+          "id": ""
+        },
+        {
+          "name": "navigator.cookieEnabled",
+          "value": "document.write(navigator.cookieEnabled);\n            true",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.doNotTrack",
+          "value": "document.write(navigator.doNotTrack);\n            null",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.msDoNotTrack",
+          "value": "document.write(navigator.msDoNotTrack);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.sendBeacon",
+          "value": "document.write(navigator.sendBeacon());",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.cookieEnabled",
+          "value": "document.write(navigator.cookieEnabled);\n            true",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.userAgent",
+          "value": "document.write(navigator.userAgent);\n            Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.appName",
+          "value": "document.write(navigator.appName);\n            Netscape",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.vendor",
+          "value": "document.write(navigator.vendor);\n            Google Inc.",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.appCodeName",
+          "value": "document.write(navigator.appCodeName);\n            Mozilla",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.getUserMedia",
+          "value": "document.write(navigator.getUserMedia());",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.sayswho",
+          "value": "document.write(navigator.sayswho);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.javaEnabled",
+          "value": "document.write(navigator.javaEnabled());\n            false",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.plugins",
+          "value": "document.write(JSON.stringify(navigator.plugins));\n            {\"0\":{\"0\":{},\"1\":{}},\"1\":{\"0\":{},\"1\":{}},\"2\":{\"0\":{},\"1\":{}},\"3\":{\"0\":{},\"1\":{}},\"4\":{\"0\":{},\"1\":{}}}",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.width",
+          "value": "document.write(screen.width);\n            800",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.height",
+          "value": "document.write(screen.height);\n            600",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "screen.colorDepth",
+          "value": "document.write(screen.colorDepth);\n            24",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.language",
+          "value": "document.write(navigator.language);\n            en-US",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.loadPurpose",
+          "value": "document.write(navigator.loadPurpose);\n            undefined",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.platform",
+          "value": "document.write(navigator.platform);\n            MacIntel",
+          "status": "",
+          "id": ""
+        },
+        {
+          "name": "navigator.mediaDevices",
+          "value": "audioinput:  id = videoinput:  id = audiooutput:  id =",
+          "status": "",
+          "id": "media1"
+        },
+        {
+          "name": "navigator.getBattery details",
+          "value": "Charging: trueLevel: 0.94",
+          "status": "",
+          "id": "battery1"
+        },
+        {
+          "name": "Canvas1",
+          "value": "Hash: -1941328102",
+          "status": "",
+          "id": "canvas1"
+        },
+        {
+          "name": "Canvas2",
+          "value": "Hash: -1941328102",
+          "status": "",
+          "id": "canvas2"
+        },
+        {
+          "name": "Canvas3 (iframe sandbox)",
+          "value": "Hash: -1941328102",
+          "status": "",
+          "id": "canvas3"
+        },
+        {
+          "name": "Canvas4 (iframe sandbox)",
+          "value": "Hash: -1941328102",
+          "status": "",
+          "id": "canvas4"
+        },
+        {
+          "name": "Canvas5 (iframe)",
+          "value": "Hash: -1941328102",
+          "status": "",
+          "id": "canvas5"
+        }
+      ]
+    },
+    "creepjs": {
+      "title": "CreepJS",
+      "computed": true,
+      "fpId": "485eeb5c5280fc4cbed0cf3bd79165f2ac6756c2f216475b29340dc800078760",
+      "fuzzy": "faafe8bbcd2d163a84394d5f42eb13e6ff969f6cd0b536ff2b2a000000000000",
+      "likeHeadless": "38%",
+      "headlessPct": "67%",
+      "stealthPct": "0%",
+      "chromium": null,
+      "platformHints": "Arial",
+      "lies": null,
+      "textLength": 4706,
+      "text": "FP ID: 485eeb5c5280fc4cbed0cf3bd79165f2ac6756c2f216475b29340dc800078760\nFuzzy: faafe8bbcd2d163a84394d5f42eb13e6ff969f6cd0b536ff2b2a000000000000\n229.40 ms\nWebRTC3e2609bf\nhost connection:\ncandidate:1908032744 1 udp 2113937151 aa146d0d-0564-4f76-85cf-95d643d5a617.local 61870 typ host generation 0 ufrag qFve network-cost 999\nfoundation/ip:\ntype & base ip: 1908032744\nip: 182.255.32.64\nsdp capabilities: 52dcc46c\nstun connection:\ncandidate:843618874 1 udp 1677729535 182.255.32.64 50667 typ srflx raddr 0.0.0.0 rport 0 generation 0 ufrag qFve network-cost 999\ndevices (3):\nmic, audio, webcam\n5.30ms\nTimezonefbcc341a\nChina Standard Time\nAsia, Shanghai\n-27028713943000\n-480\n2.30ms\nIntl18395b2f\nen-US\nJuly at China Standard Time\nAmerican English\n21 million\nnext year\n0 or 1\none\n28.30ms\nHeadless5438fe17\nchromium: true\n38% like headless: d1bd0d83\n67% headless: f49f2dad\n0% stealth: 0c019315\nplatform hints:\nArial\n9:82:91:100:82\n\n0.30ms\nResistanceeb6b354a\nprivacy: unknown\nsecurity: unknown\nmode: unknown\nextension: unknown\n152.20ms\nServiceWorkerGlobalScope\nWorker837c4d48\nlang/timezone:\nen-US (1 US dollar)\nAsia/Shanghai (-480)\nconfidence: high\ngpu:\nGoogle Inc. (Apple)\nANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)\nuserAgent:\nMozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36\ndevice:\nMac (MacIntel)\nmacOS Catalina\ncores: 10, ram: 16\nuserAgentData:\nGoogle Chrome 150 (150.0.7871.187)\nmacOS 26.3.1 arm_64\n21.00ms\nWebGL6b31f895\nimages:06f91e45\npixels:4c72f7ab\nparams (78): 786496a2\nexts (75): 901d2431\ngpu:\nconfidence: high\nGoogle Inc. (Apple)\nANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)\n0.00ms\nScreenb0313e03\n...screen: 800 x 600\n....avail: 800 x 600\ntouch: false\ndepth: 24|24\nviewport:\n756\n756\n756\n556\n469\n469\nbrowser\nlandscape\nlandscape-primary\n1\n76.60ms\nCanvas 2d03d492bc\ndata: c785fe77\nrendering:\ntextMetrics:\n0.025521647332310677\n😀☺♨...☑✴🅰\n33.80ms\nFonts22ea4c37\nload (18/51): Like undefined\napps: unsupported\n\"American Typewriter Semibold\", \"Apple SD Gothic Neo ExtraBold\", \"Futura Bold\", \"Helvetica Neue\", \"InaiMathi Bold\", \"Kohinoor Devanagari Medium\", \"MuktaMahee Regular\", \"Noto Sans Canadian Aboriginal Regular\", \"Noto Sans Gunjala Gondi Regular\", \"Noto Sans Masaram Gondi Regular\", \"Noto Serif Yezidi Regular\", \"PingFang HK Light\", \"STIX Two Math Regular\", \"STIX Two Text Regular\", \"SignPainter-HouseScript Semibold\", Galvji, Geneva, Luminari\n\n0.18591699100000003\n😀☺♨...☯☑✴\n1.30ms\nDOMRectf016402a\nelems A: 0.26037227672485364\nelems B: 0.26037227672485364\nrange A: 0.26037227672485364\nrange B: 0.26037227672485364\n0.18610277420043947\n😀☺♨...☯☑✴\n5.00ms\nSVGRectfec9fa45\nbBox: 0.06611685009002685\nchar: 0.03057584991455078\nsubs: 0.019980039978027345\ntext: 0.019980039978027345\n0.07161330368041993\n😀☺♨...☯☑✴\n37.50ms\nAudio1c3f9e5d\nsum: 124.04347624466754\ngain: -20.538288116455078\nfreq: 164533.38303375244\ntime: 502.5999314116161\ntrap: 0.9613751748620396\nunique: 4736\ndata:e24b4034\ncopy:e24b4034\nvalues: dfc44fc6\n0.30ms\nSpeecha8c32496\nlocal (180): a158dc36\nremote (19): 036f6dce\nlang (51): c4951b20\ndefault:\nSamantha [en-US]\n0.40ms\nMediad0ec3aa6\nmimes (10/12): 91101bd8\n2.00ms\nFeatures: 113-115+\nJS/DOM: df08a511 (v114-115)\nCSS: 379baeb6 (v114-115)\nWindow: 5475308a (v113-115)\n2.00ms\nCSS Media Queries1c00518e\n@media: f73d6ae7\nmatchMedia: f73d6ae7\ntouch device: unknown\nscreen query: 800 x 600\n2.50ms\nComputed Styledebc0f6d\nkeys (1398): 7f7018bf\nsystem styles: ee3fd714\n0.20ms\nMathcf16cf40\nresults: details\n0.10ms\nError92b51d39\nresults: details\n0.60ms\nWindowea972845\nkeys (1233): details\n0.00ms\nHTMLElementae4a9508\nkeys (345): details\n23.30ms\nNavigator558f97e4\nproperties (82): 328b4991\ndnt: null\ngpc: unsupported\nlang: en-US, en (en-US)\nmimeTypes (2): 11003d7c\npermissions (6): b02221aa\nplugins (5): 6488a554\nvendor: Google Inc.\nwebgpu: c98d173b\nuserAgentData:\nGoogle Chrome 150 (150.0.7871.187)\nmacOS 26.3.1 arm_64\ndevice:\nMac (MacIntel)\nmacOS Catalina\ncores: 10, ram: 16, touch: 0, bluetooth\nua parsed: Chrome 150\nuserAgent:\nMozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36\nappVersion:\n5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36\nStatus27e7c18c\nnetwork:\nrtt: 100, downlink: 1.55\neffectiveType: 4g\nsaveData: false\nbattery:\nlevel: 94%\ncharging: true\ncharge time: 20 min.\ndischarge time: charging\navailable:\nstorage: 10GB\n[10737418240]\nmemory: 4.09GB\n[4395630592]\ntiming res:\n0.09999999403953552\n1\nstack: 15524\nTests\nWorkers\nIframes\nFonts\nTimezone\nWindow Version\nScreen\nPrototype\nDOMRect\nEmojis\nMath\nMachine\nChrome Extensions\nJS Proxy"
+    }
+  },
+  "chromeLog": [
+    "[14735:5206263:0731/120357.788812:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 179962, parent pid: 1",
+    "[14735:5206263:0731/120357.792406:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 227162816512B (211.562GiB) / 994662584320B (926.352GiB)",
+    "[14735:5206263:0731/120357.792418:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 227162816512B (211.562GiB) / 994662584320B (926.352GiB)",
+    "[14735:5206263:0731/120357.792490:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[14733:5206259:0731/120357.792882:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[14733:5206259:0731/120357.793932:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[14733:5206259:0731/120357.793995:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[14733:5206259:0731/120357.794060:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[14733:5206259:0731/120357.794070:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[14733:5206259:0731/120357.794112:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[14733:5206259:0731/120357.794123:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[14733:5206259:0731/120357.794254:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run",
+    "[14431:5204283:0731/120408.417667:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "[14733:5206259:0731/120413.538501:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[14733:5206259:0731/120413.539056:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[14733:5206259:0731/120413.539084:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake) returned 0.",
+    "[14730:5206255:0731/120413.752177:VERBOSE1:chrome/updater/app/app_wakeall.cc:68] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` exited 0",
+    "[14730:5206243:0731/120413.752539:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[14730:5206243:0731/120413.753000:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[14730:5206243:0731/120413.753036:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake-all) returned 0."
+  ]
+}
