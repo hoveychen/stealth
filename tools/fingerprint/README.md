@@ -103,6 +103,50 @@ still orders headers differently, and still omits `zstd`. Nothing in the JS
 probe moved either (33/90, 11 sannysoft FAILs) — this was a network-layer
 change only.
 
+## What the navigator work changed (P4)
+
+Measured with `after-p4-lightpanda.json` against `reference-chrome-headed.json`;
+the full table is `after-p4-vs-chrome.md`.
+
+| | after subresources | after navigator |
+|---|---|---|
+| probe keys identical to Chrome | 33/90 | **52/90** |
+| bot.sannysoft.com FAIL rows | 11 | **7** |
+
+The seven that remain are all graphics: `WebGL Vendor`, `WebGL Renderer` and
+`Canvas1`..`Canvas5`. Every non-graphics row sannysoft runs now passes,
+including `Chrome (New)`, `HEADCHR_CHROME_OBJ`, `HEADCHR_PLUGINS`,
+`Plugins Length`, `Plugins is of type PluginArray` and `CHR_BATTERY`.
+`CHR_MEMORY` also flipped to pass without `performance.memory` being
+implemented — observed, not explained.
+
+What was added, all of it measured off the Chrome 150 install on this machine
+rather than recalled — property attributes, prototype member lists and object
+identity relations included:
+
+- `navigator.plugins` / `navigator.mimeTypes` — Chrome's five hardcoded PDF
+  viewer aliases and two MIME types. `JSON.stringify(navigator.plugins)` now
+  produces the same string Chrome does.
+- `window.chrome` — an ordinary object (not a platform object), with `app`,
+  `csi` and `loadTimes` as own properties whose values are native functions.
+- `navigator.connection`, `navigator.mediaDevices`, `navigator.getBattery`.
+- Chrome's user-agent, client-hint brands and `appVersion` as the *defaults*.
+  The four now derive from one version constant, so they cannot disagree.
+
+Two residual differences worth knowing about:
+
+- `navigator.userAgentData.getHighEntropyValues` returns `platformVersion: ""`
+  where Chrome reports the OS version (`26.3.1` here). Reading it needs a
+  platform-specific syscall. Everything else in that dictionary matches,
+  including that only *requested* hints come back and that the hint is named
+  `formFactors`, not `formFactor`.
+- `hardwareConcurrency` (8) and `deviceMemory` (8) are deliberately fixed, so
+  they differ from whatever the host really has — 10 and 16 on this machine.
+  A fleet sharing one pair was preferred over fingerprinting differently on
+  every machine.
+
+The three header-layer gaps below are untouched by this work and still apply.
+
 ## Reference caveats
 
 `--headless=new` Chrome 150 on this machine differs from headed Chrome in

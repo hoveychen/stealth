@@ -3,18 +3,18 @@
 | | candidate | reference |
 |---|---|---|
 | engine | `lightpanda` | `chrome-headed` |
-| build | `1.0.0-dev.14+9e7a5a9b` | `Chrome/150.0.7871.187` |
+| build | `1.0.0-dev.16+dceec575` | `Chrome/150.0.7871.187` |
 
 ## 1. JS fingerprint surface
 
-49/90 probe keys identical to the reference.
+52/90 probe keys identical to the reference.
 
 | | key | candidate | reference (real Chrome) |
 |---|---|---|---|
-| ❌ | `navigator.userAgent` | `Lightpanda/1.0` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` |
+| ✅ | `navigator.userAgent` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` |
 | ✅ | `navigator.appCodeName` | `Mozilla` | `Mozilla` |
 | ✅ | `navigator.appName` | `Netscape` | `Netscape` |
-| ❌ | `navigator.appVersion` | `1.0` | `5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36` |
+| ✅ | `navigator.appVersion` | `5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36` | `5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36` |
 | ✅ | `navigator.platform` | `MacIntel` | `MacIntel` |
 | ✅ | `navigator.product` | `Gecko` | `Gecko` |
 | ✅ | `navigator.productSub` | `20030107` | `20030107` |
@@ -23,7 +23,7 @@
 | ✅ | `navigator.oscpu` | ⚠️ `undefined` | ⚠️ `undefined` |
 | ✅ | `navigator.language` | `en-US` | `en-US` |
 | ✅ | `navigator.languages` | `["en-US","en"]` | `["en-US","en"]` |
-| ❌ | `navigator.hardwareConcurrency` | `4` | `10` |
+| ❌ | `navigator.hardwareConcurrency` | `8` | `10` |
 | ❌ | `navigator.deviceMemory` | `8` | `16` |
 | ✅ | `navigator.maxTouchPoints` | `0` | `0` |
 | ✅ | `navigator.webdriver` | `false` | `false` |
@@ -35,10 +35,10 @@
 | ✅ | `navigator.plugins.length` | `5` | `5` |
 | ✅ | `navigator.plugins.names` | `["PDF Viewer","Chrome PDF Viewer","Chromium PDF Viewer","Microsoft Edge PDF Viewer","WebKit built-in PDF"]` | `["PDF Viewer","Chrome PDF Viewer","Chromium PDF Viewer","Microsoft Edge PDF Viewer","WebKit built-in PDF"]` |
 | ✅ | `navigator.mimeTypes.length` | `2` | `2` |
-| ❌ | `navigator.userAgentData.brands` | `[{"brand":"Lightpanda","version":"1"}]` | `[{"brand":"Not;A=Brand","version":"8"},{"brand":"Chromium","version":"150"},{"brand":"Google Chrome","version"…` |
+| ✅ | `navigator.userAgentData.brands` | `[{"brand":"Not;A=Brand","version":"8"},{"brand":"Chromium","version":"150"},{"brand":"Google Chrome","version"…` | `[{"brand":"Not;A=Brand","version":"8"},{"brand":"Chromium","version":"150"},{"brand":"Google Chrome","version"…` |
 | ✅ | `navigator.userAgentData.mobile` | `false` | `false` |
 | ✅ | `navigator.userAgentData.platform` | `macOS` | `macOS` |
-| ❌ | `navigator.userAgentData.highEntropy` | `{"brands":[{"brand":"Lightpanda","version":"1"}],"mobile":false,"platform":"macOS","architecture":"arm","bitne…` | `{"architecture":"arm","bitness":"64","brands":[{"brand":"Not;A=Brand","version":"8"},{"brand":"Chromium","vers…` |
+| ❌ | `navigator.userAgentData.highEntropy` | `{"brands":[{"brand":"Not;A=Brand","version":"8"},{"brand":"Chromium","version":"150"},{"brand":"Google Chrome"…` | `{"architecture":"arm","bitness":"64","brands":[{"brand":"Not;A=Brand","version":"8"},{"brand":"Chromium","vers…` |
 | ✅ | `navigator.permissions.notifications` | `prompt` | `prompt` |
 | ✅ | `navigator.connection` | `{"effectiveType":"4g","rtt":100,"downlink":1.45,"saveData":false}` | `{"effectiveType":"4g","rtt":100,"downlink":1.45,"saveData":false}` |
 | ✅ | `navigator.mediaDevices` | `function` | `function` |
@@ -120,13 +120,13 @@
 
 | | header | candidate | reference |
 |---|---|---|---|
-| ❌ | `host` | `127.0.0.1:62804` | `127.0.0.1:57230` |
+| ❌ | `host` | `127.0.0.1:49654` | `127.0.0.1:57230` |
 | ❌ | `connection` | *(absent)* | `keep-alive` |
-| ❌ | `sec-ch-ua` | `"Lightpanda";v="1"` | `"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"` |
+| ✅ | `sec-ch-ua` | `"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"` | `"Not;A=Brand";v="8", "Chromium";v="150", "Google Chrome";v="150"` |
 | ✅ | `sec-ch-ua-mobile` | `?0` | `?0` |
 | ✅ | `sec-ch-ua-platform` | `"macOS"` | `"macOS"` |
 | ✅ | `upgrade-insecure-requests` | `1` | `1` |
-| ❌ | `user-agent` | `Lightpanda/1.0` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` |
+| ✅ | `user-agent` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` |
 | ✅ | `accept` | `text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/s…` | `text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/s…` |
 | ✅ | `sec-fetch-site` | `none` | `none` |
 | ✅ | `sec-fetch-mode` | `navigate` | `navigate` |
@@ -137,11 +137,11 @@
 
 ## 3. bot.sannysoft.com
 
-Candidate FAIL rows: **8** — `WebGL Vendor`, `WebGL Renderer`, `CHR_MEMORY`, `Canvas1`, `Canvas2`, `Canvas3 (iframe sandbox)`, `Canvas4 (iframe sandbox)`, `Canvas5 (iframe)`
+Candidate FAIL rows: **7** — `WebGL Vendor`, `WebGL Renderer`, `Canvas1`, `Canvas2`, `Canvas3 (iframe sandbox)`, `Canvas4 (iframe sandbox)`, `Canvas5 (iframe)`
 
 | | test | candidate | reference |
 |---|---|---|---|
-| ✅ | User Agent (Old) | pass · `Lightpanda/1.0` | pass · `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` |
+| ✅ | User Agent (Old) | pass · `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` | pass · `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari…` |
 | ✅ | WebDriver (New) | pass · `missing (passed)` | pass · `missing (passed)` |
 | ✅ | WebDriver Advanced | pass · `passed` | pass · `passed` |
 | ✅ | Chrome (New) | pass · `present (passed)` | pass · `present (passed)` |
@@ -168,7 +168,7 @@ Candidate FAIL rows: **8** — `WebGL Vendor`, `WebGL Renderer`, `CHR_MEMORY`, `
 | ✅ | CHR_DEBUG_TOOLS | pass · `ok` | pass · `ok` |
 | ✅ | SELENIUM_DRIVER | pass · `ok` | pass · `ok` |
 | ✅ | CHR_BATTERY | pass · `ok` | pass · `ok` |
-| ❌ | CHR_MEMORY | FAIL · `FAIL` | pass · `ok` |
+| ✅ | CHR_MEMORY | pass · `ok` | pass · `ok` |
 | ✅ | TRANSPARENT_PIXEL | pass · `ok` | pass · `ok` |
 | ✅ | SEQUENTUM | pass · `ok` | pass · `ok` |
 | ✅ | VIDEO_CODECS | pass · `ok` | pass · `ok` |
@@ -184,7 +184,7 @@ Candidate FAIL rows: **8** — `WebGL Vendor`, `WebGL Renderer`, `CHR_MEMORY`, `
 | ✅ | navigator.sendBeacon | info · `document.write(navigator.sendBeacon());
             undefined` | info · `document.write(navigator.sendBeacon());` |
 | ✅ | navigator.userAgent | info · `document.write(navigator.userAgent);
-            Lightpanda/1.0` | info · `document.write(navigator.userAgent);
+            Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/5…` | info · `document.write(navigator.userAgent);
             Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/5…` |
 | ✅ | navigator.appName | info · `document.write(navigator.appName);
             Netscape` | info · `document.write(navigator.appName);

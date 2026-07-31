@@ -146,18 +146,53 @@
     const p = navigator.userAgentData.getHighEntropyValues(['architecture', 'platformVersion', 'fullVersionList']);
     testing.expectTrue(p instanceof Promise);
     const v = await p;
+    // Chrome only returns what was asked for, plus the low-entropy set. Unknown
+    // hints are ignored, and "formFactor" is not the name — it's "formFactors".
+    const asked = await navigator.userAgentData.getHighEntropyValues(['formFactors', 'formFactor', 'nope']);
+    const none = await navigator.userAgentData.getHighEntropyValues([]);
     state.resolve();
 
     await state.done(() => {
       testing.expectEqual(false, v.mobile);
       testing.expectEqual(navigator.userAgentData.platform, v.platform);
       testing.expectEqual(true, Array.isArray(v.brands));
-      testing.expectEqual(true, Array.isArray(v.fullVersionList));
-      testing.expectEqual('Not;A=Brand', v.fullVersionList[0].brand);
-      testing.expectEqual('1.0.0.0', v.uaFullVersion);
-      testing.expectEqual(false, v.wow64);
-      testing.expectEqual(true, Array.isArray(v.formFactor));
-      testing.expectEqual('Desktop', v.formFactor[0]);
+      testing.expectEqual('arm', v.architecture === 'arm' ? 'arm' : v.architecture);
+      testing.expectEqual('', v.platformVersion);
+
+      // The high-entropy list carries four-part versions; uaFullVersion is the
+      // browser brand's — the last entry. The user-agent's reduced version
+      // zeroes everything after the major, so it deliberately does NOT equal
+      // this one; a full version ending .0.0.0 is what would be anomalous.
+      testing.expectEqual(3, v.fullVersionList.length);
+      testing.expectEqual({brand: 'Not;A=Brand', version: '8.0.0.0'}, v.fullVersionList[0]);
+      testing.expectEqual({brand: 'Chromium', version: '150.0.7871.187'}, v.fullVersionList[1]);
+      testing.expectEqual({brand: 'Google Chrome', version: '150.0.7871.187'}, v.fullVersionList[2]);
+
+      // Not requested, so not returned.
+      testing.expectEqual(undefined, v.uaFullVersion);
+      testing.expectEqual(undefined, v.wow64);
+      testing.expectEqual(undefined, v.formFactors);
+      testing.expectEqual(undefined, v.bitness);
+
+      testing.expectEqual(['Desktop'], asked.formFactors);
+      testing.expectEqual(undefined, asked.formFactor);
+      testing.expectEqual(undefined, asked.nope);
+
+      testing.expectEqual(['brands', 'mobile', 'platform'], Object.keys(none).sort());
+    });
+  }
+</script>
+
+<script id=userAgentData_uaFullVersion type=module>
+  {
+    const state = await testing.async();
+    const v = await navigator.userAgentData.getHighEntropyValues(['uaFullVersion']);
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('150.0.7871.187', v.uaFullVersion);
+      // Same major as the brands and the user-agent string.
+      testing.expectEqual(true, v.uaFullVersion.startsWith('150.'));
+      testing.expectEqual(true, navigator.userAgent.includes('Chrome/150.'));
     });
   }
 </script>

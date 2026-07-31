@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
 const builtin = @import("builtin");
 
 const Config = @import("../../Config.zig");
@@ -52,32 +53,64 @@ pub fn toJSON(_: *const NavigatorUAData, exec: *const Execution) struct {
     };
 }
 
+// Chrome returns the low-entropy set — brands, mobile, platform — plus only
+// the hints the caller asked for. Upstream ignored `hints` and returned
+// everything, which is a behavioural difference a page can see in one call:
+// asking for nothing and getting formFactor back is not something Chrome does.
 pub fn getHighEntropyValues(_: *const NavigatorUAData, hints: []const []const u8, exec: *const Execution) !js.Promise {
-    // This should always return `brands` + `mobile` + `platform` and then whatever
-    // "hints" field is requested (assuming the browser has permission), but it's
-    // also valid to just return everything.
+    const local = exec.js.local.?;
+    const values = local.newObject();
 
-    _ = hints;
+    // Always present, whatever was asked for.
+    _ = try values.set("brands", brandList(exec), .{});
+    _ = try values.set("mobile", false, .{});
+    _ = try values.set("platform", uaPlatform(exec), .{});
 
-    return exec.js.local.?.resolvePromise(.{
-        .brands = brandList(exec),
-        .mobile = false,
-        .platform = uaPlatform(exec),
-        .architecture = uaArchitecture(),
-        .bitness = uaBitness(),
-        .model = "",
-        .platformVersion = "",
-        .uaFullVersion = "1.0.0.0",
-        .fullVersionList = brandList(exec),
-        .wow64 = false,
-        .formFactor = [_][]const u8{"Desktop"},
-    });
+    for (hints) |hint| {
+        if (std.mem.eql(u8, hint, "architecture")) {
+            _ = try values.set("architecture", uaArchitecture(), .{});
+        } else if (std.mem.eql(u8, hint, "bitness")) {
+            _ = try values.set("bitness", uaBitness(), .{});
+        } else if (std.mem.eql(u8, hint, "model")) {
+            _ = try values.set("model", "", .{});
+        } else if (std.mem.eql(u8, hint, "platformVersion")) {
+            // Chrome reports the OS version here (e.g. "26.3.1"). Reading it
+            // means a platform-specific syscall; an empty string is what a
+            // client declining the hint returns, so it stays empty for now.
+            _ = try values.set("platformVersion", "", .{});
+        } else if (std.mem.eql(u8, hint, "uaFullVersion")) {
+            _ = try values.set("uaFullVersion", uaFullVersion(exec), .{});
+        } else if (std.mem.eql(u8, hint, "fullVersionList")) {
+            _ = try values.set("fullVersionList", fullVersionList(exec), .{});
+        } else if (std.mem.eql(u8, hint, "wow64")) {
+            _ = try values.set("wow64", false, .{});
+        } else if (std.mem.eql(u8, hint, "formFactors")) {
+            _ = try values.set("formFactors", [_][]const u8{"Desktop"}, .{});
+        }
+        // Unknown hints are ignored, as in Chrome.
+    }
+
+    return local.resolvePromise(values);
 }
 
 // Same list the Sec-Ch-Ua header is built from, so the header and
 // navigator.userAgentData.brands cannot drift apart.
 fn brandList(exec: *const Execution) []const Brand {
     return exec.session.browser.http_client.httpHeaders().brands;
+}
+
+// The four-part versions, resolved next to the brands in Config so the two
+// lists can't disagree. Hardcoding "1.0.0.0" here left uaFullVersion
+// contradicting the brands beside it, which report 150 by default.
+fn fullVersionList(exec: *const Execution) []const Brand {
+    return exec.session.browser.http_client.httpHeaders().full_version_brands;
+}
+
+// The version of whichever brand names the browser itself — the last entry, as
+// in Chrome's own list.
+fn uaFullVersion(exec: *const Execution) []const u8 {
+    const brands = fullVersionList(exec);
+    return if (brands.len == 0) "" else brands[brands.len - 1].version;
 }
 
 // Configured via --sec-ch-ua-platform or CDP Emulation.setUserAgentOverride,

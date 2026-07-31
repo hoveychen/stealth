@@ -822,6 +822,13 @@ pub const HttpHeaders = struct {
     /// a mismatch between the two is a stronger signal than either value alone.
     const chrome_major = "150";
     const chrome_reduced_version = chrome_major ++ ".0.0.0";
+    /// The build number the reference Chrome 150 reported. Only
+    /// navigator.userAgentData.getHighEntropyValues carries it: the user-agent
+    /// string zeroes everything after the major (that is what Chrome's
+    /// user-agent reduction does), so a Chrome whose UA says 150.0.0.0 and
+    /// whose uaFullVersion says 150.0.7871.187 is not contradicting itself —
+    /// it's the normal shape, and a full version ending .0.0.0 is the anomaly.
+    const chrome_full_version = chrome_major ++ ".0.7871.187";
 
     /// Default User-Agent. Since Chrome's user-agent reduction the string is
     /// frozen apart from the major version and a platform token from a closed
@@ -857,6 +864,14 @@ pub const HttpHeaders = struct {
         .{ .brand = "Google Chrome", .version = chrome_major },
     };
 
+    /// The same brands with the four-part versions the high-entropy hints
+    /// carry. Measured alongside default_brands.
+    pub const default_full_version_brands = [_]Brand{
+        .{ .brand = "Not;A=Brand", .version = "8.0.0.0" },
+        .{ .brand = "Chromium", .version = chrome_full_version },
+        .{ .brand = "Google Chrome", .version = chrome_full_version },
+    };
+
     /// Accept values real Chrome sends, keyed by fetch destination. Measured
     /// rather than recalled — see tools/fingerprint/results/reference-chrome-*.json
     /// for the capture these came from.
@@ -883,6 +898,10 @@ pub const HttpHeaders = struct {
     /// two sides cannot drift. Owned by `allocator` unless it aliases
     /// `default_brands`.
     brands: []const Brand,
+    /// Same brands, four-part versions, for
+    /// navigator.userAgentData.getHighEntropyValues. Padded from `brands` when
+    /// --sec-ch-ua is given, since a bare major is all that flag carries.
+    full_version_brands: []const Brand,
     sec_ch_ua: [:0]const u8,
     sec_ch_ua_platform: [:0]const u8,
     /// Bare value (e.g. "macOS"), for navigator.userAgentData.platform.
@@ -930,6 +949,12 @@ pub const HttpHeaders = struct {
             &default_brands;
         errdefer if (brands.ptr != &default_brands) allocator.free(brands);
 
+        const full_version_brands: []const Brand = if (config.secChUa() == null)
+            &default_full_version_brands
+        else
+            try padBrandVersions(allocator, brands);
+        errdefer if (full_version_brands.ptr != &default_full_version_brands) freeBrands(allocator, full_version_brands);
+
         const sec_ch_ua = try formatSecChUa(allocator, brands);
         errdefer allocator.free(sec_ch_ua);
 
@@ -950,6 +975,7 @@ pub const HttpHeaders = struct {
             .user_agent = user_agent,
             .user_agent_header = user_agent_header,
             .brands = brands,
+            .full_version_brands = full_version_brands,
             .sec_ch_ua = sec_ch_ua,
             .sec_ch_ua_platform = sec_ch_ua_platform,
             .platform = platform,
@@ -963,6 +989,41 @@ pub const HttpHeaders = struct {
     /// Anything that doesn't look like a quoted brand followed by v="…" is
     /// skipped rather than fatal — a malformed flag degrades to fewer brands,
     /// it doesn't take the browser down.
+    // Turns each brand's version into the four-part form the high-entropy
+    // hints use. A version that already carries a dot is copied as-is, so a
+    // --sec-ch-ua giving full versions round-trips untouched.
+    fn padBrandVersions(allocator: Allocator, brands: []const Brand) ![]const Brand {
+        const out = try allocator.alloc(Brand, brands.len);
+        var built: usize = 0;
+        errdefer {
+            for (out[0..built]) |b| {
+                allocator.free(b.brand);
+                allocator.free(b.version);
+            }
+            allocator.free(out);
+        }
+
+        for (brands, out) |brand, *entry| {
+            const name = try allocator.dupe(u8, brand.brand);
+            errdefer allocator.free(name);
+            const version = if (std.mem.indexOfScalar(u8, brand.version, '.') != null)
+                try allocator.dupe(u8, brand.version)
+            else
+                try std.fmt.allocPrint(allocator, "{s}.0.0.0", .{brand.version});
+            entry.* = .{ .brand = name, .version = version };
+            built += 1;
+        }
+        return out;
+    }
+
+    fn freeBrands(allocator: Allocator, brands: []const Brand) void {
+        for (brands) |b| {
+            allocator.free(b.brand);
+            allocator.free(b.version);
+        }
+        allocator.free(brands);
+    }
+
     fn parseBrands(allocator: Allocator, raw: []const u8) ![]const Brand {
         var list: std.ArrayList(Brand) = .empty;
         errdefer list.deinit(allocator);
@@ -1008,11 +1069,10 @@ pub const HttpHeaders = struct {
         allocator.free(self.sec_ch_ua_platform);
         allocator.free(self.sec_ch_ua);
         if (self.brands.ptr != &default_brands) {
-            for (self.brands) |b| {
-                allocator.free(b.brand);
-                allocator.free(b.version);
-            }
-            allocator.free(self.brands);
+            freeBrands(allocator, self.brands);
+        }
+        if (self.full_version_brands.ptr != &default_full_version_brands) {
+            freeBrands(allocator, self.full_version_brands);
         }
         allocator.free(self.user_agent_header);
         if (self.user_agent.ptr != user_agent_base.ptr) {
