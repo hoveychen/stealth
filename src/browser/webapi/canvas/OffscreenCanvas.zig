@@ -20,6 +20,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 
 const Blob = @import("../Blob.zig");
+const png = @import("png.zig");
 const OffscreenCanvasRenderingContext2D = @import("OffscreenCanvasRenderingContext2D.zig");
 
 const Execution = js.Execution;
@@ -92,10 +93,19 @@ pub fn getContext(self: *OffscreenCanvas, context_type: []const u8, exec: *Execu
     return self._cached;
 }
 
-/// Returns a Promise that resolves to a Blob containing the image.
-/// Since we have no actual rendering, this returns an empty blob.
-pub fn convertToBlob(_: *OffscreenCanvas, exec: *Execution) !js.Promise {
-    const blob = try Blob.init(null, null, exec.page);
+/// Returns a Promise that resolves to a PNG Blob of the canvas' pixels.
+/// The requested type is ignored; see `HTMLCanvasElement.toDataURL`.
+pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js.Promise {
+    if (self._width == 0 or self._height == 0) {
+        return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.IndexSizeError } });
+    }
+
+    const pixels: ?[]const u8 = if (self._cached) |cached| switch (cached) {
+        .@"2d" => |context| context._surface.peek(self._width, self._height),
+    } else null;
+
+    const bytes = try png.encode(exec.call_arena, self._width, self._height, pixels);
+    const blob = try Blob.initFromBytes(bytes, "image/png", exec.page);
     return exec.js.local.?.resolvePromise(blob);
 }
 

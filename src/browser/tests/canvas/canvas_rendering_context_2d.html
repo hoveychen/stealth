@@ -352,3 +352,78 @@
   }
 }
 </script>
+
+<script id="HTMLCanvasElement#toDataURL">
+{
+  const element = document.createElement('canvas');
+  element.width = 4;
+  element.height = 4;
+
+  const empty = element.toDataURL();
+  testing.expectTrue(empty.startsWith('data:image/png;base64,iVBORw0KGgo'));
+
+  // A canvas with no 2D context at all encodes the same transparent image as
+  // one whose context never drew.
+  const untouched = document.createElement('canvas');
+  untouched.width = 4;
+  untouched.height = 4;
+  untouched.getContext('2d');
+  testing.expectEqual(empty, untouched.toDataURL());
+
+  // Drawing changes the bytes, and drawing something else changes them again.
+  const ctx = element.getContext('2d');
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+  const red = element.toDataURL();
+  testing.expectTrue(red !== empty);
+
+  ctx.fillStyle = 'blue';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectTrue(element.toDataURL() !== red);
+
+  // Same pixels, same string.
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 2, 2);
+  testing.expectEqual(red, element.toDataURL());
+
+  // We only encode PNG, so a request for another type falls back to it —
+  // Chrome would answer 'data:image/jpeg;base64,/9j/...' here.
+  testing.expectTrue(element.toDataURL('image/jpeg').startsWith('data:image/png;base64,'));
+  testing.expectTrue(element.toDataURL('image/bogus').startsWith('data:image/png;base64,'));
+
+  // A canvas with no area has no image.
+  const degenerate = document.createElement('canvas');
+  degenerate.width = 0;
+  testing.expectEqual('data:,', degenerate.toDataURL());
+}
+</script>
+
+<script id="HTMLCanvasElement#toBlob" type=module>
+  const state = await testing.async();
+
+  const element = document.createElement('canvas');
+  element.width = 3;
+  element.height = 3;
+  const ctx = element.getContext('2d');
+  ctx.fillStyle = '#00ff00';
+  ctx.fillRect(0, 0, 3, 3);
+
+  let synchronous = true;
+  let blob = null;
+  let calledSynchronously = null;
+  element.toBlob((result) => {
+    blob = result;
+    calledSynchronously = synchronous;
+    state.resolve();
+  });
+  synchronous = false;
+
+  await state.done(() => {
+    testing.expectEqual(false, calledSynchronously);
+    testing.expectEqual(true, blob instanceof Blob);
+    testing.expectEqual('image/png', blob.type);
+    // The same bytes toDataURL would have base64'd.
+    const expected = element.toDataURL().slice('data:image/png;base64,'.length);
+    testing.expectEqual(atob(expected).length, blob.size);
+  });
+</script>

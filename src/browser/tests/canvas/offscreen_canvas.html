@@ -43,10 +43,11 @@
   const canvas = new OffscreenCanvas(64, 64);
   const promise = canvas.convertToBlob();
   testing.expectEqual(true, promise instanceof Promise);
-  // The promise should resolve to a Blob (even if empty)
+  // The promise resolves to a PNG of the (transparent) canvas.
   promise.then(blob => {
     testing.expectEqual(true, blob instanceof Blob);
-    testing.expectEqual(blob.size, 0); // Empty since no rendering
+    testing.expectEqual('image/png', blob.type);
+    testing.expectTrue(blob.size > 0);
   });
 }
 </script>
@@ -108,4 +109,38 @@
   canvas.width = 4;
   testing.expectEqual([0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 1, 1).data));
 }
+</script>
+
+<script id="OffscreenCanvas#convertToBlob png" type=module>
+  const state = await testing.async();
+
+  const canvas = new OffscreenCanvas(3, 3);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'red';
+  ctx.fillRect(0, 0, 3, 3);
+
+  const blob = await canvas.convertToBlob();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+
+  let rejected = null;
+  const empty = new OffscreenCanvas(0, 0);
+  try {
+    await empty.convertToBlob();
+  } catch (err) {
+    rejected = err;
+  }
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('image/png', blob.type);
+    testing.expectTrue(blob.size > 0);
+    // PNG signature.
+    testing.expectEqual([137, 80, 78, 71, 13, 10, 26, 10], Array.from(bytes.slice(0, 8)));
+    // IHDR carries the real dimensions.
+    testing.expectEqual([0, 0, 0, 3], Array.from(bytes.slice(16, 20)));
+    testing.expectEqual([0, 0, 0, 3], Array.from(bytes.slice(20, 24)));
+
+    testing.expectTrue(rejected !== null);
+    testing.expectTrue(rejected.toString().includes('Index or size'));
+  });
 </script>

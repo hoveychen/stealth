@@ -23,6 +23,8 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const HtmlElement = @import("../Html.zig");
 
+const Blob = @import("../../Blob.zig");
+const png = @import("../../canvas/png.zig");
 const CanvasRenderingContext2D = @import("../../canvas/CanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("../../canvas/WebGL2RenderingContext.zig");
@@ -134,6 +136,59 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
     return drawing_context;
 }
 
+/// The painted pixels, when a 2D context exists and has drawn something.
+/// Null means "every pixel is transparent black", which is also what a WebGL
+/// canvas reports here: that context does not rasterise.
+fn pixels(self: *const Canvas) ?[]const u8 {
+    const cached = self._cached orelse return null;
+    return switch (cached) {
+        .@"2d" => |context| context._surface.peek(self.getWidth(), self.getHeight()),
+        .webgl, .webgl2 => null,
+    };
+}
+
+/// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toDataURL
+///
+/// The requested type is ignored: we only encode PNG, and the spec says an
+/// unsupported type falls back to it. Chrome does support JPEG and WebP, so
+/// asking for one of those and getting a `data:image/png` URL back is a
+/// difference a fingerprinter can see — writing those encoders is a much
+/// bigger job than the PNG one, and it would not close the gap while text
+/// still does not rasterise.
+pub fn toDataURL(self: *Canvas, _: ?[]const u8, _: ?f64, frame: *Frame) ![]const u8 {
+    const width = self.getWidth();
+    const height = self.getHeight();
+    if (width == 0 or height == 0) {
+        // What Chrome answers for a canvas with no area.
+        return "data:,";
+    }
+    return png.dataUrl(frame.local_arena, width, height, self.pixels());
+}
+
+/// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob
+///
+/// Always a PNG blob, for the same reason as `toDataURL`. The callback is
+/// invoked from a task, not synchronously, which is what the spec requires
+/// and what pages that chain off it expect.
+pub fn toBlob(self: *Canvas, callback: js.Function.Global, _: ?[]const u8, _: ?f64, exec: *Execution) !void {
+    const width = self.getWidth();
+    const height = self.getHeight();
+
+    const blob: ?*Blob = if (width == 0 or height == 0) null else blk: {
+        const bytes = try png.encode(exec.call_arena, width, height, self.pixels());
+        break :blk try Blob.initFromBytes(bytes, "image/png", exec.page);
+    };
+
+    const argument = try exec.js.local.?.zigValueToJs(blob, .{});
+    var params = [_]js.Value.Global{try argument.persist()};
+
+    _ = try exec.js.global.frame.window._timers.schedule(exec, callback, 0, .{
+        .repeat = false,
+        .params = &params,
+        .name = "canvas.toBlob",
+    });
+}
+
 /// Transfers control of the canvas to an OffscreenCanvas.
 /// Returns an OffscreenCanvas with the same dimensions.
 pub fn transferControlToOffscreen(self: *Canvas, exec: *Execution) !*OffscreenCanvas {
@@ -154,5 +209,7 @@ pub const JsApi = struct {
     pub const width = bridge.accessor(Canvas.getWidth, Canvas.setWidth, .{ .ce_reactions = true });
     pub const height = bridge.accessor(Canvas.getHeight, Canvas.setHeight, .{ .ce_reactions = true });
     pub const getContext = bridge.function(Canvas.getContext, .{});
+    pub const toDataURL = bridge.function(Canvas.toDataURL, .{});
+    pub const toBlob = bridge.function(Canvas.toBlob, .{});
     pub const transferControlToOffscreen = bridge.function(Canvas.transferControlToOffscreen, .{});
 };
