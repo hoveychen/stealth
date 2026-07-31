@@ -22,6 +22,8 @@ const js = @import("../../js/js.zig");
 const Blob = @import("../Blob.zig");
 const png = @import("png.zig");
 const OffscreenCanvasRenderingContext2D = @import("OffscreenCanvasRenderingContext2D.zig");
+const WebGLRenderingContext = @import("WebGLRenderingContext.zig");
+const WebGL2RenderingContext = @import("WebGL2RenderingContext.zig");
 
 const Execution = js.Execution;
 
@@ -38,6 +40,8 @@ _cached: ?DrawingContext = null,
 /// we're using tagged union.
 const DrawingContext = union(enum) {
     @"2d": *OffscreenCanvasRenderingContext2D,
+    webgl: *WebGLRenderingContext,
+    webgl2: *WebGL2RenderingContext,
 };
 
 pub fn constructor(width: u32, height: u32, exec: *Execution) !*OffscreenCanvas {
@@ -70,26 +74,51 @@ fn resetSurface(self: *OffscreenCanvas) void {
     const cached = self._cached orelse return;
     switch (cached) {
         .@"2d" => |context| context._surface.reset(),
+        // Nothing is rasterised behind a WebGL context, so there is no bitmap
+        // to clear; the drawing-buffer size is read live off this canvas.
+        .webgl, .webgl2 => {},
     }
 }
 
+/// Unlike HTMLCanvasElement.getContext, whose argument is a free-form string,
+/// this one is a WebIDL enum: Chrome throws a TypeError on a name outside the
+/// list rather than returning null (measured — 'experimental-webgl' throws here
+/// but returns null on an HTMLCanvasElement).
+const ContextType = enum {
+    @"2d",
+    bitmaprenderer,
+    webgl,
+    webgl2,
+    webgpu,
+};
+
 pub fn getContext(self: *OffscreenCanvas, context_type: []const u8, exec: *Execution) !?DrawingContext {
-    const is_2d = std.mem.eql(u8, context_type, "2d");
+    const requested = std.meta.stringToEnum(ContextType, context_type) orelse return error.TypeError;
 
     // A canvas hands back the same context object every time, so the pixels a
-    // caller drew are still there on the next `getContext`.
+    // caller drew are still there on the next `getContext`. Asking for a
+    // different kind after the first one answers null.
     if (self._cached) |cached| {
-        return if (is_2d) cached else null;
-    }
-    if (is_2d == false) {
-        return null;
+        const matches = switch (cached) {
+            .@"2d" => requested == .@"2d",
+            .webgl => requested == .webgl,
+            .webgl2 => requested == .webgl2,
+        };
+        return if (matches) cached else null;
     }
 
-    const ctx = try exec._factory.create(OffscreenCanvasRenderingContext2D{
-        ._canvas = self,
-        ._surface = .{ .arena = exec.arena },
-    });
-    self._cached = .{ .@"2d" = ctx };
+    self._cached = switch (requested) {
+        .@"2d" => .{ .@"2d" = try exec._factory.create(OffscreenCanvasRenderingContext2D{
+            ._canvas = self,
+            ._surface = .{ .arena = exec.arena },
+        }) },
+        .webgl => .{ .webgl = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .offscreen = self } }) },
+        .webgl2 => .{ .webgl2 = try exec._factory.create(WebGL2RenderingContext{ ._canvas = .{ .offscreen = self } }) },
+        // Valid enum members we have no context type for. Chrome does return
+        // one for `bitmaprenderer`, so this is a known and narrower gap than
+        // the WebGL one it replaces.
+        .bitmaprenderer, .webgpu => return null,
+    };
     return self._cached;
 }
 
@@ -102,6 +131,8 @@ pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js
 
     const pixels: ?[]const u8 = if (self._cached) |cached| switch (cached) {
         .@"2d" => |context| context._surface.peek(self._width, self._height),
+        // A WebGL canvas reports transparent black here: nothing rasterises.
+        .webgl, .webgl2 => null,
     } else null;
 
     const bytes = try png.encode(exec.call_arena, self._width, self._height, pixels);

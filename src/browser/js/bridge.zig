@@ -1277,6 +1277,12 @@ const worker_common_apis = [_]type{
     @import("../webapi/URL.zig"),
     @import("../webapi/canvas/OffscreenCanvas.zig"),
     @import("../webapi/canvas/OffscreenCanvasRenderingContext2D.zig"),
+    // An OffscreenCanvas hands back a WebGL context inside a worker too, so
+    // both interfaces and their object handles are Exposed=(Window,Worker) in
+    // Chrome (measured: typeof self.WebGLRenderingContext === 'function').
+    @import("../webapi/canvas/WebGLRenderingContext.zig"),
+    @import("../webapi/canvas/WebGL2RenderingContext.zig"),
+    @import("../webapi/canvas/webgl_objects.zig"),
     @import("../webapi/canvas/TextMetrics.zig"),
     @import("../webapi/canvas/canvas_objects.zig"),
     @import("../webapi/net/XMLHttpRequest.zig"),

@@ -122,12 +122,12 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
         // a loud signal — `getContext('webgl') === null` happens on no real
         // browser on this hardware.
         if (std.mem.eql(u8, context_type, "webgl") or std.mem.eql(u8, context_type, "experimental-webgl")) {
-            const ctx = try frame._factory.create(WebGLRenderingContext{ ._canvas = self });
+            const ctx = try frame._factory.create(WebGLRenderingContext{ ._canvas = .{ .html = self } });
             break :blk .{ .webgl = ctx };
         }
 
         if (std.mem.eql(u8, context_type, "webgl2")) {
-            const ctx = try frame._factory.create(WebGL2RenderingContext{ ._canvas = self });
+            const ctx = try frame._factory.create(WebGL2RenderingContext{ ._canvas = .{ .html = self } });
             break :blk .{ .webgl2 = ctx };
         }
         return null;

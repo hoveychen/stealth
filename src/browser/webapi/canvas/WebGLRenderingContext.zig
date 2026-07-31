@@ -19,8 +19,8 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
-const Frame = @import("../../Frame.zig");
 const Canvas = @import("../element/html/Canvas.zig");
+const OffscreenCanvas = @import("OffscreenCanvas.zig");
 const objects = @import("webgl_objects.zig");
 
 const Execution = js.Execution;
@@ -39,7 +39,28 @@ const WebGLRenderingContext = @This();
 
 /// The canvas this context draws into. We never rasterize anything, but
 /// `gl.canvas` and the drawing-buffer size are read by feature-detection code.
-_canvas: *Canvas,
+_canvas: Surface,
+
+/// Either kind of canvas can own a WebGL context: Chrome hands one back for
+/// `new OffscreenCanvas(256, 256).getContext('webgl')` too (measured, on the
+/// main thread and inside a worker), and `gl.canvas` is then the
+/// OffscreenCanvas itself.
+pub const Surface = union(enum) {
+    html: *Canvas,
+    offscreen: *OffscreenCanvas,
+
+    pub fn width(self: Surface) u32 {
+        return switch (self) {
+            inline else => |canvas| canvas.getWidth(),
+        };
+    }
+
+    pub fn height(self: Surface) u32 {
+        return switch (self) {
+            inline else => |canvas| canvas.getHeight(),
+        };
+    }
+};
 
 /// On Chrome and Safari, a call to `getSupportedExtensions` returns total of 39.
 /// The reference for it lists lesser number of extensions:
@@ -466,18 +487,18 @@ pub const BROWSER_DEFAULT_WEBGL: u32 = 0x9244;
 pub const RGB8: u32 = 0x8051;
 pub const RGBA8: u32 = 0x8058;
 
-pub fn getCanvas(self: *const WebGLRenderingContext) *Canvas {
+pub fn getCanvas(self: *const WebGLRenderingContext) Surface {
     return self._canvas;
 }
 
 // Chrome reports the canvas' bitmap size here, not the CSS box, so this tracks
 // the width/height attributes.
 pub fn getDrawingBufferWidth(self: *const WebGLRenderingContext) u32 {
-    return self._canvas.getWidth();
+    return self._canvas.width();
 }
 
 pub fn getDrawingBufferHeight(self: *const WebGLRenderingContext) u32 {
-    return self._canvas.getHeight();
+    return self._canvas.height();
 }
 
 /// The value `getParameter` answers with. Chrome's return type is a union of
@@ -605,7 +626,7 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
         DEPTH_RANGE => floatArray(exec, &.{ 0, 1 }),
         COLOR_CLEAR_VALUE => floatArray(exec, &.{ 0, 0, 0, 0 }),
         // --- int32 arrays ---
-        VIEWPORT, SCISSOR_BOX => intArray(exec, &.{ 0, 0, @intCast(self._canvas.getWidth()), @intCast(self._canvas.getHeight()) }),
+        VIEWPORT, SCISSOR_BOX => intArray(exec, &.{ 0, 0, @intCast(self._canvas.width()), @intCast(self._canvas.height()) }),
         MAX_VIEWPORT_DIMS => intArray(exec, &.{ 16384, 16384 }),
         // --- uint32 arrays ---
         COMPRESSED_TEXTURE_FORMATS => uintArray(exec, &.{}),
@@ -621,16 +642,16 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
 }
 
 /// Enables a WebGL extension.
-pub fn getExtension(_: *const WebGLRenderingContext, name: []const u8, frame: *Frame) !?Extension {
+pub fn getExtension(_: *const WebGLRenderingContext, name: []const u8, exec: *Execution) !?Extension {
     const tag = Extension.find(name) orelse return null;
 
     return switch (tag) {
         .WEBGL_debug_renderer_info => {
-            const info = try frame._factory.create(Extension.Type.WEBGL_debug_renderer_info{});
+            const info = try exec._factory.create(Extension.Type.WEBGL_debug_renderer_info{});
             return .{ .WEBGL_debug_renderer_info = info };
         },
         .WEBGL_lose_context => {
-            const ctx = try frame._factory.create(Extension.Type.WEBGL_lose_context{});
+            const ctx = try exec._factory.create(Extension.Type.WEBGL_lose_context{});
             return .{ .WEBGL_lose_context = ctx };
         },
         inline else => |comptime_enum| @unionInit(Extension, @tagName(comptime_enum), {}),
@@ -650,28 +671,28 @@ pub fn getSupportedExtensions(_: *const WebGLRenderingContext) []const []const u
 // consumer that feature-detects WebGL and then drives it gets a context that
 // silently does nothing, instead of a TypeError on the first call.
 
-pub fn createBuffer(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLBuffer {
-    return frame._factory.create(objects.WebGLBuffer{});
+pub fn createBuffer(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLBuffer {
+    return exec._factory.create(objects.WebGLBuffer{});
 }
 
-pub fn createFramebuffer(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLFramebuffer {
-    return frame._factory.create(objects.WebGLFramebuffer{});
+pub fn createFramebuffer(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLFramebuffer {
+    return exec._factory.create(objects.WebGLFramebuffer{});
 }
 
-pub fn createProgram(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLProgram {
-    return frame._factory.create(objects.WebGLProgram{});
+pub fn createProgram(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLProgram {
+    return exec._factory.create(objects.WebGLProgram{});
 }
 
-pub fn createRenderbuffer(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLRenderbuffer {
-    return frame._factory.create(objects.WebGLRenderbuffer{});
+pub fn createRenderbuffer(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLRenderbuffer {
+    return exec._factory.create(objects.WebGLRenderbuffer{});
 }
 
-pub fn createShader(_: *const WebGLRenderingContext, _: u32, frame: *Frame) !*objects.WebGLShader {
-    return frame._factory.create(objects.WebGLShader{});
+pub fn createShader(_: *const WebGLRenderingContext, _: u32, exec: *Execution) !*objects.WebGLShader {
+    return exec._factory.create(objects.WebGLShader{});
 }
 
-pub fn createTexture(_: *const WebGLRenderingContext, frame: *Frame) !*objects.WebGLTexture {
-    return frame._factory.create(objects.WebGLTexture{});
+pub fn createTexture(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLTexture {
+    return exec._factory.create(objects.WebGLTexture{});
 }
 
 /// We never bind anything, so there is nothing to be incomplete about.
@@ -807,14 +828,14 @@ pub fn getShaderPrecisionFormat(
     _: *const WebGLRenderingContext,
     _: u32,
     precision_type: u32,
-    frame: *Frame,
+    exec: *Execution,
 ) !?*objects.WebGLShaderPrecisionFormat {
     const format: objects.WebGLShaderPrecisionFormat = switch (precision_type) {
         LOW_FLOAT, MEDIUM_FLOAT, HIGH_FLOAT => .float,
         LOW_INT, MEDIUM_INT, HIGH_INT => .int,
         else => return null,
     };
-    return try frame._factory.create(format);
+    return try exec._factory.create(format);
 }
 
 // Nothing is ever linked, so a program has no active attributes, no active
