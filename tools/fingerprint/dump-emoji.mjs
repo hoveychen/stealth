@@ -4,6 +4,7 @@
 // src/browser/emoji_metrics.zig is transcribed from.
 //
 //   node tools/fingerprint/dump-emoji.mjs --headed > /tmp/emoji.json
+//   node tools/fingerprint/dump-emoji.mjs --headed --zig > src/browser/emoji_metrics.zig
 //
 // The emoji list is CreepJS's, verbatim (creep.js `const EMOJIS`), because
 // that is the set an engine is actually asked about. Everything is measured
@@ -106,6 +107,106 @@ const src = `(() => {
 })()`;
 
 const out = await evaluate(cdp, sessionId, src, {});
-console.log(JSON.stringify(out, null, 1));
 cdp.close();
 proc.kill('SIGKILL');
+
+if (!process.argv.includes('--zig')) {
+  console.log(JSON.stringify(out, null, 1));
+} else {
+  process.stdout.write(toZig(out));
+}
+
+function toZig(data) {
+  const seen = new Set();
+  const rows = [];
+  let worst = 0;
+  for (let i = 0; i < data.at100.rows.length; i++) {
+    const a = data.at100.rows[i];
+    const b = data.at200.rows[i];
+    const key = a.codes.join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    worst = Math.max(worst, Math.abs(a.advance * 2 - b.advance));
+    rows.push(a);
+  }
+  // Longest first: the lookup takes the first cluster that matches, and a
+  // ZWJ sequence must win over its own leading codepoint.
+  const utf8Len = (r) => Buffer.byteLength(String.fromCodePoint(...r.codes), 'utf8');
+  rows.sort((x, y) => utf8Len(y) - utf8Len(x) || x.codes[0] - y.codes[0]);
+  const body = rows.map((r) => {
+    const label = String.fromCodePoint(...r.codes);
+    const escaped = r.codes.map((c) => '\\u{' + c.toString(16) + '}').join('');
+    const units = [...label].reduce((n, c) => n + (c.codePointAt(0) > 0xffff ? 2 : 1), 0);
+    return `    .{ .text = "${escaped}", .units = ${units}, .advance = ${r.advance} }, // ${label}`;
+  }).join('\n');
+
+  return `// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
+//
+// Francis Bouvier <francis@lightpanda.io>
+// Pierre Tachoire <pierre@lightpanda.io>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+// GENERATED — do not hand-edit. Produced by
+//   node tools/fingerprint/dump-emoji.mjs --headed --zig
+//
+// What headed Chrome on macOS advances for the emoji a fingerprinting script
+// measures. The set is CreepJS's own list, because that is the one an engine
+// is actually asked about: it lays all of them out as SVG <text> at 200px and
+// keys its report on how many *distinct* widths come back. Chrome answers
+// ${new Set(data.at200.rows.map((r) => r.advance)).size} distinct widths across these ${rows.length} clusters; a rule of thumb like
+// "an emoji is one em wide" answers 1, which is the tell.
+//
+// Each entry is one shaped cluster — a ZWJ sequence is a single glyph with a
+// single advance, not the sum of its parts — measured at 100px. Scaling that
+// to another size is off by at most ${worst} px at 200px, because
+// Chrome quantises the advance per size; we do not model that.
+//
+// Measured under \`font-family: sans-serif\`. A colour-emoji glyph is
+// family-independent — it always comes from Apple Color Emoji — but a BMP
+// dingbat that some text font also carries is not: Chrome makes ☺ 147.3671875
+// under sans-serif and under CreepJS's own family list, and 204.203125 under
+// serif. We keep one table, so serif text is charged the sans-serif width for
+// those few characters.
+
+/// One shaped cluster and its advance at the 100px basis. \`units\` is the
+/// cluster's length in UTF-16 code units, which is how the DOM counts
+/// characters.
+pub const Cluster = struct {
+    text: []const u8,
+    units: u32,
+    advance: f64,
+};
+
+pub const basis = 100.0;
+
+/// Ordered longest-cluster-first so \`match\` can return the first hit.
+pub const clusters = [_]Cluster{
+${body}
+};
+
+/// The measured cluster \`text\` starts with, or null when we have no
+/// measurement for it.
+pub fn match(text: []const u8) ?Cluster {
+    for (clusters) |cluster| {
+        if (std.mem.startsWith(u8, text, cluster.text)) {
+            return cluster;
+        }
+    }
+    return null;
+}
+
+const std = @import("std");
+`.trimEnd() + '\n';
+}

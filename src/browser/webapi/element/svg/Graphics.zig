@@ -112,8 +112,9 @@ pub fn getBBox(self: *Graphics, frame: *Frame) !*DOMRect {
             bounds = path.bounds(.{});
         },
         .foreign_object => |foreign_object| bounds = try foreign_object.getBounds(frame),
+        .text_content => |text_content| bounds = try text_content.getBounds(frame),
         .g, .a, .svg => try accumulateChildren(self, .{}, &bounds, frame),
-        .defs, .symbol, .switch_element, .use, .image, .text_content => {},
+        .defs, .symbol, .switch_element, .use, .image => {},
     }
     if (bounds.isEmpty()) {
         return DOMRect.create(.{}, frame._factory);
@@ -160,32 +161,42 @@ fn accumulateChildren(parent: *Graphics, matrix: PathData.Matrix, bounds: *PathD
                 bounds.merge(path.bounds(child_matrix));
             },
             .foreign_object => |foreign_object| {
-                const child_bounds = try foreign_object.getBounds(frame);
-                if (!child_bounds.isEmpty()) {
-                    var foreign_path: PathData.Path = .{};
-                    defer foreign_path.deinit(frame.local_arena);
-                    const top_left = PathData.Point{ .x = child_bounds.min_x, .y = child_bounds.min_y };
-                    const top_right = PathData.Point{ .x = child_bounds.max_x, .y = child_bounds.min_y };
-                    const bottom_right = PathData.Point{ .x = child_bounds.max_x, .y = child_bounds.max_y };
-                    const bottom_left = PathData.Point{ .x = child_bounds.min_x, .y = child_bounds.max_y };
-                    try foreign_path.appendLine(top_left, top_right, frame.local_arena);
-                    try foreign_path.appendLine(top_right, bottom_right, frame.local_arena);
-                    try foreign_path.appendLine(bottom_right, bottom_left, frame.local_arena);
-                    try foreign_path.appendLine(bottom_left, top_left, frame.local_arena);
-                    bounds.merge(foreign_path.bounds(child_matrix));
-                }
+                try mergeBox(bounds, try foreign_object.getBounds(frame), child_matrix, frame);
+            },
+            .text_content => |text_content| {
+                try mergeBox(bounds, try text_content.getBounds(frame), child_matrix, frame);
             },
             .g, .a => try cursors.append(frame.local_arena, .{
                 .next = graphics.asNode().firstChild(),
                 .matrix = child_matrix,
             }),
             // <defs> and <symbol> never render. Nested viewports, <switch>,
-            // <use>, <image> and text have geometry we cannot resolve yet, so
-            // they contribute nothing rather than making the whole box
+            // <use> and <image> have geometry we cannot resolve yet, so they
+            // contribute nothing rather than making the whole box
             // unavailable.
-            .defs, .symbol, .svg, .switch_element, .use, .image, .text_content => {},
+            .defs, .symbol, .svg, .switch_element, .use, .image => {},
         }
     }
+}
+
+/// Folds an axis-aligned child box into `bounds` under `matrix`, which can
+/// rotate or skew it, so the box goes through the path machinery as four
+/// corners rather than as a min/max pair.
+fn mergeBox(bounds: *PathData.Bounds, box: PathData.Bounds, matrix: PathData.Matrix, frame: *Frame) !void {
+    if (box.isEmpty()) {
+        return;
+    }
+    var path: PathData.Path = .{};
+    defer path.deinit(frame.local_arena);
+    const top_left = PathData.Point{ .x = box.min_x, .y = box.min_y };
+    const top_right = PathData.Point{ .x = box.max_x, .y = box.min_y };
+    const bottom_right = PathData.Point{ .x = box.max_x, .y = box.max_y };
+    const bottom_left = PathData.Point{ .x = box.min_x, .y = box.max_y };
+    try path.appendLine(top_left, top_right, frame.local_arena);
+    try path.appendLine(top_right, bottom_right, frame.local_arena);
+    try path.appendLine(bottom_right, bottom_left, frame.local_arena);
+    try path.appendLine(bottom_left, top_left, frame.local_arena);
+    bounds.merge(path.bounds(matrix));
 }
 
 fn transformMatrix(element: *Element) PathData.Matrix {

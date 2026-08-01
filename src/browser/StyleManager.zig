@@ -474,6 +474,8 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             props.pointer_events_none = std.ascii.eqlIgnoreCase(val, "none");
         } else if (std.ascii.eqlIgnoreCase(name, "font-size")) {
             props.font_size = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "font-family")) {
+            props.font_family = .{ .value = val, .important = decl.important };
         }
     }
 
@@ -1061,6 +1063,13 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleProperties) !RuleProp
         };
     }
 
+    if (decl.findProperty(comptime .wrap("font-family"))) |property| {
+        props.font_family = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
     if (decl.findProperty(comptime .wrap("display"))) |property| {
         props.display_none = property._value.eql(comptime .wrap("none"));
     }
@@ -1150,6 +1159,7 @@ const RuleProperties = struct {
     opacity_zero: ?bool = null,
     pointer_events_none: ?bool = null,
     font_size: ?Declaration = null,
+    font_family: ?Declaration = null,
 
     // return true if any field in RuleProperties is not null
     fn isRelevant(self: RuleProperties) bool {
@@ -1157,7 +1167,8 @@ const RuleProperties = struct {
             self.visibility_hidden != null or
             self.opacity_zero != null or
             self.pointer_events_none != null or
-            self.font_size != null;
+            self.font_size != null or
+            self.font_family != null;
     }
 };
 
@@ -1287,10 +1298,51 @@ fn computedFontSizeAt(self: *StyleManager, element: ?*Element, depth: u8) f64 {
     return self.computedFontSizeAt(parent, depth + 1);
 }
 
+/// Cascaded `font-family` list, verbatim, or null when nothing declares one
+/// anywhere up the chain. Same source order as computedFontSize; the caller
+/// decides which of the listed names it can actually resolve.
+pub fn computedFontFamily(self: *StyleManager, element: ?*Element) ?[]const u8 {
+    return self.computedFontFamilyAt(element, 0);
+}
+
+fn computedFontFamilyAt(self: *StyleManager, element: ?*Element, depth: u8) ?[]const u8 {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+        return null;
+    }
+    const current = element orelse return null;
+
+    const inline_property = getInlineStyleProperty(current, comptime .wrap("font-family"), self.frame);
+    const rule = self.cascadedDeclaration(current, .font_family);
+
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            return declaration.value;
+        }
+    }
+    if (inline_property) |property| {
+        return property._value.str();
+    }
+    if (rule) |declaration| {
+        return declaration.value;
+    }
+    if (current.getAttributeSafe(comptime .wrap("font-family"))) |raw| {
+        return raw;
+    }
+    return self.computedFontFamilyAt(current.parentElement(), depth + 1);
+}
+
 /// The winning `font-size` declaration among the stylesheet rules matching
+/// `el`, or null when none match.
+fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
+    return self.cascadedDeclaration(el, .font_size);
+}
+
+const CascadedProperty = enum { font_size, font_family };
+
+/// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
 /// why the two are tracked apart rather than folded into `priority`.
-fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
+fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProperty) ?Declaration {
     self.rebuildIfDirty() catch return null;
 
     var best: ?Declaration = null;
@@ -1298,9 +1350,12 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     var best_important = false;
 
     const checkRules = struct {
-        fn check(rules: *const RuleList, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
+        fn check(rules: *const RuleList, which: CascadedProperty, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
             for (rules.items(.priority), rules.items(.props), rules.items(.selector)) |p, props, selector| {
-                const declaration = props.font_size orelse continue;
+                const declaration = (switch (which) {
+                    .font_size => props.font_size,
+                    .font_family => props.font_family,
+                }) orelse continue;
                 if (important.* and !declaration.important) continue;
                 if (declaration.important == important.* and p <= priority.*) continue;
                 if (!matchesSelector(elem, selector, frame)) continue;
@@ -1313,7 +1368,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
 
     if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
         if (self.id_rules.get(id)) |rules| {
-            checkRules(&rules, &best, &best_priority, &best_important, el, self.frame);
+            checkRules(&rules, property, &best, &best_priority, &best_important, el, self.frame);
         }
     }
 
@@ -1321,16 +1376,16 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
         var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
         while (it.next()) |class| {
             if (self.class_rules.get(class)) |rules| {
-                checkRules(&rules, &best, &best_priority, &best_important, el, self.frame);
+                checkRules(&rules, property, &best, &best_priority, &best_important, el, self.frame);
             }
         }
     }
 
     if (self.tag_rules.get(el.getTag())) |rules| {
-        checkRules(&rules, &best, &best_priority, &best_important, el, self.frame);
+        checkRules(&rules, property, &best, &best_priority, &best_important, el, self.frame);
     }
 
-    checkRules(&self.other_rules, &best, &best_priority, &best_important, el, self.frame);
+    checkRules(&self.other_rules, property, &best, &best_priority, &best_important, el, self.frame);
 
     return best;
 }

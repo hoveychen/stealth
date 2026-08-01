@@ -16,9 +16,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
+
 const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 const text_measure = @import("../../../text_measure.zig");
+const font_metrics = @import("../../../font_metrics.zig");
 
 const Node = @import("../../Node.zig");
 const DOMRect = @import("../../DOMRect.zig");
@@ -26,6 +29,7 @@ const Element = @import("../../Element.zig");
 
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
+const PathData = @import("../../svg/PathData.zig");
 
 const Graphics = @import("Graphics.zig");
 
@@ -68,6 +72,57 @@ fn fontSize(self: *TextContent, frame: *Frame) f64 {
     return frame._style_manager.computedFontSize(self.asElement());
 }
 
+/// The first family in the cascaded `font-family` list we have a table for.
+/// Chrome falls back to the standard font for anything it cannot resolve and
+/// so do we, which is also what an SVG with no `font-family` at all gets:
+/// serif is Chrome's default SVG font, not sans-serif.
+fn fontFamily(self: *TextContent, frame: *Frame) font_metrics.Family {
+    const list = frame._style_manager.computedFontFamily(self.asElement()) orelse {
+        return font_metrics.fallback;
+    };
+    var names = std.mem.splitScalar(u8, list, ',');
+    while (names.next()) |raw| {
+        const name = std.mem.trim(u8, raw, " \t\r\n\x0c'\"");
+        if (font_metrics.find(name)) |family| {
+            return family;
+        }
+    }
+    return font_metrics.fallback;
+}
+
+/// Where the element's first glyph sits, from its `x` / `y` attributes. Only
+/// the single-value form is read: a `x="10 20 30"` list positions each glyph
+/// separately, which needs a layout we do not have.
+fn origin(self: *TextContent, frame: *Frame) !struct { x: f64, y: f64 } {
+    const element = self.asElement();
+    const x = (try AnimatedLength.getOrCreate(element, .x, frame)).getBaseVal().getValue(frame);
+    const y = (try AnimatedLength.getOrCreate(element, .y, frame)).getBaseVal().getValue(frame);
+    return .{
+        .x = if (std.math.isFinite(x)) x else 0,
+        .y = if (std.math.isFinite(y)) y else 0,
+    };
+}
+
+/// The box Chrome answers for a `<text>`: the advance width of its content,
+/// standing on the font's ascent and descent at the text's own origin. Chrome
+/// grows this by the ink a colour-emoji bitmap spills past its advance —
+/// under a pixel at 20px, a few at 200px — which we do not model.
+pub fn getBounds(self: *TextContent, frame: *Frame) !PathData.Bounds {
+    const size = self.fontSize(frame);
+    const width = text_measure.svgWidth(self.fontFamily(frame), self.text(frame), size);
+    if (!std.math.isFinite(width) or width <= 0) {
+        return .{};
+    }
+    const box = font_metrics.boundingBox(self.fontFamily(frame), size);
+    const at = try self.origin(frame);
+    return .{
+        .min_x = at.x,
+        .min_y = at.y - box.ascent,
+        .max_x = at.x + width,
+        .max_y = at.y + box.descent,
+    };
+}
+
 fn getTextLength(self: *TextContent, frame: *Frame) !*AnimatedLength {
     return AnimatedLength.getOrCreate(self.asElement(), .text_length, frame);
 }
@@ -81,29 +136,27 @@ pub fn getNumberOfChars(self: *TextContent, frame: *Frame) u32 {
 }
 
 pub fn getComputedTextLength(self: *TextContent, frame: *Frame) f64 {
-    return text_measure.width(self.text(frame), self.fontSize(frame));
+    return text_measure.svgWidth(self.fontFamily(frame), self.text(frame), self.fontSize(frame));
 }
 
 pub fn getSubStringLength(self: *TextContent, charnum: u32, nchars: u32, frame: *Frame) !f64 {
-    return text_measure.substringWidth(self.text(frame), charnum, nchars, self.fontSize(frame));
+    return text_measure.svgSubstringWidth(self.fontFamily(frame), self.text(frame), charnum, nchars, self.fontSize(frame));
 }
 
-// One character's glyph cell, measured from the same fallback metrics as
-// getComputedTextLength. Browsers place the cell in the element's user space
-// and sit it on the font's ascent; we have neither a resolved text origin nor
-// vertical metrics, so the box starts at the text's own origin and is one em
-// tall — a size rather than a placement, consistent with getBBox answering an
-// empty box for text.
+// One character's glyph cell: as wide as that cluster's advance, standing on
+// the font's ascent and descent, placed where the character starts in the
+// element's user space. Chrome answers the same box.
 pub fn getExtentOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*DOMRect {
-    const content = self.text(frame);
-    const font_size = self.fontSize(frame);
-    const offset = try text_measure.substringWidth(content, 0, charnum, font_size);
-    const advance = try text_measure.substringWidth(content, charnum, 1, font_size);
+    const size = self.fontSize(frame);
+    const family = self.fontFamily(frame);
+    const extent = try text_measure.svgCharExtent(family, self.text(frame), charnum, size);
+    const box = font_metrics.boundingBox(family, size);
+    const at = try self.origin(frame);
     return DOMRect.create(.{
-        .x = offset,
-        .y = 0,
-        .width = advance,
-        .height = font_size,
+        .x = at.x + extent.offset,
+        .y = at.y - box.ascent,
+        .width = extent.advance,
+        .height = box.ascent + box.descent,
     }, frame._factory);
 }
 
