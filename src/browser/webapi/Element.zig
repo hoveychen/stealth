@@ -35,6 +35,8 @@ pub const DOMRect = @import("DOMRect.zig");
 const Selector = @import("selector/Selector.zig");
 const Animation = @import("animation/Animation.zig");
 const global_event_handlers = @import("global_event_handlers.zig");
+const document_services = @import("document/services.zig");
+const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 
 pub const Svg = @import("element/Svg.zig");
@@ -1003,7 +1005,7 @@ pub fn getRelList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
 
 // The other DOMTokenList-reflected attributes (class and rel have dedicated
 // lookups above).
-pub const TokenListAttribute = enum { sizes, sandbox, @"for" };
+pub const TokenListAttribute = enum { sizes, sandbox, @"for", part };
 pub const TokenListKey = struct { element: *Element, attribute: TokenListAttribute };
 pub const TokenListLookup = std.AutoHashMapUnmanaged(TokenListKey, *collections.DOMTokenList);
 
@@ -1026,6 +1028,159 @@ pub fn getDataset(self: *Element, frame: *Frame) !*DOMStringMap {
         });
     }
     return gop.value_ptr.*;
+}
+
+// ARIAMixin. Every member reflects a lowercase attribute of the same name with
+// the `aria` camel case flattened — ariaBrailleRoleDescription is
+// aria-brailleroledescription, ariaPosInSet is aria-posinset — and none of them
+// parses its value: null when the attribute is absent, the raw string
+// otherwise, and assigning null removes the attribute. Measured uniformly
+// across the whole family on a headed Chrome 150, including the ones whose
+// names suggest a number (ariaValueMax, ariaColSpan) or a boolean
+// (ariaMultiLine).
+fn reflectedAttribute(comptime attribute: []const u8) type {
+    return struct {
+        // Most of these names are past String's 12-byte comptime SSO limit
+        // (aria-brailleroledescription is 27), so the wrap runs at runtime.
+        pub fn get(self: *const Element) ?[]const u8 {
+            return self.getAttributeSafe(.wrap(attribute));
+        }
+
+        pub fn set(self: *Element, value: ?[]const u8, frame: *Frame) !void {
+            if (value) |v| {
+                return self.setAttributeSafe(.wrap(attribute), .wrap(v), frame);
+            }
+            return self.removeAttribute(.wrap(attribute), frame);
+        }
+    };
+}
+
+// elementTiming is not part of ARIAMixin and does not behave like it: it is a
+// plain DOMString reflection, so it reads "" when unset and assigning null
+// writes the string "null" instead of removing the attribute (measured).
+pub fn getElementTiming(self: *const Element) []const u8 {
+    return self.getAttributeSafe(.wrap("elementtiming")) orelse "";
+}
+
+pub fn setElementTiming(self: *Element, value: []const u8, frame: *Frame) !void {
+    return self.setAttributeSafe(.wrap("elementtiming"), .wrap(value), frame);
+}
+
+// The IDREF-list reflections resolve their attribute to elements, so they answer
+// null while the attribute is absent rather than an empty array.
+fn reflectedElements(comptime attribute: []const u8) type {
+    return struct {
+        pub fn get(self: *Element, frame: *Frame) !?[]const *Element {
+            const raw = self.getAttributeSafe(.wrap(attribute)) orelse return null;
+            const document = self.asNode().ownerDocument(frame) orelse return null;
+
+            var found: std.ArrayList(*Element) = .empty;
+            var it = std.mem.tokenizeAny(u8, raw, " \t\n\r\x0C");
+            while (it.next()) |id| {
+                const element = document.getElementById(id, frame) orelse continue;
+                try found.append(frame.local_arena, element);
+            }
+            return found.items;
+        }
+
+        pub fn set(self: *Element, _: ?[]const *Element, frame: *Frame) !void {
+            // Assigning elements would need a per-element explicit-set store,
+            // which nothing here reads back. Clearing the attribute is the part
+            // that is observable through the reflection.
+            return self.removeAttribute(.wrap(attribute), frame);
+        }
+    };
+}
+
+// Pointer capture. There is no pointer to capture, so nothing is ever captured
+// and both the grab and the release are no-ops. Chrome answers the same shapes
+// on a page that has not been interacted with.
+pub fn hasPointerCapture(_: *const Element, _: ?i32) bool {
+    return false;
+}
+
+pub fn setPointerCapture(_: *const Element, _: ?i32) void {}
+pub fn releasePointerCapture(_: *const Element, _: ?i32) void {}
+
+// The webkit spellings are synchronous and return undefined; only the
+// unprefixed requestFullscreen is a promise. Measured rejections: a fullscreen
+// request with no user gesture behind it is a bare TypeError ("Permissions
+// check failed"), and pointer lock on a document that cannot host it is a
+// WrongDocumentError.
+pub fn webkitRequestFullscreen(_: *const Element) void {}
+
+pub fn requestFullscreen(_: *const Element, _: ?js.Object, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .type_error = "Permissions check failed" });
+}
+
+pub fn requestPointerLock(_: *const Element, _: ?js.Object, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.WrongDocumentError } });
+}
+
+// CSS zoom is not something we apply, so the effective zoom is always 1.
+pub fn getCurrentCSSZoom(_: *const Element) f64 {
+    return 1;
+}
+
+pub fn getActiveViewTransition(_: *const Element) ?*document_services.ViewTransition {
+    return null;
+}
+
+// The same registry as window.customElements (measured:
+// element.customElementRegistry === window.customElements).
+pub fn getCustomElementRegistry(_: *const Element, frame: *Frame) ?*CustomElementRegistry {
+    return frame.window.getCustomElements();
+}
+
+pub fn ariaNotify(_: *const Element, _: []const u8, _: ?js.Object) void {}
+
+// A transition scoped to this element rather than to the document, which is
+// what Chrome reports as its transitionRoot.
+pub fn startViewTransition(self: *Element, _: ?js.Object, frame: *Frame) !*document_services.ViewTransition {
+    return document_services.ViewTransition.init(self, frame);
+}
+
+// getHTML is the modern name for getInnerHTML. The options dictionary selects
+// whether shadow roots are included, and we have nothing to include.
+pub fn getHTML(self: *Element, _: ?js.Object, frame: *Frame) ![]const u8 {
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    try self.getInnerHTML(&buf.writer, frame);
+    return buf.written();
+}
+
+// setHTML parses with sanitization: measured in Chrome,
+// '<b onclick="x()">hi</b><script>bad()</script>' becomes '<b>hi</b>'. Event
+// handler attributes and script elements are dropped.
+pub fn setHTML(self: *Element, html: []const u8, _: ?js.Object, frame: *Frame) !void {
+    try self.setHTMLUnsafe(html, frame);
+    sanitizeTree(self.asNode(), frame);
+}
+
+fn sanitizeTree(root: *Node, frame: *Frame) void {
+    var walker = @import("TreeWalker.zig").Full.init(root, .{});
+    while (walker.next()) |node| {
+        const element = node.is(Element) orelse continue;
+        if (element.is(Element.Html.Script) != null) {
+            element.remove(frame);
+            continue;
+        }
+        const names = element.getAttributeNames(frame) catch continue;
+        for (names) |name| {
+            if (name.len > 2 and std.ascii.startsWithIgnoreCase(name, "on")) {
+                element.removeAttribute(.wrap(name), frame) catch {};
+            }
+        }
+    }
+}
+
+// element.pseudo(selector) names one of this element's pseudo-elements. The
+// selector must be a pseudo-element selector; anything else is null rather than
+// an error (measured).
+pub fn pseudo(self: *Element, selector: []const u8, frame: *Frame) !?*document_services.CSSPseudoElement {
+    if (!std.mem.startsWith(u8, selector, "::")) {
+        return null;
+    }
+    return document_services.CSSPseudoElement.init(self, try frame.arena.dupe(u8, selector), frame);
 }
 
 pub fn replaceChildren(self: *Element, nodes: []const Node.NodeOrText, frame: *Frame) !void {
@@ -2258,15 +2413,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const tagName = bridge.accessor(_tagName, null, .{});
     fn _tagName(self: *Element, frame: *Frame) []const u8 {
         return self.getTagNameSpec(&frame.buf);
     }
     // the frame-aware variant returns the original URI for namespaces
     // outside the built-in set instead of the placeholder
-    pub const namespaceURI = bridge.accessor(Element.getNamespaceUri, null, .{});
 
-    pub const outerHTML = bridge.accessor(_getOuterHTML, _setOuterHTML, .{ .ce_reactions = true });
     fn _getOuterHTML(self: *Element, frame: *Frame) ![]const u8 {
         // local_arena: serialization is read-only and the returned string is
         // converted to v8 before this call returns. No JS runs in between.
@@ -2279,7 +2431,6 @@ pub const JsApi = struct {
         return self.setOuterHTML(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
 
-    pub const innerHTML = bridge.accessor(_getInnerHTML, _setInnerHTML, .{ .ce_reactions = true });
     fn _getInnerHTML(self: *Element, frame: *Frame) ![]const u8 {
         // local_arena: read-only serialization, result converted to v8 before
         // returning; no JS runs in between.
@@ -2292,44 +2443,31 @@ pub const JsApi = struct {
         return self.setInnerHTML(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
 
-    pub const prefix = bridge.accessor(Element._prefix, null, .{});
+    fn _part(self: *Element, frame: *Frame) !*collections.DOMTokenList {
+        return self.getTokenList(.part, frame);
+    }
+    fn _setPart(self: *Element, value: []const u8, frame: *Frame) !void {
+        return self.setAttributeSafe(comptime .wrap("part"), .wrap(value), frame);
+    }
+    fn _computedStyleMap(self: *Element, frame: *Frame) !*document_services.StylePropertyMapReadOnly {
+        return document_services.StylePropertyMapReadOnly.init(try frame.window.getComputedStyle(self, null, frame), frame);
+    }
+    // The namespace is ignored, as it already is for getAttributeNS,
+    // hasAttributeNS and setAttributeNS: attributes are stored by local name.
+    fn _getAttributeNodeNS(self: *Element, _: ?[]const u8, local_name: String, frame: *Frame) !?*Attribute {
+        return self.getAttributeNode(local_name, frame);
+    }
+    fn _removeAttributeNS(self: *Element, _: ?[]const u8, local_name: String, frame: *Frame) !void {
+        return self.removeAttribute(local_name, frame);
+    }
 
-    pub const setAttribute = bridge.function(_setAttribute, .{ .ce_reactions = true });
     fn _setAttribute(self: *Element, name: String, value: js.Value, frame: *Frame) !void {
         return self.setAttribute(name, .wrap(try value.toStringSlice()), frame);
     }
 
-    pub const setAttributeNS = bridge.function(_setAttributeNS, .{ .ce_reactions = true });
     fn _setAttributeNS(self: *Element, maybe_ns: ?[]const u8, qn: []const u8, value: js.Value, frame: *Frame) !void {
         return self.setAttributeNS(maybe_ns, qn, .wrap(try value.toStringSlice()), frame);
     }
-
-    pub const localName = bridge.accessor(Element.getLocalName, null, .{});
-    pub const id = bridge.accessor(Element.getId, Element.setId, .{ .ce_reactions = true });
-    pub const slot = bridge.accessor(Element.getSlot, Element.setSlot, .{ .ce_reactions = true });
-    pub const ariaAtomic = bridge.accessor(Element.getAriaAtomic, Element.setAriaAtomic, .{ .ce_reactions = true });
-    pub const ariaLive = bridge.accessor(Element.getAriaLive, Element.setAriaLive, .{ .ce_reactions = true });
-    pub const className = bridge.accessor(Element.getClassName, Element.setClassName, .{ .ce_reactions = true });
-    pub const classList = bridge.accessor(Element.getClassList, Element.setClassList, .{ .ce_reactions = true });
-    pub const attributes = bridge.accessor(Element.getAttributeNamedNodeMap, null, .{});
-    pub const hasAttribute = bridge.function(Element.hasAttribute, .{});
-    pub const hasAttributeNS = bridge.function(Element.hasAttributeNS, .{});
-    pub const hasAttributes = bridge.function(Element.hasAttributes, .{});
-    pub const getAttribute = bridge.function(Element.getAttribute, .{});
-    pub const getAttributeNS = bridge.function(Element.getAttributeNS, .{});
-    pub const getAttributeNode = bridge.function(Element.getAttributeNode, .{});
-    pub const setAttributeNode = bridge.function(Element.setAttributeNode, .{ .ce_reactions = true });
-    pub const removeAttribute = bridge.function(Element.removeAttribute, .{ .ce_reactions = true });
-    pub const toggleAttribute = bridge.function(Element.toggleAttribute, .{ .ce_reactions = true });
-    pub const getAttributeNames = bridge.function(Element.getAttributeNames, .{});
-    pub const removeAttributeNode = bridge.function(Element.removeAttributeNode, .{ .ce_reactions = true });
-    pub const shadowRoot = bridge.accessor(Element.getShadowRoot, null, .{});
-    pub const assignedSlot = bridge.accessor(Element.getAssignedSlot, null, .{});
-    pub const attachShadow = bridge.function(_attachShadow, .{});
-    pub const insertAdjacentHTML = bridge.function(Element.insertAdjacentHTML, .{ .ce_reactions = true });
-    pub const setHTMLUnsafe = bridge.function(Element.setHTMLUnsafe, .{ .ce_reactions = true });
-    pub const insertAdjacentElement = bridge.function(Element.insertAdjacentElement, .{ .ce_reactions = true });
-    pub const insertAdjacentText = bridge.function(Element.insertAdjacentText, .{ .ce_reactions = true });
 
     const ShadowRootInit = struct {
         mode: String,
@@ -2358,47 +2496,161 @@ pub const JsApi = struct {
             .serializable = init.serializable,
         }, frame);
     }
-    pub const replaceChildren = bridge.function(Element.replaceChildren, .{ .ce_reactions = true });
-    pub const replaceWith = bridge.function(Element.replaceWith, .{ .ce_reactions = true });
-    pub const remove = bridge.function(Element.remove, .{ .ce_reactions = true });
-    pub const append = bridge.function(Element.append, .{ .ce_reactions = true });
-    pub const prepend = bridge.function(Element.prepend, .{ .ce_reactions = true });
-    pub const moveBefore = bridge.function(Element.moveBefore, .{ .ce_reactions = true });
-    pub const before = bridge.function(Element.before, .{ .ce_reactions = true });
-    pub const after = bridge.function(Element.after, .{ .ce_reactions = true });
-    pub const firstElementChild = bridge.accessor(Element.firstElementChild, null, .{});
-    pub const lastElementChild = bridge.accessor(Element.lastElementChild, null, .{});
-    pub const nextElementSibling = bridge.accessor(Element.nextElementSibling, null, .{});
-    pub const previousElementSibling = bridge.accessor(Element.previousElementSibling, null, .{});
-    pub const childElementCount = bridge.accessor(Element.getChildElementCount, null, .{});
-    pub const matches = bridge.function(Element.matches, .{});
-    pub const querySelector = bridge.function(Element.querySelector, .{});
-    pub const querySelectorAll = bridge.function(Element.querySelectorAll, .{});
-    pub const closest = bridge.function(Element.closest, .{});
-    pub const getAnimations = bridge.function(Element.getAnimations, .{});
-    pub const animate = bridge.function(Element.animate, .{});
-    pub const checkVisibility = bridge.function(Element.checkVisibility, .{});
-    pub const clientWidth = bridge.accessor(Element.getClientWidth, null, .{});
-    pub const clientHeight = bridge.accessor(Element.getClientHeight, null, .{});
-    pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
-    pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
-    pub const clientTop = bridge.accessor(Element.getClientTop, null, .{});
-    pub const clientLeft = bridge.accessor(Element.getClientLeft, null, .{});
+
+    // Declaration order is the prototype's own-property order, and that order
+    // is itself part of what a detector hashes. This is a headed Chrome 150's
+    // Object.getOwnPropertyNames(Element.prototype), name for name.
+    pub const namespaceURI = bridge.accessor(Element.getNamespaceUri, null, .{});
+    pub const prefix = bridge.accessor(Element._prefix, null, .{});
+    pub const localName = bridge.accessor(Element.getLocalName, null, .{});
+    pub const tagName = bridge.accessor(_tagName, null, .{});
+    pub const id = bridge.accessor(Element.getId, Element.setId, .{ .ce_reactions = true });
+    pub const className = bridge.accessor(Element.getClassName, Element.setClassName, .{ .ce_reactions = true });
+    pub const classList = bridge.accessor(Element.getClassList, Element.setClassList, .{ .ce_reactions = true });
+    pub const slot = bridge.accessor(Element.getSlot, Element.setSlot, .{ .ce_reactions = true });
+    pub const attributes = bridge.accessor(Element.getAttributeNamedNodeMap, null, .{});
+    pub const shadowRoot = bridge.accessor(Element.getShadowRoot, null, .{});
+    pub const part = bridge.accessor(_part, _setPart, .{ .ce_reactions = true });
+    pub const assignedSlot = bridge.accessor(Element.getAssignedSlot, null, .{});
+    pub const innerHTML = bridge.accessor(_getInnerHTML, _setInnerHTML, .{ .ce_reactions = true });
+    pub const outerHTML = bridge.accessor(_getOuterHTML, _setOuterHTML, .{ .ce_reactions = true });
     pub const scrollTop = bridge.accessor(Element.getScrollTop, Element.setScrollTop, .{});
     pub const scrollLeft = bridge.accessor(Element.getScrollLeft, Element.setScrollLeft, .{});
-    pub const scrollHeight = bridge.accessor(Element.getScrollHeight, null, .{});
     pub const scrollWidth = bridge.accessor(Element.getScrollWidth, null, .{});
-    pub const getClientRects = bridge.function(Element.getClientRects, .{});
+    pub const scrollHeight = bridge.accessor(Element.getScrollHeight, null, .{});
+    pub const clientTop = bridge.accessor(Element.getClientTop, null, .{});
+    pub const clientLeft = bridge.accessor(Element.getClientLeft, null, .{});
+    pub const clientWidth = bridge.accessor(Element.getClientWidth, null, .{});
+    pub const clientHeight = bridge.accessor(Element.getClientHeight, null, .{});
+    pub const onbeforecopy = bridge.accessor(handlerAccessor(.onbeforecopy).get, handlerAccessor(.onbeforecopy).set, .{});
+    pub const onbeforecut = bridge.accessor(handlerAccessor(.onbeforecut).get, handlerAccessor(.onbeforecut).set, .{});
+    pub const onbeforepaste = bridge.accessor(handlerAccessor(.onbeforepaste).get, handlerAccessor(.onbeforepaste).set, .{});
+    pub const onsearch = bridge.accessor(handlerAccessor(.onsearch).get, handlerAccessor(.onsearch).set, .{});
+    pub const elementTiming = bridge.accessor(Element.getElementTiming, Element.setElementTiming, .{ .ce_reactions = true });
+    pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
+    pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
+    pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
+    pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
+    pub const role = bridge.accessor(reflectedAttribute("role").get, reflectedAttribute("role").set, .{ .ce_reactions = true });
+    pub const ariaAtomic = bridge.accessor(Element.getAriaAtomic, Element.setAriaAtomic, .{ .ce_reactions = true });
+    pub const ariaAutoComplete = bridge.accessor(reflectedAttribute("aria-autocomplete").get, reflectedAttribute("aria-autocomplete").set, .{ .ce_reactions = true });
+    pub const ariaBusy = bridge.accessor(reflectedAttribute("aria-busy").get, reflectedAttribute("aria-busy").set, .{ .ce_reactions = true });
+    pub const ariaBrailleLabel = bridge.accessor(reflectedAttribute("aria-braillelabel").get, reflectedAttribute("aria-braillelabel").set, .{ .ce_reactions = true });
+    pub const ariaBrailleRoleDescription = bridge.accessor(reflectedAttribute("aria-brailleroledescription").get, reflectedAttribute("aria-brailleroledescription").set, .{ .ce_reactions = true });
+    pub const ariaChecked = bridge.accessor(reflectedAttribute("aria-checked").get, reflectedAttribute("aria-checked").set, .{ .ce_reactions = true });
+    pub const ariaColCount = bridge.accessor(reflectedAttribute("aria-colcount").get, reflectedAttribute("aria-colcount").set, .{ .ce_reactions = true });
+    pub const ariaColIndex = bridge.accessor(reflectedAttribute("aria-colindex").get, reflectedAttribute("aria-colindex").set, .{ .ce_reactions = true });
+    pub const ariaColSpan = bridge.accessor(reflectedAttribute("aria-colspan").get, reflectedAttribute("aria-colspan").set, .{ .ce_reactions = true });
+    pub const ariaCurrent = bridge.accessor(reflectedAttribute("aria-current").get, reflectedAttribute("aria-current").set, .{ .ce_reactions = true });
+    pub const ariaDescription = bridge.accessor(reflectedAttribute("aria-description").get, reflectedAttribute("aria-description").set, .{ .ce_reactions = true });
+    pub const ariaDisabled = bridge.accessor(reflectedAttribute("aria-disabled").get, reflectedAttribute("aria-disabled").set, .{ .ce_reactions = true });
+    pub const ariaExpanded = bridge.accessor(reflectedAttribute("aria-expanded").get, reflectedAttribute("aria-expanded").set, .{ .ce_reactions = true });
+    pub const ariaHasPopup = bridge.accessor(reflectedAttribute("aria-haspopup").get, reflectedAttribute("aria-haspopup").set, .{ .ce_reactions = true });
+    pub const ariaHidden = bridge.accessor(reflectedAttribute("aria-hidden").get, reflectedAttribute("aria-hidden").set, .{ .ce_reactions = true });
+    pub const ariaInvalid = bridge.accessor(reflectedAttribute("aria-invalid").get, reflectedAttribute("aria-invalid").set, .{ .ce_reactions = true });
+    pub const ariaKeyShortcuts = bridge.accessor(reflectedAttribute("aria-keyshortcuts").get, reflectedAttribute("aria-keyshortcuts").set, .{ .ce_reactions = true });
+    pub const ariaLabel = bridge.accessor(reflectedAttribute("aria-label").get, reflectedAttribute("aria-label").set, .{ .ce_reactions = true });
+    pub const ariaLevel = bridge.accessor(reflectedAttribute("aria-level").get, reflectedAttribute("aria-level").set, .{ .ce_reactions = true });
+    pub const ariaLive = bridge.accessor(Element.getAriaLive, Element.setAriaLive, .{ .ce_reactions = true });
+    pub const ariaModal = bridge.accessor(reflectedAttribute("aria-modal").get, reflectedAttribute("aria-modal").set, .{ .ce_reactions = true });
+    pub const ariaMultiLine = bridge.accessor(reflectedAttribute("aria-multiline").get, reflectedAttribute("aria-multiline").set, .{ .ce_reactions = true });
+    pub const ariaMultiSelectable = bridge.accessor(reflectedAttribute("aria-multiselectable").get, reflectedAttribute("aria-multiselectable").set, .{ .ce_reactions = true });
+    pub const ariaOrientation = bridge.accessor(reflectedAttribute("aria-orientation").get, reflectedAttribute("aria-orientation").set, .{ .ce_reactions = true });
+    pub const ariaPlaceholder = bridge.accessor(reflectedAttribute("aria-placeholder").get, reflectedAttribute("aria-placeholder").set, .{ .ce_reactions = true });
+    pub const ariaPosInSet = bridge.accessor(reflectedAttribute("aria-posinset").get, reflectedAttribute("aria-posinset").set, .{ .ce_reactions = true });
+    pub const ariaPressed = bridge.accessor(reflectedAttribute("aria-pressed").get, reflectedAttribute("aria-pressed").set, .{ .ce_reactions = true });
+    pub const ariaReadOnly = bridge.accessor(reflectedAttribute("aria-readonly").get, reflectedAttribute("aria-readonly").set, .{ .ce_reactions = true });
+    pub const ariaRelevant = bridge.accessor(reflectedAttribute("aria-relevant").get, reflectedAttribute("aria-relevant").set, .{ .ce_reactions = true });
+    pub const ariaRequired = bridge.accessor(reflectedAttribute("aria-required").get, reflectedAttribute("aria-required").set, .{ .ce_reactions = true });
+    pub const ariaRoleDescription = bridge.accessor(reflectedAttribute("aria-roledescription").get, reflectedAttribute("aria-roledescription").set, .{ .ce_reactions = true });
+    pub const ariaRowCount = bridge.accessor(reflectedAttribute("aria-rowcount").get, reflectedAttribute("aria-rowcount").set, .{ .ce_reactions = true });
+    pub const ariaRowIndex = bridge.accessor(reflectedAttribute("aria-rowindex").get, reflectedAttribute("aria-rowindex").set, .{ .ce_reactions = true });
+    pub const ariaRowSpan = bridge.accessor(reflectedAttribute("aria-rowspan").get, reflectedAttribute("aria-rowspan").set, .{ .ce_reactions = true });
+    pub const ariaSelected = bridge.accessor(reflectedAttribute("aria-selected").get, reflectedAttribute("aria-selected").set, .{ .ce_reactions = true });
+    pub const ariaSetSize = bridge.accessor(reflectedAttribute("aria-setsize").get, reflectedAttribute("aria-setsize").set, .{ .ce_reactions = true });
+    pub const ariaSort = bridge.accessor(reflectedAttribute("aria-sort").get, reflectedAttribute("aria-sort").set, .{ .ce_reactions = true });
+    pub const ariaValueMax = bridge.accessor(reflectedAttribute("aria-valuemax").get, reflectedAttribute("aria-valuemax").set, .{ .ce_reactions = true });
+    pub const ariaValueMin = bridge.accessor(reflectedAttribute("aria-valuemin").get, reflectedAttribute("aria-valuemin").set, .{ .ce_reactions = true });
+    pub const ariaValueNow = bridge.accessor(reflectedAttribute("aria-valuenow").get, reflectedAttribute("aria-valuenow").set, .{ .ce_reactions = true });
+    pub const ariaValueText = bridge.accessor(reflectedAttribute("aria-valuetext").get, reflectedAttribute("aria-valuetext").set, .{ .ce_reactions = true });
+    pub const children = bridge.accessor(Element.getChildren, null, .{});
+    pub const firstElementChild = bridge.accessor(Element.firstElementChild, null, .{});
+    pub const lastElementChild = bridge.accessor(Element.lastElementChild, null, .{});
+    pub const childElementCount = bridge.accessor(Element.getChildElementCount, null, .{});
+    pub const previousElementSibling = bridge.accessor(Element.previousElementSibling, null, .{});
+    pub const nextElementSibling = bridge.accessor(Element.nextElementSibling, null, .{});
+    pub const after = bridge.function(Element.after, .{ .ce_reactions = true });
+    pub const animate = bridge.function(Element.animate, .{});
+    pub const append = bridge.function(Element.append, .{ .ce_reactions = true });
+    pub const attachShadow = bridge.function(_attachShadow, .{});
+    pub const before = bridge.function(Element.before, .{ .ce_reactions = true });
+    pub const checkVisibility = bridge.function(Element.checkVisibility, .{});
+    pub const closest = bridge.function(Element.closest, .{});
+    pub const computedStyleMap = bridge.function(_computedStyleMap, .{});
+    pub const getAnimations = bridge.function(Element.getAnimations, .{});
+    pub const getAttribute = bridge.function(Element.getAttribute, .{});
+    pub const getAttributeNS = bridge.function(Element.getAttributeNS, .{});
+    pub const getAttributeNames = bridge.function(Element.getAttributeNames, .{});
+    pub const getAttributeNode = bridge.function(Element.getAttributeNode, .{});
+    pub const getAttributeNodeNS = bridge.function(_getAttributeNodeNS, .{});
     pub const getBoundingClientRect = bridge.function(Element.getBoundingClientRect, .{});
+    pub const getClientRects = bridge.function(Element.getClientRects, .{});
+    pub const getElementsByClassName = bridge.function(Element.getElementsByClassName, .{});
     pub const getElementsByTagName = bridge.function(Element.getElementsByTagName, .{});
     pub const getElementsByTagNameNS = bridge.function(Element.getElementsByTagNameNS, .{});
-    pub const getElementsByClassName = bridge.function(Element.getElementsByClassName, .{});
-    pub const children = bridge.accessor(Element.getChildren, null, .{});
+    pub const getHTML = bridge.function(Element.getHTML, .{});
+    pub const hasAttribute = bridge.function(Element.hasAttribute, .{});
+    pub const hasAttributeNS = bridge.function(Element.hasAttributeNS, .{});
+    pub const hasAttributes = bridge.function(Element.hasAttributes, .{});
+    pub const hasPointerCapture = bridge.function(Element.hasPointerCapture, .{});
+    pub const insertAdjacentElement = bridge.function(Element.insertAdjacentElement, .{ .ce_reactions = true });
+    pub const insertAdjacentHTML = bridge.function(Element.insertAdjacentHTML, .{ .ce_reactions = true });
+    pub const insertAdjacentText = bridge.function(Element.insertAdjacentText, .{ .ce_reactions = true });
+    pub const matches = bridge.function(Element.matches, .{});
+    pub const moveBefore = bridge.function(Element.moveBefore, .{ .ce_reactions = true });
+    pub const prepend = bridge.function(Element.prepend, .{ .ce_reactions = true });
+    pub const querySelector = bridge.function(Element.querySelector, .{});
+    pub const querySelectorAll = bridge.function(Element.querySelectorAll, .{});
+    pub const releasePointerCapture = bridge.function(Element.releasePointerCapture, .{});
+    pub const remove = bridge.function(Element.remove, .{ .ce_reactions = true });
+    pub const removeAttribute = bridge.function(Element.removeAttribute, .{ .ce_reactions = true });
+    pub const removeAttributeNS = bridge.function(_removeAttributeNS, .{ .ce_reactions = true });
+    pub const removeAttributeNode = bridge.function(Element.removeAttributeNode, .{ .ce_reactions = true });
+    pub const replaceChildren = bridge.function(Element.replaceChildren, .{ .ce_reactions = true });
+    pub const replaceWith = bridge.function(Element.replaceWith, .{ .ce_reactions = true });
+    pub const requestFullscreen = bridge.function(Element.requestFullscreen, .{});
+    pub const requestPointerLock = bridge.function(Element.requestPointerLock, .{});
+    pub const scroll = bridge.function(Element.scrollTo, .{});
+    pub const scrollBy = bridge.function(Element.scrollBy, .{});
     pub const scrollIntoView = bridge.function(Element.scrollIntoView, .{});
     pub const scrollIntoViewIfNeeded = bridge.function(Element.scrollIntoViewIfNeeded, .{});
-    pub const scroll = bridge.function(Element.scrollTo, .{});
     pub const scrollTo = bridge.function(Element.scrollTo, .{});
-    pub const scrollBy = bridge.function(Element.scrollBy, .{});
+    pub const setAttribute = bridge.function(_setAttribute, .{ .ce_reactions = true });
+    pub const setAttributeNS = bridge.function(_setAttributeNS, .{ .ce_reactions = true });
+    pub const setAttributeNode = bridge.function(Element.setAttributeNode, .{ .ce_reactions = true });
+    pub const setAttributeNodeNS = bridge.function(Element.setAttributeNode, .{ .ce_reactions = true });
+    pub const setHTMLUnsafe = bridge.function(Element.setHTMLUnsafe, .{ .ce_reactions = true });
+    pub const setPointerCapture = bridge.function(Element.setPointerCapture, .{});
+    pub const toggleAttribute = bridge.function(Element.toggleAttribute, .{ .ce_reactions = true });
+    pub const webkitMatchesSelector = bridge.function(Element.matches, .{});
+    pub const webkitRequestFullScreen = bridge.function(Element.webkitRequestFullscreen, .{});
+    pub const webkitRequestFullscreen = bridge.function(Element.webkitRequestFullscreen, .{});
+    pub const currentCSSZoom = bridge.accessor(Element.getCurrentCSSZoom, null, .{});
+    pub const customElementRegistry = bridge.accessor(Element.getCustomElementRegistry, null, .{});
+    pub const activeViewTransition = bridge.accessor(Element.getActiveViewTransition, null, .{});
+    pub const ariaColIndexText = bridge.accessor(reflectedAttribute("aria-colindextext").get, reflectedAttribute("aria-colindextext").set, .{ .ce_reactions = true });
+    pub const ariaRowIndexText = bridge.accessor(reflectedAttribute("aria-rowindextext").get, reflectedAttribute("aria-rowindextext").set, .{ .ce_reactions = true });
+    pub const ariaActiveDescendantElement = bridge.accessor(reflectedElements("aria-activedescendant").get, reflectedElements("aria-activedescendant").set, .{ .ce_reactions = true });
+    pub const ariaControlsElements = bridge.accessor(reflectedElements("aria-controls").get, reflectedElements("aria-controls").set, .{ .ce_reactions = true });
+    pub const ariaDescribedByElements = bridge.accessor(reflectedElements("aria-describedby").get, reflectedElements("aria-describedby").set, .{ .ce_reactions = true });
+    pub const ariaDetailsElements = bridge.accessor(reflectedElements("aria-details").get, reflectedElements("aria-details").set, .{ .ce_reactions = true });
+    pub const ariaErrorMessageElements = bridge.accessor(reflectedElements("aria-errormessage").get, reflectedElements("aria-errormessage").set, .{ .ce_reactions = true });
+    pub const ariaFlowToElements = bridge.accessor(reflectedElements("aria-flowto").get, reflectedElements("aria-flowto").set, .{ .ce_reactions = true });
+    pub const ariaLabelledByElements = bridge.accessor(reflectedElements("aria-labelledby").get, reflectedElements("aria-labelledby").set, .{ .ce_reactions = true });
+    pub const ariaNotify = bridge.function(Element.ariaNotify, .{});
+    pub const pseudo = bridge.function(Element.pseudo, .{});
+    pub const setHTML = bridge.function(Element.setHTML, .{ .ce_reactions = true });
+    pub const startViewTransition = bridge.function(Element.startViewTransition, .{});
 };
 
 pub const Build = struct {

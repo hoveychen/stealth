@@ -74,5 +74,313 @@
   }
 </script>
 
+<script id=element_prototype_aria_reflection>
+  {
+    // ARIAMixin. Every one of these reflects a lowercase attribute of the same
+    // name with the aria camel case flattened: ariaBrailleRoleDescription is
+    // aria-brailleroledescription, ariaPosInSet is aria-posinset. Measured
+    // uniformly across the family: null when the attribute is absent, the raw
+    // string otherwise, and assigning null removes the attribute. No value
+    // parsing at all — ariaValueMax holds whatever string you give it.
+    const aria = [
+      'ariaAtomic', 'ariaAutoComplete', 'ariaBusy', 'ariaBrailleLabel',
+      'ariaBrailleRoleDescription', 'ariaChecked', 'ariaColCount', 'ariaColIndex',
+      'ariaColSpan', 'ariaCurrent', 'ariaDescription', 'ariaDisabled', 'ariaExpanded',
+      'ariaHasPopup', 'ariaHidden', 'ariaInvalid', 'ariaKeyShortcuts', 'ariaLabel',
+      'ariaLevel', 'ariaLive', 'ariaModal', 'ariaMultiLine', 'ariaMultiSelectable',
+      'ariaOrientation', 'ariaPlaceholder', 'ariaPosInSet', 'ariaPressed', 'ariaReadOnly',
+      'ariaRelevant', 'ariaRequired', 'ariaRoleDescription', 'ariaRowCount', 'ariaRowIndex',
+      'ariaRowSpan', 'ariaSelected', 'ariaSetSize', 'ariaSort', 'ariaValueMax', 'ariaValueMin',
+      'ariaValueNow', 'ariaValueText', 'ariaColIndexText', 'ariaRowIndexText'
+    ];
+    const own = Object.getOwnPropertyNames(Element.prototype);
+    testing.expectEqual([], aria.filter((name) => !own.includes(name)));
+    testing.expectEqual(43, aria.length);
+
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    for (const prop of aria.concat(['role'])) {
+      const attr = prop === 'role' ? 'role' : 'aria-' + prop.slice(4).toLowerCase();
+      testing.expectEqual(null, el[prop], { desc: prop + ' unset' });
+      el[prop] = 'zz';
+      testing.expectEqual('zz', el.getAttribute(attr), { desc: prop + ' -> ' + attr });
+      el.setAttribute(attr, 'qq');
+      testing.expectEqual('qq', el[prop], { desc: prop + ' reads ' + attr });
+      el[prop] = null;
+      testing.expectEqual(false, el.hasAttribute(attr), { desc: prop + ' = null removes ' + attr });
+    }
+  }
+</script>
+
+<script id=element_prototype_aria_element_references>
+  {
+    // The IDREF-list reflections resolve to elements, so they answer null while
+    // the attribute is absent and an array once it is set.
+    const refs = [
+      'ariaActiveDescendantElement', 'ariaControlsElements', 'ariaDescribedByElements',
+      'ariaDetailsElements', 'ariaErrorMessageElements', 'ariaFlowToElements',
+      'ariaLabelledByElements'
+    ];
+    const own = Object.getOwnPropertyNames(Element.prototype);
+    testing.expectEqual([], refs.filter((name) => !own.includes(name)));
+    const el = document.getElementById('probe');
+    for (const prop of refs) {
+      testing.expectEqual(null, el[prop], { desc: prop + ' unset' });
+    }
+    el.setAttribute('aria-controls', 'probe');
+    testing.expectEqual(true, Array.isArray(el.ariaControlsElements));
+    testing.expectEqual(1, el.ariaControlsElements.length);
+    testing.expectEqual(el, el.ariaControlsElements[0]);
+    el.removeAttribute('aria-controls');
+    testing.expectEqual(null, el.ariaControlsElements);
+  }
+</script>
+
+<script id=element_prototype_part_and_element_timing>
+  {
+    testing.expectEqual('object', typeof document.getElementById('probe').part);
+    testing.expectEqual('string', typeof document.getElementById('probe').elementTiming);
+    const el = document.getElementById('probe');
+    // part is a DOMTokenList over the `part` attribute, like classList.
+    testing.expectEqual('DOMTokenList', el.part.constructor.name);
+    testing.expectEqual(0, el.part.length);
+    testing.expectEqual('', el.part.value);
+    el.setAttribute('part', 'a b');
+    testing.expectEqual(2, el.part.length);
+    testing.expectEqual(true, el.part.contains('a'));
+    el.part.add('c');
+    testing.expectEqual('a b c', el.getAttribute('part'));
+    el.removeAttribute('part');
+
+    // elementTiming is a plain DOMString reflection, not a nullable one: it
+    // reads "" when unset, and assigning null writes the string "null" rather
+    // than removing the attribute.
+    testing.expectEqual('', el.elementTiming);
+    el.elementTiming = 'hero';
+    testing.expectEqual('hero', el.getAttribute('elementtiming'));
+    el.elementTiming = null;
+    testing.expectEqual(true, el.hasAttribute('elementtiming'));
+    el.removeAttribute('elementtiming');
+  }
+</script>
+
+<script id=element_prototype_event_handlers>
+  {
+    // The eight handlers Chrome declares on Element rather than HTMLElement.
+    const own = Object.getOwnPropertyNames(Element.prototype);
+    const handlers = ['onbeforecopy', 'onbeforecut', 'onbeforepaste', 'onsearch',
+                      'onfullscreenchange', 'onfullscreenerror',
+                      'onwebkitfullscreenchange', 'onwebkitfullscreenerror'];
+    testing.expectEqual([], handlers.filter((name) => !own.includes(name)));
+    // They work on a non-HTML element, which is the reason they live here.
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    testing.expectEqual(null, svg.onfullscreenchange);
+    let seen = 0;
+    const fn = () => { seen++; };
+    svg.onfullscreenchange = fn;
+    testing.expectEqual(fn, svg.onfullscreenchange);
+    svg.dispatchEvent(new Event('fullscreenchange'));
+    testing.expectEqual(1, seen);
+    svg.onfullscreenchange = null;
+    testing.expectEqual(null, svg.onfullscreenchange);
+  }
+</script>
+
+<script id=element_prototype_pointer_and_fullscreen>
+  {
+    for (const n of ['hasPointerCapture','setPointerCapture','releasePointerCapture',
+                     'webkitRequestFullscreen','webkitRequestFullScreen','ariaNotify',
+                     'webkitMatchesSelector']) {
+      testing.expectEqual('function', typeof document.getElementById('probe')[n], { desc: n });
+    }
+    testing.expectEqual('number', typeof document.getElementById('probe').currentCSSZoom);
+    const el = document.getElementById('probe');
+    // Nothing can capture a pointer or go fullscreen here, and Chrome's answers
+    // on a page that has not been interacted with are the same shapes.
+    testing.expectEqual(false, el.hasPointerCapture(1));
+    testing.expectEqual(undefined, el.setPointerCapture(1));
+    testing.expectEqual(undefined, el.releasePointerCapture(1));
+    // The webkit spellings are synchronous and return undefined; only the
+    // unprefixed requestFullscreen is a promise.
+    testing.expectEqual(undefined, el.webkitRequestFullscreen());
+    testing.expectEqual(undefined, el.webkitRequestFullScreen());
+    testing.expectEqual(1, el.currentCSSZoom);
+    testing.expectEqual(null, el.activeViewTransition);
+    testing.expectEqual(window.customElements, el.customElementRegistry);
+    testing.expectEqual(undefined, el.ariaNotify('hi'));
+    testing.expectEqual(true, el.webkitMatchesSelector('div'));
+    testing.expectEqual(false, el.webkitMatchesSelector('span'));
+  }
+</script>
+
+<script id=element_prototype_promises>
+  testing.onload(async () => {
+    testing.expectEqual('function', typeof Element.prototype.requestFullscreen);
+    testing.expectEqual('function', typeof Element.prototype.requestPointerLock);
+    const el = document.getElementById('probe');
+    const settle = async (p) => {
+      try { await p; return 'resolved'; } catch (e) { return 'rejected:' + e.name; }
+    };
+    // Measured: a fullscreen request without a user gesture is a bare
+    // TypeError, and pointer lock on a document that cannot host it is a
+    // WrongDocumentError.
+    testing.expectEqual('rejected:TypeError', await settle(el.requestFullscreen()));
+    testing.expectEqual('rejected:WrongDocumentError', await settle(el.requestPointerLock()));
+  });
+</script>
+
+<script id=element_prototype_ns_attributes>
+  {
+    for (const n of ['getAttributeNodeNS','setAttributeNodeNS','removeAttributeNS']) {
+      testing.expectEqual('function', typeof document.getElementById('probe')[n], { desc: n });
+    }
+    const el = document.getElementById('probe');
+    // These three inherit the namespace handling their non-NS siblings already
+    // have: the engine stores attributes by local name only and ignores the
+    // namespace argument, so getAttributeNodeNS matches on the local name.
+    // Chrome would answer null for an `id` looked up in the XHTML namespace,
+    // and closing that gap belongs with getAttributeNS / hasAttributeNS /
+    // setAttributeNS rather than here.
+    testing.expectEqual('Attr', el.getAttributeNodeNS(null, 'id').constructor.name);
+    testing.expectEqual('probe', el.getAttributeNodeNS(null, 'id').value);
+    testing.expectEqual(null, el.getAttributeNodeNS(null, 'nosuchattribute'));
+
+    el.setAttributeNS('http://www.example.com/ns', 'ex:thing', 'v');
+    testing.expectEqual('v', el.getAttributeNodeNS('http://www.example.com/ns', 'thing').value);
+    testing.expectEqual(undefined, el.removeAttributeNS('http://www.example.com/ns', 'thing'));
+    testing.expectEqual(null, el.getAttributeNodeNS('http://www.example.com/ns', 'thing'));
+    // Removing something that was never there is not an error.
+    testing.expectEqual(undefined, el.removeAttributeNS(null, 'nope'));
+
+    const attr = document.createAttributeNS('http://www.w3.org/1999/xhtml', 'other');
+    attr.value = 'w';
+    testing.expectEqual(null, el.setAttributeNodeNS(attr));
+    testing.expectEqual('w', el.getAttribute('other'));
+    el.removeAttributeNS(null, 'other');
+    testing.expectEqual(false, el.hasAttribute('other'));
+  }
+</script>
+
+<script id=element_prototype_get_set_html>
+  {
+    testing.expectEqual('function', typeof Element.prototype.getHTML);
+    testing.expectEqual('function', typeof Element.prototype.setHTML);
+    const el = document.createElement('div');
+    el.innerHTML = '<b>hi</b>';
+    // getHTML is the modern name for what getInnerHTML used to do.
+    testing.expectEqual(0, el.getHTML.length);
+    testing.expectEqual('<b>hi</b>', el.getHTML());
+    // setHTML sanitises: event-handler attributes and script elements are
+    // dropped. Measured in Chrome: '<b onclick="x()">hi</b><script>bad()<\/script>'
+    // becomes '<b>hi</b>'.
+    testing.expectEqual(1, el.setHTML.length);
+    el.setHTML('<b onclick="x()">hi</b><script>bad()<\/script>');
+    testing.expectEqual('<b>hi</b>', el.innerHTML);
+  }
+</script>
+
+<script id=element_prototype_pseudo>
+  {
+    testing.expectEqual('function', typeof Element.prototype.pseudo);
+    testing.expectEqual('function', typeof window.CSSPseudoElement);
+    const el = document.getElementById('probe');
+    testing.expectEqual(1, el.pseudo.length);
+    const before = el.pseudo('::before');
+    testing.expectEqual('CSSPseudoElement', before.constructor.name);
+    testing.expectEqual(['type', 'element', 'parent', 'pseudo', 'constructor'],
+                        Object.getOwnPropertyNames(CSSPseudoElement.prototype));
+    testing.expectEqual('::before', before.type);
+    testing.expectEqual(el, before.element);
+    testing.expectEqual('CSSPseudoElement', el.pseudo('::marker').constructor.name);
+    // A selector that is not a pseudo-element is null, not an error.
+    testing.expectEqual(null, el.pseudo('nonsense'));
+  }
+</script>
+
+<script id=element_prototype_view_transition>
+  {
+    testing.expectEqual('function', typeof Element.prototype.startViewTransition);
+    const el = document.getElementById('probe');
+    testing.expectEqual(0, el.startViewTransition.length);
+    const vt = el.startViewTransition();
+    testing.expectEqual('ViewTransition', vt.constructor.name);
+    // Scoped to the element it was started on, unlike the document-wide one.
+    testing.expectEqual(el, vt.transitionRoot);
+    vt.skipTransition();
+  }
+</script>
+
+<script id=element_prototype_computed_style_map>
+  {
+    testing.expectEqual('function', typeof Element.prototype.computedStyleMap);
+    testing.expectEqual('function', typeof window.StylePropertyMapReadOnly);
+    const el = document.getElementById('probe');
+    testing.expectEqual(0, el.computedStyleMap.length);
+    const map = el.computedStyleMap();
+    testing.expectEqual('StylePropertyMapReadOnly', map.constructor.name);
+    testing.expectEqual(['size', 'get', 'getAll', 'has', 'entries', 'forEach', 'keys', 'values', 'constructor'],
+                        Object.getOwnPropertyNames(StylePropertyMapReadOnly.prototype));
+    // The same 474 computed longhands getComputedStyle enumerates, in the same
+    // order, since it is the same list.
+    testing.expectEqual(474, map.size);
+    testing.expectEqual('accent-color', [...map.keys()][0]);
+    testing.expectEqual(474, [...map.keys()].length);
+    testing.expectEqual(true, map.has('display'));
+    testing.expectEqual(false, map.has('not-a-property'));
+    testing.expectEqual('block', String(map.get('display')));
+    testing.expectEqual(null, map.get('not-a-property'));
+    // get returns one value; getAll returns a list, and entries/values yield
+    // those lists rather than bare values.
+    testing.expectEqual(1, map.getAll('display').length);
+    testing.expectEqual(true, Array.isArray([...map.values()][0]));
+    testing.expectEqual('accent-color', [...map.entries()][0][0]);
+    testing.expectError('TypeError', () => new StylePropertyMapReadOnly());
+  }
+</script>
+
+<script id=element_prototype_full_order>
+  {
+    // The whole of Element.prototype, in order, against Chrome 150's own list
+    // with one documented exception: Blink emits `constructor` in the middle of
+    // the run and V8 always appends it. Same exception as Document.prototype.
+    const expected = [
+      'namespaceURI', 'prefix', 'localName', 'tagName', 'id', 'className', 'classList', 'slot',
+      'attributes', 'shadowRoot', 'part', 'assignedSlot', 'innerHTML', 'outerHTML',
+      'scrollTop', 'scrollLeft', 'scrollWidth', 'scrollHeight', 'clientTop', 'clientLeft',
+      'clientWidth', 'clientHeight', 'onbeforecopy', 'onbeforecut', 'onbeforepaste',
+      'onsearch', 'elementTiming', 'onfullscreenchange', 'onfullscreenerror',
+      'onwebkitfullscreenchange', 'onwebkitfullscreenerror', 'role', 'ariaAtomic',
+      'ariaAutoComplete', 'ariaBusy', 'ariaBrailleLabel', 'ariaBrailleRoleDescription',
+      'ariaChecked', 'ariaColCount', 'ariaColIndex', 'ariaColSpan', 'ariaCurrent',
+      'ariaDescription', 'ariaDisabled', 'ariaExpanded', 'ariaHasPopup', 'ariaHidden',
+      'ariaInvalid', 'ariaKeyShortcuts', 'ariaLabel', 'ariaLevel', 'ariaLive', 'ariaModal',
+      'ariaMultiLine', 'ariaMultiSelectable', 'ariaOrientation', 'ariaPlaceholder',
+      'ariaPosInSet', 'ariaPressed', 'ariaReadOnly', 'ariaRelevant', 'ariaRequired',
+      'ariaRoleDescription', 'ariaRowCount', 'ariaRowIndex', 'ariaRowSpan', 'ariaSelected',
+      'ariaSetSize', 'ariaSort', 'ariaValueMax', 'ariaValueMin', 'ariaValueNow',
+      'ariaValueText', 'children', 'firstElementChild', 'lastElementChild',
+      'childElementCount', 'previousElementSibling', 'nextElementSibling', 'after', 'animate',
+      'append', 'attachShadow', 'before', 'checkVisibility', 'closest', 'computedStyleMap',
+      'getAnimations', 'getAttribute', 'getAttributeNS', 'getAttributeNames',
+      'getAttributeNode', 'getAttributeNodeNS', 'getBoundingClientRect', 'getClientRects',
+      'getElementsByClassName', 'getElementsByTagName', 'getElementsByTagNameNS', 'getHTML',
+      'hasAttribute', 'hasAttributeNS', 'hasAttributes', 'hasPointerCapture',
+      'insertAdjacentElement', 'insertAdjacentHTML', 'insertAdjacentText', 'matches',
+      'moveBefore', 'prepend', 'querySelector', 'querySelectorAll', 'releasePointerCapture',
+      'remove', 'removeAttribute', 'removeAttributeNS', 'removeAttributeNode',
+      'replaceChildren', 'replaceWith', 'requestFullscreen', 'requestPointerLock', 'scroll',
+      'scrollBy', 'scrollIntoView', 'scrollIntoViewIfNeeded', 'scrollTo', 'setAttribute',
+      'setAttributeNS', 'setAttributeNode', 'setAttributeNodeNS', 'setHTMLUnsafe',
+      'setPointerCapture', 'toggleAttribute', 'webkitMatchesSelector',
+      'webkitRequestFullScreen', 'webkitRequestFullscreen', 'currentCSSZoom',
+      'customElementRegistry', 'activeViewTransition', 'ariaColIndexText', 'ariaRowIndexText',
+      'ariaActiveDescendantElement', 'ariaControlsElements', 'ariaDescribedByElements',
+      'ariaDetailsElements', 'ariaErrorMessageElements', 'ariaFlowToElements',
+      'ariaLabelledByElements', 'ariaNotify', 'pseudo', 'setHTML', 'startViewTransition',
+      'constructor'
+    ];
+    testing.expectEqual(expected, Object.getOwnPropertyNames(Element.prototype));
+  }
+</script>
+
 </body>
 </html>
