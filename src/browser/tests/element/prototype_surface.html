@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<body>
+<div id="probe">text</div>
+
+<script id=element_prototype_no_html_members>
+  {
+    // These belong to HTMLElement, not Element: an SVG or MathML element has no
+    // style, no dataset, no offsetTop and cannot be focused. Measured on a
+    // headed Chrome 150, Element.prototype owns none of them.
+    const own = Object.getOwnPropertyNames(Element.prototype);
+    const htmlOnly = ['style', 'dataset', 'dir', 'innerText', 'offsetTop', 'offsetLeft',
+                      'offsetWidth', 'offsetHeight', 'offsetParent', 'focus', 'blur'];
+    testing.expectEqual([], htmlOnly.filter((name) => own.includes(name)));
+
+    // ...and HTMLElement.prototype owns every one of them.
+    const htmlOwn = Object.getOwnPropertyNames(HTMLElement.prototype);
+    testing.expectEqual([], htmlOnly.filter((name) => !htmlOwn.includes(name)));
+  }
+</script>
+
+<script id=element_prototype_fullscreen_handlers>
+  {
+    // The other way round: fullscreen events fire at any element, so Chrome
+    // declares these on Element and not on HTMLElement.
+    const own = Object.getOwnPropertyNames(Element.prototype);
+    const htmlOwn = Object.getOwnPropertyNames(HTMLElement.prototype);
+    for (const name of ['onfullscreenchange', 'onfullscreenerror']) {
+      testing.expectEqual(true, own.includes(name), { desc: 'Element owns ' + name });
+      testing.expectEqual(false, htmlOwn.includes(name), { desc: 'HTMLElement does not own ' + name });
+    }
+  }
+</script>
+
+<script id=element_prototype_no_surplus>
+  {
+    // Names we exposed that Chrome has on neither interface. accessKeyLabel is
+    // Gecko-only; ondragexit was dropped from the spec and never shipped in
+    // Blink; the touch handlers are gated on a touch-capable device and Chrome
+    // at navigator.maxTouchPoints === 0 has none of them.
+    const both = Object.getOwnPropertyNames(Element.prototype)
+      .concat(Object.getOwnPropertyNames(HTMLElement.prototype));
+    testing.expectEqual(0, navigator.maxTouchPoints);
+    for (const name of ['accessKeyLabel', 'ondragexit', 'ontouchstart', 'ontouchend',
+                        'ontouchmove', 'ontouchcancel']) {
+      testing.expectEqual(false, both.includes(name), { desc: 'no ' + name });
+      testing.expectEqual(false, name in document.getElementById('probe'), { desc: 'not on an element: ' + name });
+    }
+  }
+</script>
+
+<script id=element_prototype_moved_members_still_work>
+  {
+    // Moving a declaration must not change what it does.
+    const div = document.getElementById('probe');
+    testing.expectEqual('CSSStyleDeclaration', div.style.constructor.name);
+    testing.expectEqual('object', typeof div.dataset);
+    testing.expectEqual('', div.dir);
+    div.dir = 'rtl';
+    testing.expectEqual('rtl', div.getAttribute('dir'));
+    testing.expectEqual('text', div.innerText);
+    testing.expectEqual('number', typeof div.offsetTop);
+    testing.expectEqual('number', typeof div.offsetWidth);
+    testing.expectEqual(undefined, div.focus());
+    testing.expectEqual(undefined, div.blur());
+
+    // An element outside the HTML namespace reaches none of them, which is the
+    // whole point of the move.
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    testing.expectEqual(undefined, svg.dataset);
+    testing.expectEqual(undefined, svg.offsetTop);
+    testing.expectEqual(undefined, svg.focus);
+  }
+</script>
+
+</body>
+</html>

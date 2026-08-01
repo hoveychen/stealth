@@ -507,36 +507,22 @@ pub fn getIsContentEditable(self: *HtmlElement) bool {
     return false;
 }
 
+// The attribute-listener plumbing lives on Element: fullscreen handlers are
+// declared there, not here, so both interfaces need it.
 pub fn getAttributeFunction(
     self: *HtmlElement,
     listener_type: GlobalEventHandler,
     frame: *Frame,
 ) !?js.Function.Global {
-    const element = self.asElement();
-    if (frame._event_target_attr_listeners.get(.{ .target = element.asEventTarget(), .handler = listener_type })) |cached| {
-        return cached;
-    }
-
-    const attr = element.getAttributeSafe(.wrap(@tagName(listener_type))) orelse return null;
-    const function = frame.js.stringToPersistedFunction(attr, &.{"event"}, &.{}) catch |err| {
-        // Not a valid expression; log this to find out if its something we should be supporting.
-        log.warn(.js, "Html.getAttributeFunction", .{
-            .expression = attr,
-            .err = err,
-        });
-        return null;
-    };
-
-    try self.setAttributeListener(listener_type, function, frame);
-    return function;
+    return self.asElement().getAttributeFunction(listener_type, frame);
 }
 
 pub fn hasAttributeFunction(self: *HtmlElement, listener_type: GlobalEventHandler, frame: *const Frame) bool {
-    return frame._event_target_attr_listeners.contains(.{ .target = self.asEventTarget(), .handler = listener_type });
+    return self.asElement().hasAttributeFunction(listener_type, frame);
 }
 
 fn setAttributeListener(
-    self: *Element.Html,
+    self: *HtmlElement,
     listener_type: GlobalEventHandler,
     listener_callback: ?js.Function.Global,
     frame: *Frame,
@@ -547,20 +533,7 @@ fn setAttributeListener(
             .listener_type = listener_type,
         });
     }
-
-    if (listener_callback) |cb| {
-        try frame._event_target_attr_listeners.put(frame.arena, .{
-            .target = self.asEventTarget(),
-            .handler = listener_type,
-        }, cb);
-        return;
-    }
-
-    // The listener is null, remove existing listener.
-    _ = frame._event_target_attr_listeners.remove(.{
-        .target = self.asEventTarget(),
-        .handler = listener_type,
-    });
+    return self.asElement().setAttributeListener(listener_type, listener_callback, frame);
 }
 
 pub fn setOnAbort(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
@@ -1741,22 +1714,63 @@ pub const JsApi = struct {
         return self.setOuterText(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
     pub const insertAdjacentHTML = bridge.function(HtmlElement.insertAdjacentHTML, .{ .ce_reactions = true });
+
+    // Declared here rather than on Element because Chrome declares them here:
+    // an SVG or MathML element has no style, no dataset, no offset geometry and
+    // cannot be focused. The behaviour stays on Element; only the name moves.
+    fn _dataset(self: *HtmlElement, frame: *Frame) !*@import("DOMStringMap.zig") {
+        return self.asElement().getDataset(frame);
+    }
+    fn _style(self: *HtmlElement, frame: *Frame) !*@import("../css/CSSStyleDeclaration.zig") {
+        return self.asElement().getOrCreateStyle(frame);
+    }
+    fn _setStyle(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+        return self.asElement().setStyle(value, frame);
+    }
+    fn _offsetTop(self: *HtmlElement, frame: *Frame) f64 {
+        return self.asElement().getOffsetTop(frame);
+    }
+    fn _offsetLeft(self: *HtmlElement, frame: *Frame) f64 {
+        return self.asElement().getOffsetLeft(frame);
+    }
+    fn _offsetWidth(self: *HtmlElement, frame: *Frame) f64 {
+        return self.asElement().getOffsetWidth(frame);
+    }
+    fn _offsetHeight(self: *HtmlElement, frame: *Frame) f64 {
+        return self.asElement().getOffsetHeight(frame);
+    }
+    fn _offsetParent(self: *HtmlElement, frame: *Frame) ?*Element {
+        return self.asElement().getOffsetParent(frame);
+    }
+    fn _focus(self: *HtmlElement, frame: *Frame) !void {
+        return self.asElement().focus(frame);
+    }
+    fn _blur(self: *HtmlElement, frame: *Frame) !void {
+        return self.asElement().blur(frame);
+    }
     pub const click = bridge.function(HtmlElement.click, .{});
+    pub const focus = bridge.function(_focus, .{});
 
     pub const accessKey = bridge.accessor(HtmlElement.getAccessKey, HtmlElement.setAccessKey, .{ .ce_reactions = true });
     pub const autofocus = bridge.accessor(HtmlElement.getAutofocus, HtmlElement.setAutofocus, .{ .ce_reactions = true });
     pub const dir = bridge.accessor(HtmlElement.getDir, HtmlElement.setDir, .{ .ce_reactions = true });
     pub const hidden = bridge.accessor(HtmlElement.getHidden, HtmlElement.setHidden, .{ .ce_reactions = true });
     pub const translate = bridge.accessor(HtmlElement.getTranslate, HtmlElement.setTranslate, .{ .ce_reactions = true });
-    pub const accessKeyLabel = bridge.accessor(HtmlElement.getAccessKeyLabel, null, .{});
     pub const popover = bridge.accessor(HtmlElement.getPopover, HtmlElement.setPopover, .{ .ce_reactions = true });
     pub const showPopover = bridge.function(HtmlElement.showPopover, .{});
     pub const hidePopover = bridge.function(HtmlElement.hidePopover, .{});
     pub const togglePopover = bridge.function(HtmlElement.togglePopover, .{});
     pub const isContentEditable = bridge.accessor(HtmlElement.getIsContentEditable, null, .{});
+    pub const offsetParent = bridge.accessor(_offsetParent, null, .{});
+    pub const offsetTop = bridge.accessor(_offsetTop, null, .{});
+    pub const offsetLeft = bridge.accessor(_offsetLeft, null, .{});
+    pub const offsetWidth = bridge.accessor(_offsetWidth, null, .{});
+    pub const offsetHeight = bridge.accessor(_offsetHeight, null, .{});
     pub const lang = bridge.accessor(HtmlElement.getLang, HtmlElement.setLang, .{ .ce_reactions = true });
     pub const nonce = bridge.accessor(HtmlElement.getNonce, HtmlElement.setNonce, .{ .ce_reactions = true });
     pub const tabIndex = bridge.accessor(HtmlElement.getTabIndex, HtmlElement.setTabIndex, .{ .ce_reactions = true });
+    pub const style = bridge.accessor(_style, _setStyle, .{});
+    pub const blur = bridge.function(_blur, .{});
     pub const title = bridge.accessor(HtmlElement.getTitle, HtmlElement.setTitle, .{ .ce_reactions = true });
 
     pub const onabort = bridge.accessor(HtmlElement.getOnAbort, HtmlElement.setOnAbort, .{});
@@ -1787,7 +1801,6 @@ pub const JsApi = struct {
     pub const ondrag = bridge.accessor(HtmlElement.getOnDrag, HtmlElement.setOnDrag, .{});
     pub const ondragend = bridge.accessor(HtmlElement.getOnDragEnd, HtmlElement.setOnDragEnd, .{});
     pub const ondragenter = bridge.accessor(HtmlElement.getOnDragEnter, HtmlElement.setOnDragEnter, .{});
-    pub const ondragexit = bridge.accessor(HtmlElement.getOnDragExit, HtmlElement.setOnDragExit, .{});
     pub const ondragleave = bridge.accessor(HtmlElement.getOnDragLeave, HtmlElement.setOnDragLeave, .{});
     pub const ondragover = bridge.accessor(HtmlElement.getOnDragOver, HtmlElement.setOnDragOver, .{});
     pub const ondragstart = bridge.accessor(HtmlElement.getOnDragStart, HtmlElement.setOnDragStart, .{});
@@ -1798,8 +1811,6 @@ pub const JsApi = struct {
     pub const onerror = bridge.accessor(HtmlElement.getOnError, HtmlElement.setOnError, .{});
     pub const onfocus = bridge.accessor(HtmlElement.getOnFocus, HtmlElement.setOnFocus, .{});
     pub const onformdata = bridge.accessor(HtmlElement.getOnFormData, HtmlElement.setOnFormData, .{});
-    pub const onfullscreenchange = bridge.accessor(HtmlElement.getOnFullscreenChange, HtmlElement.setOnFullscreenChange, .{});
-    pub const onfullscreenerror = bridge.accessor(HtmlElement.getOnFullscreenError, HtmlElement.setOnFullscreenError, .{});
     pub const ongotpointercapture = bridge.accessor(HtmlElement.getOnGotPointerCapture, HtmlElement.setOnGotPointerCapture, .{});
     pub const oninput = bridge.accessor(HtmlElement.getOnInput, HtmlElement.setOnInput, .{});
     pub const oninvalid = bridge.accessor(HtmlElement.getOnInvalid, HtmlElement.setOnInvalid, .{});
@@ -1817,6 +1828,7 @@ pub const JsApi = struct {
     pub const onmouseover = bridge.accessor(HtmlElement.getOnMouseOver, HtmlElement.setOnMouseOver, .{});
     pub const onmouseup = bridge.accessor(HtmlElement.getOnMouseUp, HtmlElement.setOnMouseUp, .{});
     pub const onpaste = bridge.accessor(HtmlElement.getOnPaste, HtmlElement.setOnPaste, .{});
+    pub const dataset = bridge.accessor(_dataset, null, .{});
     pub const onpause = bridge.accessor(HtmlElement.getOnPause, HtmlElement.setOnPause, .{});
     pub const onplay = bridge.accessor(HtmlElement.getOnPlay, HtmlElement.setOnPlay, .{});
     pub const onplaying = bridge.accessor(HtmlElement.getOnPlaying, HtmlElement.setOnPlaying, .{});
@@ -1847,10 +1859,6 @@ pub const JsApi = struct {
     pub const onsuspend = bridge.accessor(HtmlElement.getOnSuspend, HtmlElement.setOnSuspend, .{});
     pub const ontimeupdate = bridge.accessor(HtmlElement.getOnTimeUpdate, HtmlElement.setOnTimeUpdate, .{});
     pub const ontoggle = bridge.accessor(HtmlElement.getOnToggle, HtmlElement.setOnToggle, .{});
-    pub const ontouchcancel = bridge.accessor(HtmlElement.getOnTouchCancel, HtmlElement.setOnTouchCancel, .{});
-    pub const ontouchend = bridge.accessor(HtmlElement.getOnTouchEnd, HtmlElement.setOnTouchEnd, .{});
-    pub const ontouchmove = bridge.accessor(HtmlElement.getOnTouchMove, HtmlElement.setOnTouchMove, .{});
-    pub const ontouchstart = bridge.accessor(HtmlElement.getOnTouchStart, HtmlElement.setOnTouchStart, .{});
     pub const ontransitioncancel = bridge.accessor(HtmlElement.getOnTransitionCancel, HtmlElement.setOnTransitionCancel, .{});
     pub const ontransitionend = bridge.accessor(HtmlElement.getOnTransitionEnd, HtmlElement.setOnTransitionEnd, .{});
     pub const ontransitionrun = bridge.accessor(HtmlElement.getOnTransitionRun, HtmlElement.setOnTransitionRun, .{});

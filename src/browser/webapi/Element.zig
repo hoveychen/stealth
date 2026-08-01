@@ -34,6 +34,7 @@ pub const DOMRect = @import("DOMRect.zig");
 
 const Selector = @import("selector/Selector.zig");
 const Animation = @import("animation/Animation.zig");
+const global_event_handlers = @import("global_event_handlers.zig");
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 
 pub const Svg = @import("element/Svg.zig");
@@ -903,6 +904,57 @@ pub fn getAttributeNamedNodeMap(self: *Element, frame: *Frame) !*Attribute.Named
         gop.value_ptr.* = try frame._factory.create(Attribute.NamedNodeMap{ ._element = self });
     }
     return gop.value_ptr.*;
+}
+
+// Event handler attributes ("onclick=...") and the IDL properties that shadow
+// them share one store, keyed by event target. Elements of any namespace need
+// this, not just HTML ones: Chrome declares onfullscreenchange and
+// onfullscreenerror on Element.
+pub fn getAttributeFunction(
+    self: *Element,
+    listener_type: global_event_handlers.Handler,
+    frame: *Frame,
+) !?js.Function.Global {
+    if (frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = listener_type })) |cached| {
+        return cached;
+    }
+
+    const attr = self.getAttributeSafe(.wrap(@tagName(listener_type))) orelse return null;
+    const function = frame.js.stringToPersistedFunction(attr, &.{"event"}, &.{}) catch |err| {
+        // Not a valid expression; log this to find out if its something we should be supporting.
+        log.warn(.js, "Element.getAttributeFunction", .{
+            .expression = attr,
+            .err = err,
+        });
+        return null;
+    };
+
+    try self.setAttributeListener(listener_type, function, frame);
+    return function;
+}
+
+pub fn hasAttributeFunction(self: *Element, listener_type: global_event_handlers.Handler, frame: *const Frame) bool {
+    return frame._event_target_attr_listeners.contains(.{ .target = self.asEventTarget(), .handler = listener_type });
+}
+
+pub fn setAttributeListener(
+    self: *Element,
+    listener_type: global_event_handlers.Handler,
+    listener_callback: ?js.Function.Global,
+    frame: *Frame,
+) !void {
+    if (listener_callback) |cb| {
+        try frame._event_target_attr_listeners.put(frame.arena, .{
+            .target = self.asEventTarget(),
+            .handler = listener_type,
+        }, cb);
+        return;
+    }
+
+    _ = frame._event_target_attr_listeners.remove(.{
+        .target = self.asEventTarget(),
+        .handler = listener_type,
+    });
 }
 
 pub fn getOrCreateStyle(self: *Element, frame: *Frame) !*CSSStyleDeclaration {
@@ -2186,6 +2238,20 @@ pub const Tag = enum {
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Element);
 
+    // Getter/setter pair for an event handler property, backed by the frame's
+    // attribute-listener store.
+    fn handlerAccessor(comptime handler: global_event_handlers.Handler) type {
+        return struct {
+            pub fn get(self: *Element, frame: *Frame) !?js.Function.Global {
+                return self.getAttributeFunction(handler, frame);
+            }
+
+            pub fn set(self: *Element, callback: ?js.Function.Global, frame: *Frame) !void {
+                return self.setAttributeListener(handler, callback, frame);
+            }
+        };
+    }
+
     pub const Meta = struct {
         pub const name = "Element";
         pub const prototype_chain = bridge.prototypeChain();
@@ -2199,13 +2265,6 @@ pub const JsApi = struct {
     // the frame-aware variant returns the original URI for namespaces
     // outside the built-in set instead of the placeholder
     pub const namespaceURI = bridge.accessor(Element.getNamespaceUri, null, .{});
-
-    pub const innerText = bridge.accessor(_innerText, Element.setInnerText, .{ .ce_reactions = true });
-    fn _innerText(self: *Element, frame: *Frame) ![]const u8 {
-        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-        try self.getInnerText(&buf.writer, frame);
-        return buf.written();
-    }
 
     pub const outerHTML = bridge.accessor(_getOuterHTML, _setOuterHTML, .{ .ce_reactions = true });
     fn _getOuterHTML(self: *Element, frame: *Frame) ![]const u8 {
@@ -2250,11 +2309,8 @@ pub const JsApi = struct {
     pub const slot = bridge.accessor(Element.getSlot, Element.setSlot, .{ .ce_reactions = true });
     pub const ariaAtomic = bridge.accessor(Element.getAriaAtomic, Element.setAriaAtomic, .{ .ce_reactions = true });
     pub const ariaLive = bridge.accessor(Element.getAriaLive, Element.setAriaLive, .{ .ce_reactions = true });
-    pub const dir = bridge.accessor(Element.getDir, Element.setDir, .{ .ce_reactions = true });
     pub const className = bridge.accessor(Element.getClassName, Element.setClassName, .{ .ce_reactions = true });
     pub const classList = bridge.accessor(Element.getClassList, Element.setClassList, .{ .ce_reactions = true });
-    pub const dataset = bridge.accessor(Element.getDataset, null, .{});
-    pub const style = bridge.accessor(Element.getOrCreateStyle, Element.setStyle, .{});
     pub const attributes = bridge.accessor(Element.getAttributeNamedNodeMap, null, .{});
     pub const hasAttribute = bridge.function(Element.hasAttribute, .{});
     pub const hasAttributeNS = bridge.function(Element.hasAttributeNS, .{});
@@ -2324,25 +2380,20 @@ pub const JsApi = struct {
     pub const checkVisibility = bridge.function(Element.checkVisibility, .{});
     pub const clientWidth = bridge.accessor(Element.getClientWidth, null, .{});
     pub const clientHeight = bridge.accessor(Element.getClientHeight, null, .{});
+    pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
+    pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
     pub const clientTop = bridge.accessor(Element.getClientTop, null, .{});
     pub const clientLeft = bridge.accessor(Element.getClientLeft, null, .{});
     pub const scrollTop = bridge.accessor(Element.getScrollTop, Element.setScrollTop, .{});
     pub const scrollLeft = bridge.accessor(Element.getScrollLeft, Element.setScrollLeft, .{});
     pub const scrollHeight = bridge.accessor(Element.getScrollHeight, null, .{});
     pub const scrollWidth = bridge.accessor(Element.getScrollWidth, null, .{});
-    pub const offsetTop = bridge.accessor(Element.getOffsetTop, null, .{});
-    pub const offsetLeft = bridge.accessor(Element.getOffsetLeft, null, .{});
-    pub const offsetWidth = bridge.accessor(Element.getOffsetWidth, null, .{});
-    pub const offsetHeight = bridge.accessor(Element.getOffsetHeight, null, .{});
-    pub const offsetParent = bridge.accessor(Element.getOffsetParent, null, .{});
     pub const getClientRects = bridge.function(Element.getClientRects, .{});
     pub const getBoundingClientRect = bridge.function(Element.getBoundingClientRect, .{});
     pub const getElementsByTagName = bridge.function(Element.getElementsByTagName, .{});
     pub const getElementsByTagNameNS = bridge.function(Element.getElementsByTagNameNS, .{});
     pub const getElementsByClassName = bridge.function(Element.getElementsByClassName, .{});
     pub const children = bridge.accessor(Element.getChildren, null, .{});
-    pub const focus = bridge.function(Element.focus, .{});
-    pub const blur = bridge.function(Element.blur, .{});
     pub const scrollIntoView = bridge.function(Element.scrollIntoView, .{});
     pub const scrollIntoViewIfNeeded = bridge.function(Element.scrollIntoViewIfNeeded, .{});
     pub const scroll = bridge.function(Element.scrollTo, .{});
