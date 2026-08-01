@@ -1181,6 +1181,10 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/PluginArray.zig"),
     @import("../webapi/NetworkInformation.zig"),
     @import("../webapi/media/MediaDevices.zig"),
+    // Media type support: CreepJS reads canPlayType, MediaSource.isTypeSupported
+    // and MediaRecorder.isTypeSupported as one grid, so all three exist.
+    @import("../webapi/media/MediaSource.zig"),
+    @import("../webapi/media/MediaRecorder.zig"),
     @import("../webapi/BatteryManager.zig"),
     @import("../webapi/MutationObserver.zig"),
     @import("../webapi/IntersectionObserver.zig"),
