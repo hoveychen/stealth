@@ -112,5 +112,130 @@
   }
 </script>
 
+<script id=document_prototype_legacy_members>
+  {
+    // The pre-HTML5 document surface. Values are what a headed Chrome 150
+    // reports on a plain, non-editable page.
+    testing.expectEqual(null, document.xmlEncoding);
+    testing.expectEqual(null, document.xmlVersion);
+    testing.expectEqual(false, document.xmlStandalone);
+    testing.expectEqual('off', document.designMode);
+    testing.expectEqual(false, document.wasDiscarded);
+    testing.expectEqual('visible', document.webkitVisibilityState);
+    testing.expectEqual(false, document.webkitHidden);
+    // Document.rootElement comes from the SVG spec: the document element, but
+    // only when it is an <svg> root. An HTML page therefore reports null.
+    testing.expectEqual(null, document.rootElement);
+    testing.expectEqual('function', typeof document.captureEvents);
+    testing.expectEqual('function', typeof document.releaseEvents);
+    testing.expectEqual('function', typeof document.clear);
+    testing.expectEqual(undefined, document.captureEvents());
+    testing.expectEqual(undefined, document.releaseEvents());
+    testing.expectEqual(undefined, document.clear());
+  }
+</script>
+
+<script id=document_prototype_design_mode>
+  {
+    // Anything that is not an ASCII-case-insensitive "on" reads back as "off".
+    for (const [set, want] of [['on', 'on'], ['ON', 'on'], ['On', 'on'], ['off', 'off'],
+                               ['OFF', 'off'], ['bogus', 'off'], ['', 'off'], [null, 'off'],
+                               [undefined, 'off'], [1, 'off']]) {
+      document.designMode = set;
+      testing.expectEqual(want, document.designMode, { desc: 'designMode = ' + set });
+    }
+    document.designMode = 'off';
+  }
+</script>
+
+<script id=document_prototype_colors>
+  {
+    // The colour properties reflect body attributes. Measured mapping:
+    // bgColor->bgcolor, fgColor->text, linkColor->link, vlinkColor->vlink,
+    // alinkColor->alink. Values pass through verbatim, no colour parsing.
+    for (const [prop, attr] of [['bgColor', 'bgcolor'], ['fgColor', 'text'],
+                                ['linkColor', 'link'], ['vlinkColor', 'vlink'],
+                                ['alinkColor', 'alink']]) {
+      document.body.removeAttribute(attr);
+      testing.expectEqual('', document[prop], { desc: prop + ' unset' });
+      document[prop] = 'lime';
+      testing.expectEqual('lime', document.body.getAttribute(attr), { desc: prop + ' -> ' + attr });
+      document.body.setAttribute(attr, '#ABCdef');
+      testing.expectEqual('#ABCdef', document[prop], { desc: prop + ' reads attribute verbatim' });
+      document.body.removeAttribute(attr);
+    }
+  }
+</script>
+
+<script id=document_prototype_commands>
+  {
+    // execCommand and the queryCommand* family. Chrome's answers were measured
+    // over a 97-name candidate list on a page with no selection and
+    // designMode off; the notable part is which names Blink refuses.
+    for (const fn of ['execCommand', 'queryCommandEnabled', 'queryCommandIndeterm',
+                      'queryCommandState', 'queryCommandSupported', 'queryCommandValue']) {
+      testing.expectEqual('function', typeof document[fn], { desc: 'document.' + fn });
+    }
+    for (const name of ['bold', 'italic', 'underline', 'strikeThrough', 'subscript',
+        'superscript', 'copy', 'cut', 'selectAll', 'insertText', 'insertHTML', 'undo',
+        'redo', 'styleWithCSS', 'useCSS', 'defaultParagraphSeparator', 'formatBlock',
+        'fontName', 'fontSize', 'foreColor', 'backColor', 'hiliteColor', 'justifyCenter',
+        'justifyFull', 'justifyLeft', 'justifyNone', 'justifyRight', 'indent', 'outdent',
+        'createLink', 'unlink', 'removeFormat', 'insertOrderedList', 'insertUnorderedList',
+        'insertHorizontalRule', 'insertImage', 'insertLineBreak', 'insertParagraph',
+        'insertNewlineInQuotedContent', 'delete', 'forwardDelete', 'transpose', 'print',
+        'pasteAndMatchStyle', 'unselect', 'FontSizeDelta']) {
+      testing.expectEqual(true, document.queryCommandSupported(name), { desc: name + ' supported' });
+    }
+    // ...and the names Chrome does not implement, including paste (blocked) and
+    // the Gecko-only editing toggles.
+    for (const name of ['paste', 'heading', 'contentReadOnly', 'enableObjectResizing',
+        'enableInlineTableEditing', 'enableAbsolutePositionEditing', 'increaseFontSize',
+        'decreaseFontSize', 'insertBrOnReturn', 'moveDown', 'selectWord', 'setMark',
+        'scrollPageForward', 'toggleBold', 'yank', 'AlignCenter', 'DeleteBackward',
+        'nosuchcommandxyz', '']) {
+      testing.expectEqual(false, document.queryCommandSupported(name), { desc: name + ' unsupported' });
+    }
+    // Matching is ASCII case-insensitive.
+    testing.expectEqual(true, document.queryCommandSupported('BOLD'));
+    testing.expectEqual(true, document.queryCommandSupported('SelectAll'));
+
+    // With nothing selected and designMode off, only these are enabled, and
+    // execCommand agrees with queryCommandEnabled.
+    const enabled = ['defaultParagraphSeparator', 'print', 'selectAll', 'styleWithCSS', 'useCSS'];
+    for (const name of enabled) {
+      testing.expectEqual(true, document.queryCommandEnabled(name), { desc: name + ' enabled' });
+      testing.expectEqual(true, document.execCommand(name), { desc: name + ' execCommand' });
+    }
+    for (const name of ['bold', 'italic', 'copy', 'insertText', 'undo']) {
+      testing.expectEqual(false, document.queryCommandEnabled(name), { desc: name + ' not enabled' });
+      testing.expectEqual(false, document.execCommand(name), { desc: name + ' execCommand' });
+    }
+
+    // queryCommandState and queryCommandIndeterm are false throughout, and
+    // queryCommandValue is "" except for the boolean-state commands (which
+    // stringify their state) and defaultParagraphSeparator.
+    for (const name of ['bold', 'italic', 'copy', 'selectAll', 'nosuchcommandxyz']) {
+      testing.expectEqual(false, document.queryCommandState(name), { desc: name + ' state' });
+      testing.expectEqual(false, document.queryCommandIndeterm(name), { desc: name + ' indeterm' });
+    }
+    for (const name of ['bold', 'italic', 'underline', 'strikeThrough', 'subscript',
+                        'superscript', 'insertOrderedList', 'insertUnorderedList']) {
+      testing.expectEqual('false', document.queryCommandValue(name), { desc: name + ' value' });
+    }
+    testing.expectEqual('div', document.queryCommandValue('defaultParagraphSeparator'));
+    // Selection-dependent values (fontName, fontSize, foreColor, justify*) read
+    // as "" while nothing is selected; they only report computed values once a
+    // range exists.
+    for (const name of ['fontName', 'fontSize', 'foreColor', 'justifyCenter', 'copy',
+                        'selectAll', 'nosuchcommandxyz']) {
+      testing.expectEqual('', document.queryCommandValue(name), { desc: name + ' value' });
+    }
+
+    // A missing argument is a TypeError, not a silent false.
+    testing.expectError('TypeError', () => document.execCommand());
+  }
+</script>
+
 </body>
 </html>

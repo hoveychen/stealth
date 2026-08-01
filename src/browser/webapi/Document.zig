@@ -84,6 +84,11 @@ _open_popovers: std.ArrayList(*Element) = .empty,
 _throw_on_dynamic_markup_insertion_counter: u32 = 0,
 
 _on_selectionchange: ?js.Function.Global = null,
+_design_mode: bool = false,
+// Chrome keeps whatever a script assigns to these, even on an HTML document
+// where they start out null/false.
+_xml_version: ?[]const u8 = null,
+_xml_standalone: bool = false,
 
 pub fn getOnSelectionChange(self: *Document) ?js.Function.Global {
     return self._on_selectionchange;
@@ -1112,6 +1117,177 @@ pub fn getAll(self: *Document, frame: *Frame) !*collections.HTMLAllCollection {
     return frame._factory.create(collections.HTMLAllCollection.init(self.asNode(), frame));
 }
 
+// We do not retain the XML declaration a document was parsed from, so this is
+// always null. That is what Chrome reports for an HTML document; for an XML one
+// it would echo the declared encoding.
+pub fn getXmlEncoding(_: *const Document) ?[]const u8 {
+    return null;
+}
+
+pub fn getXmlVersion(self: *const Document) ?[]const u8 {
+    if (self._xml_version) |v| {
+        return v;
+    }
+    return if (self._type == .xml) "1.0" else null;
+}
+
+pub fn setXmlVersion(self: *Document, value: ?[]const u8, frame: *Frame) !void {
+    self._xml_version = if (value) |v| try frame.arena.dupe(u8, v) else null;
+}
+
+pub fn getXmlStandalone(self: *const Document) bool {
+    return self._xml_standalone;
+}
+
+pub fn setXmlStandalone(self: *Document, value: bool) void {
+    self._xml_standalone = value;
+}
+
+pub fn getDesignMode(self: *const Document) []const u8 {
+    return if (self._design_mode) "on" else "off";
+}
+
+// Anything that is not an ASCII case-insensitive "on" turns the mode off, which
+// is how Chrome normalises it: "bogus", "", null and 1 all read back as "off".
+pub fn setDesignMode(self: *Document, value: []const u8) void {
+    self._design_mode = std.ascii.eqlIgnoreCase(value, "on");
+}
+
+pub fn getWasDiscarded(_: *const Document) bool {
+    return false;
+}
+
+// From the SVG spec, not HTML: the document element, but only when it is an
+// <svg> root. An HTML page reports null, and so does an XML document whose root
+// is anything else.
+pub fn getRootElement(self: *Document) ?*Element {
+    const el = self.getDocumentElement() orelse return null;
+    if (el._namespace != .svg or !std.mem.eql(u8, el.getLocalName(), "svg")) {
+        return null;
+    }
+    return el;
+}
+
+// document.captureEvents / releaseEvents / clear: Netscape-era no-ops that
+// Chrome still exposes and that return undefined.
+pub fn captureEvents(_: *const Document) void {}
+pub fn releaseEvents(_: *const Document) void {}
+pub fn clear(_: *const Document) void {}
+
+// The editing commands. What a page can observe without a selection is a fixed
+// table, and this is that table as measured on a headed Chrome 150 over a
+// 97-name candidate list: which names Blink admits to knowing, which of those
+// are enabled with nothing selected and designMode off, and what
+// queryCommandValue answers.
+//
+// Names are matched ASCII case-insensitively ("BOLD" and "SelectAll" resolve),
+// so the keys here are lowercase and lookups fold the input.
+const EditingCommand = struct {
+    // Enabled with no selection and designMode off. execCommand agrees with
+    // queryCommandEnabled, so it returns this too.
+    enabled: bool = false,
+    // queryCommandValue. The boolean-state commands stringify their state, so
+    // they read "false" rather than "".
+    value: []const u8 = "",
+};
+
+const editing_commands = std.StaticStringMap(EditingCommand).initComptime(.{
+    .{ "backcolor", EditingCommand{} },
+    .{ "bold", EditingCommand{ .value = "false" } },
+    .{ "copy", EditingCommand{} },
+    .{ "createlink", EditingCommand{} },
+    .{ "cut", EditingCommand{} },
+    .{ "defaultparagraphseparator", EditingCommand{ .enabled = true, .value = "div" } },
+    .{ "delete", EditingCommand{} },
+    .{ "fontname", EditingCommand{} },
+    .{ "fontsize", EditingCommand{} },
+    .{ "fontsizedelta", EditingCommand{} },
+    .{ "forecolor", EditingCommand{} },
+    .{ "formatblock", EditingCommand{} },
+    .{ "forwarddelete", EditingCommand{} },
+    .{ "hilitecolor", EditingCommand{} },
+    .{ "indent", EditingCommand{} },
+    .{ "inserthorizontalrule", EditingCommand{} },
+    .{ "inserthtml", EditingCommand{} },
+    .{ "insertimage", EditingCommand{} },
+    .{ "insertlinebreak", EditingCommand{} },
+    .{ "insertnewlineinquotedcontent", EditingCommand{} },
+    .{ "insertorderedlist", EditingCommand{ .value = "false" } },
+    .{ "insertparagraph", EditingCommand{} },
+    .{ "inserttext", EditingCommand{} },
+    .{ "insertunorderedlist", EditingCommand{ .value = "false" } },
+    .{ "italic", EditingCommand{ .value = "false" } },
+    .{ "justifycenter", EditingCommand{} },
+    .{ "justifyfull", EditingCommand{} },
+    .{ "justifyleft", EditingCommand{} },
+    .{ "justifynone", EditingCommand{} },
+    .{ "justifyright", EditingCommand{} },
+    .{ "outdent", EditingCommand{} },
+    .{ "pasteandmatchstyle", EditingCommand{} },
+    .{ "print", EditingCommand{ .enabled = true } },
+    .{ "redo", EditingCommand{} },
+    .{ "removeformat", EditingCommand{} },
+    .{ "selectall", EditingCommand{ .enabled = true } },
+    .{ "strikethrough", EditingCommand{ .value = "false" } },
+    .{ "stylewithcss", EditingCommand{ .enabled = true } },
+    .{ "subscript", EditingCommand{ .value = "false" } },
+    .{ "superscript", EditingCommand{ .value = "false" } },
+    .{ "transpose", EditingCommand{} },
+    .{ "underline", EditingCommand{ .value = "false" } },
+    .{ "undo", EditingCommand{} },
+    .{ "unlink", EditingCommand{} },
+    .{ "unselect", EditingCommand{} },
+    .{ "usecss", EditingCommand{ .enabled = true } },
+});
+
+fn lookupCommand(name: []const u8, buf: []u8) ?EditingCommand {
+    if (name.len > buf.len) {
+        return null;
+    }
+    return editing_commands.get(std.ascii.lowerString(buf[0..name.len], name));
+}
+
+// Blink refuses "paste" (a clipboard read the page may not have) and never
+// implemented the Gecko-only toggles (heading, contentReadOnly,
+// enableObjectResizing, ...), so those report unsupported here as well.
+pub fn queryCommandSupported(_: *const Document, name: []const u8) bool {
+    var buf: [64]u8 = undefined;
+    return lookupCommand(name, &buf) != null;
+}
+
+pub fn queryCommandEnabled(_: *const Document, name: []const u8) bool {
+    var buf: [64]u8 = undefined;
+    const command = lookupCommand(name, &buf) orelse return false;
+    return command.enabled;
+}
+
+// Nothing here is ever in an indeterminate or "on" state: with no editable
+// selection Chrome answers false for every command, known or not.
+pub fn queryCommandIndeterm(_: *const Document, _: []const u8) bool {
+    return false;
+}
+
+pub fn queryCommandState(_: *const Document, _: []const u8) bool {
+    return false;
+}
+
+// The selection-dependent commands (fontName, fontSize, foreColor, justify*)
+// read "" while nothing is selected; they only report computed values once a
+// range exists, which is why they carry no value in the table above.
+pub fn queryCommandValue(_: *const Document, name: []const u8) []const u8 {
+    var buf: [64]u8 = undefined;
+    const command = lookupCommand(name, &buf) orelse return "";
+    return command.value;
+}
+
+// The commands that are enabled without a selection either set a
+// document-level editing preference (styleWithCSS, useCSS,
+// defaultParagraphSeparator) or belong to the embedder (print). We report the
+// same answer Chrome does but carry out no action.
+pub fn execCommand(self: *const Document, name: []const u8) bool {
+    return self.queryCommandEnabled(name);
+}
+
 // document.write is complicated and works differently based on the state of
 // parsing. But, generally, it's supposed to be additive/streaming. Multiple
 // document.writes are parsed a single unit. Well, that causes issues with
@@ -1686,6 +1862,9 @@ pub const JsApi = struct {
     pub const contentType = bridge.accessor(Document.getContentType, null, .{});
     pub const doctype = bridge.accessor(Document.getDocType, null, .{});
     pub const documentElement = bridge.accessor(Document.getDocumentElement, null, .{});
+    pub const xmlEncoding = bridge.accessor(Document.getXmlEncoding, null, .{});
+    pub const xmlVersion = bridge.accessor(Document.getXmlVersion, Document.setXmlVersion, .{});
+    pub const xmlStandalone = bridge.accessor(Document.getXmlStandalone, Document.setXmlStandalone, .{});
     pub const domain = bridge.accessor(Document.getDomain, Document.setDomain, .{});
     pub const referrer = bridge.property("", .{ .template = false });
     pub const cookie = bridge.accessor(Document.getCookie, Document.setCookie, .{});
@@ -1703,6 +1882,7 @@ pub const JsApi = struct {
     pub const scripts = bridge.accessor(Document.getScripts, null, .{});
     pub const currentScript = bridge.accessor(Document.getCurrentScript, null, .{});
     pub const defaultView = bridge.accessor(_defaultView, null, .{});
+    pub const designMode = bridge.accessor(Document.getDesignMode, Document.setDesignMode, .{});
     fn _defaultView(self: *const Document) ?*Window {
         const frame = self._frame orelse return null;
         return frame.window;
@@ -1710,13 +1890,21 @@ pub const JsApi = struct {
     pub const onreadystatechange = bridge.accessor(handlerAccessor(.onreadystatechange).get, handlerAccessor(.onreadystatechange).set, .{});
     pub const anchors = bridge.accessor(Document.getAnchors, null, .{});
     pub const applets = bridge.accessor(Document.getApplets, null, .{});
+    pub const fgColor = bridge.accessor(colorAccessor("text").get, colorAccessor("text").set, .{});
+    pub const linkColor = bridge.accessor(colorAccessor("link").get, colorAccessor("link").set, .{});
+    pub const vlinkColor = bridge.accessor(colorAccessor("vlink").get, colorAccessor("vlink").set, .{});
+    pub const alinkColor = bridge.accessor(colorAccessor("alink").get, colorAccessor("alink").set, .{});
+    pub const bgColor = bridge.accessor(colorAccessor("bgcolor").get, colorAccessor("bgcolor").set, .{});
     pub const all = bridge.accessor(Document.getAll, null, .{});
     pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
     pub const onpointerlockchange = bridge.accessor(handlerAccessor(.onpointerlockchange).get, handlerAccessor(.onpointerlockchange).set, .{});
     pub const onpointerlockerror = bridge.accessor(handlerAccessor(.onpointerlockerror).get, handlerAccessor(.onpointerlockerror).set, .{});
     pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
     pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
+    pub const wasDiscarded = bridge.accessor(Document.getWasDiscarded, null, .{});
     pub const prerendering = bridge.property(false, .{ .template = false });
+    pub const webkitVisibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
+    pub const webkitHidden = bridge.property(false, .{ .template = false, .readonly = true });
     pub const onbeforecopy = bridge.accessor(handlerAccessor(.onbeforecopy).get, handlerAccessor(.onbeforecopy).set, .{});
     pub const onbeforecut = bridge.accessor(handlerAccessor(.onbeforecut).get, handlerAccessor(.onbeforecut).set, .{});
     pub const onbeforepaste = bridge.accessor(handlerAccessor(.onbeforepaste).get, handlerAccessor(.onbeforepaste).set, .{});
@@ -1729,6 +1917,7 @@ pub const JsApi = struct {
     pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
     pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
     pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
+    pub const rootElement = bridge.accessor(Document.getRootElement, null, .{});
     pub const onabort = bridge.accessor(handlerAccessor(.onabort).get, handlerAccessor(.onabort).set, .{});
     pub const onbeforeinput = bridge.accessor(handlerAccessor(.onbeforeinput).get, handlerAccessor(.onbeforeinput).set, .{});
     pub const onbeforematch = bridge.accessor(handlerAccessor(.onbeforematch).get, handlerAccessor(.onbeforematch).set, .{});
@@ -1845,6 +2034,8 @@ pub const JsApi = struct {
     // Operations, alphabetical, as WebIDL requires and Chrome emits.
     pub const adoptNode = bridge.function(Document.adoptNode, .{ .ce_reactions = true });
     pub const append = bridge.function(Document.append, .{ .ce_reactions = true });
+    pub const captureEvents = bridge.function(Document.captureEvents, .{});
+    pub const clear = bridge.function(Document.clear, .{});
     pub const close = bridge.function(Document.close, .{ .ce_reactions = true });
     pub const createAttribute = bridge.function(Document.createAttribute, .{});
     pub const createAttributeNS = bridge.function(Document.createAttributeNS, .{});
@@ -1864,6 +2055,7 @@ pub const JsApi = struct {
     pub const elementFromPoint = bridge.function(Document.elementFromPoint, .{});
     pub const elementsFromPoint = bridge.function(Document.elementsFromPoint, .{});
     pub const evaluate = bridge.function(Document.evaluate, .{});
+    pub const execCommand = bridge.function(Document.execCommand, .{});
     pub const getElementById = bridge.function(_getElementById, .{});
     fn _getElementById(self: *Document, value_: ?js.Value, frame: *Frame) !?*Element {
         const value = value_ orelse return null;
@@ -1885,14 +2077,38 @@ pub const JsApi = struct {
     pub const moveBefore = bridge.function(Document.moveBefore, .{ .ce_reactions = true });
     pub const open = bridge.function(Document.open, .{ .ce_reactions = true });
     pub const prepend = bridge.function(Document.prepend, .{ .ce_reactions = true });
+    pub const queryCommandEnabled = bridge.function(Document.queryCommandEnabled, .{});
+    pub const queryCommandIndeterm = bridge.function(Document.queryCommandIndeterm, .{});
+    pub const queryCommandState = bridge.function(Document.queryCommandState, .{});
+    pub const queryCommandSupported = bridge.function(Document.queryCommandSupported, .{});
+    pub const queryCommandValue = bridge.function(Document.queryCommandValue, .{});
     pub const querySelector = bridge.function(Document.querySelector, .{});
     pub const querySelectorAll = bridge.function(Document.querySelectorAll, .{});
+    pub const releaseEvents = bridge.function(Document.releaseEvents, .{});
     pub const replaceChildren = bridge.function(Document.replaceChildren, .{ .ce_reactions = true });
     pub const write = bridge.function(Document.write, .{ .ce_reactions = true });
     pub const writeln = bridge.function(Document.writeln, .{ .ce_reactions = true });
 
     fn getCharacterSet(self: *const Document) []const u8 {
         return self.getCharset();
+    }
+
+    // The colour properties are attribute reflections on <body>, with no colour
+    // parsing in either direction: whatever string goes in comes back out. The
+    // property-to-attribute mapping was measured, since the names do not line up
+    // (fgColor is `text`, not `fgcolor`).
+    fn colorAccessor(comptime attribute: []const u8) type {
+        return struct {
+            pub fn get(self: *Document) []const u8 {
+                const body_element = self.getBody() orelse return "";
+                return body_element.asElement().getAttributeSafe(comptime .wrap(attribute)) orelse "";
+            }
+
+            pub fn set(self: *Document, value: []const u8, frame: *Frame) !void {
+                const body_element = self.getBody() orelse return;
+                try body_element.asElement().setAttributeSafe(comptime .wrap(attribute), .wrap(value), frame);
+            }
+        };
     }
 
     // Generates a getter/setter pair backed by the frame's attribute-listener
