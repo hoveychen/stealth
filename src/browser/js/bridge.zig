@@ -1214,6 +1214,21 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/XPathExpression.zig"),
     @import("../webapi/XPathEvaluator.zig"),
     @import("../webapi/collections/DOMStringList.zig"),
+    // Web Audio: window-only in Chrome (no AudioContext in workers).
+    @import("../webapi/audio/BaseAudioContext.zig"),
+    @import("../webapi/audio/AudioContext.zig"),
+    @import("../webapi/audio/AudioNode.zig"),
+    @import("../webapi/audio/AudioDestinationNode.zig"),
+    @import("../webapi/audio/AnalyserNode.zig"),
+    @import("../webapi/audio/AudioListener.zig"),
+    @import("../webapi/audio/AudioParam.zig"),
+    // Web Speech synthesis: window-only in Chrome, like the audio types
+    // (measured: typeof self.speechSynthesis === 'undefined' in a worker).
+    @import("../webapi/speech/SpeechSynthesis.zig"),
+    @import("../webapi/speech/SpeechSynthesisUtterance.zig"),
+    @import("../webapi/speech/SpeechSynthesisVoice.zig"),
+    @import("../webapi/speech/SpeechSynthesisEvent.zig"),
+    @import("../webapi/speech/SpeechSynthesisErrorEvent.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,
@@ -1269,6 +1284,12 @@ const worker_common_apis = [_]type{
     @import("../webapi/URL.zig"),
     @import("../webapi/canvas/OffscreenCanvas.zig"),
     @import("../webapi/canvas/OffscreenCanvasRenderingContext2D.zig"),
+    // An OffscreenCanvas hands back a WebGL context inside a worker too, so
+    // both interfaces and their object handles are Exposed=(Window,Worker) in
+    // Chrome (measured: typeof self.WebGLRenderingContext === 'function').
+    @import("../webapi/canvas/WebGLRenderingContext.zig"),
+    @import("../webapi/canvas/WebGL2RenderingContext.zig"),
+    @import("../webapi/canvas/webgl_objects.zig"),
     @import("../webapi/canvas/TextMetrics.zig"),
     @import("../webapi/canvas/canvas_objects.zig"),
     @import("../webapi/net/XMLHttpRequest.zig"),

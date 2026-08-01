@@ -35,6 +35,8 @@ const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
+const SpeechSynthesis = @import("speech/SpeechSynthesis.zig");
+const SpeechSynthesisVoice = @import("speech/SpeechSynthesisVoice.zig");
 const Performance = @import("Performance.zig");
 const Chrome = @import("Chrome.zig");
 const Document = @import("Document.zig");
@@ -86,6 +88,11 @@ _connection: *NetworkInformation,
 // pay for them, and getBattery() has to hand back the same object every call.
 _media_devices: ?*MediaDevices = null,
 _battery: ?*BatteryManager = null,
+// window.speechSynthesis, and the voice objects getVoices() hands back. Both
+// are built on first use and then reused, because scripts compare voices by
+// identity across calls.
+_speech_synthesis: ?*SpeechSynthesis = null,
+_voices: ?[]*SpeechSynthesisVoice = null,
 _performance: Performance,
 // Epoch milliseconds at which the load event fired, or 0 before that. Only
 // chrome.csi() / chrome.loadTimes() read it — both report the load timestamp,
@@ -279,6 +286,16 @@ pub fn setPageXOffset(self: *Window, value: js.Value) void {
 
 pub fn setPageYOffset(self: *Window, value: js.Value) void {
     self.replaceGlobalProperty(value, "pageYOffset");
+}
+
+// Chrome exposes this on Window only (measured: undefined in a worker).
+pub fn getSpeechSynthesis(self: *Window, exec: *Execution) !*SpeechSynthesis {
+    if (self._speech_synthesis) |synthesis| {
+        return synthesis;
+    }
+    const synthesis = try exec._factory.eventTarget(SpeechSynthesis{ ._proto = undefined });
+    self._speech_synthesis = synthesis;
+    return synthesis;
 }
 
 pub fn getNavigator(self: *Window) *Navigator {
@@ -1239,6 +1256,7 @@ pub const JsApi = struct {
     pub const window = bridge.accessor(Window.getWindow, null, .{});
     pub const parent = bridge.accessor(Window.getParent, Window.setParent, .{});
     pub const navigator = bridge.accessor(Window.getNavigator, null, .{});
+    pub const speechSynthesis = bridge.accessor(Window.getSpeechSynthesis, null, .{});
     pub const screen = bridge.accessor(Window.getScreen, Window.setScreen, .{});
     pub const visualViewport = bridge.accessor(Window.getVisualViewport, Window.setVisualViewport, .{});
     pub const performance = bridge.accessor(Window.getPerformance, Window.setPerformance, .{});

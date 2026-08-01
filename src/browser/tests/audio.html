@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=audio_context>
+{
+  // Every value here is measured off Chrome 150 — see audio/AudioContext.zig.
+  testing.expectEqual('function', typeof AudioContext);
+  testing.expectEqual(0, AudioContext.length);
+
+  const ac = new AudioContext();
+  testing.expectEqual('[object AudioContext]', Object.prototype.toString.call(ac));
+  testing.expectEqual(48000, ac.sampleRate);
+  testing.expectEqual(0.005333333333333333, ac.baseLatency);
+  testing.expectEqual(0, ac.outputLatency);
+  testing.expectEqual('', ac.sinkId);
+  testing.expectEqual('suspended', ac.state);
+  testing.expectEqual(0, ac.currentTime);
+
+  // AudioContext -> BaseAudioContext -> EventTarget, like Chrome.
+  testing.expectEqual(true, ac instanceof BaseAudioContext);
+  testing.expectEqual(true, ac instanceof EventTarget);
+  testing.expectEqual(AudioContext.prototype.__proto__, BaseAudioContext.prototype);
+  testing.expectEqual(BaseAudioContext.prototype.__proto__, EventTarget.prototype);
+
+  // A non-default sample rate is honoured; out-of-range is a NotSupportedError.
+  testing.expectEqual(44100, new AudioContext({ sampleRate: 44100 }).sampleRate);
+  testing.expectEqual(256 / 44100, new AudioContext({ sampleRate: 44100 }).baseLatency);
+  let threw = null;
+  try { new AudioContext({ sampleRate: 10 }); } catch (e) { threw = e.name; }
+  testing.expectEqual('NotSupportedError', threw);
+
+  const ts = ac.getOutputTimestamp();
+  testing.expectEqual(['contextTime', 'performanceTime'], Object.keys(ts).sort());
+  testing.expectEqual(0, ts.contextTime);
+  testing.expectEqual('number', typeof ts.performanceTime);
+}
+</script>
+
+<script id=audio_destination>
+{
+  const ac = new AudioContext();
+  const d = ac.destination;
+  testing.expectEqual('[object AudioDestinationNode]', Object.prototype.toString.call(d));
+  testing.expectEqual(2, d.maxChannelCount);
+  testing.expectEqual(1, d.numberOfInputs);
+  testing.expectEqual(0, d.numberOfOutputs);
+  testing.expectEqual(2, d.channelCount);
+  testing.expectEqual('explicit', d.channelCountMode);
+  testing.expectEqual('speakers', d.channelInterpretation);
+  testing.expectEqual(ac, d.context);
+  testing.expectEqual(true, d instanceof AudioNode);
+  testing.expectEqual(true, d instanceof EventTarget);
+  // Same object on every read.
+  testing.expectEqual(true, ac.destination === ac.destination);
+}
+</script>
+
+<script id=analyser>
+{
+  const ac = new AudioContext();
+  const an = ac.createAnalyser();
+  testing.expectEqual('[object AnalyserNode]', Object.prototype.toString.call(an));
+  testing.expectEqual(2048, an.fftSize);
+  testing.expectEqual(1024, an.frequencyBinCount);
+  testing.expectEqual(-100, an.minDecibels);
+  testing.expectEqual(-30, an.maxDecibels);
+  testing.expectEqual(0.8, an.smoothingTimeConstant);
+  testing.expectEqual(1, an.numberOfInputs);
+  testing.expectEqual(1, an.numberOfOutputs);
+  testing.expectEqual(2, an.channelCount);
+  testing.expectEqual('max', an.channelCountMode);
+  testing.expectEqual('speakers', an.channelInterpretation);
+
+  an.fftSize = 512;
+  testing.expectEqual(512, an.fftSize);
+  testing.expectEqual(256, an.frequencyBinCount);
+  let threw = null;
+  try { an.fftSize = 500; } catch (e) { threw = e.name; }
+  testing.expectEqual('IndexSizeError', threw);
+  testing.expectEqual(512, an.fftSize);
+
+  // connect() hands back its argument so a.connect(b).connect(c) chains.
+  testing.expectEqual(ac.destination, an.connect(ac.destination));
+  testing.expectEqual(undefined, an.disconnect());
+
+  // Silence, exactly as Chrome reports it for an analyser with no input.
+  const bf = new Uint8Array(an.frequencyBinCount).fill(7);
+  an.getByteFrequencyData(bf);
+  testing.expectEqual([0], [...new Set(bf)]);
+
+  const bt = new Uint8Array(an.fftSize).fill(7);
+  an.getByteTimeDomainData(bt);
+  testing.expectEqual([128], [...new Set(bt)]);
+
+  const ff = new Float32Array(an.frequencyBinCount).fill(7);
+  an.getFloatFrequencyData(ff);
+  testing.expectEqual([-Infinity], [...new Set(ff)]);
+
+  const ft = new Float32Array(an.fftSize).fill(7);
+  an.getFloatTimeDomainData(ft);
+  testing.expectEqual([0], [...new Set(ft)]);
+}
+</script>
+
+<script id=listener>
+{
+  const l = new AudioContext().listener;
+  testing.expectEqual('[object AudioListener]', Object.prototype.toString.call(l));
+  // Origin, facing -Z, +Y up.
+  testing.expectEqual(0, l.positionX.value);
+  testing.expectEqual(0, l.positionY.value);
+  testing.expectEqual(0, l.positionZ.value);
+  testing.expectEqual(0, l.forwardX.value);
+  testing.expectEqual(0, l.forwardY.value);
+  testing.expectEqual(-1, l.forwardZ.value);
+  testing.expectEqual(0, l.upX.value);
+  testing.expectEqual(1, l.upY.value);
+  testing.expectEqual(0, l.upZ.value);
+
+  testing.expectEqual('[object AudioParam]', Object.prototype.toString.call(l.positionX));
+  testing.expectEqual(-3.4028234663852886e38, l.positionX.minValue);
+  testing.expectEqual(3.4028234663852886e38, l.positionX.maxValue);
+  testing.expectEqual('a-rate', l.positionX.automationRate);
+  testing.expectEqual(-1, l.forwardZ.defaultValue);
+  // Nine distinct params, and the same object on every read.
+  testing.expectEqual(9, new Set([l.positionX, l.positionY, l.positionZ, l.forwardX, l.forwardY, l.forwardZ, l.upX, l.upY, l.upZ]).size);
+  testing.expectEqual(true, l.positionX === l.positionX);
+
+  l.setPosition(1, 2, 3);
+  testing.expectEqual([1, 2, 3], [l.positionX.value, l.positionY.value, l.positionZ.value]);
+  l.setOrientation(4, 5, 6, 7, 8, 9);
+  testing.expectEqual([4, 5, 6, 7, 8, 9], [l.forwardX.value, l.forwardY.value, l.forwardZ.value, l.upX.value, l.upY.value, l.upZ.value]);
+
+  // Automation methods return the param so they chain.
+  testing.expectEqual(l.positionX, l.positionX.setValueAtTime(10, 0));
+  testing.expectEqual(10, l.positionX.value);
+  let threw = null;
+  try { l.positionX.setValueAtTime(1, -1); } catch (e) { threw = e.name; }
+  testing.expectEqual('RangeError', threw);
+}
+</script>
+
+<script id=audio_state type=module>
+{
+  // resume() never settles and the state never leaves "suspended" — measured on
+  // a headed Chrome as well as a headless one, because the cause is the autoplay
+  // policy and not a missing audio device. See AudioContext.zig.
+  const state = await testing.async();
+  const ac = new AudioContext();
+  const seen = [];
+  ac.onstatechange = () => seen.push(ac.state);
+  testing.expectEqual('suspended', ac.state);
+
+  const race = (p) => Promise.race([
+    p.then(() => 'resolved', (e) => 'rejected:' + e.name),
+    new Promise((r) => setTimeout(() => r('pending'), 100)),
+  ]);
+
+  const resumeOutcome = await race(ac.resume());
+  const afterResume = { state: ac.state, currentTime: ac.currentTime };
+
+  await ac.suspend();
+  const suspended = ac.state;
+  await ac.close();
+  const closed = ac.state;
+
+  // Once closed, all three reject rather than hanging.
+  const resumeAfterClose = await race(ac.resume());
+  const afterCloseNode = Object.prototype.toString.call(ac.createAnalyser());
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual('pending', resumeOutcome);
+    testing.expectEqual({ state: 'suspended', currentTime: 0 }, afterResume);
+    testing.expectEqual('suspended', suspended);
+    testing.expectEqual('closed', closed);
+    // resume() moved nothing, so only close() fired a statechange.
+    testing.expectEqual(['closed'], seen);
+    testing.expectEqual('rejected:InvalidStateError', resumeAfterClose);
+    // Chrome still hands back a node from a closed context.
+    testing.expectEqual('[object AnalyserNode]', afterCloseNode);
+  });
+}
+</script>
+
+<script id=audio_prototypes>
+{
+  // Chrome's own prototype member lists, measured. A missing or extra member
+  // here is exactly the kind of thing a fingerprint script enumerates.
+  //
+  // AudioContext.prototype is the one list that is deliberately short of
+  // Chrome's: `createMediaElementSource`, `createMediaStreamSource`,
+  // `createMediaStreamDestination` and `playbackStats` all need node types the
+  // engine has no use for yet. Asserted as-is so the gap is visible rather than
+  // filtered away.
+  testing.expectEqual(
+    ['baseLatency', 'close', 'constructor', 'getOutputTimestamp', 'onerror', 'onsinkchange', 'outputLatency', 'resume', 'setSinkId', 'sinkId', 'suspend'],
+    Object.getOwnPropertyNames(AudioContext.prototype).sort(),
+  );
+  // Same for BaseAudioContext: nineteen create* factories and `audioWorklet`
+  // and `decodeAudioData` are absent, `createAnalyser` is the one that matters.
+  testing.expectEqual(
+    ['constructor', 'createAnalyser', 'currentTime', 'destination', 'listener', 'onstatechange', 'sampleRate', 'state'],
+    Object.getOwnPropertyNames(BaseAudioContext.prototype).sort(),
+  );
+  testing.expectEqual(
+    ['channelCount', 'channelCountMode', 'channelInterpretation', 'connect', 'constructor', 'context', 'disconnect', 'numberOfInputs', 'numberOfOutputs'],
+    Object.getOwnPropertyNames(AudioNode.prototype).sort(),
+  );
+  testing.expectEqual(
+    ['constructor', 'maxChannelCount'],
+    Object.getOwnPropertyNames(AudioDestinationNode.prototype).sort(),
+  );
+  testing.expectEqual(
+    ['constructor', 'fftSize', 'frequencyBinCount', 'getByteFrequencyData', 'getByteTimeDomainData', 'getFloatFrequencyData', 'getFloatTimeDomainData', 'maxDecibels', 'minDecibels', 'smoothingTimeConstant'],
+    Object.getOwnPropertyNames(AnalyserNode.prototype).sort(),
+  );
+  testing.expectEqual(
+    ['constructor', 'forwardX', 'forwardY', 'forwardZ', 'positionX', 'positionY', 'positionZ', 'setOrientation', 'setPosition', 'upX', 'upY', 'upZ'],
+    Object.getOwnPropertyNames(AudioListener.prototype).sort(),
+  );
+
+  // Chrome's arities.
+  testing.expectEqual(1, AudioNode.prototype.connect.length);
+  testing.expectEqual(0, AudioNode.prototype.disconnect.length);
+  testing.expectEqual(1, AnalyserNode.prototype.getByteFrequencyData.length);
+  testing.expectEqual(3, AudioListener.prototype.setPosition.length);
+  testing.expectEqual(6, AudioListener.prototype.setOrientation.length);
+  testing.expectEqual(2, AudioParam.prototype.setValueAtTime.length);
+}
+</script>

@@ -248,6 +248,20 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
     const remote_url = try URL.resolve(arena.allocator(), base_url, src, .{ .encoding = frame.charset });
     script_element._executed = true;
 
+    // Content-Security-Policy. Ignoring the page's policy is not a missing
+    // feature but a detectable behaviour: rebrowser's bypassCsp test appends a
+    // <script src> to a host its own policy does not list and reports whichever
+    // of onload/onerror fires. A real browser fires error and never fetches.
+    if (frame.csp().allowsScript(remote_url, frame.url) == false) {
+        log.info(.http, "script blocked by csp", .{ .url = remote_url, .ctx = ctx });
+        // Queued rather than dispatched inline: this runs inside appendChild, so
+        // firing user JS here would be a novel re-entrancy point (same reasoning
+        // as the <link> hint events).
+        try frame.queueElementEvent(script_element._proto, .@"error");
+        arena.release();
+        return;
+    }
+
     const mode: Script.Extra.FrameExtra.Mode = blk: {
         if (element.getAttributeSafe(comptime .wrap("async")) != null) {
             break :blk .async;

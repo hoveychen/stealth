@@ -547,3 +547,32 @@
     });
   }
 </script>
+
+<script id="worker_offscreen_webgl" type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./offscreen-webgl-worker.js');
+    worker.onmessage = function(event) {
+      state.resolve(event.data);
+    };
+
+    await state.done((data) => {
+      testing.expectTrue(data.ok, 'worker webgl error: ' + data.err);
+      const r = data.results;
+      testing.expectEqual('function', r.has_webgl_ctor);
+      testing.expectEqual('function', r.has_webgl2_ctor);
+      // AudioContext is window-only in Chrome (measured), so it must stay absent.
+      testing.expectEqual('undefined', r.has_audio_ctor);
+
+      testing.expectEqual('[object WebGLRenderingContext]', r.gl_tag);
+      testing.expectEqual(true, r.gl_canvas_is_same);
+      testing.expectEqual('[object OffscreenCanvas]', r.gl_canvas_tag);
+      testing.expectEqual([256, 256], r.drawing_buffer);
+      testing.expectEqual([0, 0, 256, 256], r.viewport);
+      testing.expectEqual('[object WebGLBuffer]', r.buffer_tag);
+
+      testing.expectEqual('[object WebGL2RenderingContext]', r.gl2_tag);
+      testing.expectEqual([64, 32], r.gl2_drawing_buffer);
+    });
+  }
+</script>

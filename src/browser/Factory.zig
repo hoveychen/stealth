@@ -104,6 +104,27 @@ pub fn uiEvent(_: *const Factory, arena: *lp.Arena, typ: String, child: anytype)
     return chain.get(2);
 }
 
+// {Event, SpeechSynthesisEvent, SpeechSynthesisErrorEvent}. Mirrors uiEvent,
+// except the middle carries fields (the utterance), so it is set by value.
+pub fn speechSynthesisEvent(_: *const Factory, arena: *lp.Arena, typ: String, middle: anytype, child: anytype) !*@TypeOf(child) {
+    const SpeechSynthesisEvent = @import("webapi/speech/SpeechSynthesisEvent.zig");
+
+    const chain = try PrototypeChain(
+        &.{ Event, SpeechSynthesisEvent, @TypeOf(child) },
+    ).allocate(arena.allocator());
+
+    const event_ptr = chain.get(0);
+    event_ptr.* = try eventInit(arena, typ, chain.get(1));
+
+    const middle_ptr = chain.get(1);
+    middle_ptr.* = middle;
+    middle_ptr._proto = chain.get(0);
+    middle_ptr._type = unionInit(SpeechSynthesisEvent.Type, chain.get(2));
+
+    chain.setLeaf(2, child);
+    return chain.get(2);
+}
+
 pub fn mouseEvent(_: *const Factory, arena: *lp.Arena, typ: String, mouse: MouseEvent, child: anytype) !*@TypeOf(child) {
     const chain = try PrototypeChain(
         &.{ Event, UIEvent, MouseEvent, @TypeOf(child) },
@@ -510,6 +531,25 @@ pub fn xhrEventTarget(_: *const Factory, allocator: Allocator, child: anytype) !
     return try AutoPrototypeChain(
         &.{ EventTarget, XMLHttpRequestEventTarget, @TypeOf(child) },
     ).create(allocator, child);
+}
+
+// {EventTarget, AudioNode, Leaf}. The leaf's `_context` is set by the caller
+// once the chain exists — the middle can only be default-initialised here.
+pub fn audioNode(self: *Factory, child: anytype) !*@TypeOf(child) {
+    const AudioNode = @import("webapi/audio/AudioNode.zig");
+
+    return try AutoPrototypeChain(
+        &.{ EventTarget, AudioNode, @TypeOf(child) },
+    ).create(self._slab.allocator(), child);
+}
+
+// {EventTarget, BaseAudioContext, AudioContext}.
+pub fn audioContext(self: *Factory, child: anytype) !*@TypeOf(child) {
+    const BaseAudioContext = @import("webapi/audio/BaseAudioContext.zig");
+
+    return try AutoPrototypeChain(
+        &.{ EventTarget, BaseAudioContext, @TypeOf(child) },
+    ).create(self._slab.allocator(), child);
 }
 
 pub fn textTrackCue(self: *Factory, child: anytype) !*@TypeOf(child) {

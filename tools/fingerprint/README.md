@@ -35,6 +35,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `detector-sweep.mjs` | Walks every detector in `sites.mjs` and records how far each page got — nodes, text length, verdict words, and whether the navigation happened at all. Answers "does the detector finish", which the collectors do not. |
 | `subresource-check.mjs` | Answers "did the request happen at all", per fetch destination. Exits non-zero on a miss. Takes engine flags after `--`. |
 | `collect-*.mjs` | Spawn the engine, run the four steps, write one JSON snapshot. |
+| `dump-voices.mjs` | Regenerates `src/browser/webapi/speech/voices.zig` from the real Chrome's `speechSynthesis.getVoices()`. The list arrives asynchronously, so it polls until it stops growing and refuses to write an empty table. |
 | `dump-graphics.mjs` | Dumps Chrome's *whole* graphics API surface — every GLenum, every method's arity, every `getParameter` answer, every character's advance width. `probe.js` asks "what does a fingerprinting script see"; this asks "what exactly should we report". The Zig code under `src/browser/webapi/canvas/` is transcribed from its output. |
 | `diff.mjs` | Renders a candidate/reference markdown comparison. |
 
@@ -558,20 +559,19 @@ guessing, and each verified by isolation before writing any Zig:
 
 ### What is still short, with the cause where it is known
 
-- **CreepJS `audio`**: no `AudioContext` / `OfflineAudioContext` at all. Its
-  audio sub-test cannot start. This is a Web Audio stub of its own size, and it
-  is now the widest single gap left: deviceandbrowserinfo's entire verdict
-  hinges on the same absence (see below).
-- **CreepJS `speech`**: no `speechSynthesis` / `SpeechSynthesisUtterance`.
-  iphey trips on the same gap — it `alert()`s
-  `ReferenceError: speechSynthesis is not defined` while still completing.
-- **CreepJS `webgl`**: not the WebGL work — CreepJS asks
-  `new OffscreenCanvas(256, 256).getContext('webgl')`, and `OffscreenCanvas`
-  only serves `2d`. `HTMLCanvasElement.getContext('webgl')` works; routing
-  OffscreenCanvas to the same context closes it.
-- **rebrowser's `bypassCsp` is red**: it declares a CSP the engine ignores, and
-  rebrowser calls that "invalid behavior for a normal browser". Chrome is green
-  there. Found only because the table started rendering.
+- ~~**CreepJS `audio`**~~ **Partly closed, and the rest is a deliberate no.**
+  `AudioContext` and its value layer now exist (see F1 below), which is what
+  deviceandbrowserinfo needed. CreepJS's own audio sub-test still reads
+  `blocked`, because it fingerprints through `OfflineAudioContext.startRendering`
+  and there is no DSP here to render with. A constant buffer would hash to a
+  value no real Chrome produces, so it stays absent on purpose.
+- ~~**CreepJS `speech`**~~ **Closed (F3).** `speechSynthesis` and its four
+  companion interfaces exist, `getVoices()` answers the measured 199-voice macOS
+  list, and iphey's `ReferenceError` alert is gone.
+- ~~**CreepJS `webgl`**~~ **Closed (F2).** `OffscreenCanvas.getContext` serves
+  `webgl` and `webgl2`, on the main thread and in a worker.
+- ~~**rebrowser's `bypassCsp` is red**~~ **Closed (F4).** The engine enforces
+  the page's `script-src` for external script loads.
 - ~~**`tls.browserleaks.com/json` navigation is intermittent**~~ **Closed: it
   was the route.** The failing navigations report `SslConnectError`, which is
   the fake-IP tunnel dropping a handshake — the same mechanism as P9, and it
@@ -592,7 +592,8 @@ guessing, and each verified by isolation before writing any Zig:
   minified source for top-level `return`s had missed it, because it is nested
   inside `try { try { … } } `. Same gap as the CreepJS `audio` item above, so
   one Web Audio stub closes both.
-- **browserleaks.com/javascript renders 853 nodes against Chrome's 1180** with
+- **browserleaks.com/javascript renders 1039 nodes against Chrome's 1180** (853
+  before F1–F3) with
   zero page errors and zero failed requests. It is not a broken script — the
   page renders one section per API family and the ones we do not implement come
   out empty. Closing it is API coverage measured section by section, not a bug
@@ -635,3 +636,135 @@ The remaining 31 probe keys are enumerated in `after-p6-vs-chrome.md`; the
 per-layer sections above say which are deliberate (`hardwareConcurrency`,
 `deviceMemory`), which are missing APIs (`RTCPeerConnection`, `AudioContext`,
 `speechSynthesis`), and which are known gaps with a measured cost.
+
+## Closing the four API gaps (F1–F4)
+
+The four items the previous section had listed as open — CreepJS's `audio`,
+`speech` and `webgl` sub-tests, and rebrowser's red `bypassCsp` row — were taken
+as one plan. Everything below was measured through a SOCKS proxy, with the
+`main` binary and the branch binary run back to back on the same route, because
+the machine's default route is the fake-IP tunnel from P9 and it blames whichever
+host it drops.
+
+The reference column is a **headed** Chrome
+(`detectors-chrome-headed.json`, `detector-sweep.mjs chrome --headed`). Headless
+is not a safe stand-in: some sites treat it differently, and its own APIs can
+report differently. Where a row needed a Chrome measurement finer than the sweep
+records, the probe is named.
+
+| | before (`detectors-partial-lightpanda.json`) | after (`detectors-api-gaps-lightpanda.json`) | Chrome (headed) |
+|---|---|---|---|
+| deviceandbrowserinfo nodes | 235, no verdict panel | **262, verdict panel renders** | 263 |
+| rebrowser `bypassCsp` | 🔴 "CSP was ignored … invalid behavior for a normal browser" | **🟢 "CSP is enabled, it's expected behavior"** | 🟢 |
+| rebrowser nodes / verdict words | 100 / 7 | **98 / 6** | 98 / 6 |
+| CreepJS WebGL sub-test | `images/pixels: blocked`, `params (0)`, `exts (0)` | **`images:55a7e17b`, `pixels:85d16b8a`, `params (78)`, `exts (75):901d2431`** | `exts (75): 901d2431` |
+| CreepJS speech sub-test | `local (0)/remote (0)/lang (0): blocked` | **`local (180):a158dc36`, `remote (19):036f6dce`, `lang (51):c4951b20`** | the same three hashes, byte for byte — but only when something touches `speechSynthesis` early (see below) |
+| CreepJS `blocked` rows, whole report | 20 | **13** | 3 |
+| CreepJS nodes | 3724 | **4150** | 3756 |
+| browserleaks.com/javascript nodes | 853 | **1039** | 1180 |
+| amiunique nodes | 1494 | **1530** | 1550 |
+| iphey `alert()`s | 2 (`i9` speechSynthesis, `i20`) | **1 (`i20` only)** | — |
+
+No site in the twelve-site sweep lost content, which is the check that matters
+for F4: a CSP implementation that is too strict shows up as a page that stops
+rendering, and none did.
+
+**F1 — `AudioContext`.** Seven types (`AudioContext`, `BaseAudioContext`,
+`AudioNode`, `AudioDestinationNode`, `AnalyserNode`, `AudioListener`,
+`AudioParam`), every value measured off Chrome 150 rather than remembered. This
+was the highest-value item: deviceandbrowserinfo's `collectFingerprint()` returns
+`undefined` the moment `typeof AudioContext != "function"`, and the whole verdict
+panel hangs off that.
+
+Deliberately absent: `OfflineAudioContext`, and therefore no audio *hash*. The
+engine has no audio thread, so rendering it would mean a fabricated constant
+buffer — and a constant audio hash matches no real Chrome at all, which is a
+stronger signal than the missing constructor. The analyser's four `get*Data()`
+calls report silence, which is not a fabrication: it is exactly what Chrome
+returns for an analyser with nothing connected (byte frequency 0, byte
+time-domain 128, float frequency `-Infinity`, float time-domain 0, all measured).
+
+`resume()` returns a promise that never settles and leaves the state
+`suspended`, and `currentTime` stays 0. That is Chrome, measured on a headed
+window as well as a headless one — still pending after 2s in both. The cause is
+the autoplay policy, not a missing audio device: a context created by script with
+no user gesture behind it never starts, which is the position every fingerprint
+collector is in. `suspend()` and `close()` do resolve, also measured.
+
+An earlier revision had `resume()` resolve and start a clock, on the theory that
+the never-settling promise was a headless artefact. Measuring a headed window
+disproved it, and the invented behaviour was removed.
+
+**F2 — `OffscreenCanvas` WebGL.** The drawing surface of both WebGL contexts
+became a union of the two canvas kinds. Two things fell out of it: the
+object-creating calls took a `*Frame` and so could never have run in a worker at
+all (they take an `*Execution` now, and the WebGL interfaces joined the worker
+scope, which is where Chrome has them — measured), and
+`OffscreenCanvas.getContext` now validates its argument as the WebIDL enum it is.
+Chrome throws a `TypeError` for `'experimental-webgl'` *there* while returning
+null for it on an `HTMLCanvasElement`; that asymmetry is measured, not assumed.
+
+**F3 — `speechSynthesis`.** Five types, plus a generated voice table. The table
+is 199 entries because that is what Chrome reports on this machine — 180 local
+macOS system voices then 19 Google remote ones, 51 languages, `Samantha` the
+default — and an empty `getVoices()` is the headless tell, so it is measured data
+rather than a plausible-looking invention. Regenerate with `dump-voices.mjs`.
+
+`getVoices()` reproduces Chrome's *timing* as well as its values, because the
+timing is observable. Polling a headed Chrome every 25ms from first access, three
+runs: the first synchronous read is always empty, `voiceschanged` fires at
+661/662/664ms, and the list is complete at 668/675/675ms. So the first read here
+answers `[]`, the list arrives 665ms later, and `voiceschanged` fires then.
+
+That number is worth not rounding. CreepJS reads `getVoices()`, waits 50ms, then
+gives up 300ms later if no voice with `localService` has arrived — so whether it
+renders hashes or `blocked` depends on whether anything warmed the TTS service
+before its own late warm-up call. It is a race in CreepJS, not a property of
+Chrome: with a `getVoices()` injected at document start, a headed Chrome renders
+`local (180): a158dc36 / remote (19): 036f6dce / lang (51): c4951b20`, which is
+byte for byte what this engine produces. Without it, the same headed Chrome —
+and a second run against the same warm profile — renders all three blocked.
+
+An earlier revision filled the list on the very next task instead. That reported
+the right values for the wrong reason, and it would have shown a filled list in
+the window where Chrome shows an empty one.
+
+`speak()` has no synthesiser behind it, so rather than doing nothing — which
+hangs any page waiting on `onend` — it delivers Chrome's success pair, `start`
+then `end`, from a scheduler task.
+
+**F4 — page CSP.** `src/browser/Csp.zig` parses policies from the
+`Content-Security-Policy` response headers and from every `<meta http-equiv>`,
+and `ScriptManager.addFromElement` consults it before resolving a remote script.
+A blocked load fetches nothing and queues an `error` event on the element.
+
+The scope is `script-src` (falling back to `default-src`), external loads only.
+Inline script and `eval` are not blocked, other directives are parsed past, and a
+host-source's path is ignored. Every one of those simplifications is in the
+more-permissive direction, so none of them can break a page a real browser would
+run. Two are deliberately in the *stricter* direction: `'strict-dynamic'` is not
+honoured, because honouring it would allow precisely the script-inserted load
+rebrowser tests, and `Content-Security-Policy-Report-Only` never blocks.
+
+### What is still open after F1–F4
+
+- **CreepJS `audio` stays `blocked`** — see the `OfflineAudioContext` decision
+  above. This is a choice, not an omission, and it *is* visible: a headed Chrome
+  renders real numbers there (`sum: 124.04347624466754`, `gain:
+  -20.538288116455078`, `unique: 4736`, measured), so the row differs rather than
+  matching. The trade is a differing row against a fabricated hash that matches no
+  machine at all.
+- **CreepJS still shows 13 `blocked` rows against Chrome's 3.** The remaining
+  ones are WebRTC (`sdp capabilities`), SVG (`bBox`), the nine audio rows, MIME
+  types (`mimes (0/12)`), and CSS media queries (`@media`). Each is a separate
+  API surface, none of them attributed to a bug.
+- **iphey's second alert, `i20: TypeError: Illegal invocation`**, is unchanged
+  and was present before this work, so it is a separate pre-existing gap rather
+  than fallout. It has not been attributed to a named API yet.
+- **browserscan.net renders 1231 nodes against Chrome's 1965**, unchanged by this
+  plan.
+- **CreepJS's `innerText` is 50525 characters against the headed Chrome's 4568 in
+  the same sweep.** The Chrome column is the one that looks wrong — its record
+  shows a report that had not finished rendering when the sweep read it — so the
+  ratio says nothing about the engine either way. Node counts (4146 vs 3760) are
+  the honest comparison.

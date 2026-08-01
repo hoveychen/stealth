@@ -29,8 +29,6 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
-const Frame = @import("../../Frame.zig");
-const Canvas = @import("../element/html/Canvas.zig");
 const objects = @import("webgl_objects.zig");
 const WebGL1 = @import("WebGLRenderingContext.zig");
 
@@ -42,7 +40,10 @@ pub fn registerTypes() []const type {
 
 const WebGL2RenderingContext = @This();
 
-_canvas: *Canvas,
+_canvas: Surface,
+
+/// Shared with WebGL 1: see WebGLRenderingContext.Surface.
+pub const Surface = WebGL1.Surface;
 
 // The GLenum constants, measured from Chrome.
 pub const DEPTH_BUFFER_BIT: u32 = 0x0100;
@@ -661,7 +662,7 @@ pub fn getSupportedExtensions(_: *const WebGL2RenderingContext) []const []const 
     return &extension_names;
 }
 
-pub fn getExtension(_: *const WebGL2RenderingContext, name: []const u8, frame: *Frame) !?Extension {
+pub fn getExtension(_: *const WebGL2RenderingContext, name: []const u8, exec: *Execution) !?Extension {
     var supported = false;
     for (extension_names) |candidate| {
         if (std.ascii.eqlIgnoreCase(candidate, name)) {
@@ -674,24 +675,24 @@ pub fn getExtension(_: *const WebGL2RenderingContext, name: []const u8, frame: *
     }
 
     if (std.ascii.eqlIgnoreCase(name, "WEBGL_debug_renderer_info")) {
-        return .{ .debug_renderer_info = try frame._factory.create(WebGL1.Extension.Type.WEBGL_debug_renderer_info{}) };
+        return .{ .debug_renderer_info = try exec._factory.create(WebGL1.Extension.Type.WEBGL_debug_renderer_info{}) };
     }
     if (std.ascii.eqlIgnoreCase(name, "WEBGL_lose_context")) {
-        return .{ .lose_context = try frame._factory.create(WebGL1.Extension.Type.WEBGL_lose_context{}) };
+        return .{ .lose_context = try exec._factory.create(WebGL1.Extension.Type.WEBGL_lose_context{}) };
     }
     return .{ .supported = .{} };
 }
 
-pub fn getCanvas(self: *const WebGL2RenderingContext) *Canvas {
+pub fn getCanvas(self: *const WebGL2RenderingContext) Surface {
     return self._canvas;
 }
 
 pub fn getDrawingBufferWidth(self: *const WebGL2RenderingContext) u32 {
-    return self._canvas.getWidth();
+    return self._canvas.width();
 }
 
 pub fn getDrawingBufferHeight(self: *const WebGL2RenderingContext) u32 {
-    return self._canvas.getHeight();
+    return self._canvas.height();
 }
 
 const Parameter = union(enum) {
@@ -856,7 +857,7 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         COMPRESSED_TEXTURE_FORMATS => uintArray(exec, &.{}),
         COLOR_WRITEMASK => .{ .booleans = &.{ true, true, true, true } },
         // The viewport and scissor box default to the whole drawing buffer.
-        VIEWPORT, SCISSOR_BOX => intArray(exec, &.{ 0, 0, @intCast(self._canvas.getWidth()), @intCast(self._canvas.getHeight()) }),
+        VIEWPORT, SCISSOR_BOX => intArray(exec, &.{ 0, 0, @intCast(self._canvas.width()), @intCast(self._canvas.height()) }),
         WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => .{ .string = "Google Inc. (Apple)" },
         WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)" },
         else => null,
@@ -866,48 +867,48 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
 // ---------------------------------------------------------------------------
 // The calls.
 
-pub fn createBuffer(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLBuffer {
-    return frame._factory.create(objects.WebGLBuffer{});
+pub fn createBuffer(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLBuffer {
+    return exec._factory.create(objects.WebGLBuffer{});
 }
 
-pub fn createFramebuffer(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLFramebuffer {
-    return frame._factory.create(objects.WebGLFramebuffer{});
+pub fn createFramebuffer(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLFramebuffer {
+    return exec._factory.create(objects.WebGLFramebuffer{});
 }
 
-pub fn createProgram(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLProgram {
-    return frame._factory.create(objects.WebGLProgram{});
+pub fn createProgram(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLProgram {
+    return exec._factory.create(objects.WebGLProgram{});
 }
 
-pub fn createRenderbuffer(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLRenderbuffer {
-    return frame._factory.create(objects.WebGLRenderbuffer{});
+pub fn createRenderbuffer(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLRenderbuffer {
+    return exec._factory.create(objects.WebGLRenderbuffer{});
 }
 
-pub fn createShader(_: *const WebGL2RenderingContext, _: u32, frame: *Frame) !*objects.WebGLShader {
-    return frame._factory.create(objects.WebGLShader{});
+pub fn createShader(_: *const WebGL2RenderingContext, _: u32, exec: *Execution) !*objects.WebGLShader {
+    return exec._factory.create(objects.WebGLShader{});
 }
 
-pub fn createTexture(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLTexture {
-    return frame._factory.create(objects.WebGLTexture{});
+pub fn createTexture(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLTexture {
+    return exec._factory.create(objects.WebGLTexture{});
 }
 
-pub fn createQuery(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLQuery {
-    return frame._factory.create(objects.WebGLQuery{});
+pub fn createQuery(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLQuery {
+    return exec._factory.create(objects.WebGLQuery{});
 }
 
-pub fn createSampler(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLSampler {
-    return frame._factory.create(objects.WebGLSampler{});
+pub fn createSampler(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLSampler {
+    return exec._factory.create(objects.WebGLSampler{});
 }
 
-pub fn createVertexArray(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLVertexArrayObject {
-    return frame._factory.create(objects.WebGLVertexArrayObject{});
+pub fn createVertexArray(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLVertexArrayObject {
+    return exec._factory.create(objects.WebGLVertexArrayObject{});
 }
 
-pub fn createTransformFeedback(_: *const WebGL2RenderingContext, frame: *Frame) !*objects.WebGLTransformFeedback {
-    return frame._factory.create(objects.WebGLTransformFeedback{});
+pub fn createTransformFeedback(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLTransformFeedback {
+    return exec._factory.create(objects.WebGLTransformFeedback{});
 }
 
-pub fn fenceSync(_: *const WebGL2RenderingContext, _: u32, _: u32, frame: *Frame) !*objects.WebGLSync {
-    return frame._factory.create(objects.WebGLSync{});
+pub fn fenceSync(_: *const WebGL2RenderingContext, _: u32, _: u32, exec: *Execution) !*objects.WebGLSync {
+    return exec._factory.create(objects.WebGLSync{});
 }
 
 pub fn checkFramebufferStatus(_: *const WebGL2RenderingContext, _: u32) u32 {
@@ -1064,14 +1065,14 @@ pub fn getShaderPrecisionFormat(
     _: *const WebGL2RenderingContext,
     _: u32,
     precision_type: u32,
-    frame: *Frame,
+    exec: *Execution,
 ) !?*objects.WebGLShaderPrecisionFormat {
     const format: objects.WebGLShaderPrecisionFormat = switch (precision_type) {
         LOW_FLOAT, MEDIUM_FLOAT, HIGH_FLOAT => .float,
         LOW_INT, MEDIUM_INT, HIGH_INT => .int,
         else => return null,
     };
-    return try frame._factory.create(format);
+    return try exec._factory.create(format);
 }
 
 pub fn getActiveAttrib(_: *const WebGL2RenderingContext, _: ?*objects.WebGLProgram, _: u32) ?*objects.WebGLActiveInfo {

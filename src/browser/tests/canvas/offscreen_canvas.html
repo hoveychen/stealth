@@ -144,3 +144,60 @@
     testing.expectTrue(rejected.toString().includes('Index or size'));
   });
 </script>
+
+<script id="OffscreenCanvas#getContext webgl">
+{
+  // Chrome hands back a WebGL context for an OffscreenCanvas, and `gl.canvas`
+  // is the OffscreenCanvas itself (measured, main thread and worker).
+  const canvas = new OffscreenCanvas(256, 256);
+  const gl = canvas.getContext('webgl');
+  testing.expectEqual('[object WebGLRenderingContext]', Object.prototype.toString.call(gl));
+  testing.expectEqual(true, gl.canvas === canvas);
+  testing.expectEqual(256, gl.drawingBufferWidth);
+  testing.expectEqual(256, gl.drawingBufferHeight);
+  testing.expectEqual([0, 0, 256, 256], Array.from(gl.getParameter(gl.VIEWPORT)));
+  // Same object on every read, and a different kind afterwards answers null.
+  testing.expectEqual(true, canvas.getContext('webgl') === gl);
+  testing.expectEqual(null, canvas.getContext('2d'));
+
+  const gl2 = new OffscreenCanvas(300, 150).getContext('webgl2');
+  testing.expectEqual('[object WebGL2RenderingContext]', Object.prototype.toString.call(gl2));
+  testing.expectEqual(300, gl2.drawingBufferWidth);
+  testing.expectEqual(150, gl2.drawingBufferHeight);
+
+  // Resizing the canvas moves the drawing buffer with it.
+  const c3 = new OffscreenCanvas(8, 8);
+  const g3 = c3.getContext('webgl');
+  c3.width = 64;
+  testing.expectEqual(64, g3.drawingBufferWidth);
+
+  // Object-creating calls work off an OffscreenCanvas context too — this is
+  // what used to need a Frame and therefore could not run in a worker.
+  testing.expectEqual('[object WebGLBuffer]', Object.prototype.toString.call(gl.createBuffer()));
+  testing.expectEqual('[object WebGLProgram]', Object.prototype.toString.call(gl.createProgram()));
+}
+</script>
+
+<script id="OffscreenCanvas#getContext enum">
+{
+  // OffscreenRenderingContextType is a real WebIDL enum here, unlike
+  // HTMLCanvasElement's free-form string: a name outside the list is a
+  // TypeError rather than null (measured).
+  let threw = null;
+  try { new OffscreenCanvas(2, 2).getContext('experimental-webgl'); } catch (e) { threw = e.name; }
+  testing.expectEqual('TypeError', threw);
+
+  threw = null;
+  try { new OffscreenCanvas(2, 2).getContext('bogus'); } catch (e) { threw = e.name; }
+  testing.expectEqual('TypeError', threw);
+
+  // In the list but not implemented here: null rather than a throw.
+  testing.expectEqual(null, new OffscreenCanvas(2, 2).getContext('bitmaprenderer'));
+  testing.expectEqual(null, new OffscreenCanvas(2, 2).getContext('webgpu'));
+
+  // An HTMLCanvasElement keeps the loose behaviour.
+  testing.expectEqual(null, document.createElement('canvas').getContext('bogus'));
+  testing.expectEqual('[object WebGLRenderingContext]',
+    Object.prototype.toString.call(document.createElement('canvas').getContext('experimental-webgl')));
+}
+</script>
