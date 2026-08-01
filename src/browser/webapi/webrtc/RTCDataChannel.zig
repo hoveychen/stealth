@@ -265,6 +265,7 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Declaration order is what Object.getOwnPropertyNames() reports; this is Chrome's (measured).
     pub const label = bridge.accessor(RTCDataChannel.getLabel, null, .{});
     pub const ordered = bridge.accessor(RTCDataChannel.getOrdered, null, .{});
     pub const maxPacketLifeTime = bridge.accessor(RTCDataChannel.getMaxPacketLifeTime, null, .{});
@@ -275,16 +276,14 @@ pub const JsApi = struct {
     pub const readyState = bridge.accessor(RTCDataChannel.getReadyState, null, .{});
     pub const bufferedAmount = bridge.accessor(RTCDataChannel.getBufferedAmount, null, .{});
     pub const bufferedAmountLowThreshold = bridge.accessor(RTCDataChannel.getBufferedAmountLowThreshold, RTCDataChannel.setBufferedAmountLowThreshold, .{});
-    pub const binaryType = bridge.accessor(RTCDataChannel.getBinaryType, RTCDataChannel.setBinaryType, .{});
-    pub const reliable = bridge.accessor(RTCDataChannel.getReliable, null, .{});
-
     pub const onopen = bridge.accessor(RTCDataChannel.getOnOpen, RTCDataChannel.setOnOpen, .{});
     pub const onbufferedamountlow = bridge.accessor(RTCDataChannel.getOnBufferedAmountLow, RTCDataChannel.setOnBufferedAmountLow, .{});
     pub const onerror = bridge.accessor(RTCDataChannel.getOnError, RTCDataChannel.setOnError, .{});
     pub const onclosing = bridge.accessor(RTCDataChannel.getOnClosing, RTCDataChannel.setOnClosing, .{});
     pub const onclose = bridge.accessor(RTCDataChannel.getOnClose, RTCDataChannel.setOnClose, .{});
     pub const onmessage = bridge.accessor(RTCDataChannel.getOnMessage, RTCDataChannel.setOnMessage, .{});
-
+    pub const binaryType = bridge.accessor(RTCDataChannel.getBinaryType, RTCDataChannel.setBinaryType, .{});
+    pub const reliable = bridge.accessor(RTCDataChannel.getReliable, null, .{});
     pub const close = bridge.function(RTCDataChannel.close, .{});
     pub const send = bridge.function(RTCDataChannel.send, .{});
 };

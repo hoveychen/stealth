@@ -1246,6 +1246,12 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/webrtc/RTCPeerConnectionIceEvent.zig"),
     @import("../webapi/webrtc/RTCStatsReport.zig"),
     @import("../webapi/webrtc/rtp.zig"),
+    @import("../webapi/webrtc/transports.zig"),
+    @import("../webapi/webrtc/RTCCertificate.zig"),
+    @import("../webapi/webrtc/RTCError.zig"),
+    @import("../webapi/webrtc/events.zig"),
+    @import("../webapi/webrtc/encoded_frames.zig"),
+    @import("../webapi/webrtc/RTCRtpScriptTransform.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,
@@ -1329,6 +1335,12 @@ const worker_common_apis = [_]type{
     @import("../webapi/MessageChannel.zig"),
     @import("../webapi/MessagePort.zig"),
     @import("../webapi/collections/DOMStringList.zig"),
+    // The RTC surface a Chrome DedicatedWorkerGlobalScope carries, measured:
+    // exactly RTCTransformEvent, RTCRtpScriptTransformer, RTCDataChannel,
+    // RTCEncodedVideoFrame and RTCEncodedAudioFrame — no RTCPeerConnection.
+    @import("../webapi/webrtc/encoded_frames.zig"),
+    @import("../webapi/webrtc/RTCDataChannel.zig"),
+    @import("../webapi/webrtc/worker_transform.zig"),
 };
 
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/DedicatedWorkerGlobalScope.zig")} ++ worker_common_apis));
@@ -1339,7 +1351,9 @@ pub const SharedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/SharedW
 // to know about all possible types. Individual snapshots use their own
 // subsets (PageJsApis, WorkerSnapshot.JsApis).
 pub const JsApis = blk: {
-    const base = PageJsApis ++ [_]type{
+    // worker_transform holds the only [Exposed=Worker]-only interfaces, so they
+    // are named here rather than reached through PageJsApis.
+    const base = PageJsApis ++ flattenTypes(&.{@import("../webapi/webrtc/worker_transform.zig")}) ++ [_]type{
         @import("../webapi/DedicatedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/SharedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/WorkerGlobalScope.zig").JsApi,

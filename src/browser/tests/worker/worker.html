@@ -576,3 +576,40 @@
     });
   }
 </script>
+
+<script id="worker_webrtc" type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./webrtc-worker.js');
+    worker.onmessage = (event) => state.resolve(event.data);
+
+    await state.done((r) => {
+      // Chrome's worker scope has exactly these five, and notably *not*
+      // RTCPeerConnection (measured, see webrtc-worker-surface.mjs).
+      testing.expectEqual(
+        ['RTCDataChannel', 'RTCEncodedAudioFrame', 'RTCEncodedVideoFrame',
+         'RTCRtpScriptTransformer', 'RTCTransformEvent'],
+        r.names);
+      testing.expectEqual('undefined', r.has_peer_connection);
+
+      testing.expectEqual(true, r.transform_event_proto);
+      testing.expectEqual(true, r.data_channel_proto);
+      testing.expectEqual(true, r.transformer_proto);
+
+      testing.expectEqual(['transformer', 'constructor'], r.transform_event_keys);
+      testing.expectEqual(['readable', 'writable', 'options', 'sendKeyFrameRequest', 'constructor'],
+        r.transformer_keys);
+      testing.expectEqual(['timestamp', 'data', 'getMetadata', 'toString', 'constructor'],
+        r.audio_frame_keys);
+
+      testing.expectEqual(0, r.lengths.RTCTransformEvent);
+      testing.expectEqual(0, r.lengths.RTCRtpScriptTransformer);
+      testing.expectEqual(0, r.lengths.RTCDataChannel);
+      testing.expectEqual(1, r.lengths.RTCEncodedAudioFrame);
+
+      testing.expectEqual(true, r.illegal.RTCTransformEvent);
+      testing.expectEqual(true, r.illegal.RTCRtpScriptTransformer);
+      testing.expectEqual(true, r.illegal.RTCDataChannel);
+    });
+  }
+</script>

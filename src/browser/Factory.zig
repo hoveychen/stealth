@@ -37,6 +37,7 @@ const Blob = @import("webapi/Blob.zig");
 const AbstractRange = @import("webapi/AbstractRange.zig");
 const DOMRect = @import("webapi/DOMRect.zig");
 const DOMRectReadOnly = @import("webapi/DOMRectReadOnly.zig");
+const DOMException = @import("webapi/DOMException.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -313,6 +314,20 @@ pub fn abstractRange(_: *const Factory, arena: *lp.Arena, child: anytype, frame:
         // live_ranges list.
         frame._live_ranges.append(&abstract_range._range_link);
     }
+
+    return chain.get(1);
+}
+
+// {DOMException, RTCError}. DOMException carries its own fields and has no
+// `_type` union — nothing downcasts through it — so the base is set by value
+// rather than through AutoPrototypeChain.
+pub fn domException(self: *Factory, base: DOMException, child: anytype) !*@TypeOf(child) {
+    const chain = try PrototypeChain(
+        &.{ DOMException, @TypeOf(child) },
+    ).allocate(self._slab.allocator());
+
+    chain.get(0).* = base;
+    chain.setLeaf(1, child);
 
     return chain.get(1);
 }

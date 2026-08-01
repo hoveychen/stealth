@@ -415,3 +415,217 @@
   });
 }
 </script>
+
+<script id=webrtc_globals>
+{
+  // The full RTC* global surface. Chrome 150 has exactly these 24 names on
+  // window; CreepJS reads Object.getOwnPropertyNames(window) directly, so a
+  // window carrying RTCPeerConnection but not, say, RTCDtlsTransport is a tell.
+  // Everything asserted below was measured — see
+  // agent-workspace/stealth-detector-probes/webrtc-protochain.mjs.
+  const NAMES = [
+    'RTCPeerConnection', 'webkitRTCPeerConnection', 'RTCSessionDescription', 'RTCIceCandidate',
+    'RTCDataChannel', 'RTCPeerConnectionIceEvent', 'RTCStatsReport', 'RTCRtpSender', 'RTCRtpReceiver',
+    'RTCRtpTransceiver', 'RTCDtlsTransport', 'RTCIceTransport', 'RTCSctpTransport', 'RTCDTMFSender',
+    'RTCCertificate', 'RTCError', 'RTCTrackEvent', 'RTCErrorEvent', 'RTCDataChannelEvent',
+    'RTCPeerConnectionIceErrorEvent', 'RTCDTMFToneChangeEvent', 'RTCEncodedAudioFrame',
+    'RTCEncodedVideoFrame', 'RTCRtpScriptTransform',
+  ];
+  testing.expectEqual(
+    NAMES.slice().sort(),
+    Object.getOwnPropertyNames(window).filter((k) => /^(RTC|webkitRTC)/.test(k)).sort(),
+  );
+
+  // Interface objects are non-enumerable, writable and configurable on window.
+  for (const n of NAMES) {
+    const d = Object.getOwnPropertyDescriptor(window, n);
+    testing.expectEqual(false, d.enumerable, {message: n});
+    testing.expectEqual(true, d.writable, {message: n});
+    testing.expectEqual(true, d.configurable, {message: n});
+  }
+
+  // The legacy prefix is the *same* function object, and keeps the unprefixed name.
+  testing.expectEqual(true, webkitRTCPeerConnection === RTCPeerConnection);
+  testing.expectEqual('RTCPeerConnection', webkitRTCPeerConnection.name);
+
+  // Constructor arities.
+  testing.expectEqual(0, RTCRtpTransceiver.length);
+  testing.expectEqual(0, RTCDtlsTransport.length);
+  testing.expectEqual(0, RTCIceTransport.length);
+  testing.expectEqual(0, RTCSctpTransport.length);
+  testing.expectEqual(0, RTCDTMFSender.length);
+  testing.expectEqual(0, RTCCertificate.length);
+  testing.expectEqual(1, RTCError.length);
+  testing.expectEqual(1, RTCEncodedAudioFrame.length);
+  testing.expectEqual(1, RTCEncodedVideoFrame.length);
+  testing.expectEqual(1, RTCRtpScriptTransform.length);
+  testing.expectEqual(2, RTCTrackEvent.length);
+  testing.expectEqual(2, RTCErrorEvent.length);
+  testing.expectEqual(2, RTCDataChannelEvent.length);
+  testing.expectEqual(2, RTCPeerConnectionIceErrorEvent.length);
+  testing.expectEqual(2, RTCDTMFToneChangeEvent.length);
+
+  // Prototype chains: four EventTargets, five Events, one DOMException, the
+  // rest plain objects.
+  for (const n of ['RTCDtlsTransport', 'RTCIceTransport', 'RTCSctpTransport', 'RTCDTMFSender']) {
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(window[n].prototype), {message: n});
+    testing.expectEqual(EventTarget, Object.getPrototypeOf(window[n]), {message: n});
+  }
+  for (const n of ['RTCTrackEvent', 'RTCErrorEvent', 'RTCDataChannelEvent',
+                   'RTCPeerConnectionIceErrorEvent', 'RTCDTMFToneChangeEvent']) {
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(window[n].prototype), {message: n});
+    testing.expectEqual(Event, Object.getPrototypeOf(window[n]), {message: n});
+  }
+  testing.expectEqual(DOMException.prototype, Object.getPrototypeOf(RTCError.prototype));
+  testing.expectEqual(DOMException, Object.getPrototypeOf(RTCError));
+  for (const n of ['RTCRtpTransceiver', 'RTCCertificate', 'RTCEncodedAudioFrame',
+                   'RTCEncodedVideoFrame', 'RTCRtpScriptTransform']) {
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[n].prototype), {message: n});
+  }
+
+  // Prototype member lists, in Chrome's order.
+  const protoKeys = (n) => Object.getOwnPropertyNames(window[n].prototype);
+  testing.expectEqual(
+    ['mid', 'sender', 'receiver', 'stopped', 'direction', 'currentDirection',
+     'getHeaderExtensionsToNegotiate', 'getNegotiatedHeaderExtensions', 'setCodecPreferences',
+     'setHeaderExtensionsToNegotiate', 'stop', 'constructor'],
+    protoKeys('RTCRtpTransceiver'));
+  testing.expectEqual(
+    ['iceTransport', 'state', 'onstatechange', 'onerror', 'getRemoteCertificates', 'constructor'],
+    protoKeys('RTCDtlsTransport'));
+  testing.expectEqual(
+    ['role', 'state', 'gatheringState', 'onstatechange', 'ongatheringstatechange',
+     'onselectedcandidatepairchange', 'getLocalCandidates', 'getLocalParameters',
+     'getRemoteCandidates', 'getRemoteParameters', 'getSelectedCandidatePair', 'constructor'],
+    protoKeys('RTCIceTransport'));
+  testing.expectEqual(
+    ['transport', 'state', 'maxMessageSize', 'maxChannels', 'onstatechange', 'constructor'],
+    protoKeys('RTCSctpTransport'));
+  testing.expectEqual(
+    ['ontonechange', 'canInsertDTMF', 'toneBuffer', 'insertDTMF', 'constructor'],
+    protoKeys('RTCDTMFSender'));
+  testing.expectEqual(['expires', 'getFingerprints', 'constructor'], protoKeys('RTCCertificate'));
+  testing.expectEqual(
+    ['errorDetail', 'sdpLineNumber', 'httpRequestStatusCode', 'sctpCauseCode', 'receivedAlert',
+     'sentAlert', 'constructor'],
+    protoKeys('RTCError'));
+  testing.expectEqual(['error', 'constructor'], protoKeys('RTCErrorEvent'));
+  testing.expectEqual(['receiver', 'track', 'streams', 'transceiver', 'constructor'],
+    protoKeys('RTCTrackEvent'));
+  testing.expectEqual(['channel', 'constructor'], protoKeys('RTCDataChannelEvent'));
+  testing.expectEqual(
+    ['address', 'port', 'hostCandidate', 'url', 'errorCode', 'errorText', 'constructor'],
+    protoKeys('RTCPeerConnectionIceErrorEvent'));
+  testing.expectEqual(['tone', 'constructor'], protoKeys('RTCDTMFToneChangeEvent'));
+  testing.expectEqual(['timestamp', 'data', 'getMetadata', 'toString', 'constructor'],
+    protoKeys('RTCEncodedAudioFrame'));
+  testing.expectEqual(['type', 'timestamp', 'data', 'getMetadata', 'toString', 'constructor'],
+    protoKeys('RTCEncodedVideoFrame'));
+  testing.expectEqual(['constructor'], protoKeys('RTCRtpScriptTransform'));
+
+  // The six unconstructible interfaces.
+  for (const n of ['RTCRtpTransceiver', 'RTCDtlsTransport', 'RTCIceTransport', 'RTCSctpTransport',
+                   'RTCDTMFSender', 'RTCCertificate']) {
+    testing.expectError('TypeError', () => new window[n]());
+  }
+  // These two need a frame to clone, which no page can produce here.
+  testing.expectError('TypeError', () => new RTCEncodedAudioFrame());
+  testing.expectError('TypeError', () => new RTCEncodedVideoFrame({}));
+  testing.expectError('TypeError', () => new RTCRtpScriptTransform());
+}
+</script>
+
+<script id=webrtc_error>
+{
+  // Measured against Chrome 150: name is always OperationError, code 0, an
+  // absent message is "" rather than DOMException's canned text, and every
+  // numeric member defaults to null.
+  const e = new RTCError({errorDetail: 'data-channel-failure'});
+  testing.expectEqual(true, e instanceof RTCError);
+  testing.expectEqual(true, e instanceof DOMException);
+  testing.expectEqual('OperationError', e.name);
+  testing.expectEqual('', e.message);
+  testing.expectEqual(0, e.code);
+  testing.expectEqual('data-channel-failure', e.errorDetail);
+  testing.expectEqual(null, e.sdpLineNumber);
+  testing.expectEqual(null, e.httpRequestStatusCode);
+  testing.expectEqual(null, e.sctpCauseCode);
+  testing.expectEqual(null, e.receivedAlert);
+  testing.expectEqual(null, e.sentAlert);
+  testing.expectEqual(undefined, e.stack);
+  testing.expectEqual('OperationError', String(e));
+
+  const full = new RTCError({
+    errorDetail: 'sdp-syntax-error', sdpLineNumber: 7, httpRequestStatusCode: 404,
+    sctpCauseCode: 3, receivedAlert: 40, sentAlert: 41,
+  }, 'boom');
+  testing.expectEqual('boom', full.message);
+  testing.expectEqual('OperationError: boom', String(full));
+  testing.expectEqual(7, full.sdpLineNumber);
+  testing.expectEqual(404, full.httpRequestStatusCode);
+  testing.expectEqual(3, full.sctpCauseCode);
+  testing.expectEqual(40, full.receivedAlert);
+  testing.expectEqual(41, full.sentAlert);
+
+  testing.expectError('TypeError', () => new RTCError());
+  testing.expectError('TypeError', () => new RTCError({errorDetail: 'nope'}));
+}
+</script>
+
+<script id=webrtc_new_events>
+{
+  // Chrome requires the dictionary — all five report length 2 — and rejects a
+  // missing required member with a TypeError.
+  const err = new RTCError({errorDetail: 'dtls-failure'});
+  const ev = new RTCErrorEvent('e', {error: err});
+  testing.expectEqual(true, ev instanceof Event);
+  testing.expectEqual('e', ev.type);
+  testing.expectEqual(err, ev.error);
+  testing.expectEqual(false, ev.bubbles);
+  testing.expectEqual(false, ev.cancelable);
+  testing.expectError('TypeError', () => new RTCErrorEvent('e'));
+  testing.expectError('TypeError', () => new RTCErrorEvent('e', {}));
+
+  const pc = new RTCPeerConnection();
+  const dc = pc.createDataChannel('x');
+  const dce = new RTCDataChannelEvent('datachannel', {channel: dc});
+  testing.expectEqual('datachannel', dce.type);
+  testing.expectEqual('x', dce.channel.label);
+  testing.expectEqual(false, dce.bubbles);
+  pc.close();
+  testing.expectError('TypeError', () => new RTCDataChannelEvent('datachannel'));
+  testing.expectError('TypeError', () => new RTCDataChannelEvent('datachannel', {}));
+
+  // errorCode is the one required member; the rest default as measured.
+  const iee = new RTCPeerConnectionIceErrorEvent('icecandidateerror', {errorCode: 701});
+  testing.expectEqual('icecandidateerror', iee.type);
+  testing.expectEqual(null, iee.address);
+  testing.expectEqual(null, iee.port);
+  testing.expectEqual('', iee.hostCandidate);
+  testing.expectEqual('', iee.url);
+  testing.expectEqual(701, iee.errorCode);
+  testing.expectEqual('', iee.errorText);
+  testing.expectError('TypeError', () => new RTCPeerConnectionIceErrorEvent('e'));
+  testing.expectError('TypeError', () => new RTCPeerConnectionIceErrorEvent('e', {}));
+
+  const withAddress = new RTCPeerConnectionIceErrorEvent('icecandidateerror', {
+    errorCode: 701, address: '1.2.3.4', port: 5000, url: 'stun:x', errorText: 'nope',
+  });
+  testing.expectEqual('1.2.3.4', withAddress.address);
+  testing.expectEqual(5000, withAddress.port);
+  // Not derived from address/port: Chrome answers "" here too (measured).
+  testing.expectEqual('', withAddress.hostCandidate);
+  testing.expectEqual('stun:x', withAddress.url);
+  testing.expectEqual('nope', withAddress.errorText);
+
+  // tone defaults to "", so an empty dictionary is enough.
+  testing.expectEqual('', new RTCDTMFToneChangeEvent('tonechange', {}).tone);
+  testing.expectEqual('5', new RTCDTMFToneChangeEvent('tonechange', {tone: '5'}).tone);
+  testing.expectError('TypeError', () => new RTCDTMFToneChangeEvent('tonechange'));
+
+  // No MediaStreamTrack exists here, so RTCTrackEvent's dictionary can never
+  // be satisfied — Chrome rejects every value we could pass too.
+  testing.expectError('TypeError', () => new RTCTrackEvent('track'));
+  testing.expectError('TypeError', () => new RTCTrackEvent('track', {}));
+}
+</script>

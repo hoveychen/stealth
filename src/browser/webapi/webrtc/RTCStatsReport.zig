@@ -137,12 +137,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Declaration order is what Object.getOwnPropertyNames() reports; this is Chrome's (measured).
     pub const size = bridge.accessor(RTCStatsReport.getSize, null, .{});
+    pub const entries = bridge.function(RTCStatsReport.entries, .{});
+    pub const forEach = bridge.function(RTCStatsReport.forEach, .{});
     pub const get = bridge.function(RTCStatsReport.get, .{});
     pub const has = bridge.function(RTCStatsReport.has, .{});
     pub const keys = bridge.function(RTCStatsReport.keys, .{});
     pub const values = bridge.function(RTCStatsReport.values, .{});
-    pub const entries = bridge.function(RTCStatsReport.entries, .{});
-    pub const forEach = bridge.function(RTCStatsReport.forEach, .{});
     pub const symbol_iterator = bridge.iterator(RTCStatsReport.entries, .{});
 };

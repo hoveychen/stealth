@@ -98,6 +98,10 @@ pub const Type = union(enum) {
     toggle_event: *@import("event/ToggleEvent.zig"),
     speech_synthesis_event: *@import("speech/SpeechSynthesisEvent.zig"),
     rtc_peer_connection_ice_event: *@import("webrtc/RTCPeerConnectionIceEvent.zig"),
+    rtc_peer_connection_ice_error_event: *@import("webrtc/events.zig").RTCPeerConnectionIceErrorEvent,
+    rtc_error_event: *@import("webrtc/events.zig").RTCErrorEvent,
+    rtc_data_channel_event: *@import("webrtc/events.zig").RTCDataChannelEvent,
+    rtc_dtmf_tone_change_event: *@import("webrtc/events.zig").RTCDTMFToneChangeEvent,
 };
 
 pub const Options = struct {
@@ -224,6 +228,10 @@ pub fn is(self: *Event, comptime T: type) ?*T {
             return e.is(T);
         },
         .rtc_peer_connection_ice_event => |e| return if (T == @import("webrtc/RTCPeerConnectionIceEvent.zig")) e else null,
+        .rtc_peer_connection_ice_error_event => |e| return if (T == @import("webrtc/events.zig").RTCPeerConnectionIceErrorEvent) e else null,
+        .rtc_error_event => |e| return if (T == @import("webrtc/events.zig").RTCErrorEvent) e else null,
+        .rtc_data_channel_event => |e| return if (T == @import("webrtc/events.zig").RTCDataChannelEvent) e else null,
+        .rtc_dtmf_tone_change_event => |e| return if (T == @import("webrtc/events.zig").RTCDTMFToneChangeEvent) e else null,
     }
     return null;
 }

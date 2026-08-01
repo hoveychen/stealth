@@ -21,6 +21,10 @@ const js = @import("../js/js.zig");
 
 const DOMException = @This();
 
+// RTCError sits on top of this (Chrome roots RTCError.prototype at
+// DOMException.prototype), so DOMException is the head of a prototype chain.
+pub const _prototype_root = true;
+
 _code: Code = .none,
 _custom_name: ?[]const u8 = null,
 _custom_message: ?[]const u8 = null,
@@ -163,6 +167,13 @@ pub fn toString(self: *const DOMException, exec: *js.Execution) ![]const u8 {
             else => break :blk self.getMessage(),
         }
     };
+    // DOMException does not define its own toString — it inherits
+    // Error.prototype.toString, which drops the separator when the message is
+    // empty. Measured on Chrome 150: String(new RTCError({errorDetail: ...}))
+    // is "OperationError", not "OperationError: ".
+    if (msg.len == 0) {
+        return self.getName();
+    }
     return std.fmt.bufPrint(exec.buf, "{s}: {s}", .{ self.getName(), msg }) catch return msg;
 }
 

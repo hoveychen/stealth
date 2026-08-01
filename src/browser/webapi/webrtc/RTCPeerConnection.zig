@@ -722,10 +722,15 @@ pub const JsApi = struct {
         pub const name = "RTCPeerConnection";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // Chrome still ships the 2013-era prefixed name, and it is the *same*
+        // function object: measured, webkitRTCPeerConnection === RTCPeerConnection
+        // and webkitRTCPeerConnection.name === "RTCPeerConnection".
+        pub const constructor_aliases = [_][]const u8{"webkitRTCPeerConnection"};
     };
 
     pub const constructor = bridge.constructor(RTCPeerConnection.constructor, .{});
 
+    // Declaration order is what Object.getOwnPropertyNames() reports; this is Chrome's (measured).
     pub const localDescription = bridge.accessor(RTCPeerConnection.getLocalDescription, null, .{});
     pub const currentLocalDescription = bridge.accessor(RTCPeerConnection.getCurrentLocalDescription, null, .{});
     pub const pendingLocalDescription = bridge.accessor(RTCPeerConnection.getPendingLocalDescription, null, .{});
@@ -737,8 +742,6 @@ pub const JsApi = struct {
     pub const iceConnectionState = bridge.accessor(RTCPeerConnection.getIceConnectionState, null, .{});
     pub const connectionState = bridge.accessor(RTCPeerConnection.getConnectionState, null, .{});
     pub const canTrickleIceCandidates = bridge.accessor(RTCPeerConnection.getCanTrickleIceCandidates, null, .{});
-    pub const sctp = bridge.accessor(RTCPeerConnection.getSctp, null, .{});
-
     pub const onnegotiationneeded = bridge.accessor(Handler("_on_negotiationneeded").get, Handler("_on_negotiationneeded").setter, .{});
     pub const onicecandidate = bridge.accessor(Handler("_on_icecandidate").get, Handler("_on_icecandidate").setter, .{});
     pub const onsignalingstatechange = bridge.accessor(Handler("_on_signalingstatechange").get, Handler("_on_signalingstatechange").setter, .{});
@@ -747,32 +750,32 @@ pub const JsApi = struct {
     pub const onicegatheringstatechange = bridge.accessor(Handler("_on_icegatheringstatechange").get, Handler("_on_icegatheringstatechange").setter, .{});
     pub const onicecandidateerror = bridge.accessor(Handler("_on_icecandidateerror").get, Handler("_on_icecandidateerror").setter, .{});
     pub const ontrack = bridge.accessor(Handler("_on_track").get, Handler("_on_track").setter, .{});
+    pub const sctp = bridge.accessor(RTCPeerConnection.getSctp, null, .{});
     pub const ondatachannel = bridge.accessor(Handler("_on_datachannel").get, Handler("_on_datachannel").setter, .{});
     pub const onaddstream = bridge.accessor(Handler("_on_addstream").get, Handler("_on_addstream").setter, .{});
     pub const onremovestream = bridge.accessor(Handler("_on_removestream").get, Handler("_on_removestream").setter, .{});
-
-    pub const createOffer = bridge.function(RTCPeerConnection.createOffer, .{});
+    pub const addIceCandidate = bridge.function(RTCPeerConnection.addIceCandidate, .{});
+    pub const addStream = bridge.function(RTCPeerConnection.addStream, .{});
+    pub const addTrack = bridge.function(RTCPeerConnection.addTrack, .{});
+    pub const addTransceiver = bridge.function(RTCPeerConnection.addTransceiver, .{});
+    pub const close = bridge.function(RTCPeerConnection.close, .{});
     pub const createAnswer = bridge.function(RTCPeerConnection.createAnswer, .{});
+    pub const createDTMFSender = bridge.function(RTCPeerConnection.createDTMFSender, .{});
+    pub const createDataChannel = bridge.function(RTCPeerConnection.createDataChannel, .{});
+    pub const createOffer = bridge.function(RTCPeerConnection.createOffer, .{});
+    pub const getConfiguration = bridge.function(RTCPeerConnection.getConfiguration, .{});
+    pub const getLocalStreams = bridge.function(RTCPeerConnection.getStreams, .{});
+    pub const getReceivers = bridge.function(RTCPeerConnection.getReceivers, .{});
+    pub const getRemoteStreams = bridge.function(RTCPeerConnection.getStreams, .{});
+    pub const getSenders = bridge.function(RTCPeerConnection.getSenders, .{});
+    pub const getStats = bridge.function(RTCPeerConnection.getStats, .{});
+    pub const getTransceivers = bridge.function(RTCPeerConnection.getTransceivers, .{});
+    pub const removeStream = bridge.function(RTCPeerConnection.removeStream, .{});
+    pub const removeTrack = bridge.function(RTCPeerConnection.removeTrack, .{});
+    pub const restartIce = bridge.function(RTCPeerConnection.restartIce, .{});
+    pub const setConfiguration = bridge.function(RTCPeerConnection.setConfiguration, .{});
     pub const setLocalDescription = bridge.function(RTCPeerConnection.setLocalDescription, .{});
     pub const setRemoteDescription = bridge.function(RTCPeerConnection.setRemoteDescription, .{});
-    pub const addIceCandidate = bridge.function(RTCPeerConnection.addIceCandidate, .{});
-    pub const createDataChannel = bridge.function(RTCPeerConnection.createDataChannel, .{});
-    pub const getConfiguration = bridge.function(RTCPeerConnection.getConfiguration, .{});
-    pub const setConfiguration = bridge.function(RTCPeerConnection.setConfiguration, .{});
-    pub const close = bridge.function(RTCPeerConnection.close, .{});
-    pub const getStats = bridge.function(RTCPeerConnection.getStats, .{});
-    pub const restartIce = bridge.function(RTCPeerConnection.restartIce, .{});
-    pub const addTrack = bridge.function(RTCPeerConnection.addTrack, .{});
-    pub const removeTrack = bridge.function(RTCPeerConnection.removeTrack, .{});
-    pub const addTransceiver = bridge.function(RTCPeerConnection.addTransceiver, .{});
-    pub const getSenders = bridge.function(RTCPeerConnection.getSenders, .{});
-    pub const getReceivers = bridge.function(RTCPeerConnection.getReceivers, .{});
-    pub const getTransceivers = bridge.function(RTCPeerConnection.getTransceivers, .{});
-    pub const getLocalStreams = bridge.function(RTCPeerConnection.getStreams, .{});
-    pub const getRemoteStreams = bridge.function(RTCPeerConnection.getStreams, .{});
-    pub const addStream = bridge.function(RTCPeerConnection.addStream, .{});
-    pub const removeStream = bridge.function(RTCPeerConnection.removeStream, .{});
-    pub const createDTMFSender = bridge.function(RTCPeerConnection.createDTMFSender, .{});
 };
 
 const testing = @import("../../../testing.zig");

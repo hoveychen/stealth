@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// RTCRtpSender and RTCRtpReceiver. Only the static getCapabilities() is
-// reachable: nothing in this engine ever produces an instance, because that
-// needs a track, and there is no media stack. The instance members are still
-// declared so the prototypes enumerate the way Chrome's do — a missing
-// prototype method is exactly the kind of thing a fingerprinting script
-// compares against its own table.
+// RTCRtpSender, RTCRtpReceiver and RTCRtpTransceiver. Only the static
+// getCapabilities() is reachable: nothing in this engine ever produces an
+// instance, because that needs a track, and there is no media stack. The
+// instance members are still declared so the prototypes enumerate the way
+// Chrome's do — a missing prototype method is exactly the kind of thing a
+// fingerprinting script compares against its own table.
 //
 // The capability tables are Chrome's, read from the same browser run that
 // produced the SDP in chrome_sdp.zig. Sender and receiver report the same audio
@@ -33,7 +33,7 @@ const chrome_sdp = @import("chrome_sdp.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
-    return &.{ RTCRtpSender, RTCRtpReceiver };
+    return &.{ RTCRtpSender, RTCRtpReceiver, RTCRtpTransceiver };
 }
 
 // Chrome answers null for anything that isn't "audio" or "video" (measured
@@ -157,17 +157,18 @@ pub const RTCRtpSender = struct {
 
         pub const getCapabilities = bridge.function(RTCRtpSender.getCapabilities, .{ .static = true });
 
+        // Declaration order is what Object.getOwnPropertyNames() reports; this is Chrome's (measured).
         pub const track = bridge.accessor(RTCRtpSender.getTrack, null, .{});
         pub const transport = bridge.accessor(RTCRtpSender.getTransport, null, .{});
         pub const rtcpTransport = bridge.accessor(RTCRtpSender.getRtcpTransport, null, .{});
         pub const dtmf = bridge.accessor(RTCRtpSender.getDtmf, null, .{});
-        pub const transform = bridge.accessor(RTCRtpSender.getTransform, RTCRtpSender.setTransform, .{});
         pub const createEncodedStreams = bridge.function(RTCRtpSender.createEncodedStreams, .{});
         pub const getParameters = bridge.function(RTCRtpSender.getParameters, .{});
         pub const getStats = bridge.function(RTCRtpSender.getStats, .{});
         pub const replaceTrack = bridge.function(RTCRtpSender.replaceTrack, .{});
         pub const setParameters = bridge.function(RTCRtpSender.setParameters, .{});
         pub const setStreams = bridge.function(RTCRtpSender.setStreams, .{});
+        pub const transform = bridge.accessor(RTCRtpSender.getTransform, RTCRtpSender.setTransform, .{});
     };
 };
 
@@ -242,16 +243,87 @@ pub const RTCRtpReceiver = struct {
 
         pub const getCapabilities = bridge.function(RTCRtpReceiver.getCapabilities, .{ .static = true });
 
+        // Declaration order is what Object.getOwnPropertyNames() reports; this is Chrome's (measured).
         pub const track = bridge.accessor(RTCRtpReceiver.getTrack, null, .{});
         pub const transport = bridge.accessor(RTCRtpReceiver.getTransport, null, .{});
         pub const rtcpTransport = bridge.accessor(RTCRtpReceiver.getRtcpTransport, null, .{});
         pub const playoutDelayHint = bridge.accessor(RTCRtpReceiver.getPlayoutDelayHint, RTCRtpReceiver.setPlayoutDelayHint, .{});
-        pub const jitterBufferTarget = bridge.accessor(RTCRtpReceiver.getJitterBufferTarget, RTCRtpReceiver.setJitterBufferTarget, .{});
-        pub const transform = bridge.accessor(RTCRtpReceiver.getTransform, RTCRtpReceiver.setTransform, .{});
         pub const createEncodedStreams = bridge.function(RTCRtpReceiver.createEncodedStreams, .{});
         pub const getContributingSources = bridge.function(RTCRtpReceiver.getContributingSources, .{});
-        pub const getSynchronizationSources = bridge.function(RTCRtpReceiver.getSynchronizationSources, .{});
         pub const getParameters = bridge.function(RTCRtpReceiver.getParameters, .{});
         pub const getStats = bridge.function(RTCRtpReceiver.getStats, .{});
+        pub const getSynchronizationSources = bridge.function(RTCRtpReceiver.getSynchronizationSources, .{});
+        pub const jitterBufferTarget = bridge.accessor(RTCRtpReceiver.getJitterBufferTarget, RTCRtpReceiver.setJitterBufferTarget, .{});
+        pub const transform = bridge.accessor(RTCRtpReceiver.getTransform, RTCRtpReceiver.setTransform, .{});
+    };
+};
+
+// Handed out by pc.addTransceiver() / pc.getTransceivers() in Chrome; here
+// getTransceivers() is always empty and addTransceiver is absent, so this is
+// prototype surface only. Chrome roots it at Object, not EventTarget, and
+// `new RTCRtpTransceiver()` throws "Illegal constructor" — which is what
+// omitting a `constructor` decl gets us (measured, /tmp/webrtc-protochain-chrome.json).
+pub const RTCRtpTransceiver = struct {
+    pub fn getMid(_: *const RTCRtpTransceiver) ?[]const u8 {
+        return null;
+    }
+
+    pub fn getSender(_: *const RTCRtpTransceiver) ?js.Value {
+        return null;
+    }
+
+    pub fn getReceiver(_: *const RTCRtpTransceiver) ?js.Value {
+        return null;
+    }
+
+    pub fn getStopped(_: *const RTCRtpTransceiver) bool {
+        return false;
+    }
+
+    pub fn getDirection(_: *const RTCRtpTransceiver) []const u8 {
+        return "sendrecv";
+    }
+
+    pub fn setDirection(_: *RTCRtpTransceiver, _: []const u8) void {}
+
+    pub fn getCurrentDirection(_: *const RTCRtpTransceiver) ?[]const u8 {
+        return null;
+    }
+
+    pub fn getHeaderExtensionsToNegotiate(_: *const RTCRtpTransceiver) []const js.Value {
+        return &.{};
+    }
+
+    pub fn getNegotiatedHeaderExtensions(_: *const RTCRtpTransceiver) []const js.Value {
+        return &.{};
+    }
+
+    pub fn setCodecPreferences(_: *RTCRtpTransceiver, _: []const js.Value) void {}
+
+    pub fn setHeaderExtensionsToNegotiate(_: *RTCRtpTransceiver, _: []const js.Value) void {}
+
+    pub fn stop(_: *RTCRtpTransceiver) void {}
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(RTCRtpTransceiver);
+
+        pub const Meta = struct {
+            pub const name = "RTCRtpTransceiver";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const mid = bridge.accessor(RTCRtpTransceiver.getMid, null, .{});
+        pub const sender = bridge.accessor(RTCRtpTransceiver.getSender, null, .{});
+        pub const receiver = bridge.accessor(RTCRtpTransceiver.getReceiver, null, .{});
+        pub const stopped = bridge.accessor(RTCRtpTransceiver.getStopped, null, .{});
+        pub const direction = bridge.accessor(RTCRtpTransceiver.getDirection, RTCRtpTransceiver.setDirection, .{});
+        pub const currentDirection = bridge.accessor(RTCRtpTransceiver.getCurrentDirection, null, .{});
+        pub const getHeaderExtensionsToNegotiate = bridge.function(RTCRtpTransceiver.getHeaderExtensionsToNegotiate, .{});
+        pub const getNegotiatedHeaderExtensions = bridge.function(RTCRtpTransceiver.getNegotiatedHeaderExtensions, .{});
+        pub const setCodecPreferences = bridge.function(RTCRtpTransceiver.setCodecPreferences, .{});
+        pub const setHeaderExtensionsToNegotiate = bridge.function(RTCRtpTransceiver.setHeaderExtensionsToNegotiate, .{});
+        pub const stop = bridge.function(RTCRtpTransceiver.stop, .{});
     };
 };

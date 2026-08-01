@@ -331,6 +331,20 @@ fn createSnapshotContext(
                 // Web IDL: interface objects on the global are non-enumerable.
                 v8.v8__Object__DefineOwnProperty(global_obj, context, v8_class_name, func, v8.DontEnum, &maybe_result);
             }
+
+            // Extra global names for the *same* constructor, for the legacy
+            // vendor-prefixed aliases Chrome still ships (webkitRTCPeerConnection
+            // === RTCPeerConnection is true there, measured). Unlike
+            // constructor_alias above, this does not rename the class: the
+            // function keeps Meta.name, which is what Chrome reports for
+            // webkitRTCPeerConnection.name.
+            if (@hasDecl(JsApi.Meta, "constructor_aliases")) {
+                inline for (JsApi.Meta.constructor_aliases) |alias| {
+                    const alias_name = v8.v8__String__NewFromUtf8(isolate, alias.ptr, v8.kNormal, @intCast(alias.len));
+                    var maybe_alias: v8.MaybeBool = undefined;
+                    v8.v8__Object__DefineOwnProperty(global_obj, context, alias_name, func, v8.DontEnum, &maybe_alias);
+                }
+            }
         }
 
         // WebIDL [Exposed=...] gating. Members are installed on the shared
