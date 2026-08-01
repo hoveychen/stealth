@@ -372,3 +372,67 @@
   testing.expectEqual(1024, requests.length);
   testing.expectEqual('https://example.com/1023', requests[1023].url);
 </script>
+
+<!-- A streaming request body. Vite's module-preload helper feature-tests for
+     it on every page it ships, and a throw here takes the whole app bundle
+     down with it: browserscan.net loses ~740 nodes and never hydrates.
+     Every expectation was read off headed Chrome. -->
+<script id=streamingBody>
+  {
+    const stream = () => new ReadableStream();
+
+    // The exact shape of Vite's probe: `duplex` is read, and no Content-Type
+    // is inferred for a stream.
+    let duplexAccessed = false;
+    const probe = new Request('https://example.com/a', {
+      body: stream(),
+      method: 'POST',
+      get duplex() { duplexAccessed = true; return 'half'; },
+    });
+    testing.expectEqual(true, duplexAccessed);
+    testing.expectEqual(false, probe.headers.has('Content-Type'));
+    testing.expectEqual('POST', probe.method);
+    testing.expectEqual(false, probe.bodyUsed);
+    testing.expectEqual(true, probe.body instanceof ReadableStream);
+
+    // `duplex` is mandatory for a streaming body, and 'half' is its only value.
+    testing.expectError('TypeError', () => new Request('https://example.com/a', {
+      body: stream(), method: 'POST',
+    }));
+    testing.expectError('TypeError', () => new Request('https://example.com/a', {
+      body: stream(), method: 'POST', duplex: 'full',
+    }));
+    // …and a body still needs a method that can carry one.
+    testing.expectError('TypeError', () => new Request('https://example.com/a', {
+      body: stream(), method: 'GET', duplex: 'half',
+    }));
+
+    // A byte body is exposed as a stream too, and keeps its inferred type.
+    const bytes = new Request('https://example.com/a', { body: 'hi', method: 'POST' });
+    testing.expectEqual('text/plain;charset=UTF-8', bytes.headers.get('Content-Type'));
+    testing.expectEqual(true, bytes.body instanceof ReadableStream);
+  }
+</script>
+
+<script id=streamingBodyRead type=module>
+  const state = await testing.async();
+
+  // Reading a streaming body drains the stream.
+  const closed = new ReadableStream({
+    start(c) { c.enqueue(new TextEncoder().encode('ab')); c.close(); },
+  });
+  const request = new Request('https://example.com/a', {
+    body: closed, method: 'POST', duplex: 'half',
+  });
+  const contentType = request.headers.get('Content-Type');
+  const isStream = request.body instanceof ReadableStream;
+  const text = await request.text();
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(null, contentType);
+    testing.expectEqual(true, isStream);
+    testing.expectEqual('ab', text);
+    testing.expectEqual(true, request.bodyUsed);
+  });
+</script>
