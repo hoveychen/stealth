@@ -57,9 +57,48 @@
 
 <script id=matchMedia_unsupported_feature>
 {
-  // Unknown features evaluate to false per Media Queries Level 4.
+  // Unknown features evaluate to false per Media Queries Level 4. Chrome
+  // implements neither inverted-colors nor video-dynamic-range (measured), so
+  // those have to stay unrecognised here too.
+  testing.expectEqual(false, window.matchMedia('(nonsense: 1)').matches);
+  testing.expectEqual(false, window.matchMedia('(inverted-colors: none)').matches);
+  testing.expectEqual(false, window.matchMedia('(video-dynamic-range: standard)').matches);
+  // Recognised, but not this device's value.
   testing.expectEqual(false, window.matchMedia('(prefers-color-scheme: dark)').matches);
-  testing.expectEqual(false, window.matchMedia('(hover: hover)').matches);
+  testing.expectEqual(false, window.matchMedia('(hover: none)').matches);
+}
+</script>
+
+<script id=matchMedia_device_persona>
+{
+  // The exact query set CreepJS's getCSSMedia section runs, answered the way a
+  // headed Chrome answers it — see the header of src/browser/css/MediaQuery.zig.
+  const pick = (feat, vals) => {
+    for (const v of vals) if (window.matchMedia(`(${feat}: ${v})`).matches) return v;
+    return undefined;
+  };
+  testing.expectEqual('no-preference', pick('prefers-reduced-motion', ['no-preference', 'reduce']));
+  testing.expectEqual('light', pick('prefers-color-scheme', ['light', 'dark']));
+  testing.expectEqual(false, window.matchMedia('(monochrome)').matches);
+  testing.expectEqual(true, window.matchMedia('(monochrome: 0)').matches);
+  testing.expectEqual('none', pick('forced-colors', ['none', 'active']));
+  testing.expectEqual('hover', pick('any-hover', ['hover', 'none']));
+  testing.expectEqual('hover', pick('hover', ['hover', 'none']));
+  testing.expectEqual('fine', pick('any-pointer', ['fine', 'coarse', 'none']));
+  testing.expectEqual('fine', pick('pointer', ['fine', 'coarse', 'none']));
+  testing.expectEqual('browser', pick('display-mode', ['fullscreen', 'standalone', 'minimal-ui', 'browser']));
+  testing.expectEqual('srgb', pick('color-gamut', ['rec2020', 'p3', 'srgb']));
+
+  // device-* line up with screen, which is how CreepJS spots an iframe-shrunk one.
+  testing.expectEqual(true, window.matchMedia(`(device-width: ${screen.width}px) and (device-height: ${screen.height}px)`).matches);
+  testing.expectEqual(true, window.matchMedia('(device-aspect-ratio: 16/9)').matches);
+  testing.expectEqual(false, window.matchMedia('(device-width: 12345px)').matches);
+
+  // Consistent with devicePixelRatio and screen.colorDepth.
+  testing.expectEqual(true, window.matchMedia('(resolution: 1dppx)').matches);
+  testing.expectEqual(1, window.devicePixelRatio);
+  testing.expectEqual(true, window.matchMedia('(color: 8)').matches);
+  testing.expectEqual(24, screen.colorDepth);
 }
 </script>
 
