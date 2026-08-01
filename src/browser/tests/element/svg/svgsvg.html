@@ -192,6 +192,67 @@
 }
 </script>
 
+<!-- `em` resolves against the cascaded font-size, so a stylesheet rule counts
+     just as much as the inline declaration and the presentation attribute do.
+     Every number here was read off headed Chrome. -->
+<script id=cascadedFontSize>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const style = document.createElement('style');
+  style.textContent = '.fs-cls { font-size: 20px }'
+    + ' #fs-id { font-size: 40px }'
+    + ' .fs-bang { font-size: 50px !important }'
+    + ' .fs-parent { font-size: 25px }';
+  document.head.appendChild(style);
+
+  const root = document.createElementNS(ns, 'svg');
+  document.body.appendChild(root);
+  const el = document.createElementNS(ns, 'svg');
+  el.setAttribute('x', '2em');
+  root.appendChild(el);
+
+  // No declaration anywhere: the initial 16px.
+  testing.expectEqual(32, el.x.baseVal.value);
+
+  // A class rule.
+  el.setAttribute('class', 'fs-cls');
+  testing.expectEqual(40, el.x.baseVal.value);
+
+  // An id rule outranks it.
+  el.setAttribute('id', 'fs-id');
+  testing.expectEqual(80, el.x.baseVal.value);
+
+  // The inline declaration outranks both.
+  el.setAttribute('style', 'font-size: 10px');
+  testing.expectEqual(20, el.x.baseVal.value);
+
+  // …but not an `!important` rule.
+  el.setAttribute('class', 'fs-cls fs-bang');
+  testing.expectEqual(100, el.x.baseVal.value);
+
+  // The presentation attribute is the weakest author declaration: any rule
+  // beats it, and it only applies once no rule matches. (A second element:
+  // dropping the `style` attribute does not currently drop the parsed
+  // declaration it created, which is a separate gap.)
+  const pres = document.createElementNS(ns, 'svg');
+  pres.setAttribute('x', '2em');
+  pres.setAttribute('class', 'fs-cls');
+  pres.setAttribute('font-size', '80px');
+  root.appendChild(pres);
+  testing.expectEqual(40, pres.x.baseVal.value);
+  pres.removeAttribute('class');
+  testing.expectEqual(160, pres.x.baseVal.value);
+
+  // font-size inherits, so a rule matching an ancestor reaches the child.
+  pres.removeAttribute('font-size');
+  root.setAttribute('class', 'fs-parent');
+  testing.expectEqual(50, pres.x.baseVal.value);
+
+  root.remove();
+  style.remove();
+}
+</script>
+
 <script id=factories>
 {
   // SVG2 defines SVGPoint/SVGMatrix/SVGRect as aliases of the DOM geometry

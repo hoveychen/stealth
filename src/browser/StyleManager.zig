@@ -43,13 +43,15 @@ const Allocator = std.mem.Allocator;
 pub const VisibilityCache = std.AutoHashMapUnmanaged(*Element, bool);
 pub const PointerEventsCache = std.AutoHashMapUnmanaged(*Element, bool);
 
-// Tracks visibility-relevant CSS rules from <style> elements.
+// Tracks the CSS rules we resolve from <style> elements: the visibility
+// filter's properties, plus font-size, which SVG's `em` units and text
+// measurement read back.
 // Rules are bucketed by their rightmost selector part for fast lookup.
 const StyleManager = @This();
 
 const Tag = Element.Tag;
 const Input = Element.Html.Input;
-const RuleList = std.MultiArrayList(VisibilityRule);
+const RuleList = std.MultiArrayList(Rule);
 
 frame: *Frame,
 
@@ -357,14 +359,14 @@ fn isValidLayerComponent(component: []const u8) bool {
     return true;
 }
 
-/// Compute every layer's rank and apply it to every VisibilityRule we have.
+/// Compute every layer's rank and apply it to every Rule we have.
 /// We can only do this now that we've parsed every parsed every sheet since
 /// @layer statement can change the ordering/
 fn finalizeLayerRanks(self: *StyleManager, build_arena: Allocator) Allocator.Error!void {
     const layers = self.layers.items;
 
     if (layers.len == 0) {
-        // No layers. Every VisibilityRule already has the correct layerless
+        // No layers. Every Rule already has the correct layerless
         // priority, and with no layers, there's nothing to adjust.
         return;
     }
@@ -457,7 +459,7 @@ fn stampRuleList(self: *StyleManager, rules: *RuleList) void {
 fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []const u8, block_text: []const u8, layer: u16) !void {
     if (selector_text.len == 0) return;
 
-    var props = VisibilityProperties{};
+    var props = RuleProperties{};
     var it = CssParser.parseDeclarationsList(block_text);
     while (it.next()) |decl| {
         const name = decl.name;
@@ -470,6 +472,8 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             props.opacity_zero = std.ascii.eqlIgnoreCase(val, "0");
         } else if (std.ascii.eqlIgnoreCase(name, "pointer-events")) {
             props.pointer_events_none = std.ascii.eqlIgnoreCase(val, "none");
+        } else if (std.ascii.eqlIgnoreCase(name, "font-size")) {
+            props.font_size = .{ .value = val, .important = decl.important };
         }
     }
 
@@ -479,7 +483,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
     for (selectors) |selector| {
         const rightmost = if (selector.segments.len > 0) selector.segments[selector.segments.len - 1].compound else selector.first;
         const bucket_key = getBucketKey(rightmost) orelse continue;
-        const rule = VisibilityRule{
+        const rule = Rule{
             .props = props,
             .selector = selector,
             .priority = (@as(u64, computeSpecificity(selector)) << SPEC_SHIFT) | @min(self.next_doc_order, MAX_DOC_ORDER),
@@ -929,8 +933,8 @@ fn elementHasPointerEventsNone(self: *StyleManager, el: *Element) bool {
     return result orelse false;
 }
 
-// Extracts visibility-relevant rules from a CSS rule.
-// Creates one VisibilityRule per selector (not per selector list) so each has correct specificity.
+// Extracts the rules we resolve from a CSS rule.
+// Creates one Rule per selector (not per selector list) so each has correct specificity.
 // Buckets rules by their rightmost selector part for fast lookup.
 fn addRule(self: *StyleManager, build_arena: Allocator, style_rule: *CSSStyleRule) !void {
     const selector_text = style_rule._selector_text;
@@ -938,9 +942,9 @@ fn addRule(self: *StyleManager, build_arena: Allocator, style_rule: *CSSStyleRul
         return;
     }
 
-    // Check if the rule has visibility-relevant properties
+    // Check if the rule declares anything we resolve
     const style = style_rule._style orelse return;
-    const props = extractVisibilityProperties(style);
+    const props = try extractRuleProperties(self.arena.allocator(), style);
     if (!props.isRelevant()) {
         return;
     }
@@ -963,7 +967,7 @@ fn addRule(self: *StyleManager, build_arena: Allocator, style_rule: *CSSStyleRul
         // Find the bucketing key from rightmost compound
         const bucket_key = getBucketKey(rightmost) orelse continue; // skip if dynamic pseudo-class
 
-        const rule = VisibilityRule{
+        const rule = Rule{
             .props = props,
             .selector = selector,
             .priority = (@as(u64, computeSpecificity(selector)) << SPEC_SHIFT) | @min(self.next_doc_order, MAX_DOC_ORDER),
@@ -1043,10 +1047,19 @@ fn getBucketKey(compound: Selector.Compound) ?BucketKey {
     return best_key;
 }
 
-/// Extracts visibility-relevant properties from a style declaration.
-fn extractVisibilityProperties(style: *CSSStyleProperties) VisibilityProperties {
-    var props = VisibilityProperties{};
+/// Extracts the properties we resolve from a style declaration. `arena` owns
+/// the copies of any value we keep verbatim: the declaration belongs to the
+/// stylesheet, which outlives no rebuild in particular.
+fn extractRuleProperties(arena: Allocator, style: *CSSStyleProperties) !RuleProperties {
+    var props = RuleProperties{};
     const decl = style.asCSSStyleDeclaration();
+
+    if (decl.findProperty(comptime .wrap("font-size"))) |property| {
+        props.font_size = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
 
     if (decl.findProperty(comptime .wrap("display"))) |property| {
         props.display_none = property._value.eql(comptime .wrap("none"));
@@ -1124,24 +1137,33 @@ fn matchesSelector(el: *Element, selector: Selector.Selector, frame: *Frame) boo
     return SelectorList.matches(node, selector, node, frame);
 }
 
-const VisibilityProperties = struct {
+/// A declaration we keep verbatim rather than reducing to a flag, because the
+/// caller needs the value and not just its presence.
+pub const Declaration = struct {
+    value: []const u8,
+    important: bool,
+};
+
+const RuleProperties = struct {
     display_none: ?bool = null,
     visibility_hidden: ?bool = null,
     opacity_zero: ?bool = null,
     pointer_events_none: ?bool = null,
+    font_size: ?Declaration = null,
 
-    // return true if any field in VisibilityProperties is not null
-    fn isRelevant(self: VisibilityProperties) bool {
+    // return true if any field in RuleProperties is not null
+    fn isRelevant(self: RuleProperties) bool {
         return self.display_none != null or
             self.visibility_hidden != null or
             self.opacity_zero != null or
-            self.pointer_events_none != null;
+            self.pointer_events_none != null or
+            self.font_size != null;
     }
 };
 
-const VisibilityRule = struct {
+const Rule = struct {
     selector: Selector.Selector, // Single selector, not a list
-    props: VisibilityProperties,
+    props: RuleProperties,
 
     // Packed priority: layer_rank:12 | specificity:30 | doc_order:22.
     // The rank bits are 0 until finalizeLayerRanks stamps them (the rank
@@ -1175,7 +1197,7 @@ const UNLAYERED_RANK: u32 = std.math.maxInt(u12);
 // its 12 bits of VisibleRule.priority
 const MAX_LAYERS: usize = 1024;
 
-// VisibilityRule.priority field offsets (layer_rank:12 | spec:30 | doc:22).
+// Rule.priority field offsets (layer_rank:12 | spec:30 | doc:22).
 const SPEC_SHIFT: u6 = 22;
 const RANK_SHIFT: u6 = 52;
 
@@ -1219,8 +1241,10 @@ pub fn inlineStyleValue(self: *StyleManager, el: *Element, property_name: String
 /// `inherit`/relative-unit chains share it).
 const MAX_FONT_ANCESTOR_DEPTH = 32;
 
-/// Computed font-size in CSS pixels. We do what we can, namely inline styles
-/// font-related attributes, up the parent chain.
+/// Computed font-size in CSS pixels, cascading the three author sources CSS
+/// orders — `!important` first, then the inline declaration, then normal
+/// declarations, with the presentation attribute below every rule — and
+/// inheriting up the parent chain when the element declares nothing.
 pub fn computedFontSize(self: *StyleManager, element: ?*Element) f64 {
     return self.computedFontSizeAt(element, 0);
 }
@@ -1232,8 +1256,26 @@ fn computedFontSizeAt(self: *StyleManager, element: ?*Element, depth: u8) f64 {
     const current = element orelse return 16;
     const parent = current.parentElement();
 
-    if (self.inlineStyleValue(current, comptime .wrap("font-size"))) |raw| {
-        if (self.parseFontSize(raw, parent, depth + 1)) |size| {
+    const inline_property = getInlineStyleProperty(current, comptime .wrap("font-size"), self.frame);
+    const rule = self.cascadedFontSize(current);
+
+    // An `!important` rule beats the inline declaration unless that one is
+    // itself `!important` (CSS Cascade §6.2: same origin, importance first,
+    // then the style attribute).
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            if (self.parseFontSize(declaration.value, parent, depth + 1)) |size| {
+                return size;
+            }
+        }
+    }
+    if (inline_property) |property| {
+        if (self.parseFontSize(property._value.str(), parent, depth + 1)) |size| {
+            return size;
+        }
+    }
+    if (rule) |declaration| {
+        if (self.parseFontSize(declaration.value, parent, depth + 1)) |size| {
             return size;
         }
     }
@@ -1243,6 +1285,54 @@ fn computedFontSizeAt(self: *StyleManager, element: ?*Element, depth: u8) f64 {
         }
     }
     return self.computedFontSizeAt(parent, depth + 1);
+}
+
+/// The winning `font-size` declaration among the stylesheet rules matching
+/// `el`, or null when none match. Importance outranks specificity, which is
+/// why the two are tracked apart rather than folded into `priority`.
+fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
+    self.rebuildIfDirty() catch return null;
+
+    var best: ?Declaration = null;
+    var best_priority: u64 = 0;
+    var best_important = false;
+
+    const checkRules = struct {
+        fn check(rules: *const RuleList, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
+            for (rules.items(.priority), rules.items(.props), rules.items(.selector)) |p, props, selector| {
+                const declaration = props.font_size orelse continue;
+                if (important.* and !declaration.important) continue;
+                if (declaration.important == important.* and p <= priority.*) continue;
+                if (!matchesSelector(elem, selector, frame)) continue;
+                winner.* = declaration;
+                priority.* = p;
+                important.* = declaration.important;
+            }
+        }
+    }.check;
+
+    if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
+        if (self.id_rules.get(id)) |rules| {
+            checkRules(&rules, &best, &best_priority, &best_important, el, self.frame);
+        }
+    }
+
+    if (el.getAttributeSafe(comptime .wrap("class"))) |class_attr| {
+        var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
+        while (it.next()) |class| {
+            if (self.class_rules.get(class)) |rules| {
+                checkRules(&rules, &best, &best_priority, &best_important, el, self.frame);
+            }
+        }
+    }
+
+    if (self.tag_rules.get(el.getTag())) |rules| {
+        checkRules(&rules, &best, &best_priority, &best_important, el, self.frame);
+    }
+
+    checkRules(&self.other_rules, &best, &best_priority, &best_important, el, self.frame);
+
+    return best;
 }
 
 fn parseFontSize(self: *StyleManager, raw: []const u8, parent: ?*Element, depth: u8) ?f64 {
