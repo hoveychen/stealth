@@ -91,7 +91,7 @@ pub fn insertRule(self: *CSSStyleSheet, rule: []const u8, maybe_index: ?u32, fra
             try style_rule.setSelectorText(s.selector, frame);
 
             const style_props = try style_rule.getStyle(frame);
-            const style = style_props.asCSSStyleDeclaration();
+            const style = style_props;
             try style.setCssText(s.block, frame);
             break :blk style_rule._proto;
         },
@@ -177,7 +177,7 @@ pub fn replaceSync(self: *CSSStyleSheet, text: []const u8, frame: *Frame) CSSErr
                 try style_rule.setSelectorText(s.selector, frame);
 
                 const style_props = try style_rule.getStyle(frame);
-                const style = style_props.asCSSStyleDeclaration();
+                const style = style_props;
                 try style.setCssText(s.block, frame);
                 break :blk style_rule._proto;
             },

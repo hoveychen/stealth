@@ -34,7 +34,7 @@ pub const DOMRect = @import("DOMRect.zig");
 
 const Selector = @import("selector/Selector.zig");
 const Animation = @import("animation/Animation.zig");
-const CSSStyleProperties = @import("css/CSSStyleProperties.zig");
+const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 
 pub const Svg = @import("element/Svg.zig");
 pub const Html = @import("element/Html.zig");
@@ -51,7 +51,7 @@ const Element = @This();
 pub const Proto = Node;
 
 pub const DatasetLookup = std.AutoHashMapUnmanaged(*Element, *DOMStringMap);
-pub const StyleLookup = std.AutoHashMapUnmanaged(*Element, *CSSStyleProperties);
+pub const StyleLookup = std.AutoHashMapUnmanaged(*Element, *CSSStyleDeclaration);
 pub const ClassListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
 pub const RelListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
 pub const ShadowRootLookup = std.AutoHashMapUnmanaged(*Element, *ShadowRoot);
@@ -905,21 +905,21 @@ pub fn getAttributeNamedNodeMap(self: *Element, frame: *Frame) !*Attribute.Named
     return gop.value_ptr.*;
 }
 
-pub fn getOrCreateStyle(self: *Element, frame: *Frame) !*CSSStyleProperties {
+pub fn getOrCreateStyle(self: *Element, frame: *Frame) !*CSSStyleDeclaration {
     const gop = try frame._element_styles.getOrPut(frame.arena, self);
     if (!gop.found_existing) {
-        gop.value_ptr.* = try CSSStyleProperties.init(self, false, frame);
+        gop.value_ptr.* = try CSSStyleDeclaration.init(self, false, frame);
     }
     return gop.value_ptr.*;
 }
 
-fn getStyle(self: *Element, frame: *Frame) ?*CSSStyleProperties {
+fn getStyle(self: *Element, frame: *Frame) ?*CSSStyleDeclaration {
     return frame._element_styles.get(self);
 }
 
 pub fn setStyle(self: *Element, value: []const u8, frame: *Frame) !void {
     const style = try self.getOrCreateStyle(frame);
-    try style.asCSSStyleDeclaration().setCssText(value, frame);
+    try style.setCssText(value, frame);
 }
 
 pub fn getClassList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
@@ -1261,7 +1261,7 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, 
     var height: f64 = 5.0;
 
     if (self.getStyle(frame)) |style| {
-        const decl = style.asCSSStyleDeclaration();
+        const decl = style;
         width = CSS.parseDimensionViewport(decl.getPropertyValue("width", frame), frame) orelse 5.0;
         height = CSS.parseDimensionViewport(decl.getPropertyValue("height", frame), frame) orelse 5.0;
     }
@@ -1563,7 +1563,7 @@ pub fn getOffsetParent(self: *Element, frame: *Frame) ?*Element {
 
 fn positionStyle(self: *Element, frame: *Frame) []const u8 {
     const style = self.getStyle(frame) orelse return "";
-    return style.asCSSStyleDeclaration().getPropertyValue("position", frame);
+    return style.getPropertyValue("position", frame);
 }
 
 pub fn getClientTop(_: *Element) f64 {

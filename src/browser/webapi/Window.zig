@@ -52,7 +52,7 @@ const storage = @import("storage/storage.zig");
 const idb = @import("storage/idb/idb.zig");
 const CookieStore = @import("storage/CookieStore.zig");
 const Element = @import("Element.zig");
-const CSSStyleProperties = @import("css/CSSStyleProperties.zig");
+const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const Selection = @import("Selection.zig");
 const Timers = @import("Timers.zig");
@@ -720,18 +720,18 @@ pub fn matchMedia(_: *const Window, query: []const u8, frame: *Frame) !*MediaQue
     });
 }
 
-pub fn getComputedStyle(_: *const Window, element: *Element, pseudo_element: ?[]const u8, frame: *Frame) !*CSSStyleProperties {
+pub fn getComputedStyle(_: *const Window, element: *Element, pseudo_element: ?[]const u8, frame: *Frame) !*CSSStyleDeclaration {
     if (pseudo_element) |pe| {
         if (pe.len != 0) {
             log.warn(.not_implemented, "window.GetComputedStyle", .{ .pseudo_element = pe });
             // Chrome hands out a distinct object per pseudo-element, so these
             // can't share the per-element cache entry.
-            return CSSStyleProperties.init(element, true, frame);
+            return CSSStyleDeclaration.init(element, true, frame);
         }
     }
     const gop = try frame._element_computed_styles.getOrPut(frame.arena, element);
     if (!gop.found_existing) {
-        gop.value_ptr.* = try CSSStyleProperties.init(element, true, frame);
+        gop.value_ptr.* = try CSSStyleDeclaration.init(element, true, frame);
     }
     return gop.value_ptr.*;
 }

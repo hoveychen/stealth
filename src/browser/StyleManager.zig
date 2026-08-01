@@ -33,7 +33,7 @@ const SelectorList = @import("webapi/selector/List.zig");
 
 const CSSStyleRule = @import("webapi/css/CSSStyleRule.zig");
 const CSSStyleSheet = @import("webapi/css/CSSStyleSheet.zig");
-const CSSStyleProperties = @import("webapi/css/CSSStyleProperties.zig");
+const CSSStyleDeclaration = @import("webapi/css/CSSStyleDeclaration.zig");
 const CSSStyleProperty = @import("webapi/css/CSSStyleDeclaration.zig").Property;
 
 const log = lp.log;
@@ -1052,9 +1052,9 @@ fn getBucketKey(compound: Selector.Compound) ?BucketKey {
 /// Extracts the properties we resolve from a style declaration. `arena` owns
 /// the copies of any value we keep verbatim: the declaration belongs to the
 /// stylesheet, which outlives no rebuild in particular.
-fn extractRuleProperties(arena: Allocator, style: *CSSStyleProperties) !RuleProperties {
+fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RuleProperties {
     var props = RuleProperties{};
-    const decl = style.asCSSStyleDeclaration();
+    const decl = style;
 
     if (decl.findProperty(comptime .wrap("font-size"))) |property| {
         props.font_size = .{
@@ -1236,7 +1236,7 @@ fn getInlineStyleProperty(el: *Element, property_name: String, frame: *Frame) ?*
             return null;
         };
     };
-    return style.asCSSStyleDeclaration().findProperty(property_name);
+    return style.findProperty(property_name);
 }
 
 /// Resolved value of an element's inline `style=` declaration for `property_name`,
