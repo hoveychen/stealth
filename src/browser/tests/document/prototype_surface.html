@@ -2,6 +2,7 @@
 <script src="../testing.js"></script>
 
 <body>
+<div id="caret-target" style="width: 100px; height: 50px;">caret text</div>
 
 <script id=document_prototype_html_document_is_empty>
   {
@@ -235,6 +236,211 @@
     // A missing argument is a TypeError, not a silent false.
     testing.expectError('TypeError', () => document.execCommand());
   }
+</script>
+
+<script id=document_prototype_fullscreen_and_friends>
+  {
+    // The fullscreen / pointer-lock / picture-in-picture / storage-access
+    // corner of Document, all measured on a headed Chrome 150 at a secure
+    // origin. The webkit* aliases are not historical dead weight: Chrome still
+    // ships every one of them.
+    testing.expectEqual(true, document.fullscreenEnabled);
+    testing.expectEqual(false, document.fullscreen);
+    testing.expectEqual(null, document.fullscreenElement);
+    testing.expectEqual(false, document.webkitIsFullScreen);
+    testing.expectEqual(null, document.webkitCurrentFullScreenElement);
+    testing.expectEqual(true, document.webkitFullscreenEnabled);
+    testing.expectEqual(null, document.webkitFullscreenElement);
+    testing.expectEqual(true, document.pictureInPictureEnabled);
+    testing.expectEqual(null, document.pictureInPictureElement);
+    testing.expectEqual(null, document.pointerLockElement);
+    testing.expectEqual(null, document.activeViewTransition);
+    testing.expectEqual(undefined, document.exitPointerLock());
+    testing.expectEqual(undefined, document.webkitCancelFullScreen());
+    testing.expectEqual(undefined, document.webkitExitFullscreen());
+    testing.expectEqual(undefined, document.ariaNotify('hello'));
+    testing.expectEqual(0, document.getAnimations().length);
+    testing.expectEqual(true, Array.isArray(document.getAnimations()));
+    // document.customElementRegistry is the very same registry as
+    // window.customElements, not a second one.
+    testing.expectEqual(window.customElements, document.customElementRegistry);
+  }
+</script>
+
+<script id=document_prototype_timeline>
+  {
+    testing.expectEqual('object', typeof document.timeline);
+    testing.expectEqual('function', typeof window.DocumentTimeline);
+    testing.expectEqual('function', typeof window.AnimationTimeline);
+    // document.timeline is a DocumentTimeline, whose own prototype carries only
+    // `constructor`; currentTime and duration come from AnimationTimeline one
+    // rung up.
+    testing.expectEqual('DocumentTimeline', document.timeline.constructor.name);
+    testing.expectEqual('[object DocumentTimeline]', String(document.timeline));
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(DocumentTimeline.prototype));
+    testing.expectEqual(['currentTime', 'duration', 'constructor'],
+                        Object.getOwnPropertyNames(AnimationTimeline.prototype));
+    testing.expectEqual('number', typeof document.timeline.currentTime);
+    testing.expectEqual(document.timeline, document.timeline);
+    // Unlike its siblings here, DocumentTimeline is constructible.
+    testing.expectEqual(0, DocumentTimeline.length);
+    testing.expectEqual('number', typeof new DocumentTimeline().currentTime);
+  }
+</script>
+
+<script id=document_prototype_feature_policy>
+  {
+    testing.expectEqual('object', typeof document.featurePolicy);
+    testing.expectEqual('function', typeof window.FeaturePolicy);
+    // document.featurePolicy. Chrome 150 reports 82 permission-policy features
+    // at a top-level document, all of them allowed, each allowlisted to the
+    // document's own origin. The list itself is a version fingerprint, so it is
+    // reproduced in Chrome's own iteration order.
+    const fp = document.featurePolicy;
+    testing.expectEqual('FeaturePolicy', fp.constructor.name);
+    testing.expectEqual(['allowedFeatures', 'allowsFeature', 'features', 'getAllowlistForFeature', 'constructor'],
+                        Object.getOwnPropertyNames(FeaturePolicy.prototype));
+    testing.expectEqual(82, fp.features().length);
+    testing.expectEqual('geolocation', fp.features()[0]);
+    testing.expectEqual('microphone', fp.features()[81]);
+    testing.expectEqual(82, fp.allowedFeatures().length);
+    testing.expectEqual(true, fp.allowsFeature('camera'));
+    testing.expectEqual(false, fp.allowsFeature('bogus-xyz'));
+    testing.expectEqual([location.origin], fp.getAllowlistForFeature('camera'));
+    testing.expectEqual([], fp.getAllowlistForFeature('bogus-xyz'));
+    testing.expectEqual(fp, document.featurePolicy);
+  }
+</script>
+
+<script id=document_prototype_fragment_directive>
+  {
+    testing.expectEqual('object', typeof document.fragmentDirective);
+    testing.expectEqual('function', typeof window.FragmentDirective);
+    testing.expectEqual('FragmentDirective', document.fragmentDirective.constructor.name);
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(FragmentDirective.prototype));
+    testing.expectEqual([], Object.keys(document.fragmentDirective));
+    testing.expectEqual(document.fragmentDirective, document.fragmentDirective);
+  }
+</script>
+
+<script id=document_prototype_view_transition>
+  {
+    testing.expectEqual('function', typeof document.startViewTransition);
+    testing.expectEqual('function', typeof window.ViewTransition);
+    testing.expectEqual('function', typeof window.ViewTransitionTypeSet);
+    const vt = document.startViewTransition();
+    testing.expectEqual('ViewTransition', vt.constructor.name);
+    testing.expectEqual(['finished', 'ready', 'updateCallbackDone', 'types', 'skipTransition',
+                         'transitionRoot', 'waitUntil', 'constructor'],
+                        Object.getOwnPropertyNames(ViewTransition.prototype));
+    testing.expectEqual('HTMLHtmlElement', vt.transitionRoot.constructor.name);
+    testing.expectEqual(1, vt.waitUntil.length);
+    testing.expectEqual('ViewTransitionTypeSet', vt.types.constructor.name);
+    testing.expectEqual(0, vt.types.size);
+    testing.expectEqual(['size', 'add', 'clear', 'delete', 'entries', 'forEach', 'has', 'keys',
+                         'values', 'constructor'],
+                        Object.getOwnPropertyNames(ViewTransitionTypeSet.prototype));
+    vt.types.add('slide');
+    testing.expectEqual(1, vt.types.size);
+    testing.expectEqual(true, vt.types.has('slide'));
+    testing.expectEqual(false, vt.types.has('fade'));
+    testing.expectEqual(true, vt.types.delete('slide'));
+    testing.expectEqual(false, vt.types.delete('slide'));
+    vt.types.add('a');
+    vt.types.clear();
+    testing.expectEqual(0, vt.types.size);
+    testing.expectEqual(undefined, vt.skipTransition());
+  }
+</script>
+
+<script id=document_prototype_view_transition_promises>
+  testing.onload(async () => {
+    testing.expectEqual('function', typeof document.startViewTransition);
+    // Measured: skipping a transition rejects ready with an AbortError while
+    // updateCallbackDone and finished both resolve with undefined.
+    const vt = document.startViewTransition();
+    vt.skipTransition();
+    let readyErr = null;
+    try { await vt.ready; } catch (e) { readyErr = e.name + ':' + e.message; }
+    testing.expectEqual('AbortError:Transition was skipped', readyErr);
+    testing.expectEqual(undefined, await vt.updateCallbackDone);
+    testing.expectEqual(undefined, await vt.finished);
+  });
+</script>
+
+<script id=document_prototype_caret_from_point>
+  {
+    testing.expectEqual('function', typeof document.caretRangeFromPoint);
+    testing.expectEqual('function', typeof document.caretPositionFromPoint);
+    testing.expectEqual('function', typeof window.CaretPosition);
+    // caretRangeFromPoint takes no declared arguments in Chrome and tolerates
+    // being called with none; caretPositionFromPoint declares two and requires
+    // them.
+    testing.expectEqual(0, document.caretRangeFromPoint.length);
+    testing.expectEqual(2, document.caretPositionFromPoint.length);
+    testing.expectError('TypeError', () => document.caretPositionFromPoint());
+    testing.expectEqual(['offsetNode', 'offset', 'getClientRect', 'constructor'],
+                        Object.getOwnPropertyNames(CaretPosition.prototype));
+    // Both hit-test the point and then describe a caret inside whatever they
+    // find, so they are only as good as elementFromPoint — which needs a sized
+    // box to resolve anything under our faux layout. Chrome reports a real
+    // offset into the text; we have no text metrics, so the offset is 0.
+    const target = document.getElementById('caret-target');
+    const rect = target.getBoundingClientRect();
+    const x = rect.left + 10;
+    const y = rect.top + 5;
+    testing.expectEqual(true, document.elementFromPoint(x, y) !== null);
+    const r = document.caretRangeFromPoint(x, y);
+    testing.expectEqual('Range', r.constructor.name);
+    testing.expectEqual(true, r.collapsed);
+    testing.expectEqual('#text', r.startContainer.nodeName);
+    const cp = document.caretPositionFromPoint(x, y);
+    testing.expectEqual('CaretPosition', cp.constructor.name);
+    testing.expectEqual('#text', cp.offsetNode.nodeName);
+    testing.expectEqual(0, cp.offset);
+    testing.expectEqual('DOMRect', cp.getClientRect().constructor.name);
+  }
+</script>
+
+<script id=document_prototype_illegal_constructors>
+  {
+    // Only DocumentTimeline is constructible; the rest report an illegal
+    // constructor, as Chrome does.
+    for (const name of ['FeaturePolicy', 'FragmentDirective', 'ViewTransition',
+                        'ViewTransitionTypeSet', 'CaretPosition']) {
+      testing.expectError('TypeError', () => new window[name]());
+    }
+  }
+</script>
+
+<script id=document_prototype_storage_access_promises>
+  testing.onload(async () => {
+    for (const fn of ['hasStorageAccess', 'hasUnpartitionedCookieAccess', 'requestStorageAccess',
+                      'requestStorageAccessFor', 'hasPrivateToken', 'hasRedemptionRecord',
+                      'browsingTopics', 'exitFullscreen', 'exitPictureInPicture']) {
+      testing.expectEqual('function', typeof document[fn], { desc: 'document.' + fn });
+    }
+    const settle = async (p) => {
+      try { return 'resolved:' + JSON.stringify(await p); }
+      catch (e) { return 'rejected:' + e.name; }
+    };
+    // Measured on Chrome at a top-level, same-site document: storage access is
+    // already granted, so the queries resolve true and the request resolves.
+    testing.expectEqual('resolved:true', await settle(document.hasStorageAccess()));
+    testing.expectEqual('resolved:true', await settle(document.hasUnpartitionedCookieAccess()));
+    testing.expectEqual('resolved:undefined', await settle(document.requestStorageAccess()));
+    // ...while the cross-site variant needs a permission we do not have.
+    testing.expectEqual('rejected:NotAllowedError',
+                        await settle(document.requestStorageAccessFor('https://example.com')));
+    // Private State Tokens: no issuer has ever signed for us.
+    testing.expectEqual('resolved:false', await settle(document.hasPrivateToken('https://example.com')));
+    testing.expectEqual('resolved:false', await settle(document.hasRedemptionRecord('https://example.com')));
+    // Topics: an empty list, since nothing has been observed.
+    testing.expectEqual('resolved:[]', await settle(document.browsingTopics()));
+    // Leaving a state we were never in.
+    testing.expectEqual('rejected:TypeError', await settle(document.exitFullscreen()));
+    testing.expectEqual('rejected:InvalidStateError', await settle(document.exitPictureInPicture()));
+  });
 </script>
 
 </body>

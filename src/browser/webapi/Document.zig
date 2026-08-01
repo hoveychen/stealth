@@ -38,6 +38,8 @@ const DOMImplementation = @import("DOMImplementation.zig");
 const StyleSheetList = @import("css/StyleSheetList.zig");
 const FontFaceSet = @import("css/FontFaceSet.zig");
 const Selection = @import("Selection.zig");
+const services = @import("document/services.zig");
+const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const XPathResult = @import("XPathResult.zig");
 const XPathExpression = @import("XPathExpression.zig");
 
@@ -89,6 +91,9 @@ _design_mode: bool = false,
 // where they start out null/false.
 _xml_version: ?[]const u8 = null,
 _xml_standalone: bool = false,
+_timeline: ?*services.DocumentTimeline = null,
+_feature_policy: ?*services.FeaturePolicy = null,
+_fragment_directive: ?*services.FragmentDirective = null,
 
 pub fn getOnSelectionChange(self: *Document) ?js.Function.Global {
     return self._on_selectionchange;
@@ -1288,6 +1293,165 @@ pub fn execCommand(self: *const Document, name: []const u8) bool {
     return self.queryCommandEnabled(name);
 }
 
+// Fullscreen, pointer lock and picture-in-picture. None of the three can ever
+// be entered here — there is no window to fill, no cursor to capture and no
+// video pipeline — so every element query answers null and every exit is a
+// no-op. Chrome nonetheless advertises the capabilities as available
+// (fullscreenEnabled and pictureInPictureEnabled are both true on a normal
+// page), and reporting false would be a signal of its own, so the flags are
+// true and the state is empty. The webkit* spellings are still shipped by
+// Chrome, aliases and all.
+pub fn getFullscreenEnabled(_: *const Document) bool {
+    return true;
+}
+
+pub fn getFullscreen(_: *const Document) bool {
+    return false;
+}
+
+pub fn getFullscreenElement(_: *const Document) ?*Element {
+    return null;
+}
+
+pub fn getPictureInPictureEnabled(_: *const Document) bool {
+    return true;
+}
+
+pub fn exitPointerLock(_: *const Document) void {}
+pub fn webkitCancelFullScreen(_: *const Document) void {}
+pub fn webkitExitFullscreen(_: *const Document) void {}
+
+// Measured rejection shapes: exiting fullscreen when the document is not
+// active is a plain TypeError, while leaving picture-in-picture we never
+// entered is an InvalidStateError.
+pub fn exitFullscreen(_: *const Document, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .type_error = "Document not active" });
+}
+
+pub fn exitPictureInPicture(_: *const Document, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidStateError } });
+}
+
+// Document-wide animations. Element.getAnimations already reports none; there
+// is nothing on the document either.
+pub fn getAnimations(_: *const Document) []*@import("animation/Animation.zig") {
+    return &.{};
+}
+
+// The Storage Access API. A top-level, same-site document already has
+// unpartitioned cookie access, so Chrome resolves both queries true and the
+// request resolves immediately; asking on behalf of another site needs a
+// permission grant we have no way to hold, and Chrome rejects that with
+// NotAllowedError.
+pub fn hasStorageAccess(_: *const Document, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(true);
+}
+
+pub fn requestStorageAccess(_: *const Document, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+pub fn requestStorageAccessFor(_: *const Document, _: []const u8, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotAllowedError } });
+}
+
+// Topics and Private State Tokens: we join no interest groups, observe no
+// topics and hold no tokens, which is the same answer a fresh Chrome profile
+// gives.
+pub fn browsingTopics(_: *const Document, _: ?js.Object, exec: *const js.Execution) !js.Promise {
+    const empty: []const js.Object = &.{};
+    return exec.js.local.?.resolvePromise(empty);
+}
+
+pub fn hasPrivateToken(_: *const Document, _: []const u8, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(false);
+}
+
+pub fn hasRedemptionRecord(_: *const Document, _: []const u8, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(false);
+}
+
+// Announces a message to assistive technology. There is none listening.
+pub fn ariaNotify(_: *const Document, _: []const u8, _: ?js.Object) void {}
+
+pub fn getTimeline(self: *Document, frame: *Frame) !*services.DocumentTimeline {
+    if (self._timeline) |existing| {
+        return existing;
+    }
+    const created = try services.DocumentTimeline.init(frame);
+    self._timeline = created;
+    return created;
+}
+
+pub fn getFeaturePolicy(self: *Document, frame: *Frame) !*services.FeaturePolicy {
+    return documentService(services.FeaturePolicy, &self._feature_policy, frame);
+}
+
+pub fn getFragmentDirective(self: *Document, frame: *Frame) !*services.FragmentDirective {
+    return documentService(services.FragmentDirective, &self._fragment_directive, frame);
+}
+
+// Created on first read and handed back unchanged after that, so identity
+// holds: Chrome's document.timeline === document.timeline.
+fn documentService(comptime T: type, slot: *?*T, frame: *Frame) !*T {
+    if (slot.*) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(T{});
+    slot.* = created;
+    return created;
+}
+
+// A transition that is already over — see ViewTransition for why. Chrome scopes
+// a document-wide transition to the document element, which is what it reports
+// as transitionRoot.
+pub fn startViewTransition(self: *Document, _: ?js.Object, frame: *Frame) !*services.ViewTransition {
+    return services.ViewTransition.init(self.getDocumentElement(), frame);
+}
+
+// Non-null only while a transition is running, and ours never are.
+pub fn getActiveViewTransition(_: *const Document) ?*services.ViewTransition {
+    return null;
+}
+
+// The same registry as window.customElements, not a second one (measured:
+// document.customElementRegistry === window.customElements).
+pub fn getCustomElementRegistry(self: *const Document, frame: *Frame) ?*CustomElementRegistry {
+    const owner = self._frame orelse frame;
+    return owner.window.getCustomElements();
+}
+
+// caretRangeFromPoint / caretPositionFromPoint. Both hit-test a viewport point
+// and describe where a caret would land inside the node found there. We have no
+// text layout, so the offset is always 0 — the node is real, the position within
+// it is not something we can measure.
+pub fn caretRangeFromPoint(self: *Document, x: ?f64, y: ?f64, frame: *Frame) !?*Range {
+    const node = try self.caretNodeFromPoint(x orelse 0, y orelse 0, frame) orelse return null;
+    const range = try Range.initIn(self.asNode(), frame);
+    try range.setStart(node, 0);
+    try range.setEnd(node, 0);
+    return range;
+}
+
+pub fn caretPositionFromPoint(self: *Document, x: f64, y: f64, frame: *Frame) !?*services.CaretPosition {
+    const node = try self.caretNodeFromPoint(x, y, frame) orelse return null;
+    return services.CaretPosition.init(node, 0, frame);
+}
+
+// Chrome reports the text node under the point rather than its element, so
+// descend into the first text child when there is one.
+fn caretNodeFromPoint(self: *Document, x: f64, y: f64, frame: *Frame) !?*Node {
+    const element = try self.elementFromPoint(x, y, frame) orelse return null;
+    var child = element.asNode().firstChild();
+    while (child) |node| {
+        if (node._type == .cdata) {
+            return node;
+        }
+        child = node.nextSibling();
+    }
+    return element.asNode();
+}
+
 // document.write is complicated and works differently based on the state of
 // parsing. But, generally, it's supposed to be additive/streaming. Multiple
 // document.writes are parsed a single unit. Well, that causes issues with
@@ -1903,6 +2067,7 @@ pub const JsApi = struct {
     pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
     pub const wasDiscarded = bridge.accessor(Document.getWasDiscarded, null, .{});
     pub const prerendering = bridge.property(false, .{ .template = false });
+    pub const featurePolicy = bridge.accessor(Document.getFeaturePolicy, null, .{});
     pub const webkitVisibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
     pub const webkitHidden = bridge.property(false, .{ .template = false, .readonly = true });
     pub const onbeforecopy = bridge.accessor(handlerAccessor(.onbeforecopy).get, handlerAccessor(.onbeforecopy).set, .{});
@@ -1913,11 +2078,19 @@ pub const JsApi = struct {
     pub const onresume = bridge.accessor(handlerAccessor(.onresume).get, handlerAccessor(.onresume).set, .{});
     pub const onsearch = bridge.accessor(handlerAccessor(.onsearch).get, handlerAccessor(.onsearch).set, .{});
     pub const onvisibilitychange = bridge.accessor(handlerAccessor(.onvisibilitychange).get, handlerAccessor(.onvisibilitychange).set, .{});
+    pub const timeline = bridge.accessor(Document.getTimeline, null, .{});
+    pub const fullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, null, .{});
+    pub const fullscreen = bridge.accessor(Document.getFullscreen, null, .{});
     pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
     pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
+    pub const webkitIsFullScreen = bridge.accessor(Document.getFullscreen, null, .{});
+    pub const webkitCurrentFullScreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const webkitFullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, null, .{});
+    pub const webkitFullscreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
     pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
     pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
     pub const rootElement = bridge.accessor(Document.getRootElement, null, .{});
+    pub const pictureInPictureEnabled = bridge.accessor(Document.getPictureInPictureEnabled, null, .{});
     pub const onabort = bridge.accessor(handlerAccessor(.onabort).get, handlerAccessor(.onabort).set, .{});
     pub const onbeforeinput = bridge.accessor(handlerAccessor(.onbeforeinput).get, handlerAccessor(.onbeforeinput).set, .{});
     pub const onbeforematch = bridge.accessor(handlerAccessor(.onbeforematch).get, handlerAccessor(.onbeforematch).set, .{});
@@ -2023,7 +2196,10 @@ pub const JsApi = struct {
     pub const childElementCount = bridge.accessor(Document.getChildElementCount, null, .{});
     pub const activeElement = bridge.accessor(Document.getActiveElement, null, .{});
     pub const styleSheets = bridge.accessor(Document.getStyleSheets, null, .{});
+    pub const pointerLockElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const fullscreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
     pub const adoptedStyleSheets = bridge.accessor(Document.getAdoptedStyleSheets, Document.setAdoptedStyleSheets, .{});
+    pub const pictureInPictureElement = bridge.accessor(Document.getFullscreenElement, null, .{});
     pub const fonts = bridge.accessor(Document.getFonts, null, .{});
 
     // `[LegacyUnforgeable]`: Chrome puts this on every document instance, not on
@@ -2035,6 +2211,8 @@ pub const JsApi = struct {
     pub const adoptNode = bridge.function(Document.adoptNode, .{ .ce_reactions = true });
     pub const append = bridge.function(Document.append, .{ .ce_reactions = true });
     pub const captureEvents = bridge.function(Document.captureEvents, .{});
+    pub const caretPositionFromPoint = bridge.function(Document.caretPositionFromPoint, .{});
+    pub const caretRangeFromPoint = bridge.function(Document.caretRangeFromPoint, .{});
     pub const clear = bridge.function(Document.clear, .{});
     pub const close = bridge.function(Document.close, .{ .ce_reactions = true });
     pub const createAttribute = bridge.function(Document.createAttribute, .{});
@@ -2056,6 +2234,10 @@ pub const JsApi = struct {
     pub const elementsFromPoint = bridge.function(Document.elementsFromPoint, .{});
     pub const evaluate = bridge.function(Document.evaluate, .{});
     pub const execCommand = bridge.function(Document.execCommand, .{});
+    pub const exitFullscreen = bridge.function(Document.exitFullscreen, .{});
+    pub const exitPictureInPicture = bridge.function(Document.exitPictureInPicture, .{});
+    pub const exitPointerLock = bridge.function(Document.exitPointerLock, .{});
+    pub const getAnimations = bridge.function(Document.getAnimations, .{});
     pub const getElementById = bridge.function(_getElementById, .{});
     fn _getElementById(self: *Document, value_: ?js.Value, frame: *Frame) !?*Element {
         const value = value_ orelse return null;
@@ -2073,6 +2255,8 @@ pub const JsApi = struct {
     pub const getElementsByTagNameNS = bridge.function(Document.getElementsByTagNameNS, .{});
     pub const getSelection = bridge.function(Document.getSelection, .{});
     pub const hasFocus = bridge.function(Document.hasFocus, .{});
+    pub const hasStorageAccess = bridge.function(Document.hasStorageAccess, .{});
+    pub const hasUnpartitionedCookieAccess = bridge.function(Document.hasStorageAccess, .{});
     pub const importNode = bridge.function(Document.importNode, .{ .ce_reactions = true });
     pub const moveBefore = bridge.function(Document.moveBefore, .{ .ce_reactions = true });
     pub const open = bridge.function(Document.open, .{ .ce_reactions = true });
@@ -2086,8 +2270,23 @@ pub const JsApi = struct {
     pub const querySelectorAll = bridge.function(Document.querySelectorAll, .{});
     pub const releaseEvents = bridge.function(Document.releaseEvents, .{});
     pub const replaceChildren = bridge.function(Document.replaceChildren, .{ .ce_reactions = true });
+    pub const requestStorageAccess = bridge.function(Document.requestStorageAccess, .{});
+    pub const requestStorageAccessFor = bridge.function(Document.requestStorageAccessFor, .{});
+    pub const startViewTransition = bridge.function(Document.startViewTransition, .{});
+    pub const webkitCancelFullScreen = bridge.function(Document.webkitCancelFullScreen, .{});
+    pub const webkitExitFullscreen = bridge.function(Document.webkitExitFullscreen, .{});
     pub const write = bridge.function(Document.write, .{ .ce_reactions = true });
     pub const writeln = bridge.function(Document.writeln, .{ .ce_reactions = true });
+
+    // Chrome emits these after `constructor`, i.e. after the main IDL block:
+    // they are runtime-enabled features, appended as they are switched on.
+    pub const fragmentDirective = bridge.accessor(Document.getFragmentDirective, null, .{});
+    pub const browsingTopics = bridge.function(Document.browsingTopics, .{});
+    pub const hasPrivateToken = bridge.function(Document.hasPrivateToken, .{});
+    pub const hasRedemptionRecord = bridge.function(Document.hasRedemptionRecord, .{});
+    pub const activeViewTransition = bridge.accessor(Document.getActiveViewTransition, null, .{});
+    pub const customElementRegistry = bridge.accessor(Document.getCustomElementRegistry, null, .{});
+    pub const ariaNotify = bridge.function(Document.ariaNotify, .{});
 
     fn getCharacterSet(self: *const Document) []const u8 {
         return self.getCharset();
