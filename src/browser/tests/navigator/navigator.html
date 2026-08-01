@@ -39,11 +39,15 @@
 
   testing.expectEqual(null, navigator.doNotTrack);
 
-  // GPC must default to false — per https://w3c.github.io/gpc/#javascript-property
-  // the signal reflects an explicit user preference (Firefox defaults to false;
-  // Chrome doesn't expose the property at all). A true default makes
-  // GPC-compliant consent managers reject-all and skip their consent UI.
-  testing.expectEqual(false, navigator.globalPrivacyControl);
+  // GPC must be absent, not false. Per https://w3c.github.io/gpc/#javascript-property
+  // the signal reflects an explicit user preference, and Chrome only defines
+  // the property once one is set: measured on headed Chrome 150,
+  // `'globalPrivacyControl' in navigator` is false. Absent reads the same way
+  // to a GPC-compliant consent manager as an explicit false — no preference —
+  // so this keeps the behaviour that made upstream stop returning true, while
+  // dropping a name that isn't on Chrome's Navigator.prototype.
+  testing.expectEqual(false, 'globalPrivacyControl' in navigator);
+  testing.expectEqual(undefined, navigator.globalPrivacyControl);
 
   // Every Navigator attribute must be a native accessor on the prototype
   for (const name of [
@@ -52,7 +56,6 @@
     'deviceMemory', 'maxTouchPoints', 'vendor', 'vendorSub', 'product',
     'productSub', 'pdfViewerEnabled', 'webdriver',
     'plugins', 'mimeTypes', 'connection', 'mediaDevices', 'doNotTrack',
-    'globalPrivacyControl',
   ]) {
     const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, name);
     testing.expectEqual('function', typeof desc.get); // accessor on prototype

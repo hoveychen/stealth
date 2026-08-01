@@ -16,6 +16,37 @@
   screen.addEventListener('change', () => {});
 </script>
 
+<script id=screen_chrome_surface>
+  // Measured on headed Chrome 150: availLeft/availTop say where the usable
+  // area starts (the menu bar eats availTop pixels off the top), isExtended
+  // says whether a second display is attached, and onchange is the handler
+  // for the change event Screen already inherits the machinery for. All four
+  // are on Chrome's Screen.prototype, and browserleaks.com/javascript prints
+  // three of them by name — reading `undefined` back is the tell.
+  testing.expectEqual(0, screen.availLeft);
+  testing.expectEqual(40, screen.availTop);
+  testing.expectEqual(false, screen.isExtended);
+  if (testing.IS_TEST_RUNNER) {
+    // The menu bar is the whole difference between height and availHeight.
+    testing.expectEqual(screen.height - screen.availHeight, screen.availTop);
+  }
+
+  testing.expectEqual(null, screen.onchange);
+  const onchange = () => {};
+  screen.onchange = onchange;
+  testing.expectEqual(onchange, screen.onchange);
+  screen.onchange = null;
+  testing.expectEqual(null, screen.onchange);
+
+  // Chrome's own order, minus `constructor` — where the bridge puts that is
+  // not ours to choose.
+  testing.expectEqual(
+    ['availWidth', 'availHeight', 'width', 'height', 'colorDepth', 'pixelDepth',
+      'availLeft', 'availTop', 'orientation', 'onchange', 'isExtended'],
+    Object.getOwnPropertyNames(Screen.prototype).filter((n) => n !== 'constructor'),
+  );
+</script>
+
 <script id=orientation>
   screen.orientation.addEventListener('change', () => {})
   // above shouldn't crash (it used to)

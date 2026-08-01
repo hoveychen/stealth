@@ -164,14 +164,14 @@ pub fn getWebdriver(_: *const Navigator) bool {
     return false;
 }
 
-// Default to false: per https://w3c.github.io/gpc/#javascript-property the
-// signal reflects an explicit user preference, and none is configured here.
-// Firefox defaults to false; Chrome doesn't expose the property. Returning
-// true made GPC-compliant consent managers treat every page load as "reject
-// tracking" and skip their consent UI entirely.
-pub fn getGlobalPrivacyControl(_: *const Navigator) bool {
-    return false;
-}
+// globalPrivacyControl is deliberately absent. Per
+// https://w3c.github.io/gpc/#javascript-property the signal reflects an
+// explicit user preference, and none is configured here; Chrome only defines
+// the property once one is set, so on a stock Chrome 150 the name isn't on
+// Navigator.prototype at all (measured). Absent and false read the same way to
+// a GPC-compliant consent manager — no preference, show the consent UI — so
+// this keeps the behaviour that made upstream stop returning true, without the
+// extra name for a fingerprinter to enumerate.
 
 pub fn getPlatform(_: *const Navigator) []const u8 {
     return switch (builtin.os.tag) {
@@ -345,7 +345,6 @@ pub const JsApi = struct {
     pub const pdfViewerEnabled = bridge.accessor(Navigator.getPdfViewerEnabled, null, .{});
     pub const webdriver = bridge.accessor(Navigator.getWebdriver, null, .{});
     pub const doNotTrack = bridge.accessor(Navigator.getDoNotTrack, null, .{});
-    pub const globalPrivacyControl = bridge.accessor(Navigator.getGlobalPrivacyControl, null, .{});
 
     pub const javaEnabled = bridge.function(Navigator.javaEnabled, .{});
     pub const sendBeacon = bridge.function(Navigator.sendBeacon, .{ .exposed = .window, .noop = true });
