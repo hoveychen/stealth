@@ -48,5 +48,69 @@
   }
 </script>
 
+
+<script id=document_prototype_event_handlers>
+  {
+    // Every on* property a headed Chrome 150 owns on Document.prototype, in
+    // Chrome's own order. Measured, not taken from the spec: Chrome ships
+    // vendor-prefixed aliases (onwebkitanimationend, onwebkitfullscreenchange)
+    // and legacy ones (onsearch, onfreeze) that no current spec lists.
+    const expected = [
+      'onreadystatechange', 'onpointerlockchange', 'onpointerlockerror', 'onbeforecopy',
+      'onbeforecut', 'onbeforepaste', 'onfreeze', 'onprerenderingchange', 'onresume',
+      'onsearch', 'onvisibilitychange', 'onfullscreenchange', 'onfullscreenerror',
+      'onwebkitfullscreenchange', 'onwebkitfullscreenerror', 'onabort', 'onbeforeinput',
+      'onbeforematch', 'onbeforetoggle', 'onblur', 'oncancel', 'oncanplay', 'oncanplaythrough',
+      'onchange', 'onclick', 'onclose', 'oncommand', 'oncontentvisibilityautostatechange',
+      'oncontextlost', 'oncontextmenu', 'oncontextrestored', 'oncuechange', 'ondblclick',
+      'ondrag', 'ondragend', 'ondragenter', 'ondragleave', 'ondragover', 'ondragstart',
+      'ondrop', 'ondurationchange', 'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata',
+      'oninput', 'oninvalid', 'onkeydown', 'onkeypress', 'onkeyup', 'onload', 'onloadeddata',
+      'onloadedmetadata', 'onloadstart', 'onmousedown', 'onmouseenter', 'onmouseleave',
+      'onmousemove', 'onmouseout', 'onmouseover', 'onmouseup', 'onmousewheel', 'onpause',
+      'onplay', 'onplaying', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
+      'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect',
+      'onslotchange', 'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
+      'onvolumechange', 'onwaiting', 'onwebkitanimationend', 'onwebkitanimationiteration',
+      'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel', 'onauxclick',
+      'ongotpointercapture', 'onlostpointercapture', 'onpointerdown', 'onpointermove',
+      'onpointerup', 'onpointercancel', 'onpointerover', 'onpointerout', 'onpointerenter',
+      'onpointerleave', 'onselectstart', 'onselectionchange', 'onanimationcancel',
+      'onanimationend', 'onanimationiteration', 'onanimationstart', 'ontransitionrun',
+      'ontransitionstart', 'ontransitionend', 'ontransitioncancel', 'onbeforexrselect',
+      'oncopy', 'oncut', 'onpaste', 'onpointerrawupdate', 'onscrollsnapchange',
+      'onscrollsnapchanging'
+    ];
+    const own = Object.getOwnPropertyNames(Document.prototype);
+    const missing = expected.filter((name) => !own.includes(name));
+    testing.expectEqual([], missing);
+
+    // ...and only those. Touch handlers are gated on a touch-capable device:
+    // Chrome at navigator.maxTouchPoints === 0 has none of them, on Document or
+    // anywhere else, so exposing them contradicts our own maxTouchPoints.
+    testing.expectEqual(0, navigator.maxTouchPoints);
+    const surplus = own.filter((name) => name.startsWith('on') && !expected.includes(name));
+    testing.expectEqual([], surplus);
+  }
+</script>
+
+<script id=document_prototype_event_handler_roundtrip>
+  {
+    // A generated handler must behave like the hand-written ones: readable back,
+    // clearable with null, and actually invoked by dispatch.
+    testing.expectEqual(null, document.onvisibilitychange);
+    let seen = 0;
+    const fn = () => { seen++; };
+    document.onvisibilitychange = fn;
+    testing.expectEqual(fn, document.onvisibilitychange);
+    document.dispatchEvent(new Event('visibilitychange'));
+    testing.expectEqual(1, seen);
+    document.onvisibilitychange = null;
+    testing.expectEqual(null, document.onvisibilitychange);
+    document.dispatchEvent(new Event('visibilitychange'));
+    testing.expectEqual(1, seen);
+  }
+</script>
+
 </body>
 </html>

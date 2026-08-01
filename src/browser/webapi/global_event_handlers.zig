@@ -42,9 +42,9 @@ const Key = struct {
 
         const ptr = @intFromPtr(self.target) >> 3;
         if (comptime IS_DEBUG) {
-            lp.assert(ptr < (1 << 57), "Key.fuse: pointer overflow", .{ .ptr = ptr });
+            lp.assert(ptr < (1 << 56), "Key.fuse: pointer overflow", .{ .ptr = ptr });
         }
-        return ptr | (@as(u64, @intFromEnum(self.handler)) << 57);
+        return ptr | (@as(u64, @intFromEnum(self.handler)) << 56);
     }
 };
 
@@ -65,18 +65,23 @@ pub const Lookup = std.HashMapUnmanaged(
     std.hash_map.default_max_load_percentage,
 );
 
-/// Enum of known event listeners; increasing the size of it (u7)
-/// can cause `Key` to behave incorrectly.
-pub const Handler = enum(u7) {
+/// Enum of known event listeners; increasing the size of it (u8)
+/// can cause `Key` to behave incorrectly. `Key.fuse` packs the tag into the
+/// top 8 bits, so the shift there must move in step with this.
+pub const Handler = enum(u8) {
     onabort,
     onanimationcancel,
     onanimationend,
     onanimationiteration,
     onanimationstart,
     onauxclick,
+    onbeforecopy,
+    onbeforecut,
     onbeforeinput,
     onbeforematch,
+    onbeforepaste,
     onbeforetoggle,
+    onbeforexrselect,
     onblur,
     oncancel,
     oncanplay,
@@ -107,6 +112,7 @@ pub const Handler = enum(u7) {
     onerror,
     onfocus,
     onformdata,
+    onfreeze,
     onfullscreenchange,
     onfullscreenerror,
     ongotpointercapture,
@@ -121,10 +127,13 @@ pub const Handler = enum(u7) {
     onloadstart,
     onlostpointercapture,
     onmousedown,
+    onmouseenter,
+    onmouseleave,
     onmousemove,
     onmouseout,
     onmouseover,
     onmouseup,
+    onmousewheel,
     onpaste,
     onpause,
     onplay,
@@ -133,17 +142,25 @@ pub const Handler = enum(u7) {
     onpointerdown,
     onpointerenter,
     onpointerleave,
+    onpointerlockchange,
+    onpointerlockerror,
     onpointermove,
     onpointerout,
     onpointerover,
     onpointerrawupdate,
     onpointerup,
+    onprerenderingchange,
     onprogress,
     onratechange,
+    onreadystatechange,
     onreset,
     onresize,
+    onresume,
     onscroll,
     onscrollend,
+    onscrollsnapchange,
+    onscrollsnapchanging,
+    onsearch,
     onsecuritypolicyviolation,
     onseeked,
     onseeking,
@@ -164,8 +181,15 @@ pub const Handler = enum(u7) {
     ontransitionend,
     ontransitionrun,
     ontransitionstart,
+    onvisibilitychange,
     onvolumechange,
     onwaiting,
+    onwebkitanimationend,
+    onwebkitanimationiteration,
+    onwebkitanimationstart,
+    onwebkitfullscreenchange,
+    onwebkitfullscreenerror,
+    onwebkittransitionend,
     onwheel,
 };
 

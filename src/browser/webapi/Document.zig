@@ -97,22 +97,6 @@ pub fn setOnSelectionChange(self: *Document, listener: ?js.Function) !void {
     }
 }
 
-// Stored in the frame's attribute-listener map (like element and ShadowRoot
-// property handlers), which the dispatch propagation path consults for any
-// event target.
-pub fn getOnClick(self: *Document, frame: *Frame) ?js.Function.Global {
-    return (self._frame orelse frame)._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = .onclick });
-}
-
-pub fn setOnClick(self: *Document, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    const owner = self._frame orelse frame;
-    if (Window.getFunctionFromSetter(setter)) |cb| {
-        try owner._event_target_attr_listeners.put(owner.arena, .{ .target = self.asEventTarget(), .handler = .onclick }, cb);
-    } else {
-        _ = owner._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = .onclick });
-    }
-}
-
 pub const Type = union(enum) {
     generic,
     html: *HTMLDocument,
@@ -1677,6 +1661,9 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(_constructor, .{});
+    pub const onpointerrawupdate = bridge.accessor(handlerAccessor(.onpointerrawupdate).get, handlerAccessor(.onpointerrawupdate).set, .{});
+    pub const onscrollsnapchange = bridge.accessor(handlerAccessor(.onscrollsnapchange).get, handlerAccessor(.onscrollsnapchange).set, .{});
+    pub const onscrollsnapchanging = bridge.accessor(handlerAccessor(.onscrollsnapchanging).get, handlerAccessor(.onscrollsnapchanging).set, .{});
     fn _constructor(frame: *Frame) !*Document {
         return frame._factory.node(Document{
             ._proto = undefined,
@@ -1715,21 +1702,132 @@ pub const JsApi = struct {
     pub const forms = bridge.accessor(Document.getForms, null, .{});
     pub const scripts = bridge.accessor(Document.getScripts, null, .{});
     pub const currentScript = bridge.accessor(Document.getCurrentScript, null, .{});
-    pub const defaultView = bridge.accessor(struct {
-        fn defaultView(self: *const Document) ?*@import("Window.zig") {
-            const frame = self._frame orelse return null;
-            return frame.window;
-        }
-    }.defaultView, null, .{});
+    pub const defaultView = bridge.accessor(_defaultView, null, .{});
+    fn _defaultView(self: *const Document) ?*Window {
+        const frame = self._frame orelse return null;
+        return frame.window;
+    }
+    pub const onreadystatechange = bridge.accessor(handlerAccessor(.onreadystatechange).get, handlerAccessor(.onreadystatechange).set, .{});
     pub const anchors = bridge.accessor(Document.getAnchors, null, .{});
     pub const applets = bridge.accessor(Document.getApplets, null, .{});
     pub const all = bridge.accessor(Document.getAll, null, .{});
     pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
+    pub const onpointerlockchange = bridge.accessor(handlerAccessor(.onpointerlockchange).get, handlerAccessor(.onpointerlockchange).set, .{});
+    pub const onpointerlockerror = bridge.accessor(handlerAccessor(.onpointerlockerror).get, handlerAccessor(.onpointerlockerror).set, .{});
     pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
     pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
     pub const prerendering = bridge.property(false, .{ .template = false });
-    pub const onclick = bridge.accessor(Document.getOnClick, Document.setOnClick, .{});
+    pub const onbeforecopy = bridge.accessor(handlerAccessor(.onbeforecopy).get, handlerAccessor(.onbeforecopy).set, .{});
+    pub const onbeforecut = bridge.accessor(handlerAccessor(.onbeforecut).get, handlerAccessor(.onbeforecut).set, .{});
+    pub const onbeforepaste = bridge.accessor(handlerAccessor(.onbeforepaste).get, handlerAccessor(.onbeforepaste).set, .{});
+    pub const onfreeze = bridge.accessor(handlerAccessor(.onfreeze).get, handlerAccessor(.onfreeze).set, .{});
+    pub const onprerenderingchange = bridge.accessor(handlerAccessor(.onprerenderingchange).get, handlerAccessor(.onprerenderingchange).set, .{});
+    pub const onresume = bridge.accessor(handlerAccessor(.onresume).get, handlerAccessor(.onresume).set, .{});
+    pub const onsearch = bridge.accessor(handlerAccessor(.onsearch).get, handlerAccessor(.onsearch).set, .{});
+    pub const onvisibilitychange = bridge.accessor(handlerAccessor(.onvisibilitychange).get, handlerAccessor(.onvisibilitychange).set, .{});
+    pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
+    pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
+    pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
+    pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
+    pub const onabort = bridge.accessor(handlerAccessor(.onabort).get, handlerAccessor(.onabort).set, .{});
+    pub const onbeforeinput = bridge.accessor(handlerAccessor(.onbeforeinput).get, handlerAccessor(.onbeforeinput).set, .{});
+    pub const onbeforematch = bridge.accessor(handlerAccessor(.onbeforematch).get, handlerAccessor(.onbeforematch).set, .{});
+    pub const onbeforetoggle = bridge.accessor(handlerAccessor(.onbeforetoggle).get, handlerAccessor(.onbeforetoggle).set, .{});
+    pub const onblur = bridge.accessor(handlerAccessor(.onblur).get, handlerAccessor(.onblur).set, .{});
+    pub const oncancel = bridge.accessor(handlerAccessor(.oncancel).get, handlerAccessor(.oncancel).set, .{});
+    pub const oncanplay = bridge.accessor(handlerAccessor(.oncanplay).get, handlerAccessor(.oncanplay).set, .{});
+    pub const oncanplaythrough = bridge.accessor(handlerAccessor(.oncanplaythrough).get, handlerAccessor(.oncanplaythrough).set, .{});
+    pub const onchange = bridge.accessor(handlerAccessor(.onchange).get, handlerAccessor(.onchange).set, .{});
+    pub const onclick = bridge.accessor(handlerAccessor(.onclick).get, handlerAccessor(.onclick).set, .{});
+    pub const onclose = bridge.accessor(handlerAccessor(.onclose).get, handlerAccessor(.onclose).set, .{});
+    pub const oncommand = bridge.accessor(handlerAccessor(.oncommand).get, handlerAccessor(.oncommand).set, .{});
+    pub const oncontentvisibilityautostatechange = bridge.accessor(handlerAccessor(.oncontentvisibilityautostatechange).get, handlerAccessor(.oncontentvisibilityautostatechange).set, .{});
+    pub const oncontextlost = bridge.accessor(handlerAccessor(.oncontextlost).get, handlerAccessor(.oncontextlost).set, .{});
+    pub const oncontextmenu = bridge.accessor(handlerAccessor(.oncontextmenu).get, handlerAccessor(.oncontextmenu).set, .{});
+    pub const oncontextrestored = bridge.accessor(handlerAccessor(.oncontextrestored).get, handlerAccessor(.oncontextrestored).set, .{});
+    pub const oncuechange = bridge.accessor(handlerAccessor(.oncuechange).get, handlerAccessor(.oncuechange).set, .{});
+    pub const ondblclick = bridge.accessor(handlerAccessor(.ondblclick).get, handlerAccessor(.ondblclick).set, .{});
+    pub const ondrag = bridge.accessor(handlerAccessor(.ondrag).get, handlerAccessor(.ondrag).set, .{});
+    pub const ondragend = bridge.accessor(handlerAccessor(.ondragend).get, handlerAccessor(.ondragend).set, .{});
+    pub const ondragenter = bridge.accessor(handlerAccessor(.ondragenter).get, handlerAccessor(.ondragenter).set, .{});
+    pub const ondragleave = bridge.accessor(handlerAccessor(.ondragleave).get, handlerAccessor(.ondragleave).set, .{});
+    pub const ondragover = bridge.accessor(handlerAccessor(.ondragover).get, handlerAccessor(.ondragover).set, .{});
+    pub const ondragstart = bridge.accessor(handlerAccessor(.ondragstart).get, handlerAccessor(.ondragstart).set, .{});
+    pub const ondrop = bridge.accessor(handlerAccessor(.ondrop).get, handlerAccessor(.ondrop).set, .{});
+    pub const ondurationchange = bridge.accessor(handlerAccessor(.ondurationchange).get, handlerAccessor(.ondurationchange).set, .{});
+    pub const onemptied = bridge.accessor(handlerAccessor(.onemptied).get, handlerAccessor(.onemptied).set, .{});
+    pub const onended = bridge.accessor(handlerAccessor(.onended).get, handlerAccessor(.onended).set, .{});
+    pub const onerror = bridge.accessor(handlerAccessor(.onerror).get, handlerAccessor(.onerror).set, .{});
+    pub const onfocus = bridge.accessor(handlerAccessor(.onfocus).get, handlerAccessor(.onfocus).set, .{});
+    pub const onformdata = bridge.accessor(handlerAccessor(.onformdata).get, handlerAccessor(.onformdata).set, .{});
+    pub const oninput = bridge.accessor(handlerAccessor(.oninput).get, handlerAccessor(.oninput).set, .{});
+    pub const oninvalid = bridge.accessor(handlerAccessor(.oninvalid).get, handlerAccessor(.oninvalid).set, .{});
+    pub const onkeydown = bridge.accessor(handlerAccessor(.onkeydown).get, handlerAccessor(.onkeydown).set, .{});
+    pub const onkeypress = bridge.accessor(handlerAccessor(.onkeypress).get, handlerAccessor(.onkeypress).set, .{});
+    pub const onkeyup = bridge.accessor(handlerAccessor(.onkeyup).get, handlerAccessor(.onkeyup).set, .{});
+    pub const onload = bridge.accessor(handlerAccessor(.onload).get, handlerAccessor(.onload).set, .{});
+    pub const onloadeddata = bridge.accessor(handlerAccessor(.onloadeddata).get, handlerAccessor(.onloadeddata).set, .{});
+    pub const onloadedmetadata = bridge.accessor(handlerAccessor(.onloadedmetadata).get, handlerAccessor(.onloadedmetadata).set, .{});
+    pub const onloadstart = bridge.accessor(handlerAccessor(.onloadstart).get, handlerAccessor(.onloadstart).set, .{});
+    pub const onmousedown = bridge.accessor(handlerAccessor(.onmousedown).get, handlerAccessor(.onmousedown).set, .{});
+    pub const onmouseenter = bridge.accessor(handlerAccessor(.onmouseenter).get, handlerAccessor(.onmouseenter).set, .{});
+    pub const onmouseleave = bridge.accessor(handlerAccessor(.onmouseleave).get, handlerAccessor(.onmouseleave).set, .{});
+    pub const onmousemove = bridge.accessor(handlerAccessor(.onmousemove).get, handlerAccessor(.onmousemove).set, .{});
+    pub const onmouseout = bridge.accessor(handlerAccessor(.onmouseout).get, handlerAccessor(.onmouseout).set, .{});
+    pub const onmouseover = bridge.accessor(handlerAccessor(.onmouseover).get, handlerAccessor(.onmouseover).set, .{});
+    pub const onmouseup = bridge.accessor(handlerAccessor(.onmouseup).get, handlerAccessor(.onmouseup).set, .{});
+    pub const onmousewheel = bridge.accessor(handlerAccessor(.onmousewheel).get, handlerAccessor(.onmousewheel).set, .{});
+    pub const onpause = bridge.accessor(handlerAccessor(.onpause).get, handlerAccessor(.onpause).set, .{});
+    pub const onplay = bridge.accessor(handlerAccessor(.onplay).get, handlerAccessor(.onplay).set, .{});
+    pub const onplaying = bridge.accessor(handlerAccessor(.onplaying).get, handlerAccessor(.onplaying).set, .{});
+    pub const onprogress = bridge.accessor(handlerAccessor(.onprogress).get, handlerAccessor(.onprogress).set, .{});
+    pub const onratechange = bridge.accessor(handlerAccessor(.onratechange).get, handlerAccessor(.onratechange).set, .{});
+    pub const onreset = bridge.accessor(handlerAccessor(.onreset).get, handlerAccessor(.onreset).set, .{});
+    pub const onresize = bridge.accessor(handlerAccessor(.onresize).get, handlerAccessor(.onresize).set, .{});
+    pub const onscroll = bridge.accessor(handlerAccessor(.onscroll).get, handlerAccessor(.onscroll).set, .{});
+    pub const onscrollend = bridge.accessor(handlerAccessor(.onscrollend).get, handlerAccessor(.onscrollend).set, .{});
+    pub const onsecuritypolicyviolation = bridge.accessor(handlerAccessor(.onsecuritypolicyviolation).get, handlerAccessor(.onsecuritypolicyviolation).set, .{});
+    pub const onseeked = bridge.accessor(handlerAccessor(.onseeked).get, handlerAccessor(.onseeked).set, .{});
+    pub const onseeking = bridge.accessor(handlerAccessor(.onseeking).get, handlerAccessor(.onseeking).set, .{});
+    pub const onselect = bridge.accessor(handlerAccessor(.onselect).get, handlerAccessor(.onselect).set, .{});
+    pub const onslotchange = bridge.accessor(handlerAccessor(.onslotchange).get, handlerAccessor(.onslotchange).set, .{});
+    pub const onstalled = bridge.accessor(handlerAccessor(.onstalled).get, handlerAccessor(.onstalled).set, .{});
+    pub const onsubmit = bridge.accessor(handlerAccessor(.onsubmit).get, handlerAccessor(.onsubmit).set, .{});
+    pub const onsuspend = bridge.accessor(handlerAccessor(.onsuspend).get, handlerAccessor(.onsuspend).set, .{});
+    pub const ontimeupdate = bridge.accessor(handlerAccessor(.ontimeupdate).get, handlerAccessor(.ontimeupdate).set, .{});
+    pub const ontoggle = bridge.accessor(handlerAccessor(.ontoggle).get, handlerAccessor(.ontoggle).set, .{});
+    pub const onvolumechange = bridge.accessor(handlerAccessor(.onvolumechange).get, handlerAccessor(.onvolumechange).set, .{});
+    pub const onwaiting = bridge.accessor(handlerAccessor(.onwaiting).get, handlerAccessor(.onwaiting).set, .{});
+    pub const onwebkitanimationend = bridge.accessor(handlerAccessor(.onwebkitanimationend).get, handlerAccessor(.onwebkitanimationend).set, .{});
+    pub const onwebkitanimationiteration = bridge.accessor(handlerAccessor(.onwebkitanimationiteration).get, handlerAccessor(.onwebkitanimationiteration).set, .{});
+    pub const onwebkitanimationstart = bridge.accessor(handlerAccessor(.onwebkitanimationstart).get, handlerAccessor(.onwebkitanimationstart).set, .{});
+    pub const onwebkittransitionend = bridge.accessor(handlerAccessor(.onwebkittransitionend).get, handlerAccessor(.onwebkittransitionend).set, .{});
+    pub const onwheel = bridge.accessor(handlerAccessor(.onwheel).get, handlerAccessor(.onwheel).set, .{});
+    pub const onauxclick = bridge.accessor(handlerAccessor(.onauxclick).get, handlerAccessor(.onauxclick).set, .{});
+    pub const ongotpointercapture = bridge.accessor(handlerAccessor(.ongotpointercapture).get, handlerAccessor(.ongotpointercapture).set, .{});
+    pub const onlostpointercapture = bridge.accessor(handlerAccessor(.onlostpointercapture).get, handlerAccessor(.onlostpointercapture).set, .{});
+    pub const onpointerdown = bridge.accessor(handlerAccessor(.onpointerdown).get, handlerAccessor(.onpointerdown).set, .{});
+    pub const onpointermove = bridge.accessor(handlerAccessor(.onpointermove).get, handlerAccessor(.onpointermove).set, .{});
+    pub const onpointerup = bridge.accessor(handlerAccessor(.onpointerup).get, handlerAccessor(.onpointerup).set, .{});
+    pub const onpointercancel = bridge.accessor(handlerAccessor(.onpointercancel).get, handlerAccessor(.onpointercancel).set, .{});
+    pub const onpointerover = bridge.accessor(handlerAccessor(.onpointerover).get, handlerAccessor(.onpointerover).set, .{});
+    pub const onpointerout = bridge.accessor(handlerAccessor(.onpointerout).get, handlerAccessor(.onpointerout).set, .{});
+    pub const onpointerenter = bridge.accessor(handlerAccessor(.onpointerenter).get, handlerAccessor(.onpointerenter).set, .{});
+    pub const onpointerleave = bridge.accessor(handlerAccessor(.onpointerleave).get, handlerAccessor(.onpointerleave).set, .{});
+    pub const onselectstart = bridge.accessor(handlerAccessor(.onselectstart).get, handlerAccessor(.onselectstart).set, .{});
     pub const onselectionchange = bridge.accessor(Document.getOnSelectionChange, Document.setOnSelectionChange, .{});
+    pub const onanimationcancel = bridge.accessor(handlerAccessor(.onanimationcancel).get, handlerAccessor(.onanimationcancel).set, .{});
+    pub const onanimationend = bridge.accessor(handlerAccessor(.onanimationend).get, handlerAccessor(.onanimationend).set, .{});
+    pub const onanimationiteration = bridge.accessor(handlerAccessor(.onanimationiteration).get, handlerAccessor(.onanimationiteration).set, .{});
+    pub const onanimationstart = bridge.accessor(handlerAccessor(.onanimationstart).get, handlerAccessor(.onanimationstart).set, .{});
+    pub const ontransitionrun = bridge.accessor(handlerAccessor(.ontransitionrun).get, handlerAccessor(.ontransitionrun).set, .{});
+    pub const ontransitionstart = bridge.accessor(handlerAccessor(.ontransitionstart).get, handlerAccessor(.ontransitionstart).set, .{});
+    pub const ontransitionend = bridge.accessor(handlerAccessor(.ontransitionend).get, handlerAccessor(.ontransitionend).set, .{});
+    pub const ontransitioncancel = bridge.accessor(handlerAccessor(.ontransitioncancel).get, handlerAccessor(.ontransitioncancel).set, .{});
+    pub const onbeforexrselect = bridge.accessor(handlerAccessor(.onbeforexrselect).get, handlerAccessor(.onbeforexrselect).set, .{});
+    pub const oncopy = bridge.accessor(handlerAccessor(.oncopy).get, handlerAccessor(.oncopy).set, .{});
+    pub const oncut = bridge.accessor(handlerAccessor(.oncut).get, handlerAccessor(.oncut).set, .{});
+    pub const onpaste = bridge.accessor(handlerAccessor(.onpaste).get, handlerAccessor(.onpaste).set, .{});
     pub const children = bridge.accessor(Document.getChildren, null, .{});
     pub const firstElementChild = bridge.accessor(Document.getFirstElementChild, null, .{});
     pub const lastElementChild = bridge.accessor(Document.getLastElementChild, null, .{});
