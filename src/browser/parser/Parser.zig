@@ -273,16 +273,26 @@ pub fn parseXML(self: *Parser, xml: []const u8) void {
 }
 
 pub fn parseFragment(self: *Parser, html: []const u8) void {
-    const context_name: []const u8 = if (self.container.node.is(Element)) |el|
-        el.getLocalName()
-    else
-        "";
+    // The fragment parsing algorithm takes its initial insertion mode — and
+    // whether it is in foreign content at all — from the context element, so
+    // the context's namespace travels with its name.
+    var context_name: []const u8 = "";
+    var context_ns: u8 = 0;
+    if (self.container.node.is(Element)) |el| {
+        context_name = el.getLocalName();
+        context_ns = switch (el._namespace) {
+            .svg => 1,
+            .mathml => 2,
+            else => 0,
+        };
+    }
 
     h5e.html5ever_parse_fragment(
         html.ptr,
         html.len,
         context_name.ptr,
         context_name.len,
+        context_ns,
         &self.container,
         self,
         createElementCallback,

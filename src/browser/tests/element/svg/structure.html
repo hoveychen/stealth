@@ -106,3 +106,45 @@
   testing.expectEqual(6, box.height);
 }
 </script>
+
+<!-- Fragment parsing takes its mode from the context element, so markup set
+     through innerHTML on an SVG element is SVG, not HTML. Sprite sheets are
+     injected exactly this way — vite-plugin-svg-icons builds one <svg> and
+     fills it with <symbol>s — and HTML-namespace children make every <use>
+     that references them dangle. All values read off headed Chrome. -->
+<script id=innerHtmlNamespace>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const info = (el) => [el.tagName, el.namespaceURI, Object.getPrototypeOf(el).constructor.name].join('|');
+
+  const host = document.createElementNS(ns, 'svg');
+  document.body.appendChild(host);
+  host.innerHTML = '<symbol id="ns-sym" viewBox="0 0 10 10"><path d="M0 0"/></symbol>'
+    + '<linearGradient><stop/></linearGradient>';
+  testing.expectEqual('symbol|' + ns + '|SVGSymbolElement', info(host.children[0]));
+  testing.expectEqual('path|' + ns + '|SVGPathElement', info(host.children[0].children[0]));
+  testing.expectEqual('linearGradient|' + ns + '|SVGLinearGradientElement', info(host.children[1]));
+  testing.expectEqual('stop|' + ns + '|SVGStopElement', info(host.children[1].children[0]));
+
+  // A <g> is just as much an SVG context as the root is.
+  const g = document.createElementNS(ns, 'g');
+  host.appendChild(g);
+  g.innerHTML = '<rect/><foreignObject><div>inner</div></foreignObject>';
+  testing.expectEqual('rect|' + ns + '|SVGRectElement', info(g.children[0]));
+  testing.expectEqual('foreignObject|' + ns + '|SVGForeignObjectElement', info(g.children[1]));
+  // …and <foreignObject> switches back to HTML, as it does in the document.
+  testing.expectEqual('DIV|http://www.w3.org/1999/xhtml|HTMLDivElement', info(g.children[1].children[0]));
+
+  // An HTML context still gives HTML, and only the <svg> subtree inside it
+  // is SVG — which already worked, and must keep working.
+  const div = document.createElement('div');
+  document.body.appendChild(div);
+  div.innerHTML = '<svg><path d="M0 0"/></svg><p>x</p>';
+  testing.expectEqual('svg|' + ns + '|SVGSVGElement', info(div.children[0]));
+  testing.expectEqual('path|' + ns + '|SVGPathElement', info(div.children[0].children[0]));
+  testing.expectEqual('P|http://www.w3.org/1999/xhtml|HTMLParagraphElement', info(div.children[1]));
+
+  host.remove();
+  div.remove();
+}
+</script>
