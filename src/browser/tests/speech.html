@@ -34,11 +34,35 @@
 }
 </script>
 
-<script id=speech_voices>
+<script id=speech_voices_first_read>
 {
-  // The macOS system voice list Chrome reports, carried verbatim. An empty
-  // getVoices() is the headless tell this closes.
+  // Chrome's timing, not just its values: the first synchronous getVoices() is
+  // empty and the list arrives on a later task with a voiceschanged event. A
+  // headed Chrome behaves the same way — CreepJS reads it synchronously and
+  // renders local (0) / remote (0) / lang (0) there too. See SpeechSynthesis.zig.
+  //
+  // A classic script, deliberately: module scripts are deferred, so a module here
+  // would run after some other block had already triggered the fill.
+  // The listener goes on before the first read so it cannot miss the event.
+  window.__voicesChanged = false;
+  speechSynthesis.addEventListener('voiceschanged', () => { window.__voicesChanged = true; });
+  testing.expectEqual(0, speechSynthesis.getVoices().length);
+  // Still empty well inside CreepJS's 350ms budget, which is the whole point.
+  testing.expectEqual(0, speechSynthesis.getVoices().length);
+}
+</script>
+
+<script id=speech_voices type=module>
+{
+  const state = await testing.async();
+  // Chrome's measured fill latency is ~665ms; wait past it.
+  await new Promise((r) => setTimeout(r, 800));
   const voices = speechSynthesis.getVoices();
+  state.resolve();
+  await state.done(() => runVoiceChecks(voices));
+
+  function runVoiceChecks(voices) {
+  testing.expectEqual(true, window.__voicesChanged);
   testing.expectEqual(199, voices.length);
   testing.expectEqual('[object SpeechSynthesisVoice]', Object.prototype.toString.call(voices[0]));
   testing.expectEqual('Samantha', voices[0].name);
@@ -62,24 +86,30 @@
     ['constructor', 'default', 'lang', 'localService', 'name', 'voiceURI'],
     Object.getOwnPropertyNames(SpeechSynthesisVoice.prototype).sort(),
   );
+  }
 }
 </script>
 
-<script id=speech_utterance>
+<script id=speech_utterance type=module>
 {
-  const u = new SpeechSynthesisUtterance('hello');
-  testing.expectEqual('[object SpeechSynthesisUtterance]', Object.prototype.toString.call(u));
-  testing.expectEqual(true, u instanceof EventTarget);
-  testing.expectEqual('hello', u.text);
-  testing.expectEqual('', u.lang);
-  testing.expectEqual(null, u.voice);
-  testing.expectEqual(1, u.volume);
-  testing.expectEqual(1, u.rate);
-  testing.expectEqual(1, u.pitch);
+  const state = await testing.async();
+  // Waits for the voice list, because it assigns one.
+  await new Promise((r) => setTimeout(r, 800));
 
-  // `text` is optional, so the constructor reports length 0 and defaults to "".
-  testing.expectEqual(0, SpeechSynthesisUtterance.length);
-  testing.expectEqual('', new SpeechSynthesisUtterance().text);
+  const u = new SpeechSynthesisUtterance('hello');
+  const fresh = {
+    tag: Object.prototype.toString.call(u),
+    isEventTarget: u instanceof EventTarget,
+    text: u.text,
+    lang: u.lang,
+    voice: u.voice,
+    volume: u.volume,
+    rate: u.rate,
+    pitch: u.pitch,
+    // `text` is optional, so the constructor reports length 0 and defaults to "".
+    ctorLength: SpeechSynthesisUtterance.length,
+    noArgText: new SpeechSynthesisUtterance().text,
+  };
 
   u.text = 'world';
   u.lang = 'en-GB';
@@ -87,12 +117,26 @@
   u.rate = 2;
   u.pitch = 0.25;
   u.voice = speechSynthesis.getVoices()[1];
-  testing.expectEqual(['world', 'en-GB', 0.5, 2, 0.25, 'Albert'], [u.text, u.lang, u.volume, u.rate, u.pitch, u.voice.name]);
+  const written = [u.text, u.lang, u.volume, u.rate, u.pitch, u.voice.name];
+  state.resolve();
 
-  testing.expectEqual(
-    ['constructor', 'lang', 'onboundary', 'onend', 'onerror', 'onmark', 'onpause', 'onresume', 'onstart', 'pitch', 'rate', 'text', 'voice', 'volume'],
-    Object.getOwnPropertyNames(SpeechSynthesisUtterance.prototype).sort(),
-  );
+  await state.done(() => {
+    testing.expectEqual('[object SpeechSynthesisUtterance]', fresh.tag);
+    testing.expectEqual(true, fresh.isEventTarget);
+    testing.expectEqual('hello', fresh.text);
+    testing.expectEqual('', fresh.lang);
+    testing.expectEqual(null, fresh.voice);
+    testing.expectEqual([1, 1, 1], [fresh.volume, fresh.rate, fresh.pitch]);
+    testing.expectEqual(0, fresh.ctorLength);
+    testing.expectEqual('', fresh.noArgText);
+
+    testing.expectEqual(['world', 'en-GB', 0.5, 2, 0.25, 'Albert'], written);
+
+    testing.expectEqual(
+      ['constructor', 'lang', 'onboundary', 'onend', 'onerror', 'onmark', 'onpause', 'onresume', 'onstart', 'pitch', 'rate', 'text', 'voice', 'volume'],
+      Object.getOwnPropertyNames(SpeechSynthesisUtterance.prototype).sort(),
+    );
+  });
 }
 </script>
 

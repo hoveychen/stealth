@@ -15,12 +15,26 @@
 // `alert()` reading "ReferenceError: speechSynthesis is not defined" and CreepJS
 // renders as a blocked speech section.
 //
-// getVoices() answers the measured macOS voice list (199 entries — voices.zig)
-// straight away. Chrome's first synchronous call right after load returns an
-// empty array and fills the list in asynchronously, so answering immediately is
-// a *timing* difference from Chrome; it is the right trade, because the value a
-// detector actually reads and scores is the list, and an empty list is the
-// headless tell we are here to remove.
+// getVoices() reproduces Chrome's timing as well as its values: the first
+// synchronous call returns an empty array, the measured macOS list (199 entries
+// — voices.zig) arrives ~665ms later, and `voiceschanged` fires then.
+//
+// The latency is measured, not chosen. Polling a headed Chrome every 25ms from
+// first access, three runs: the first read is always empty, `voiceschanged`
+// fires at 661/662/664ms and the list is complete at 668/675/675ms.
+//
+// It matters because it is *observable*. CreepJS reads getVoices(), waits 50ms,
+// then gives up after a further 300ms if no voice with `localService` has
+// arrived — so a real Chrome misses its budget and CreepJS renders
+// `local (0) / remote (0) / lang (0): blocked`. Confirmed on a headed window and
+// again on a warm profile (the same window run twice against one persistent
+// profile), so it is neither a headless artefact nor a cold TTS service.
+//
+// An earlier revision filled the list on the next task instead, which made
+// CreepJS report `local (180) / remote (19) / lang (51)` — a triple no real
+// Chrome produces, and therefore a worse signal than the blocked rows it
+// replaced. A page that waits for the event, as a page that actually wants to
+// speak must, still gets all 199.
 //
 // speak() has no synthesiser behind it. Rather than doing nothing — which hangs
 // any page that waits for `onend` — it fires Chrome's success sequence (start
@@ -30,6 +44,7 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 
+const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const SpeechSynthesisEvent = @import("SpeechSynthesisEvent.zig");
 const SpeechSynthesisUtterance = @import("SpeechSynthesisUtterance.zig");
@@ -46,6 +61,18 @@ _proto: *EventTarget,
 _paused: bool = false,
 _speaking: bool = false,
 _on_voices_changed: ?js.Function.Global = null,
+
+// getVoices() answers empty until the list "arrives". The task that flips this
+// is scheduled by the first getVoices() call, matching Chrome, where the list is
+// populated lazily on first access rather than at page load.
+_voices_ready: bool = false,
+_voices_task_queued: bool = false,
+
+// Chrome's measured latency between the first getVoices() and the voice list
+// being complete — see the header. Not a round number on purpose: it is the
+// measurement, and rounding it down to 500 would put it inside CreepJS's budget
+// and back into reporting something Chrome does not.
+const VOICE_LIST_LATENCY_MS: u32 = 665;
 
 pub fn asEventTarget(self: *SpeechSynthesis) *EventTarget {
     return self._proto;
@@ -65,7 +92,20 @@ pub fn getPaused(self: *const SpeechSynthesis) bool {
     return self._paused;
 }
 
-pub fn getVoices(_: *SpeechSynthesis, exec: *Execution) ![]*SpeechSynthesisVoice {
+pub fn getVoices(self: *SpeechSynthesis, exec: *Execution) ![]*SpeechSynthesisVoice {
+    if (self._voices_ready == false) {
+        if (self._voices_task_queued == false) {
+            self._voices_task_queued = true;
+            const task = try exec._factory.create(VoicesReadyTask{ .synthesis = self, .exec = exec });
+            try exec.js.scheduler.add(task, VoicesReadyTask.run, VOICE_LIST_LATENCY_MS, .{
+                .name = "speechSynthesis.voiceschanged",
+                .low_priority = false,
+                .finalizer = VoicesReadyTask.cancelled,
+            });
+        }
+        return &.{};
+    }
+
     const frame = exec.js.global.frame;
     if (frame.window._voices) |cached| {
         return cached;
@@ -81,6 +121,34 @@ pub fn getVoices(_: *SpeechSynthesis, exec: *Execution) ![]*SpeechSynthesisVoice
     frame.window._voices = list;
     return list;
 }
+
+// Flips getVoices() from empty to the full list and fires voiceschanged, which is
+// the event a page waits on when its first read came back empty.
+const VoicesReadyTask = struct {
+    synthesis: *SpeechSynthesis,
+    exec: *Execution,
+
+    fn cancelled(ctx: *anyopaque) void {
+        const self: *VoicesReadyTask = @ptrCast(@alignCast(ctx));
+        self.exec._factory.destroy(self);
+    }
+
+    fn run(ctx: *anyopaque) !?u32 {
+        const self: *VoicesReadyTask = @ptrCast(@alignCast(ctx));
+        defer self.exec._factory.destroy(self);
+
+        const synthesis = self.synthesis;
+        synthesis._voices_ready = true;
+
+        const target = synthesis.asEventTarget();
+        if (!self.exec.hasDirectListeners(target, "voiceschanged", synthesis._on_voices_changed)) {
+            return null;
+        }
+        const event = try Event.initTrusted(.wrap("voiceschanged"), .{}, self.exec.page);
+        try self.exec.dispatch(target, event, synthesis._on_voices_changed, .{ .context = "speechSynthesis.voiceschanged" });
+        return null;
+    }
+};
 
 pub fn speak(self: *SpeechSynthesis, utterance: *SpeechSynthesisUtterance, exec: *Execution) !void {
     self._speaking = true;

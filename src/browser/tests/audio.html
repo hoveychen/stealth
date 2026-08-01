@@ -142,34 +142,43 @@
 
 <script id=audio_state type=module>
 {
-  // Unlike headless Chrome (whose resume() never settles without an audio
-  // device), resume() here resolves and the clock starts — see AudioContext.zig.
+  // resume() never settles and the state never leaves "suspended" — measured on
+  // a headed Chrome as well as a headless one, because the cause is the autoplay
+  // policy and not a missing audio device. See AudioContext.zig.
   const state = await testing.async();
   const ac = new AudioContext();
   const seen = [];
   ac.onstatechange = () => seen.push(ac.state);
   testing.expectEqual('suspended', ac.state);
 
-  await ac.resume();
-  const running = ac.state;
+  const race = (p) => Promise.race([
+    p.then(() => 'resolved', (e) => 'rejected:' + e.name),
+    new Promise((r) => setTimeout(() => r('pending'), 100)),
+  ]);
+
+  const resumeOutcome = await race(ac.resume());
+  const afterResume = { state: ac.state, currentTime: ac.currentTime };
+
   await ac.suspend();
   const suspended = ac.state;
   await ac.close();
   const closed = ac.state;
 
-  let rejected = null;
-  await ac.resume().catch((e) => { rejected = e.name; });
-  const afterClose = Object.prototype.toString.call(ac.createAnalyser());
+  // Once closed, all three reject rather than hanging.
+  const resumeAfterClose = await race(ac.resume());
+  const afterCloseNode = Object.prototype.toString.call(ac.createAnalyser());
   state.resolve();
 
   await state.done(() => {
-    testing.expectEqual('running', running);
+    testing.expectEqual('pending', resumeOutcome);
+    testing.expectEqual({ state: 'suspended', currentTime: 0 }, afterResume);
     testing.expectEqual('suspended', suspended);
     testing.expectEqual('closed', closed);
-    testing.expectEqual(['running', 'suspended', 'closed'], seen);
-    testing.expectEqual('InvalidStateError', rejected);
+    // resume() moved nothing, so only close() fired a statechange.
+    testing.expectEqual(['closed'], seen);
+    testing.expectEqual('rejected:InvalidStateError', resumeAfterClose);
     // Chrome still hands back a node from a closed context.
-    testing.expectEqual('[object AnalyserNode]', afterClose);
+    testing.expectEqual('[object AnalyserNode]', afterCloseNode);
   });
 }
 </script>

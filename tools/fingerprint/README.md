@@ -646,13 +646,19 @@ as one plan. Everything below was measured through a SOCKS proxy, with the
 the machine's default route is the fake-IP tunnel from P9 and it blames whichever
 host it drops.
 
-| | before (`detectors-partial-lightpanda.json`) | after (`detectors-api-gaps-lightpanda.json`) | Chrome |
+The reference column is a **headed** Chrome
+(`detectors-chrome-headed.json`, `detector-sweep.mjs chrome --headed`). Headless
+is not a safe stand-in: some sites treat it differently, and its own APIs can
+report differently. Where a row needed a Chrome measurement finer than the sweep
+records, the probe is named.
+
+| | before (`detectors-partial-lightpanda.json`) | after (`detectors-api-gaps-lightpanda.json`) | Chrome (headed) |
 |---|---|---|---|
 | deviceandbrowserinfo nodes | 235, no verdict panel | **262, verdict panel renders** | 263 |
 | rebrowser `bypassCsp` | 🔴 "CSP was ignored … invalid behavior for a normal browser" | **🟢 "CSP is enabled, it's expected behavior"** | 🟢 |
 | rebrowser nodes / verdict words | 100 / 7 | **98 / 6** | 98 / 6 |
 | CreepJS WebGL sub-test | `images/pixels: blocked`, `params (0)`, `exts (0)` | **`images:55a7e17b`, `pixels:85d16b8a`, `params (78)`, `exts (75):901d2431`** | `exts (75): 901d2431` |
-| CreepJS speech sub-test | `local (0)/remote (0)/lang (0): blocked` | **`local (180)`, `remote (19)`, `lang (51)`** | `local (0): blocked` (its list is not ready in time) |
+| CreepJS speech sub-test | `local (0)/remote (0)/lang (0): blocked` | **`local (180):a158dc36`, `remote (19):036f6dce`, `lang (51):c4951b20`** | the same three hashes, byte for byte — but only when something touches `speechSynthesis` early (see below) |
 | CreepJS `blocked` rows, whole report | 20 | **13** | 3 |
 | CreepJS nodes | 3724 | **4150** | 3756 |
 | browserleaks.com/javascript nodes | 853 | **1039** | 1180 |
@@ -678,10 +684,16 @@ calls report silence, which is not a fabrication: it is exactly what Chrome
 returns for an analyser with nothing connected (byte frequency 0, byte
 time-domain 128, float frequency `-Infinity`, float time-domain 0, all measured).
 
-One measured Chrome behaviour is deliberately *not* copied: in headless Chrome
-with no audio device, `resume()` returns a promise that never settles and the
-state stays `suspended` forever. Copying that would hang any page that awaits it,
-so `resume()` resolves and the clock starts, which is what a headed Chrome does.
+`resume()` returns a promise that never settles and leaves the state
+`suspended`, and `currentTime` stays 0. That is Chrome, measured on a headed
+window as well as a headless one — still pending after 2s in both. The cause is
+the autoplay policy, not a missing audio device: a context created by script with
+no user gesture behind it never starts, which is the position every fingerprint
+collector is in. `suspend()` and `close()` do resolve, also measured.
+
+An earlier revision had `resume()` resolve and start a clock, on the theory that
+the never-settling promise was a headless artefact. Measuring a headed window
+disproved it, and the invented behaviour was removed.
 
 **F2 — `OffscreenCanvas` WebGL.** The drawing surface of both WebGL contexts
 became a union of the two canvas kinds. Two things fell out of it: the
@@ -698,10 +710,25 @@ macOS system voices then 19 Google remote ones, 51 languages, `Samantha` the
 default — and an empty `getVoices()` is the headless tell, so it is measured data
 rather than a plausible-looking invention. Regenerate with `dump-voices.mjs`.
 
-`getVoices()` answers immediately, where Chrome's first synchronous call right
-after load returns `[]` and fills in asynchronously. That is a timing difference
-from Chrome, taken knowingly: the value a detector scores is the list, and
-CreepJS reads it early enough that even a real headless Chrome shows 0 there.
+`getVoices()` reproduces Chrome's *timing* as well as its values, because the
+timing is observable. Polling a headed Chrome every 25ms from first access, three
+runs: the first synchronous read is always empty, `voiceschanged` fires at
+661/662/664ms, and the list is complete at 668/675/675ms. So the first read here
+answers `[]`, the list arrives 665ms later, and `voiceschanged` fires then.
+
+That number is worth not rounding. CreepJS reads `getVoices()`, waits 50ms, then
+gives up 300ms later if no voice with `localService` has arrived — so whether it
+renders hashes or `blocked` depends on whether anything warmed the TTS service
+before its own late warm-up call. It is a race in CreepJS, not a property of
+Chrome: with a `getVoices()` injected at document start, a headed Chrome renders
+`local (180): a158dc36 / remote (19): 036f6dce / lang (51): c4951b20`, which is
+byte for byte what this engine produces. Without it, the same headed Chrome —
+and a second run against the same warm profile — renders all three blocked.
+
+An earlier revision filled the list on the very next task instead. That reported
+the right values for the wrong reason, and it would have shown a filled list in
+the window where Chrome shows an empty one.
+
 `speak()` has no synthesiser behind it, so rather than doing nothing — which
 hangs any page waiting on `onend` — it delivers Chrome's success pair, `start`
 then `end`, from a scheduler task.
@@ -722,7 +749,11 @@ rebrowser tests, and `Content-Security-Policy-Report-Only` never blocks.
 ### What is still open after F1–F4
 
 - **CreepJS `audio` stays `blocked`** — see the `OfflineAudioContext` decision
-  above. This is a choice, not an omission.
+  above. This is a choice, not an omission, and it *is* visible: a headed Chrome
+  renders real numbers there (`sum: 124.04347624466754`, `gain:
+  -20.538288116455078`, `unique: 4736`, measured), so the row differs rather than
+  matching. The trade is a differing row against a fabricated hash that matches no
+  machine at all.
 - **CreepJS still shows 13 `blocked` rows against Chrome's 3.** The remaining
   ones are WebRTC (`sdp capabilities`), SVG (`bBox`), the nine audio rows, MIME
   types (`mimes (0/12)`), and CSS media queries (`@media`). Each is a separate
@@ -732,8 +763,8 @@ rebrowser tests, and `Content-Security-Policy-Report-Only` never blocks.
   than fallout. It has not been attributed to a named API yet.
 - **browserscan.net renders 1231 nodes against Chrome's 1965**, unchanged by this
   plan.
-- **CreepJS's `innerText` is now 50525 characters against Chrome's 4698 in the
-  same sweep.** The Chrome column there is the one that looks wrong — its own
-  record shows a report that did not finish rendering — so the ratio is not a
-  finding about the engine either way, and the node counts are the honest
-  comparison.
+- **CreepJS's `innerText` is 50525 characters against the headed Chrome's 4568 in
+  the same sweep.** The Chrome column is the one that looks wrong — its record
+  shows a report that had not finished rendering when the sweep read it — so the
+  ratio says nothing about the engine either way. Node counts (4146 vs 3760) are
+  the honest comparison.

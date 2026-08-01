@@ -28,12 +28,18 @@
 // sampleRate 48000, baseLatency 256/48000, outputLatency 0, sinkId "", initial
 // state "suspended".
 //
-// One measured behaviour is deliberately *not* copied: in headless Chrome with
-// no audio device, resume() returns a promise that never settles and the state
-// stays "suspended" forever. Copying that would hang any script that awaits it,
-// so resume() here behaves like a headed Chrome that has had a user gesture —
-// it resolves and the state becomes "running". That matches the rest of this
-// fork, which reports a headed Chrome's values throughout.
+// resume() returns a promise that never settles and leaves the state
+// "suspended". That is not a stub: it is what Chrome does, measured on *both*
+// a headless and a headed window (still pending after 2s, state "suspended",
+// currentTime 0). The cause is the autoplay policy rather than a missing audio
+// device — a context created by script with no user gesture behind it never
+// starts — and a script running under a fingerprint collector is always in
+// exactly that position. suspend() and close() do resolve, also measured.
+//
+// An earlier revision had resume() resolve and start a clock, on the theory that
+// the never-settling promise was a headless artefact. Measuring a real headed
+// window disproved that, so the invented behaviour is gone: a script that times
+// out resume() would otherwise have seen something no Chrome produces.
 
 const std = @import("std");
 const lp = @import("lightpanda");
@@ -126,8 +132,14 @@ pub const OutputTimestamp = struct {
     performanceTime: f64,
 };
 
+// Never settles, per the measurement in the header. The state does not move
+// either, so there is nothing to transition.
 pub fn @"resume"(self: *AudioContext, exec: *const Execution) !js.Promise {
-    return self.settle(.running, exec);
+    const local = exec.js.local.?;
+    if (self._proto._state == .closed) {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidStateError } });
+    }
+    return local.createPromiseResolver().promise();
 }
 
 pub fn @"suspend"(self: *AudioContext, exec: *const Execution) !js.Promise {
@@ -138,8 +150,8 @@ pub fn close(self: *AudioContext, exec: *const Execution) !js.Promise {
     return self.settle(.closed, exec);
 }
 
-// Chrome rejects all three on an already-closed context, and resolves with
-// undefined otherwise.
+// Chrome rejects on an already-closed context, and resolves with undefined
+// otherwise.
 fn settle(self: *AudioContext, to: BaseAudioContext.State, exec: *const Execution) !js.Promise {
     const local = exec.js.local.?;
     if (self._proto._state == .closed) {

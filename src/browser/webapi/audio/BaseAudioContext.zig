@@ -22,13 +22,10 @@
 // because detectors read its (silent) values rather than its output. See the
 // AnalyserNode header.
 
-const std = @import("std");
-
 const js = @import("../../js/js.zig");
 
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
-const Performance = @import("../Performance.zig");
 
 const AudioNode = @import("AudioNode.zig");
 const AnalyserNode = @import("AnalyserNode.zig");
@@ -41,10 +38,6 @@ const BaseAudioContext = @This();
 
 pub const Proto = EventTarget;
 
-// The render quantum: Chrome advances currentTime in 128-frame steps, so a
-// context's clock is never a raw wall-clock reading.
-const RENDER_QUANTUM_FRAMES: f64 = 128;
-
 _type: Type,
 _proto: *EventTarget,
 
@@ -55,11 +48,6 @@ _state: State = .suspended,
 _destination: ?*AudioDestinationNode = null,
 _listener: ?*AudioListener = null,
 _on_state_change: ?js.Function.Global = null,
-
-// The graph clock. It only advances while the state is `running`: microseconds
-// banked from earlier running stretches, plus the current stretch if any.
-_elapsed_us: u64 = 0,
-_running_since_us: ?u64 = null,
 
 pub const Type = union(enum) {
     audio_context: *@import("AudioContext.zig"),
@@ -83,14 +71,13 @@ pub fn getState(self: *const BaseAudioContext) []const u8 {
     return @tagName(self._state);
 }
 
-pub fn getCurrentTime(self: *const BaseAudioContext) f64 {
-    var elapsed_us = self._elapsed_us;
-    if (self._running_since_us) |since| {
-        elapsed_us += Performance.highResTimestamp() - since;
-    }
-    const seconds = @as(f64, @floatFromInt(elapsed_us)) / std.time.us_per_s;
-    const quantum = RENDER_QUANTUM_FRAMES / self._sample_rate;
-    return @floor(seconds / quantum) * quantum;
+// Always zero, which is what Chrome reports for a context that never started —
+// measured on a headed window as well as a headless one, because the reason is
+// the autoplay policy and not the absence of an audio device. The clock would
+// advance in render-quantum steps once a context ran; nothing here can start one,
+// so there is no clock to advance.
+pub fn getCurrentTime(_: *const BaseAudioContext) f64 {
+    return 0;
 }
 
 pub fn getDestination(self: *const BaseAudioContext) *AudioDestinationNode {
@@ -121,19 +108,11 @@ pub fn createAnalyser(self: *BaseAudioContext, exec: *Execution) !*AnalyserNode 
     return analyser;
 }
 
-// Moves the clock and the state together, then fires statechange. Called by
-// AudioContext's resume/suspend/close.
+// Moves the state and fires statechange. Called by AudioContext's
+// suspend/close; `running` is unreachable — see resume() there.
 pub fn transition(self: *BaseAudioContext, to: State, exec: *const Execution) !void {
     if (self._state == to) {
         return;
-    }
-
-    if (self._running_since_us) |since| {
-        self._elapsed_us += Performance.highResTimestamp() - since;
-        self._running_since_us = null;
-    }
-    if (to == .running) {
-        self._running_since_us = Performance.highResTimestamp();
     }
     self._state = to;
 

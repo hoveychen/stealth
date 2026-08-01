@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port]');
+    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed]');
     process.exit(2);
 }
 const outArg = process.argv.indexOf('--out');
@@ -31,6 +31,11 @@ const outPath = path.resolve(
 // README), so a sweep that has to be trusted runs through a plain proxy.
 const proxyArg = process.argv.indexOf('--proxy');
 const proxy = proxyArg !== -1 ? process.argv[proxyArg + 1] : null;
+// Headless Chrome is not a safe stand-in for the reference: some sites treat it
+// differently, and some of its own APIs report differently (speechSynthesis
+// fills its voice list too late for CreepJS to see it). --headed makes the
+// reference column a real window.
+const headed = process.argv.includes('--headed');
 const PORT = engine === 'chrome' ? 9334 : 9224;
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
@@ -42,7 +47,7 @@ if (engine === 'chrome') {
         `--user-data-dir=${profile}`,
         '--no-first-run',
         '--no-default-browser-check',
-        '--headless=new',
+        ...(headed ? [] : ['--headless=new']),
         ...(proxy ? [`--proxy-server=${proxy}`] : []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
@@ -66,7 +71,7 @@ const keep = (d) => {
 proc.stdout.on('data', keep);
 proc.stderr.on('data', keep);
 
-const snapshot = { engine, version: null, sites: [] };
+const snapshot = { headed, engine, version: null, sites: [] };
 
 try {
     for (let i = 0; i < 120; i++) {
