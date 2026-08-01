@@ -1229,6 +1229,19 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/speech/SpeechSynthesisVoice.zig"),
     @import("../webapi/speech/SpeechSynthesisEvent.zig"),
     @import("../webapi/speech/SpeechSynthesisErrorEvent.zig"),
+    // WebRTC: window-only in Chrome. A worker global carries RTCDataChannel and
+    // the encoded-frame types but no RTCPeerConnection (measured: the RTC* keys
+    // on a DedicatedWorkerGlobalScope are RTCTransformEvent,
+    // RTCRtpScriptTransformer, RTCDataChannel, RTCEncodedVideoFrame,
+    // RTCEncodedAudioFrame), and none of those are reachable without a
+    // connection to hand them out.
+    @import("../webapi/webrtc/RTCPeerConnection.zig"),
+    @import("../webapi/webrtc/RTCSessionDescription.zig"),
+    @import("../webapi/webrtc/RTCIceCandidate.zig"),
+    @import("../webapi/webrtc/RTCDataChannel.zig"),
+    @import("../webapi/webrtc/RTCPeerConnectionIceEvent.zig"),
+    @import("../webapi/webrtc/RTCStatsReport.zig"),
+    @import("../webapi/webrtc/rtp.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,

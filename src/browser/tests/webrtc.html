@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=webrtc_surface>
+{
+  // Every shape here is measured off Chrome 150 — see webrtc/RTCPeerConnection.zig.
+  testing.expectEqual('function', typeof RTCPeerConnection);
+  testing.expectEqual('function', typeof RTCSessionDescription);
+  testing.expectEqual('function', typeof RTCIceCandidate);
+  testing.expectEqual('function', typeof RTCDataChannel);
+  testing.expectEqual('function', typeof RTCRtpSender);
+  testing.expectEqual('function', typeof RTCRtpReceiver);
+  testing.expectEqual('function', typeof RTCPeerConnectionIceEvent);
+  testing.expectEqual('function', typeof RTCStatsReport);
+
+  // Chrome reports length 0 for the constructor: the config argument is optional.
+  testing.expectEqual(0, RTCPeerConnection.length);
+  testing.expectEqual(1, RTCRtpSender.getCapabilities.length);
+
+  const pc = new RTCPeerConnection();
+  testing.expectEqual('[object RTCPeerConnection]', Object.prototype.toString.call(pc));
+  testing.expectEqual(true, pc instanceof EventTarget);
+
+  // A fresh connection's state, all four accessors.
+  testing.expectEqual('stable', pc.signalingState);
+  testing.expectEqual('new', pc.iceGatheringState);
+  testing.expectEqual('new', pc.iceConnectionState);
+  testing.expectEqual('new', pc.connectionState);
+  testing.expectEqual(null, pc.localDescription);
+  testing.expectEqual(null, pc.remoteDescription);
+  testing.expectEqual(null, pc.canTrickleIceCandidates);
+  testing.expectEqual(null, pc.sctp);
+  testing.expectEqual(0, pc.getSenders().length);
+  testing.expectEqual(0, pc.getTransceivers().length);
+
+  pc.close();
+  testing.expectEqual('closed', pc.signalingState);
+  testing.expectEqual('closed', pc.connectionState);
+  testing.expectEqual('closed', pc.iceConnectionState);
+  // iceGatheringState is the one that does *not* go to closed (measured).
+  testing.expectEqual('new', pc.iceGatheringState);
+}
+</script>
+
+<script id=webrtc_data_channel>
+{
+  const pc = new RTCPeerConnection();
+  const dc = pc.createDataChannel('');
+  testing.expectEqual('[object RTCDataChannel]', Object.prototype.toString.call(dc));
+  testing.expectEqual('', dc.label);
+  testing.expectEqual(true, dc.ordered);
+  testing.expectEqual(null, dc.maxPacketLifeTime);
+  testing.expectEqual(null, dc.maxRetransmits);
+  testing.expectEqual('', dc.protocol);
+  testing.expectEqual(false, dc.negotiated);
+  testing.expectEqual(null, dc.id);
+  testing.expectEqual('connecting', dc.readyState);
+  testing.expectEqual(0, dc.bufferedAmount);
+  testing.expectEqual(0, dc.bufferedAmountLowThreshold);
+  testing.expectEqual('arraybuffer', dc.binaryType);
+  testing.expectEqual(true, dc.reliable);
+
+  // A channel that never opened cannot send, and Chrome's error is an
+  // InvalidStateError.
+  let threw = null;
+  try { dc.send('x'); } catch (e) { threw = e.name; }
+  testing.expectEqual('InvalidStateError', threw);
+
+  // Chrome refuses to make a channel on a closed connection.
+  pc.close();
+  let closedThrew = null;
+  try { pc.createDataChannel('y'); } catch (e) { closedThrew = e.name; }
+  testing.expectEqual('InvalidStateError', closedThrew);
+}
+</script>
+
+<script id=webrtc_session_description>
+{
+  // Bare: type null, sdp "". Both accessors are writable in Chrome even though
+  // the spec calls them readonly.
+  const bare = new RTCSessionDescription();
+  testing.expectEqual(null, bare.type);
+  testing.expectEqual('', bare.sdp);
+  testing.expectEqual('{"type":null,"sdp":""}', JSON.stringify(bare));
+
+  const filled = new RTCSessionDescription({ type: 'answer', sdp: 'x' });
+  testing.expectEqual('answer', filled.type);
+  testing.expectEqual('{"type":"answer","sdp":"x"}', JSON.stringify(filled));
+}
+</script>
+
+<script id=webrtc_ice_candidate>
+{
+  // An init that names neither a mid nor an m-line index is a TypeError.
+  let threw = null;
+  try { new RTCIceCandidate({ candidate: 'x' }); } catch (e) { threw = e.name; }
+  testing.expectEqual('TypeError', threw);
+
+  const line = 'candidate:1107373719 1 udp 2113937151 abc-def.local 54588 typ host ' +
+    'generation 0 ufrag 3Ade network-cost 999';
+  const c = new RTCIceCandidate({ candidate: line, sdpMid: '0', sdpMLineIndex: 0 });
+  testing.expectEqual(line, c.candidate);
+  testing.expectEqual('0', c.sdpMid);
+  testing.expectEqual(0, c.sdpMLineIndex);
+  testing.expectEqual('1107373719', c.foundation);
+  // "rtp", not the numeric 1 that is in the line (measured).
+  testing.expectEqual('rtp', c.component);
+  testing.expectEqual(2113937151, c.priority);
+  testing.expectEqual('abc-def.local', c.address);
+  testing.expectEqual('udp', c.protocol);
+  testing.expectEqual(54588, c.port);
+  testing.expectEqual('host', c.type);
+  testing.expectEqual(null, c.tcpType);
+  testing.expectEqual(null, c.relatedAddress);
+  testing.expectEqual(null, c.relatedPort);
+  // Not parsed out of the `ufrag` token in the line — only the init sets it.
+  testing.expectEqual(null, c.usernameFragment);
+  testing.expectEqual(null, c.relayProtocol);
+  testing.expectEqual(null, c.url);
+
+  // toJSON carries four keys, and reports usernameFragment as "" where the
+  // accessor reports null.
+  testing.expectEqual(
+    ['candidate', 'sdpMLineIndex', 'sdpMid', 'usernameFragment'],
+    Object.keys(c.toJSON()).sort(),
+  );
+  testing.expectEqual('', c.toJSON().usernameFragment);
+}
+</script>
+
+<script id=webrtc_capabilities>
+{
+  // The tables are Chrome's, captured by tools/fingerprint/dump-webrtc.mjs.
+  const audio = RTCRtpSender.getCapabilities('audio');
+  testing.expectEqual(8, audio.codecs.length);
+  testing.expectEqual(4, audio.headerExtensions.length);
+  testing.expectEqual(['codecs', 'headerExtensions'], Object.keys(audio));
+
+  // Chrome's key order within a codec is alphabetical, and a key it has no
+  // value for is absent rather than null.
+  testing.expectEqual(['channels', 'clockRate', 'mimeType', 'sdpFmtpLine'], Object.keys(audio.codecs[0]));
+  testing.expectEqual('audio/opus', audio.codecs[0].mimeType);
+  testing.expectEqual(48000, audio.codecs[0].clockRate);
+  testing.expectEqual(2, audio.codecs[0].channels);
+  testing.expectEqual('minptime=10;useinbandfec=1', audio.codecs[0].sdpFmtpLine);
+  testing.expectEqual(['channels', 'clockRate', 'mimeType'], Object.keys(audio.codecs[1]));
+  testing.expectEqual(false, 'sdpFmtpLine' in audio.codecs[1]);
+
+  // Video codecs carry no `channels` key at all.
+  const video = RTCRtpSender.getCapabilities('video');
+  testing.expectEqual(15, video.codecs.length);
+  testing.expectEqual(11, video.headerExtensions.length);
+  testing.expectEqual(['clockRate', 'mimeType'], Object.keys(video.codecs[0]));
+  testing.expectEqual('video/VP8', video.codecs[0].mimeType);
+  testing.expectEqual(['direction', 'uri'], Object.keys(video.headerExtensions[0]));
+
+  // The receiver decodes profiles the encoder will not emit, so its video
+  // table is longer; audio is the same for both.
+  testing.expectEqual(23, RTCRtpReceiver.getCapabilities('video').codecs.length);
+  testing.expectEqual(
+    JSON.stringify(audio),
+    JSON.stringify(RTCRtpReceiver.getCapabilities('audio')),
+  );
+
+  // Chrome answers null for anything else rather than throwing.
+  testing.expectEqual(null, RTCRtpSender.getCapabilities('bogus'));
+}
+</script>
+
+<script id=webrtc_offer_shapes type=module>
+{
+  const state = await testing.async();
+
+  // The three measured shapes. Which m= sections appear depends on what was
+  // asked for, and an offer with nothing added has no m= line at all.
+  const bare = await new RTCPeerConnection().createOffer();
+
+  const dcOnly = new RTCPeerConnection();
+  dcOnly.createDataChannel('');
+  const dcOffer = await dcOnly.createOffer();
+
+  const creep = new RTCPeerConnection();
+  creep.createDataChannel('');
+  const creepOffer = await creep.createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 });
+
+  state.resolve();
+  await state.done(() => {
+    // createOffer resolves with a plain object, not an RTCSessionDescription,
+    // and its key order is sdp then type — the reverse of the class's toJSON.
+    testing.expectEqual(true, Object.getPrototypeOf(bare) === Object.prototype);
+    testing.expectEqual(['sdp', 'type'], Object.keys(bare));
+    testing.expectEqual('offer', bare.type);
+
+    const mlines = (sdp) => sdp.split('\r\n').filter((l) => l.startsWith('m=')).map((l) => l.split(' ')[0]);
+    const line = (sdp, prefix) => sdp.split('\r\n').find((l) => l.startsWith(prefix));
+
+    testing.expectEqual([], mlines(bare.sdp));
+    testing.expectEqual(undefined, line(bare.sdp, 'a=group:BUNDLE'));
+    testing.expectEqual('v=0', bare.sdp.split('\r\n')[0]);
+    testing.expectEqual(true, /^o=- \d{19} 2 IN IP4 127\.0\.0\.1$/.test(bare.sdp.split('\r\n')[1]));
+
+    testing.expectEqual(['m=application'], mlines(dcOffer.sdp));
+    testing.expectEqual('a=group:BUNDLE 0', line(dcOffer.sdp, 'a=group:BUNDLE'));
+
+    testing.expectEqual(['m=audio', 'm=video', 'm=application'], mlines(creepOffer.sdp));
+    testing.expectEqual('a=group:BUNDLE 0 1 2', line(creepOffer.sdp, 'a=group:BUNDLE'));
+    // The BUNDLE line sits between t= and a=extmap-allow-mixed, not at either
+    // end of the preamble.
+    testing.expectEqual(
+      ['v=0', 'o=', 's=-', 't=0 0', 'a=group:BUNDLE 0 1 2', 'a=extmap-allow-mixed', 'a=msid-semantic: WMS'],
+      creepOffer.sdp.split('\r\n').slice(0, 7).map((l) => (l.startsWith('o=') ? 'o=' : l)),
+    );
+
+    // Every section shares one ufrag, password and DTLS fingerprint.
+    const ufrags = new Set(creepOffer.sdp.split('\r\n').filter((l) => l.startsWith('a=ice-ufrag:')));
+    testing.expectEqual(1, ufrags.size);
+    testing.expectEqual(3, creepOffer.sdp.split('a=ice-ufrag:').length - 1);
+    testing.expectEqual(true, /^a=ice-ufrag:[A-Za-z0-9+/]{4}$/.test([...ufrags][0]));
+    testing.expectEqual(true, /^a=ice-pwd:[A-Za-z0-9+/]{24}$/.test(line(creepOffer.sdp, 'a=ice-pwd:')));
+    testing.expectEqual(
+      true,
+      /^a=fingerprint:sha-256 ([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(line(creepOffer.sdp, 'a=fingerprint:')),
+    );
+
+    // Two connections do not share any of it.
+    testing.expectEqual(false, line(creepOffer.sdp, 'a=ice-ufrag:') === line(dcOffer.sdp, 'a=ice-ufrag:'));
+  });
+}
+</script>
+
+<script id=webrtc_sdp_capabilities type=module>
+{
+  const state = await testing.async();
+  const pc = new RTCPeerConnection();
+  pc.createDataChannel('');
+  const offer = await pc.createOffer({ offerToReceiveAudio: 1, offerToReceiveVideo: 1 });
+  state.resolve();
+
+  await state.done(() => {
+    // CreepJS's own read of the offer: it hashes the codecs, clock rates, fmtp
+    // and rtcp-fb lines it parses back out of the SDP. Reproducing the parse
+    // here is what pins the table — see webrtc/RTCPeerConnection.zig.
+    const sdp = offer.sdp;
+    const payloads = (kind) => (new RegExp(`m=${kind} [^\\s]+ [^\\s]+ ([^\\r\\n]+)`).exec(sdp) || [])[1].split(' ');
+    testing.expectEqual(8, payloads('audio').length);
+    testing.expectEqual(42, payloads('video').length);
+
+    const rtpmap = (pt) => (new RegExp(`a=rtpmap:${pt} ([^\\r\\n]+)`).exec(sdp) || [])[1];
+    testing.expectEqual('opus/48000/2', rtpmap(111));
+    testing.expectEqual('VP8/90000', rtpmap(96));
+    testing.expectEqual('H264/90000', rtpmap(103));
+
+    const fmtp = (pt) => (new RegExp(`a=fmtp:${pt} ([^\\r\\n]+)`).exec(sdp) || [])[1];
+    testing.expectEqual('minptime=10;useinbandfec=1', fmtp(111));
+    testing.expectEqual('level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f', fmtp(103));
+
+    // The extension list CreepJS renders under the modal.
+    const extensions = [...new Set((sdp.match(/extmap:\d+ [^\r\n]+/g) || [])
+      .map((x) => x.replace(/extmap:[^\s]+ /, '')))].sort();
+    // 4 audio URIs plus 11 video ones, three of which are shared. This is the
+    // list CreepJS renders verbatim, so it is pinned in full.
+    testing.expectEqual([
+      'http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01',
+      'http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time',
+      'http://www.webrtc.org/experiments/rtp-hdrext/color-space',
+      'http://www.webrtc.org/experiments/rtp-hdrext/playout-delay',
+      'http://www.webrtc.org/experiments/rtp-hdrext/video-content-type',
+      'http://www.webrtc.org/experiments/rtp-hdrext/video-timing',
+      'urn:3gpp:video-orientation',
+      'urn:ietf:params:rtp-hdrext:sdes:mid',
+      'urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id',
+      'urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id',
+      'urn:ietf:params:rtp-hdrext:ssrc-audio-level',
+      'urn:ietf:params:rtp-hdrext:toffset',
+    ], extensions);
+
+    // Feedback lines are what the modal lists per codec.
+    testing.expectEqual(
+      ['ccm fir', 'goog-remb', 'nack', 'nack pli', 'transport-cc'],
+      [...new Set((sdp.match(/a=rtcp-fb:96 ([^\r\n]+)/g) || []).map((x) => x.replace('a=rtcp-fb:96 ', '')))].sort(),
+    );
+  });
+}
+</script>
+
+<script id=webrtc_ice_gathering type=module>
+{
+  const state = await testing.async();
+
+  // No ICE servers, so gathering runs to completion — with servers configured
+  // there would be a server-reflexive candidate still outstanding.
+  const pc = new RTCPeerConnection();
+  pc.createDataChannel('');
+  const sequence = [];
+  const candidates = [];
+  pc.addEventListener('icecandidate', (e) => {
+    sequence.push(e.candidate ? 'candidate' : 'null');
+    if (e.candidate) candidates.push(e.candidate);
+  });
+  pc.addEventListener('icegatheringstatechange', () => sequence.push('gathering:' + pc.iceGatheringState));
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  const stateRightAfter = pc.iceGatheringState;
+  await new Promise((r) => setTimeout(r, 200));
+  state.resolve();
+
+  await state.done(() => {
+    // Gathering starts from a later task, so it still reads "new" here.
+    testing.expectEqual('new', stateRightAfter);
+    testing.expectEqual('offer', pc.localDescription.type);
+    testing.expectEqual('[object RTCSessionDescription]', Object.prototype.toString.call(pc.localDescription));
+
+    // Measured order: the state reaches "complete" *before* the null candidate.
+    testing.expectEqual(['gathering:gathering', 'candidate', 'gathering:complete', 'null'], sequence);
+    testing.expectEqual('complete', pc.iceGatheringState);
+
+    testing.expectEqual(1, candidates.length);
+    const c = candidates[0];
+    testing.expectEqual('host', c.type);
+    testing.expectEqual('udp', c.protocol);
+    testing.expectEqual(2113937151, c.priority);
+    testing.expectEqual('0', c.sdpMid);
+    testing.expectEqual(0, c.sdpMLineIndex);
+    // An mDNS name rather than an address: Chrome hides the local IP behind a
+    // per-session UUID, so a bare IP here would be the anomaly.
+    testing.expectEqual(true, /^[0-9a-f-]{36}\.local$/.test(c.address));
+    testing.expectEqual(4, c.usernameFragment.length);
+
+    // localDescription grows the candidate line as it arrives, and the copy in
+    // the SDP drops the `ufrag` token the event's line carries.
+    const inSdp = pc.localDescription.sdp.split('\r\n').filter((l) => l.startsWith('a=candidate:'));
+    testing.expectEqual(1, inSdp.length);
+    testing.expectEqual(false, inSdp[0].includes(' ufrag '));
+    testing.expectEqual(true, c.candidate.includes(' ufrag '));
+    testing.expectEqual('a=' + c.candidate.replace(/ ufrag \S+/, ''), inSdp[0]);
+    // It is spliced in after the section's c=/a=rtcp: header, where Chrome
+    // puts it. The application section has no a=rtcp: line.
+    const lines = pc.localDescription.sdp.split('\r\n');
+    testing.expectEqual('c=IN IP4 0.0.0.0', lines[lines.indexOf(inSdp[0]) - 1]);
+  });
+}
+</script>
+
+<script id=webrtc_configuration type=module>
+{
+  const state = await testing.async();
+  const pc = new RTCPeerConnection({
+    iceCandidatePoolSize: 1,
+    iceServers: [{ urls: ['stun:stun4.l.google.com:19302', 'stun:stun3.l.google.com:19302'] }],
+  });
+  // A bare string for `urls` is still reported as an array.
+  const single = new RTCPeerConnection({ iceServers: [{ urls: 'stun:example.com:3478', username: 'u' }] });
+  state.resolve();
+
+  await state.done(() => {
+    const config = pc.getConfiguration();
+    testing.expectEqual(
+      ['alwaysNegotiateDataChannels', 'bundlePolicy', 'certificates', 'encodedInsertableStreams',
+        'iceCandidatePoolSize', 'iceServers', 'iceTransportPolicy', 'rtcpMuxPolicy'],
+      Object.keys(config),
+    );
+    testing.expectEqual('balanced', config.bundlePolicy);
+    testing.expectEqual('all', config.iceTransportPolicy);
+    testing.expectEqual('require', config.rtcpMuxPolicy);
+    testing.expectEqual(false, config.alwaysNegotiateDataChannels);
+    testing.expectEqual(1, config.iceCandidatePoolSize);
+    testing.expectEqual(0, config.certificates.length);
+    testing.expectEqual(1, config.iceServers.length);
+    testing.expectEqual(['credential', 'urls', 'username'], Object.keys(config.iceServers[0]));
+    testing.expectEqual(['stun:stun4.l.google.com:19302', 'stun:stun3.l.google.com:19302'], config.iceServers[0].urls);
+    testing.expectEqual('', config.iceServers[0].username);
+
+    testing.expectEqual(['stun:example.com:3478'], single.getConfiguration().iceServers[0].urls);
+    testing.expectEqual('u', single.getConfiguration().iceServers[0].username);
+  });
+}
+</script>
+
+<script id=webrtc_stats type=module>
+{
+  const state = await testing.async();
+  const pc = new RTCPeerConnection();
+  const report = await pc.getStats();
+  // Chrome resolves getStats even after close().
+  pc.close();
+  const afterClose = await pc.getStats();
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual('[object RTCStatsReport]', Object.prototype.toString.call(report));
+    // Maplike, but not a Map subclass (measured).
+    testing.expectEqual(false, report instanceof Map);
+    testing.expectEqual(1, report.size);
+    testing.expectEqual(true, report.has('P'));
+    testing.expectEqual(false, report.has('nope'));
+
+    const record = report.get('P');
+    testing.expectEqual(
+      ['id', 'timestamp', 'type', 'dataChannelsClosed', 'dataChannelsOpened'],
+      Object.keys(record),
+    );
+    testing.expectEqual('peer-connection', record.type);
+    testing.expectEqual('P', record.id);
+    testing.expectEqual(0, record.dataChannelsOpened);
+    testing.expectEqual('number', typeof record.timestamp);
+
+    const seen = [];
+    report.forEach((v, k) => seen.push([k, v.type]));
+    testing.expectEqual([['P', 'peer-connection']], seen);
+    testing.expectEqual(['P'], [...report.keys()]);
+    testing.expectEqual([['P', 'peer-connection']], [...report].map(([k, v]) => [k, v.type]));
+
+    testing.expectEqual(1, afterClose.size);
+  });
+}
+</script>

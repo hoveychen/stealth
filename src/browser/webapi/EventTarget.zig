@@ -66,6 +66,8 @@ pub const Type = union(enum) {
     base_audio_context: *@import("audio/BaseAudioContext.zig"),
     speech_synthesis: *@import("speech/SpeechSynthesis.zig"),
     speech_synthesis_utterance: *@import("speech/SpeechSynthesisUtterance.zig"),
+    rtc_peer_connection: *@import("webrtc/RTCPeerConnection.zig"),
+    rtc_data_channel: *@import("webrtc/RTCDataChannel.zig"),
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -252,6 +254,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .base_audio_context => writer.writeAll("<BaseAudioContext>"),
         .speech_synthesis => writer.writeAll("<SpeechSynthesis>"),
         .speech_synthesis_utterance => writer.writeAll("<SpeechSynthesisUtterance>"),
+        .rtc_peer_connection => writer.writeAll("<RTCPeerConnection>"),
+        .rtc_data_channel => writer.writeAll("<RTCDataChannel>"),
     };
 }
 
@@ -290,6 +294,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .base_audio_context => return "[object BaseAudioContext]",
         .speech_synthesis => return "[object SpeechSynthesis]",
         .speech_synthesis_utterance => return "[object SpeechSynthesisUtterance]",
+        .rtc_peer_connection => return "[object RTCPeerConnection]",
+        .rtc_data_channel => return "[object RTCDataChannel]",
     };
 }
 

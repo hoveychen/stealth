@@ -97,6 +97,7 @@ pub const Type = union(enum) {
     idb_version_change_event: *@import("storage/idb/IDBVersionChangeEvent.zig"),
     toggle_event: *@import("event/ToggleEvent.zig"),
     speech_synthesis_event: *@import("speech/SpeechSynthesisEvent.zig"),
+    rtc_peer_connection_ice_event: *@import("webrtc/RTCPeerConnectionIceEvent.zig"),
 };
 
 pub const Options = struct {
@@ -222,6 +223,7 @@ pub fn is(self: *Event, comptime T: type) ?*T {
             }
             return e.is(T);
         },
+        .rtc_peer_connection_ice_event => |e| return if (T == @import("webrtc/RTCPeerConnectionIceEvent.zig")) e else null,
     }
     return null;
 }
