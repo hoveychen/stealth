@@ -1,0 +1,635 @@
+{
+ "measuredOn": "headed Chrome 150.0.7871.187 @ http://localhost:8931/ (isSecureContext true)",
+ "note": "Navigator.prototype has 83 names in a secure context and only 36 in a non-secure one — many of these members are secure-context gated. Capture the baseline on a secure origin or the list silently shrinks.",
+ "chromeOrder": [
+  "vendorSub",
+  "productSub",
+  "vendor",
+  "maxTouchPoints",
+  "scheduling",
+  "userActivation",
+  "geolocation",
+  "doNotTrack",
+  "webkitTemporaryStorage",
+  "webkitPersistentStorage",
+  "windowControlsOverlay",
+  "hardwareConcurrency",
+  "cookieEnabled",
+  "appCodeName",
+  "appName",
+  "appVersion",
+  "platform",
+  "product",
+  "userAgent",
+  "language",
+  "languages",
+  "onLine",
+  "webdriver",
+  "plugins",
+  "mimeTypes",
+  "pdfViewerEnabled",
+  "connection",
+  "getGamepads",
+  "javaEnabled",
+  "sendBeacon",
+  "vibrate",
+  "constructor",
+  "deprecatedRunAdAuctionEnforcesKAnonymity",
+  "protectedAudience",
+  "bluetooth",
+  "clipboard",
+  "credentials",
+  "keyboard",
+  "managed",
+  "mediaDevices",
+  "serviceWorker",
+  "virtualKeyboard",
+  "wakeLock",
+  "deviceMemory",
+  "userAgentData",
+  "locks",
+  "storage",
+  "gpu",
+  "login",
+  "ink",
+  "mediaCapabilities",
+  "permissions",
+  "devicePosture",
+  "hid",
+  "mediaSession",
+  "presentation",
+  "serial",
+  "usb",
+  "xr",
+  "storageBuckets",
+  "adAuctionComponents",
+  "runAdAuction",
+  "canLoadAdAuctionFencedFrame",
+  "canShare",
+  "share",
+  "clearAppBadge",
+  "getBattery",
+  "getUserMedia",
+  "requestMIDIAccess",
+  "requestMediaKeySystemAccess",
+  "setAppBadge",
+  "webkitGetUserMedia",
+  "clearOriginJoinedAdInterestGroups",
+  "createAuctionNonce",
+  "joinAdInterestGroup",
+  "leaveAdInterestGroup",
+  "updateAdInterestGroups",
+  "deprecatedReplaceInURN",
+  "deprecatedURNToURL",
+  "getInstalledRelatedApps",
+  "getInterestGroupAdAuctionData",
+  "registerProtocolHandler",
+  "unregisterProtocolHandler"
+ ],
+ "lightpandaOrder": [
+  "userAgent",
+  "appName",
+  "appCodeName",
+  "appVersion",
+  "platform",
+  "language",
+  "languages",
+  "onLine",
+  "cookieEnabled",
+  "hardwareConcurrency",
+  "deviceMemory",
+  "maxTouchPoints",
+  "vendor",
+  "vendorSub",
+  "product",
+  "productSub",
+  "pdfViewerEnabled",
+  "webdriver",
+  "doNotTrack",
+  "javaEnabled",
+  "sendBeacon",
+  "permissions",
+  "storage",
+  "userAgentData",
+  "plugins",
+  "mimeTypes",
+  "modelContext",
+  "connection",
+  "mediaDevices",
+  "getBattery",
+  "registerProtocolHandler",
+  "unregisterProtocolHandler",
+  "constructor"
+ ],
+ "missingCount": 51,
+ "extraCount": 1,
+ "extra": [
+  "modelContext"
+ ],
+ "missing": [
+  {
+   "name": "scheduling",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Scheduling]",
+   "ctor": "Scheduling",
+   "globalCtor": "function",
+   "protoNames": [
+    "isInputPending",
+    "constructor"
+   ]
+  },
+  {
+   "name": "userActivation",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object UserActivation]",
+   "ctor": "UserActivation",
+   "globalCtor": "function",
+   "protoNames": [
+    "hasBeenActive",
+    "isActive",
+    "constructor"
+   ]
+  },
+  {
+   "name": "geolocation",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Geolocation]",
+   "ctor": "Geolocation",
+   "globalCtor": "function",
+   "protoNames": [
+    "clearWatch",
+    "getCurrentPosition",
+    "watchPosition",
+    "constructor"
+   ]
+  },
+  {
+   "name": "webkitTemporaryStorage",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object DeprecatedStorageQuota]",
+   "ctor": "Object",
+   "globalCtor": "function",
+   "protoNames": [
+    "queryUsageAndQuota",
+    "requestQuota"
+   ]
+  },
+  {
+   "name": "webkitPersistentStorage",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object DeprecatedStorageQuota]",
+   "ctor": "Object",
+   "globalCtor": "function",
+   "protoNames": [
+    "queryUsageAndQuota",
+    "requestQuota"
+   ]
+  },
+  {
+   "name": "windowControlsOverlay",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object WindowControlsOverlay]",
+   "ctor": "WindowControlsOverlay",
+   "globalCtor": "function",
+   "protoNames": [
+    "visible",
+    "ongeometrychange",
+    "getTitlebarAreaRect",
+    "constructor"
+   ]
+  },
+  {
+   "name": "getGamepads",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "vibrate",
+   "kind": "method",
+   "length": 1
+  },
+  {
+   "name": "deprecatedRunAdAuctionEnforcesKAnonymity",
+   "kind": "accessor",
+   "type": "boolean",
+   "value": "false"
+  },
+  {
+   "name": "protectedAudience",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object ProtectedAudience]",
+   "ctor": "ProtectedAudience",
+   "globalCtor": "function",
+   "protoNames": [
+    "queryFeatureSupport",
+    "constructor"
+   ]
+  },
+  {
+   "name": "bluetooth",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Bluetooth]",
+   "ctor": "Bluetooth",
+   "globalCtor": "function",
+   "protoNames": [
+    "getAvailability",
+    "requestDevice",
+    "constructor"
+   ]
+  },
+  {
+   "name": "clipboard",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Clipboard]",
+   "ctor": "Clipboard",
+   "globalCtor": "function",
+   "protoNames": [
+    "onclipboardchange",
+    "read",
+    "readText",
+    "write",
+    "writeText",
+    "constructor"
+   ]
+  },
+  {
+   "name": "credentials",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object CredentialsContainer]",
+   "ctor": "CredentialsContainer",
+   "globalCtor": "function",
+   "protoNames": [
+    "create",
+    "get",
+    "preventSilentAccess",
+    "store",
+    "constructor"
+   ]
+  },
+  {
+   "name": "keyboard",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Keyboard]",
+   "ctor": "Keyboard",
+   "globalCtor": "function",
+   "protoNames": [
+    "getLayoutMap",
+    "lock",
+    "unlock",
+    "constructor"
+   ]
+  },
+  {
+   "name": "managed",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object NavigatorManagedData]",
+   "ctor": "NavigatorManagedData",
+   "globalCtor": "function",
+   "protoNames": [
+    "onmanagedconfigurationchange",
+    "getManagedConfiguration",
+    "constructor"
+   ]
+  },
+  {
+   "name": "serviceWorker",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object ServiceWorkerContainer]",
+   "ctor": "ServiceWorkerContainer",
+   "globalCtor": "function",
+   "protoNames": [
+    "controller",
+    "ready",
+    "oncontrollerchange",
+    "onmessage",
+    "onmessageerror",
+    "getRegistration",
+    "getRegistrations",
+    "register",
+    "startMessages",
+    "constructor"
+   ]
+  },
+  {
+   "name": "virtualKeyboard",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object VirtualKeyboard]",
+   "ctor": "VirtualKeyboard",
+   "globalCtor": "function",
+   "protoNames": [
+    "boundingRect",
+    "overlaysContent",
+    "ongeometrychange",
+    "hide",
+    "show",
+    "constructor"
+   ]
+  },
+  {
+   "name": "wakeLock",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object WakeLock]",
+   "ctor": "WakeLock",
+   "globalCtor": "function",
+   "protoNames": [
+    "request",
+    "constructor"
+   ]
+  },
+  {
+   "name": "locks",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object LockManager]",
+   "ctor": "LockManager",
+   "globalCtor": "function",
+   "protoNames": [
+    "query",
+    "request",
+    "constructor"
+   ]
+  },
+  {
+   "name": "gpu",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object GPU]",
+   "ctor": "GPU",
+   "globalCtor": "function",
+   "protoNames": [
+    "wgslLanguageFeatures",
+    "getPreferredCanvasFormat",
+    "requestAdapter",
+    "constructor"
+   ]
+  },
+  {
+   "name": "login",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object NavigatorLogin]",
+   "ctor": "NavigatorLogin",
+   "globalCtor": "function",
+   "protoNames": [
+    "setStatus",
+    "constructor"
+   ]
+  },
+  {
+   "name": "ink",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Ink]",
+   "ctor": "Ink",
+   "globalCtor": "function",
+   "protoNames": [
+    "requestPresenter",
+    "constructor"
+   ]
+  },
+  {
+   "name": "mediaCapabilities",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object MediaCapabilities]",
+   "ctor": "MediaCapabilities",
+   "globalCtor": "function",
+   "protoNames": [
+    "decodingInfo",
+    "encodingInfo",
+    "constructor"
+   ]
+  },
+  {
+   "name": "devicePosture",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object DevicePosture]",
+   "ctor": "DevicePosture",
+   "globalCtor": "function",
+   "protoNames": [
+    "type",
+    "onchange",
+    "constructor"
+   ]
+  },
+  {
+   "name": "hid",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object HID]",
+   "ctor": "HID",
+   "globalCtor": "function",
+   "protoNames": [
+    "onconnect",
+    "ondisconnect",
+    "getDevices",
+    "constructor",
+    "requestDevice"
+   ]
+  },
+  {
+   "name": "mediaSession",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object MediaSession]",
+   "ctor": "MediaSession",
+   "globalCtor": "function",
+   "protoNames": [
+    "metadata",
+    "playbackState",
+    "setActionHandler",
+    "setCameraActive",
+    "setMicrophoneActive",
+    "setPositionState",
+    "constructor"
+   ]
+  },
+  {
+   "name": "presentation",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Presentation]",
+   "ctor": "Presentation",
+   "globalCtor": "function",
+   "protoNames": [
+    "defaultRequest",
+    "receiver",
+    "constructor"
+   ]
+  },
+  {
+   "name": "serial",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object Serial]",
+   "ctor": "Serial",
+   "globalCtor": "function",
+   "protoNames": [
+    "onconnect",
+    "ondisconnect",
+    "getPorts",
+    "constructor",
+    "requestPort"
+   ]
+  },
+  {
+   "name": "usb",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object USB]",
+   "ctor": "USB",
+   "globalCtor": "function",
+   "protoNames": [
+    "onconnect",
+    "ondisconnect",
+    "getDevices",
+    "constructor",
+    "requestDevice"
+   ]
+  },
+  {
+   "name": "xr",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object XRSystem]",
+   "ctor": "XRSystem",
+   "globalCtor": "function",
+   "protoNames": [
+    "ondevicechange",
+    "isSessionSupported",
+    "requestSession",
+    "constructor"
+   ]
+  },
+  {
+   "name": "storageBuckets",
+   "kind": "accessor",
+   "type": "object",
+   "brand": "[object StorageBucketManager]",
+   "ctor": "StorageBucketManager",
+   "globalCtor": "function",
+   "protoNames": [
+    "delete",
+    "keys",
+    "open",
+    "constructor"
+   ]
+  },
+  {
+   "name": "adAuctionComponents",
+   "kind": "method",
+   "length": 1
+  },
+  {
+   "name": "runAdAuction",
+   "kind": "method",
+   "length": 1
+  },
+  {
+   "name": "canLoadAdAuctionFencedFrame",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "canShare",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "share",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "clearAppBadge",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "getUserMedia",
+   "kind": "method",
+   "length": 3
+  },
+  {
+   "name": "requestMIDIAccess",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "requestMediaKeySystemAccess",
+   "kind": "method",
+   "length": 2
+  },
+  {
+   "name": "setAppBadge",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "webkitGetUserMedia",
+   "kind": "method",
+   "length": 3
+  },
+  {
+   "name": "clearOriginJoinedAdInterestGroups",
+   "kind": "method",
+   "length": 1
+  },
+  {
+   "name": "createAuctionNonce",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "joinAdInterestGroup",
+   "kind": "method",
+   "length": 1
+  },
+  {
+   "name": "leaveAdInterestGroup",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "updateAdInterestGroups",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "deprecatedReplaceInURN",
+   "kind": "method",
+   "length": 2
+  },
+  {
+   "name": "deprecatedURNToURL",
+   "kind": "method",
+   "length": 1
+  },
+  {
+   "name": "getInstalledRelatedApps",
+   "kind": "method",
+   "length": 0
+  },
+  {
+   "name": "getInterestGroupAdAuctionData",
+   "kind": "method",
+   "length": 1
+  }
+ ]
+}
