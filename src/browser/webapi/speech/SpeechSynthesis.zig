@@ -23,18 +23,20 @@
 // first access, three runs: the first read is always empty, `voiceschanged`
 // fires at 661/662/664ms and the list is complete at 668/675/675ms.
 //
-// It matters because it is *observable*. CreepJS reads getVoices(), waits 50ms,
-// then gives up after a further 300ms if no voice with `localService` has
-// arrived — so a real Chrome misses its budget and CreepJS renders
-// `local (0) / remote (0) / lang (0): blocked`. Confirmed on a headed window and
-// again on a warm profile (the same window run twice against one persistent
-// profile), so it is neither a headless artefact nor a cold TTS service.
+// Reproducing the latency rather than filling on the next task keeps *both*
+// observable windows right: the one where Chrome answers empty, and the one where
+// it answers the full list.
 //
-// An earlier revision filled the list on the next task instead, which made
-// CreepJS report `local (180) / remote (19) / lang (51)` — a triple no real
-// Chrome produces, and therefore a worse signal than the blocked rows it
-// replaced. A page that waits for the event, as a page that actually wants to
-// speak must, still gets all 199.
+// CreepJS makes that visible. It reads getVoices(), waits 50ms, then gives up
+// 300ms later if no voice with `localService` has arrived — so its speech row
+// depends on whether anything warmed the TTS service before its own late warm-up
+// call, in Chrome exactly as much as here. With a getVoices() injected at document
+// start, a headed Chrome renders `local (180): a158dc36 / remote (19): 036f6dce /
+// lang (51): c4951b20`, which is byte for byte what this engine renders. With
+// nothing warming it — a plain sweep, headed or headless, cold profile or warm —
+// the same Chrome renders all three blocked. The row is a race in CreepJS, not a
+// property of Chrome, and matching Chrome's latency is what makes this engine sit
+// on the same side of it.
 //
 // speak() has no synthesiser behind it. Rather than doing nothing — which hangs
 // any page that waits for `onend` — it fires Chrome's success sequence (start
@@ -69,9 +71,8 @@ _voices_ready: bool = false,
 _voices_task_queued: bool = false,
 
 // Chrome's measured latency between the first getVoices() and the voice list
-// being complete — see the header. Not a round number on purpose: it is the
-// measurement, and rounding it down to 500 would put it inside CreepJS's budget
-// and back into reporting something Chrome does not.
+// being complete — see the header. Left unrounded because it is the measurement;
+// there is nothing to tune it against.
 const VOICE_LIST_LATENCY_MS: u32 = 665;
 
 pub fn asEventTarget(self: *SpeechSynthesis) *EventTarget {

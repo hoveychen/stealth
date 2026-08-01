@@ -37,9 +37,8 @@
 <script id=speech_voices_first_read>
 {
   // Chrome's timing, not just its values: the first synchronous getVoices() is
-  // empty and the list arrives on a later task with a voiceschanged event. A
-  // headed Chrome behaves the same way — CreepJS reads it synchronously and
-  // renders local (0) / remote (0) / lang (0) there too. See SpeechSynthesis.zig.
+  // empty, and the list arrives ~665ms later with a voiceschanged event —
+  // measured on a headed Chrome, three runs. See SpeechSynthesis.zig.
   //
   // A classic script, deliberately: module scripts are deferred, so a module here
   // would run after some other block had already triggered the fill.
@@ -47,7 +46,8 @@
   window.__voicesChanged = false;
   speechSynthesis.addEventListener('voiceschanged', () => { window.__voicesChanged = true; });
   testing.expectEqual(0, speechSynthesis.getVoices().length);
-  // Still empty well inside CreepJS's 350ms budget, which is the whole point.
+  // A second synchronous read is still empty: the fill is on a timer, not on the
+  // next task, so both of Chrome's observable windows are reproduced.
   testing.expectEqual(0, speechSynthesis.getVoices().length);
 }
 </script>
