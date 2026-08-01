@@ -2239,6 +2239,13 @@ const MAX_STYLESHEET_BYTES: usize = 2 * 1024 * 1024;
 // Synchronously fetch and parse an external `<link rel=stylesheet>`.
 // href is passed in as an optimization since the [currently] only callsite has
 // it, so why look it up again?
+/// Fetches a `rel="stylesheet"` link's sheet and registers it. The fetch is
+/// synchronous so the cascade sees the sheet before the statement after the
+/// insertion runs, but the load/error event is queued: a browser cannot fire it
+/// from inside `appendChild`, and code that attaches its listener straight
+/// after inserting the link — Vite's module-preload helper does exactly that,
+/// and awaits the event before resolving the import it guards — would
+/// otherwise never see it.
 pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []const u8) !void {
     if (self.isGoingAway() or href.len == 0) {
         return;
@@ -2265,7 +2272,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
 
     const resolved = URL.resolve(arena.allocator(), self.base(), href, .{ .encoding = self.charset }) catch |err| {
         log.warn(.http, "external stylesheet resolve", .{ .err = err, .href = href });
-        try self.fireElementEvent(element, comptime .wrap("error"));
+        try self.queueElementEvent(link._proto, .@"error");
         return;
     };
 
@@ -2305,13 +2312,13 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own
     }, &self._http_owner) catch |err| {
         log.warn(.http, "external stylesheet fetch", .{ .err = err, .url = resolved });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     };
     defer response.deinit(arena.allocator());
 
     if (response.status < 200 or response.status >= 300) {
         log.info(.http, "external stylesheet status", .{ .status = response.status, .url = resolved });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     }
 
     if (response.body.items.len > MAX_STYLESHEET_BYTES) {
@@ -2320,7 +2327,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
             .max = MAX_STYLESHEET_BYTES,
             .url = resolved,
         });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     }
 
     // Reuse the cached sheet on re-fetch (href mutation on a connected
@@ -2349,11 +2356,11 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // minimum.
     sheet.replaceSync(response.body.items, self) catch |err| {
         log.warn(.http, "external stylesheet parse", .{ .err = err, .url = resolved });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     };
     sheet._href = try self.arena.dupe(u8, resolved);
 
-    try self.fireElementEvent(element, comptime .wrap("load"));
+    try self.queueElementEvent(link._proto, .load);
 }
 
 // Fetch an `<img src>` and throw the bytes away.
