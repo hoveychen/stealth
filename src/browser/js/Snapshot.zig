@@ -313,7 +313,26 @@ fn createSnapshotContext(
         @setEvalBranchQuota(10_000);
         const template_index = comptime bridge.JsApiLookup.getId(JsApi);
         const func = v8.v8__FunctionTemplate__GetFunction(templates[template_index], context);
-        if (@hasDecl(JsApi.Meta, "name")) {
+
+        // WebIDL [LegacyNoInterfaceObject]: the interface still brands its
+        // instances through Symbol.toStringTag, but there is no constructor on
+        // the global and no `constructor` back-reference on the prototype.
+        // Measured on Chrome 150: navigator.webkitTemporaryStorage is
+        // "[object DeprecatedStorageQuota]" while globalThis
+        // .DeprecatedStorageQuota is undefined and the prototype carries only
+        // queryUsageAndQuota and requestQuota.
+        const no_interface_object = comptime @hasDecl(JsApi.Meta, "no_interface_object");
+        if (comptime no_interface_object) {
+            const func_obj: *const v8.Object = @ptrCast(func);
+            if (v8.v8__Object__Get(func_obj, context, prototype_key)) |proto_handle| {
+                const proto_obj: *const v8.Object = @ptrCast(proto_handle);
+                const constructor_key = v8.v8__String__NewFromUtf8(isolate, "constructor", v8.kNormal, 11);
+                var maybe_deleted: v8.MaybeBool = undefined;
+                v8.v8__Object__Delete(proto_obj, context, constructor_key, &maybe_deleted);
+            }
+        }
+
+        if (@hasDecl(JsApi.Meta, "name") and !no_interface_object) {
             if (@hasDecl(JsApi.Meta, "constructor_alias")) {
                 const alias = JsApi.Meta.constructor_alias;
                 const v8_class_name = v8.v8__String__NewFromUtf8(isolate, alias.ptr, v8.kNormal, @intCast(alias.len));

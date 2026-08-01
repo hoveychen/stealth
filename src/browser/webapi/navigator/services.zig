@@ -37,6 +37,7 @@ const js = @import("../../js/js.zig");
 const mime = @import("../media/mime.zig");
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
 const Frame = @import("../../Frame.zig");
+const idb = @import("../storage/idb/idb.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -55,6 +56,18 @@ pub fn registerTypes() []const type {
         WGSLLanguageFeatures.KeyIterator,
         WGSLLanguageFeatures.ValueIterator,
         WGSLLanguageFeatures.EntryIterator,
+        Keyboard,
+        KeyboardLayoutMap,
+        KeyboardLayoutMap.KeyIterator,
+        KeyboardLayoutMap.ValueIterator,
+        KeyboardLayoutMap.EntryIterator,
+        LockManager,
+        Lock,
+        Ink,
+        DelegatedInkTrailPresenter,
+        StorageBucketManager,
+        StorageBucket,
+        DeprecatedStorageQuota,
     };
 }
 
@@ -631,5 +644,376 @@ pub const WGSLLanguageFeatures = struct {
         pub const keys = bridge.function(WGSLLanguageFeatures.keys, .{});
         pub const values = bridge.function(WGSLLanguageFeatures.values, .{});
         pub const symbol_iterator = bridge.iterator(WGSLLanguageFeatures.values, .{});
+    };
+};
+
+pub const Keyboard = struct {
+    _pad: bool = false,
+
+    // Chrome resolves a map of the host's physical keyboard layout (48 entries
+    // on the reference machine, and different ones on a different layout). We
+    // resolve an empty map: baking one machine's layout into every deployment
+    // would hand out a shared, wrong keyboard, and we have no per-host
+    // measurement to use instead. The type, brand and arity are exact; the
+    // contents are the shallow part.
+    pub fn getLayoutMap(_: *const Keyboard, exec: *const Execution) !js.Promise {
+        const map = try exec._factory.create(KeyboardLayoutMap{});
+        return exec.js.local.?.resolvePromise(map);
+    }
+
+    // Nothing to capture keys from, and Chrome resolves with nothing too
+    // (measured).
+    pub fn lock(_: *const Keyboard, _: ?[]const []const u8, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise({});
+    }
+
+    pub fn unlock(_: *const Keyboard) void {}
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(Keyboard);
+
+        pub const Meta = struct {
+            pub const name = "Keyboard";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const getLayoutMap = bridge.function(Keyboard.getLayoutMap, .{});
+        pub const lock = bridge.function(Keyboard.lock, .{});
+        pub const unlock = bridge.function(Keyboard.unlock, .{});
+    };
+};
+
+pub const KeyboardLayoutMap = struct {
+    _pad: bool = false,
+
+    pub fn getSize(_: *const KeyboardLayoutMap) u32 {
+        return 0;
+    }
+
+    pub fn get(_: *const KeyboardLayoutMap, _: []const u8) ?[]const u8 {
+        return null;
+    }
+
+    pub fn has(_: *const KeyboardLayoutMap, _: []const u8) bool {
+        return false;
+    }
+
+    pub fn keys(self: *KeyboardLayoutMap, exec: *const Execution) !*KeyIterator {
+        return .init(.{ .map = self }, exec);
+    }
+
+    pub fn values(self: *KeyboardLayoutMap, exec: *const Execution) !*ValueIterator {
+        return .init(.{ .map = self }, exec);
+    }
+
+    pub fn entries(self: *KeyboardLayoutMap, exec: *const Execution) !*EntryIterator {
+        return .init(.{ .map = self }, exec);
+    }
+
+    pub fn forEach(_: *KeyboardLayoutMap, _: js.Function, _: ?js.Object) void {}
+
+    pub const Iterator = struct {
+        map: *KeyboardLayoutMap,
+
+        pub const Entry = struct { []const u8, []const u8 };
+
+        pub fn next(_: *Iterator, _: *const Execution) ?Iterator.Entry {
+            return null;
+        }
+    };
+
+    const GenericIterator = @import("../collections/iterator.zig").Entry;
+    pub const KeyIterator = GenericIterator(Iterator, "0");
+    pub const ValueIterator = GenericIterator(Iterator, "1");
+    pub const EntryIterator = GenericIterator(Iterator, null);
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(KeyboardLayoutMap);
+
+        pub const Meta = struct {
+            pub const name = "KeyboardLayoutMap";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const size = bridge.accessor(KeyboardLayoutMap.getSize, null, .{});
+        pub const entries = bridge.function(KeyboardLayoutMap.entries, .{});
+        pub const forEach = bridge.function(KeyboardLayoutMap.forEach, .{});
+        pub const get = bridge.function(KeyboardLayoutMap.get, .{ .null_as_undefined = true });
+        pub const has = bridge.function(KeyboardLayoutMap.has, .{});
+        pub const keys = bridge.function(KeyboardLayoutMap.keys, .{});
+        pub const values = bridge.function(KeyboardLayoutMap.values, .{});
+        pub const symbol_iterator = bridge.iterator(KeyboardLayoutMap.entries, .{});
+    };
+};
+
+pub const LockManager = struct {
+    _pad: bool = false,
+
+    const Snapshot = struct {
+        held: []const []const u8 = &.{},
+        pending: []const []const u8 = &.{},
+    };
+
+    // Nothing else holds a web lock in this engine, which is also what Chrome
+    // reported on a page that had taken none.
+    pub fn query(_: *const LockManager, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(Snapshot{});
+    }
+
+    // The lock is granted immediately — there is no other agent to contend with
+    // — and the promise settles with whatever the callback returned, as
+    // Chrome's does. The `request(name, options, callback)` overload is not
+    // accepted: only the two-argument form is, which is the shape Chrome
+    // reports a length of 2 for.
+    pub fn request(_: *const LockManager, name: []const u8, callback: js.Function, exec: *const Execution) !js.Promise {
+        const held = try exec._factory.create(Lock{ ._name = try exec.arena.dupe(u8, name) });
+        const result = try callback.call(js.Value, .{held});
+        return exec.js.local.?.resolvePromise(result);
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(LockManager);
+
+        pub const Meta = struct {
+            pub const name = "LockManager";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const query = bridge.function(LockManager.query, .{});
+        pub const request = bridge.function(LockManager.request, .{});
+    };
+};
+
+pub const Lock = struct {
+    _name: []const u8,
+
+    pub fn getName(self: *const Lock) []const u8 {
+        return self._name;
+    }
+
+    // 'exclusive' is the default mode and the one the reference Chrome handed
+    // back for a request that didn't ask for anything else.
+    pub fn getMode(_: *const Lock) []const u8 {
+        return "exclusive";
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(Lock);
+
+        pub const Meta = struct {
+            pub const name = "Lock";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const name = bridge.accessor(Lock.getName, null, .{});
+        pub const mode = bridge.accessor(Lock.getMode, null, .{});
+    };
+};
+
+pub const Ink = struct {
+    _pad: bool = false,
+
+    pub fn requestPresenter(_: *const Ink, _: ?js.Object, exec: *const Execution) !js.Promise {
+        const presenter = try exec._factory.create(DelegatedInkTrailPresenter{});
+        return exec.js.local.?.resolvePromise(presenter);
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(Ink);
+
+        pub const Meta = struct {
+            pub const name = "Ink";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const requestPresenter = bridge.function(Ink.requestPresenter, .{});
+    };
+};
+
+pub const DelegatedInkTrailPresenter = struct {
+    _pad: bool = false,
+
+    // null when the presenter was requested without a presentation element,
+    // which is what the reference Chrome reported.
+    pub fn getPresentationArea(_: *const DelegatedInkTrailPresenter) ?bool {
+        return null;
+    }
+
+    // There is no ink trail to move; Chrome's own answer is undefined.
+    pub fn updateInkTrailStartPoint(_: *const DelegatedInkTrailPresenter, _: js.Value, _: js.Value) void {}
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(DelegatedInkTrailPresenter);
+
+        pub const Meta = struct {
+            pub const name = "DelegatedInkTrailPresenter";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const presentationArea = bridge.accessor(DelegatedInkTrailPresenter.getPresentationArea, null, .{});
+        pub const updateInkTrailStartPoint = bridge.function(DelegatedInkTrailPresenter.updateInkTrailStartPoint, .{});
+    };
+};
+
+pub const StorageBucketManager = struct {
+    _pad: bool = false,
+
+    pub fn open(_: *const StorageBucketManager, name: []const u8, _: ?js.Object, exec: *const Execution) !js.Promise {
+        const bucket = try exec._factory.create(StorageBucket{ ._name = try exec.arena.dupe(u8, name) });
+        return exec.js.local.?.resolvePromise(bucket);
+    }
+
+    // No bucket was ever persisted, so there are no keys and nothing to delete.
+    pub fn keys(_: *const StorageBucketManager, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
+    }
+
+    pub fn delete(_: *const StorageBucketManager, _: []const u8, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise({});
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(StorageBucketManager);
+
+        pub const Meta = struct {
+            pub const name = "StorageBucketManager";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const delete = bridge.function(StorageBucketManager.delete, .{});
+        pub const keys = bridge.function(StorageBucketManager.keys, .{});
+        pub const open = bridge.function(StorageBucketManager.open, .{});
+    };
+};
+
+pub const StorageBucket = struct {
+    _name: []const u8,
+
+    const Estimate = struct {
+        usage: u64 = 0,
+        quota: u64 = 1024 * 1024 * 1024,
+    };
+
+    pub fn getName(self: *const StorageBucket) []const u8 {
+        return self._name;
+    }
+
+    // The bucket shares the page's IDB factory rather than getting one of its
+    // own — a separate database namespace would be a difference a page could
+    // observe, and we have none to give it.
+    pub fn getIndexedDB(_: *const StorageBucket, exec: *Execution) !*idb.IDBFactory {
+        // Window-only, so the global is always a Frame.
+        return exec.js.global.frame.window.getIndexedDB(exec);
+    }
+
+    // CacheStorage does not exist in this engine at all — window.caches is
+    // missing too — so this reports the same absence rather than a fake.
+    pub fn getCaches(_: *const StorageBucket) ?bool {
+        return null;
+    }
+
+    pub fn estimate(_: *const StorageBucket, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(Estimate{});
+    }
+
+    pub fn expires(_: *const StorageBucket, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(null);
+    }
+
+    // The bucket file system is not implemented; Chrome rejects getDirectory
+    // with a DOMException when it can't hand one out.
+    pub fn getDirectory(_: *const StorageBucket, exec: *const Execution) js.Promise {
+        return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
+    }
+
+    pub fn persisted(_: *const StorageBucket, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(false);
+    }
+
+    pub fn setExpires(_: *const StorageBucket, _: f64, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise({});
+    }
+
+    pub fn persist(_: *const StorageBucket, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(false);
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(StorageBucket);
+
+        pub const Meta = struct {
+            pub const name = "StorageBucket";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const name = bridge.accessor(StorageBucket.getName, null, .{});
+        pub const indexedDB = bridge.accessor(StorageBucket.getIndexedDB, null, .{});
+        pub const caches = bridge.accessor(StorageBucket.getCaches, null, .{});
+        pub const estimate = bridge.function(StorageBucket.estimate, .{});
+        pub const expires = bridge.function(StorageBucket.expires, .{});
+        pub const getDirectory = bridge.function(StorageBucket.getDirectory, .{});
+        pub const persisted = bridge.function(StorageBucket.persisted, .{});
+        pub const setExpires = bridge.function(StorageBucket.setExpires, .{});
+        pub const persist = bridge.function(StorageBucket.persist, .{});
+    };
+};
+
+// navigator.webkitTemporaryStorage / webkitPersistentStorage. Chrome brands both
+// [object DeprecatedStorageQuota] but exposes no such global and puts no
+// `constructor` on the prototype: the interface is [LegacyNoInterfaceObject]
+// (measured — globalThis.DeprecatedStorageQuota is undefined there).
+pub const DeprecatedStorageQuota = struct {
+    // 4 GiB on the reference Chrome's temporary pool, with nothing stored. An
+    // f64 rather than a u64: quotas past 2^32 come back from a u64 as a BigInt,
+    // and Chrome reports a plain Number.
+    _quota: f64,
+
+    pub fn queryUsageAndQuota(
+        self: *const DeprecatedStorageQuota,
+        callback: js.Function,
+        _: ?js.Function,
+    ) !void {
+        _ = try callback.call(void, .{ @as(f64, 0), self._quota });
+    }
+
+    // Chrome granted exactly what was asked for (measured: requestQuota(1024)
+    // called back with 1024).
+    pub fn requestQuota(
+        _: *const DeprecatedStorageQuota,
+        bytes: f64,
+        callback: ?js.Function,
+        _: ?js.Function,
+    ) !void {
+        if (callback) |cb| {
+            _ = try cb.call(void, .{bytes});
+        }
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(DeprecatedStorageQuota);
+
+        pub const Meta = struct {
+            pub const name = "DeprecatedStorageQuota";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const no_interface_object = true;
+        };
+
+        pub const queryUsageAndQuota = bridge.function(DeprecatedStorageQuota.queryUsageAndQuota, .{});
+        pub const requestQuota = bridge.function(DeprecatedStorageQuota.requestQuota, .{});
     };
 };

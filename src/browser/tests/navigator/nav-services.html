@@ -303,3 +303,174 @@
     testing.expectEqual(Array.from(f), seen);
   }
 </script>
+
+<script id=keyboard type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof Keyboard);
+    testing.expectEqual('[object Keyboard]', Object.prototype.toString.call(navigator.keyboard));
+    testing.expectEqual(
+      ['getLayoutMap', 'lock', 'unlock', 'constructor'],
+      Object.getOwnPropertyNames(Keyboard.prototype),
+    );
+    testing.expectEqual(0, Keyboard.prototype.getLayoutMap.length);
+    testing.expectEqual(0, Keyboard.prototype.lock.length);
+    testing.expectEqual(0, Keyboard.prototype.unlock.length);
+    testing.expectEqual(undefined, navigator.keyboard.unlock());
+
+    const locked = await navigator.keyboard.lock();
+    const map = await navigator.keyboard.getLayoutMap();
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(undefined, locked);
+      testing.expectEqual('function', typeof KeyboardLayoutMap);
+      testing.expectEqual('[object KeyboardLayoutMap]', Object.prototype.toString.call(map));
+      testing.expectEqual(
+        ['size', 'entries', 'forEach', 'get', 'has', 'keys', 'values', 'constructor'],
+        Object.getOwnPropertyNames(KeyboardLayoutMap.prototype),
+      );
+      // Deliberately empty: the entries are the host's physical keyboard
+      // layout, which we don't measure per host and won't bake one machine's
+      // into every deployment.
+      testing.expectEqual(0, map.size);
+      testing.expectEqual([], Array.from(map));
+      testing.expectEqual(undefined, map.get('KeyA'));
+      testing.expectEqual(false, map.has('KeyA'));
+    });
+  }
+</script>
+
+<script id=locks type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof LockManager);
+    testing.expectEqual('[object LockManager]', Object.prototype.toString.call(navigator.locks));
+    testing.expectEqual(['query', 'request', 'constructor'], Object.getOwnPropertyNames(LockManager.prototype));
+    testing.expectEqual(0, LockManager.prototype.query.length);
+    testing.expectEqual(2, LockManager.prototype.request.length);
+
+    const snapshot = await navigator.locks.query();
+    let lockName = null, lockMode = null, lockBrand = null;
+    const returned = await navigator.locks.request('probe', (lock) => {
+      lockBrand = Object.prototype.toString.call(lock);
+      lockName = lock.name;
+      lockMode = lock.mode;
+      return 'callback-result';
+    });
+    state.resolve();
+
+    await state.done(() => {
+      // Nothing else holds a lock here, which is what Chrome reported.
+      testing.expectEqual({ held: [], pending: [] }, snapshot);
+      testing.expectEqual('function', typeof Lock);
+      testing.expectEqual(['name', 'mode', 'constructor'], Object.getOwnPropertyNames(Lock.prototype));
+      testing.expectEqual('[object Lock]', lockBrand);
+      testing.expectEqual('probe', lockName);
+      testing.expectEqual('exclusive', lockMode);
+      // request() resolves with whatever the callback returned.
+      testing.expectEqual('callback-result', returned);
+    });
+  }
+</script>
+
+<script id=ink type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof Ink);
+    testing.expectEqual('[object Ink]', Object.prototype.toString.call(navigator.ink));
+    testing.expectEqual(['requestPresenter', 'constructor'], Object.getOwnPropertyNames(Ink.prototype));
+    testing.expectEqual(0, Ink.prototype.requestPresenter.length);
+
+    const presenter = await navigator.ink.requestPresenter();
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual('function', typeof DelegatedInkTrailPresenter);
+      testing.expectEqual('[object DelegatedInkTrailPresenter]', Object.prototype.toString.call(presenter));
+      testing.expectEqual(
+        ['presentationArea', 'updateInkTrailStartPoint', 'constructor'],
+        Object.getOwnPropertyNames(DelegatedInkTrailPresenter.prototype),
+      );
+      testing.expectEqual(2, DelegatedInkTrailPresenter.prototype.updateInkTrailStartPoint.length);
+      // null when the presenter was requested without an element, as measured.
+      testing.expectEqual(null, presenter.presentationArea);
+    });
+  }
+</script>
+
+<script id=storageBuckets type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof StorageBucketManager);
+    testing.expectEqual('[object StorageBucketManager]', Object.prototype.toString.call(navigator.storageBuckets));
+    testing.expectEqual(
+      ['delete', 'keys', 'open', 'constructor'],
+      Object.getOwnPropertyNames(StorageBucketManager.prototype),
+    );
+    testing.expectEqual(1, StorageBucketManager.prototype.delete.length);
+    testing.expectEqual(0, StorageBucketManager.prototype.keys.length);
+    testing.expectEqual(1, StorageBucketManager.prototype.open.length);
+
+    const keys = await navigator.storageBuckets.keys();
+    const deleted = await navigator.storageBuckets.delete('nope');
+    const bucket = await navigator.storageBuckets.open('probe');
+    const estimate = await bucket.estimate();
+    const persisted = await bucket.persisted();
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual([], keys);
+      testing.expectEqual(undefined, deleted);
+      testing.expectEqual('function', typeof StorageBucket);
+      testing.expectEqual('[object StorageBucket]', Object.prototype.toString.call(bucket));
+      testing.expectEqual(
+        ['name', 'indexedDB', 'caches', 'estimate', 'expires', 'getDirectory',
+         'persisted', 'setExpires', 'persist', 'constructor'],
+        Object.getOwnPropertyNames(StorageBucket.prototype),
+      );
+      testing.expectEqual('probe', bucket.name);
+      // The bucket shares the page's IDB factory; there is no CacheStorage in
+      // this engine yet, so caches is null rather than a fake.
+      testing.expectEqual(indexedDB, bucket.indexedDB);
+      testing.expectEqual(null, bucket.caches);
+      testing.expectEqual(false, persisted);
+      testing.expectEqual(['usage', 'quota'], Object.keys(estimate));
+    });
+  }
+</script>
+
+<script id=deprecatedStorageQuota type=module>
+  {
+    const state = await testing.async();
+    // Chrome brands both objects [object DeprecatedStorageQuota] but exposes no
+    // such global and puts no `constructor` on their prototype: the interface is
+    // [LegacyNoInterfaceObject] (measured).
+    testing.expectEqual('undefined', typeof DeprecatedStorageQuota);
+    for (const store of [navigator.webkitTemporaryStorage, navigator.webkitPersistentStorage]) {
+      testing.expectEqual('[object DeprecatedStorageQuota]', Object.prototype.toString.call(store));
+      testing.expectEqual(
+        ['queryUsageAndQuota', 'requestQuota'],
+        Object.getOwnPropertyNames(Object.getPrototypeOf(store)),
+      );
+    }
+    testing.expectEqual(navigator.webkitTemporaryStorage, navigator.webkitTemporaryStorage);
+    // Two distinct objects, one per quota kind.
+    testing.expectEqual(false, navigator.webkitTemporaryStorage === navigator.webkitPersistentStorage);
+
+    const usage = await new Promise((resolve, reject) => {
+      navigator.webkitTemporaryStorage.queryUsageAndQuota((u, q) => resolve([u, q]), reject);
+    });
+    const granted = await new Promise((resolve, reject) => {
+      navigator.webkitPersistentStorage.requestQuota(1024, resolve, reject);
+    });
+    state.resolve();
+
+    await state.done(() => {
+      // Measured on Chrome: nothing stored, and a 4 GiB temporary quota.
+      testing.expectEqual([0, 4294967296], usage);
+      // requestQuota echoes back what was asked for (measured).
+      testing.expectEqual(1024, granted);
+    });
+  }
+</script>

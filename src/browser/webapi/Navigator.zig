@@ -57,6 +57,12 @@ _media_capabilities: ?*services.MediaCapabilities = null,
 _media_session: ?*services.MediaSession = null,
 _presentation: ?*services.Presentation = null,
 _gpu: ?*services.GPU = null,
+_keyboard: ?*services.Keyboard = null,
+_locks: ?*services.LockManager = null,
+_ink: ?*services.Ink = null,
+_storage_buckets: ?*services.StorageBucketManager = null,
+_temporary_storage: ?*services.DeprecatedStorageQuota = null,
+_persistent_storage: ?*services.DeprecatedStorageQuota = null,
 
 pub const init: Navigator = .{};
 
@@ -282,6 +288,43 @@ pub fn getGpu(self: *Navigator, frame: *Frame) !*services.GPU {
     return service(services.GPU, &self._gpu, frame);
 }
 
+pub fn getKeyboard(self: *Navigator, frame: *Frame) !*services.Keyboard {
+    return service(services.Keyboard, &self._keyboard, frame);
+}
+
+pub fn getLocks(self: *Navigator, frame: *Frame) !*services.LockManager {
+    return service(services.LockManager, &self._locks, frame);
+}
+
+pub fn getInk(self: *Navigator, frame: *Frame) !*services.Ink {
+    return service(services.Ink, &self._ink, frame);
+}
+
+pub fn getStorageBuckets(self: *Navigator, frame: *Frame) !*services.StorageBucketManager {
+    return service(services.StorageBucketManager, &self._storage_buckets, frame);
+}
+
+// Two distinct objects, one per quota pool, as on Chrome. 4 GiB is what the
+// reference Chrome reported for the temporary pool; the persistent pool grants
+// whatever a page asks for, so its own quota is never read.
+pub fn getWebkitTemporaryStorage(self: *Navigator, frame: *Frame) !*services.DeprecatedStorageQuota {
+    if (self._temporary_storage) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = 4 * 1024 * 1024 * 1024 });
+    self._temporary_storage = created;
+    return created;
+}
+
+pub fn getWebkitPersistentStorage(self: *Navigator, frame: *Frame) !*services.DeprecatedStorageQuota {
+    if (self._persistent_storage) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = 0 });
+    self._persistent_storage = created;
+    return created;
+}
+
 pub fn getModelContext(_: *const Navigator, frame: *Frame) *ModelContext {
     return &frame.window._model_context;
 }
@@ -442,6 +485,12 @@ pub const JsApi = struct {
     pub const mediaSession = bridge.accessor(Navigator.getMediaSession, null, .{ .exposed = .window });
     pub const presentation = bridge.accessor(Navigator.getPresentation, null, .{ .exposed = .window });
     pub const gpu = bridge.accessor(Navigator.getGpu, null, .{ .exposed = .window });
+    pub const keyboard = bridge.accessor(Navigator.getKeyboard, null, .{ .exposed = .window });
+    pub const locks = bridge.accessor(Navigator.getLocks, null, .{ .exposed = .window });
+    pub const ink = bridge.accessor(Navigator.getInk, null, .{ .exposed = .window });
+    pub const storageBuckets = bridge.accessor(Navigator.getStorageBuckets, null, .{ .exposed = .window });
+    pub const webkitTemporaryStorage = bridge.accessor(Navigator.getWebkitTemporaryStorage, null, .{ .exposed = .window });
+    pub const webkitPersistentStorage = bridge.accessor(Navigator.getWebkitPersistentStorage, null, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
 };
