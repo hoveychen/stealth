@@ -277,10 +277,27 @@
   testing.expectEqual(1, matrix.d);
   testing.expectEqual(true, matrix.is2D);
 
+  // SVGRect is the exception: Chrome and Firefox both still ship it as its
+  // own interface, so we do too, and it is what getBBox() and
+  // getExtentOfChar() answer with.
   const rect = svg.createSVGRect();
-  testing.expectEqual(true, rect instanceof DOMRect);
+  testing.expectEqual(true, rect instanceof SVGRect);
+  testing.expectEqual(false, rect instanceof DOMRect);
+  testing.expectEqual('SVGRect', Object.getPrototypeOf(rect).constructor.name);
+  testing.expectEqual(Object.prototype, Object.getPrototypeOf(SVGRect.prototype));
+  testing.expectEqual('x,y,width,height,constructor', Object.getOwnPropertyNames(SVGRect.prototype).join(','));
+  testing.expectEqual(0, SVGRect.length);
+  testing.expectError('TypeError', () => new SVGRect());
   testing.expectEqual(0, rect.x);
   testing.expectEqual(0, rect.width);
+  rect.x = 1.5;
+  rect.height = -3;
+  testing.expectEqual(1.5, rect.x);
+  testing.expectEqual(-3, rect.height);
+  // A WebIDL float is restricted, so a non-finite assignment throws.
+  testing.expectError('TypeError', () => { rect.y = NaN; });
+  testing.expectError('TypeError', () => { rect.width = Infinity; });
+  testing.expectEqual(true, $('#first').getBBox() instanceof SVGRect);
 
   const number = svg.createSVGNumber();
   testing.expectEqual(true, number instanceof SVGNumber);

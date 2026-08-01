@@ -24,7 +24,7 @@ const text_measure = @import("../../../text_measure.zig");
 const font_metrics = @import("../../../font_metrics.zig");
 
 const Node = @import("../../Node.zig");
-const DOMRect = @import("../../DOMRect.zig");
+const SvgRect = @import("../../svg/Rect.zig");
 const Element = @import("../../Element.zig");
 
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
@@ -146,13 +146,13 @@ pub fn getSubStringLength(self: *TextContent, charnum: u32, nchars: u32, frame: 
 // One character's glyph cell: as wide as that cluster's advance, standing on
 // the font's ascent and descent, placed where the character starts in the
 // element's user space. Chrome answers the same box.
-pub fn getExtentOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*DOMRect {
+pub fn getExtentOfChar(self: *TextContent, charnum: u32, frame: *Frame) !*SvgRect {
     const size = self.fontSize(frame);
     const family = self.fontFamily(frame);
     const extent = try text_measure.svgCharExtent(family, self.text(frame), charnum, size);
     const box = font_metrics.boundingBox(family, size);
     const at = try self.origin(frame);
-    return DOMRect.create(.{
+    return SvgRect.create(.{
         .x = at.x + extent.offset,
         .y = at.y - box.ascent,
         .width = extent.advance,

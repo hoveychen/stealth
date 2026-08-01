@@ -24,7 +24,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const TreeWalker = @import("../../TreeWalker.zig");
-const DOMRect = @import("../../DOMRect.zig");
+const SvgRect = @import("../../svg/Rect.zig");
 const DOMPoint = @import("../../DOMPoint.zig");
 const DOMMatrix = @import("../../DOMMatrix.zig");
 const SvgNumber = @import("../../svg/Number.zig");
@@ -99,8 +99,8 @@ pub fn createSVGMatrix(_: *Svg, frame: *Frame) !*DOMMatrix {
     return DOMMatrix.create(identity, true, frame._page);
 }
 
-pub fn createSVGRect(_: *Svg, frame: *Frame) !*DOMRect {
-    return DOMRect.create(.{}, frame._factory);
+pub fn createSVGRect(_: *Svg, frame: *Frame) !*SvgRect {
+    return SvgRect.create(.{}, frame._factory);
 }
 
 pub fn createSVGNumber(_: *Svg, frame: *Frame) !*SvgNumber {

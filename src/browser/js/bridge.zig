@@ -1091,6 +1091,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/element/svg/Polyline.zig"),
     @import("../webapi/svg/AnimatedString.zig"),
     @import("../webapi/svg/Number.zig"),
+    @import("../webapi/svg/Rect.zig"),
     @import("../webapi/svg/Length.zig"),
     @import("../webapi/svg/Angle.zig"),
     @import("../webapi/svg/Transform.zig"),

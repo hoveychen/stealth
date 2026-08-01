@@ -22,7 +22,7 @@ const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
-const DOMRect = @import("../../DOMRect.zig");
+const SvgRect = @import("../../svg/Rect.zig");
 const DOMMatrixReadOnly = @import("../../DOMMatrixReadOnly.zig");
 const SvgElement = @import("../Svg.zig");
 const AnimatedTransformList = @import("../../svg/AnimatedTransformList.zig");
@@ -103,7 +103,7 @@ pub const JsApi = struct {
 // SVGBoundingBoxOptions is not modelled: Chrome declares no parameter at all
 // and Firefox's flags degenerate to the fill geometry, so both engines answer
 // every call with the fill box.
-pub fn getBBox(self: *Graphics, frame: *Frame) !*DOMRect {
+pub fn getBBox(self: *Graphics, frame: *Frame) !*SvgRect {
     var bounds: PathData.Bounds = .{};
     switch (self._type) {
         .geometry => |geometry| {
@@ -117,10 +117,10 @@ pub fn getBBox(self: *Graphics, frame: *Frame) !*DOMRect {
         .defs, .symbol, .switch_element, .use, .image => {},
     }
     if (bounds.isEmpty()) {
-        return DOMRect.create(.{}, frame._factory);
+        return SvgRect.create(.{}, frame._factory);
     }
 
-    return DOMRect.create(.{
+    return SvgRect.create(.{
         .x = bounds.min_x,
         .y = bounds.min_y,
         .width = bounds.width(),
