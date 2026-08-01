@@ -381,6 +381,15 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
     }
     try self.contexts.append(self.allocator, context);
 
+    {
+        var ls: js.Local.Scope = undefined;
+        context.localScope(&ls);
+        defer ls.deinit();
+        ls.local.eval(wasm_streaming_bootstrap, "wasm-streaming") catch |err| {
+            log.err(.js, "wasm streaming bootstrap", .{ .err = err });
+        };
+    }
+
     return context;
 }
 
@@ -755,3 +764,48 @@ test "Env: Frame context" {
     try testing.expectEqual(true, (try ls.local.exec("typeof WorkerGlobalScope === 'undefined'", null)).isTrue());
     try testing.expectEqual(true, (try ls.local.exec("typeof DedicatedWorkerGlobalScope === 'undefined'", null)).isTrue());
 }
+
+// WebAssembly.compileStreaming and WebAssembly.instantiateStreaming are the only
+// two members of the namespace that V8 does not provide: they take a Response
+// rather than bytes, so they belong to the embedder. Chrome exposes them as
+// plain writable, enumerable, configurable data properties of arity 1, and both
+// reject with a TypeError on a missing argument, a non-Response argument, or a
+// response whose MIME type is not application/wasm (all measured).
+//
+// Blink streams the module through the compiler as the bytes arrive; we read the
+// body first and hand it to WebAssembly.compile. The difference is not
+// observable from script beyond the timing of a large download.
+//
+// This has to run per context rather than once at snapshot time: V8 materialises
+// the WebAssembly namespace when a context is deserialised, so it does not exist
+// yet while the snapshot is being built (reading it there gives undefined). One
+// deviation follows from defining the two names afterwards: Chrome lists them
+// between RuntimeError and Suspending, while appending puts them last. The set
+// is what detectors compare, not the position within the namespace object.
+const wasm_streaming_bootstrap =
+    \\(() => {
+    \\  const wasm = globalThis.WebAssembly;
+    \\  const compile = wasm.compile;
+    \\  const instantiate = wasm.instantiate;
+    \\  async function bytesOf(source, name) {
+    \\    const response = await source;
+    \\    if (!(response instanceof Response)) {
+    \\      throw new TypeError("Failed to execute '" + name + "' on 'WebAssembly': An argument must be provided, which must be a Response or Promise<Response> object");
+    \\    }
+    \\    const type = response.headers.get('content-type');
+    \\    if (type === null || type.split(';')[0].trim().toLowerCase() !== 'application/wasm') {
+    \\      throw new TypeError("Failed to execute '" + name + "' on 'WebAssembly': Incorrect response MIME type. Expected 'application/wasm'.");
+    \\    }
+    \\    return response.arrayBuffer();
+    \\  }
+    \\  const define = (name, fn) => Object.defineProperty(wasm, name, {
+    \\    value: fn, writable: true, enumerable: true, configurable: true,
+    \\  });
+    \\  define('compileStreaming', function compileStreaming(source) {
+    \\    return bytesOf(source, 'compileStreaming').then((bytes) => compile.call(wasm, bytes));
+    \\  });
+    \\  define('instantiateStreaming', function instantiateStreaming(source, imports = undefined) {
+    \\    return bytesOf(source, 'instantiateStreaming').then((bytes) => instantiate.call(wasm, bytes, imports));
+    \\  });
+    \\})()
+;
