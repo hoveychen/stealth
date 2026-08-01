@@ -34,6 +34,7 @@ const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
 const services = @import("navigator/services.zig");
+const devices = @import("navigator/devices.zig");
 
 const Navigator = @This();
 _pad: bool = false,
@@ -63,6 +64,20 @@ _ink: ?*services.Ink = null,
 _storage_buckets: ?*services.StorageBucketManager = null,
 _temporary_storage: ?*services.DeprecatedStorageQuota = null,
 _persistent_storage: ?*services.DeprecatedStorageQuota = null,
+_wake_lock: ?*devices.WakeLock = null,
+// EventTarget-backed, so these are built through the factory's prototype chain
+// rather than created flat.
+_window_controls_overlay: ?*devices.WindowControlsOverlay = null,
+_bluetooth: ?*devices.Bluetooth = null,
+_clipboard: ?*devices.Clipboard = null,
+_managed: ?*devices.NavigatorManagedData = null,
+_service_worker: ?*devices.ServiceWorkerContainer = null,
+_virtual_keyboard: ?*devices.VirtualKeyboard = null,
+_device_posture: ?*devices.DevicePosture = null,
+_hid: ?*devices.HID = null,
+_serial: ?*devices.Serial = null,
+_usb: ?*devices.USB = null,
+_xr: ?*devices.XRSystem = null,
 
 pub const init: Navigator = .{};
 
@@ -288,6 +303,65 @@ pub fn getGpu(self: *Navigator, frame: *Frame) !*services.GPU {
     return service(services.GPU, &self._gpu, frame);
 }
 
+// Same lazy caching as `service`, but through the factory's prototype-chain
+// allocator so EventTarget sits under the instance.
+fn device(comptime T: type, slot: *?*T, frame: *Frame) !*T {
+    if (slot.*) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.eventTarget(T{ ._proto = undefined });
+    slot.* = created;
+    return created;
+}
+
+pub fn getWakeLock(self: *Navigator, frame: *Frame) !*devices.WakeLock {
+    return service(devices.WakeLock, &self._wake_lock, frame);
+}
+
+pub fn getWindowControlsOverlay(self: *Navigator, frame: *Frame) !*devices.WindowControlsOverlay {
+    return device(devices.WindowControlsOverlay, &self._window_controls_overlay, frame);
+}
+
+pub fn getBluetooth(self: *Navigator, frame: *Frame) !*devices.Bluetooth {
+    return device(devices.Bluetooth, &self._bluetooth, frame);
+}
+
+pub fn getClipboard(self: *Navigator, frame: *Frame) !*devices.Clipboard {
+    return device(devices.Clipboard, &self._clipboard, frame);
+}
+
+pub fn getManaged(self: *Navigator, frame: *Frame) !*devices.NavigatorManagedData {
+    return device(devices.NavigatorManagedData, &self._managed, frame);
+}
+
+pub fn getServiceWorker(self: *Navigator, frame: *Frame) !*devices.ServiceWorkerContainer {
+    return device(devices.ServiceWorkerContainer, &self._service_worker, frame);
+}
+
+pub fn getVirtualKeyboard(self: *Navigator, frame: *Frame) !*devices.VirtualKeyboard {
+    return device(devices.VirtualKeyboard, &self._virtual_keyboard, frame);
+}
+
+pub fn getDevicePosture(self: *Navigator, frame: *Frame) !*devices.DevicePosture {
+    return device(devices.DevicePosture, &self._device_posture, frame);
+}
+
+pub fn getHid(self: *Navigator, frame: *Frame) !*devices.HID {
+    return device(devices.HID, &self._hid, frame);
+}
+
+pub fn getSerial(self: *Navigator, frame: *Frame) !*devices.Serial {
+    return device(devices.Serial, &self._serial, frame);
+}
+
+pub fn getUsb(self: *Navigator, frame: *Frame) !*devices.USB {
+    return device(devices.USB, &self._usb, frame);
+}
+
+pub fn getXr(self: *Navigator, frame: *Frame) !*devices.XRSystem {
+    return device(devices.XRSystem, &self._xr, frame);
+}
+
 pub fn getKeyboard(self: *Navigator, frame: *Frame) !*services.Keyboard {
     return service(services.Keyboard, &self._keyboard, frame);
 }
@@ -491,6 +565,18 @@ pub const JsApi = struct {
     pub const storageBuckets = bridge.accessor(Navigator.getStorageBuckets, null, .{ .exposed = .window });
     pub const webkitTemporaryStorage = bridge.accessor(Navigator.getWebkitTemporaryStorage, null, .{ .exposed = .window });
     pub const webkitPersistentStorage = bridge.accessor(Navigator.getWebkitPersistentStorage, null, .{ .exposed = .window });
+    pub const wakeLock = bridge.accessor(Navigator.getWakeLock, null, .{ .exposed = .window });
+    pub const windowControlsOverlay = bridge.accessor(Navigator.getWindowControlsOverlay, null, .{ .exposed = .window });
+    pub const bluetooth = bridge.accessor(Navigator.getBluetooth, null, .{ .exposed = .window });
+    pub const clipboard = bridge.accessor(Navigator.getClipboard, null, .{ .exposed = .window });
+    pub const managed = bridge.accessor(Navigator.getManaged, null, .{ .exposed = .window });
+    pub const serviceWorker = bridge.accessor(Navigator.getServiceWorker, null, .{ .exposed = .window });
+    pub const virtualKeyboard = bridge.accessor(Navigator.getVirtualKeyboard, null, .{ .exposed = .window });
+    pub const devicePosture = bridge.accessor(Navigator.getDevicePosture, null, .{ .exposed = .window });
+    pub const hid = bridge.accessor(Navigator.getHid, null, .{ .exposed = .window });
+    pub const serial = bridge.accessor(Navigator.getSerial, null, .{ .exposed = .window });
+    pub const usb = bridge.accessor(Navigator.getUsb, null, .{ .exposed = .window });
+    pub const xr = bridge.accessor(Navigator.getXr, null, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
 };

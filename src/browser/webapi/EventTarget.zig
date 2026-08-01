@@ -70,6 +70,18 @@ pub const Type = union(enum) {
     media_recorder: *@import("media/MediaRecorder.zig"),
     rtc_peer_connection: *@import("webrtc/RTCPeerConnection.zig"),
     rtc_data_channel: *@import("webrtc/RTCDataChannel.zig"),
+    window_controls_overlay: *@import("navigator/devices.zig").WindowControlsOverlay,
+    bluetooth: *@import("navigator/devices.zig").Bluetooth,
+    clipboard: *@import("navigator/devices.zig").Clipboard,
+    navigator_managed_data: *@import("navigator/devices.zig").NavigatorManagedData,
+    service_worker_container: *@import("navigator/devices.zig").ServiceWorkerContainer,
+    virtual_keyboard: *@import("navigator/devices.zig").VirtualKeyboard,
+    device_posture: *@import("navigator/devices.zig").DevicePosture,
+    hid: *@import("navigator/devices.zig").HID,
+    serial: *@import("navigator/devices.zig").Serial,
+    usb: *@import("navigator/devices.zig").USB,
+    xr_system: *@import("navigator/devices.zig").XRSystem,
+    wake_lock_sentinel: *@import("navigator/devices.zig").WakeLockSentinel,
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -260,6 +272,18 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .media_recorder => writer.writeAll("<MediaRecorder>"),
         .rtc_peer_connection => writer.writeAll("<RTCPeerConnection>"),
         .rtc_data_channel => writer.writeAll("<RTCDataChannel>"),
+        .window_controls_overlay => writer.writeAll("<WindowControlsOverlay>"),
+        .bluetooth => writer.writeAll("<Bluetooth>"),
+        .clipboard => writer.writeAll("<Clipboard>"),
+        .navigator_managed_data => writer.writeAll("<NavigatorManagedData>"),
+        .service_worker_container => writer.writeAll("<ServiceWorkerContainer>"),
+        .virtual_keyboard => writer.writeAll("<VirtualKeyboard>"),
+        .device_posture => writer.writeAll("<DevicePosture>"),
+        .hid => writer.writeAll("<HID>"),
+        .serial => writer.writeAll("<Serial>"),
+        .usb => writer.writeAll("<USB>"),
+        .xr_system => writer.writeAll("<XRSystem>"),
+        .wake_lock_sentinel => writer.writeAll("<WakeLockSentinel>"),
     };
 }
 
@@ -302,6 +326,18 @@ pub fn toString(self: *EventTarget) []const u8 {
         .media_recorder => return "[object MediaRecorder]",
         .rtc_peer_connection => return "[object RTCPeerConnection]",
         .rtc_data_channel => return "[object RTCDataChannel]",
+        .window_controls_overlay => return "[object WindowControlsOverlay]",
+        .bluetooth => return "[object Bluetooth]",
+        .clipboard => return "[object Clipboard]",
+        .navigator_managed_data => return "[object NavigatorManagedData]",
+        .service_worker_container => return "[object ServiceWorkerContainer]",
+        .virtual_keyboard => return "[object VirtualKeyboard]",
+        .device_posture => return "[object DevicePosture]",
+        .hid => return "[object HID]",
+        .serial => return "[object Serial]",
+        .usb => return "[object USB]",
+        .xr_system => return "[object XRSystem]",
+        .wake_lock_sentinel => return "[object WakeLockSentinel]",
     };
 }
 

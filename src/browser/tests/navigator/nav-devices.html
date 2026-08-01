@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The navigator service objects that inherit from EventTarget, measured on
+  headed Chrome 150 over http://localhost. Prototype member lists are Chrome's
+  own getOwnPropertyNames order.
+-->
+
+<script id=deviceTypesAreEventTargets>
+  {
+    // Every one of these is an EventTarget on Chrome (measured: their prototype
+    // chains all run through EventTarget), which is why they live apart from
+    // the plain service objects.
+    for (const [name, value] of [
+      ['WindowControlsOverlay', navigator.windowControlsOverlay],
+      ['Bluetooth', navigator.bluetooth],
+      ['Clipboard', navigator.clipboard],
+      ['NavigatorManagedData', navigator.managed],
+      ['ServiceWorkerContainer', navigator.serviceWorker],
+      ['VirtualKeyboard', navigator.virtualKeyboard],
+      ['DevicePosture', navigator.devicePosture],
+      ['HID', navigator.hid],
+      ['Serial', navigator.serial],
+      ['USB', navigator.usb],
+      ['XRSystem', navigator.xr],
+    ]) {
+      testing.expectEqual('function', typeof globalThis[name], { message: name });
+      testing.expectEqual(`[object ${name}]`, Object.prototype.toString.call(value));
+      testing.expectEqual(true, value instanceof globalThis[name]);
+      testing.expectEqual(true, value instanceof EventTarget);
+      testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(globalThis[name].prototype));
+      // Chrome hands back the same object on every read.
+      testing.expectEqual(true, value === value);
+    }
+  }
+</script>
+
+<script id=windowControlsOverlay>
+  {
+    testing.expectEqual(
+      ['visible', 'ongeometrychange', 'getTitlebarAreaRect', 'constructor'],
+      Object.getOwnPropertyNames(WindowControlsOverlay.prototype),
+    );
+    testing.expectEqual(0, WindowControlsOverlay.prototype.getTitlebarAreaRect.length);
+    // No window controls overlay is displayed, which is the state the reference
+    // Chrome was in: not visible and an all-zero titlebar rect.
+    testing.expectEqual(false, navigator.windowControlsOverlay.visible);
+    testing.expectEqual(null, navigator.windowControlsOverlay.ongeometrychange);
+    const rect = navigator.windowControlsOverlay.getTitlebarAreaRect();
+    testing.expectEqual('[object DOMRect]', Object.prototype.toString.call(rect));
+    testing.expectEqual([0, 0, 0, 0], [rect.x, rect.y, rect.width, rect.height]);
+  }
+</script>
+
+<script id=bluetooth type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(
+      ['getAvailability', 'requestDevice', 'constructor'],
+      Object.getOwnPropertyNames(Bluetooth.prototype),
+    );
+    testing.expectEqual(0, Bluetooth.prototype.getAvailability.length);
+    testing.expectEqual(0, Bluetooth.prototype.requestDevice.length);
+
+    const available = await navigator.bluetooth.getAvailability();
+    let err = null;
+    try { await navigator.bluetooth.requestDevice({ acceptAllDevices: true }); } catch (e) { err = e.name; }
+    state.resolve();
+
+    await state.done(() => {
+      // The desktop this claims to be has a radio, same as the reference
+      // Chrome — the same persona that fixes hardwareConcurrency at 8.
+      testing.expectEqual(true, available);
+      // Chrome refuses the chooser outside a user gesture, and nothing here
+      // ever has one.
+      testing.expectEqual('SecurityError', err);
+    });
+  }
+</script>
+
+<script id=clipboard type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(
+      ['onclipboardchange', 'read', 'readText', 'write', 'writeText', 'constructor'],
+      Object.getOwnPropertyNames(Clipboard.prototype),
+    );
+    testing.expectEqual(0, Clipboard.prototype.read.length);
+    testing.expectEqual(0, Clipboard.prototype.readText.length);
+    testing.expectEqual(1, Clipboard.prototype.write.length);
+    testing.expectEqual(1, Clipboard.prototype.writeText.length);
+    testing.expectEqual(null, navigator.clipboard.onclipboardchange);
+
+    // Measured on Chrome: an unfocused document is refused with
+    // NotAllowedError, while write([]) has nothing to write and resolves.
+    const errs = [];
+    for (const call of [
+      () => navigator.clipboard.read(),
+      () => navigator.clipboard.readText(),
+      () => navigator.clipboard.writeText('x'),
+    ]) {
+      try { await call(); errs.push('resolved'); } catch (e) { errs.push(e.name); }
+    }
+    const wrote = await navigator.clipboard.write([]);
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(['NotAllowedError', 'NotAllowedError', 'NotAllowedError'], errs);
+      testing.expectEqual(undefined, wrote);
+    });
+  }
+</script>
+
+<script id=managed type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(
+      ['onmanagedconfigurationchange', 'getManagedConfiguration', 'constructor'],
+      Object.getOwnPropertyNames(NavigatorManagedData.prototype),
+    );
+    testing.expectEqual(1, NavigatorManagedData.prototype.getManagedConfiguration.length);
+    testing.expectEqual(null, navigator.managed.onmanagedconfigurationchange);
+
+    let err = null;
+    try { await navigator.managed.getManagedConfiguration([]); } catch (e) { err = e.name; }
+    state.resolve();
+    // This is not a managed app, which is exactly what Chrome answered.
+    await state.done(() => testing.expectEqual('NotAllowedError', err));
+  }
+</script>
+
+<script id=serviceWorker type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(
+      ['controller', 'ready', 'oncontrollerchange', 'onmessage', 'onmessageerror',
+       'getRegistration', 'getRegistrations', 'register', 'startMessages', 'constructor'],
+      Object.getOwnPropertyNames(ServiceWorkerContainer.prototype),
+    );
+    testing.expectEqual(0, ServiceWorkerContainer.prototype.getRegistration.length);
+    testing.expectEqual(0, ServiceWorkerContainer.prototype.getRegistrations.length);
+    testing.expectEqual(1, ServiceWorkerContainer.prototype.register.length);
+    testing.expectEqual(0, ServiceWorkerContainer.prototype.startMessages.length);
+
+    testing.expectEqual(null, navigator.serviceWorker.controller);
+    testing.expectEqual(null, navigator.serviceWorker.oncontrollerchange);
+    testing.expectEqual(null, navigator.serviceWorker.onmessage);
+    testing.expectEqual(null, navigator.serviceWorker.onmessageerror);
+    testing.expectEqual(undefined, navigator.serviceWorker.startMessages());
+    testing.expectEqual(true, navigator.serviceWorker.ready instanceof Promise);
+    // Chrome hands back the same promise every time, and it never settles while
+    // no worker controls the page (measured: still pending after three
+    // seconds).
+    testing.expectEqual(navigator.serviceWorker.ready, navigator.serviceWorker.ready);
+
+    const registration = await navigator.serviceWorker.getRegistration();
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    let err = null;
+    try { await navigator.serviceWorker.register('/sw.js'); } catch (e) { err = e.name; }
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(undefined, registration);
+      testing.expectEqual([], registrations);
+      testing.expectEqual('TypeError', err);
+    });
+  }
+</script>
+
+<script id=virtualKeyboard>
+  {
+    testing.expectEqual(
+      ['boundingRect', 'overlaysContent', 'ongeometrychange', 'hide', 'show', 'constructor'],
+      Object.getOwnPropertyNames(VirtualKeyboard.prototype),
+    );
+    testing.expectEqual(0, VirtualKeyboard.prototype.hide.length);
+    testing.expectEqual(0, VirtualKeyboard.prototype.show.length);
+
+    const rect = navigator.virtualKeyboard.boundingRect;
+    testing.expectEqual('[object DOMRect]', Object.prototype.toString.call(rect));
+    testing.expectEqual([0, 0, 0, 0], [rect.x, rect.y, rect.width, rect.height]);
+    testing.expectEqual(null, navigator.virtualKeyboard.ongeometrychange);
+    testing.expectEqual(undefined, navigator.virtualKeyboard.hide());
+    testing.expectEqual(undefined, navigator.virtualKeyboard.show());
+
+    // Settable and it sticks, as measured.
+    testing.expectEqual(false, navigator.virtualKeyboard.overlaysContent);
+    navigator.virtualKeyboard.overlaysContent = true;
+    testing.expectEqual(true, navigator.virtualKeyboard.overlaysContent);
+    navigator.virtualKeyboard.overlaysContent = false;
+  }
+</script>
+
+<script id=devicePosture>
+  {
+    testing.expectEqual(['type', 'onchange', 'constructor'], Object.getOwnPropertyNames(DevicePosture.prototype));
+    // A desktop screen doesn't fold, so Chrome reports 'continuous' (measured).
+    testing.expectEqual('continuous', navigator.devicePosture.type);
+    testing.expectEqual(null, navigator.devicePosture.onchange);
+  }
+</script>
+
+<script id=deviceChoosers type=module>
+  {
+    const state = await testing.async();
+    // Chrome puts `constructor` before requestDevice on these three
+    // (['onconnect','ondisconnect','getDevices','constructor','requestDevice'])
+    // — a Blink artefact of requestDevice sitting behind its own flag. V8 gives
+    // us prototype.constructor first and our members after, so the constructor
+    // lands last here. Every name matches; only its position doesn't.
+    testing.expectEqual(
+      ['onconnect', 'ondisconnect', 'getDevices', 'requestDevice', 'constructor'],
+      Object.getOwnPropertyNames(HID.prototype),
+    );
+    testing.expectEqual(
+      ['onconnect', 'ondisconnect', 'getPorts', 'requestPort', 'constructor'],
+      Object.getOwnPropertyNames(Serial.prototype),
+    );
+    testing.expectEqual(
+      ['onconnect', 'ondisconnect', 'getDevices', 'requestDevice', 'constructor'],
+      Object.getOwnPropertyNames(USB.prototype),
+    );
+    testing.expectEqual(1, HID.prototype.requestDevice.length);
+    testing.expectEqual(0, Serial.prototype.requestPort.length);
+    testing.expectEqual(1, USB.prototype.requestDevice.length);
+
+    for (const t of [navigator.hid, navigator.serial, navigator.usb]) {
+      testing.expectEqual(null, t.onconnect);
+      testing.expectEqual(null, t.ondisconnect);
+    }
+
+    // No devices are paired, and each chooser refuses to open outside a user
+    // gesture — all four measured on Chrome.
+    const lists = [
+      await navigator.hid.getDevices(),
+      await navigator.serial.getPorts(),
+      await navigator.usb.getDevices(),
+    ];
+    const errs = [];
+    for (const call of [
+      () => navigator.hid.requestDevice({ filters: [] }),
+      () => navigator.serial.requestPort(),
+      () => navigator.usb.requestDevice({ filters: [] }),
+    ]) {
+      try { await call(); errs.push('resolved'); } catch (e) { errs.push(e.name); }
+    }
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual([[], [], []], lists);
+      testing.expectEqual(['SecurityError', 'SecurityError', 'SecurityError'], errs);
+    });
+  }
+</script>
+
+<script id=xr type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(
+      ['ondevicechange', 'isSessionSupported', 'requestSession', 'constructor'],
+      Object.getOwnPropertyNames(XRSystem.prototype),
+    );
+    testing.expectEqual(1, XRSystem.prototype.isSessionSupported.length);
+    testing.expectEqual(1, XRSystem.prototype.requestSession.length);
+    testing.expectEqual(null, navigator.xr.ondevicechange);
+
+    const supported = await navigator.xr.isSessionSupported('immersive-vr');
+    let err = null;
+    try { await navigator.xr.requestSession('immersive-vr'); } catch (e) { err = e.name; }
+    state.resolve();
+
+    await state.done(() => {
+      // No headset, and requesting a session needs a user activation Chrome
+      // never sees here (both measured).
+      testing.expectEqual(false, supported);
+      testing.expectEqual('SecurityError', err);
+    });
+  }
+</script>
+
+<script id=wakeLock type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof WakeLock);
+    testing.expectEqual('[object WakeLock]', Object.prototype.toString.call(navigator.wakeLock));
+    testing.expectEqual(['request', 'constructor'], Object.getOwnPropertyNames(WakeLock.prototype));
+    testing.expectEqual(0, WakeLock.prototype.request.length);
+    // WakeLock itself is not an EventTarget on Chrome; its sentinel is.
+    testing.expectEqual(false, navigator.wakeLock instanceof EventTarget);
+
+    const sentinel = await navigator.wakeLock.request('screen');
+    const released = await sentinel.release();
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual('function', typeof WakeLockSentinel);
+      testing.expectEqual('[object WakeLockSentinel]', Object.prototype.toString.call(sentinel));
+      testing.expectEqual(true, sentinel instanceof EventTarget);
+      testing.expectEqual(
+        ['onrelease', 'released', 'type', 'release', 'constructor'],
+        Object.getOwnPropertyNames(WakeLockSentinel.prototype),
+      );
+      testing.expectEqual(0, WakeLockSentinel.prototype.release.length);
+      testing.expectEqual('screen', sentinel.type);
+      testing.expectEqual(null, sentinel.onrelease);
+      testing.expectEqual(undefined, released);
+      // released was measured false straight after request; that release()
+      // flips it is the spec's behaviour, not something measured here.
+      testing.expectEqual(true, sentinel.released);
+    });
+  }
+</script>

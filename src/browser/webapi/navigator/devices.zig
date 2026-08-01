@@ -1,0 +1,614 @@
+// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
+//
+// Francis Bouvier <francis@lightpanda.io>
+// Pierre Tachoire <pierre@lightpanda.io>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+// The navigator service objects that inherit from EventTarget on Chrome, plus
+// WakeLock, which doesn't but hands back a sentinel that does. Measured on a
+// headed Chrome 150 over http://localhost; see navigator/services.zig for why
+// the origin has to be a secure one.
+//
+// None of the on* handlers here ever fires. They exist because they're on
+// Chrome's prototype, and a page that assigns one gets it back — same as
+// BatteryManager.zig, whose values are equally constant.
+
+const std = @import("std");
+
+const js = @import("../../js/js.zig");
+const DOMRect = @import("../DOMRect.zig");
+const EventTarget = @import("../EventTarget.zig");
+const Frame = @import("../../Frame.zig");
+const Execution = js.Execution;
+
+pub fn registerTypes() []const type {
+    return &.{
+        WindowControlsOverlay,
+        Bluetooth,
+        Clipboard,
+        NavigatorManagedData,
+        ServiceWorkerContainer,
+        VirtualKeyboard,
+        DevicePosture,
+        HID,
+        Serial,
+        USB,
+        XRSystem,
+        WakeLock,
+        WakeLockSentinel,
+    };
+}
+
+// Every handler on these types is a plain slot: assign a function, read the
+// same function back, and nothing ever calls it.
+fn handlerAccessors(comptime T: type, comptime field: []const u8) type {
+    return struct {
+        fn get(self: *T) ?js.Function.Global {
+            return @field(self, field);
+        }
+
+        fn set(self: *T, listener: ?js.Function) !void {
+            @field(self, field) = if (listener) |l| try l.persistWithThis(self) else null;
+        }
+    };
+}
+
+pub const WindowControlsOverlay = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_geometry_change: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *WindowControlsOverlay) *EventTarget {
+        return self._proto;
+    }
+
+    // No window controls overlay is displayed, which is the state the reference
+    // Chrome was in too: not visible, all-zero titlebar rect.
+    pub fn getVisible(_: *const WindowControlsOverlay) bool {
+        return false;
+    }
+
+    pub fn getTitlebarAreaRect(_: *const WindowControlsOverlay, exec: *const Execution) !*DOMRect {
+        return DOMRect.create(.{}, exec._factory);
+    }
+
+    const handlers = handlerAccessors(WindowControlsOverlay, "_on_geometry_change");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(WindowControlsOverlay);
+
+        pub const Meta = struct {
+            pub const name = "WindowControlsOverlay";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const visible = bridge.accessor(WindowControlsOverlay.getVisible, null, .{});
+        pub const ongeometrychange = bridge.accessor(handlers.get, handlers.set, .{});
+        pub const getTitlebarAreaRect = bridge.function(WindowControlsOverlay.getTitlebarAreaRect, .{});
+    };
+};
+
+pub const Bluetooth = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+
+    pub fn asEventTarget(self: *Bluetooth) *EventTarget {
+        return self._proto;
+    }
+
+    // True, like the reference Chrome. This is the same persona decision as the
+    // fixed hardwareConcurrency of 8 in Navigator.zig: the machine being
+    // described is an ordinary desktop, and ordinary desktops have a radio.
+    pub fn getAvailability(_: *const Bluetooth, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(true);
+    }
+
+    // Chrome refuses to open the chooser outside a user gesture, and nothing
+    // here ever has one (measured: "Must be handling a user gesture to show a
+    // permission request.").
+    pub fn requestDevice(_: *const Bluetooth, _: ?js.Object) !void {
+        return error.SecurityError;
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(Bluetooth);
+
+        pub const Meta = struct {
+            pub const name = "Bluetooth";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const getAvailability = bridge.function(Bluetooth.getAvailability, .{});
+        pub const requestDevice = bridge.function(Bluetooth.requestDevice, .{});
+    };
+};
+
+pub const Clipboard = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_clipboard_change: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *Clipboard) *EventTarget {
+        return self._proto;
+    }
+
+    // Measured on Chrome: an unfocused document is refused with NotAllowedError
+    // ("Document is not focused."). Nothing here ever holds focus, so the
+    // refusal is the honest answer as well as the matching one.
+    fn notFocused(exec: *const Execution) js.Promise {
+        return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotAllowedError } });
+    }
+
+    pub fn read(_: *const Clipboard, _: ?js.Object, exec: *const Execution) js.Promise {
+        return notFocused(exec);
+    }
+
+    pub fn readText(_: *const Clipboard, exec: *const Execution) js.Promise {
+        return notFocused(exec);
+    }
+
+    // write() with nothing to write resolves even unfocused (measured).
+    pub fn write(_: *const Clipboard, _: js.Value, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise({});
+    }
+
+    pub fn writeText(_: *const Clipboard, _: []const u8, exec: *const Execution) js.Promise {
+        return notFocused(exec);
+    }
+
+    const handlers = handlerAccessors(Clipboard, "_on_clipboard_change");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(Clipboard);
+
+        pub const Meta = struct {
+            pub const name = "Clipboard";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const onclipboardchange = bridge.accessor(handlers.get, handlers.set, .{});
+        pub const read = bridge.function(Clipboard.read, .{});
+        pub const readText = bridge.function(Clipboard.readText, .{});
+        pub const write = bridge.function(Clipboard.write, .{});
+        pub const writeText = bridge.function(Clipboard.writeText, .{});
+    };
+};
+
+pub const NavigatorManagedData = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_managed_configuration_change: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *NavigatorManagedData) *EventTarget {
+        return self._proto;
+    }
+
+    // This is not a managed app, which is exactly what Chrome answered
+    // ("Service connection error. This API is available only for managed
+    // apps.").
+    pub fn getManagedConfiguration(_: *const NavigatorManagedData, _: js.Value, exec: *const Execution) js.Promise {
+        return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotAllowedError } });
+    }
+
+    const handlers = handlerAccessors(NavigatorManagedData, "_on_managed_configuration_change");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(NavigatorManagedData);
+
+        pub const Meta = struct {
+            pub const name = "NavigatorManagedData";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const onmanagedconfigurationchange = bridge.accessor(handlers.get, handlers.set, .{});
+        pub const getManagedConfiguration = bridge.function(NavigatorManagedData.getManagedConfiguration, .{});
+    };
+};
+
+pub const ServiceWorkerContainer = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _ready: ?js.Promise.Global = null,
+    _on_controller_change: ?js.Function.Global = null,
+    _on_message: ?js.Function.Global = null,
+    _on_message_error: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *ServiceWorkerContainer) *EventTarget {
+        return self._proto;
+    }
+
+    pub fn getController(_: *const ServiceWorkerContainer) ?bool {
+        return null;
+    }
+
+    // Chrome hands back the same promise every time and it never settles while
+    // no worker controls the page (measured: still pending after three
+    // seconds). Nothing ever registers a worker here, so it stays pending — a
+    // promise that resolves with a registration we don't have would be the
+    // invention.
+    pub fn getReady(self: *ServiceWorkerContainer, exec: *const Execution) !js.Promise {
+        const local = exec.js.local.?;
+        if (self._ready) |ready| {
+            return ready.local(local);
+        }
+        const resolver = local.createPromiseResolver();
+        const promise = resolver.promise();
+        // Nobody will ever reject it; without this v8 reports it at teardown.
+        promise.markAsHandled();
+        self._ready = try promise.persist();
+        return promise;
+    }
+
+    pub fn getRegistration(_: *const ServiceWorkerContainer, _: ?[]const u8, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise({});
+    }
+
+    pub fn getRegistrations(_: *const ServiceWorkerContainer, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
+    }
+
+    // No service worker support at all, so the script can never be installed.
+    // Chrome's own failure for a script it can't fetch is a TypeError
+    // (measured against a 404).
+    pub fn register(_: *const ServiceWorkerContainer, _: []const u8, _: ?js.Object, exec: *const Execution) js.Promise {
+        return exec.js.local.?.rejectPromise(.{
+            .type_error = "Failed to register a ServiceWorker: the script could not be fetched.",
+        });
+    }
+
+    pub fn startMessages(_: *const ServiceWorkerContainer) void {}
+
+    const controller_change = handlerAccessors(ServiceWorkerContainer, "_on_controller_change");
+    const message = handlerAccessors(ServiceWorkerContainer, "_on_message");
+    const message_error = handlerAccessors(ServiceWorkerContainer, "_on_message_error");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(ServiceWorkerContainer);
+
+        pub const Meta = struct {
+            pub const name = "ServiceWorkerContainer";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const controller = bridge.accessor(ServiceWorkerContainer.getController, null, .{});
+        pub const ready = bridge.accessor(ServiceWorkerContainer.getReady, null, .{});
+        pub const oncontrollerchange = bridge.accessor(controller_change.get, controller_change.set, .{});
+        pub const onmessage = bridge.accessor(message.get, message.set, .{});
+        pub const onmessageerror = bridge.accessor(message_error.get, message_error.set, .{});
+        pub const getRegistration = bridge.function(ServiceWorkerContainer.getRegistration, .{});
+        pub const getRegistrations = bridge.function(ServiceWorkerContainer.getRegistrations, .{});
+        pub const register = bridge.function(ServiceWorkerContainer.register, .{});
+        pub const startMessages = bridge.function(ServiceWorkerContainer.startMessages, .{});
+    };
+};
+
+pub const VirtualKeyboard = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _overlays_content: bool = false,
+    _on_geometry_change: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *VirtualKeyboard) *EventTarget {
+        return self._proto;
+    }
+
+    // No virtual keyboard is on screen, so the rect is all zeros — the same
+    // rect the reference Chrome reported on a desktop.
+    pub fn getBoundingRect(_: *const VirtualKeyboard, exec: *const Execution) !*DOMRect {
+        return DOMRect.create(.{}, exec._factory);
+    }
+
+    pub fn getOverlaysContent(self: *const VirtualKeyboard) bool {
+        return self._overlays_content;
+    }
+
+    pub fn setOverlaysContent(self: *VirtualKeyboard, value: bool) void {
+        self._overlays_content = value;
+    }
+
+    pub fn hide(_: *const VirtualKeyboard) void {}
+
+    pub fn show(_: *const VirtualKeyboard) void {}
+
+    const handlers = handlerAccessors(VirtualKeyboard, "_on_geometry_change");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(VirtualKeyboard);
+
+        pub const Meta = struct {
+            pub const name = "VirtualKeyboard";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const boundingRect = bridge.accessor(VirtualKeyboard.getBoundingRect, null, .{});
+        pub const overlaysContent = bridge.accessor(VirtualKeyboard.getOverlaysContent, VirtualKeyboard.setOverlaysContent, .{});
+        pub const ongeometrychange = bridge.accessor(handlers.get, handlers.set, .{});
+        pub const hide = bridge.function(VirtualKeyboard.hide, .{});
+        pub const show = bridge.function(VirtualKeyboard.show, .{});
+    };
+};
+
+pub const DevicePosture = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_change: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *DevicePosture) *EventTarget {
+        return self._proto;
+    }
+
+    // A desktop screen doesn't fold, so Chrome reports 'continuous' (measured).
+    pub fn getType(_: *const DevicePosture) []const u8 {
+        return "continuous";
+    }
+
+    const handlers = handlerAccessors(DevicePosture, "_on_change");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(DevicePosture);
+
+        pub const Meta = struct {
+            pub const name = "DevicePosture";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const @"type" = bridge.accessor(DevicePosture.getType, null, .{});
+        pub const onchange = bridge.accessor(handlers.get, handlers.set, .{});
+    };
+};
+
+// HID, Serial and USB are the same shape: a connect/disconnect handler pair, a
+// list of already-paired devices (empty — nothing is paired) and a chooser that
+// Chrome refuses to open outside a user gesture. All three refusals were
+// measured, and all three carry the same message.
+pub const HID = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_connect: ?js.Function.Global = null,
+    _on_disconnect: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *HID) *EventTarget {
+        return self._proto;
+    }
+
+    pub fn getDevices(_: *const HID, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
+    }
+
+    pub fn requestDevice(_: *const HID, _: js.Value) !void {
+        return error.SecurityError;
+    }
+
+    const connect = handlerAccessors(HID, "_on_connect");
+    const disconnect = handlerAccessors(HID, "_on_disconnect");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(HID);
+
+        pub const Meta = struct {
+            pub const name = "HID";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const onconnect = bridge.accessor(connect.get, connect.set, .{});
+        pub const ondisconnect = bridge.accessor(disconnect.get, disconnect.set, .{});
+        pub const getDevices = bridge.function(HID.getDevices, .{});
+        pub const requestDevice = bridge.function(HID.requestDevice, .{});
+    };
+};
+
+pub const Serial = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_connect: ?js.Function.Global = null,
+    _on_disconnect: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *Serial) *EventTarget {
+        return self._proto;
+    }
+
+    pub fn getPorts(_: *const Serial, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
+    }
+
+    pub fn requestPort(_: *const Serial, _: ?js.Object) !void {
+        return error.SecurityError;
+    }
+
+    const connect = handlerAccessors(Serial, "_on_connect");
+    const disconnect = handlerAccessors(Serial, "_on_disconnect");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(Serial);
+
+        pub const Meta = struct {
+            pub const name = "Serial";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const onconnect = bridge.accessor(connect.get, connect.set, .{});
+        pub const ondisconnect = bridge.accessor(disconnect.get, disconnect.set, .{});
+        pub const getPorts = bridge.function(Serial.getPorts, .{});
+        pub const requestPort = bridge.function(Serial.requestPort, .{});
+    };
+};
+
+pub const USB = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_connect: ?js.Function.Global = null,
+    _on_disconnect: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *USB) *EventTarget {
+        return self._proto;
+    }
+
+    pub fn getDevices(_: *const USB, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
+    }
+
+    pub fn requestDevice(_: *const USB, _: js.Value) !void {
+        return error.SecurityError;
+    }
+
+    const connect = handlerAccessors(USB, "_on_connect");
+    const disconnect = handlerAccessors(USB, "_on_disconnect");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(USB);
+
+        pub const Meta = struct {
+            pub const name = "USB";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const onconnect = bridge.accessor(connect.get, connect.set, .{});
+        pub const ondisconnect = bridge.accessor(disconnect.get, disconnect.set, .{});
+        pub const getDevices = bridge.function(USB.getDevices, .{});
+        pub const requestDevice = bridge.function(USB.requestDevice, .{});
+    };
+};
+
+pub const XRSystem = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _on_device_change: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *XRSystem) *EventTarget {
+        return self._proto;
+    }
+
+    // No headset attached, which is what the reference Chrome reported.
+    pub fn isSessionSupported(_: *const XRSystem, _: []const u8, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise(false);
+    }
+
+    // Chrome needs a user activation for this and never gets one here
+    // (measured: "The requested session requires user activation.").
+    pub fn requestSession(_: *const XRSystem, _: []const u8, _: ?js.Object) !void {
+        return error.SecurityError;
+    }
+
+    const handlers = handlerAccessors(XRSystem, "_on_device_change");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(XRSystem);
+
+        pub const Meta = struct {
+            pub const name = "XRSystem";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const ondevicechange = bridge.accessor(handlers.get, handlers.set, .{});
+        pub const isSessionSupported = bridge.function(XRSystem.isSessionSupported, .{});
+        pub const requestSession = bridge.function(XRSystem.requestSession, .{});
+    };
+};
+
+// WakeLock is not an EventTarget on Chrome; its sentinel is.
+pub const WakeLock = struct {
+    _pad: bool = false,
+
+    pub fn request(_: *const WakeLock, wake_lock_type: ?[]const u8, exec: *const Execution) !js.Promise {
+        const sentinel = try exec._factory.eventTarget(WakeLockSentinel{
+            ._proto = undefined,
+            ._type = if (std.mem.eql(u8, wake_lock_type orelse "screen", "system")) .system else .screen,
+        });
+        return exec.js.local.?.resolvePromise(sentinel);
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(WakeLock);
+
+        pub const Meta = struct {
+            pub const name = "WakeLock";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+
+        pub const request = bridge.function(WakeLock.request, .{});
+    };
+};
+
+pub const WakeLockSentinel = struct {
+    pub const Proto = EventTarget;
+
+    _proto: *EventTarget,
+    _type: Kind,
+    _released: bool = false,
+    _on_release: ?js.Function.Global = null,
+
+    const Kind = enum { screen, system };
+
+    pub fn asEventTarget(self: *WakeLockSentinel) *EventTarget {
+        return self._proto;
+    }
+
+    pub fn getReleased(self: *const WakeLockSentinel) bool {
+        return self._released;
+    }
+
+    pub fn getType(self: *const WakeLockSentinel) []const u8 {
+        return @tagName(self._type);
+    }
+
+    // There is no screen to keep awake, so releasing only flips the flag. The
+    // release event isn't dispatched: nothing here listens for one and the
+    // handler slot never fires, same as the rest of this file.
+    pub fn release(self: *WakeLockSentinel, exec: *const Execution) !js.Promise {
+        self._released = true;
+        return exec.js.local.?.resolvePromise({});
+    }
+
+    const handlers = handlerAccessors(WakeLockSentinel, "_on_release");
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(WakeLockSentinel);
+
+        pub const Meta = struct {
+            pub const name = "WakeLockSentinel";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const onrelease = bridge.accessor(handlers.get, handlers.set, .{});
+        pub const released = bridge.accessor(WakeLockSentinel.getReleased, null, .{});
+        pub const @"type" = bridge.accessor(WakeLockSentinel.getType, null, .{});
+        pub const release = bridge.function(WakeLockSentinel.release, .{});
+    };
+};
