@@ -730,8 +730,8 @@ pub fn getActiveElement(self: *Document) ?*Element {
     }
 
     // Default to body if it exists
-    if (self.is(HTMLDocument)) |html_doc| {
-        if (html_doc.getBody()) |body| {
+    if (self.is(HTMLDocument) != null) {
+        if (self.getBody()) |body| {
             return body.asElement();
         }
     }
@@ -949,6 +949,183 @@ pub fn getDocType(self: *Document) ?*Node {
         }
     }
     return null;
+}
+
+// The members below come from the HTML spec's partial interface Document. They
+// belong on Document.prototype, not on HTMLDocument.prototype: a headed Chrome
+// 150 carries nothing but `constructor` on HTMLDocument.prototype. Detectors
+// enumerate Document.prototype one level deep, so a member parked one rung too
+// low reads as missing.
+
+// The head is the first html-namespace child of the document element whose
+// local name is head, whatever its Zig element type (e.g. a createElementNS
+// "blah:head" is an HTMLUnknownElement but still qualifies).
+pub fn getHead(self: *Document) ?*Element {
+    const doc_el = self.getDocumentElement() orelse return null;
+    var it = doc_el.asNode().childrenIterator();
+    while (it.next()) |node| {
+        const el = node.is(Element) orelse continue;
+        if (el._namespace == .html and std.mem.eql(u8, el.getLocalName(), "head")) {
+            return el;
+        }
+    }
+    return null;
+}
+
+pub fn getBody(self: *Document) ?*Element.Html.Body {
+    const document_element = self.getDocumentElement() orelse return null;
+    return findBodyForDoc(document_element);
+}
+
+pub fn setBody(self: *Document, html: []const u8, frame: *Frame) !void {
+    const document_element = self.getDocumentElement() orelse return error.HierarchyError;
+
+    // Build a fresh <body> holding the parsed HTML as its children. Fragment
+    // parsing strips any <html>/<body>/<head> wrappers the author included.
+    const new_body_node = try Frame.node_factory.createElementNS(frame, .html, "body", null);
+    if (html.len > 0) {
+        try Frame.parse.htmlAsChildren(frame, new_body_node, html);
+    }
+
+    const document_node = document_element.asNode();
+    if (findBodyForDoc(document_element)) |current| {
+        _ = try document_node.replaceChild(new_body_node, current.asNode(), frame);
+    } else {
+        _ = try document_node.appendChild(new_body_node, frame);
+    }
+}
+
+fn findBodyForDoc(document_element: *Element) ?*Element.Html.Body {
+    var child = document_element.asNode().firstChild();
+    while (child) |node| {
+        if (node.is(Element.Html.Body)) |body| {
+            return body;
+        }
+        child = node.nextSibling();
+    }
+    return null;
+}
+
+pub fn getTitle(self: *Document, frame: *Frame) ![]const u8 {
+    // Search the entire document for the first <title> element
+    const root = self.getDocumentElement() orelse return "";
+    const title_element = blk: {
+        var walker = @import("TreeWalker.zig").Full.init(root.asNode(), .{});
+        while (walker.next()) |node| {
+            if (node.is(Element.Html.Title)) |title| {
+                break :blk title;
+            }
+        }
+        return "";
+    };
+
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    try title_element.asNode().getTextContent(&buf.writer);
+    const text = buf.written();
+
+    if (text.len == 0) {
+        return "";
+    }
+
+    var started = false;
+    var in_whitespace = false;
+    var result: std.ArrayList(u8) = .empty;
+    try result.ensureTotalCapacity(frame.local_arena, text.len);
+
+    for (text) |c| {
+        const is_ascii_ws = c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\x0C';
+
+        if (is_ascii_ws) {
+            if (started) {
+                in_whitespace = true;
+            }
+        } else {
+            if (in_whitespace) {
+                result.appendAssumeCapacity(' ');
+                in_whitespace = false;
+            }
+            result.appendAssumeCapacity(c);
+            started = true;
+        }
+    }
+
+    return result.items;
+}
+
+pub fn setTitle(self: *Document, title: []const u8, frame: *Frame) !void {
+    const head = self.getHead() orelse return;
+
+    // Find existing title element in head
+    var it = head.asNode().childrenIterator();
+    while (it.next()) |node| {
+        if (node.is(Element.Html.Title)) |title_element| {
+            // Replace children, but don't create text node for empty string
+            if (title.len == 0) {
+                return title_element.asElement().replaceChildren(&.{}, frame);
+            } else {
+                return title_element.asElement().replaceChildren(&.{.{ .text = title }}, frame);
+            }
+        }
+    }
+
+    // No title element found, create one
+    const title_node = try Frame.node_factory.createElementNS(frame, .html, "title", null);
+    const title_element = title_node.as(Element);
+
+    // Only add text if non-empty
+    if (title.len > 0) {
+        try title_element.replaceChildren(&.{.{ .text = title }}, frame);
+    }
+
+    _ = try head.asNode().appendChild(title_node, frame);
+}
+
+pub fn getImages(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .img, frame);
+}
+
+pub fn getScripts(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .script, frame);
+}
+
+pub fn getLinks(self: *Document, frame: *Frame) !collections.NodeLive(.links) {
+    return collections.NodeLive(.links).init(self.asNode(), {}, frame);
+}
+
+pub fn getAnchors(self: *Document, frame: *Frame) !collections.NodeLive(.anchors) {
+    return collections.NodeLive(.anchors).init(self.asNode(), {}, frame);
+}
+
+pub fn getForms(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .form, frame);
+}
+
+pub fn getEmbeds(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .embed, frame);
+}
+
+pub fn getApplets(_: *const Document, frame: *Frame) !*collections.HTMLCollection {
+    return frame._factory.create(collections.HTMLCollection{ ._data = .empty });
+}
+
+pub fn getCurrentScript(self: *const Document) ?*Element.Html.Script {
+    return self._current_script;
+}
+
+pub fn getDir(self: *Document) []const u8 {
+    const el = self.getDocumentElement() orelse return "";
+    const html = el.is(Element.Html) orelse return "";
+    return html.getDir();
+}
+
+pub fn setDir(self: *Document, value: []const u8, frame: *Frame) !void {
+    const el = self.getDocumentElement() orelse return;
+    const html = el.is(Element.Html) orelse return;
+    try html.setDir(value, frame);
+}
+
+pub fn getAll(self: *Document, frame: *Frame) !*collections.HTMLAllCollection {
+    return frame._factory.create(collections.HTMLAllCollection.init(self.asNode(), frame));
 }
 
 // document.write is complicated and works differently based on the state of
@@ -1509,42 +1686,86 @@ pub const JsApi = struct {
         });
     }
 
-    pub const onselectionchange = bridge.accessor(Document.getOnSelectionChange, Document.setOnSelectionChange, .{});
-    pub const onclick = bridge.accessor(Document.getOnClick, Document.setOnClick, .{});
-    pub const ontouchstart = bridge.accessor(handlerAccessor(.ontouchstart).get, handlerAccessor(.ontouchstart).set, .{});
-    pub const ontouchend = bridge.accessor(handlerAccessor(.ontouchend).get, handlerAccessor(.ontouchend).set, .{});
-    pub const ontouchmove = bridge.accessor(handlerAccessor(.ontouchmove).get, handlerAccessor(.ontouchmove).set, .{});
-    pub const ontouchcancel = bridge.accessor(handlerAccessor(.ontouchcancel).get, handlerAccessor(.ontouchcancel).set, .{});
-    pub const URL = bridge.accessor(Document.getURL, null, .{});
-    pub const location = bridge.accessor(Document.getLocation, Document.setLocation, .{});
-    pub const documentURI = bridge.accessor(Document.getURL, null, .{});
-    pub const documentElement = bridge.accessor(Document.getDocumentElement, null, .{});
-    pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
-    pub const children = bridge.accessor(Document.getChildren, null, .{});
-    pub const readyState = bridge.accessor(Document.getReadyState, null, .{});
+    // Declaration order is the prototype's own-property order, so it is the
+    // order a detector sees. It mirrors a headed Chrome 150's
+    // Object.getOwnPropertyNames(Document.prototype) exactly.
     pub const implementation = bridge.accessor(Document.getImplementation, null, .{});
+    pub const URL = bridge.accessor(Document.getURL, null, .{});
+    pub const documentURI = bridge.accessor(Document.getURL, null, .{});
+    pub const compatMode = bridge.accessor(Document.getCompatMode, null, .{});
+    pub const characterSet = bridge.accessor(getCharacterSet, null, .{});
+    pub const charset = bridge.accessor(getCharacterSet, null, .{});
+    pub const inputEncoding = bridge.accessor(getCharacterSet, null, .{});
+    pub const contentType = bridge.accessor(Document.getContentType, null, .{});
+    pub const doctype = bridge.accessor(Document.getDocType, null, .{});
+    pub const documentElement = bridge.accessor(Document.getDocumentElement, null, .{});
+    pub const domain = bridge.accessor(Document.getDomain, Document.setDomain, .{});
+    pub const referrer = bridge.property("", .{ .template = false });
+    pub const cookie = bridge.accessor(Document.getCookie, Document.setCookie, .{});
+    pub const lastModified = bridge.accessor(Document.getLastModified, null, .{});
+    pub const readyState = bridge.accessor(Document.getReadyState, null, .{});
+    pub const title = bridge.accessor(Document.getTitle, Document.setTitle, .{ .ce_reactions = true });
+    pub const dir = bridge.accessor(Document.getDir, Document.setDir, .{ .ce_reactions = true });
+    pub const body = bridge.accessor(Document.getBody, Document.setBody, .{ .ce_reactions = true });
+    pub const head = bridge.accessor(Document.getHead, null, .{});
+    pub const images = bridge.accessor(Document.getImages, null, .{});
+    pub const embeds = bridge.accessor(Document.getEmbeds, null, .{});
+    pub const plugins = bridge.accessor(Document.getEmbeds, null, .{});
+    pub const links = bridge.accessor(Document.getLinks, null, .{});
+    pub const forms = bridge.accessor(Document.getForms, null, .{});
+    pub const scripts = bridge.accessor(Document.getScripts, null, .{});
+    pub const currentScript = bridge.accessor(Document.getCurrentScript, null, .{});
+    pub const defaultView = bridge.accessor(struct {
+        fn defaultView(self: *const Document) ?*@import("Window.zig") {
+            const frame = self._frame orelse return null;
+            return frame.window;
+        }
+    }.defaultView, null, .{});
+    pub const anchors = bridge.accessor(Document.getAnchors, null, .{});
+    pub const applets = bridge.accessor(Document.getApplets, null, .{});
+    pub const all = bridge.accessor(Document.getAll, null, .{});
+    pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
+    pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
+    pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
+    pub const prerendering = bridge.property(false, .{ .template = false });
+    pub const onclick = bridge.accessor(Document.getOnClick, Document.setOnClick, .{});
+    pub const onselectionchange = bridge.accessor(Document.getOnSelectionChange, Document.setOnSelectionChange, .{});
+    pub const children = bridge.accessor(Document.getChildren, null, .{});
+    pub const firstElementChild = bridge.accessor(Document.getFirstElementChild, null, .{});
+    pub const lastElementChild = bridge.accessor(Document.getLastElementChild, null, .{});
+    pub const childElementCount = bridge.accessor(Document.getChildElementCount, null, .{});
     pub const activeElement = bridge.accessor(Document.getActiveElement, null, .{});
     pub const styleSheets = bridge.accessor(Document.getStyleSheets, null, .{});
+    pub const adoptedStyleSheets = bridge.accessor(Document.getAdoptedStyleSheets, Document.setAdoptedStyleSheets, .{});
     pub const fonts = bridge.accessor(Document.getFonts, null, .{});
-    pub const contentType = bridge.accessor(Document.getContentType, null, .{});
-    pub const domain = bridge.accessor(Document.getDomain, Document.setDomain, .{});
-    pub const cookie = bridge.accessor(Document.getCookie, Document.setCookie, .{});
-    pub const createElement = bridge.function(Document.createElement, .{});
-    pub const createElementNS = bridge.function(Document.createElementNS, .{});
-    pub const createDocumentFragment = bridge.function(Document.createDocumentFragment, .{});
-    pub const createComment = bridge.function(Document.createComment, .{});
-    pub const createTextNode = bridge.function(Document.createTextNode, .{});
+
+    // `[LegacyUnforgeable]`: Chrome puts this on every document instance, not on
+    // Document.prototype. Measured descriptor: enumerable, non-configurable,
+    // get+set.
+    pub const location = bridge.accessor(Document.getLocation, Document.setLocation, .{ .unforgeable = true, .deletable = false });
+
+    // Operations, alphabetical, as WebIDL requires and Chrome emits.
+    pub const adoptNode = bridge.function(Document.adoptNode, .{ .ce_reactions = true });
+    pub const append = bridge.function(Document.append, .{ .ce_reactions = true });
+    pub const close = bridge.function(Document.close, .{ .ce_reactions = true });
     pub const createAttribute = bridge.function(Document.createAttribute, .{});
     pub const createAttributeNS = bridge.function(Document.createAttributeNS, .{});
     pub const createCDATASection = bridge.function(Document.createCDATASection, .{});
-    pub const createProcessingInstruction = bridge.function(Document.createProcessingInstruction, .{});
-    pub const createRange = bridge.function(Document.createRange, .{});
+    pub const createComment = bridge.function(Document.createComment, .{});
+    pub const createDocumentFragment = bridge.function(Document.createDocumentFragment, .{});
+    pub const createElement = bridge.function(Document.createElement, .{});
+    pub const createElementNS = bridge.function(Document.createElementNS, .{});
     pub const createEvent = bridge.function(Document.createEvent, .{});
-    pub const createTreeWalker = bridge.function(Document.createTreeWalker, .{});
-    pub const createNodeIterator = bridge.function(Document.createNodeIterator, .{});
-    pub const evaluate = bridge.function(Document.evaluate, .{});
     pub const createExpression = bridge.function(Document.createExpression, .{});
     pub const createNSResolver = bridge.function(Document.createNSResolver, .{});
+    pub const createNodeIterator = bridge.function(Document.createNodeIterator, .{});
+    pub const createProcessingInstruction = bridge.function(Document.createProcessingInstruction, .{});
+    pub const createRange = bridge.function(Document.createRange, .{});
+    pub const createTextNode = bridge.function(Document.createTextNode, .{});
+    pub const createTreeWalker = bridge.function(Document.createTreeWalker, .{});
+    pub const elementFromPoint = bridge.function(Document.elementFromPoint, .{});
+    pub const elementsFromPoint = bridge.function(Document.elementsFromPoint, .{});
+    pub const evaluate = bridge.function(Document.evaluate, .{});
     pub const getElementById = bridge.function(_getElementById, .{});
     fn _getElementById(self: *Document, value_: ?js.Value, frame: *Frame) !?*Element {
         const value = value_ orelse return null;
@@ -1556,50 +1777,25 @@ pub const JsApi = struct {
         }
         return self.getElementById(try value.toZig([]const u8), frame);
     }
-    pub const querySelector = bridge.function(Document.querySelector, .{});
-    pub const querySelectorAll = bridge.function(Document.querySelectorAll, .{});
+    pub const getElementsByClassName = bridge.function(Document.getElementsByClassName, .{});
+    pub const getElementsByName = bridge.function(Document.getElementsByName, .{});
     pub const getElementsByTagName = bridge.function(Document.getElementsByTagName, .{});
     pub const getElementsByTagNameNS = bridge.function(Document.getElementsByTagNameNS, .{});
     pub const getSelection = bridge.function(Document.getSelection, .{});
-    pub const getElementsByClassName = bridge.function(Document.getElementsByClassName, .{});
-    pub const getElementsByName = bridge.function(Document.getElementsByName, .{});
-    pub const adoptNode = bridge.function(Document.adoptNode, .{ .ce_reactions = true });
+    pub const hasFocus = bridge.function(Document.hasFocus, .{});
     pub const importNode = bridge.function(Document.importNode, .{ .ce_reactions = true });
-    pub const append = bridge.function(Document.append, .{ .ce_reactions = true });
-    pub const prepend = bridge.function(Document.prepend, .{ .ce_reactions = true });
     pub const moveBefore = bridge.function(Document.moveBefore, .{ .ce_reactions = true });
+    pub const open = bridge.function(Document.open, .{ .ce_reactions = true });
+    pub const prepend = bridge.function(Document.prepend, .{ .ce_reactions = true });
+    pub const querySelector = bridge.function(Document.querySelector, .{});
+    pub const querySelectorAll = bridge.function(Document.querySelectorAll, .{});
     pub const replaceChildren = bridge.function(Document.replaceChildren, .{ .ce_reactions = true });
-    pub const elementFromPoint = bridge.function(Document.elementFromPoint, .{});
-    pub const elementsFromPoint = bridge.function(Document.elementsFromPoint, .{});
     pub const write = bridge.function(Document.write, .{ .ce_reactions = true });
     pub const writeln = bridge.function(Document.writeln, .{ .ce_reactions = true });
-    pub const open = bridge.function(Document.open, .{ .ce_reactions = true });
-    pub const close = bridge.function(Document.close, .{ .ce_reactions = true });
-    pub const doctype = bridge.accessor(Document.getDocType, null, .{});
-    pub const firstElementChild = bridge.accessor(Document.getFirstElementChild, null, .{});
-    pub const lastElementChild = bridge.accessor(Document.getLastElementChild, null, .{});
-    pub const childElementCount = bridge.accessor(Document.getChildElementCount, null, .{});
-    pub const adoptedStyleSheets = bridge.accessor(Document.getAdoptedStyleSheets, Document.setAdoptedStyleSheets, .{});
-    pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
-    pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
-    pub const defaultView = bridge.accessor(struct {
-        fn defaultView(self: *const Document) ?*@import("Window.zig") {
-            const frame = self._frame orelse return null;
-            return frame.window;
-        }
-    }.defaultView, null, .{});
-    pub const hasFocus = bridge.function(Document.hasFocus, .{});
 
-    pub const prerendering = bridge.property(false, .{ .template = false });
-    pub const characterSet = bridge.accessor(getCharacterSet, null, .{});
-    pub const charset = bridge.accessor(getCharacterSet, null, .{});
-    pub const inputEncoding = bridge.accessor(getCharacterSet, null, .{});
-    pub const compatMode = bridge.accessor(Document.getCompatMode, null, .{});
-    pub const lastModified = bridge.accessor(Document.getLastModified, null, .{});
     fn getCharacterSet(self: *const Document) []const u8 {
         return self.getCharset();
     }
-    pub const referrer = bridge.property("", .{ .template = false });
 
     // Generates a getter/setter pair backed by the frame's attribute-listener
     // map, like onclick above, for other document event handler properties.

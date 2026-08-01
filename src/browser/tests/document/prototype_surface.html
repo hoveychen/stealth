@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<body>
+
+<script id=document_prototype_html_document_is_empty>
+  {
+    // Measured on a headed Chrome 150: HTMLDocument.prototype carries nothing
+    // but `constructor`. Every document member lives one level up, on
+    // Document.prototype. Detectors that read
+    // Object.getOwnPropertyDescriptors(Document.prototype) look at that one
+    // level only, so anything parked on HTMLDocument reads as missing.
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(HTMLDocument.prototype));
+  }
+</script>
+
+<script id=document_prototype_owns_html_members>
+  {
+    const own = Object.getOwnPropertyNames(Document.prototype);
+    for (const name of [
+      'title', 'dir', 'body', 'head', 'images', 'embeds', 'plugins', 'links',
+      'forms', 'scripts', 'currentScript', 'anchors', 'applets', 'all', 'doctype',
+    ]) {
+      testing.expectEqual(true, own.includes(name), { desc: 'Document.prototype owns ' + name });
+    }
+  }
+</script>
+
+<script id=document_prototype_no_lang>
+  {
+    // Chrome has no `lang` on documents at all: measured `'lang' in document`
+    // is false there. It is an HTMLElement member only.
+    testing.expectEqual(false, 'lang' in document);
+    testing.expectEqual(undefined, document.lang);
+  }
+</script>
+
+<script id=document_prototype_html_members_still_work>
+  {
+    // Moving the declaration must not change behaviour.
+    testing.expectEqual('BODY', document.body.tagName);
+    testing.expectEqual('HEAD', document.head.tagName);
+    testing.expectEqual('HTMLCollection', document.images.constructor.name);
+    testing.expectEqual('HTMLAllCollection', document.all.constructor.name);
+    testing.expectEqual('html', document.doctype.name);
+    document.dir = 'rtl';
+    testing.expectEqual('rtl', document.documentElement.getAttribute('dir'));
+  }
+</script>
+
+</body>
+</html>
