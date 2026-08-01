@@ -2001,9 +2001,6 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(_constructor, .{});
-    pub const onpointerrawupdate = bridge.accessor(handlerAccessor(.onpointerrawupdate).get, handlerAccessor(.onpointerrawupdate).set, .{});
-    pub const onscrollsnapchange = bridge.accessor(handlerAccessor(.onscrollsnapchange).get, handlerAccessor(.onscrollsnapchange).set, .{});
-    pub const onscrollsnapchanging = bridge.accessor(handlerAccessor(.onscrollsnapchanging).get, handlerAccessor(.onscrollsnapchanging).set, .{});
     fn _constructor(frame: *Frame) !*Document {
         return frame._factory.node(Document{
             ._proto = undefined,
@@ -2281,10 +2278,13 @@ pub const JsApi = struct {
     // Chrome emits these after `constructor`, i.e. after the main IDL block:
     // they are runtime-enabled features, appended as they are switched on.
     pub const fragmentDirective = bridge.accessor(Document.getFragmentDirective, null, .{});
+    pub const onpointerrawupdate = bridge.accessor(handlerAccessor(.onpointerrawupdate).get, handlerAccessor(.onpointerrawupdate).set, .{});
     pub const browsingTopics = bridge.function(Document.browsingTopics, .{});
     pub const hasPrivateToken = bridge.function(Document.hasPrivateToken, .{});
     pub const hasRedemptionRecord = bridge.function(Document.hasRedemptionRecord, .{});
     pub const activeViewTransition = bridge.accessor(Document.getActiveViewTransition, null, .{});
+    pub const onscrollsnapchange = bridge.accessor(handlerAccessor(.onscrollsnapchange).get, handlerAccessor(.onscrollsnapchange).set, .{});
+    pub const onscrollsnapchanging = bridge.accessor(handlerAccessor(.onscrollsnapchanging).get, handlerAccessor(.onscrollsnapchanging).set, .{});
     pub const customElementRegistry = bridge.accessor(Document.getCustomElementRegistry, null, .{});
     pub const ariaNotify = bridge.function(Document.ariaNotify, .{});
 

@@ -443,5 +443,71 @@
   });
 </script>
 
+<script id=document_prototype_full_order>
+  {
+    // The whole of Document.prototype, in order. Declaration order is
+    // own-property order, and own-property order is itself a fingerprint, so
+    // this is Chrome 150's list verbatim with one documented exception:
+    // Blink emits `constructor` in the middle of the run (right after writeln,
+    // before the runtime-enabled tail), while V8 always appends it. Everything
+    // else lines up name for name.
+    const expected = [
+      'implementation', 'URL', 'documentURI', 'compatMode', 'characterSet', 'charset',
+      'inputEncoding', 'contentType', 'doctype', 'documentElement', 'xmlEncoding',
+      'xmlVersion', 'xmlStandalone', 'domain', 'referrer', 'cookie', 'lastModified',
+      'readyState', 'title', 'dir', 'body', 'head', 'images', 'embeds', 'plugins', 'links',
+      'forms', 'scripts', 'currentScript', 'defaultView', 'designMode', 'onreadystatechange',
+      'anchors', 'applets', 'fgColor', 'linkColor', 'vlinkColor', 'alinkColor', 'bgColor',
+      'all', 'scrollingElement', 'onpointerlockchange', 'onpointerlockerror', 'hidden',
+      'visibilityState', 'wasDiscarded', 'prerendering', 'featurePolicy',
+      'webkitVisibilityState', 'webkitHidden', 'onbeforecopy', 'onbeforecut', 'onbeforepaste',
+      'onfreeze', 'onprerenderingchange', 'onresume', 'onsearch', 'onvisibilitychange',
+      'timeline', 'fullscreenEnabled', 'fullscreen', 'onfullscreenchange', 'onfullscreenerror',
+      'webkitIsFullScreen', 'webkitCurrentFullScreenElement', 'webkitFullscreenEnabled',
+      'webkitFullscreenElement', 'onwebkitfullscreenchange', 'onwebkitfullscreenerror',
+      'rootElement', 'pictureInPictureEnabled', 'onabort', 'onbeforeinput', 'onbeforematch',
+      'onbeforetoggle', 'onblur', 'oncancel', 'oncanplay', 'oncanplaythrough', 'onchange',
+      'onclick', 'onclose', 'oncommand', 'oncontentvisibilityautostatechange', 'oncontextlost',
+      'oncontextmenu', 'oncontextrestored', 'oncuechange', 'ondblclick', 'ondrag', 'ondragend',
+      'ondragenter', 'ondragleave', 'ondragover', 'ondragstart', 'ondrop', 'ondurationchange',
+      'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata', 'oninput', 'oninvalid',
+      'onkeydown', 'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata',
+      'onloadstart', 'onmousedown', 'onmouseenter', 'onmouseleave', 'onmousemove',
+      'onmouseout', 'onmouseover', 'onmouseup', 'onmousewheel', 'onpause', 'onplay',
+      'onplaying', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
+      'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect',
+      'onslotchange', 'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
+      'onvolumechange', 'onwaiting', 'onwebkitanimationend', 'onwebkitanimationiteration',
+      'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel', 'onauxclick',
+      'ongotpointercapture', 'onlostpointercapture', 'onpointerdown', 'onpointermove',
+      'onpointerup', 'onpointercancel', 'onpointerover', 'onpointerout', 'onpointerenter',
+      'onpointerleave', 'onselectstart', 'onselectionchange', 'onanimationcancel',
+      'onanimationend', 'onanimationiteration', 'onanimationstart', 'ontransitionrun',
+      'ontransitionstart', 'ontransitionend', 'ontransitioncancel', 'onbeforexrselect',
+      'oncopy', 'oncut', 'onpaste', 'children', 'firstElementChild', 'lastElementChild',
+      'childElementCount', 'activeElement', 'styleSheets', 'pointerLockElement',
+      'fullscreenElement', 'adoptedStyleSheets', 'pictureInPictureElement', 'fonts',
+      'adoptNode', 'append', 'captureEvents', 'caretPositionFromPoint', 'caretRangeFromPoint',
+      'clear', 'close', 'createAttribute', 'createAttributeNS', 'createCDATASection',
+      'createComment', 'createDocumentFragment', 'createElement', 'createElementNS',
+      'createEvent', 'createExpression', 'createNSResolver', 'createNodeIterator',
+      'createProcessingInstruction', 'createRange', 'createTextNode', 'createTreeWalker',
+      'elementFromPoint', 'elementsFromPoint', 'evaluate', 'execCommand', 'exitFullscreen',
+      'exitPictureInPicture', 'exitPointerLock', 'getAnimations', 'getElementById',
+      'getElementsByClassName', 'getElementsByName', 'getElementsByTagName',
+      'getElementsByTagNameNS', 'getSelection', 'hasFocus', 'hasStorageAccess',
+      'hasUnpartitionedCookieAccess', 'importNode', 'moveBefore', 'open', 'prepend',
+      'queryCommandEnabled', 'queryCommandIndeterm', 'queryCommandState',
+      'queryCommandSupported', 'queryCommandValue', 'querySelector', 'querySelectorAll',
+      'releaseEvents', 'replaceChildren', 'requestStorageAccess', 'requestStorageAccessFor',
+      'startViewTransition', 'webkitCancelFullScreen', 'webkitExitFullscreen', 'write',
+      'writeln', 'fragmentDirective', 'onpointerrawupdate', 'browsingTopics',
+      'hasPrivateToken', 'hasRedemptionRecord', 'activeViewTransition', 'onscrollsnapchange',
+      'onscrollsnapchanging', 'customElementRegistry', 'ariaNotify', 'constructor'
+    ];
+    testing.expectEqual(expected, Object.getOwnPropertyNames(Document.prototype));
+  }
+</script>
+
 </body>
 </html>
