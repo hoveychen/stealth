@@ -33,6 +33,7 @@ const ModelContext = @import("ModelContext.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
+const services = @import("navigator/services.zig");
 
 const Navigator = @This();
 _pad: bool = false,
@@ -41,6 +42,21 @@ _mime_types: PluginArray.MimeTypeArray = .{},
 _permissions: Permissions = .{},
 _storage: StorageManager = .{},
 _ua_data: NavigatorUAData = .{},
+// Chrome hands back the same object on every read of these, so each is created
+// once and cached. They are allocated rather than embedded on purpose: the JS
+// identity map is keyed by Zig address alone, and a struct's first-in-memory
+// field shares its owner's address, so an embedded service object can come back
+// branded [object Navigator].
+_scheduling: ?*services.Scheduling = null,
+_user_activation: ?*services.UserActivation = null,
+_geolocation: ?*services.Geolocation = null,
+_protected_audience: ?*services.ProtectedAudience = null,
+_credentials: ?*services.CredentialsContainer = null,
+_login: ?*services.NavigatorLogin = null,
+_media_capabilities: ?*services.MediaCapabilities = null,
+_media_session: ?*services.MediaSession = null,
+_presentation: ?*services.Presentation = null,
+_gpu: ?*services.GPU = null,
 
 pub const init: Navigator = .{};
 
@@ -215,6 +231,57 @@ pub fn getUserAgentData(self: *Navigator) *NavigatorUAData {
     return &self._ua_data;
 }
 
+// Creates the service object on first read and hands back the same one after
+// that, the way Chrome does.
+fn service(comptime T: type, slot: *?*T, frame: *Frame) !*T {
+    if (slot.*) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(T{});
+    slot.* = created;
+    return created;
+}
+
+pub fn getScheduling(self: *Navigator, frame: *Frame) !*services.Scheduling {
+    return service(services.Scheduling, &self._scheduling, frame);
+}
+
+pub fn getUserActivation(self: *Navigator, frame: *Frame) !*services.UserActivation {
+    return service(services.UserActivation, &self._user_activation, frame);
+}
+
+pub fn getGeolocation(self: *Navigator, frame: *Frame) !*services.Geolocation {
+    return service(services.Geolocation, &self._geolocation, frame);
+}
+
+pub fn getProtectedAudience(self: *Navigator, frame: *Frame) !*services.ProtectedAudience {
+    return service(services.ProtectedAudience, &self._protected_audience, frame);
+}
+
+pub fn getCredentials(self: *Navigator, frame: *Frame) !*services.CredentialsContainer {
+    return service(services.CredentialsContainer, &self._credentials, frame);
+}
+
+pub fn getLogin(self: *Navigator, frame: *Frame) !*services.NavigatorLogin {
+    return service(services.NavigatorLogin, &self._login, frame);
+}
+
+pub fn getMediaCapabilities(self: *Navigator, frame: *Frame) !*services.MediaCapabilities {
+    return service(services.MediaCapabilities, &self._media_capabilities, frame);
+}
+
+pub fn getMediaSession(self: *Navigator, frame: *Frame) !*services.MediaSession {
+    return service(services.MediaSession, &self._media_session, frame);
+}
+
+pub fn getPresentation(self: *Navigator, frame: *Frame) !*services.Presentation {
+    return service(services.Presentation, &self._presentation, frame);
+}
+
+pub fn getGpu(self: *Navigator, frame: *Frame) !*services.GPU {
+    return service(services.GPU, &self._gpu, frame);
+}
+
 pub fn getModelContext(_: *const Navigator, frame: *Frame) *ModelContext {
     return &frame.window._model_context;
 }
@@ -323,7 +390,10 @@ pub const JsApi = struct {
         pub const name = "Navigator";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
-        pub const empty_with_no_proto = true;
+        // Deliberately not `empty_with_no_proto`: some of the service objects
+        // above carry state (Geolocation's watch counter, MediaSession's
+        // playbackState), and an empty binding hands the getters a pointer to a
+        // comptime constant, so writing through it faults.
     };
 
     pub const userAgent = bridge.accessor(Navigator.getUserAgent, null, .{});
@@ -359,6 +429,19 @@ pub const JsApi = struct {
     pub const connection = bridge.accessor(Navigator.getConnection, null, .{ .exposed = .window });
     pub const mediaDevices = bridge.accessor(Navigator.getMediaDevices, null, .{ .exposed = .window });
     pub const getBattery = bridge.function(Navigator.getBattery, .{ .exposed = .window });
+
+    // Secure-context-gated service objects. All of these were measured on
+    // Chrome 150's Navigator.prototype; see webapi/navigator/services.zig.
+    pub const scheduling = bridge.accessor(Navigator.getScheduling, null, .{ .exposed = .window });
+    pub const userActivation = bridge.accessor(Navigator.getUserActivation, null, .{ .exposed = .window });
+    pub const geolocation = bridge.accessor(Navigator.getGeolocation, null, .{ .exposed = .window });
+    pub const protectedAudience = bridge.accessor(Navigator.getProtectedAudience, null, .{ .exposed = .window });
+    pub const credentials = bridge.accessor(Navigator.getCredentials, null, .{ .exposed = .window });
+    pub const login = bridge.accessor(Navigator.getLogin, null, .{ .exposed = .window });
+    pub const mediaCapabilities = bridge.accessor(Navigator.getMediaCapabilities, null, .{ .exposed = .window });
+    pub const mediaSession = bridge.accessor(Navigator.getMediaSession, null, .{ .exposed = .window });
+    pub const presentation = bridge.accessor(Navigator.getPresentation, null, .{ .exposed = .window });
+    pub const gpu = bridge.accessor(Navigator.getGpu, null, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
 };

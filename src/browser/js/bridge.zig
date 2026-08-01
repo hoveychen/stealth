@@ -1187,6 +1187,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/media/MediaSource.zig"),
     @import("../webapi/media/MediaRecorder.zig"),
     @import("../webapi/BatteryManager.zig"),
+    @import("../webapi/navigator/services.zig"),
     @import("../webapi/MutationObserver.zig"),
     @import("../webapi/IntersectionObserver.zig"),
     @import("../webapi/CustomElementRegistry.zig"),

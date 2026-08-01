@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Navigator's non-device service objects, measured on headed Chrome 150 over
+  http://localhost (a secure origin — Navigator.prototype carries 83 names in a
+  secure context and only 36 outside one, so a baseline taken off a plain http
+  origin silently loses two thirds of the list).
+
+  Every prototype member list below is Chrome's own `Object.getOwnPropertyNames`
+  order, not alphabetical: the order is itself a surface a fingerprinter can
+  hash.
+-->
+
+<script id=scheduling>
+  {
+    testing.expectEqual('function', typeof Scheduling);
+    testing.expectEqual('[object Scheduling]', Object.prototype.toString.call(navigator.scheduling));
+    // Chrome hands back the same object on every read.
+    testing.expectEqual(navigator.scheduling, navigator.scheduling);
+    testing.expectEqual(['isInputPending', 'constructor'], Object.getOwnPropertyNames(Scheduling.prototype));
+    testing.expectEqual(true, navigator.scheduling instanceof Scheduling);
+
+    // Measured false on a freshly loaded page, with and without the dictionary.
+    testing.expectEqual(false, navigator.scheduling.isInputPending());
+    testing.expectEqual(false, navigator.scheduling.isInputPending({ includeContinuous: true }));
+    testing.expectEqual(0, Scheduling.prototype.isInputPending.length);
+
+    const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'scheduling');
+    testing.expectEqual('function', typeof desc.get);
+    testing.expectEqual(undefined, desc.set);
+  }
+</script>
+
+<script id=userActivation>
+  {
+    testing.expectEqual('function', typeof UserActivation);
+    testing.expectEqual('[object UserActivation]', Object.prototype.toString.call(navigator.userActivation));
+    testing.expectEqual(navigator.userActivation, navigator.userActivation);
+    testing.expectEqual(
+      ['hasBeenActive', 'isActive', 'constructor'],
+      Object.getOwnPropertyNames(UserActivation.prototype),
+    );
+    // No gesture has reached the page, which is what Chrome reports on load.
+    testing.expectEqual(false, navigator.userActivation.hasBeenActive);
+    testing.expectEqual(false, navigator.userActivation.isActive);
+  }
+</script>
+
+<script id=geolocation>
+  {
+    testing.expectEqual('function', typeof Geolocation);
+    testing.expectEqual('[object Geolocation]', Object.prototype.toString.call(navigator.geolocation));
+    testing.expectEqual(navigator.geolocation, navigator.geolocation);
+    testing.expectEqual(
+      ['clearWatch', 'getCurrentPosition', 'watchPosition', 'constructor'],
+      Object.getOwnPropertyNames(Geolocation.prototype),
+    );
+    testing.expectEqual(1, Geolocation.prototype.clearWatch.length);
+    testing.expectEqual(1, Geolocation.prototype.getCurrentPosition.length);
+    testing.expectEqual(1, Geolocation.prototype.watchPosition.length);
+
+    // Chrome's watch ids are a 1-based counter (measured: two calls returned 1
+    // then 2).
+    testing.expectEqual(1, navigator.geolocation.watchPosition(() => {}));
+    testing.expectEqual(2, navigator.geolocation.watchPosition(() => {}));
+    testing.expectEqual(undefined, navigator.geolocation.clearWatch(1));
+
+    // Neither callback is ever invoked: on the reference Chrome the permission
+    // request stayed pending and no callback had fired after five seconds. We
+    // have no position to report and will not invent one, so the request stays
+    // pending here too rather than fabricating either a fix or a denial.
+    let fired = false;
+    testing.expectEqual(
+      undefined,
+      navigator.geolocation.getCurrentPosition(() => { fired = true; }, () => { fired = true; }),
+    );
+    testing.expectEqual(false, fired);
+  }
+</script>
+
+<script id=protectedAudience>
+  {
+    testing.expectEqual('function', typeof ProtectedAudience);
+    testing.expectEqual('[object ProtectedAudience]', Object.prototype.toString.call(navigator.protectedAudience));
+    testing.expectEqual(
+      ['queryFeatureSupport', 'constructor'],
+      Object.getOwnPropertyNames(ProtectedAudience.prototype),
+    );
+    testing.expectEqual(1, ProtectedAudience.prototype.queryFeatureSupport.length);
+
+    // The '*' answer is Chrome 150's, copied field-for-field in its own key
+    // order.
+    testing.expectEqual({
+      adComponentsLimit: 40,
+      deprecatedRenderURLReplacements: true,
+      reportingTimeout: true,
+      permitCrossOriginTrustedSignals: true,
+      realTimeReporting: true,
+      selectableReportingIds: false,
+      sellerNonce: true,
+      trustedSignalsKVv2: true,
+      maxGroupLifetimeMs: 2592000000,
+    }, navigator.protectedAudience.queryFeatureSupport('*'));
+
+    // A named feature answers with just its value, an unknown one with
+    // undefined (both measured).
+    testing.expectEqual(true, navigator.protectedAudience.queryFeatureSupport('reportingTimeout'));
+    testing.expectEqual(false, navigator.protectedAudience.queryFeatureSupport('selectableReportingIds'));
+    testing.expectEqual(40, navigator.protectedAudience.queryFeatureSupport('adComponentsLimit'));
+    testing.expectEqual(undefined, navigator.protectedAudience.queryFeatureSupport('nope'));
+  }
+</script>
+
+<script id=credentials type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof CredentialsContainer);
+    testing.expectEqual('[object CredentialsContainer]', Object.prototype.toString.call(navigator.credentials));
+    testing.expectEqual(
+      ['create', 'get', 'preventSilentAccess', 'store', 'constructor'],
+      Object.getOwnPropertyNames(CredentialsContainer.prototype),
+    );
+    testing.expectEqual(0, CredentialsContainer.prototype.create.length);
+    testing.expectEqual(0, CredentialsContainer.prototype.get.length);
+    testing.expectEqual(0, CredentialsContainer.prototype.preventSilentAccess.length);
+    testing.expectEqual(1, CredentialsContainer.prototype.store.length);
+
+    // Measured: get() with no matching credential resolves null,
+    // preventSilentAccess() resolves undefined, create({}) and store(x) reject.
+    const got = await navigator.credentials.get({ password: true });
+    const silent = await navigator.credentials.preventSilentAccess();
+    let createErr = null;
+    try { await navigator.credentials.create({}); } catch (e) { createErr = e.name; }
+    let storeErr = null;
+    try { await navigator.credentials.store({}); } catch (e) { storeErr = e.name; }
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(null, got);
+      testing.expectEqual(undefined, silent);
+      testing.expectEqual('NotSupportedError', createErr);
+      testing.expectEqual('TypeError', storeErr);
+    });
+  }
+</script>
+
+<script id=login type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof NavigatorLogin);
+    testing.expectEqual('[object NavigatorLogin]', Object.prototype.toString.call(navigator.login));
+    testing.expectEqual(['setStatus', 'constructor'], Object.getOwnPropertyNames(NavigatorLogin.prototype));
+    testing.expectEqual(1, NavigatorLogin.prototype.setStatus.length);
+    const r = await navigator.login.setStatus('logged-out');
+    state.resolve();
+    await state.done(() => testing.expectEqual(undefined, r));
+  }
+</script>
+
+<script id=mediaCapabilities type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof MediaCapabilities);
+    testing.expectEqual('[object MediaCapabilities]', Object.prototype.toString.call(navigator.mediaCapabilities));
+    testing.expectEqual(
+      ['decodingInfo', 'encodingInfo', 'constructor'],
+      Object.getOwnPropertyNames(MediaCapabilities.prototype),
+    );
+    testing.expectEqual(1, MediaCapabilities.prototype.decodingInfo.length);
+    testing.expectEqual(1, MediaCapabilities.prototype.encodingInfo.length);
+
+    const h264 = await navigator.mediaCapabilities.decodingInfo({
+      type: 'file',
+      video: { contentType: 'video/mp4; codecs="avc1.42E01E"', width: 640, height: 480, bitrate: 1000, framerate: 30 },
+    });
+    const bogus = await navigator.mediaCapabilities.decodingInfo({
+      type: 'file',
+      video: { contentType: 'video/bogus; codecs="nope"', width: 640, height: 480, bitrate: 1000, framerate: 30 },
+    });
+    const enc = await navigator.mediaCapabilities.encodingInfo({
+      type: 'webrtc',
+      video: { contentType: 'video/VP8', width: 640, height: 480, bitrate: 1000, framerate: 30 },
+    });
+    state.resolve();
+
+    await state.done(() => {
+      // Chrome's key order, measured.
+      testing.expectEqual(
+        ['powerEfficient', 'smooth', 'supported', 'keySystemAccess'],
+        Object.keys(h264),
+      );
+      testing.expectEqual({ powerEfficient: true, smooth: true, supported: true, keySystemAccess: null }, h264);
+      testing.expectEqual({ powerEfficient: false, smooth: false, supported: false, keySystemAccess: null }, bogus);
+      // Chrome answers a WebRTC encode as supported and smooth but not power
+      // efficient (measured).
+      testing.expectEqual({ powerEfficient: false, smooth: true, supported: true, keySystemAccess: null }, enc);
+    });
+  }
+</script>
+
+<script id=mediaSession>
+  {
+    testing.expectEqual('function', typeof MediaSession);
+    testing.expectEqual('[object MediaSession]', Object.prototype.toString.call(navigator.mediaSession));
+    testing.expectEqual(navigator.mediaSession, navigator.mediaSession);
+    testing.expectEqual(
+      ['metadata', 'playbackState', 'setActionHandler', 'setCameraActive',
+       'setMicrophoneActive', 'setPositionState', 'constructor'],
+      Object.getOwnPropertyNames(MediaSession.prototype),
+    );
+    testing.expectEqual(2, MediaSession.prototype.setActionHandler.length);
+    testing.expectEqual(1, MediaSession.prototype.setCameraActive.length);
+    testing.expectEqual(1, MediaSession.prototype.setMicrophoneActive.length);
+    testing.expectEqual(0, MediaSession.prototype.setPositionState.length);
+
+    testing.expectEqual(null, navigator.mediaSession.metadata);
+    testing.expectEqual('none', navigator.mediaSession.playbackState);
+    // A value outside the enum is dropped rather than thrown on, which is what
+    // Chrome does (measured: assigning 'bogus' leaves it at 'none').
+    navigator.mediaSession.playbackState = 'bogus';
+    testing.expectEqual('none', navigator.mediaSession.playbackState);
+    navigator.mediaSession.playbackState = 'playing';
+    testing.expectEqual('playing', navigator.mediaSession.playbackState);
+
+    testing.expectEqual(undefined, navigator.mediaSession.setActionHandler('play', null));
+    testing.expectEqual(undefined, navigator.mediaSession.setPositionState());
+    testing.expectEqual(undefined, navigator.mediaSession.setCameraActive(false));
+    testing.expectEqual(undefined, navigator.mediaSession.setMicrophoneActive(false));
+  }
+</script>
+
+<script id=presentation>
+  {
+    testing.expectEqual('function', typeof Presentation);
+    testing.expectEqual('[object Presentation]', Object.prototype.toString.call(navigator.presentation));
+    testing.expectEqual(
+      ['defaultRequest', 'receiver', 'constructor'],
+      Object.getOwnPropertyNames(Presentation.prototype),
+    );
+    // Both null with no presentation display around, as on the reference Chrome.
+    testing.expectEqual(null, navigator.presentation.defaultRequest);
+    testing.expectEqual(null, navigator.presentation.receiver);
+    // defaultRequest is writable; receiver is not.
+    const d = Object.getOwnPropertyDescriptor(Presentation.prototype, 'defaultRequest');
+    testing.expectEqual('function', typeof d.set);
+    testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(Presentation.prototype, 'receiver').set);
+  }
+</script>
+
+<script id=gpu type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual('function', typeof GPU);
+    testing.expectEqual('[object GPU]', Object.prototype.toString.call(navigator.gpu));
+    testing.expectEqual(
+      ['wgslLanguageFeatures', 'getPreferredCanvasFormat', 'requestAdapter', 'constructor'],
+      Object.getOwnPropertyNames(GPU.prototype),
+    );
+    testing.expectEqual(0, GPU.prototype.getPreferredCanvasFormat.length);
+    testing.expectEqual(0, GPU.prototype.requestAdapter.length);
+    testing.expectEqual('bgra8unorm', navigator.gpu.getPreferredCanvasFormat());
+
+    // No adapter: requestAdapter resolving null is the documented answer when
+    // WebGPU has no device to hand out, and we have none.
+    const adapter = await navigator.gpu.requestAdapter();
+    state.resolve();
+    await state.done(() => testing.expectEqual(null, adapter));
+  }
+</script>
+
+<script id=wgslLanguageFeatures>
+  {
+    testing.expectEqual('function', typeof WGSLLanguageFeatures);
+    const f = navigator.gpu.wgslLanguageFeatures;
+    testing.expectEqual('[object WGSLLanguageFeatures]', Object.prototype.toString.call(f));
+    testing.expectEqual(
+      ['size', 'entries', 'forEach', 'has', 'keys', 'values', 'constructor'],
+      Object.getOwnPropertyNames(WGSLLanguageFeatures.prototype),
+    );
+    // Chrome 150's list, in its own order.
+    testing.expectEqual(10, f.size);
+    testing.expectEqual([
+      'packed_4x8_integer_dot_product',
+      'subgroup_uniformity',
+      'immediate_address_space',
+      'linear_indexing',
+      'subgroup_id',
+      'readonly_and_readwrite_storage_textures',
+      'unrestricted_pointer_parameters',
+      'pointer_composite_access',
+      'texture_and_sampler_let',
+      'uniform_buffer_standard_layout',
+    ], Array.from(f));
+    testing.expectEqual(true, f.has('subgroup_id'));
+    testing.expectEqual(false, f.has('nope'));
+    // setlike: keys, values and the default iterator all yield the entry itself.
+    testing.expectEqual(Array.from(f), Array.from(f.keys()));
+    testing.expectEqual(Array.from(f), Array.from(f.values()));
+    testing.expectEqual(['subgroup_id', 'subgroup_id'], Array.from(f.entries())[4]);
+    const seen = [];
+    f.forEach((v) => seen.push(v));
+    testing.expectEqual(Array.from(f), seen);
+  }
+</script>
