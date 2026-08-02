@@ -111,7 +111,7 @@ fn parseSheet(self: *StyleManager, build_arena: Allocator, sheet: *CSSStyleSheet
                 // `insertRule` / `replaceSync` participates in the cascade
                 // when its query matches the viewport.
                 .media => try self.applyMediaAtRule(build_arena, rule._text, 0, NO_LAYER),
-                .layer => try self.applyLayerAtRule(build_arena, rule._text, 0, NO_LAYER),
+                .layer_block, .layer_statement => try self.applyLayerAtRule(build_arena, rule._text, 0, NO_LAYER),
                 else => {},
             }
         }

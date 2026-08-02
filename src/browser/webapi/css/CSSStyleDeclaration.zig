@@ -1106,6 +1106,32 @@ fn getAtIndex(self: *const CSSStyleDeclaration, index: u32) ?[]const u8 {
     return self.item(index);
 }
 
+/// Chrome puts Symbol.iterator on CSSStyleDeclaration.prototype and it walks
+/// the indexed half, yielding property names. Unexposed as keys/values/entries
+/// because Chrome has none of those here.
+pub fn values(self: *CSSStyleDeclaration, exec: *js.Execution) !*ValueIterator {
+    return .init(.{ .declaration = self }, exec);
+}
+
+const Iterator = struct {
+    index: u32 = 0,
+    declaration: *CSSStyleDeclaration,
+
+    const Entry = struct { u32, []const u8 };
+
+    pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
+        const index = self.index;
+        if (index >= self.declaration.length()) {
+            return null;
+        }
+        self.index = index + 1;
+        return .{ index, self.declaration.item(index) };
+    }
+};
+
+const GenericIterator = @import("../collections/iterator.zig").Entry;
+pub const ValueIterator = GenericIterator(Iterator, "1");
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(CSSStyleDeclaration);
 
@@ -1128,6 +1154,7 @@ pub const JsApi = struct {
     pub const item = bridge.function(_item, .{});
     pub const removeProperty = bridge.function(CSSStyleDeclaration.removeProperty, .{});
     pub const setProperty = bridge.function(CSSStyleDeclaration.setProperty, .{});
+    pub const symbol_iterator = bridge.iterator(CSSStyleDeclaration.values, .{});
 
     fn _item(self: *const CSSStyleDeclaration, index: i32) []const u8 {
         if (index < 0) {

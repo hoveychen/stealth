@@ -33,6 +33,27 @@ pub fn remove(self: *StyleSheetList, sheet: *CSSStyleSheet) void {
     }
 }
 
+pub fn values(self: *StyleSheetList, exec: *js.Execution) !*ValueIterator {
+    return .init(.{ .list = self }, exec);
+}
+
+const Iterator = struct {
+    index: u32 = 0,
+    list: *StyleSheetList,
+
+    const Entry = struct { u32, *CSSStyleSheet };
+
+    pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
+        const index = self.index;
+        const value = self.list.item(index) orelse return null;
+        self.index = index + 1;
+        return .{ index, value };
+    }
+};
+
+const GenericIterator = @import("../collections/iterator.zig").Entry;
+pub const ValueIterator = GenericIterator(Iterator, "1");
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(StyleSheetList);
 
@@ -43,5 +64,7 @@ pub const JsApi = struct {
     };
 
     pub const length = bridge.accessor(StyleSheetList.length, null, .{});
+    pub const item = bridge.function(StyleSheetList.item, .{});
     pub const @"[]" = bridge.indexed(StyleSheetList.item, null, .{ .null_as_undefined = true });
+    pub const symbol_iterator = bridge.iterator(StyleSheetList.values, .{});
 };

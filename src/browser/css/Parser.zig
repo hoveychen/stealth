@@ -317,6 +317,14 @@ pub const AtRule = struct {
     /// brace (block at-rules) or semicolon (statement at-rules). Borrowed
     /// from the input slice.
     text: []const u8,
+    /// Everything between the at-keyword and the block's `{` (or the
+    /// terminating `;`), whitespace-trimmed: `@media screen { ... }` yields
+    /// `"screen"`. Borrowed from the input slice.
+    prelude: []const u8 = "",
+    /// The block body without its braces, or null for statement at-rules
+    /// (`@import`, `@namespace`, `@layer a, b;`). Borrowed from the input
+    /// slice. An empty block is `""`, which is distinct from no block.
+    block: ?[]const u8 = null,
 };
 
 pub const Rule = union(enum) {
@@ -428,11 +436,17 @@ pub const RulesIterator = struct {
         var end = at_span.end;
         var depth: usize = 0;
         var saw_block = false;
+        // Prelude runs from just past the at-keyword to the block's `{` (or
+        // to the terminating `;`); block spans the braces' interior.
+        var prelude_end = at_span.end;
+        var block_start: usize = 0;
+        var block_end: usize = 0;
 
         while (true) {
             const peeked = self.stream.peek() orelse break;
             if (!saw_block and isSemicolon(peeked.token) and depth == 0) {
                 const semi = self.stream.next() orelse break;
+                prelude_end = semi.start;
                 end = semi.end;
                 break;
             }
@@ -445,17 +459,33 @@ pub const RulesIterator = struct {
 
             end = span.end;
             if (span.token == .curly_bracket_block) {
+                if (depth == 0 and !saw_block) {
+                    prelude_end = span.start;
+                    block_start = span.end;
+                }
                 depth += 1;
                 saw_block = true;
             } else if (span.token == .close_curly_bracket) {
                 if (depth > 0) depth -= 1;
-                if (saw_block and depth == 0) break;
+                if (saw_block and depth == 0) {
+                    block_end = span.start;
+                    break;
+                }
+            } else if (!saw_block) {
+                prelude_end = span.end;
             }
+        }
+
+        // An unterminated block runs to the end of the input.
+        if (saw_block and block_end < block_start) {
+            block_end = self.input.len;
         }
 
         return .{
             .keyword = keyword,
             .text = self.input[start..end],
+            .prelude = std.mem.trim(u8, self.input[at_span.end..prelude_end], &std.ascii.whitespace),
+            .block = if (saw_block) self.input[block_start..block_end] else null,
         };
     }
 };

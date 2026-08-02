@@ -2389,7 +2389,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         log.warn(.http, "external stylesheet parse", .{ .err = err, .url = resolved });
         return self.queueElementEvent(link._proto, .@"error");
     };
-    sheet._href = try self.arena.dupe(u8, resolved);
+    sheet.setHref(try self.arena.dupe(u8, resolved));
 
     try self.queueElementEvent(link._proto, .load);
 }
