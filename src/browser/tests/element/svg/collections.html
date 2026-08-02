@@ -182,7 +182,8 @@
   testing.expectEqual('4 5', polyline.getAttribute('points'));
 
   points.clear();
-  testing.expectEqual('', polyline.getAttribute('points'));
+  // Measured on Chrome 150: emptying a reflected list removes the attribute.
+  testing.expectEqual(null, polyline.getAttribute('points'));
 }
 </script>
 
@@ -394,7 +395,7 @@
   testing.expectEqual('translate(7 8)', group.getAttribute('transform'));
 
   base.clear();
-  testing.expectEqual('', group.getAttribute('transform'));
+  testing.expectEqual(null, group.getAttribute('transform'));
 }
 </script>
 

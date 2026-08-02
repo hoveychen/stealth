@@ -637,12 +637,12 @@
    "location": "http://localhost:8741/",
    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
    "cssInterfaceName": "CSSStyleDeclaration",
-   "totalUnsupportSpans": 612,
+   "totalUnsupportSpans": 608,
    "report": {
     "window": {
      "chromeBaselineKeys": 1100,
-     "engineKeys": 723,
-     "unsupportSpans": 488,
+     "engineKeys": 727,
+     "unsupportSpans": 484,
      "diffRemoved": [
       "console",
       "Option",
@@ -683,10 +683,6 @@
       "Scheduler",
       "SVGPoint",
       "SVGMatrix",
-      "SVGLengthList",
-      "SVGAnimatedRect",
-      "SVGAnimatedLengthList",
-      "SVGAnimatedAngle",
       "ReportingObserver",
       "ReadableStreamBYOBRequest",
       "ReadableStreamBYOBReader",

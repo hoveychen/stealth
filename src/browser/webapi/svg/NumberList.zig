@@ -60,12 +60,14 @@ pub const Kind = enum {
     color_matrix_values,
     kernel_matrix,
     table_values,
+    rotate,
 
     fn attributeName(self: Kind) lp.String {
         return switch (self) {
             .color_matrix_values => .wrap("values"),
             .kernel_matrix => .wrap("kernelMatrix"),
             .table_values => .wrap("tableValues"),
+            .rotate => .wrap("rotate"),
         };
     }
 };
@@ -163,7 +165,7 @@ fn mutateItem(context: *anyopaque, item: *Number, value: f32) anyerror!void {
 
 // A list of numbers separated by whitespace and/or a single comma. Chrome
 // throws the whole attribute away when any token is malformed.
-fn parse(raw: []const u8, frame: *Frame) !std.ArrayList(*Number) {
+fn parse(_: *NumberList, raw: []const u8, frame: *Frame) !std.ArrayList(*Number) {
     var parsed: std.ArrayList(*Number) = .empty;
     errdefer for (parsed.items) |item| item.releaseRef(frame._page);
 

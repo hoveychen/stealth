@@ -57,6 +57,15 @@ pub fn deinit(self: *Angle, _: *Page) void {
     self._arena.release();
 }
 
+/// An angle that mirrors an attribute, such as a marker's `orient`.
+pub fn reflected(element: *Element, attr_name: String, read_only: bool, frame: *Frame) !*Angle {
+    const self = try detached(frame);
+    self._element = element;
+    self._attr_name = attr_name;
+    self._read_only = read_only;
+    return self;
+}
+
 pub fn acquireRef(self: *Angle) void {
     self._rc.acquire();
 }
@@ -73,9 +82,15 @@ pub fn getUnitType(self: *Angle) u16 {
     };
 }
 
+// `value` and `valueInSpecifiedUnits` are WebIDL floats: Chrome answers
+// orient="1rad" with 57.2957763671875, the f32 rounding of 180/pi.
 pub fn getValue(self: *Angle) f64 {
     self.syncFromAttribute();
-    return toDegrees(self._value, self._unit);
+    return asFloat(toDegrees(self._value, self._unit));
+}
+
+fn asFloat(value: f64) f64 {
+    return @floatCast(@as(f32, @floatCast(value)));
 }
 
 // Sets the value in degrees; the stored unit is preserved and
@@ -93,7 +108,7 @@ pub fn setValue(self: *Angle, value: f64, frame: *Frame) !void {
 
 pub fn getValueInSpecifiedUnits(self: *Angle) f64 {
     self.syncFromAttribute();
-    return self._value;
+    return asFloat(self._value);
 }
 
 pub fn setValueInSpecifiedUnits(self: *Angle, value: f64, frame: *Frame) !void {
@@ -158,8 +173,10 @@ fn syncFromAttribute(self: *Angle) void {
         return;
     };
     const parsed = parse(raw) catch {
+        // Measured on Chrome 150: a marker's orient="auto" or orient="bogus"
+        // reads back as 0 with the unspecified unit, not the unknown one.
         self._value = 0;
-        self._unit = .unknown;
+        self._unit = .unspecified;
         return;
     };
     self._value = parsed.value;
@@ -204,10 +221,14 @@ fn checkedUnit(value: u16) !Unit {
     };
 }
 
+// Blink converts radians with a single-precision pi, so orient="1rad" reads
+// back as 57.2957763671875 rather than the f64 180/pi.
+const pi_f32: f32 = std.math.pi;
+
 fn toDegrees(value: f64, unit: Unit) f64 {
     return switch (unit) {
         .unknown, .unspecified, .deg => value,
-        .rad => value * 180.0 / std.math.pi,
+        .rad => @as(f32, @floatCast(value)) * 180.0 / pi_f32,
         .grad => value * 0.9,
         .turn => value * 360.0,
     };
@@ -216,7 +237,7 @@ fn toDegrees(value: f64, unit: Unit) f64 {
 fn fromDegrees(value: f64, unit: Unit) f64 {
     return switch (unit) {
         .unknown, .unspecified, .deg => value,
-        .rad => value * std.math.pi / 180.0,
+        .rad => @as(f32, @floatCast(value)) * pi_f32 / 180.0,
         .grad => value / 0.9,
         .turn => value / 360.0,
     };
@@ -241,16 +262,17 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own member order: attributes, then constants, then the two
+    // operations alphabetically.
+    pub const unitType = bridge.accessor(Angle.getUnitType, null, .{});
+    pub const value = bridge.accessor(Angle.getValue, Angle.setValue, .{});
+    pub const valueInSpecifiedUnits = bridge.accessor(Angle.getValueInSpecifiedUnits, Angle.setValueInSpecifiedUnits, .{});
+    pub const valueAsString = bridge.accessor(Angle.getValueAsString, Angle.setValueAsString, .{});
     pub const SVG_ANGLETYPE_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const SVG_ANGLETYPE_UNSPECIFIED = bridge.property(1, .{ .template = true });
     pub const SVG_ANGLETYPE_DEG = bridge.property(2, .{ .template = true });
     pub const SVG_ANGLETYPE_RAD = bridge.property(3, .{ .template = true });
     pub const SVG_ANGLETYPE_GRAD = bridge.property(4, .{ .template = true });
-
-    pub const unitType = bridge.accessor(Angle.getUnitType, null, .{});
-    pub const value = bridge.accessor(Angle.getValue, Angle.setValue, .{});
-    pub const valueInSpecifiedUnits = bridge.accessor(Angle.getValueInSpecifiedUnits, Angle.setValueInSpecifiedUnits, .{});
-    pub const valueAsString = bridge.accessor(Angle.getValueAsString, Angle.setValueAsString, .{});
-    pub const newValueSpecifiedUnits = bridge.function(Angle.newValueSpecifiedUnits, .{});
     pub const convertToSpecifiedUnits = bridge.function(Angle.convertToSpecifiedUnits, .{});
+    pub const newValueSpecifiedUnits = bridge.function(Angle.newValueSpecifiedUnits, .{});
 };

@@ -22,8 +22,12 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 
+const Angle = @import("../../svg/Angle.zig");
+const AnimatedAngle = @import("../../svg/AnimatedAngle.zig");
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
+const AnimatedPreserveAspectRatio = @import("../../svg/AnimatedPreserveAspectRatio.zig");
+const AnimatedRect = @import("../../svg/AnimatedRect.zig");
 
 const Svg = @import("../Svg.zig");
 
@@ -54,6 +58,32 @@ fn getMarkerHeight(self: *Marker, frame: *Frame) !*AnimatedLength {
 fn getMarkerUnits(self: *Marker, frame: *Frame) !*AnimatedEnumeration {
     return AnimatedEnumeration.getOrCreate(self.asElement(), .marker_units, frame);
 }
+fn getOrientType(self: *Marker, frame: *Frame) !*AnimatedEnumeration {
+    return AnimatedEnumeration.getOrCreate(self.asElement(), .marker_orient, frame);
+}
+fn getOrientAngle(self: *Marker, frame: *Frame) !*AnimatedAngle {
+    return AnimatedAngle.getOrCreate(self.asElement(), frame);
+}
+fn getViewBox(self: *Marker, frame: *Frame) !*AnimatedRect {
+    return AnimatedRect.getOrCreate(self.asElement(), frame);
+}
+fn getPreserveAspectRatio(self: *Marker, frame: *Frame) !*AnimatedPreserveAspectRatio {
+    return AnimatedPreserveAspectRatio.getOrCreate(self.asElement(), frame);
+}
+
+// Measured on Chrome 150: setOrientToAngle() writes the angle's own
+// serialization into the attribute (a fresh SVGAngle gives "0") and
+// setOrientToAuto() writes the keyword.
+fn setOrientToAngle(self: *Marker, angle: *Angle, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(
+        comptime .wrap("orient"),
+        .wrap(try angle.getValueAsString(frame)),
+        frame,
+    );
+}
+fn setOrientToAuto(self: *Marker, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("orient"), .wrap("auto"), frame);
+}
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Marker);
@@ -62,12 +92,23 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+    // Chrome's own member order: the attributes first, then the constants,
+    // then the two operations.
+    pub const refX = bridge.accessor(Marker.getRefX, null, .{});
+    pub const refY = bridge.accessor(Marker.getRefY, null, .{});
+    pub const markerUnits = bridge.accessor(Marker.getMarkerUnits, null, .{});
+    pub const markerWidth = bridge.accessor(Marker.getMarkerWidth, null, .{});
+    pub const markerHeight = bridge.accessor(Marker.getMarkerHeight, null, .{});
+    pub const orientType = bridge.accessor(Marker.getOrientType, null, .{});
+    pub const orientAngle = bridge.accessor(Marker.getOrientAngle, null, .{});
+    pub const viewBox = bridge.accessor(Marker.getViewBox, null, .{});
+    pub const preserveAspectRatio = bridge.accessor(Marker.getPreserveAspectRatio, null, .{});
     pub const SVG_MARKERUNITS_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const SVG_MARKERUNITS_USERSPACEONUSE = bridge.property(1, .{ .template = true });
     pub const SVG_MARKERUNITS_STROKEWIDTH = bridge.property(2, .{ .template = true });
-    pub const refX = bridge.accessor(Marker.getRefX, null, .{});
-    pub const refY = bridge.accessor(Marker.getRefY, null, .{});
-    pub const markerWidth = bridge.accessor(Marker.getMarkerWidth, null, .{});
-    pub const markerHeight = bridge.accessor(Marker.getMarkerHeight, null, .{});
-    pub const markerUnits = bridge.accessor(Marker.getMarkerUnits, null, .{});
+    pub const SVG_MARKER_ORIENT_UNKNOWN = bridge.property(0, .{ .template = true });
+    pub const SVG_MARKER_ORIENT_AUTO = bridge.property(1, .{ .template = true });
+    pub const SVG_MARKER_ORIENT_ANGLE = bridge.property(2, .{ .template = true });
+    pub const setOrientToAngle = bridge.function(Marker.setOrientToAngle, .{});
+    pub const setOrientToAuto = bridge.function(Marker.setOrientToAuto, .{});
 };

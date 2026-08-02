@@ -118,6 +118,13 @@ const stitch_entries = [_]Entry{
     .{ .keyword = "stitch", .value = 1 },
     .{ .keyword = "noStitch", .value = 2 },
 };
+// A marker's orient. Measured on Chrome 150: "auto" is AUTO(1),
+// "auto-start-reverse" reports UNKNOWN(0) because the IDL has no value for
+// it, and everything else — including a malformed value — is ANGLE(2).
+const marker_orient_entries = [_]Entry{
+    .{ .keyword = "auto", .value = 1 },
+    .{ .keyword = "auto-start-reverse", .value = 0 },
+};
 const channel_entries = [_]Entry{
     .{ .keyword = "R", .value = 1 },
     .{ .keyword = "G", .value = 2 },
@@ -149,6 +156,7 @@ pub const Kind = enum {
     convolve_edge_mode,
     turbulence_type,
     turbulence_stitch_tiles,
+    marker_orient,
 
     fn attributeName(self: Kind) lp.String {
         return switch (self) {
@@ -171,6 +179,7 @@ pub const Kind = enum {
             .displacement_y_channel => .wrap("yChannelSelector"),
             .transfer_function_type, .color_matrix_type, .turbulence_type => .wrap("type"),
             .convolve_edge_mode => .wrap("edgeMode"),
+            .marker_orient => .wrap("orient"),
             .turbulence_stitch_tiles => .wrap("stitchTiles"),
         };
     }
@@ -191,6 +200,7 @@ pub const Kind = enum {
             .convolve_edge_mode => &edge_mode_entries,
             .turbulence_type => &turbulence_type_entries,
             .turbulence_stitch_tiles => &stitch_entries,
+            .marker_orient => &marker_orient_entries,
             else => &unit_entries,
         };
     }

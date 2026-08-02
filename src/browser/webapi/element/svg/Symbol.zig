@@ -17,6 +17,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const js = @import("../../../js/js.zig");
+const Frame = @import("../../../Frame.zig");
+const AnimatedPreserveAspectRatio = @import("../../svg/AnimatedPreserveAspectRatio.zig");
+const AnimatedRect = @import("../../svg/AnimatedRect.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
@@ -35,6 +38,13 @@ pub fn asNode(self: *Symbol) *Node {
     return self.asElement().asNode();
 }
 
+fn getViewBox(self: *Symbol, frame: *Frame) !*AnimatedRect {
+    return AnimatedRect.getOrCreate(self.asElement(), frame);
+}
+fn getPreserveAspectRatio(self: *Symbol, frame: *Frame) !*AnimatedPreserveAspectRatio {
+    return AnimatedPreserveAspectRatio.getOrCreate(self.asElement(), frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Symbol);
     pub const Meta = struct {
@@ -42,4 +52,7 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+
+    pub const viewBox = bridge.accessor(Symbol.getViewBox, null, .{});
+    pub const preserveAspectRatio = bridge.accessor(Symbol.getPreserveAspectRatio, null, .{});
 };

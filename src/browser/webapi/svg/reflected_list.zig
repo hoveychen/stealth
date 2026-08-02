@@ -29,7 +29,7 @@
 //! `List` must carry the `_frame`, `_element`, `_read_only`, `_synced`,
 //! `_snapshot`, `_items` and `_retired` fields. `hooks` must provide:
 //!   attrName(*const List) String
-//!   parse([]const u8, *Frame) !std.ArrayList(*Item)   (SyntaxError -> empty list)
+//!   parse(*List, []const u8, *Frame) !std.ArrayList(*Item)  (SyntaxError -> empty)
 //!   writeItem(*Item, *std.Io.Writer) !void
 //!   prepareItem(*List, *Item, *Frame) !*Item
 //!   attach(*List, *Item) void
@@ -166,7 +166,7 @@ pub fn Mixin(comptime List: type, comptime Item: type, comptime hooks: anytype) 
             }
 
             self._synced = false;
-            var parsed = hooks.parse(raw, frame) catch |err| switch (err) {
+            var parsed = hooks.parse(self, raw, frame) catch |err| switch (err) {
                 error.SyntaxError => std.ArrayList(*Item).empty,
                 else => return err,
             };
@@ -217,7 +217,13 @@ pub fn Mixin(comptime List: type, comptime Item: type, comptime hooks: anytype) 
 
         pub fn commitAttribute(self: *List, serialized: []const u8, frame: *Frame) !void {
             self._synced = false;
-            try self._element.setAttributeSafe(hooks.attrName(self), .wrap(serialized), frame);
+            // Measured on Chrome 150 for all four list attributes: emptying a
+            // list removes the attribute rather than leaving it blank.
+            if (serialized.len == 0) {
+                try self._element.removeAttribute(hooks.attrName(self), frame);
+            } else {
+                try self._element.setAttributeSafe(hooks.attrName(self), .wrap(serialized), frame);
+            }
             self._snapshot.clearRetainingCapacity();
             try self._snapshot.appendSlice(frame.arena, serialized);
             self._synced = true;

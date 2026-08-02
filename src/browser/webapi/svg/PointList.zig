@@ -145,7 +145,7 @@ fn mutatePoint(
     point.setCoordinateRaw(coordinate, value);
 }
 
-fn parse(raw: []const u8, frame: *Frame) !std.ArrayList(*DOMPoint) {
+fn parse(_: *PointList, raw: []const u8, frame: *Frame) !std.ArrayList(*DOMPoint) {
     var scanner = NumberScanner{ .input = raw };
     var parsed: std.ArrayList(*DOMPoint) = .empty;
     errdefer for (parsed.items) |point| point._proto.releaseRef(frame._page);

@@ -66,11 +66,15 @@ const NavigationKind = @import("webapi/navigation/root.zig").NavigationKind;
 
 const PointList = @import("webapi/svg/PointList.zig");
 const NumberList = @import("webapi/svg/NumberList.zig");
+const LengthList = @import("webapi/svg/LengthList.zig");
 const StringList = @import("webapi/svg/StringList.zig");
 const AnimatedEnumeration = @import("webapi/svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("webapi/svg/AnimatedLength.zig");
 const AnimatedNumber = @import("webapi/svg/AnimatedNumber.zig");
 const AnimatedNumberList = @import("webapi/svg/AnimatedNumberList.zig");
+const AnimatedLengthList = @import("webapi/svg/AnimatedLengthList.zig");
+const AnimatedRect = @import("webapi/svg/AnimatedRect.zig");
+const AnimatedAngle = @import("webapi/svg/AnimatedAngle.zig");
 const AnimatedInteger = @import("webapi/svg/AnimatedInteger.zig");
 const AnimatedBoolean = @import("webapi/svg/AnimatedBoolean.zig");
 const AnimatedString = @import("webapi/svg/AnimatedString.zig");
@@ -161,6 +165,10 @@ _svg_animated_number_lists: AnimatedNumberList.Lookup = .empty,
 _svg_animated_integers: AnimatedInteger.Lookup = .empty,
 _svg_animated_booleans: AnimatedBoolean.Lookup = .empty,
 _svg_number_lists: NumberList.Lookup = .empty,
+_svg_length_lists: LengthList.Lookup = .empty,
+_svg_animated_length_lists: AnimatedLengthList.Lookup = .empty,
+_svg_animated_rects: AnimatedRect.Lookup = .empty,
+_svg_animated_angles: AnimatedAngle.Lookup = .empty,
 _svg_animated_preserve_aspect_ratios: AnimatedPreserveAspectRatio.Lookup = .empty,
 _svg_animated_strings: AnimatedString.Lookup = .empty,
 _svg_animated_transform_lists: AnimatedTransformList.Lookup = .empty,
@@ -542,6 +550,16 @@ pub fn deinit(self: *Frame) void {
         var svg_number_lists = self._svg_number_lists.valueIterator();
         while (svg_number_lists.next()) |list| {
             list.*.deinit(page);
+        }
+
+        var svg_length_lists = self._svg_length_lists.valueIterator();
+        while (svg_length_lists.next()) |list| {
+            list.*.deinit(page);
+        }
+
+        var svg_animated_angles = self._svg_animated_angles.valueIterator();
+        while (svg_animated_angles.next()) |angle| {
+            angle.*.deinit(page);
         }
 
         var svg_transform_lists = self._svg_animated_transform_lists.valueIterator();

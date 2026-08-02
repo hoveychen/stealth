@@ -17,9 +17,12 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
+const Frame = @import("../../Frame.zig");
 const Factory = @import("../../Factory.zig");
+const Element = @import("../Element.zig");
 
 // SVG2 folds SVGRect into DOMRect, but no browser shipped that: Chrome and
 // Firefox both still answer getBBox(), getExtentOfChar() and createSVGRect()
@@ -33,6 +36,12 @@ _x: f64 = 0,
 _y: f64 = 0,
 _width: f64 = 0,
 _height: f64 = 0,
+// Set when this rect is the base or animated value of a reflected rect
+// attribute (viewBox). The four coordinates then come from the attribute and
+// a write puts the whole rect back into it.
+_element: ?*Element = null,
+_attr_name: lp.String = .empty,
+_read_only: bool = false,
 
 pub const Data = struct {
     x: f64 = 0,
@@ -50,39 +59,107 @@ pub fn create(data: Data, factory: *Factory) !*Rect {
     });
 }
 
-pub fn getX(self: *const Rect) f64 {
+/// A rect that mirrors a `x y width height` attribute, such as viewBox.
+pub fn reflected(element: *Element, attr_name: lp.String, read_only: bool, factory: *Factory) !*Rect {
+    return factory.create(Rect{
+        ._element = element,
+        ._attr_name = attr_name,
+        ._read_only = read_only,
+    });
+}
+
+pub fn getX(self: *Rect) f64 {
+    self.syncFromAttribute();
     return self._x;
 }
 
-pub fn getY(self: *const Rect) f64 {
+pub fn getY(self: *Rect) f64 {
+    self.syncFromAttribute();
     return self._y;
 }
 
-pub fn getWidth(self: *const Rect) f64 {
+pub fn getWidth(self: *Rect) f64 {
+    self.syncFromAttribute();
     return self._width;
 }
 
-pub fn getHeight(self: *const Rect) f64 {
+pub fn getHeight(self: *Rect) f64 {
+    self.syncFromAttribute();
     return self._height;
+}
+
+// Chrome throws away the whole attribute unless it holds exactly four
+// numbers, so a short, long or malformed list reads back as 0 0 0 0. A
+// negative width or height is kept as written.
+fn syncFromAttribute(self: *Rect) void {
+    const element = self._element orelse return;
+    self._x = 0;
+    self._y = 0;
+    self._width = 0;
+    self._height = 0;
+    const raw = element.getAttributeSafe(self._attr_name) orelse return;
+
+    var values: [4]f64 = undefined;
+    var count: usize = 0;
+    var it = std.mem.tokenizeAny(u8, raw, " \t\r\n\x0c,");
+    while (it.next()) |token| {
+        if (count == values.len) return;
+        values[count] = std.fmt.parseFloat(f64, token) catch return;
+        if (!std.math.isFinite(values[count])) return;
+        count += 1;
+    }
+    if (count != values.len) {
+        return;
+    }
+    self._x = values[0];
+    self._y = values[1];
+    self._width = values[2];
+    self._height = values[3];
+}
+
+fn writeBack(self: *Rect, frame: *Frame) !void {
+    const element = self._element orelse return;
+    const value = try std.fmt.allocPrint(frame.local_arena, "{d} {d} {d} {d}", .{
+        self._x, self._y, self._width, self._height,
+    });
+    try element.setAttributeSafe(self._attr_name, .wrap(value), frame);
 }
 
 // Every coordinate is a WebIDL `float`, which is restricted: Chrome answers a
 // non-finite assignment with "The provided float value is non-finite." The
 // bridge does not police that for us.
-pub fn setX(self: *Rect, value: f64) !void {
+pub fn setX(self: *Rect, value: f64, frame: *Frame) !void {
+    try self.ensureWritable();
+    self.syncFromAttribute();
     self._x = try finite(value);
+    try self.writeBack(frame);
 }
 
-pub fn setY(self: *Rect, value: f64) !void {
+pub fn setY(self: *Rect, value: f64, frame: *Frame) !void {
+    try self.ensureWritable();
+    self.syncFromAttribute();
     self._y = try finite(value);
+    try self.writeBack(frame);
 }
 
-pub fn setWidth(self: *Rect, value: f64) !void {
+pub fn setWidth(self: *Rect, value: f64, frame: *Frame) !void {
+    try self.ensureWritable();
+    self.syncFromAttribute();
     self._width = try finite(value);
+    try self.writeBack(frame);
 }
 
-pub fn setHeight(self: *Rect, value: f64) !void {
+pub fn setHeight(self: *Rect, value: f64, frame: *Frame) !void {
+    try self.ensureWritable();
+    self.syncFromAttribute();
     self._height = try finite(value);
+    try self.writeBack(frame);
+}
+
+fn ensureWritable(self: *const Rect) !void {
+    if (self._read_only) {
+        return error.NoModificationAllowed;
+    }
 }
 
 fn finite(value: f64) !f64 {

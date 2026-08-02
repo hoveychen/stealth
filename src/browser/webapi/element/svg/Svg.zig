@@ -33,6 +33,7 @@ const SvgAngle = @import("../../svg/Angle.zig");
 const SvgTransform = @import("../../svg/Transform.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
 const AnimatedPreserveAspectRatio = @import("../../svg/AnimatedPreserveAspectRatio.zig");
+const AnimatedRect = @import("../../svg/AnimatedRect.zig");
 
 const Graphics = @import("Graphics.zig");
 
@@ -77,6 +78,10 @@ pub fn getWidth(self: *Svg, frame: *Frame) !*AnimatedLength {
 
 pub fn getHeight(self: *Svg, frame: *Frame) !*AnimatedLength {
     return AnimatedLength.getOrCreate(self.asElement(), .svg_height, frame);
+}
+
+pub fn getViewBox(self: *Svg, frame: *Frame) !*AnimatedRect {
+    return AnimatedRect.getOrCreate(self.asElement(), frame);
 }
 
 pub fn getPreserveAspectRatio(self: *Svg, frame: *Frame) !*AnimatedPreserveAspectRatio {
@@ -138,6 +143,7 @@ pub const JsApi = struct {
     pub const y = bridge.accessor(Svg.getY, null, .{});
     pub const width = bridge.accessor(Svg.getWidth, null, .{});
     pub const height = bridge.accessor(Svg.getHeight, null, .{});
+    pub const viewBox = bridge.accessor(Svg.getViewBox, null, .{});
     pub const preserveAspectRatio = bridge.accessor(Svg.getPreserveAspectRatio, null, .{});
 
     pub const createSVGPoint = bridge.function(Svg.createSVGPoint, .{});
