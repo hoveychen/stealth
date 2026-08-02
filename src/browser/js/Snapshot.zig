@@ -700,7 +700,16 @@ fn illegalConstructorCallback(raw_info: ?*const v8.FunctionCallbackInfo) callcon
     }
     log.info(.js, "Illegal constructor call", .{ .name = name });
 
-    const message = v8.v8__String__NewFromUtf8(isolate, "Illegal Constructor", v8.kNormal, 19);
+    // Chrome names the interface in the message (measured on a headed Chrome
+    // 150: new Permissions() gives "Failed to construct 'Permissions': Illegal
+    // constructor"), and the class name is already in hand from new.target.
+    var message_buf: [name_buf.len + 48]u8 = undefined;
+    const message_text = std.fmt.bufPrint(
+        &message_buf,
+        "Failed to construct '{s}': Illegal constructor",
+        .{name},
+    ) catch "Illegal constructor";
+    const message = v8.v8__String__NewFromUtf8(isolate, message_text.ptr, v8.kNormal, @intCast(message_text.len));
     const js_exception = v8.v8__Exception__TypeError(message);
 
     _ = v8.v8__Isolate__ThrowException(isolate, js_exception);

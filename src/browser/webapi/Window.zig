@@ -34,6 +34,7 @@ const Screen = @import("Screen.zig");
 const BarProp = @import("BarProp.zig");
 const External = @import("External.zig");
 const StyleMedia = @import("StyleMedia.zig");
+const trusted_types = @import("trusted_types.zig");
 const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
@@ -93,6 +94,7 @@ _scrollbars: BarProp = .init,
 _statusbar: BarProp = .init,
 _toolbar: BarProp = .init,
 _external: External = .init,
+_trusted_types: trusted_types.TrustedTypePolicyFactory = .init,
 _style_media: StyleMedia = .init,
 // window.status. Blink kept the accessor after dropping the status bar it used
 // to write to, so it is a plain string cell that remembers whatever is
@@ -467,6 +469,10 @@ pub fn getToolbar(self: *Window) *BarProp {
 
 pub fn getExternal(self: *Window) *External {
     return &self._external;
+}
+
+pub fn getTrustedTypes(self: *Window) *trusted_types.TrustedTypePolicyFactory {
+    return &self._trusted_types;
 }
 
 pub fn getStyleMedia(self: *Window) *StyleMedia {
@@ -1655,6 +1661,7 @@ pub const JsApi = struct {
     pub const external = bridge.accessor(Window.getExternal, Window.setExternal, .{});
     // Getter-only, and the one window attribute Blink marks non-enumerable.
     pub const styleMedia = bridge.accessor(Window.getStyleMedia, null, .{});
+    pub const trustedTypes = bridge.accessor(Window.getTrustedTypes, null, .{});
     pub const offscreenBuffering = bridge.accessor(Window.getOffscreenBuffering, Window.setOffscreenBuffering, .{ .enumerable = false });
     // navigator's other name, and the same object.
     pub const clientInformation = bridge.accessor(Window.getNavigator, Window.setClientInformation, .{});
