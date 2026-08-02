@@ -107,6 +107,7 @@ pub const Type = union(enum) {
     media_query_list_event: *@import("event/css_events.zig").MediaQueryListEvent,
     font_face_set_load_event: *@import("event/css_events.zig").FontFaceSetLoadEvent,
     task_priority_change_event: *@import("scheduler.zig").TaskPriorityChangeEvent,
+    sensor_error_event: *@import("sensor.zig").SensorErrorEvent,
 };
 
 pub const Options = struct {
@@ -242,6 +243,7 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .media_query_list_event => |e| return if (T == @import("event/css_events.zig").MediaQueryListEvent) e else null,
         .font_face_set_load_event => |e| return if (T == @import("event/css_events.zig").FontFaceSetLoadEvent) e else null,
         .task_priority_change_event => |e| return if (T == @import("scheduler.zig").TaskPriorityChangeEvent) e else null,
+        .sensor_error_event => |e| return if (T == @import("sensor.zig").SensorErrorEvent) e else null,
     }
     return null;
 }

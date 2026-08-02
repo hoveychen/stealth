@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The Generic Sensor API: Sensor, SensorErrorEvent and the six concrete
+  sensors. Every shape, value and message below was measured on a headed
+  Chrome 150 over http://localhost; the snapshots live in
+  agent-workspace/stealth-detector-probes/win-batch/ (win11-chrome.json for the
+  interface shapes, probe-win11b.js / probe-win11c.js / /tmp/probe-11d.js for
+  the behaviours).
+
+  This machine has no motion sensors, so Chrome answers start() with a
+  NotReadableError rather than with readings -- which is the answer this engine
+  can give honestly, and the one it gives.
+-->
+
+<script id="sensor_surface">
+  {
+    const NAMES = [
+      'Sensor', 'SensorErrorEvent', 'Accelerometer', 'LinearAccelerationSensor',
+      'GravitySensor', 'Gyroscope', 'OrientationSensor', 'AbsoluteOrientationSensor',
+      'RelativeOrientationSensor',
+    ];
+    for (const n of NAMES) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(0, Object.keys(window).filter((k) => k === n).length);
+    }
+
+    // Chrome's arities: only the event takes arguments.
+    for (const n of NAMES) {
+      testing.expectEqual(n === 'SensorErrorEvent' ? 2 : 0, window[n].length);
+    }
+
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(Sensor.prototype));
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(SensorErrorEvent.prototype));
+    testing.expectEqual(Sensor.prototype, Object.getPrototypeOf(Accelerometer.prototype));
+    testing.expectEqual(Accelerometer.prototype, Object.getPrototypeOf(LinearAccelerationSensor.prototype));
+    testing.expectEqual(Accelerometer.prototype, Object.getPrototypeOf(GravitySensor.prototype));
+    testing.expectEqual(Sensor.prototype, Object.getPrototypeOf(Gyroscope.prototype));
+    testing.expectEqual(Sensor.prototype, Object.getPrototypeOf(OrientationSensor.prototype));
+    testing.expectEqual(OrientationSensor.prototype, Object.getPrototypeOf(AbsoluteOrientationSensor.prototype));
+    testing.expectEqual(OrientationSensor.prototype, Object.getPrototypeOf(RelativeOrientationSensor.prototype));
+
+    testing.expectEqual(
+      'activated,hasReading,timestamp,onerror,onreading,onactivate,start,stop,constructor',
+      Object.getOwnPropertyNames(Sensor.prototype).join(','),
+    );
+    testing.expectEqual('error,constructor', Object.getOwnPropertyNames(SensorErrorEvent.prototype).join(','));
+    testing.expectEqual('x,y,z,constructor', Object.getOwnPropertyNames(Accelerometer.prototype).join(','));
+    testing.expectEqual('x,y,z,constructor', Object.getOwnPropertyNames(Gyroscope.prototype).join(','));
+    testing.expectEqual('quaternion,populateMatrix,constructor', Object.getOwnPropertyNames(OrientationSensor.prototype).join(','));
+    for (const n of ['LinearAccelerationSensor', 'GravitySensor', 'AbsoluteOrientationSensor', 'RelativeOrientationSensor']) {
+      testing.expectEqual('constructor', Object.getOwnPropertyNames(window[n].prototype).join(','));
+    }
+
+    testing.expectEqual(0, Sensor.prototype.start.length);
+    testing.expectEqual(0, Sensor.prototype.stop.length);
+    testing.expectEqual(1, OrientationSensor.prototype.populateMatrix.length);
+
+    // The three event handlers are the only read/write members.
+    for (const k of ['activated', 'hasReading', 'timestamp']) {
+      const d = Object.getOwnPropertyDescriptor(Sensor.prototype, k);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+      testing.expectEqual(true, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+    }
+    for (const k of ['onerror', 'onreading', 'onactivate']) {
+      const d = Object.getOwnPropertyDescriptor(Sensor.prototype, k);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual('function', typeof d.set);
+    }
+    const start = Object.getOwnPropertyDescriptor(Sensor.prototype, 'start');
+    testing.expectEqual(true, start.enumerable);
+    testing.expectEqual(true, start.configurable);
+    testing.expectEqual(true, start.writable);
+    const tag = Object.getOwnPropertyDescriptor(Sensor.prototype, Symbol.toStringTag);
+    testing.expectEqual('Sensor', tag.value);
+    testing.expectEqual(false, tag.writable);
+    testing.expectEqual(false, tag.enumerable);
+    testing.expectEqual(true, tag.configurable);
+  }
+</script>
+
+<script id="sensor_construction">
+  {
+    const message = (fn) => {
+      try { fn(); } catch (e) { return e.name + ': ' + e.message; }
+      return 'no throw';
+    };
+
+    // Sensor and OrientationSensor are abstract.
+    for (const n of ['Sensor', 'OrientationSensor']) {
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': Illegal constructor`,
+        message(() => new window[n]()),
+      );
+      testing.expectEqual('TypeError: Illegal constructor', message(() => window[n]()));
+    }
+
+    const CONCRETE = ['Accelerometer', 'LinearAccelerationSensor', 'GravitySensor',
+      'Gyroscope', 'AbsoluteOrientationSensor', 'RelativeOrientationSensor'];
+    for (const n of CONCRETE) {
+      testing.expectEqual(`[object ${n}]`, Object.prototype.toString.call(new window[n]()));
+      testing.expectEqual(`[object ${n}]`, Object.prototype.toString.call(new window[n]({ frequency: 60 })));
+      // A missing dictionary, an explicit null and an out-of-range frequency
+      // are all fine; only a non-finite one and a non-object are not.
+      testing.expectEqual(`[object ${n}]`, Object.prototype.toString.call(new window[n](null)));
+      testing.expectEqual(`[object ${n}]`, Object.prototype.toString.call(new window[n]({ frequency: 0 })));
+      testing.expectEqual(`[object ${n}]`, Object.prototype.toString.call(new window[n]({ frequency: -1 })));
+      testing.expectEqual(`[object ${n}]`, Object.prototype.toString.call(new window[n]({ frequency: '60' })));
+      testing.expectEqual(`[object ${n}]`, Object.prototype.toString.call(new window[n]({ frequency: null })));
+
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': Please use the 'new' operator, ` +
+          'this DOM object constructor cannot be called as a function.',
+        message(() => window[n]()),
+      );
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': The provided value is not of type 'SpatialSensorOptions'.`,
+        message(() => new window[n](1)),
+      );
+      for (const bad of [Infinity, NaN, 'x']) {
+        testing.expectEqual(
+          `TypeError: Failed to construct '${n}': Failed to read the 'frequency' property from ` +
+            "'SensorOptions': The provided double value is non-finite.",
+          message(() => new window[n]({ frequency: bad })),
+        );
+      }
+      // referenceFrame is validated on every one of them, not just the
+      // orientation pair -- measured.
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': Failed to read the 'referenceFrame' property from ` +
+          "'SpatialSensorOptions': The provided value 'bogus' is not a valid enum value of type " +
+          'LocalCoordinateSystem.',
+        message(() => new window[n]({ referenceFrame: 'bogus' })),
+      );
+      testing.expectEqual(
+        `[object ${n}]`,
+        Object.prototype.toString.call(new window[n]({ referenceFrame: 'screen' })),
+      );
+      testing.expectEqual(
+        `[object ${n}]`,
+        Object.prototype.toString.call(new window[n]({ referenceFrame: 'device' })),
+      );
+    }
+  }
+</script>
+
+<script id="sensor_idle_state">
+  {
+    const a = new Accelerometer();
+    testing.expectEqual(false, a.activated);
+    testing.expectEqual(false, a.hasReading);
+    testing.expectEqual(null, a.timestamp);
+    testing.expectEqual(null, a.x);
+    testing.expectEqual(null, a.y);
+    testing.expectEqual(null, a.z);
+    testing.expectEqual(null, a.onerror);
+    testing.expectEqual(null, a.onreading);
+    testing.expectEqual(null, a.onactivate);
+
+    const g = new Gyroscope();
+    testing.expectEqual(null, g.x);
+    testing.expectEqual(null, g.y);
+    testing.expectEqual(null, g.z);
+
+    const o = new RelativeOrientationSensor();
+    testing.expectEqual(null, o.quaternion);
+
+    // A LinearAccelerationSensor is an Accelerometer, so it answers x/y/z; a
+    // Gyroscope is not, so Accelerometer's own getter refuses it.
+    const xget = Object.getOwnPropertyDescriptor(Accelerometer.prototype, 'x').get;
+    testing.expectEqual(null, xget.call(new LinearAccelerationSensor()));
+    testing.expectError('Illegal invocation', () => xget.call(new Gyroscope()));
+    testing.expectError('Illegal invocation', () => Sensor.prototype.start.call({}));
+    testing.expectError(
+      'Illegal invocation',
+      () => Object.getOwnPropertyDescriptor(OrientationSensor.prototype, 'quaternion').get.call(a),
+    );
+    // Sensor's own getters do work on any concrete sensor.
+    testing.expectEqual(false, Object.getOwnPropertyDescriptor(Sensor.prototype, 'activated').get.call(a));
+
+    // No reading, so there is nothing to populate -- whichever of the three
+    // accepted target types is passed.
+    const nodata = "NotReadableError: Failed to execute 'populateMatrix' on 'OrientationSensor': " +
+      'Sensor data is not available.';
+    const message = (fn) => { try { fn(); } catch (e) { return e.name + ': ' + e.message; } return 'no throw'; };
+    testing.expectEqual(nodata, message(() => o.populateMatrix(new Float32Array(16))));
+    testing.expectEqual(nodata, message(() => o.populateMatrix(new Float64Array(16))));
+    testing.expectEqual(nodata, message(() => o.populateMatrix(new DOMMatrix())));
+    testing.expectEqual(
+      "TypeError: Failed to execute 'populateMatrix' on 'OrientationSensor': 1 argument required, " +
+        'but only 0 present.',
+      message(() => o.populateMatrix()),
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'populateMatrix' on 'OrientationSensor': Target buffer must have " +
+        'at least 16 elements.',
+      message(() => o.populateMatrix(new Float32Array(4))),
+    );
+    for (const bad of [null, [], 1]) {
+      testing.expectEqual(
+        "TypeError: Failed to execute 'populateMatrix' on 'OrientationSensor': The provided value is " +
+          "not of type '(DOMMatrix or Float32Array or Float64Array)'.",
+        message(() => o.populateMatrix(bad)),
+      );
+    }
+  }
+</script>
+
+<script id="sensor_error_event">
+  {
+    const message = (fn) => { try { fn(); } catch (e) { return e.name + ': ' + e.message; } return 'no throw'; };
+    testing.expectEqual(
+      "TypeError: Failed to construct 'SensorErrorEvent': 2 arguments required, but only 0 present.",
+      message(() => new SensorErrorEvent()),
+    );
+    testing.expectEqual(
+      "TypeError: Failed to construct 'SensorErrorEvent': 2 arguments required, but only 1 present.",
+      message(() => new SensorErrorEvent('e')),
+    );
+    testing.expectEqual(
+      "TypeError: Failed to construct 'SensorErrorEvent': Failed to read the 'error' property from " +
+        "'SensorErrorEventInit': Required member is undefined.",
+      message(() => new SensorErrorEvent('e', {})),
+    );
+    for (const bad of [null, 1, 'x']) {
+      testing.expectEqual(
+        "TypeError: Failed to construct 'SensorErrorEvent': Failed to read the 'error' property from " +
+          "'SensorErrorEventInit': Failed to convert value to 'DOMException'.",
+        message(() => new SensorErrorEvent('e', { error: bad })),
+      );
+    }
+
+    const dom = new DOMException('boom', 'NotAllowedError');
+    const ev = new SensorErrorEvent('e', { error: dom, bubbles: true, cancelable: true });
+    testing.expectEqual('e', ev.type);
+    // The very same DOMException, not a copy.
+    testing.expectEqual(true, ev.error === dom);
+    testing.expectEqual(true, ev.error === ev.error);
+    testing.expectEqual(true, ev.bubbles);
+    testing.expectEqual(true, ev.cancelable);
+    testing.expectEqual(false, ev.isTrusted);
+    testing.expectEqual('[object SensorErrorEvent]', Object.prototype.toString.call(ev));
+  }
+</script>
+
+<script id="sensor_start_fails" type=module>
+  {
+    const state = await testing.async();
+    const out = {};
+    const a = new Accelerometer();
+    const seen = [];
+    a.addEventListener('error', (e) => seen.push([
+      e.error.name, e.error.message, e.error.code, e.type, e.bubbles, e.cancelable,
+      e.isTrusted, Object.prototype.toString.call(e), e.target === a,
+    ].join('|')));
+
+    a.start();
+    // start() answers nothing, and nothing has happened yet: not on this turn,
+    // and not on a microtask either (measured).
+    out.activatedAfterStart = a.activated;
+    out.startTwice = (() => { try { a.start(); return 'ok'; } catch (e) { return e.name; } })();
+    await Promise.resolve();
+    out.afterMicrotask = seen.length;
+
+    await new Promise((r) => setTimeout(r, 50));
+    out.afterWait = seen.slice();
+    out.activatedAfterError = a.activated;
+    out.hasReadingAfterError = a.hasReading;
+
+    // Stopped and started again: it fails again.
+    seen.length = 0;
+    a.stop();
+    a.start();
+    await new Promise((r) => setTimeout(r, 50));
+    out.secondRound = seen.length;
+
+    // Stopped before the failure lands: nothing fires.
+    const b = new Gyroscope();
+    let viaHandler = 0;
+    b.onerror = () => { viaHandler += 1; };
+    b.start();
+    b.stop();
+    await new Promise((r) => setTimeout(r, 50));
+    out.stoppedBeforeError = viaHandler;
+
+    // onerror is a real handler, and reads back what was assigned.
+    const c = new GravitySensor();
+    const fn = (e) => { out.viaOnError = e.error.name; };
+    c.onerror = fn;
+    out.onerrorReadsBack = c.onerror === fn;
+    c.start();
+    await new Promise((r) => setTimeout(r, 50));
+    // stop() is idempotent and never throws.
+    c.stop();
+    c.stop();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(false, out.activatedAfterStart);
+      testing.expectEqual('ok', out.startTwice);
+      testing.expectEqual(0, out.afterMicrotask);
+      testing.expectEqual(
+        'NotReadableError|Could not connect to a sensor|0|error|false|false|true|[object SensorErrorEvent]|true',
+        out.afterWait.join(','),
+      );
+      testing.expectEqual(false, out.activatedAfterError);
+      testing.expectEqual(false, out.hasReadingAfterError);
+      testing.expectEqual(1, out.secondRound);
+      testing.expectEqual(0, out.stoppedBeforeError);
+      testing.expectEqual(true, out.onerrorReadsBack);
+      testing.expectEqual('NotReadableError', out.viaOnError);
+    });
+  }
+</script>
