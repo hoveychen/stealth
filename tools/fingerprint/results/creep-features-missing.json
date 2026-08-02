@@ -636,7 +636,7 @@
   "lightpanda": {
    "location": "http://localhost:8741/",
    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-   "cssInterfaceName": "Object",
+   "cssInterfaceName": "CSSStyleDeclaration",
    "totalUnsupportSpans": 756,
    "report": {
     "window": {

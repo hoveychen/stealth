@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<body>
+<div id="probe">text</div>
+
+<script id=tag_lives_on_the_interface_prototype>
+  {
+    // Web IDL says the brand is a property of the interface *prototype* object,
+    // and every interface has one. Measured on a headed Chrome 150 over
+    // http://localhost:
+    //   Object.getOwnPropertyDescriptor(Element.prototype, Symbol.toStringTag)
+    //     -> { value: 'Element', writable: false, enumerable: false, configurable: true }
+    const interfaces = ['Element', 'Document', 'Node', 'Event', 'Navigator',
+                        'HTMLDivElement', 'Range', 'CSSStyleDeclaration', 'Window',
+                        'Location', 'EventTarget', 'HTMLElement', 'HTMLDocument',
+                        'NodeList', 'DOMTokenList', 'Attr', 'Screen', 'History',
+                        'Storage', 'Performance', 'URL', 'Blob', 'XMLHttpRequest',
+                        'Response', 'SVGElement', 'CSSStyleSheet', 'DOMParser',
+                        'Crypto', 'Permissions', 'DOMImplementation'];
+    for (const name of interfaces) {
+      testing.expectEqual('function', typeof globalThis[name], { desc: name + ' is a global' });
+      const desc = Object.getOwnPropertyDescriptor(globalThis[name].prototype, Symbol.toStringTag);
+      testing.expectEqual('object', typeof desc, { desc: name + '.prototype owns the tag' });
+      testing.expectEqual(name, desc.value, { desc: name + ' tag value' });
+      testing.expectEqual(false, desc.writable, { desc: name + ' tag writable' });
+      testing.expectEqual(false, desc.enumerable, { desc: name + ' tag enumerable' });
+      testing.expectEqual(true, desc.configurable, { desc: name + ' tag configurable' });
+    }
+  }
+</script>
+
+<script id=tag_stringifies_the_prototype>
+  {
+    // The whole point of the brand: a bare prototype stringifies to its
+    // interface name, not to [object Object].
+    testing.expectEqual('[object Element]', String(Element.prototype));
+    testing.expectEqual('[object Document]', String(Document.prototype));
+    testing.expectEqual('[object Navigator]', String(Navigator.prototype));
+    testing.expectEqual('[object CSSStyleDeclaration]', String(CSSStyleDeclaration.prototype));
+    testing.expectEqual('[object Event]', Object.prototype.toString.call(Event.prototype));
+    testing.expectEqual('[object Range]', Object.prototype.toString.call(Range.prototype));
+    // Chrome reports this one through getComputedStyle's prototype; it is the
+    // line dump-creep-features.mjs prints as `getComputedStyle prototype`.
+    const decl = getComputedStyle(document.getElementById('probe'));
+    testing.expectEqual('[object CSSStyleDeclaration]', String(Object.getPrototypeOf(decl)));
+  }
+</script>
+
+<script id=tag_is_not_an_own_property_of_instances>
+  {
+    // Chrome brands the prototype only. Instances own no symbols at all:
+    //   Object.getOwnPropertySymbols(document.createElement('div')) -> []
+    const instances = {
+      'div': document.createElement('div'),
+      'document': document,
+      'navigator': navigator,
+      'style': document.getElementById('probe').style,
+      'computed': getComputedStyle(document.getElementById('probe')),
+      'event': new Event('x'),
+      'range': document.createRange(),
+      'screen': screen,
+      'history': history,
+      'localStorage': localStorage,
+      'performance': performance,
+      'crypto': crypto,
+      'implementation': document.implementation,
+      'plugins': navigator.plugins,
+    };
+    for (const [label, value] of Object.entries(instances)) {
+      testing.expectEqual([], Object.getOwnPropertySymbols(value).map(String), { desc: label + ' owns no symbol' });
+    }
+    // ...yet they still stringify correctly, because they inherit the brand.
+    testing.expectEqual('[object HTMLDivElement]', Object.prototype.toString.call(instances.div));
+    testing.expectEqual('[object HTMLDocument]', Object.prototype.toString.call(document));
+    testing.expectEqual('[object Crypto]', Object.prototype.toString.call(crypto));
+    testing.expectEqual('[object DOMImplementation]', Object.prototype.toString.call(document.implementation));
+  }
+</script>
+
+<script id=tag_brands_the_global>
+  {
+    // Chrome: String(window) is '[object Window]' and window itself owns no
+    // symbol -- the brand is inherited from Window.prototype.
+    testing.expectEqual('[object Window]', Object.prototype.toString.call(window));
+    testing.expectEqual([], Object.getOwnPropertySymbols(window).map(String));
+    testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(window, Symbol.toStringTag));
+  }
+</script>
+
+<script id=tag_comes_before_the_iterator_symbol>
+  {
+    // Blink defines the brand first, so it sorts ahead of @@iterator in
+    // getOwnPropertySymbols. Measured: NodeList.prototype ->
+    //   [Symbol(Symbol.toStringTag), Symbol(Symbol.iterator)]
+    for (const name of ['NodeList', 'DOMTokenList', 'URLSearchParams', 'FormData']) {
+      const symbols = Object.getOwnPropertySymbols(globalThis[name].prototype).map(String);
+      testing.expectEqual(['Symbol(Symbol.toStringTag)', 'Symbol(Symbol.iterator)'], symbols,
+        { desc: name + ' symbol order' });
+    }
+  }
+</script>
+
+<script id=tag_on_namespace_objects_uses_the_namespace_name>
+  {
+    // A namespace object carries the brand itself (it has no prototype of its
+    // own). Measured on Chrome 150: console is '[object console]' -- lower
+    // case, because the namespace's identifier is `console` -- and CSS is
+    // '[object CSS]'.
+    testing.expectEqual('[object console]', Object.prototype.toString.call(console));
+    testing.expectEqual('[object CSS]', Object.prototype.toString.call(CSS));
+    for (const ns of [console, CSS]) {
+      const desc = Object.getOwnPropertyDescriptor(ns, Symbol.toStringTag);
+      testing.expectEqual('object', typeof desc, { desc: 'namespace owns the tag' });
+      testing.expectEqual(false, desc.writable);
+      testing.expectEqual(false, desc.enumerable);
+      testing.expectEqual(true, desc.configurable);
+    }
+  }
+</script>
+
+<script id=tag_is_not_on_the_interface_object>
+  {
+    // The constructor function is not branded; only its prototype is.
+    for (const name of ['Element', 'Document', 'Navigator']) {
+      testing.expectEqual(undefined,
+        Object.getOwnPropertyDescriptor(globalThis[name], Symbol.toStringTag),
+        { desc: name + ' the function is unbranded' });
+    }
+    // And a symbol key never shows up in getOwnPropertyNames.
+    testing.expectEqual([], Object.getOwnPropertyNames(Element.prototype).filter((n) => n.includes('toStringTag')));
+  }
+</script>
+
+<script id=tag_survives_on_legacy_no_interface_object>
+  {
+    // [LegacyNoInterfaceObject]: no constructor on the global and no
+    // `constructor` back-reference, but the prototype still carries the brand.
+    // Measured: navigator.webkitTemporaryStorage -> '[object DeprecatedStorageQuota]'
+    // with Object.getPrototypeOf(...).constructor === Object.
+    const quota = navigator.webkitTemporaryStorage;
+    testing.expectEqual('object', typeof quota);
+    testing.expectEqual('[object DeprecatedStorageQuota]', Object.prototype.toString.call(quota));
+    testing.expectEqual([], Object.getOwnPropertySymbols(quota).map(String));
+    const proto = Object.getPrototypeOf(quota);
+    testing.expectEqual('DeprecatedStorageQuota', Object.getOwnPropertyDescriptor(proto, Symbol.toStringTag).value);
+    testing.expectEqual(undefined, globalThis.DeprecatedStorageQuota);
+  }
+</script>

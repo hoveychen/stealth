@@ -795,6 +795,27 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     const own_properties = @hasDecl(JsApi.Meta, "own_properties") and JsApi.Meta.own_properties;
     const member_template = if (own_properties) instance else prototype;
 
+    // Web IDL brands the interface *prototype* object, never the instances; a
+    // namespace object (which has no prototype of its own) carries the brand
+    // directly. Measured on a headed Chrome 150:
+    //
+    //   Object.getOwnPropertyDescriptor(Element.prototype, Symbol.toStringTag)
+    //     -> { value: 'Element', writable: false, enumerable: false, configurable: true }
+    //   Object.getOwnPropertySymbols(document.createElement('div')) -> []
+    //   Object.prototype.toString.call(console) -> '[object console]'
+    //
+    // This runs before the member loop so the brand sorts ahead of @@iterator
+    // in getOwnPropertySymbols, the way Blink orders them. In [Global]
+    // flattening mode we skip it: the class already got its brand from the
+    // regular pass, and Chrome's `window` owns no symbol of its own -- it
+    // inherits '[object Window]' from Window.prototype.
+    if (comptime !flatten and @hasDecl(JsApi.Meta, "name")) {
+        const tag = comptime if (@hasDecl(JsApi.Meta, "to_string_tag")) JsApi.Meta.to_string_tag else JsApi.Meta.name;
+        const js_name = v8.v8__Symbol__GetToStringTag(isolate);
+        const js_value = v8.v8__String__NewFromUtf8(isolate, tag.ptr, v8.kNormal, @intCast(tag.len));
+        v8.v8__Template__Set(@ptrCast(if (own_properties) instance else prototype), js_name, js_value, v8.ReadOnly + v8.DontEnum);
+    }
+
     const declarations = @typeInfo(JsApi).@"struct".decls;
     var has_named_index_getter = false;
 
@@ -932,12 +953,6 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
         v8.v8__ObjectTemplate__SetCallAsFunctionHandler(instance, JsApi.Meta.callable.func);
     }
 
-    if (@hasDecl(JsApi.Meta, "name")) {
-        const js_name = v8.v8__Symbol__GetToStringTag(isolate);
-        const js_value = v8.v8__String__NewFromUtf8(isolate, JsApi.Meta.name.ptr, v8.kNormal, @intCast(JsApi.Meta.name.len));
-        v8.v8__Template__Set(@ptrCast(instance), js_name, js_value, v8.ReadOnly + v8.DontDelete);
-    }
-
     if (comptime IS_DEBUG) {
         if (!has_named_index_getter) {
             var configuration: v8.NamedPropertyHandlerConfiguration = .{
@@ -1037,4 +1052,9 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
             .attribute = attribute,
         });
     }
+}
+
+const testing = @import("../../testing.zig");
+test "Snapshot: Symbol.toStringTag" {
+    try testing.htmlRunner("to_string_tag.html", .{});
 }
