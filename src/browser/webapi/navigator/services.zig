@@ -38,6 +38,7 @@ const mime = @import("../media/mime.zig");
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
 const Frame = @import("../../Frame.zig");
 const idb = @import("../storage/idb/idb.zig");
+const cache_storage = @import("../storage/cache_storage.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -901,6 +902,9 @@ pub const StorageBucketManager = struct {
 
 pub const StorageBucket = struct {
     _name: []const u8,
+    // Chrome gives each bucket its own CacheStorage, distinct from
+    // window.caches and stable across reads (measured).
+    _caches: cache_storage.CacheStorage = .init,
 
     const Estimate = struct {
         usage: u64 = 0,
@@ -919,10 +923,8 @@ pub const StorageBucket = struct {
         return exec.js.global.frame.window.getIndexedDB(exec);
     }
 
-    // CacheStorage does not exist in this engine at all — window.caches is
-    // missing too — so this reports the same absence rather than a fake.
-    pub fn getCaches(_: *const StorageBucket) ?bool {
-        return null;
+    pub fn getCaches(self: *StorageBucket) *cache_storage.CacheStorage {
+        return &self._caches;
     }
 
     pub fn estimate(_: *const StorageBucket, exec: *const Execution) !js.Promise {

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  window.caches, CacheStorage and Cache. Every shape, value and message below
+  was measured on a headed Chrome 150 over http://localhost; the snapshot lives
+  in agent-workspace/stealth-detector-probes/win-batch/win7-chrome.json.
+-->
+
+<script id="cache_storage_surface">
+  {
+    for (const n of ['CacheStorage', 'Cache']) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[n].prototype));
+      testing.expectError(
+        "Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+    testing.expectEqual(
+      'delete,has,keys,match,open,constructor',
+      Object.getOwnPropertyNames(CacheStorage.prototype).join(','),
+    );
+    testing.expectEqual(
+      'add,addAll,delete,keys,match,matchAll,put,constructor',
+      Object.getOwnPropertyNames(Cache.prototype).join(','),
+    );
+    const arities = ['delete=1', 'has=1', 'keys=0', 'match=1', 'open=1'];
+    testing.expectEqual(
+      arities.join(','),
+      arities.map((a) => {
+        const m = a.split('=')[0];
+        return m + '=' + CacheStorage.prototype[m].length;
+      }).join(','),
+    );
+    const cacheArities = ['add=1', 'addAll=1', 'delete=1', 'keys=0', 'match=1', 'matchAll=0', 'put=2'];
+    testing.expectEqual(
+      cacheArities.join(','),
+      cacheArities.map((a) => {
+        const m = a.split('=')[0];
+        return m + '=' + Cache.prototype[m].length;
+      }).join(','),
+    );
+
+    const d = Object.getOwnPropertyDescriptor(window, 'caches');
+    testing.expectEqual('function', typeof d.get);
+    testing.expectEqual(undefined, d.set);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+    testing.expectEqual('[object CacheStorage]', Object.prototype.toString.call(window.caches));
+    testing.expectEqual(true, window.caches === window.caches);
+  }
+</script>
+
+<script id="cache_storage_round_trip" type=module>
+  {
+    const state = await testing.async();
+    const out = {};
+    (async () => {
+      out.keys0 = JSON.stringify(await caches.keys());
+      out.hasMiss = String(await caches.has('nope'));
+      out.matchMiss = String(await caches.match('/nope'));
+      out.deleteMiss = String(await caches.delete('nope'));
+
+      const c = await caches.open('probe');
+      out.cacheBrand = Object.prototype.toString.call(c);
+      out.sameCache = String(c === (await caches.open('probe')));
+      out.keys1 = JSON.stringify(await caches.keys());
+      out.hasHit = String(await caches.has('probe'));
+
+      out.cacheMatchMiss = String(await c.match('/nope'));
+      out.cacheMatchAll0 = String((await c.matchAll()).length);
+      out.cacheKeys0 = String((await c.keys()).length);
+      out.cacheDeleteMiss = String(await c.delete('/nope'));
+
+      out.put = String(await c.put('/x', new Response('hi')));
+      out.cacheKeys1 = String((await c.keys()).length);
+      out.keyUrl = (await c.keys())[0].url;
+      out.matchText = await (await c.match('/x')).text();
+      // absolute, relative and Request all name the same entry
+      out.matchAbsolute = String(!!(await c.match(location.origin + '/x')));
+      out.matchRequest = String(!!(await c.match(new Request('/x'))));
+      out.storageMatch = String(!!(await caches.match('/x')));
+      out.matchAll1 = String((await c.matchAll()).length);
+      out.matchAllMiss = String((await c.matchAll('/nope')).length);
+      out.keysMiss = String((await c.keys('/nope')).length);
+      out.cacheDeleteHit = String(await c.delete('/x'));
+      out.cacheKeysAfterDelete = String((await c.keys()).length);
+
+      out.deleteHit = String(await caches.delete('probe'));
+      out.keys2 = JSON.stringify(await caches.keys());
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      testing.expectEqual('[]', out.keys0);
+      testing.expectEqual('false', out.hasMiss);
+      testing.expectEqual('undefined', out.matchMiss);
+      testing.expectEqual('false', out.deleteMiss);
+      testing.expectEqual('[object Cache]', out.cacheBrand);
+      testing.expectEqual('true', out.sameCache);
+      testing.expectEqual('["probe"]', out.keys1);
+      testing.expectEqual('true', out.hasHit);
+      testing.expectEqual('undefined', out.cacheMatchMiss);
+      testing.expectEqual('0', out.cacheMatchAll0);
+      testing.expectEqual('0', out.cacheKeys0);
+      testing.expectEqual('false', out.cacheDeleteMiss);
+      testing.expectEqual('undefined', out.put);
+      testing.expectEqual('1', out.cacheKeys1);
+      testing.expectEqual(location.origin + '/x', out.keyUrl);
+      testing.expectEqual('hi', out.matchText);
+      testing.expectEqual('true', out.matchAbsolute);
+      testing.expectEqual('true', out.matchRequest);
+      testing.expectEqual('true', out.storageMatch);
+      testing.expectEqual('1', out.matchAll1);
+      testing.expectEqual('0', out.matchAllMiss);
+      testing.expectEqual('0', out.keysMiss);
+      testing.expectEqual('true', out.cacheDeleteHit);
+      testing.expectEqual('0', out.cacheKeysAfterDelete);
+      testing.expectEqual('true', out.deleteHit);
+      testing.expectEqual('[]', out.keys2);
+    });
+  }
+</script>
+
+<script id="cache_storage_argument_errors" type=module>
+  {
+    const state = await testing.async();
+    const out = {};
+    (async () => {
+      const settle = async (key, fn) => {
+        let p = null;
+        try { p = fn(); } catch (e) { out[key] = 'SYNC ' + e.name + ': ' + e.message; return; }
+        try { await p; out[key] = 'resolved'; }
+        catch (e) { out[key] = e.name + ': ' + e.message; }
+      };
+      await settle('open', () => caches.open());
+      await settle('has', () => caches.has());
+      await settle('delete', () => caches.delete());
+      await settle('storageMatch', () => caches.match());
+      const c = await caches.open('argprobe');
+      await settle('put0', () => c.put());
+      await settle('put1', () => c.put('/x'));
+      await settle('putBadResponse', () => c.put('/x', 42));
+      await settle('match', () => c.match());
+      await settle('cacheDelete', () => c.delete());
+      await settle('add', () => c.add('/nonexistent-xyz'));
+      await settle('addNoArg', () => c.add());
+      await settle('addAllNoArg', () => c.addAll());
+      await caches.delete('argprobe');
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      const s = (m) => "TypeError: Failed to execute '" + m + "' on 'CacheStorage': 1 argument required, but only 0 present.";
+      const k = (m) => "TypeError: Failed to execute '" + m + "' on 'Cache': 1 argument required, but only 0 present.";
+      testing.expectEqual(s('open'), out.open);
+      testing.expectEqual(s('has'), out.has);
+      testing.expectEqual(s('delete'), out.delete);
+      testing.expectEqual(s('match'), out.storageMatch);
+      testing.expectEqual("TypeError: Failed to execute 'put' on 'Cache': 2 arguments required, but only 0 present.", out.put0);
+      testing.expectEqual("TypeError: Failed to execute 'put' on 'Cache': 2 arguments required, but only 1 present.", out.put1);
+      testing.expectEqual("TypeError: Failed to execute 'put' on 'Cache': parameter 2 is not of type 'Response'.", out.putBadResponse);
+      testing.expectEqual(k('match'), out.match);
+      testing.expectEqual(k('delete'), out.cacheDelete);
+      testing.expectEqual(k('add'), out.addNoArg);
+      testing.expectEqual(k('addAll'), out.addAllNoArg);
+      // add()/addAll() would have to fetch, and this engine cannot chain onto
+      // its own fetch promise, so every URL gets the answer Chrome gives one
+      // that did not come back.
+      testing.expectEqual("TypeError: Failed to execute 'add' on 'Cache': Request failed", out.add);
+    });
+  }
+</script>

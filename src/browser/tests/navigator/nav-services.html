@@ -430,10 +430,13 @@
         Object.getOwnPropertyNames(StorageBucket.prototype),
       );
       testing.expectEqual('probe', bucket.name);
-      // The bucket shares the page's IDB factory; there is no CacheStorage in
-      // this engine yet, so caches is null rather than a fake.
+      // The bucket shares the page's IDB factory, but gets a CacheStorage of
+      // its own -- distinct from window.caches and stable across reads, the
+      // way Chrome's is (measured).
       testing.expectEqual(indexedDB, bucket.indexedDB);
-      testing.expectEqual(null, bucket.caches);
+      testing.expectEqual('[object CacheStorage]', Object.prototype.toString.call(bucket.caches));
+      testing.expectEqual(true, bucket.caches === bucket.caches);
+      testing.expectEqual(false, bucket.caches === window.caches);
       testing.expectEqual(false, persisted);
       testing.expectEqual(['usage', 'quota'], Object.keys(estimate));
     });

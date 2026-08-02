@@ -38,6 +38,7 @@ const trusted_types = @import("trusted_types.zig");
 const DOMException = @import("DOMException.zig");
 const launch_queue = @import("launch_queue.zig");
 const ImageBitmap = @import("canvas/ImageBitmap.zig");
+const cache_storage = @import("storage/cache_storage.zig");
 const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
@@ -99,6 +100,7 @@ _toolbar: BarProp = .init,
 _external: External = .init,
 _trusted_types: trusted_types.TrustedTypePolicyFactory = .init,
 _launch_queue: launch_queue.LaunchQueue = .init,
+_caches: cache_storage.CacheStorage = .init,
 _style_media: StyleMedia = .init,
 // window.status. Blink kept the accessor after dropping the status bar it used
 // to write to, so it is a plain string cell that remembers whatever is
@@ -481,6 +483,10 @@ pub fn getTrustedTypes(self: *Window) *trusted_types.TrustedTypePolicyFactory {
 
 pub fn getLaunchQueue(self: *Window) *launch_queue.LaunchQueue {
     return &self._launch_queue;
+}
+
+pub fn getCaches(self: *Window) *cache_storage.CacheStorage {
+    return &self._caches;
 }
 
 pub fn getStyleMedia(self: *Window) *StyleMedia {
@@ -1763,6 +1769,7 @@ pub const JsApi = struct {
     pub const showSaveFilePicker = bridge.function(Window.showSaveFilePicker, .{});
     pub const getScreenDetails = bridge.function(Window.getScreenDetails, .{});
     pub const launchQueue = bridge.accessor(Window.getLaunchQueue, null, .{});
+    pub const caches = bridge.accessor(Window.getCaches, null, .{});
 
     // [Replaceable] (CSSOM-View): the getter reads the page's runtime viewport
     // (overridable via Emulation.setDeviceMetricsOverride); the setter overwrites
