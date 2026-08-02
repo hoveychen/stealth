@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The CSS events, the two Animation subclasses CSS drives, and AnimationEffect.
+  Measured on a headed Chrome 150 over http://localhost (probes probe-css1.js
+  and probe-css11.js in agent-workspace/stealth-detector-probes/css-batch).
+-->
+
+<script>
+function protoKeys(ctor) {
+    return Object.getOwnPropertyNames(ctor.prototype).join(' ');
+}
+function chainOf(ctor) {
+    const out = [];
+    let p = Object.getPrototypeOf(ctor.prototype);
+    while (p && p !== Object.prototype) {
+        out.push(p.constructor.name);
+        p = Object.getPrototypeOf(p);
+    }
+    return out.join(' ');
+}
+function errorName(fn) {
+    try {
+        fn();
+    } catch (e) {
+        return e.name;
+    }
+    return null;
+}
+</script>
+
+<script id="css_event_shapes">
+{
+    // Measured: Blink puts pseudoTarget AFTER constructor on both transition
+    // and animation events. V8 can only put constructor last, so the order
+    // here is Chrome's minus that one known limitation.
+    testing.expectEqual(1, TransitionEvent.length);
+    testing.expectEqual('Event', chainOf(TransitionEvent));
+    testing.expectEqual('propertyName elapsedTime pseudoElement pseudoTarget constructor',
+        protoKeys(TransitionEvent));
+
+    testing.expectEqual(1, AnimationEvent.length);
+    testing.expectEqual('Event', chainOf(AnimationEvent));
+    testing.expectEqual('animationName elapsedTime pseudoElement pseudoTarget constructor',
+        protoKeys(AnimationEvent));
+
+    testing.expectEqual(1, MediaQueryListEvent.length);
+    testing.expectEqual('Event', chainOf(MediaQueryListEvent));
+    testing.expectEqual('media matches constructor', protoKeys(MediaQueryListEvent));
+
+    testing.expectEqual(1, FontFaceSetLoadEvent.length);
+    testing.expectEqual('Event', chainOf(FontFaceSetLoadEvent));
+    testing.expectEqual('fontfaces constructor', protoKeys(FontFaceSetLoadEvent));
+
+    testing.expectEqual(0, AnimationEffect.length);
+    testing.expectEqual('', chainOf(AnimationEffect));
+    testing.expectEqual('getComputedTiming getTiming updateTiming constructor',
+        protoKeys(AnimationEffect));
+
+    testing.expectEqual(0, CSSAnimation.length);
+    testing.expectEqual('Animation EventTarget', chainOf(CSSAnimation));
+    testing.expectEqual('animationName constructor', protoKeys(CSSAnimation));
+
+    testing.expectEqual(0, CSSTransition.length);
+    testing.expectEqual('Animation EventTarget', chainOf(CSSTransition));
+    testing.expectEqual('transitionProperty constructor', protoKeys(CSSTransition));
+
+    // Animation gains the EventTarget layer and eleven members.
+    testing.expectEqual(0, Animation.length);
+    testing.expectEqual('EventTarget', chainOf(Animation));
+    testing.expectEqual(
+        'effect timeline startTime currentTime playbackRate rangeStart rangeEnd ' +
+        'playState replaceState pending id onfinish oncancel onremove finished ready ' +
+        'cancel commitStyles finish pause persist play reverse updatePlaybackRate ' +
+        'overallProgress constructor',
+        protoKeys(Animation));
+
+    testing.expectEqual('media matches onchange addListener removeListener constructor',
+        protoKeys(MediaQueryList));
+
+    // Measured: the three that CSS drives are not constructible.
+    for (const name of ['CSSAnimation', 'CSSTransition', 'AnimationEffect']) {
+        testing.expectEqual('TypeError', errorName(() => new window[name]()));
+    }
+}
+</script>
+
+<script id="css_event_transition_and_animation">
+{
+    // Measured defaults: empty strings, zero elapsedTime, a null pseudoTarget,
+    // and none of bubbles/cancelable/composed.
+    let e = new TransitionEvent('transitionend');
+    testing.expectTrue(e instanceof Event);
+    testing.expectEqual('transitionend', e.type);
+    testing.expectEqual('', e.propertyName);
+    testing.expectEqual(0, e.elapsedTime);
+    testing.expectEqual('', e.pseudoElement);
+    testing.expectEqual(null, e.pseudoTarget);
+    testing.expectFalse(e.bubbles);
+    testing.expectFalse(e.cancelable);
+    testing.expectFalse(e.composed);
+    testing.expectEqual('[object TransitionEvent]', String(e));
+
+    e = new TransitionEvent('transitionrun', {
+        propertyName: 'width', elapsedTime: 1.5, pseudoElement: '::before',
+        bubbles: true, cancelable: true, composed: true,
+    });
+    testing.expectEqual('width', e.propertyName);
+    testing.expectEqual(1.5, e.elapsedTime);
+    testing.expectEqual('::before', e.pseudoElement);
+    testing.expectTrue(e.bubbles);
+    testing.expectTrue(e.cancelable);
+    testing.expectTrue(e.composed);
+    // Measured: the members are read-only, and assigning is a silent no-op.
+    e.propertyName = 'zz';
+    testing.expectEqual('width', e.propertyName);
+    testing.expectEqual('TypeError', errorName(() => new TransitionEvent()));
+
+    let a = new AnimationEvent('animationend');
+    testing.expectEqual('', a.animationName);
+    testing.expectEqual(0, a.elapsedTime);
+    testing.expectEqual('', a.pseudoElement);
+    testing.expectEqual(null, a.pseudoTarget);
+    a = new AnimationEvent('animationstart', { animationName: 'spin', elapsedTime: 2, pseudoElement: '::after' });
+    testing.expectEqual('spin', a.animationName);
+    testing.expectEqual(2, a.elapsedTime);
+    testing.expectEqual('::after', a.pseudoElement);
+    testing.expectEqual('TypeError', errorName(() => new AnimationEvent()));
+}
+</script>
+
+<script id="css_event_mql_and_fontface">
+{
+    let e = new MediaQueryListEvent('change');
+    testing.expectTrue(e instanceof Event);
+    testing.expectEqual('', e.media);
+    testing.expectFalse(e.matches);
+    e = new MediaQueryListEvent('change', { media: '(min-width: 100px)', matches: true });
+    testing.expectEqual('(min-width: 100px)', e.media);
+    testing.expectTrue(e.matches);
+    testing.expectEqual('TypeError', errorName(() => new MediaQueryListEvent()));
+
+    // Measured: fontfaces defaults to an empty frozen array, and each read
+    // hands back a fresh array object.
+    let f = new FontFaceSetLoadEvent('loading');
+    testing.expectTrue(Array.isArray(f.fontfaces));
+    testing.expectEqual(0, f.fontfaces.length);
+    // Chrome's array is frozen; there is no freeze binding on js.Array here, so
+    // ours is not. Recorded rather than faked.
+    testing.expectFalse(Object.isFrozen(f.fontfaces));
+    testing.expectFalse(f.fontfaces === f.fontfaces);
+
+    const face = new FontFace('A', 'url(a.woff2)');
+    f = new FontFaceSetLoadEvent('loadingdone', { fontfaces: [face] });
+    testing.expectEqual(1, f.fontfaces.length);
+    testing.expectTrue(f.fontfaces[0] === face);
+    testing.expectEqual('TypeError', errorName(() => new FontFaceSetLoadEvent()));
+}
+</script>
+
+<script id="css_event_animation_members">
+{
+    const a = new Animation();
+    testing.expectTrue(a instanceof EventTarget);
+    // Measured on a fresh Animation.
+    testing.expectEqual(null, a.effect);
+    testing.expectEqual('DocumentTimeline', a.timeline.constructor.name);
+    testing.expectEqual('idle', a.playState);
+    testing.expectFalse(a.pending);
+    testing.expectEqual(null, a.startTime);
+    testing.expectEqual(null, a.currentTime);
+    testing.expectEqual(1, a.playbackRate);
+    testing.expectEqual('normal', a.rangeStart);
+    testing.expectEqual('normal', a.rangeEnd);
+    testing.expectEqual('active', a.replaceState);
+    testing.expectEqual('', a.id);
+    testing.expectEqual(null, a.overallProgress);
+    testing.expectEqual(null, a.onfinish);
+    testing.expectEqual(null, a.oncancel);
+    testing.expectEqual(null, a.onremove);
+
+    a.id = 'x';
+    testing.expectEqual('x', a.id);
+    a.currentTime = 5;
+    testing.expectEqual(5, a.currentTime);
+    a.playbackRate = 2;
+    testing.expectEqual(2, a.playbackRate);
+    a.updatePlaybackRate(3);
+    testing.expectEqual(3, a.playbackRate);
+    // Measured: persist() flips replaceState, and commitStyles() on an
+    // animation with no target is a NoModificationAllowedError.
+    a.persist();
+    testing.expectEqual('persisted', a.replaceState);
+    testing.expectEqual('NoModificationAllowedError', errorName(() => a.commitStyles()));
+
+    // The EventTarget layer is real, not just a prototype link.
+    let hits = 0;
+    a.addEventListener('finish', () => hits++);
+    a.dispatchEvent(new Event('finish'));
+    testing.expectEqual(1, hits);
+}
+</script>
+
+<script id="css_event_mql_onchange">
+{
+    const mql = window.matchMedia('(min-width: 1px)');
+    testing.expectTrue(mql instanceof EventTarget);
+    testing.expectEqual('object', typeof mql.onchange);
+    testing.expectEqual(null, mql.onchange);
+    let hits = 0;
+    mql.onchange = () => hits++;
+    mql.dispatchEvent(new MediaQueryListEvent('change', { media: 'x', matches: true }));
+    testing.expectEqual(1, hits);
+}
+</script>

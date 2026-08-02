@@ -89,8 +89,20 @@ pub fn dispatch(self: *EventManager, target: *EventTarget, event: *Event) Dispat
         .node => |node| try self.dispatchNode(node, event),
         .xhr => |xhr| try self.dispatchDirect(target, event, xhr.inlineHandler(event._type_string), .{ .context = "dispatch" }),
         .window => |w| try self.dispatchDirect(target, event, self.windowInlineHandler(w, target, event._type_string), .{ .context = "dispatch" }),
-        else => try self.dispatchDirect(target, event, null, .{ .context = "dispatch" }),
+        else => try self.dispatchDirect(target, event, self.attrInlineHandler(target, event._type_string), .{ .context = "dispatch" }),
     }
+}
+
+// Resolves a property event handler kept in the frame's attribute-listener
+// store. Every EventTarget that is neither a node nor the window used to get a
+// null handler here, so an `on*` property set on one of them (MediaQueryList's
+// onchange is the first) never fired for an event dispatched straight at it,
+// even though addEventListener on the same target worked. Nodes reach the same
+// store through getInlineHandler on the propagation path.
+fn attrInlineHandler(self: *EventManager, target: *EventTarget, typ: lp.String) ?js.Function.Global {
+    const global_event_handlers = @import("webapi/global_event_handlers.zig");
+    const handler_type = global_event_handlers.fromEventType(typ.str()) orelse return null;
+    return self.frame._event_target_attr_listeners.get(.{ .target = target, .handler = handler_type });
 }
 
 // Resolves the Window's property event handler for the given event type.

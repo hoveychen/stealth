@@ -102,6 +102,10 @@ pub const Type = union(enum) {
     rtc_error_event: *@import("webrtc/events.zig").RTCErrorEvent,
     rtc_data_channel_event: *@import("webrtc/events.zig").RTCDataChannelEvent,
     rtc_dtmf_tone_change_event: *@import("webrtc/events.zig").RTCDTMFToneChangeEvent,
+    transition_event: *@import("event/css_events.zig").TransitionEvent,
+    animation_event: *@import("event/css_events.zig").AnimationEvent,
+    media_query_list_event: *@import("event/css_events.zig").MediaQueryListEvent,
+    font_face_set_load_event: *@import("event/css_events.zig").FontFaceSetLoadEvent,
 };
 
 pub const Options = struct {
@@ -232,6 +236,10 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .rtc_error_event => |e| return if (T == @import("webrtc/events.zig").RTCErrorEvent) e else null,
         .rtc_data_channel_event => |e| return if (T == @import("webrtc/events.zig").RTCDataChannelEvent) e else null,
         .rtc_dtmf_tone_change_event => |e| return if (T == @import("webrtc/events.zig").RTCDTMFToneChangeEvent) e else null,
+        .transition_event => |e| return if (T == @import("event/css_events.zig").TransitionEvent) e else null,
+        .animation_event => |e| return if (T == @import("event/css_events.zig").AnimationEvent) e else null,
+        .media_query_list_event => |e| return if (T == @import("event/css_events.zig").MediaQueryListEvent) e else null,
+        .font_face_set_load_event => |e| return if (T == @import("event/css_events.zig").FontFaceSetLoadEvent) e else null,
     }
     return null;
 }
