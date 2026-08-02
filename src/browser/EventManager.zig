@@ -88,15 +88,25 @@ pub fn dispatch(self: *EventManager, target: *EventTarget, event: *Event) Dispat
     switch (target._type) {
         .node => |node| try self.dispatchNode(node, event),
         .xhr => |xhr| try self.dispatchDirect(target, event, xhr.inlineHandler(event._type_string), .{ .context = "dispatch" }),
-        .window => |w| try self.dispatchDirect(target, event, windowInlineHandler(w, event._type_string), .{ .context = "dispatch" }),
+        .window => |w| try self.dispatchDirect(target, event, self.windowInlineHandler(w, target, event._type_string), .{ .context = "dispatch" }),
         else => try self.dispatchDirect(target, event, null, .{ .context = "dispatch" }),
     }
 }
 
 // Resolves the Window's property event handler for the given event type.
-fn windowInlineHandler(window: *@import("webapi/Window.zig"), typ: lp.String) ?js.Function.Global {
+fn windowInlineHandler(self: *EventManager, window: *@import("webapi/Window.zig"), target: *EventTarget, typ: lp.String) ?js.Function.Global {
     const global_event_handlers = @import("webapi/global_event_handlers.zig");
     const handler_type = global_event_handlers.fromEventType(typ.str()) orelse return null;
+
+    // Most of the Window's handler properties live in the frame's
+    // attribute-listener store; only the six below have a dedicated slot.
+    // Without this lookup an event dispatched straight at the window (as
+    // opposed to one bubbling up to it, which goes through getInlineHandler)
+    // would skip window.onclick and friends entirely.
+    if (self.frame._event_target_attr_listeners.get(.{ .target = target, .handler = handler_type })) |cached| {
+        return cached;
+    }
+
     return switch (handler_type) {
         .onerror => window._on_error,
         .onload => window._on_load,

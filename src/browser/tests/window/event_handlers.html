@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<body>
+
+<script id=window_owns_every_event_handler>
+  {
+    // Every event handler [Global] Window declares, in the order a headed
+    // Chrome 150 lists them under Object.getOwnPropertyNames(window). Blink
+    // emits them per IDL interface -- the Window-specific ones first, then
+    // GlobalEventHandlers, then the pointer/animation/transition mixins, then
+    // WindowEventHandlers -- which is why this is not alphabetical.
+    const handlers = [
+      'onsearch', 'onappinstalled', 'onbeforeinstallprompt', 'onabort', 'onbeforeinput',
+      'onbeforematch', 'onbeforetoggle', 'onblur', 'oncancel', 'oncanplay',
+      'oncanplaythrough', 'onchange', 'onclick', 'onclose', 'oncommand',
+      'oncontentvisibilityautostatechange', 'oncontextlost', 'oncontextmenu', 'oncontextrestored', 'oncuechange',
+      'ondblclick', 'ondrag', 'ondragend', 'ondragenter', 'ondragleave',
+      'ondragover', 'ondragstart', 'ondrop', 'ondurationchange', 'onemptied',
+      'onended', 'onerror', 'onfocus', 'onformdata', 'oninput',
+      'oninvalid', 'onkeydown', 'onkeypress', 'onkeyup', 'onload',
+      'onloadeddata', 'onloadedmetadata', 'onloadstart', 'onmousedown', 'onmouseenter',
+      'onmouseleave', 'onmousemove', 'onmouseout', 'onmouseover', 'onmouseup',
+      'onmousewheel', 'onpause', 'onplay', 'onplaying', 'onprogress',
+      'onratechange', 'onreset', 'onresize', 'onscroll', 'onscrollend',
+      'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onslotchange',
+      'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
+      'onvolumechange', 'onwaiting', 'onwebkitanimationend', 'onwebkitanimationiteration', 'onwebkitanimationstart',
+      'onwebkittransitionend', 'onwheel', 'onauxclick', 'ongotpointercapture', 'onlostpointercapture',
+      'onpointerdown', 'onpointermove', 'onpointerup', 'onpointercancel', 'onpointerover',
+      'onpointerout', 'onpointerenter', 'onpointerleave', 'onselectstart', 'onselectionchange',
+      'onanimationcancel', 'onanimationend', 'onanimationiteration', 'onanimationstart', 'ontransitionrun',
+      'ontransitionstart', 'ontransitionend', 'ontransitioncancel', 'onbeforexrselect', 'onafterprint',
+      'onbeforeprint', 'onbeforeunload', 'onhashchange', 'onlanguagechange', 'onmessage',
+      'onmessageerror', 'onoffline', 'ononline', 'onpagehide', 'onpageshow',
+      'onpopstate', 'onrejectionhandled', 'onstorage', 'onunhandledrejection', 'onunload',
+      'ondevicemotion', 'ondeviceorientation', 'ondeviceorientationabsolute', 'onpointerrawupdate', 'onpageswap',
+      'onpagereveal', 'onscrollsnapchange', 'onscrollsnapchanging', 'ongamepadconnected', 'ongamepaddisconnected',
+    ];
+    testing.expectEqual(125, handlers.length);
+
+    const own = Object.getOwnPropertyNames(window);
+    testing.expectEqual([], handlers.filter((name) => !own.includes(name)));
+
+    // ...and nothing beyond that list. `on` names we expose that Chrome does
+    // not are just as loud a signal as the ones we are missing.
+    testing.expectEqual([], own.filter((name) => name.startsWith('on') && !handlers.includes(name)));
+
+    // The relative order of the handler block matches Chrome's.
+    testing.expectEqual(handlers, own.filter((name) => name.startsWith('on')));
+  }
+</script>
+
+<script id=window_event_handler_descriptors>
+  {
+    // Measured on Chrome 150: all 125 share one descriptor shape -- an
+    // enumerable, configurable accessor pair whose getter is named
+    // "get <name>" and takes no argument.
+    for (const name of ['onclick', 'onunload', 'ondevicemotion', 'onwheel', 'onpagereveal']) {
+      const d = Object.getOwnPropertyDescriptor(window, name);
+      testing.expectEqual('object', typeof d, { desc: name + ' has a descriptor' });
+      testing.expectEqual('function', typeof d.get, { desc: name + ' getter' });
+      testing.expectEqual('function', typeof d.set, { desc: name + ' setter' });
+      testing.expectEqual(true, d.enumerable, { desc: name + ' enumerable' });
+      testing.expectEqual(true, d.configurable, { desc: name + ' configurable' });
+      testing.expectEqual('get ' + name, d.get.name, { desc: name + ' getter name' });
+      testing.expectEqual(0, d.get.length, { desc: name + ' getter arity' });
+      testing.expectEqual(1, d.set.length, { desc: name + ' setter arity' });
+    }
+  }
+</script>
+
+<script id=window_event_handlers_default_to_null>
+  {
+    // An unset handler reads back as null, not undefined -- `typeof
+    // window.onabort` is 'object' in Chrome, and a script that probes for
+    // 'undefined' is reading a missing property, not an unset one.
+    for (const name of ['onabort', 'onkeydown', 'onstorage', 'onbeforeunload', 'ongamepadconnected']) {
+      testing.expectEqual(null, window[name], { desc: name + ' defaults to null' });
+      testing.expectEqual('object', typeof window[name], { desc: name + ' typeof' });
+    }
+  }
+</script>
+
+<script id=window_event_handlers_round_trip>
+  {
+    // Assignment round-trips, null clears, and a non-callable is swallowed
+    // (window.onx = {} does nothing) the way our existing handlers behave.
+    const fn = function () {};
+    for (const name of ['onkeydown', 'onstorage', 'ondevicemotion', 'onwheel']) {
+      window[name] = fn;
+      testing.expectEqual(fn, window[name], { desc: name + ' assigns' });
+      window[name] = null;
+      testing.expectEqual(null, window[name], { desc: name + ' clears' });
+      window[name] = {};
+      testing.expectEqual(null, window[name], { desc: name + ' ignores a non-function' });
+    }
+  }
+</script>
+
+<script id=window_event_handlers_dispatch>
+  {
+    // The property is not just storage: a handler set through it runs when the
+    // matching event is dispatched at the window.
+    let seen = 0;
+    window.onkeydown = function (e) { seen += 1; };
+    window.dispatchEvent(new Event('keydown'));
+    testing.expectEqual(1, seen);
+    window.onkeydown = null;
+    window.dispatchEvent(new Event('keydown'));
+    testing.expectEqual(1, seen);
+
+    // ...and when the event bubbles up to the window from a node.
+    let bubbled = 0;
+    window.onkeyup = function () { bubbled += 1; };
+    document.body.dispatchEvent(new Event('keyup', { bubbles: true }));
+    testing.expectEqual(1, bubbled);
+    window.onkeyup = null;
+  }
+</script>
+
+<script id=window_onclick_fires_on_a_direct_dispatch>
+  {
+    // Regression: the Window's handler properties (all but the six with a
+    // dedicated storage slot) live in the frame's attribute-listener store,
+    // and the direct-dispatch path used to ignore that store -- so
+    // window.onclick ran for a click bubbling up from a node but not for
+    // window.dispatchEvent(new Event('click')). Chrome runs both, and runs
+    // the property handler before an addEventListener listener registered
+    // after it.
+    const order = [];
+    window.onclick = () => order.push('property');
+    const listener = () => order.push('listener');
+    window.addEventListener('click', listener);
+    window.dispatchEvent(new Event('click'));
+    window.removeEventListener('click', listener);
+    window.onclick = null;
+    testing.expectEqual(['property', 'listener'], order);
+  }
+</script>
