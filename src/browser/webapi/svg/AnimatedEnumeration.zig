@@ -60,6 +60,44 @@ const text_path_spacing_entries = [_]Entry{
     .{ .keyword = "auto", .value = 1 },
     .{ .keyword = "exact", .value = 2 },
 };
+// The filter primitive enumerations. Values are SVGFE*Element's own
+// SVG_* constants, measured on Chrome 150.
+const blend_mode_entries = [_]Entry{
+    .{ .keyword = "normal", .value = 1 },
+    .{ .keyword = "multiply", .value = 2 },
+    .{ .keyword = "screen", .value = 3 },
+    .{ .keyword = "darken", .value = 4 },
+    .{ .keyword = "lighten", .value = 5 },
+    .{ .keyword = "overlay", .value = 6 },
+    .{ .keyword = "color-dodge", .value = 7 },
+    .{ .keyword = "color-burn", .value = 8 },
+    .{ .keyword = "hard-light", .value = 9 },
+    .{ .keyword = "soft-light", .value = 10 },
+    .{ .keyword = "difference", .value = 11 },
+    .{ .keyword = "exclusion", .value = 12 },
+    .{ .keyword = "hue", .value = 13 },
+    .{ .keyword = "saturation", .value = 14 },
+    .{ .keyword = "color", .value = 15 },
+    .{ .keyword = "luminosity", .value = 16 },
+};
+const composite_operator_entries = [_]Entry{
+    .{ .keyword = "over", .value = 1 },
+    .{ .keyword = "in", .value = 2 },
+    .{ .keyword = "out", .value = 3 },
+    .{ .keyword = "atop", .value = 4 },
+    .{ .keyword = "xor", .value = 5 },
+    .{ .keyword = "arithmetic", .value = 6 },
+};
+const morphology_operator_entries = [_]Entry{
+    .{ .keyword = "erode", .value = 1 },
+    .{ .keyword = "dilate", .value = 2 },
+};
+const channel_entries = [_]Entry{
+    .{ .keyword = "R", .value = 1 },
+    .{ .keyword = "G", .value = 2 },
+    .{ .keyword = "B", .value = 3 },
+    .{ .keyword = "A", .value = 4 },
+};
 
 pub const Kind = enum {
     clip_path_units,
@@ -73,6 +111,13 @@ pub const Kind = enum {
     length_adjust,
     text_path_method,
     text_path_spacing,
+    filter_units,
+    primitive_units,
+    blend_mode,
+    composite_operator,
+    morphology_operator,
+    displacement_x_channel,
+    displacement_y_channel,
 
     fn attributeName(self: Kind) lp.String {
         return switch (self) {
@@ -87,6 +132,12 @@ pub const Kind = enum {
             .length_adjust => .wrap("lengthAdjust"),
             .text_path_method => .wrap("method"),
             .text_path_spacing => .wrap("spacing"),
+            .filter_units => .wrap("filterUnits"),
+            .primitive_units => .wrap("primitiveUnits"),
+            .blend_mode => .wrap("mode"),
+            .composite_operator, .morphology_operator => .wrap("operator"),
+            .displacement_x_channel => .wrap("xChannelSelector"),
+            .displacement_y_channel => .wrap("yChannelSelector"),
         };
     }
 
@@ -97,6 +148,10 @@ pub const Kind = enum {
             .length_adjust => &length_adjust_entries,
             .text_path_method => &text_path_method_entries,
             .text_path_spacing => &text_path_spacing_entries,
+            .blend_mode => &blend_mode_entries,
+            .composite_operator => &composite_operator_entries,
+            .morphology_operator => &morphology_operator_entries,
+            .displacement_x_channel, .displacement_y_channel => &channel_entries,
             else => &unit_entries,
         };
     }
@@ -109,7 +164,12 @@ pub const Kind = enum {
             .spread_method,
             .length_adjust,
             .text_path_method,
+            .primitive_units,
+            .blend_mode,
+            .composite_operator,
+            .morphology_operator,
             => 1,
+            .displacement_x_channel, .displacement_y_channel => 4,
             else => 2,
         };
     }

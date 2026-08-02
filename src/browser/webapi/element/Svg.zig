@@ -36,6 +36,7 @@ pub const Marker = @import("svg/Marker.zig");
 pub const Mask = @import("svg/Mask.zig");
 pub const Pattern = @import("svg/Pattern.zig");
 pub const Stop = @import("svg/Stop.zig");
+pub const filter = @import("svg/filter.zig");
 
 const String = lp.String;
 
@@ -58,6 +59,28 @@ pub const Type = union(enum) {
     mask: *Mask,
     pattern: *Pattern,
     stop: *Stop,
+    // <filter> and its primitives. Each primitive derives straight from
+    // SVGElement in Chrome, so each is its own variant rather than a nested
+    // union under a shared base that does not exist.
+    filter: *filter.Filter,
+    fe_blend: *filter.FEBlend,
+    fe_component_transfer: *filter.FEComponentTransfer,
+    fe_composite: *filter.FEComposite,
+    fe_diffuse_lighting: *filter.FEDiffuseLighting,
+    fe_displacement_map: *filter.FEDisplacementMap,
+    fe_distant_light: *filter.FEDistantLight,
+    fe_drop_shadow: *filter.FEDropShadow,
+    fe_flood: *filter.FEFlood,
+    fe_gaussian_blur: *filter.FEGaussianBlur,
+    fe_image: *filter.FEImage,
+    fe_merge: *filter.FEMerge,
+    fe_merge_node: *filter.FEMergeNode,
+    fe_morphology: *filter.FEMorphology,
+    fe_offset: *filter.FEOffset,
+    fe_point_light: *filter.FEPointLight,
+    fe_specular_lighting: *filter.FESpecularLighting,
+    fe_spot_light: *filter.FESpotLight,
+    fe_tile: *filter.FETile,
     generic: *Generic,
 };
 
@@ -105,7 +128,35 @@ pub fn getTag(self: *const Svg) Element.Tag {
         },
         .generic => |g| g._tag,
         .title => .title,
-        .view, .desc, .metadata, .gradient, .clip_path, .marker, .mask, .pattern, .stop => .unknown,
+        .view,
+        .desc,
+        .metadata,
+        .gradient,
+        .clip_path,
+        .marker,
+        .mask,
+        .pattern,
+        .stop,
+        .filter,
+        .fe_blend,
+        .fe_component_transfer,
+        .fe_composite,
+        .fe_diffuse_lighting,
+        .fe_displacement_map,
+        .fe_distant_light,
+        .fe_drop_shadow,
+        .fe_flood,
+        .fe_gaussian_blur,
+        .fe_image,
+        .fe_merge,
+        .fe_merge_node,
+        .fe_morphology,
+        .fe_offset,
+        .fe_point_light,
+        .fe_specular_lighting,
+        .fe_spot_light,
+        .fe_tile,
+        => .unknown,
     };
 }
 
