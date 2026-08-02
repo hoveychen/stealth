@@ -98,23 +98,34 @@ fn syncFromAttribute(self: *Rect) void {
     self._width = 0;
     self._height = 0;
     const raw = element.getAttributeSafe(self._attr_name) orelse return;
-
-    var values: [4]f64 = undefined;
-    var count: usize = 0;
-    var it = std.mem.tokenizeAny(u8, raw, " \t\r\n\x0c,");
-    while (it.next()) |token| {
-        if (count == values.len) return;
-        values[count] = std.fmt.parseFloat(f64, token) catch return;
-        if (!std.math.isFinite(values[count])) return;
-        count += 1;
-    }
-    if (count != values.len) {
-        return;
-    }
+    const values = parseFour(raw) orelse return;
     self._x = values[0];
     self._y = values[1];
     self._width = values[2];
     self._height = values[3];
+}
+
+/// The `x y width height` shape shared by viewBox and every other rect
+/// attribute. Anything but exactly four finite numbers is discarded whole.
+pub fn parseFour(raw: []const u8) ?[4]f64 {
+    var values: [4]f64 = undefined;
+    var count: usize = 0;
+    var it = std.mem.tokenizeAny(u8, raw, " \t\r\n\x0c,");
+    while (it.next()) |token| {
+        if (count == values.len) return null;
+        values[count] = std.fmt.parseFloat(f64, token) catch return null;
+        if (!std.math.isFinite(values[count])) return null;
+        count += 1;
+    }
+    if (count != values.len) {
+        return null;
+    }
+    return values;
+}
+
+/// The viewBox of `element`, if it carries a usable one.
+pub fn viewBoxOf(element: *Element) ?[4]f64 {
+    return parseFour(element.getAttributeSafe(comptime .wrap("viewBox")) orelse return null);
 }
 
 fn writeBack(self: *Rect, frame: *Frame) !void {

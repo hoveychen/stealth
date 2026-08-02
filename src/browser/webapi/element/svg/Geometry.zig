@@ -23,7 +23,7 @@ const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
-const DOMPoint = @import("../../DOMPoint.zig");
+const SvgPoint = @import("../../svg/Point.zig");
 
 const Graphics = @import("Graphics.zig");
 const AnimatedNumber = @import("../../svg/AnimatedNumber.zig");
@@ -95,12 +95,12 @@ pub fn getTotalLength(self: *Geometry, frame: *Frame) !f64 {
     return path.totalLength(frame.local_arena);
 }
 
-pub fn getPointAtLength(self: *Geometry, distance: f64, frame: *Frame) !*DOMPoint {
+pub fn getPointAtLength(self: *Geometry, distance: f64, frame: *Frame) !*SvgPoint {
     if (!std.math.isFinite(distance)) return error.TypeError;
     var path = try self.buildPath(frame);
     defer path.deinit(frame.local_arena);
     const point = try path.pointAtLength(distance, frame.local_arena);
-    return DOMPoint.create(point.x, point.y, 0, 1, frame._page);
+    return SvgPoint.create(SvgPoint.narrow(point.x), SvgPoint.narrow(point.y), frame._page);
 }
 
 pub fn buildPath(self: *Geometry, frame: *Frame) !PathData.Path {

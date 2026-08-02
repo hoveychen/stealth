@@ -21,6 +21,7 @@ const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
 const Page = @import("../Page.zig");
+const SvgMatrix = @import("svg/Matrix.zig");
 const DOMMatrix = @import("DOMMatrix.zig");
 
 const DOMMatrixReadOnly = @This();
@@ -540,7 +541,7 @@ pub fn parseTransformFunction(function: TransformFunction, syntax: TransformSynt
         try requireAngle(units[0]);
         if (syntax == .svg and units[0] != .none) return error.SyntaxError;
         if (count == 3) try requireUnitless(units[1..3]);
-        var matrix = rotateZMatrix(toRadians(values[0], units[0]));
+        var matrix = rotateZMatrix(toRadiansIn(values[0], units[0], syntax));
         if (count == 3) {
             matrix = multiplyMatrix(translationMatrix(values[1], values[2], 0), matrix);
             matrix = multiplyMatrix(matrix, translationMatrix(-values[1], -values[2], 0));
@@ -575,8 +576,8 @@ pub fn parseTransformFunction(function: TransformFunction, syntax: TransformSynt
         try requireCount(count, 1, 1);
         try requireAngle(units[0]);
         if (syntax == .svg and units[0] != .none) return error.SyntaxError;
-        if (Eql(u8, name, "skewX")) return makeParsedTransform(.skew_x, skewMatrix(toRadians(values[0], units[0]), 0), values, count, true);
-        return makeParsedTransform(.skew_y, skewMatrix(0, toRadians(values[0], units[0])), values, count, true);
+        if (Eql(u8, name, "skewX")) return makeParsedTransform(.skew_x, skewMatrix(toRadiansIn(values[0], units[0], syntax), 0), values, count, true);
+        return makeParsedTransform(.skew_y, skewMatrix(0, toRadiansIn(values[0], units[0], syntax)), values, count, true);
     }
 
     if (Eql(u8, name, "perspective")) {
@@ -627,6 +628,18 @@ pub fn toRadians(value: f64, unit: ParsedValue.Unit) f64 {
         .deg, .none => value * std.math.pi / 180.0,
         .other => value,
     };
+}
+
+/// Blink converts degrees for SVG through a precomputed pi/180 instead of
+/// multiplying by pi and dividing by 180, and the two land on different
+/// doubles: `transform="skewX(89)"` reads back as 57.289961630759144 where
+/// the CSS/DOMMatrix path gives 57.289961630759876. Both measured on Chrome
+/// 150, so the SVG callers take this variant.
+pub fn toRadiansIn(value: f64, unit: ParsedValue.Unit, syntax: TransformSyntax) f64 {
+    if (syntax == .css or unit != .none and unit != .deg) {
+        return toRadians(value, unit);
+    }
+    return value * SvgMatrix.DEGREES_TO_RADIANS;
 }
 
 pub fn getA(self: *const DOMMatrixReadOnly) f64 {

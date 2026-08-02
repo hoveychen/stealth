@@ -22,8 +22,7 @@ const lp = @import("lightpanda");
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const Page = @import("../../Page.zig");
-const DOMPoint = @import("../DOMPoint.zig");
-const DOMPointReadOnly = @import("../DOMPointReadOnly.zig");
+const Point = @import("Point.zig");
 const Element = @import("../Element.zig");
 const reflected_list = @import("reflected_list.zig");
 
@@ -34,10 +33,10 @@ _element: *Element,
 _read_only: bool,
 _synced: bool = false,
 _snapshot: std.ArrayList(u8) = .empty,
-_items: std.ArrayList(*DOMPoint) = .empty,
-_retired: std.ArrayList(*DOMPoint) = .empty,
+_items: std.ArrayList(*Point) = .empty,
+_retired: std.ArrayList(*Point) = .empty,
 
-const M = reflected_list.Mixin(PointList, DOMPoint, .{
+const M = reflected_list.Mixin(PointList, Point, .{
     .attrName = attrName,
     .parse = parse,
     .writeItem = writeItem,
@@ -88,36 +87,35 @@ fn attrName(_: *const PointList) lp.String {
     return .wrap("points");
 }
 
-fn prepareItem(_: *PointList, item: *DOMPoint, frame: *Frame) !*DOMPoint {
-    if (!std.math.isFinite(item._proto._x) or !std.math.isFinite(item._proto._y)) return error.TypeError;
-    const prepared = if (item._proto.isAttached())
-        try DOMPoint.create(item._proto._x, item._proto._y, item._proto._z, item._proto._w, frame._page)
+fn prepareItem(_: *PointList, item: *Point, frame: *Frame) !*Point {
+    if (!std.math.isFinite(item._x) or !std.math.isFinite(item._y)) return error.TypeError;
+    const prepared = if (item.isAttached())
+        try Point.create(item._x, item._y, frame._page)
     else
         item;
-    prepared._proto.acquireRef();
+    prepared.acquireRef();
     return prepared;
 }
 
-fn attach(self: *PointList, point: *DOMPoint) void {
-    point._proto.restrict();
-    point._proto.attach(.{
+fn attach(self: *PointList, point: *Point) void {
+    point.attach(.{
         .owner = self,
         .mutate = PointList.mutatePoint,
     }, self._read_only);
 }
 
-fn detachItem(point: *DOMPoint, owner: *PointList) void {
-    point._proto.detach(owner);
+fn detachItem(point: *Point, owner: *PointList) void {
+    point.detach(owner);
 }
 
-fn releaseItem(point: *DOMPoint, page: *Page) void {
-    point._proto.releaseRef(page);
+fn releaseItem(point: *Point, page: *Page) void {
+    point.releaseRef(page);
 }
 
 fn mutatePoint(
     context: *anyopaque,
-    point: *DOMPointReadOnly,
-    coordinate: DOMPointReadOnly.Coordinate,
+    point: *Point,
+    coordinate: Point.Coordinate,
     value: f64,
 ) anyerror!void {
     const self: *PointList = @ptrCast(@alignCast(context));
@@ -125,53 +123,47 @@ fn mutatePoint(
     try M.sync(self, frame);
 
     // An external attribute mutation detaches the old item during sync. The
-    // caller still owns that DOMPoint identity, but it no longer mutates the list.
+    // caller still owns that SVGPoint identity, but it no longer mutates the list.
     if (!point.isAttachedTo(self)) {
         point.setCoordinateRaw(coordinate, value);
         return;
     }
 
-    if (coordinate == .z or coordinate == .w) {
-        point.setCoordinateRaw(coordinate, value);
-        return;
-    }
-    if (!std.math.isFinite(value)) return error.TypeError;
-
     const index = for (self._items.items, 0..) |candidate, i| {
-        if (candidate._proto == point) break i;
+        if (candidate == point) break i;
     } else unreachable;
 
     try self.setAttributeWithOverride(index, coordinate, value, frame);
     point.setCoordinateRaw(coordinate, value);
 }
 
-fn parse(_: *PointList, raw: []const u8, frame: *Frame) !std.ArrayList(*DOMPoint) {
+fn parse(_: *PointList, raw: []const u8, frame: *Frame) !std.ArrayList(*Point) {
     var scanner = NumberScanner{ .input = raw };
-    var parsed: std.ArrayList(*DOMPoint) = .empty;
-    errdefer for (parsed.items) |point| point._proto.releaseRef(frame._page);
+    var parsed: std.ArrayList(*Point) = .empty;
+    errdefer for (parsed.items) |point| point.releaseRef(frame._page);
 
     while (try scanner.next()) |x| {
         // A trailing coordinate with no pair truncates the list; only a
         // malformed number invalidates the whole attribute.
         const y = (try scanner.next()) orelse break;
-        const point = try DOMPoint.create(x, y, 0, 1, frame._page);
-        point._proto.acquireRef();
+        const point = try Point.create(Point.narrow(x), Point.narrow(y), frame._page);
+        point.acquireRef();
         parsed.append(frame.local_arena, point) catch |err| {
-            point._proto.releaseRef(frame._page);
+            point.releaseRef(frame._page);
             return err;
         };
     }
     return parsed;
 }
 
-fn writeItem(point: *DOMPoint, writer: *std.Io.Writer) !void {
-    try writer.print("{d} {d}", .{ point._proto._x, point._proto._y });
+fn writeItem(point: *Point, writer: *std.Io.Writer) !void {
+    try writer.print("{d} {d}", .{ point._x, point._y });
 }
 
 fn setAttributeWithOverride(
     self: *PointList,
     index: usize,
-    coordinate: DOMPointReadOnly.Coordinate,
+    coordinate: Point.Coordinate,
     value: f64,
     frame: *Frame,
 ) !void {
@@ -179,8 +171,8 @@ fn setAttributeWithOverride(
     const writer = &serialized.writer;
     for (self._items.items, 0..) |point, i| {
         if (i != 0) try writer.writeByte(' ');
-        const x = if (i == index and coordinate == .x) value else point._proto._x;
-        const y = if (i == index and coordinate == .y) value else point._proto._y;
+        const x = if (i == index and coordinate == .x) value else point._x;
+        const y = if (i == index and coordinate == .y) value else point._y;
         try writer.print("{d} {d}", .{ x, y });
     }
     try M.commitAttribute(self, serialized.written(), frame);

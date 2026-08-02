@@ -24,6 +24,7 @@ const Frame = @import("../../Frame.zig");
 const Page = @import("../../Page.zig");
 const units = @import("../../css/units.zig");
 const Element = @import("../Element.zig");
+const Rect = @import("Rect.zig");
 
 const String = lp.String;
 const Length = @This();
@@ -341,24 +342,30 @@ fn ancestorViewportDimensionAt(element: *Element, direction: Direction, frame: *
 }
 
 fn viewBoxDimension(element: *Element, direction: Direction) ?f64 {
-    const raw = element.getAttributeSafe(comptime .wrap("viewBox")) orelse return null;
-    var values: [4]f64 = undefined;
-    var count: usize = 0;
-    var it = std.mem.tokenizeAny(u8, raw, " \t\r\n\x0c,");
-    while (it.next()) |token| {
-        if (count == values.len) return null;
-        values[count] = std.fmt.parseFloat(f64, token) catch return null;
-        if (!std.math.isFinite(values[count])) return null;
-        count += 1;
-    }
-    if (count != values.len) {
-        return null;
-    }
+    const values = Rect.viewBoxOf(element) orelse return null;
     return switch (direction) {
         .horizontal => values[2],
         .vertical => values[3],
         .unspecified => unreachable,
     };
+}
+
+/// The used `width`/`height` of a viewport-establishing element, in the user
+/// units of the coordinate system it sits in. An omitted or unusable value is
+/// `auto`, whose used value is 100% of the containing viewport.
+pub fn viewportDimension(element: *Element, direction: Direction, frame: *Frame) f64 {
+    const attr_name: String = switch (direction) {
+        .horizontal => comptime .wrap("width"),
+        .vertical => comptime .wrap("height"),
+        .unspecified => unreachable,
+    };
+    const raw = element.getAttributeSafe(attr_name) orelse {
+        return ancestorViewportDimension(element, direction, frame);
+    };
+    const parsed = parse(raw) catch {
+        return ancestorViewportDimension(element, direction, frame);
+    };
+    return resolveParsedLength(parsed, element, direction, frame, 0);
 }
 
 fn nearestSvgViewport(element: *Element) ?*Element {

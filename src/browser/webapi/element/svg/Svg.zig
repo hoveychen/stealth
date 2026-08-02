@@ -25,8 +25,8 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const TreeWalker = @import("../../TreeWalker.zig");
 const SvgRect = @import("../../svg/Rect.zig");
-const DOMPoint = @import("../../DOMPoint.zig");
-const DOMMatrix = @import("../../DOMMatrix.zig");
+const SvgPoint = @import("../../svg/Point.zig");
+const SvgMatrix = @import("../../svg/Matrix.zig");
 const SvgNumber = @import("../../svg/Number.zig");
 const SvgLength = @import("../../svg/Length.zig");
 const SvgAngle = @import("../../svg/Angle.zig");
@@ -88,20 +88,12 @@ pub fn getPreserveAspectRatio(self: *Svg, frame: *Frame) !*AnimatedPreserveAspec
     return AnimatedPreserveAspectRatio.getOrCreate(self.asElement(), frame);
 }
 
-pub fn createSVGPoint(_: *Svg, frame: *Frame) !*DOMPoint {
-    const point = try DOMPoint.create(0, 0, 0, 1, frame._page);
-    point._proto.restrict();
-    return point;
+pub fn createSVGPoint(_: *Svg, frame: *Frame) !*SvgPoint {
+    return SvgPoint.create(0, 0, frame._page);
 }
 
-pub fn createSVGMatrix(_: *Svg, frame: *Frame) !*DOMMatrix {
-    const identity: [16]f64 = .{
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-    };
-    return DOMMatrix.create(identity, true, frame._page);
+pub fn createSVGMatrix(_: *Svg, frame: *Frame) !*SvgMatrix {
+    return SvgMatrix.create(.{}, frame._page);
 }
 
 pub fn createSVGRect(_: *Svg, frame: *Frame) !*SvgRect {
@@ -124,8 +116,8 @@ pub fn createSVGTransform(_: *Svg, frame: *Frame) !*SvgTransform {
     return SvgTransform.detached(frame);
 }
 
-pub fn createSVGTransformFromMatrix(_: *Svg, init: ?SvgTransform.DOMMatrix2DInit, frame: *Frame) !*SvgTransform {
-    return SvgTransform.fromMatrix(init, frame);
+pub fn createSVGTransformFromMatrix(_: *Svg, matrix: *const SvgMatrix, frame: *Frame) !*SvgTransform {
+    return SvgTransform.fromMatrix(matrix, frame);
 }
 
 pub const JsApi = struct {

@@ -29,7 +29,7 @@ const PreserveAspectRatio = @This();
 _element: *Element,
 _read_only: bool = false,
 
-const Value = struct {
+pub const Value = struct {
     alignment: u16 = 6,
     meet_or_slice: u16 = 1,
 };
@@ -72,7 +72,13 @@ fn ensureWritable(self: *const PreserveAspectRatio) !void {
 }
 
 fn current(self: *const PreserveAspectRatio) Value {
-    const raw = self._element.getAttributeSafe(String.wrap("preserveAspectRatio")) orelse return .{};
+    return valueOf(self._element);
+}
+
+/// The parsed `preserveAspectRatio` of `element`; anything malformed falls
+/// back to the initial xMidYMid meet.
+pub fn valueOf(element: *Element) Value {
+    const raw = element.getAttributeSafe(String.wrap("preserveAspectRatio")) orelse return .{};
     var parts = std.mem.tokenizeAny(u8, raw, " \t\r\n\x0c");
     const alignment = alignValue(parts.next() orelse return .{}) orelse return .{};
     const meet_or_slice = meetOrSliceValue(parts.next() orelse "meet") orelse return .{};

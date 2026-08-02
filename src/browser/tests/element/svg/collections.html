@@ -489,14 +489,23 @@
   const transform = root.createSVGTransform();
   const matrix = transform.matrix;
 
-  testing.expectEqual(matrix, matrix.translateSelf(2, 3));
+  // SVGMatrix has none of DOMMatrix's mutate-in-place methods; the only way
+  // to write through the live matrix is to assign a component.
+  testing.expectEqual(undefined, matrix.translateSelf);
+  testing.expectEqual(undefined, matrix.setMatrixValue);
+
+  matrix.e = 2;
+  matrix.f = 3;
   testing.expectEqual(2, matrix.e);
   testing.expectEqual(3, matrix.f);
   testing.expectEqual(SVGTransform.SVG_TRANSFORM_MATRIX, transform.type);
 
-  testing.expectEqual(matrix, matrix.setMatrixValue('matrix(1, 0, 0, 1, 9, 10)'));
-  testing.expectEqual(9, matrix.e);
-  testing.expectEqual(10, matrix.f);
+  // translate() derives a fresh, detached matrix instead, so the transform
+  // it came from is left where it was.
+  const derived = matrix.translate(7, 7);
+  testing.expectFalse(derived === matrix);
+  testing.expectEqual('9,10', `${derived.e},${derived.f}`);
+  testing.expectEqual('2,3', `${matrix.e},${matrix.f}`);
 }
 </script>
 
@@ -507,18 +516,18 @@
   const transform = root.createSVGTransform();
   const matrix = transform.matrix;
 
-  // An SVGTransform is a 2D affine transform and the `transform` attribute has
-  // no syntax for anything else, so the 3D components are dropped.
-  matrix.m13 = 2;
-  testing.expectEqual(SVGTransform.SVG_TRANSFORM_MATRIX, transform.type);
-  testing.expectTrue(matrix.is2D);
-  testing.expectEqual(0, matrix.m13);
+  // An SVGTransform is a 2D affine transform, and its matrix is an SVGMatrix
+  // rather than a DOMMatrix, so there is nothing 3D to drop in the first
+  // place: none of DOMMatrix's extra members exist here.
+  testing.expectEqual('SVGMatrix', matrix.constructor.name);
+  testing.expectEqual(undefined, matrix.is2D);
+  testing.expectEqual(undefined, matrix.m13);
+  testing.expectEqual(undefined, matrix.setMatrixValue);
 
-  matrix.setMatrixValue('translate3d(1px, 2px, 3px)');
-  testing.expectTrue(matrix.is2D);
-  testing.expectEqual(1, matrix.e);
-  testing.expectEqual(2, matrix.f);
-  testing.expectEqual(0, matrix.m43);
+  // Writing through the live matrix demotes the transform to a plain matrix.
+  matrix.e = 1;
+  matrix.f = 2;
+  testing.expectEqual(SVGTransform.SVG_TRANSFORM_MATRIX, transform.type);
 
   group.transform.baseVal.initialize(transform);
   testing.expectEqual('matrix(1 0 0 1 1 2)', group.getAttribute('transform'));

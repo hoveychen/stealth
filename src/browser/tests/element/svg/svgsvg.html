@@ -256,30 +256,27 @@
 <script id=factories>
 {
   // SVG2 defines SVGPoint/SVGMatrix/SVGRect as aliases of the DOM geometry
-  // types, which is what we return. Browsers (Chrome and Firefox both) still
-  // ship distinct legacy interfaces, so the instanceof and DOM-geometry-only
-  // members (w, is2D) fail there. The DOM types are functional supersets of
-  // the legacy ones, so site-facing behavior only gains members.
+  // types, but neither Chrome nor Firefox shipped that, so all three are
+  // their own interfaces here too. matrix.html covers them in full.
   const svg = $('#first');
 
   const point = svg.createSVGPoint();
-  testing.expectEqual(true, point instanceof DOMPoint);
+  testing.expectEqual(false, point instanceof DOMPoint);
+  testing.expectEqual('SVGPoint', point.constructor.name);
   testing.expectEqual(0, point.x);
   testing.expectEqual(0, point.y);
-  testing.expectEqual(1, point.w);
+  testing.expectEqual(undefined, point.w);
   point.x = 5;
   testing.expectEqual(5, point.x);
 
   const matrix = svg.createSVGMatrix();
-  testing.expectEqual(true, matrix instanceof DOMMatrix);
+  testing.expectEqual(false, matrix instanceof DOMMatrix);
+  testing.expectEqual('SVGMatrix', matrix.constructor.name);
   testing.expectEqual(1, matrix.a);
   testing.expectEqual(0, matrix.b);
   testing.expectEqual(1, matrix.d);
-  testing.expectEqual(true, matrix.is2D);
+  testing.expectEqual(undefined, matrix.is2D);
 
-  // SVGRect is the exception: Chrome and Firefox both still ship it as its
-  // own interface, so we do too, and it is what getBBox() and
-  // getExtentOfChar() answer with.
   const rect = svg.createSVGRect();
   testing.expectEqual(true, rect instanceof SVGRect);
   testing.expectEqual(false, rect instanceof DOMRect);

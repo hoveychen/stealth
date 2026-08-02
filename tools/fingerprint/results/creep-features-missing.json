@@ -637,12 +637,12 @@
    "location": "http://localhost:8741/",
    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
    "cssInterfaceName": "CSSStyleDeclaration",
-   "totalUnsupportSpans": 608,
+   "totalUnsupportSpans": 606,
    "report": {
     "window": {
      "chromeBaselineKeys": 1100,
-     "engineKeys": 727,
-     "unsupportSpans": 484,
+     "engineKeys": 729,
+     "unsupportSpans": 482,
      "diffRemoved": [
       "console",
       "Option",
@@ -681,8 +681,6 @@
       "SecurityPolicyViolationEvent",
       "ScriptProcessorNode",
       "Scheduler",
-      "SVGPoint",
-      "SVGMatrix",
       "ReportingObserver",
       "ReadableStreamBYOBRequest",
       "ReadableStreamBYOBReader",
