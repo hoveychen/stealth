@@ -65,7 +65,11 @@ pub fn getCssRules(self: *CSSStyleSheet, frame: *Frame) !*CSSRuleList {
     self._css_rules = rules;
 
     if (self.getOwnerNode()) |owner| {
+        // <style> in either namespace owns its rules through its text.
         if (owner.is(Element.Html.Style)) |style| {
+            const text = try style.asNode().getTextContentAlloc(frame.local_arena);
+            try self.replaceSync(text, frame);
+        } else if (owner.is(Element.Svg.Style)) |style| {
             const text = try style.asNode().getTextContentAlloc(frame.local_arena);
             try self.replaceSync(text, frame);
         }

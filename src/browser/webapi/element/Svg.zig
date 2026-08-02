@@ -37,6 +37,9 @@ pub const Mask = @import("svg/Mask.zig");
 pub const Pattern = @import("svg/Pattern.zig");
 pub const Stop = @import("svg/Stop.zig");
 pub const filter = @import("svg/filter.zig");
+pub const animation = @import("svg/animation.zig");
+pub const Script = @import("svg/Script.zig");
+pub const Style = @import("svg/Style.zig");
 
 const String = lp.String;
 
@@ -85,6 +88,13 @@ pub const Type = union(enum) {
     fe_specular_lighting: *filter.FESpecularLighting,
     fe_spot_light: *filter.FESpotLight,
     fe_tile: *filter.FETile,
+    // The SMIL elements. <animate>, <animateMotion>, <animateTransform> and
+    // <set> share SVGAnimationElement; <mpath>, <script> and <style> each
+    // derive straight from SVGElement.
+    animation: *animation.Animation,
+    mpath: *animation.MPath,
+    script: *Script,
+    style: *Style,
     generic: *Generic,
 };
 
@@ -104,6 +114,9 @@ pub fn is(self: *Svg, comptime T: type) ?*T {
     }
     if (self._type == .component_transfer_function) {
         return self._type.component_transfer_function.is(T);
+    }
+    if (self._type == .animation) {
+        return self._type.animation.is(T);
     }
     return null;
 }
@@ -167,6 +180,10 @@ pub fn getTag(self: *const Svg) Element.Tag {
         .fe_specular_lighting,
         .fe_spot_light,
         .fe_tile,
+        .animation,
+        .mpath,
+        .script,
+        .style,
         => .unknown,
     };
 }

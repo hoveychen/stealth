@@ -888,6 +888,7 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
             const Graphics = Element.Svg.Graphics;
             const Geometry = Graphics.Geometry;
             const Filter = Element.Svg.filter;
+            const Animation = Element.Svg.animation;
             // SVG tag names are case-sensitive; no lowering before matching.
             switch (name.len) {
                 1 => switch (name[0]) {
@@ -898,6 +899,7 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                 3 => switch (@as(u24, @bitCast(name[0..3].*))) {
                     asUint("svg") => return createSvgElementT(frame, Graphics.Svg, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("use") => return createSvgElementT(frame, Graphics.Use, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("set") => return createSvgElementT(frame, Animation.Set, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 4 => switch (@as(u32, @bitCast(name[0..4].*))) {
@@ -916,6 +918,8 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     asUint("image") => return createSvgElementT(frame, Graphics.Image, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("title") => return createSvgElementT(frame, Element.Svg.Title, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("tspan") => return createSvgElementT(frame, Graphics.TextContent.TextPositioning.TSpan, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("mpath") => return createSvgElementT(frame, Animation.MPath, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("style") => return createSvgElementT(frame, Element.Svg.Style, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 6 => switch (@as(u48, @bitCast(name[0..6].*))) {
@@ -925,6 +929,7 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     asUint("switch") => return createSvgElementT(frame, Graphics.Switch, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("symbol") => return createSvgElementT(frame, Graphics.Symbol, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feTile") => return createSvgElementT(frame, Filter.FETile, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("script") => return createSvgElementT(frame, Element.Svg.Script, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 7 => switch (@as(u56, @bitCast(name[0..7].*))) {
@@ -939,6 +944,7 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     asUint("feFuncB") => return createSvgElementT(frame, Filter.FEFuncB, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feFuncG") => return createSvgElementT(frame, Filter.FEFuncG, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feFuncR") => return createSvgElementT(frame, Filter.FEFuncR, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("animate") => return createSvgElementT(frame, Animation.Animate, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 8 => switch (@as(u64, @bitCast(name[0..8].*))) {
@@ -965,6 +971,7 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                 13 => switch (@as(u104, @bitCast(name[0..13].*))) {
                     asUint("foreignObject") => return createSvgElementT(frame, Graphics.ForeignObject, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feColorMatrix") => return createSvgElementT(frame, Filter.FEColorMatrix, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("animateMotion") => return createSvgElementT(frame, Animation.AnimateMotion, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 14 => switch (@as(u112, @bitCast(name[0..14].*))) {
@@ -976,6 +983,7 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                 },
                 16 => switch (@as(u128, @bitCast(name[0..16].*))) {
                     asUint("feConvolveMatrix") => return createSvgElementT(frame, Filter.FEConvolveMatrix, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("animateTransform") => return createSvgElementT(frame, Animation.AnimateTransform, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 17 => switch (@as(u136, @bitCast(name[0..17].*))) {

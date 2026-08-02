@@ -3199,6 +3199,12 @@ fn nodeIsReady(self: *Frame, comptime from_parser: bool, node: *Node) !void {
             log.err(.frame, "frame.nodeIsReady", .{ .err = err, .element = "style", .type = frame._type });
             return error.StyleLoadError;
         };
+    } else if (node.is(Element.Svg.Style)) |style| {
+        const frame = if (comptime from_parser) self else node.ownerFrame(self);
+        style.styleAddedCallback(frame) catch |err| {
+            log.err(.frame, "frame.nodeIsReady", .{ .err = err, .element = "svg style", .type = frame._type });
+            return error.StyleLoadError;
+        };
     }
 }
 
