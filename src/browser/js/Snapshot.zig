@@ -716,6 +716,8 @@ fn illegalConstructorCallback(raw_info: ?*const v8.FunctionCallbackInfo) callcon
     // Recover the constructor's name via NewTarget, whose .name property was
     // set via SetClassName when the FunctionTemplate was built. Lets us tell
     // `new DOMException()` apart from `new MutationRecord()` in the warning.
+    // A plain call has no new.target and gets no name -- which is also what
+    // Chrome does, see the message below.
     var name_buf: [128]u8 = undefined;
     var name: []const u8 = "<unknown>";
     if (v8.v8__FunctionCallbackInfo__NewTarget(raw_info)) |new_target| {
@@ -735,12 +737,18 @@ fn illegalConstructorCallback(raw_info: ?*const v8.FunctionCallbackInfo) callcon
     // Chrome names the interface in the message (measured on a headed Chrome
     // 150: new Permissions() gives "Failed to construct 'Permissions': Illegal
     // constructor"), and the class name is already in hand from new.target.
+    // Called as a plain function -- `Permissions()` -- there is no new.target
+    // and Chrome answers a bare "Illegal constructor" (measured the same way),
+    // so the name never reaches the message and never leaks a placeholder.
     var message_buf: [name_buf.len + 48]u8 = undefined;
-    const message_text = std.fmt.bufPrint(
-        &message_buf,
-        "Failed to construct '{s}': Illegal constructor",
-        .{name},
-    ) catch "Illegal constructor";
+    const message_text = if (v8.v8__FunctionCallbackInfo__IsConstructCall(raw_info))
+        std.fmt.bufPrint(
+            &message_buf,
+            "Failed to construct '{s}': Illegal constructor",
+            .{name},
+        ) catch "Illegal constructor"
+    else
+        "Illegal constructor";
     const message = v8.v8__String__NewFromUtf8(isolate, message_text.ptr, v8.kNormal, @intCast(message_text.len));
     const js_exception = v8.v8__Exception__TypeError(message);
 

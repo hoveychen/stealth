@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Calling an interface object as a function rather than with `new`. Both
+  messages were measured on a headed Chrome 150 over http://localhost
+  (agent-workspace/stealth-detector-probes, /tmp/probe-ctor.js): an interface
+  with no constructor answers a bare "Illegal constructor", while one that has
+  a constructor names itself and points at the `new` operator.
+-->
+
+<script id="constructor_called_as_function">
+  {
+    const message = (fn) => {
+      try { fn(); } catch (e) { return e.name + ': ' + e.message; }
+      return 'no throw';
+    };
+
+    // No constructor: `new` names the interface, a plain call does not. Chrome
+    // takes the name from new.target, which a plain call does not have.
+    for (const n of ['Permissions', 'BarProp', 'Navigator', 'Screen', 'History']) {
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': Illegal constructor`,
+        message(() => new window[n]()),
+      );
+      testing.expectEqual('TypeError: Illegal constructor', message(() => window[n]()));
+    }
+
+    // Has a constructor: its own message, naming the interface.
+    for (const n of ['Event', 'AbortController', 'MessageChannel', 'TaskController']) {
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': Please use the 'new' operator, ` +
+          'this DOM object constructor cannot be called as a function.',
+        message(() => window[n]('x')),
+      );
+    }
+  }
+</script>
