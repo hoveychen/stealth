@@ -137,7 +137,39 @@ fn isValid(self: Snapshot) bool {
     return v8.v8__StartupData__IsValid(self.startup_data);
 }
 
+// V8 derives an isolate's default JS stack limit from the *thread's* stack
+// start minus --stack-size (984 KB by default), not from where the isolate was
+// created. By the time App.init() gets here the main thread is already about
+// 1.4 MB deep, so that default limit sits above our stack pointer and the very
+// first Script::Compile in createSnapshotContext dies with
+// `RangeError: Maximum call stack size exceeded` -- with no JS recursion
+// anywhere in sight.
+//
+// Measured while adding the File System Access interfaces: startup broke the
+// moment the registry crossed a threshold (five extra interfaces fine, six
+// fatal), the frame between create() and that Compile is only 36 KB, and
+// running the same build with `--v8-flags-unsafe --stack-size=4000` started
+// cleanly. So the budget was already exhausted before we got here and each new
+// interface was just nudging the frame along.
+//
+// So build the snapshot on a thread of its own, where the isolate starts from
+// a fresh stack and the whole default budget is actually available. Nothing
+// about the resulting blob depends on which thread produced it, and page
+// isolates are untouched, so script-visible recursion depth is unchanged.
 pub fn create() !Snapshot {
+    var result: Result = .{ .value = error.SnapshotThreadFailed };
+    const thread = try std.Thread.spawn(.{}, buildOnThread, .{&result});
+    thread.join();
+    return result.value;
+}
+
+const Result = struct { value: anyerror!Snapshot };
+
+fn buildOnThread(result: *Result) void {
+    result.value = build();
+}
+
+fn build() !Snapshot {
     var external_references = collectExternalReferences();
 
     var params: v8.CreateParams = undefined;
