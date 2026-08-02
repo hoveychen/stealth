@@ -108,6 +108,8 @@ pub const Type = union(enum) {
     font_face_set_load_event: *@import("event/css_events.zig").FontFaceSetLoadEvent,
     task_priority_change_event: *@import("scheduler.zig").TaskPriorityChangeEvent,
     sensor_error_event: *@import("sensor.zig").SensorErrorEvent,
+    midi_message_event: *@import("midi.zig").MIDIMessageEvent,
+    midi_connection_event: *@import("midi.zig").MIDIConnectionEvent,
 };
 
 pub const Options = struct {
@@ -115,6 +117,26 @@ pub const Options = struct {
     cancelable: bool = false,
     composed: bool = false,
 };
+
+/// EventInit's three members, read by hand. For the constructors that read
+/// their whole dictionary themselves because one of their own members needs a
+/// message the bridge cannot produce.
+pub fn optionsFromJs(value_: ?js.Value) !Options {
+    const value = value_ orelse return .{};
+    if (!value.isObject()) {
+        return .{};
+    }
+    const object = value.toObject();
+
+    var options: Options = .{};
+    inline for (@typeInfo(Options).@"struct".fields) |field| {
+        const member = try object.get(field.name);
+        if (!member.isUndefined()) {
+            @field(options, field.name) = member.toBool();
+        }
+    }
+    return options;
+}
 
 pub fn init(typ: []const u8, opts_: ?Options, page: *Page) !*Event {
     const arena = try page.getArena(.tiny, "Event");
@@ -244,6 +266,8 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .font_face_set_load_event => |e| return if (T == @import("event/css_events.zig").FontFaceSetLoadEvent) e else null,
         .task_priority_change_event => |e| return if (T == @import("scheduler.zig").TaskPriorityChangeEvent) e else null,
         .sensor_error_event => |e| return if (T == @import("sensor.zig").SensorErrorEvent) e else null,
+        .midi_message_event => |e| return if (T == @import("midi.zig").MIDIMessageEvent) e else null,
+        .midi_connection_event => |e| return if (T == @import("midi.zig").MIDIConnectionEvent) e else null,
     }
     return null;
 }

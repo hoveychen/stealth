@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The Web MIDI API: MIDIAccess, MIDIPort and its two subtypes, the two maplikes
+  and the two events. Every shape, value and message below was measured on a
+  headed Chrome 150 over http://localhost; the snapshots live in
+  agent-workspace/stealth-detector-probes/win-batch/ (win11-chrome.json for the
+  interface shapes, probe-win11b.js / probe-win11c.js for the behaviours).
+
+  Six of the eight are unreachable from script here, and that is the honest
+  answer rather than a gap: navigator.requestMIDIAccess never settles -- which
+  is where Chrome's own permission prompt leaves it, measured -- so no
+  MIDIAccess, port or map can ever exist to hand out. The two events are
+  constructible, and they behave.
+-->
+
+<script id="midi_surface">
+  {
+    const NAMES = ['MIDIAccess', 'MIDIPort', 'MIDIInput', 'MIDIOutput', 'MIDIInputMap',
+      'MIDIOutputMap', 'MIDIMessageEvent', 'MIDIConnectionEvent'];
+    for (const n of NAMES) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(0, Object.keys(window).filter((k) => k === n).length);
+      // Only the two events take an argument.
+      testing.expectEqual(n.endsWith('Event') ? 1 : 0, window[n].length);
+    }
+
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(MIDIAccess.prototype));
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(MIDIPort.prototype));
+    testing.expectEqual(MIDIPort.prototype, Object.getPrototypeOf(MIDIInput.prototype));
+    testing.expectEqual(MIDIPort.prototype, Object.getPrototypeOf(MIDIOutput.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(MIDIInputMap.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(MIDIOutputMap.prototype));
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(MIDIMessageEvent.prototype));
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(MIDIConnectionEvent.prototype));
+
+    testing.expectEqual(
+      'inputs,outputs,sysexEnabled,onstatechange,constructor',
+      Object.getOwnPropertyNames(MIDIAccess.prototype).join(','),
+    );
+    testing.expectEqual(
+      'connection,id,manufacturer,name,state,type,version,onstatechange,close,open,constructor',
+      Object.getOwnPropertyNames(MIDIPort.prototype).join(','),
+    );
+    testing.expectEqual('onmidimessage,constructor', Object.getOwnPropertyNames(MIDIInput.prototype).join(','));
+    testing.expectEqual('send,constructor', Object.getOwnPropertyNames(MIDIOutput.prototype).join(','));
+    for (const n of ['MIDIInputMap', 'MIDIOutputMap']) {
+      testing.expectEqual(
+        'size,entries,forEach,get,has,keys,values,constructor',
+        Object.getOwnPropertyNames(window[n].prototype).join(','),
+      );
+      testing.expectEqual(
+        'Symbol(Symbol.toStringTag),Symbol(Symbol.iterator)',
+        Object.getOwnPropertySymbols(window[n].prototype).map(String).join(','),
+      );
+    }
+    testing.expectEqual('data,constructor', Object.getOwnPropertyNames(MIDIMessageEvent.prototype).join(','));
+    testing.expectEqual('port,constructor', Object.getOwnPropertyNames(MIDIConnectionEvent.prototype).join(','));
+
+    testing.expectEqual(0, MIDIPort.prototype.close.length);
+    testing.expectEqual(0, MIDIPort.prototype.open.length);
+    testing.expectEqual(1, MIDIOutput.prototype.send.length);
+    testing.expectEqual(0, MIDIInputMap.prototype.entries.length);
+    testing.expectEqual(1, MIDIInputMap.prototype.forEach.length);
+    testing.expectEqual(1, MIDIInputMap.prototype.get.length);
+    testing.expectEqual(1, MIDIInputMap.prototype.has.length);
+    testing.expectEqual(0, MIDIInputMap.prototype.keys.length);
+    testing.expectEqual(0, MIDIInputMap.prototype.values.length);
+
+    // The only writable members are the three event handlers.
+    for (const [iface, key] of [[MIDIAccess, 'onstatechange'], [MIDIPort, 'onstatechange'], [MIDIInput, 'onmidimessage']]) {
+      const d = Object.getOwnPropertyDescriptor(iface.prototype, key);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual('function', typeof d.set);
+    }
+    for (const [iface, key] of [[MIDIAccess, 'inputs'], [MIDIPort, 'id'], [MIDIInputMap, 'size'], [MIDIMessageEvent, 'data'], [MIDIConnectionEvent, 'port']]) {
+      const d = Object.getOwnPropertyDescriptor(iface.prototype, key);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+      testing.expectEqual(true, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+    }
+  }
+</script>
+
+<script id="midi_illegal_constructors">
+  {
+    const message = (fn) => { try { fn(); } catch (e) { return e.name + ': ' + e.message; } return 'no throw'; };
+    for (const n of ['MIDIAccess', 'MIDIPort', 'MIDIInput', 'MIDIOutput', 'MIDIInputMap', 'MIDIOutputMap']) {
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': Illegal constructor`,
+        message(() => new window[n]()),
+      );
+      testing.expectEqual('TypeError: Illegal constructor', message(() => window[n]()));
+    }
+    for (const n of ['MIDIMessageEvent', 'MIDIConnectionEvent']) {
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': 1 argument required, but only 0 present.`,
+        message(() => new window[n]()),
+      );
+      testing.expectEqual(
+        `TypeError: Failed to construct '${n}': Please use the 'new' operator, ` +
+          'this DOM object constructor cannot be called as a function.',
+        message(() => window[n]('x')),
+      );
+    }
+  }
+</script>
+
+<script id="midi_message_event">
+  {
+    const message = (fn) => { try { fn(); } catch (e) { return e.name + ': ' + e.message; } return 'no throw'; };
+
+    const plain = new MIDIMessageEvent('midimessage');
+    testing.expectEqual('midimessage', plain.type);
+    testing.expectEqual(null, plain.data);
+    testing.expectEqual('[object MIDIMessageEvent]', Object.prototype.toString.call(plain));
+    testing.expectEqual(null, new MIDIMessageEvent('m', {}).data);
+    testing.expectEqual(null, new MIDIMessageEvent('m', { data: undefined }).data);
+    testing.expectEqual(null, new MIDIMessageEvent('m', { data: null }).data);
+
+    // The very same Uint8Array, not a copy: a later write to it is visible.
+    const bytes = new Uint8Array([0x90, 0x45, 0x7f]);
+    const ev = new MIDIMessageEvent('midimessage', { data: bytes });
+    testing.expectEqual(true, ev.data === bytes);
+    testing.expectEqual(true, ev.data === ev.data);
+    bytes[0] = 9;
+    testing.expectEqual(9, ev.data[0]);
+    testing.expectEqual(3, ev.data.length);
+
+    // Only a Uint8Array will do -- not another view, not a buffer.
+    const badData = "TypeError: Failed to construct 'MIDIMessageEvent': Failed to read the 'data' property " +
+      "from 'MIDIMessageEventInit': Failed to convert value to 'Uint8Array'.";
+    for (const bad of [new Uint8ClampedArray([1]), new Int8Array([1]), new ArrayBuffer(2), [1, 2], 1, 'x']) {
+      testing.expectEqual(badData, message(() => new MIDIMessageEvent('m', { data: bad })));
+    }
+
+    // Event's own init members still apply.
+    const flags = new MIDIMessageEvent('m', { bubbles: true, cancelable: true, composed: true });
+    testing.expectEqual(true, flags.bubbles);
+    testing.expectEqual(true, flags.cancelable);
+    testing.expectEqual(true, flags.composed);
+    testing.expectEqual(false, flags.isTrusted);
+
+    testing.expectError(
+      'Illegal invocation',
+      () => Object.getOwnPropertyDescriptor(MIDIMessageEvent.prototype, 'data').get.call(new Event('x')),
+    );
+  }
+</script>
+
+<script id="midi_connection_event">
+  {
+    const message = (fn) => { try { fn(); } catch (e) { return e.name + ': ' + e.message; } return 'no throw'; };
+
+    const ev = new MIDIConnectionEvent('statechange');
+    testing.expectEqual('statechange', ev.type);
+    testing.expectEqual(null, ev.port);
+    testing.expectEqual('[object MIDIConnectionEvent]', Object.prototype.toString.call(ev));
+    testing.expectEqual(null, new MIDIConnectionEvent('s', {}).port);
+    testing.expectEqual(null, new MIDIConnectionEvent('s', { port: undefined }).port);
+    testing.expectEqual(null, new MIDIConnectionEvent('s', { port: null }).port);
+
+    // There is no MIDIPort to hand it, so every non-null value is refused.
+    const badPort = "TypeError: Failed to construct 'MIDIConnectionEvent': Failed to read the 'port' " +
+      "property from 'MIDIConnectionEventInit': Failed to convert value to 'MIDIPort'.";
+    for (const bad of [1, 'x', {}, new Event('y')]) {
+      testing.expectEqual(badPort, message(() => new MIDIConnectionEvent('s', { port: bad })));
+    }
+  }
+</script>
+
+<script id="midi_access_pending" type=module>
+  {
+    const state = await testing.async();
+    // Chrome's permission prompt leaves this pending, so no MIDIAccess is ever
+    // handed out and the maps stay unreachable. Only an argument error settles
+    // it, and it settles as a rejection.
+    let settled = 'pending';
+    navigator.requestMIDIAccess().then(() => { settled = 'resolved'; }, () => { settled = 'rejected'; });
+    let badArg = null;
+    try {
+      await navigator.requestMIDIAccess(1);
+      badArg = 'resolved';
+    } catch (e) { badArg = e.name + ': ' + e.message; }
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual('pending', settled);
+      testing.expectEqual(
+        "TypeError: Failed to execute 'requestMIDIAccess' on 'Navigator': The provided value is not of " +
+          "type 'MIDIOptions'.",
+        badArg,
+      );
+    });
+  }
+</script>

@@ -497,8 +497,21 @@ pub fn getUserMedia(
 // Chrome's permission prompt leaves this pending, and it was still pending four
 // seconds later (measured). Resolving it with a MIDI access object we don't
 // have would be the invention, and rejecting it claims a decision nobody made.
-pub fn requestMIDIAccess(_: *const Navigator, _: ?js.Object, exec: *const Execution) js.Promise {
-    const resolver = exec.js.local.?.createPromiseResolver();
+//
+// A MIDIOptions that is not a dictionary never reaches the prompt: it is a
+// rejection, not a synchronous throw (measured -- `requestMIDIAccess(1)`
+// rejects while `requestMIDIAccess(null)` stays pending like the rest).
+pub fn requestMIDIAccess(_: *const Navigator, options_: ?js.Value, exec: *const Execution) js.Promise {
+    const local = exec.js.local.?;
+    if (options_) |options| {
+        if (!options.isNullOrUndefined() and !options.isObject()) {
+            return local.rejectPromise(.{
+                .type_error = "Failed to execute 'requestMIDIAccess' on 'Navigator': The provided value " ++
+                    "is not of type 'MIDIOptions'.",
+            });
+        }
+    }
+    const resolver = local.createPromiseResolver();
     const promise = resolver.promise();
     promise.markAsHandled();
     return promise;

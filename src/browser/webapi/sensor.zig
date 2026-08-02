@@ -520,8 +520,6 @@ pub const SensorErrorEvent = struct {
     _proto: *Event,
     _error: *DOMException,
 
-    const EventOptions = Event.inheritOptions(SensorErrorEvent, struct {});
-
     pub fn constructor(
         type_: ?js.Value,
         options_: ?js.Value,
@@ -556,13 +554,7 @@ pub const SensorErrorEvent = struct {
             exec,
         );
 
-        var event_options: EventOptions = .{};
-        if (options.isObject()) {
-            const object = options.toObject();
-            event_options.bubbles = try readFlag(object, "bubbles");
-            event_options.cancelable = try readFlag(object, "cancelable");
-            event_options.composed = try readFlag(object, "composed");
-        }
+        const event_options = try Event.optionsFromJs(options);
 
         const arena = try exec.getArena(.tiny, "SensorErrorEvent");
         errdefer arena.release();
@@ -585,7 +577,7 @@ pub const SensorErrorEvent = struct {
             try String.init(arena.allocator(), "error", .{}),
             SensorErrorEvent{ ._proto = undefined, ._error = dom },
         );
-        Event.populatePrototypes(event, EventOptions{}, true);
+        Event.populatePrototypes(event, Event.Options{}, true);
         return event;
     }
 
@@ -613,11 +605,3 @@ pub const SensorErrorEvent = struct {
         pub const @"error" = bridge.accessor(SensorErrorEvent.getError, null, .{});
     };
 };
-
-fn readFlag(object: js.Object, comptime member: []const u8) !bool {
-    const value = try object.get(member);
-    if (value.isUndefined()) {
-        return false;
-    }
-    return value.toBool();
-}
