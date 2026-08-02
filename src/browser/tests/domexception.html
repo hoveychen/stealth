@@ -132,3 +132,27 @@
     testing.expectEqual(true, err instanceof Error);
   }, () => link.appendChild(content));
 </script>
+
+<script id=message_outlives_later_strings>
+  {
+    // The message and the name are the script's, and they have to keep saying
+    // what the script said however many strings cross the bridge afterwards.
+    // They used to be slices of a shared scratch buffer, so the next string
+    // argument -- any string argument -- wrote over them in place:
+    // `new CustomEvent('yy')` turned a "boom" message into "yyom".
+    const e = new DOMException('boom', 'NotAllowedError');
+    new CustomEvent('yy');
+    document.createElement('xx');
+    new URL('http://example.com/');
+    testing.expectEqual('boom', e.message);
+    testing.expectEqual('NotAllowedError', e.name);
+    testing.expectEqual('NotAllowedError: boom', String(e));
+
+    // The name matters just as much: it is what the legacy code is read from.
+    const named = new DOMException('a longer message', 'InvalidStateError');
+    new CustomEvent('zzzzzzzzzzzzzzzzzzzzz');
+    testing.expectEqual('a longer message', named.message);
+    testing.expectEqual('InvalidStateError', named.name);
+    testing.expectEqual(11, named.code);
+  }
+</script>

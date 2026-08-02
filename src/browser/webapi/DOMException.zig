@@ -39,6 +39,20 @@ pub fn init(message: ?[]const u8, name: ?[]const u8) DOMException {
     };
 }
 
+// `new DOMException(message, name)`. The strings the bridge hands over are
+// slices of a per-call scratch buffer, so they have to be copied: keeping them
+// meant the next string to cross the bridge -- from any call at all, a
+// `new CustomEvent('yy')` was enough -- overwrote the message in place.
+// init() itself takes its strings from Zig callers, which pass literals, so it
+// stays as it is.
+pub fn constructor(message: ?[]const u8, name: ?[]const u8, exec: *const js.Execution) !DOMException {
+    return .{
+        ._code = if (name) |n| Code.fromName(n) else .none,
+        ._custom_name = if (name) |n| try exec.dupeString(n) else null,
+        ._custom_message = if (message) |m| try exec.dupeString(m) else null,
+    };
+}
+
 pub fn fromError(err: anyerror) ?DOMException {
     return switch (err) {
         error.SyntaxError => .{ ._code = .syntax_error },
@@ -262,7 +276,7 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(DOMException.init, .{});
+    pub const constructor = bridge.constructor(DOMException.constructor, .{});
     pub const code = bridge.accessor(DOMException.getCode, null, .{});
     pub const name = bridge.accessor(DOMException.getName, null, .{});
     pub const message = bridge.accessor(DOMException.getMessage, null, .{});
