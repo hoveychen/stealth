@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  window.createImageBitmap and ImageBitmap. Every shape, size and message below
+  was measured on a headed Chrome 150 over http://localhost; the snapshot lives
+  in agent-workspace/stealth-detector-probes/win-batch/win9-chrome.json.
+-->
+
+<script id="image_bitmap_surface">
+  {
+    testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, 'ImageBitmap'));
+    const c = Object.getOwnPropertyDescriptor(window, 'ImageBitmap');
+    testing.expectEqual(false, c.enumerable);
+    testing.expectEqual(true, c.configurable);
+    testing.expectEqual(true, c.writable);
+    testing.expectEqual(0, ImageBitmap.length);
+    testing.expectEqual('ImageBitmap', ImageBitmap.name);
+    testing.expectEqual(
+      'width,height,close,constructor',
+      Object.getOwnPropertyNames(ImageBitmap.prototype).join(','),
+    );
+    testing.expectEqual('ImageBitmap', ImageBitmap.prototype[Symbol.toStringTag]);
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(ImageBitmap.prototype));
+    testing.expectEqual(0, ImageBitmap.prototype.close.length);
+    testing.expectError(
+      "Failed to construct 'ImageBitmap': Illegal constructor",
+      () => new ImageBitmap(),
+    );
+
+    const d = Object.getOwnPropertyDescriptor(window, 'createImageBitmap');
+    testing.expectEqual('function', typeof d.value);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+    testing.expectEqual(true, d.writable);
+    testing.expectEqual(1, d.value.length);
+    testing.expectEqual('createImageBitmap', d.value.name);
+  }
+</script>
+
+<script id="image_bitmap_from_canvas" type=module>
+  {
+    const state = await testing.async();
+    const out = {};
+    (async () => {
+      const c = document.createElement('canvas');
+      c.width = 4; c.height = 3;
+      const p = window.createImageBitmap(c);
+      out.brandOfReturn = Object.prototype.toString.call(p);
+      const bmp = await p;
+      out.brand = Object.prototype.toString.call(bmp);
+      out.size = bmp.width + 'x' + bmp.height;
+      out.widthType = typeof bmp.width;
+      out.close = String(bmp.close());
+      out.afterClose = bmp.width + 'x' + bmp.height;
+      out.closeTwice = String(bmp.close());
+      // an ImageData source, and a bitmap used as a source in turn
+      out.fromImageData = (await window.createImageBitmap(new ImageData(5, 7))).width + 'x' +
+        (await window.createImageBitmap(new ImageData(5, 7))).height;
+      const src = await window.createImageBitmap(c);
+      out.fromBitmap = (await window.createImageBitmap(src)).width + 'x' +
+        (await window.createImageBitmap(src)).height;
+      // the crop-rect overload: the rect wins, is not clipped, and a negative
+      // extent is taken by magnitude
+      out.crop = (await window.createImageBitmap(c, 1, 2, 3, 4)).width + 'x' +
+        (await window.createImageBitmap(c, 1, 2, 3, 4)).height;
+      out.cropNeg = (await window.createImageBitmap(c, 0, 0, -3, 4)).width + 'x4';
+      out.cropOver = (await window.createImageBitmap(c, 5, 5, 20, 20)).width + 'x20';
+      // a lone second argument is the options dictionary, not sx
+      out.optionsOnly = (await window.createImageBitmap(c, { imageOrientation: 'flipY' })).width + 'x3';
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      testing.expectEqual('[object Promise]', out.brandOfReturn);
+      testing.expectEqual('[object ImageBitmap]', out.brand);
+      testing.expectEqual('4x3', out.size);
+      testing.expectEqual('number', out.widthType);
+      testing.expectEqual('undefined', out.close);
+      testing.expectEqual('0x0', out.afterClose);
+      testing.expectEqual('undefined', out.closeTwice);
+      testing.expectEqual('5x7', out.fromImageData);
+      testing.expectEqual('4x3', out.fromBitmap);
+      testing.expectEqual('3x4', out.crop);
+      testing.expectEqual('3x4', out.cropNeg);
+      testing.expectEqual('20x20', out.cropOver);
+      testing.expectEqual('4x3', out.optionsOnly);
+    });
+  }
+</script>
+
+<script id="image_bitmap_rejections" type=module>
+  {
+    const state = await testing.async();
+    const out = {};
+    const mk = (w, h) => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      return c;
+    };
+    (async () => {
+      const settle = async (key, fn) => {
+        try { await fn(); out[key] = 'resolved'; }
+        catch (e) { out[key] = e.name + ': ' + e.message; }
+      };
+      // No argument at all is a rejection, not a synchronous throw.
+      let sync = 'no sync throw';
+      let promise = null;
+      try { promise = window.createImageBitmap(); } catch (e) { sync = 'SYNC ' + e.name; }
+      out.noArgSync = sync;
+      await settle('noArg', () => promise);
+      await settle('plainObject', () => window.createImageBitmap({}));
+      await settle('nullSource', () => window.createImageBitmap(null));
+      await settle('zeroWidth', () => window.createImageBitmap(mk(0, 4)));
+      await settle('zeroHeight', () => window.createImageBitmap(mk(4, 0)));
+      await settle('cropZeroWidth', () => window.createImageBitmap(mk(10, 10), 0, 0, 0, 5));
+      await settle('cropZeroHeight', () => window.createImageBitmap(mk(10, 10), 0, 0, 5, 0));
+      await settle('emptyImage', () => window.createImageBitmap(document.createElement('img')));
+      await settle('closedBitmap', async () => {
+        const b = await window.createImageBitmap(mk(8, 2));
+        b.close();
+        return window.createImageBitmap(b);
+      });
+      await settle('blob', () => window.createImageBitmap(new Blob(['nope'], { type: 'image/png' })));
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      const prefix = "Failed to execute 'createImageBitmap' on 'Window': ";
+      const types = '(Blob or HTMLCanvasElement or HTMLImageElement or HTMLVideoElement or ' +
+        "ImageBitmap or ImageData or OffscreenCanvas or SVGImageElement or VideoFrame)";
+      testing.expectEqual('no sync throw', out.noArgSync);
+      testing.expectEqual('TypeError: ' + prefix + '1 argument required, but only 0 present.', out.noArg);
+      testing.expectEqual("TypeError: " + prefix + "The provided value is not of type '" + types + "'.", out.plainObject);
+      testing.expectEqual("TypeError: " + prefix + "The provided value is not of type '" + types + "'.", out.nullSource);
+      testing.expectEqual('InvalidStateError: ' + prefix + "The image source's width is 0.", out.zeroWidth);
+      testing.expectEqual('InvalidStateError: ' + prefix + "The image source's height is 0.", out.zeroHeight);
+      testing.expectEqual('RangeError: ' + prefix + 'The crop rect width is 0.', out.cropZeroWidth);
+      testing.expectEqual('RangeError: ' + prefix + 'The crop rect height is 0.', out.cropZeroHeight);
+      testing.expectEqual('InvalidStateError: ' + prefix + 'The image source is not usable.', out.emptyImage);
+      testing.expectEqual('InvalidStateError: ' + prefix + 'The image source is not usable.', out.closedBitmap);
+      // No image decoder here, so every Blob gets the answer Chrome gives an
+      // undecodable one -- note Chrome words this one without the prefix.
+      testing.expectEqual('InvalidStateError: The source image could not be decoded.', out.blob);
+    });
+  }
+</script>

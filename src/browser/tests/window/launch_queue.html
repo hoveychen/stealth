@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  window.launchQueue, LaunchQueue and LaunchParams. Measured on a headed
+  Chrome 150 over http://localhost (win1-chrome.json / win9-chrome.json): on an
+  ordinary navigation the consumer is never called, so no LaunchParams exists.
+-->
+
+<script id="launch_queue_surface">
+  {
+    for (const n of ['LaunchQueue', 'LaunchParams']) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[n].prototype));
+      testing.expectError(
+        "Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+    testing.expectEqual(
+      'setConsumer,constructor',
+      Object.getOwnPropertyNames(LaunchQueue.prototype).join(','),
+    );
+    testing.expectEqual(1, LaunchQueue.prototype.setConsumer.length);
+    testing.expectEqual(
+      'targetURL,files,constructor',
+      Object.getOwnPropertyNames(LaunchParams.prototype).join(','),
+    );
+    for (const m of ['targetURL', 'files']) {
+      const d = Object.getOwnPropertyDescriptor(LaunchParams.prototype, m);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+    }
+
+    // launchQueue itself: a getter-only, enumerable own property of window.
+    const d = Object.getOwnPropertyDescriptor(window, 'launchQueue');
+    testing.expectEqual('function', typeof d.get);
+    testing.expectEqual(undefined, d.set);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+  }
+</script>
+
+<script id="launch_queue_behaviour">
+  {
+    testing.expectEqual('[object LaunchQueue]', Object.prototype.toString.call(window.launchQueue));
+    testing.expectEqual(true, window.launchQueue === window.launchQueue);
+
+    let called = false;
+    testing.expectEqual(undefined, window.launchQueue.setConsumer(() => { called = true; }));
+    testing.expectError(
+      "Failed to execute 'setConsumer' on 'LaunchQueue': 1 argument required, but only 0 present.",
+      () => window.launchQueue.setConsumer(),
+    );
+    testing.expectError(
+      "Failed to execute 'setConsumer' on 'LaunchQueue': parameter 1 is not of type 'Function'.",
+      () => window.launchQueue.setConsumer(42),
+    );
+    // Nothing launched this page, so the consumer stays unused.
+    testing.onload(() => testing.expectEqual(false, called));
+  }
+</script>

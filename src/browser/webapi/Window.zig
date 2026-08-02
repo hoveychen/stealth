@@ -36,6 +36,8 @@ const External = @import("External.zig");
 const StyleMedia = @import("StyleMedia.zig");
 const trusted_types = @import("trusted_types.zig");
 const DOMException = @import("DOMException.zig");
+const launch_queue = @import("launch_queue.zig");
+const ImageBitmap = @import("canvas/ImageBitmap.zig");
 const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
@@ -96,6 +98,7 @@ _statusbar: BarProp = .init,
 _toolbar: BarProp = .init,
 _external: External = .init,
 _trusted_types: trusted_types.TrustedTypePolicyFactory = .init,
+_launch_queue: launch_queue.LaunchQueue = .init,
 _style_media: StyleMedia = .init,
 // window.status. Blink kept the accessor after dropping the status bar it used
 // to write to, so it is a plain string cell that remembers whatever is
@@ -474,6 +477,10 @@ pub fn getExternal(self: *Window) *External {
 
 pub fn getTrustedTypes(self: *Window) *trusted_types.TrustedTypePolicyFactory {
     return &self._trusted_types;
+}
+
+pub fn getLaunchQueue(self: *Window) *launch_queue.LaunchQueue {
+    return &self._launch_queue;
 }
 
 pub fn getStyleMedia(self: *Window) *StyleMedia {
@@ -1735,12 +1742,27 @@ pub const JsApi = struct {
     pub const webkitRequestAnimationFrame = bridge.function(Window.requestAnimationFrame, .{});
     pub const webkitCancelAnimationFrame = bridge.function(Window.cancelAnimationFrame, .{});
 
+    pub const createImageBitmap = bridge.function(struct {
+        fn createImageBitmap(
+            _: *Window,
+            source: ?js.Value,
+            sx: ?js.Value,
+            sy: ?js.Value,
+            sw: ?js.Value,
+            sh: ?js.Value,
+            exec: *const Execution,
+        ) !js.Promise {
+            return ImageBitmap.create(source, sx, sy, sw, sh, exec);
+        }
+    }.createImageBitmap, .{ .arity = 1 });
+
     // Gated APIs: each one exists and each one rejects. See the functions.
     pub const queryLocalFonts = bridge.function(Window.queryLocalFonts, .{});
     pub const showDirectoryPicker = bridge.function(Window.showDirectoryPicker, .{});
     pub const showOpenFilePicker = bridge.function(Window.showOpenFilePicker, .{});
     pub const showSaveFilePicker = bridge.function(Window.showSaveFilePicker, .{});
     pub const getScreenDetails = bridge.function(Window.getScreenDetails, .{});
+    pub const launchQueue = bridge.accessor(Window.getLaunchQueue, null, .{});
 
     // [Replaceable] (CSSOM-View): the getter reads the page's runtime viewport
     // (overridable via Emulation.setDeviceMetricsOverride); the setter overwrites

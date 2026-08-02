@@ -1242,6 +1242,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/screen_details.zig"),
     @import("../webapi/file_system_access.zig"),
     @import("../webapi/FontData.zig"),
+    @import("../webapi/launch_queue.zig"),
+    @import("../webapi/canvas/ImageBitmap.zig"),
     @import("../webapi/External.zig"),
     @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),
