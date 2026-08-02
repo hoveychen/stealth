@@ -935,6 +935,10 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     asUint("feFlood") => return createSvgElementT(frame, Filter.FEFlood, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feImage") => return createSvgElementT(frame, Filter.FEImage, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feMerge") => return createSvgElementT(frame, Filter.FEMerge, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("feFuncA") => return createSvgElementT(frame, Filter.FEFuncA, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("feFuncB") => return createSvgElementT(frame, Filter.FEFuncB, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("feFuncG") => return createSvgElementT(frame, Filter.FEFuncG, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("feFuncR") => return createSvgElementT(frame, Filter.FEFuncR, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 8 => switch (@as(u64, @bitCast(name[0..8].*))) {
@@ -955,10 +959,12 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     asUint("feDropShadow") => return createSvgElementT(frame, Filter.FEDropShadow, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feMorphology") => return createSvgElementT(frame, Filter.FEMorphology, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("fePointLight") => return createSvgElementT(frame, Filter.FEPointLight, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("feTurbulence") => return createSvgElementT(frame, Filter.FETurbulence, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 13 => switch (@as(u104, @bitCast(name[0..13].*))) {
                     asUint("foreignObject") => return createSvgElementT(frame, Graphics.ForeignObject, name, attribute_iterator, .{ ._proto = undefined }),
+                    asUint("feColorMatrix") => return createSvgElementT(frame, Filter.FEColorMatrix, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 14 => switch (@as(u112, @bitCast(name[0..14].*))) {
@@ -966,6 +972,10 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     asUint("radialGradient") => return createSvgElementT(frame, Element.Svg.GradientElement.RadialGradient, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feDistantLight") => return createSvgElementT(frame, Filter.FEDistantLight, name, attribute_iterator, .{ ._proto = undefined }),
                     asUint("feGaussianBlur") => return createSvgElementT(frame, Filter.FEGaussianBlur, name, attribute_iterator, .{ ._proto = undefined }),
+                    else => {},
+                },
+                16 => switch (@as(u128, @bitCast(name[0..16].*))) {
+                    asUint("feConvolveMatrix") => return createSvgElementT(frame, Filter.FEConvolveMatrix, name, attribute_iterator, .{ ._proto = undefined }),
                     else => {},
                 },
                 17 => switch (@as(u136, @bitCast(name[0..17].*))) {

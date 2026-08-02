@@ -245,11 +245,13 @@ pub const JsApi = struct {
 
     pub const length = bridge.accessor(PointList.getLength, null, .{});
     pub const numberOfItems = bridge.accessor(PointList.getNumberOfItems, null, .{});
-    pub const clear = bridge.function(PointList.clear, .{});
-    pub const initialize = bridge.function(PointList.initialize, .{});
-    pub const getItem = bridge.function(PointList.getItem, .{});
-    pub const insertItemBefore = bridge.function(PointList.insertItemBefore, .{});
-    pub const replaceItem = bridge.function(PointList.replaceItem, .{});
-    pub const removeItem = bridge.function(PointList.removeItem, .{});
+    // WebIDL orders operations alphabetically after the attributes, which is
+    // the order Chrome's SVGPointList.prototype reports.
     pub const appendItem = bridge.function(PointList.appendItem, .{});
+    pub const clear = bridge.function(PointList.clear, .{});
+    pub const getItem = bridge.function(PointList.getItem, .{});
+    pub const initialize = bridge.function(PointList.initialize, .{});
+    pub const insertItemBefore = bridge.function(PointList.insertItemBefore, .{});
+    pub const removeItem = bridge.function(PointList.removeItem, .{});
+    pub const replaceItem = bridge.function(PointList.replaceItem, .{});
 };

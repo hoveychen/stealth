@@ -23,6 +23,11 @@
     <feFlood id=flood></feFlood>
     <feImage id=image></feImage>
     <feTile id=tile></feTile>
+    <feColorMatrix id=colorMatrix></feColorMatrix>
+    <feConvolveMatrix id=convolve></feConvolveMatrix>
+    <feTurbulence id=turbulence></feTurbulence>
+    <feComponentTransfer><feFuncA id=funcA></feFuncA><feFuncB id=funcB></feFuncB>
+      <feFuncG id=funcG></feFuncG><feFuncR id=funcR></feFuncR></feComponentTransfer>
   </filter>
 </svg>
 
@@ -49,6 +54,13 @@
     ['feSpecularLighting', 'SVGFESpecularLightingElement'],
     ['feSpotLight', 'SVGFESpotLightElement'],
     ['feTile', 'SVGFETileElement'],
+    ['feColorMatrix', 'SVGFEColorMatrixElement'],
+    ['feConvolveMatrix', 'SVGFEConvolveMatrixElement'],
+    ['feTurbulence', 'SVGFETurbulenceElement'],
+    ['feFuncA', 'SVGFEFuncAElement'],
+    ['feFuncB', 'SVGFEFuncBElement'],
+    ['feFuncG', 'SVGFEFuncGElement'],
+    ['feFuncR', 'SVGFEFuncRElement'],
   ];
   for (const [tag, name] of pairs) {
     const created = document.createElementNS(ns, tag);
@@ -249,5 +261,146 @@
   filter.x.baseVal.valueAsString = '5';
   testing.expectEqual('5', filter.getAttribute('x'));
   testing.expectEqual(1, filter.x.baseVal.unitType);
+}
+</script>
+
+<script id=transferFunctions>
+{
+  // The four channel functions share every member with their base class and
+  // add nothing but a name.
+  for (const id of ['#funcA', '#funcB', '#funcG', '#funcR']) {
+    const fn = $(id);
+    testing.expectEqual(true, fn instanceof SVGComponentTransferFunctionElement);
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(Object.getPrototypeOf(fn)));
+  }
+  testing.expectEqual(5, SVGComponentTransferFunctionElement.SVG_FECOMPONENTTRANSFER_TYPE_GAMMA);
+  // The constants belong to the base class only; the children inherit them
+  // through the constructor chain rather than owning them.
+  testing.expectEqual(false, SVGFEFuncAElement.hasOwnProperty('SVG_FECOMPONENTTRANSFER_TYPE_GAMMA'));
+
+  const funcA = $('#funcA');
+  testing.expectEqual(1, funcA.type.baseVal);
+  testing.expectEqual(1, funcA.slope.baseVal);
+  testing.expectEqual(0, funcA.intercept.baseVal);
+  testing.expectEqual(1, funcA.amplitude.baseVal);
+  testing.expectEqual(1, funcA.exponent.baseVal);
+  testing.expectEqual(0, funcA.offset.baseVal);
+  testing.expectEqual(0, funcA.tableValues.baseVal.numberOfItems);
+  funcA.setAttribute('type', 'gamma');
+  testing.expectEqual(5, funcA.type.baseVal);
+  funcA.setAttribute('tableValues', '0 1');
+  testing.expectEqual(2, funcA.tableValues.baseVal.numberOfItems);
+}
+</script>
+
+<script id=numberLists>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (t) => document.createElementNS(ns, t);
+  const cm = mk('feColorMatrix');
+  testing.expectEqual(true, cm.values instanceof SVGAnimatedNumberList);
+  testing.expectEqual(true, cm.values.baseVal instanceof SVGNumberList);
+  testing.expectEqual(true, cm.values === cm.values);
+  // baseVal and animVal are distinct objects; animVal is read only.
+  testing.expectEqual(false, cm.values.baseVal === cm.values.animVal);
+
+  cm.setAttribute('values', '1 0.5, -2e1  3');
+  testing.expectEqual(4, cm.values.baseVal.numberOfItems);
+  testing.expectEqual(4, cm.values.baseVal.length);
+  testing.expectEqual(1, cm.values.baseVal.getItem(0).value);
+  testing.expectEqual(0.5, cm.values.baseVal.getItem(1).value);
+  testing.expectEqual(-20, cm.values.baseVal.getItem(2).value);
+  testing.expectError('NoModificationAllowedError', () => cm.values.animVal.clear());
+
+  // One malformed token empties the whole list.
+  const bad = mk('feColorMatrix');
+  bad.setAttribute('values', '1 x 2');
+  testing.expectEqual(0, bad.values.baseVal.numberOfItems);
+
+  // Items are live: writing one rewrites the attribute.
+  const mut = mk('feColorMatrix');
+  mut.setAttribute('values', '1 2 3');
+  mut.values.baseVal.getItem(1).value = 9;
+  testing.expectEqual('1 9 3', mut.getAttribute('values'));
+  testing.expectEqual(9, mut.values.baseVal.getItem(1).value);
+
+  const app = mk('feColorMatrix');
+  const n = mk('svg').createSVGNumber();
+  n.value = 8;
+  app.setAttribute('values', '1 2');
+  app.values.baseVal.appendItem(n);
+  testing.expectEqual('1 2 8', app.getAttribute('values'));
+
+  const rem = mk('feColorMatrix');
+  rem.setAttribute('values', '1 2 3');
+  rem.values.baseVal.removeItem(1);
+  testing.expectEqual('1 3', rem.getAttribute('values'));
+
+  const conv = mk('feConvolveMatrix');
+  conv.setAttribute('kernelMatrix', '1 2 3 4');
+  testing.expectEqual(4, conv.kernelMatrix.baseVal.numberOfItems);
+}
+</script>
+
+<script id=convolveAndTurbulence>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (t) => document.createElementNS(ns, t);
+  const conv = $('#convolve');
+  testing.expectEqual(true, conv.orderX instanceof SVGAnimatedInteger);
+  testing.expectEqual(3, conv.orderX.baseVal);
+  testing.expectEqual(3, conv.orderY.baseVal);
+  testing.expectEqual(0, conv.targetX.baseVal);
+  testing.expectEqual(1, conv.divisor.baseVal);
+  testing.expectEqual(0, conv.bias.baseVal);
+  testing.expectEqual(1, conv.edgeMode.baseVal);
+  testing.expectEqual(true, conv.preserveAlpha instanceof SVGAnimatedBoolean);
+  testing.expectEqual(false, conv.preserveAlpha.baseVal);
+
+  const order = mk('feConvolveMatrix');
+  order.setAttribute('order', '5 7');
+  testing.expectEqual(5, order.orderX.baseVal);
+  testing.expectEqual(7, order.orderY.baseVal);
+  order.setAttribute('order', '4');
+  testing.expectEqual(4, order.orderX.baseVal);
+  testing.expectEqual(4, order.orderY.baseVal);
+  // order must be positive; Chrome falls back to the initial 3.
+  order.setAttribute('order', '0');
+  testing.expectEqual(3, order.orderX.baseVal);
+
+  const edge = mk('feConvolveMatrix');
+  edge.setAttribute('edgeMode', 'none');
+  testing.expectEqual(3, edge.edgeMode.baseVal);
+
+  // An SVG boolean matches the keyword exactly.
+  const alpha = mk('feConvolveMatrix');
+  alpha.setAttribute('preserveAlpha', 'TRUE');
+  testing.expectEqual(false, alpha.preserveAlpha.baseVal);
+  alpha.setAttribute('preserveAlpha', 'true');
+  testing.expectEqual(true, alpha.preserveAlpha.baseVal);
+
+  const turb = $('#turbulence');
+  testing.expectEqual(1, turb.numOctaves.baseVal);
+  testing.expectEqual(0, turb.seed.baseVal);
+  testing.expectEqual(2, turb.stitchTiles.baseVal);
+  testing.expectEqual(2, turb.type.baseVal);
+  testing.expectEqual(0, turb.baseFrequencyX.baseVal);
+
+  const oct = mk('feTurbulence');
+  oct.numOctaves.baseVal = 5;
+  testing.expectEqual('5', oct.getAttribute('numOctaves'));
+  testing.expectEqual(5, oct.numOctaves.baseVal);
+
+  const freq = mk('feTurbulence');
+  freq.setAttribute('baseFrequency', '0.3');
+  testing.expectEqual(freq.baseFrequencyX.baseVal, freq.baseFrequencyY.baseVal);
+  freq.setAttribute('type', 'fractalNoise');
+  testing.expectEqual(1, freq.type.baseVal);
+  freq.setAttribute('stitchTiles', 'stitch');
+  testing.expectEqual(1, freq.stitchTiles.baseVal);
+
+  const cmt = mk('feColorMatrix');
+  cmt.setAttribute('type', 'luminanceToAlpha');
+  testing.expectEqual(4, cmt.type.baseVal);
 }
 </script>

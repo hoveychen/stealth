@@ -65,10 +65,14 @@ const slotting = @import("webapi/element/slotting.zig");
 const NavigationKind = @import("webapi/navigation/root.zig").NavigationKind;
 
 const PointList = @import("webapi/svg/PointList.zig");
+const NumberList = @import("webapi/svg/NumberList.zig");
 const StringList = @import("webapi/svg/StringList.zig");
 const AnimatedEnumeration = @import("webapi/svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("webapi/svg/AnimatedLength.zig");
 const AnimatedNumber = @import("webapi/svg/AnimatedNumber.zig");
+const AnimatedNumberList = @import("webapi/svg/AnimatedNumberList.zig");
+const AnimatedInteger = @import("webapi/svg/AnimatedInteger.zig");
+const AnimatedBoolean = @import("webapi/svg/AnimatedBoolean.zig");
 const AnimatedString = @import("webapi/svg/AnimatedString.zig");
 const AnimatedTransformList = @import("webapi/svg/AnimatedTransformList.zig");
 const AnimatedPreserveAspectRatio = @import("webapi/svg/AnimatedPreserveAspectRatio.zig");
@@ -153,6 +157,10 @@ _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,
 _svg_animated_lengths: AnimatedLength.Lookup = .empty,
 _svg_animated_numbers: AnimatedNumber.Lookup = .empty,
+_svg_animated_number_lists: AnimatedNumberList.Lookup = .empty,
+_svg_animated_integers: AnimatedInteger.Lookup = .empty,
+_svg_animated_booleans: AnimatedBoolean.Lookup = .empty,
+_svg_number_lists: NumberList.Lookup = .empty,
 _svg_animated_preserve_aspect_ratios: AnimatedPreserveAspectRatio.Lookup = .empty,
 _svg_animated_strings: AnimatedString.Lookup = .empty,
 _svg_animated_transform_lists: AnimatedTransformList.Lookup = .empty,
@@ -528,6 +536,11 @@ pub fn deinit(self: *Frame) void {
 
         var svg_point_lists = self._svg_point_lists.valueIterator();
         while (svg_point_lists.next()) |list| {
+            list.*.deinit(page);
+        }
+
+        var svg_number_lists = self._svg_number_lists.valueIterator();
+        while (svg_number_lists.next()) |list| {
             list.*.deinit(page);
         }
 

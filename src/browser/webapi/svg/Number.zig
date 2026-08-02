@@ -28,12 +28,25 @@ const Number = @This();
 _rc: lp.RC = .{},
 _arena: *lp.Arena,
 _value: f32 = 0,
+// Set while this number is an item of an SVGNumberList: writing the value
+// then rewrites the whole reflected attribute rather than the local field.
+_attachment: ?Attachment = null,
+_read_only: bool = false,
+
+pub const Attachment = struct {
+    owner: *anyopaque,
+    mutate: *const fn (*anyopaque, *Number, f32) anyerror!void,
+};
 
 pub fn detached(frame: *Frame) !*Number {
-    const arena = try frame._page.getArena(.tiny, "SVGNumber");
+    return create(0, frame._page);
+}
+
+pub fn create(value: f32, page: *Page) !*Number {
+    const arena = try page.getArena(.tiny, "SVGNumber");
     errdefer arena.release();
     const self = try arena.create(Number);
-    self.* = .{ ._arena = arena };
+    self.* = .{ ._arena = arena, ._value = value };
     return self;
 }
 
@@ -54,11 +67,40 @@ pub fn getValue(self: *const Number) f32 {
 }
 
 pub fn setValue(self: *Number, value: f32) !void {
+    if (self._read_only) {
+        return error.NoModificationAllowed;
+    }
     // WebIDL float is restricted, and the bridge does not police that for us.
     if (!std.math.isFinite(value)) {
         return error.TypeError;
     }
+    if (self._attachment) |attachment| {
+        return attachment.mutate(attachment.owner, self, value);
+    }
     self._value = value;
+}
+
+pub fn setValueRaw(self: *Number, value: f32) void {
+    self._value = value;
+}
+
+pub fn attach(self: *Number, attachment: Attachment, read_only: bool) void {
+    self._attachment = attachment;
+    if (read_only) self._read_only = true;
+}
+
+pub fn detach(self: *Number, owner: *anyopaque) void {
+    const attachment = self._attachment orelse return;
+    if (attachment.owner == owner) self._attachment = null;
+}
+
+pub fn isAttached(self: *const Number) bool {
+    return self._attachment != null;
+}
+
+pub fn isAttachedTo(self: *const Number, owner: *anyopaque) bool {
+    const attachment = self._attachment orelse return false;
+    return attachment.owner == owner;
 }
 
 pub const JsApi = struct {

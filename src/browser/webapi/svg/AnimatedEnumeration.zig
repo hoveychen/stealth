@@ -92,6 +92,32 @@ const morphology_operator_entries = [_]Entry{
     .{ .keyword = "erode", .value = 1 },
     .{ .keyword = "dilate", .value = 2 },
 };
+const transfer_function_entries = [_]Entry{
+    .{ .keyword = "identity", .value = 1 },
+    .{ .keyword = "table", .value = 2 },
+    .{ .keyword = "discrete", .value = 3 },
+    .{ .keyword = "linear", .value = 4 },
+    .{ .keyword = "gamma", .value = 5 },
+};
+const color_matrix_entries = [_]Entry{
+    .{ .keyword = "matrix", .value = 1 },
+    .{ .keyword = "saturate", .value = 2 },
+    .{ .keyword = "hueRotate", .value = 3 },
+    .{ .keyword = "luminanceToAlpha", .value = 4 },
+};
+const edge_mode_entries = [_]Entry{
+    .{ .keyword = "duplicate", .value = 1 },
+    .{ .keyword = "wrap", .value = 2 },
+    .{ .keyword = "none", .value = 3 },
+};
+const turbulence_type_entries = [_]Entry{
+    .{ .keyword = "fractalNoise", .value = 1 },
+    .{ .keyword = "turbulence", .value = 2 },
+};
+const stitch_entries = [_]Entry{
+    .{ .keyword = "stitch", .value = 1 },
+    .{ .keyword = "noStitch", .value = 2 },
+};
 const channel_entries = [_]Entry{
     .{ .keyword = "R", .value = 1 },
     .{ .keyword = "G", .value = 2 },
@@ -118,6 +144,11 @@ pub const Kind = enum {
     morphology_operator,
     displacement_x_channel,
     displacement_y_channel,
+    transfer_function_type,
+    color_matrix_type,
+    convolve_edge_mode,
+    turbulence_type,
+    turbulence_stitch_tiles,
 
     fn attributeName(self: Kind) lp.String {
         return switch (self) {
@@ -138,6 +169,9 @@ pub const Kind = enum {
             .composite_operator, .morphology_operator => .wrap("operator"),
             .displacement_x_channel => .wrap("xChannelSelector"),
             .displacement_y_channel => .wrap("yChannelSelector"),
+            .transfer_function_type, .color_matrix_type, .turbulence_type => .wrap("type"),
+            .convolve_edge_mode => .wrap("edgeMode"),
+            .turbulence_stitch_tiles => .wrap("stitchTiles"),
         };
     }
 
@@ -152,6 +186,11 @@ pub const Kind = enum {
             .composite_operator => &composite_operator_entries,
             .morphology_operator => &morphology_operator_entries,
             .displacement_x_channel, .displacement_y_channel => &channel_entries,
+            .transfer_function_type => &transfer_function_entries,
+            .color_matrix_type => &color_matrix_entries,
+            .convolve_edge_mode => &edge_mode_entries,
+            .turbulence_type => &turbulence_type_entries,
+            .turbulence_stitch_tiles => &stitch_entries,
             else => &unit_entries,
         };
     }
@@ -168,6 +207,9 @@ pub const Kind = enum {
             .blend_mode,
             .composite_operator,
             .morphology_operator,
+            .transfer_function_type,
+            .color_matrix_type,
+            .convolve_edge_mode,
             => 1,
             .displacement_x_channel, .displacement_y_channel => 4,
             else => 2,

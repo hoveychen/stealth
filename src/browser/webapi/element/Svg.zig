@@ -63,7 +63,11 @@ pub const Type = union(enum) {
     // SVGElement in Chrome, so each is its own variant rather than a nested
     // union under a shared base that does not exist.
     filter: *filter.Filter,
+    component_transfer_function: *filter.ComponentTransferFunction,
     fe_blend: *filter.FEBlend,
+    fe_color_matrix: *filter.FEColorMatrix,
+    fe_convolve_matrix: *filter.FEConvolveMatrix,
+    fe_turbulence: *filter.FETurbulence,
     fe_component_transfer: *filter.FEComponentTransfer,
     fe_composite: *filter.FEComposite,
     fe_diffuse_lighting: *filter.FEDiffuseLighting,
@@ -97,6 +101,9 @@ pub fn is(self: *Svg, comptime T: type) ?*T {
     }
     if (self._type == .gradient) {
         return self._type.gradient.is(T);
+    }
+    if (self._type == .component_transfer_function) {
+        return self._type.component_transfer_function.is(T);
     }
     return null;
 }
@@ -138,7 +145,11 @@ pub fn getTag(self: *const Svg) Element.Tag {
         .pattern,
         .stop,
         .filter,
+        .component_transfer_function,
         .fe_blend,
+        .fe_color_matrix,
+        .fe_convolve_matrix,
+        .fe_turbulence,
         .fe_component_transfer,
         .fe_composite,
         .fe_diffuse_lighting,

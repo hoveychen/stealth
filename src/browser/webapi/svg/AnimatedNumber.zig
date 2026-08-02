@@ -71,6 +71,16 @@ pub const Kind = enum {
     drop_shadow_std_y,
     morphology_radius_x,
     morphology_radius_y,
+    convolve_divisor,
+    convolve_bias,
+    base_frequency_x,
+    base_frequency_y,
+    turbulence_seed,
+    func_slope,
+    func_intercept,
+    func_amplitude,
+    func_exponent,
+    func_offset,
 
     fn attributeName(self: Kind) lp.String {
         return switch (self) {
@@ -105,6 +115,15 @@ pub const Kind = enum {
             .drop_shadow_std_y,
             => comptime .wrap("stdDeviation"),
             .morphology_radius_x, .morphology_radius_y => comptime .wrap("radius"),
+            .convolve_divisor => comptime .wrap("divisor"),
+            .convolve_bias => comptime .wrap("bias"),
+            .base_frequency_x, .base_frequency_y => .wrap("baseFrequency"),
+            .turbulence_seed => comptime .wrap("seed"),
+            .func_slope => comptime .wrap("slope"),
+            .func_intercept => comptime .wrap("intercept"),
+            .func_amplitude => comptime .wrap("amplitude"),
+            .func_exponent => comptime .wrap("exponent"),
+            .func_offset => comptime .wrap("offset"),
         };
     }
 
@@ -118,11 +137,13 @@ pub const Kind = enum {
             .std_deviation_x,
             .drop_shadow_std_x,
             .morphology_radius_x,
+            .base_frequency_x,
             => .first,
             .kernel_unit_length_y,
             .std_deviation_y,
             .drop_shadow_std_y,
             .morphology_radius_y,
+            .base_frequency_y,
             => .second,
             else => .single,
         };
@@ -140,6 +161,8 @@ pub const Kind = enum {
             .drop_shadow_std_y => .drop_shadow_std_x,
             .morphology_radius_x => .morphology_radius_y,
             .morphology_radius_y => .morphology_radius_x,
+            .base_frequency_x => .base_frequency_y,
+            .base_frequency_y => .base_frequency_x,
             else => null,
         };
     }
@@ -150,6 +173,10 @@ pub const Kind = enum {
             .diffuse_constant,
             .specular_constant,
             .specular_exponent,
+            .convolve_divisor,
+            .func_slope,
+            .func_amplitude,
+            .func_exponent,
             => 1,
             .drop_shadow_dx,
             .drop_shadow_dy,

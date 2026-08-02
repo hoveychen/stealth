@@ -39,16 +39,28 @@ const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const Svg = @import("../Svg.zig");
 
+const AnimatedBoolean = @import("../../svg/AnimatedBoolean.zig");
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
+const AnimatedInteger = @import("../../svg/AnimatedInteger.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
 const AnimatedNumber = @import("../../svg/AnimatedNumber.zig");
+const AnimatedNumberList = @import("../../svg/AnimatedNumberList.zig");
 const AnimatedPreserveAspectRatio = @import("../../svg/AnimatedPreserveAspectRatio.zig");
 const AnimatedString = @import("../../svg/AnimatedString.zig");
+const NumberList = @import("../../svg/NumberList.zig");
 
 pub fn registerTypes() []const type {
     return &.{
         Filter,
+        ComponentTransferFunction,
+        FEFuncA,
+        FEFuncB,
+        FEFuncG,
+        FEFuncR,
         FEBlend,
+        FEColorMatrix,
+        FEConvolveMatrix,
+        FETurbulence,
         FEComponentTransfer,
         FEComposite,
         FEDiffuseLighting,
@@ -104,6 +116,30 @@ fn Enum(comptime T: type, comptime kind: AnimatedEnumeration.Kind) type {
     };
 }
 
+fn Int(comptime T: type, comptime kind: AnimatedInteger.Kind) type {
+    return struct {
+        pub fn get(self: *T, frame: *Frame) !*AnimatedInteger {
+            return AnimatedInteger.getOrCreate(self._proto.asElement(), kind, frame);
+        }
+    };
+}
+
+fn Bool(comptime T: type, comptime kind: AnimatedBoolean.Kind) type {
+    return struct {
+        pub fn get(self: *T, frame: *Frame) !*AnimatedBoolean {
+            return AnimatedBoolean.getOrCreate(self._proto.asElement(), kind, frame);
+        }
+    };
+}
+
+fn NumList(comptime T: type, comptime kind: NumberList.Kind) type {
+    return struct {
+        pub fn get(self: *T, frame: *Frame) !*AnimatedNumberList {
+            return AnimatedNumberList.getOrCreate(self._proto.asElement(), kind, frame);
+        }
+    };
+}
+
 // setStdDeviation() on feGaussianBlur and feDropShadow. Measured on Chrome:
 // it moves both base values and leaves the attribute alone.
 fn setStdDeviationOn(
@@ -146,6 +182,219 @@ pub const Filter = struct {
         pub const width = bridge.accessor(Len(Filter, .filter_width).get, null, .{});
         pub const height = bridge.accessor(Len(Filter, .filter_height).get, null, .{});
         pub const href = bridge.accessor(Str(Filter, .href).get, null, .{});
+    };
+};
+
+// The base of the four transfer-function children of <feComponentTransfer>.
+// Chrome never hands out a bare one, but the interface is a window global and
+// carries every member the children have.
+pub const ComponentTransferFunction = struct {
+    pub const Proto = Svg;
+    _proto: *Svg,
+    _type: Type,
+
+    pub const Type = union(enum) {
+        func_a: *FEFuncA,
+        func_b: *FEFuncB,
+        func_g: *FEFuncG,
+        func_r: *FEFuncR,
+    };
+
+    pub fn is(self: *ComponentTransferFunction, comptime T: type) ?*T {
+        inline for (@typeInfo(Type).@"union".fields) |f| {
+            if (@field(Type, f.name) == self._type) {
+                if (f.type == *T) {
+                    return @field(self._type, f.name);
+                }
+            }
+        }
+        return null;
+    }
+
+    pub fn asElement(self: *ComponentTransferFunction) *Element {
+        return self._proto.asElement();
+    }
+    pub fn asNode(self: *ComponentTransferFunction) *Node {
+        return self.asElement().asNode();
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(ComponentTransferFunction);
+        pub const Meta = struct {
+            pub const name = "SVGComponentTransferFunctionElement";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const T = ComponentTransferFunction;
+        pub const @"type" = bridge.accessor(Enum(T, .transfer_function_type).get, null, .{});
+        pub const tableValues = bridge.accessor(NumList(T, .table_values).get, null, .{});
+        pub const slope = bridge.accessor(Num(T, .func_slope).get, null, .{});
+        pub const intercept = bridge.accessor(Num(T, .func_intercept).get, null, .{});
+        pub const amplitude = bridge.accessor(Num(T, .func_amplitude).get, null, .{});
+        pub const exponent = bridge.accessor(Num(T, .func_exponent).get, null, .{});
+        pub const offset = bridge.accessor(Num(T, .func_offset).get, null, .{});
+
+        pub const SVG_FECOMPONENTTRANSFER_TYPE_UNKNOWN = bridge.property(0, .{ .template = true });
+        pub const SVG_FECOMPONENTTRANSFER_TYPE_IDENTITY = bridge.property(1, .{ .template = true });
+        pub const SVG_FECOMPONENTTRANSFER_TYPE_TABLE = bridge.property(2, .{ .template = true });
+        pub const SVG_FECOMPONENTTRANSFER_TYPE_DISCRETE = bridge.property(3, .{ .template = true });
+        pub const SVG_FECOMPONENTTRANSFER_TYPE_LINEAR = bridge.property(4, .{ .template = true });
+        pub const SVG_FECOMPONENTTRANSFER_TYPE_GAMMA = bridge.property(5, .{ .template = true });
+    };
+};
+
+// The four channel functions add nothing of their own; only the class name
+// distinguishes them.
+fn TransferFunctionChild(comptime interface_name: []const u8) type {
+    return struct {
+        const Child = @This();
+        pub const Proto = ComponentTransferFunction;
+        _proto: *ComponentTransferFunction,
+
+        pub fn asElement(self: *Child) *Element {
+            return self._proto.asElement();
+        }
+        pub fn asNode(self: *Child) *Node {
+            return self.asElement().asNode();
+        }
+
+        pub const JsApi = struct {
+            pub const bridge = js.Bridge(Child);
+            pub const Meta = struct {
+                pub const name = interface_name;
+                pub const prototype_chain = bridge.prototypeChain();
+                pub var class_id: bridge.ClassId = undefined;
+            };
+        };
+    };
+}
+
+pub const FEFuncA = TransferFunctionChild("SVGFEFuncAElement");
+pub const FEFuncB = TransferFunctionChild("SVGFEFuncBElement");
+pub const FEFuncG = TransferFunctionChild("SVGFEFuncGElement");
+pub const FEFuncR = TransferFunctionChild("SVGFEFuncRElement");
+
+pub const FEColorMatrix = struct {
+    pub const Proto = Svg;
+    _proto: *Svg,
+
+    pub fn asElement(self: *FEColorMatrix) *Element {
+        return self._proto.asElement();
+    }
+    pub fn asNode(self: *FEColorMatrix) *Node {
+        return self.asElement().asNode();
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(FEColorMatrix);
+        pub const Meta = struct {
+            pub const name = "SVGFEColorMatrixElement";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const T = FEColorMatrix;
+        pub const in1 = bridge.accessor(Str(T, .in1).get, null, .{});
+        pub const @"type" = bridge.accessor(Enum(T, .color_matrix_type).get, null, .{});
+        pub const values = bridge.accessor(NumList(T, .color_matrix_values).get, null, .{});
+        pub const x = bridge.accessor(Len(T, .primitive_x).get, null, .{});
+        pub const y = bridge.accessor(Len(T, .primitive_y).get, null, .{});
+        pub const width = bridge.accessor(Len(T, .primitive_width).get, null, .{});
+        pub const height = bridge.accessor(Len(T, .primitive_height).get, null, .{});
+        pub const result = bridge.accessor(Str(T, .result).get, null, .{});
+
+        pub const SVG_FECOLORMATRIX_TYPE_UNKNOWN = bridge.property(0, .{ .template = true });
+        pub const SVG_FECOLORMATRIX_TYPE_MATRIX = bridge.property(1, .{ .template = true });
+        pub const SVG_FECOLORMATRIX_TYPE_SATURATE = bridge.property(2, .{ .template = true });
+        pub const SVG_FECOLORMATRIX_TYPE_HUEROTATE = bridge.property(3, .{ .template = true });
+        pub const SVG_FECOLORMATRIX_TYPE_LUMINANCETOALPHA = bridge.property(4, .{ .template = true });
+    };
+};
+
+pub const FEConvolveMatrix = struct {
+    pub const Proto = Svg;
+    _proto: *Svg,
+
+    pub fn asElement(self: *FEConvolveMatrix) *Element {
+        return self._proto.asElement();
+    }
+    pub fn asNode(self: *FEConvolveMatrix) *Node {
+        return self.asElement().asNode();
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(FEConvolveMatrix);
+        pub const Meta = struct {
+            pub const name = "SVGFEConvolveMatrixElement";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const T = FEConvolveMatrix;
+        pub const in1 = bridge.accessor(Str(T, .in1).get, null, .{});
+        pub const orderX = bridge.accessor(Int(T, .convolve_order_x).get, null, .{});
+        pub const orderY = bridge.accessor(Int(T, .convolve_order_y).get, null, .{});
+        pub const kernelMatrix = bridge.accessor(NumList(T, .kernel_matrix).get, null, .{});
+        pub const divisor = bridge.accessor(Num(T, .convolve_divisor).get, null, .{});
+        pub const bias = bridge.accessor(Num(T, .convolve_bias).get, null, .{});
+        pub const targetX = bridge.accessor(Int(T, .convolve_target_x).get, null, .{});
+        pub const targetY = bridge.accessor(Int(T, .convolve_target_y).get, null, .{});
+        pub const edgeMode = bridge.accessor(Enum(T, .convolve_edge_mode).get, null, .{});
+        pub const kernelUnitLengthX = bridge.accessor(Num(T, .kernel_unit_length_x).get, null, .{});
+        pub const kernelUnitLengthY = bridge.accessor(Num(T, .kernel_unit_length_y).get, null, .{});
+        pub const preserveAlpha = bridge.accessor(Bool(T, .preserve_alpha).get, null, .{});
+        pub const x = bridge.accessor(Len(T, .primitive_x).get, null, .{});
+        pub const y = bridge.accessor(Len(T, .primitive_y).get, null, .{});
+        pub const width = bridge.accessor(Len(T, .primitive_width).get, null, .{});
+        pub const height = bridge.accessor(Len(T, .primitive_height).get, null, .{});
+        pub const result = bridge.accessor(Str(T, .result).get, null, .{});
+
+        pub const SVG_EDGEMODE_UNKNOWN = bridge.property(0, .{ .template = true });
+        pub const SVG_EDGEMODE_DUPLICATE = bridge.property(1, .{ .template = true });
+        pub const SVG_EDGEMODE_WRAP = bridge.property(2, .{ .template = true });
+        pub const SVG_EDGEMODE_NONE = bridge.property(3, .{ .template = true });
+    };
+};
+
+pub const FETurbulence = struct {
+    pub const Proto = Svg;
+    _proto: *Svg,
+
+    pub fn asElement(self: *FETurbulence) *Element {
+        return self._proto.asElement();
+    }
+    pub fn asNode(self: *FETurbulence) *Node {
+        return self.asElement().asNode();
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(FETurbulence);
+        pub const Meta = struct {
+            pub const name = "SVGFETurbulenceElement";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const T = FETurbulence;
+        pub const baseFrequencyX = bridge.accessor(Num(T, .base_frequency_x).get, null, .{});
+        pub const baseFrequencyY = bridge.accessor(Num(T, .base_frequency_y).get, null, .{});
+        pub const numOctaves = bridge.accessor(Int(T, .turbulence_num_octaves).get, null, .{});
+        pub const seed = bridge.accessor(Num(T, .turbulence_seed).get, null, .{});
+        pub const stitchTiles = bridge.accessor(Enum(T, .turbulence_stitch_tiles).get, null, .{});
+        pub const @"type" = bridge.accessor(Enum(T, .turbulence_type).get, null, .{});
+        pub const x = bridge.accessor(Len(T, .primitive_x).get, null, .{});
+        pub const y = bridge.accessor(Len(T, .primitive_y).get, null, .{});
+        pub const width = bridge.accessor(Len(T, .primitive_width).get, null, .{});
+        pub const height = bridge.accessor(Len(T, .primitive_height).get, null, .{});
+        pub const result = bridge.accessor(Str(T, .result).get, null, .{});
+
+        pub const SVG_TURBULENCE_TYPE_UNKNOWN = bridge.property(0, .{ .template = true });
+        pub const SVG_TURBULENCE_TYPE_FRACTALNOISE = bridge.property(1, .{ .template = true });
+        pub const SVG_TURBULENCE_TYPE_TURBULENCE = bridge.property(2, .{ .template = true });
+        pub const SVG_STITCHTYPE_UNKNOWN = bridge.property(0, .{ .template = true });
+        pub const SVG_STITCHTYPE_STITCH = bridge.property(1, .{ .template = true });
+        pub const SVG_STITCHTYPE_NOSTITCH = bridge.property(2, .{ .template = true });
     };
 };
 

@@ -883,6 +883,9 @@ pub const JsApiLookup = struct {
     ///    const index_id = types.getId(@TypeOf(res));
     ///
     pub const Enum = blk: {
+        // std.simd.iota loops once per interface, so the quota has to grow
+        // with the interface list.
+        @setEvalBranchQuota(JsApis.len * 8);
         var names: [JsApis.len][:0]const u8 = undefined;
         for (JsApis, 0..) |JsApi, i| {
             names[i] = @typeName(JsApi);
@@ -1090,6 +1093,10 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/element/svg/Polyline.zig"),
     @import("../webapi/element/svg/filter.zig"),
     @import("../webapi/svg/UnitTypes.zig"),
+    @import("../webapi/svg/NumberList.zig"),
+    @import("../webapi/svg/AnimatedNumberList.zig"),
+    @import("../webapi/svg/AnimatedInteger.zig"),
+    @import("../webapi/svg/AnimatedBoolean.zig"),
     @import("../webapi/svg/AnimatedString.zig"),
     @import("../webapi/svg/Number.zig"),
     @import("../webapi/svg/Rect.zig"),
