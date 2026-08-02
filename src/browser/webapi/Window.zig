@@ -35,6 +35,7 @@ const BarProp = @import("BarProp.zig");
 const External = @import("External.zig");
 const StyleMedia = @import("StyleMedia.zig");
 const trusted_types = @import("trusted_types.zig");
+const DOMException = @import("DOMException.zig");
 const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
@@ -1049,6 +1050,59 @@ pub fn resizeTo(_: *Window, _: f64, _: f64) void {}
 pub fn captureEvents(_: *Window) void {}
 pub fn releaseEvents(_: *Window) void {}
 
+// Three APIs that Chrome gates behind a user gesture or a permission prompt.
+// A page that just calls them -- which is what a fingerprinting script does --
+// gets a rejected promise, so these reproduce the rejections rather than the
+// feature. All three messages were measured on a headed Chrome 150.
+fn rejectWith(
+    comptime name: []const u8,
+    error_name: []const u8,
+    message: []const u8,
+    frame: *Frame,
+) js.Promise {
+    const resolver = frame.js.local.?.createPromiseResolver();
+    resolver.reject("Window." ++ name, DOMException.init(message, error_name));
+    return resolver.promise();
+}
+
+fn filePicker(comptime name: []const u8, frame: *Frame) js.Promise {
+    return rejectWith(
+        name,
+        "SecurityError",
+        "Failed to execute '" ++ name ++ "' on 'Window': " ++
+            "Must be handling a user gesture to show a file picker.",
+        frame,
+    );
+}
+
+pub fn showOpenFilePicker(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
+    return filePicker("showOpenFilePicker", frame);
+}
+
+pub fn showSaveFilePicker(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
+    return filePicker("showSaveFilePicker", frame);
+}
+
+pub fn showDirectoryPicker(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
+    return filePicker("showDirectoryPicker", frame);
+}
+
+// Window Management: asking for the permission needs a transient activation,
+// so the request never even reaches the prompt.
+pub fn getScreenDetails(_: *Window, frame: *Frame) js.Promise {
+    return rejectWith(
+        "getScreenDetails",
+        "NotAllowedError",
+        "Transient activation is required to request permission.",
+        frame,
+    );
+}
+
+// Local Font Access, same story with a shorter message.
+pub fn queryLocalFonts(_: *Window, _: ?js.Value, frame: *Frame) js.Promise {
+    return rejectWith("queryLocalFonts", "SecurityError", "User activation is required.", frame);
+}
+
 pub fn postMessage(self: *Window, message: js.Value, target_origin: ?[]const u8, transfer: ?[]const *MessagePort, frame: *Frame) !void {
     // For now, we ignore targetOrigin checking and just dispatch the message
     // In a full implementation, we would validate the origin
@@ -1680,6 +1734,13 @@ pub const JsApi = struct {
     // while webkitURL === URL).
     pub const webkitRequestAnimationFrame = bridge.function(Window.requestAnimationFrame, .{});
     pub const webkitCancelAnimationFrame = bridge.function(Window.cancelAnimationFrame, .{});
+
+    // Gated APIs: each one exists and each one rejects. See the functions.
+    pub const queryLocalFonts = bridge.function(Window.queryLocalFonts, .{});
+    pub const showDirectoryPicker = bridge.function(Window.showDirectoryPicker, .{});
+    pub const showOpenFilePicker = bridge.function(Window.showOpenFilePicker, .{});
+    pub const showSaveFilePicker = bridge.function(Window.showSaveFilePicker, .{});
+    pub const getScreenDetails = bridge.function(Window.getScreenDetails, .{});
 
     // [Replaceable] (CSSOM-View): the getter reads the page's runtime viewport
     // (overridable via Emulation.setDeviceMetricsOverride); the setter overwrites

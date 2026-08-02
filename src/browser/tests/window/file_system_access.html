@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  File System Access: the three picker methods on window and the four handle /
+  stream interfaces behind them. Every shape and message below was measured on
+  a headed Chrome 150 over http://localhost; the snapshots live in
+  agent-workspace/stealth-detector-probes/win-batch/ (win1-chrome.json for the
+  prototypes, win7-chrome.json for the behaviour).
+-->
+
+<script id="fsa_globals_exist">
+  {
+    const names = [
+      'FileSystemHandle', 'FileSystemFileHandle',
+      'FileSystemDirectoryHandle', 'FileSystemWritableFileStream',
+    ];
+    const missing = names.filter((n) => !Object.prototype.hasOwnProperty.call(window, n));
+    testing.expectEqual('', missing.join(','));
+    for (const n of names) {
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, window[n].length);
+      testing.expectEqual(n, window[n].name);
+    }
+
+    const methods = ['showOpenFilePicker', 'showSaveFilePicker', 'showDirectoryPicker'];
+    const missingMethods = methods.filter((n) => !Object.prototype.hasOwnProperty.call(window, n));
+    testing.expectEqual('', missingMethods.join(','));
+    for (const n of methods) {
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual('function', typeof d.value);
+      testing.expectEqual(true, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, d.value.length);
+      testing.expectEqual(n, d.value.name);
+    }
+  }
+</script>
+
+<script id="fsa_prototype_shapes">
+  {
+    const expected = {
+      FileSystemHandle: 'kind,name,isSameEntry,queryPermission,remove,requestPermission,constructor',
+      FileSystemFileHandle: 'createWritable,getFile,move,constructor',
+      FileSystemDirectoryHandle: 'getDirectoryHandle,getFileHandle,removeEntry,resolve,entries,keys,values,constructor',
+      FileSystemWritableFileStream: 'seek,truncate,write,mode,constructor',
+    };
+    for (const [n, keys] of Object.entries(expected)) {
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[n].prototype).join(','));
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+    }
+
+    // Method arities, as Chrome reports them.
+    const arities = {
+      FileSystemHandle: ['isSameEntry=1', 'queryPermission=0', 'remove=0', 'requestPermission=0'],
+      FileSystemFileHandle: ['createWritable=0', 'getFile=0', 'move=1'],
+      FileSystemDirectoryHandle: [
+        'getDirectoryHandle=1', 'getFileHandle=1', 'removeEntry=1', 'resolve=1',
+        'entries=0', 'keys=0', 'values=0',
+      ],
+      FileSystemWritableFileStream: ['seek=1', 'truncate=1', 'write=1'],
+    };
+    for (const [n, members] of Object.entries(arities)) {
+      const actual = members.map((m) => {
+        const name = m.split('=')[0];
+        return name + '=' + window[n].prototype[name].length;
+      });
+      testing.expectEqual(members.join(','), actual.join(','));
+    }
+
+    // Accessors: getter-only, every one of them.
+    const getters = {
+      FileSystemHandle: ['kind', 'name'],
+      FileSystemWritableFileStream: ['mode'],
+    };
+    for (const [n, members] of Object.entries(getters)) {
+      for (const m of members) {
+        const d = Object.getOwnPropertyDescriptor(window[n].prototype, m);
+        testing.expectEqual('function', typeof d.get);
+        testing.expectEqual(undefined, d.set);
+      }
+    }
+  }
+</script>
+
+<script id="fsa_prototype_chains">
+  {
+    const chain = (ctor) => {
+      const out = [];
+      let p = ctor.prototype;
+      while (p && p !== Object.prototype) {
+        out.push(p.constructor.name);
+        p = Object.getPrototypeOf(p);
+      }
+      out.push('Object.prototype');
+      return out.join(',');
+    };
+    testing.expectEqual('FileSystemHandle,Object.prototype', chain(FileSystemHandle));
+    testing.expectEqual('FileSystemFileHandle,FileSystemHandle,Object.prototype', chain(FileSystemFileHandle));
+    testing.expectEqual('FileSystemDirectoryHandle,FileSystemHandle,Object.prototype', chain(FileSystemDirectoryHandle));
+    testing.expectEqual('FileSystemWritableFileStream,WritableStream,Object.prototype', chain(FileSystemWritableFileStream));
+
+    // The directory handle is the only one with a second prototype symbol.
+    testing.expectEqual(
+      'Symbol(Symbol.toStringTag),Symbol(Symbol.asyncIterator)',
+      Object.getOwnPropertySymbols(FileSystemDirectoryHandle.prototype).map(String).join(','),
+    );
+    testing.expectEqual(
+      'Symbol(Symbol.toStringTag)',
+      Object.getOwnPropertySymbols(FileSystemHandle.prototype).map(String).join(','),
+    );
+  }
+</script>
+
+<script id="fsa_illegal_constructors">
+  {
+    const names = [
+      'FileSystemHandle', 'FileSystemFileHandle',
+      'FileSystemDirectoryHandle', 'FileSystemWritableFileStream',
+    ];
+    for (const n of names) {
+      testing.expectError(
+        "Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+  }
+</script>
+
+<script id="fsa_pickers_reject" type=module>
+  // No user gesture is ever in flight here, so all three pickers reject with
+  // the same SecurityError Chrome produces on a page that calls them directly.
+  {
+    const state = await testing.async();
+    const results = {};
+    const names = ['showOpenFilePicker', 'showSaveFilePicker', 'showDirectoryPicker'];
+    (async () => {
+      for (const n of names) {
+        const p = window[n]();
+        results[n + 'Return'] = Object.prototype.toString.call(p);
+        try {
+          await p;
+          results[n] = 'resolved';
+        } catch (e) {
+          results[n] = e.name + ': ' + e.message;
+        }
+      }
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      for (const n of names) {
+        testing.expectEqual('[object Promise]', results[n + 'Return']);
+        testing.expectEqual(
+          "SecurityError: Failed to execute '" + n + "' on 'Window': " +
+            'Must be handling a user gesture to show a file picker.',
+          results[n],
+        );
+      }
+    });
+  }
+</script>
