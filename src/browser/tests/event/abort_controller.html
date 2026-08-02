@@ -125,6 +125,8 @@
   testing.expectEqual(true, signal.aborted);
   testing.expectEqual(true, signal.reason instanceof DOMException);
   testing.expectEqual("AbortError", signal.reason.name);
+  // Chrome's wording for an abort with no reason of its own, measured.
+  testing.expectEqual("signal is aborted without reason", signal.reason.message);
 }
 </script>
 
@@ -327,7 +329,10 @@
       testing.expectEqual(true, s3.aborted);
       testing.expectEqual(true, s3.reason instanceof DOMException);
       testing.expectEqual('TimeoutError', s3.reason.name);
-      testing.expectError('TimeoutError: The operation timed out', () => {
+      // Chrome's wording, measured; not the generic "The operation timed out"
+      // a TimeoutError carries by default.
+      testing.expectEqual('signal timed out', s3.reason.message);
+      testing.expectError('TimeoutError: signal timed out', () => {
         s3.throwIfAborted()
       });
     });

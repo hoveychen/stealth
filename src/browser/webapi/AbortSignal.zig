@@ -33,6 +33,15 @@ const AbortSignal = @This();
 
 pub const Proto = EventTarget;
 
+// What an abort with no reason of its own reports. This is Chrome's wording,
+// measured; the generic "The operation was aborted" an AbortError carries by
+// default is not what a script sees.
+const NO_REASON = "signal is aborted without reason";
+
+// Likewise for AbortSignal.timeout(), whose reason is not the generic
+// "The operation timed out" either.
+const TIMED_OUT = "signal timed out";
+
 const Dependend = union(enum) {
     signal: *AbortSignal,
     model_context_tool: *ModelContextTool,
@@ -61,7 +70,16 @@ const Dependend = union(enum) {
     }
 };
 
+// A TaskSignal is an AbortSignal, and a script can reach one through
+// AbortSignal-typed surfaces (a prioritychange event's target, TaskSignal.any).
+// This is what lets those come back as the TaskSignal they are.
+pub const Type = union(enum) {
+    generic: void,
+    task_signal: *@import("scheduler.zig").TaskSignal,
+};
+
 _proto: *EventTarget,
+_type: Type = .generic,
 _aborted: bool = false,
 _is_dependent: bool = false,
 _reason: Reason = .undefined,
@@ -72,6 +90,7 @@ _source_signals: std.ArrayList(*AbortSignal) = .empty,
 pub fn init(exec: *const Execution) !*AbortSignal {
     return exec._factory.eventTarget(AbortSignal{
         ._proto = undefined,
+        ._type = .generic,
     });
 }
 
@@ -133,7 +152,7 @@ fn markAborted(self: *AbortSignal, reason_: ?Reason, exec: *const Execution) !vo
         // Allocate the DOMException so the reason keeps a single JS identity:
         // dependent signals must expose the very same DOMException instance.
         const dom = try exec.arena.create(DOMException);
-        dom.* = DOMException.fromError(error.AbortError).?;
+        dom.* = DOMException.init(NO_REASON, "AbortError");
         self._reason = .{ .dom = dom };
     }
 }
@@ -176,10 +195,16 @@ pub fn createAny(signals_value: js.Value, exec: *const Execution) !*AbortSignal 
     const signals = try signals_value.toZig([]const *AbortSignal);
 
     const result = try init(exec);
+    try linkAny(result, signals, exec);
+    return result;
+}
+
+// The dependency half of any(), split out so TaskSignal.any can reuse it on a
+// signal it has already built as the right subtype.
+pub fn linkAny(result: *AbortSignal, signals: []const *AbortSignal, exec: *const Execution) !void {
     for (signals) |source| {
         if (source._aborted) {
-            try result.abort(source._reason, exec);
-            return result;
+            return result.abort(source._reason, exec);
         }
     }
 
@@ -196,7 +221,6 @@ pub fn createAny(signals_value: js.Value, exec: *const Execution) !*AbortSignal 
             }
         }
     }
-    return result;
 }
 
 pub fn createTimeout(delay: u32, exec: *const Execution) !*AbortSignal {
@@ -225,7 +249,7 @@ pub fn throwIfAborted(self: *const AbortSignal, exec: *const Execution) !ThrowIf
             .dom => |err| local.newException(err),
             .string => |str| local.newException(str),
             .js_val => |js_val| local.newException(js_val),
-            .undefined => local.newException(DOMException.fromError(error.AbortError).?),
+            .undefined => local.newException(DOMException.init(NO_REASON, "AbortError")),
         };
         return .{ .exception = exception };
     }
@@ -269,7 +293,7 @@ const TimeoutCallback = struct {
         }
 
         const dom = try self.exec.arena.create(DOMException);
-        dom.* = DOMException.fromError(error.TimeoutError).?;
+        dom.* = DOMException.init(TIMED_OUT, "TimeoutError");
         try self.signal.abort(.{ .dom = dom }, self.exec);
     }
 };

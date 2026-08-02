@@ -106,6 +106,7 @@ pub const Type = union(enum) {
     animation_event: *@import("event/css_events.zig").AnimationEvent,
     media_query_list_event: *@import("event/css_events.zig").MediaQueryListEvent,
     font_face_set_load_event: *@import("event/css_events.zig").FontFaceSetLoadEvent,
+    task_priority_change_event: *@import("scheduler.zig").TaskPriorityChangeEvent,
 };
 
 pub const Options = struct {
@@ -240,6 +241,7 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .animation_event => |e| return if (T == @import("event/css_events.zig").AnimationEvent) e else null,
         .media_query_list_event => |e| return if (T == @import("event/css_events.zig").MediaQueryListEvent) e else null,
         .font_face_set_load_event => |e| return if (T == @import("event/css_events.zig").FontFaceSetLoadEvent) e else null,
+        .task_priority_change_event => |e| return if (T == @import("scheduler.zig").TaskPriorityChangeEvent) e else null,
     }
     return null;
 }

@@ -39,6 +39,7 @@ const DOMException = @import("DOMException.zig");
 const launch_queue = @import("launch_queue.zig");
 const ImageBitmap = @import("canvas/ImageBitmap.zig");
 const cache_storage = @import("storage/cache_storage.zig");
+const scheduler = @import("scheduler.zig");
 const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
@@ -101,6 +102,7 @@ _external: External = .init,
 _trusted_types: trusted_types.TrustedTypePolicyFactory = .init,
 _launch_queue: launch_queue.LaunchQueue = .init,
 _caches: cache_storage.CacheStorage = .init,
+_scheduler: scheduler.Scheduler = .init,
 _style_media: StyleMedia = .init,
 // window.status. Blink kept the accessor after dropping the status bar it used
 // to write to, so it is a plain string cell that remembers whatever is
@@ -487,6 +489,14 @@ pub fn getLaunchQueue(self: *Window) *launch_queue.LaunchQueue {
 
 pub fn getCaches(self: *Window) *cache_storage.CacheStorage {
     return &self._caches;
+}
+
+pub fn getScheduler(self: *Window) *scheduler.Scheduler {
+    return &self._scheduler;
+}
+
+pub fn setScheduler(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "scheduler");
 }
 
 pub fn getStyleMedia(self: *Window) *StyleMedia {
@@ -1770,6 +1780,8 @@ pub const JsApi = struct {
     pub const getScreenDetails = bridge.function(Window.getScreenDetails, .{});
     pub const launchQueue = bridge.accessor(Window.getLaunchQueue, null, .{});
     pub const caches = bridge.accessor(Window.getCaches, null, .{});
+    // [Replaceable], unlike launchQueue and caches (measured).
+    pub const scheduler = bridge.accessor(Window.getScheduler, Window.setScheduler, .{});
 
     // [Replaceable] (CSSOM-View): the getter reads the page's runtime viewport
     // (overridable via Emulation.setDeviceMetricsOverride); the setter overwrites
