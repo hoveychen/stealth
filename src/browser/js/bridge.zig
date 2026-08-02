@@ -175,6 +175,7 @@ pub const Function = struct {
     arity: usize,
     noop: bool = false,
     wpt_only: bool = false,
+    enumerable: bool = true,
     js_name: ?[:0]const u8 = null,
     exposed: Caller.Function.Opts.Exposed = .both,
     cache: ?Caller.Function.Opts.Caching = null,
@@ -185,6 +186,7 @@ pub const Function = struct {
             .cache = opts.cache,
             .static = opts.static,
             .wpt_only = opts.wpt_only,
+            .enumerable = opts.enumerable,
             .js_name = opts.js_name,
             .exposed = opts.exposed,
             // Non-static methods receive `self` as their first param; static
@@ -240,6 +242,7 @@ pub const Accessor = struct {
     deletable: bool = true,
     wpt_only: bool = false,
     unforgeable: bool = false, // Web IDL [LegacyUnforgeable]
+    enumerable: bool = true,
     exposed: Caller.Function.Opts.Exposed = .both,
     cache: ?Caller.Function.Opts.Caching = null,
     getter: ?*const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void = null,
@@ -252,6 +255,7 @@ pub const Accessor = struct {
             .wpt_only = opts.wpt_only,
             .deletable = opts.deletable,
             .unforgeable = opts.unforgeable,
+            .enumerable = opts.enumerable,
             .exposed = opts.exposed,
         };
 
@@ -1233,6 +1237,9 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/DataTransfer.zig"),
     @import("../webapi/Screen.zig"),
     @import("../webapi/VisualViewport.zig"),
+    @import("../webapi/BarProp.zig"),
+    @import("../webapi/External.zig"),
+    @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),
     @import("../webapi/navigation/Navigation.zig"),
     @import("../webapi/navigation/NavigationHistoryEntry.zig"),

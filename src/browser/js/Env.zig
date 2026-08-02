@@ -388,6 +388,23 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
         ls.local.eval(wasm_streaming_bootstrap, "wasm-streaming") catch |err| {
             log.err(.js, "wasm streaming bootstrap", .{ .err = err });
         };
+
+        // Snapshot creation deletes V8's built-in `console` from the global so
+        // ours takes over, but the delete also takes out the copy the [Global]
+        // flattening pass had mirrored there, leaving `console` reachable only
+        // through the prototype. Chrome has it as an own, non-enumerable data
+        // property of `window` (measured on a headed Chrome 150:
+        // Object.getOwnPropertyDescriptor(window, 'console') is a value
+        // descriptor, and Window.prototype has no `console` at all), and
+        // Object.getOwnPropertyNames(window) is a surface fingerprinters read
+        // directly. Resolving it here goes through the prototype accessor, so
+        // the value is the same Console object as before.
+        const global_object = context.globalObject(&ls.local);
+        if (global_object.get("console")) |console_value| {
+            _ = global_object.defineOwnProperty("console", console_value, v8.DontEnum);
+        } else |err| {
+            log.err(.js, "console own property", .{ .err = err });
+        }
     }
 
     return context;

@@ -867,8 +867,10 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     v8.v8__Template__Set(@ptrCast(template), js_name, @ptrCast(function_template), v8.None);
                 } else {
                     // Web IDL: operations on the interface prototype object
-                    // (and mirrored onto [Global] instances) are enumerable.
-                    v8.v8__Template__Set(@ptrCast(define_on orelse member_template), js_name, @ptrCast(function_template), v8.None);
+                    // (and mirrored onto [Global] instances) are enumerable,
+                    // unless the member opted out (window.webkitURL).
+                    const attribute: v8.PropertyAttribute = if (value.enumerable) v8.None else v8.DontEnum;
+                    v8.v8__Template__Set(@ptrCast(define_on orelse member_template), js_name, @ptrCast(function_template), attribute);
                 }
             },
             bridge.Indexed => {
@@ -1038,6 +1040,9 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
     }
     if (value.deletable == false) {
         attribute |= v8.DontDelete;
+    }
+    if (value.enumerable == false) {
+        attribute |= v8.DontEnum;
     }
 
     if (value.static) {

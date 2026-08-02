@@ -219,6 +219,11 @@ pub const JsApi = struct {
         // object, so Object.entries(console) returns them.
         pub const own_properties = true;
 
+        // A namespace has no interface object: Chrome exposes `console` and no
+        // `Console` (measured -- globalThis.Console is undefined there, while
+        // we were handing detectors an extra global nothing else has).
+        pub const no_interface_object = true;
+
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };

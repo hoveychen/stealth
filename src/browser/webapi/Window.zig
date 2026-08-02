@@ -31,6 +31,9 @@ const CSS = @import("CSS.zig");
 const Navigator = @import("Navigator.zig");
 const ModelContext = @import("ModelContext.zig");
 const Screen = @import("Screen.zig");
+const BarProp = @import("BarProp.zig");
+const External = @import("External.zig");
+const StyleMedia = @import("StyleMedia.zig");
 const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
@@ -80,6 +83,21 @@ _crypto: Crypto = .init,
 _console: Console = .init,
 _navigator: Navigator = .init,
 _model_context: ModelContext = .init,
+// The six BarProp objects behind window.locationbar & friends. Six separate
+// fields rather than one shared object, because Chrome hands back six distinct
+// objects (measured: window.locationbar !== window.menubar).
+_locationbar: BarProp = .init,
+_menubar: BarProp = .init,
+_personalbar: BarProp = .init,
+_scrollbars: BarProp = .init,
+_statusbar: BarProp = .init,
+_toolbar: BarProp = .init,
+_external: External = .init,
+_style_media: StyleMedia = .init,
+// window.status. Blink kept the accessor after dropping the status bar it used
+// to write to, so it is a plain string cell that remembers whatever is
+// assigned. Owned by the frame arena once written.
+_status: []const u8 = "",
 _screen: *Screen,
 _visual_viewport: *VisualViewport,
 _connection: *NetworkInformation,
@@ -385,6 +403,139 @@ pub fn getOrigin(self: *const Window) []const u8 {
 
 pub fn setOrigin(self: *Window, value: js.Value) void {
     self.replaceGlobalProperty(value, "origin");
+}
+
+// A potentially-trustworthy origin: https/wss, file, or a loopback host. On a
+// headed Chrome 150 over http://localhost this answers true, which is what
+// unlocks the secure-context-only APIs the rest of the surface advertises.
+pub fn getIsSecureContext(self: *const Window) bool {
+    const protocol = self._location._url.getProtocol();
+    if (std.mem.eql(u8, protocol, "https:")) return true;
+    if (std.mem.eql(u8, protocol, "wss:")) return true;
+    if (std.mem.eql(u8, protocol, "file:")) return true;
+
+    const hostname = self._location._url.getHostname();
+    if (std.mem.eql(u8, hostname, "localhost")) return true;
+    if (std.mem.eql(u8, hostname, "[::1]")) return true;
+    if (std.mem.endsWith(u8, hostname, ".localhost")) return true;
+    // Blink treats the whole 127.0.0.0/8 block as loopback, not just 127.0.0.1.
+    if (std.mem.startsWith(u8, hostname, "127.")) return true;
+    return false;
+}
+
+// COOP+COEP cross-origin isolation, which nothing here negotiates, so the
+// SharedArrayBuffer/high-resolution-timer gate stays shut. False on the
+// reference Chrome for an ordinary page too (measured).
+pub fn getCrossOriginIsolated(_: *const Window) bool {
+    return false;
+}
+
+// True on the reference Chrome 150 (measured) -- Blink defaults a page with no
+// Origin-Agent-Cluster header to an origin-keyed agent cluster.
+pub fn getOriginAgentCluster(_: *const Window) bool {
+    return true;
+}
+
+// Only an anonymous iframe (<iframe credentialless>) reports true.
+pub fn getCredentialless(_: *const Window) bool {
+    return false;
+}
+
+pub fn getLocationbar(self: *Window) *BarProp {
+    return &self._locationbar;
+}
+
+pub fn getMenubar(self: *Window) *BarProp {
+    return &self._menubar;
+}
+
+pub fn getPersonalbar(self: *Window) *BarProp {
+    return &self._personalbar;
+}
+
+pub fn getScrollbars(self: *Window) *BarProp {
+    return &self._scrollbars;
+}
+
+pub fn getStatusbar(self: *Window) *BarProp {
+    return &self._statusbar;
+}
+
+pub fn getToolbar(self: *Window) *BarProp {
+    return &self._toolbar;
+}
+
+pub fn getExternal(self: *Window) *External {
+    return &self._external;
+}
+
+pub fn getStyleMedia(self: *Window) *StyleMedia {
+    return &self._style_media;
+}
+
+pub fn getStatus(self: *const Window) []const u8 {
+    return self._status;
+}
+
+pub fn setStatus(self: *Window, value: []const u8, frame: *Frame) !void {
+    self._status = try frame.dupeString(value);
+}
+
+// Vestigial: Blink kept the attribute after the double-buffering it described
+// stopped being a thing. It reports true and takes a write without effect.
+pub fn getOffscreenBuffering(_: *const Window) bool {
+    return true;
+}
+
+// devicePixelRatio is a fixed part of the device profile the rest of the engine
+// is built around -- MediaQuery.zig resolves resolution queries against the
+// same 1920x1080-at-1 display, and screen.width/height agree with it. The
+// reference machine's Chrome reports 2 because its panel is Retina; the number
+// here describes the display we claim, not the one running the build.
+pub fn getDevicePixelRatio(_: *const Window) u32 {
+    return 1;
+}
+
+// [Replaceable]: assigning to any of these shadows the accessor with a plain
+// data property on the global, rather than throwing or being ignored.
+pub fn setLocationbar(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "locationbar");
+}
+
+pub fn setMenubar(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "menubar");
+}
+
+pub fn setPersonalbar(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "personalbar");
+}
+
+pub fn setScrollbars(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "scrollbars");
+}
+
+pub fn setStatusbar(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "statusbar");
+}
+
+pub fn setToolbar(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "toolbar");
+}
+
+pub fn setExternal(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "external");
+}
+
+pub fn setClientInformation(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "clientInformation");
+}
+
+pub fn setOffscreenBuffering(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "offscreenBuffering");
+}
+
+pub fn setDevicePixelRatio(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "devicePixelRatio");
 }
 
 pub fn getSelection(self: *const Window) *Selection {
@@ -870,6 +1021,27 @@ pub fn close(self: *Window) void {
 
 pub fn focus(_: *Window) void {}
 pub fn blur(_: *Window) void {}
+
+// window.find(): Chrome's non-standard "did the browser's find-in-page match
+// anything" hook. Nothing here runs a text search, and Chrome itself answers
+// false whenever the string isn't on the page, so false it is.
+pub fn find(_: *Window, _: ?[]const u8) bool {
+    return false;
+}
+
+// No printer, no window manager. Each of these is a no-op that Chrome also
+// treats as advisory: a page opened by script may resize itself, an ordinary
+// tab silently ignores moveTo/resizeTo.
+pub fn print(_: *Window) void {}
+pub fn stop(_: *Window) void {}
+pub fn moveBy(_: *Window, _: f64, _: f64) void {}
+pub fn moveTo(_: *Window, _: f64, _: f64) void {}
+pub fn resizeBy(_: *Window, _: f64, _: f64) void {}
+pub fn resizeTo(_: *Window, _: f64, _: f64) void {}
+
+// Netscape-era event capture. Blink keeps both names as no-ops.
+pub fn captureEvents(_: *Window) void {}
+pub fn releaseEvents(_: *Window) void {}
 
 pub fn postMessage(self: *Window, message: js.Value, target_origin: ?[]const u8, transfer: ?[]const *MessagePort, frame: *Frame) !void {
     // For now, we ignore targetOrigin checking and just dispatch the message
@@ -1461,11 +1633,46 @@ pub const JsApi = struct {
     pub const scroll = bridge.function(Window.scrollTo, .{});
     pub const scrollBy = bridge.function(Window.scrollBy, .{});
 
-    // Return false since we don't have secure-context-only APIs implemented
-    // (webcam, geolocation, clipboard, etc.)
-    // This is safer and could help avoid processing errors by hinting at
-    // sites not to try to access those features
-    pub const isSecureContext = bridge.property(false, .{ .template = false });
+    // These four are accessors rather than bridge.property values on purpose:
+    // only accessors and functions get mirrored onto the global object by the
+    // [Global] flattening pass, and Chrome has all four as own properties of
+    // `window`, not inherited from Window.prototype (measured).
+    pub const isSecureContext = bridge.accessor(Window.getIsSecureContext, null, .{});
+    pub const crossOriginIsolated = bridge.accessor(Window.getCrossOriginIsolated, null, .{});
+    pub const originAgentCluster = bridge.accessor(Window.getOriginAgentCluster, null, .{});
+    pub const credentialless = bridge.accessor(Window.getCredentialless, null, .{});
+
+    // The six BarProp objects, in Chrome's own order. Each is get+set: the
+    // setter is the [Replaceable] one every legacy Window attribute carries.
+    pub const locationbar = bridge.accessor(Window.getLocationbar, Window.setLocationbar, .{});
+    pub const menubar = bridge.accessor(Window.getMenubar, Window.setMenubar, .{});
+    pub const personalbar = bridge.accessor(Window.getPersonalbar, Window.setPersonalbar, .{});
+    pub const scrollbars = bridge.accessor(Window.getScrollbars, Window.setScrollbars, .{});
+    pub const statusbar = bridge.accessor(Window.getStatusbar, Window.setStatusbar, .{});
+    pub const toolbar = bridge.accessor(Window.getToolbar, Window.setToolbar, .{});
+
+    pub const status = bridge.accessor(Window.getStatus, Window.setStatus, .{});
+    pub const external = bridge.accessor(Window.getExternal, Window.setExternal, .{});
+    // Getter-only, and the one window attribute Blink marks non-enumerable.
+    pub const styleMedia = bridge.accessor(Window.getStyleMedia, null, .{});
+    pub const offscreenBuffering = bridge.accessor(Window.getOffscreenBuffering, Window.setOffscreenBuffering, .{ .enumerable = false });
+    // navigator's other name, and the same object.
+    pub const clientInformation = bridge.accessor(Window.getNavigator, Window.setClientInformation, .{});
+
+    pub const find = bridge.function(Window.find, .{});
+    pub const print = bridge.function(Window.print, .{});
+    pub const stop = bridge.function(Window.stop, .{});
+    pub const moveBy = bridge.function(Window.moveBy, .{});
+    pub const moveTo = bridge.function(Window.moveTo, .{});
+    pub const resizeBy = bridge.function(Window.resizeBy, .{});
+    pub const resizeTo = bridge.function(Window.resizeTo, .{});
+    pub const captureEvents = bridge.function(Window.captureEvents, .{});
+    pub const releaseEvents = bridge.function(Window.releaseEvents, .{});
+    // Separate function objects from their unprefixed twins, the way Chrome
+    // has them (measured: webkitRequestAnimationFrame !== requestAnimationFrame,
+    // while webkitURL === URL).
+    pub const webkitRequestAnimationFrame = bridge.function(Window.requestAnimationFrame, .{});
+    pub const webkitCancelAnimationFrame = bridge.function(Window.cancelAnimationFrame, .{});
 
     // [Replaceable] (CSSOM-View): the getter reads the page's runtime viewport
     // (overridable via Emulation.setDeviceMetricsOverride); the setter overwrites
@@ -1479,7 +1686,7 @@ pub const JsApi = struct {
     // screenLeft/screenTop are the legacy aliases of screenX/screenY.
     pub const screenLeft = bridge.accessor(Window.getScreenX, Window.setScreenLeft, .{});
     pub const screenTop = bridge.accessor(Window.getScreenY, Window.setScreenTop, .{});
-    pub const devicePixelRatio = bridge.property(1, .{ .template = false, .readonly = false });
+    pub const devicePixelRatio = bridge.accessor(Window.getDevicePixelRatio, Window.setDevicePixelRatio, .{});
 
     pub const opener = bridge.accessor(Window.getOpener, Window.setOpener, .{});
     pub const closed = bridge.accessor(Window.getClosed, null, .{});

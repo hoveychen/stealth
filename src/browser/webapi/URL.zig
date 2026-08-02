@@ -337,6 +337,9 @@ pub const JsApi = struct {
         pub const name = "URL";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // window.webkitURL is the very same function object (measured:
+        // window.webkitURL === window.URL on a headed Chrome 150).
+        pub const constructor_aliases = [_][]const u8{"webkitURL"};
     };
 
     pub const constructor = bridge.constructor(URL.init, .{});

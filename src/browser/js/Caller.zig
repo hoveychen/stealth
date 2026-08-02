@@ -786,6 +786,11 @@ pub const Function = struct {
         // Overrides the arity derived from the Zig signature; see
         // bridge.Constructor.Opts.arity for why a variadic operation needs it.
         arity: ?usize = null,
+        // Web IDL makes interface members enumerable, but a handful of Blink's
+        // legacy [Global] attributes aren't: window.offscreenBuffering and
+        // window.webkitURL both come back with enumerable: false (measured on a
+        // headed Chrome 150).
+        enumerable: bool = true,
 
         pub const Exposed = enum { both, window, worker };
 
