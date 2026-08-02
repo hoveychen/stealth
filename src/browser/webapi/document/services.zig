@@ -40,8 +40,6 @@ const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const DOMRect = @import("../DOMRect.zig");
 const DOMException = @import("../DOMException.zig");
-const CSSStyleDeclaration = @import("../css/CSSStyleDeclaration.zig");
-const chrome_properties = @import("../css/chrome_properties.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -57,11 +55,6 @@ pub fn registerTypes() []const type {
         ViewTransitionTypeSet.EntryIterator,
         CaretPosition,
         CSSPseudoElement,
-        CSSStyleValue,
-        StylePropertyMapReadOnly,
-        StylePropertyMapReadOnly.KeyIterator,
-        StylePropertyMapReadOnly.ValueIterator,
-        StylePropertyMapReadOnly.EntryIterator,
     };
 }
 
@@ -568,164 +561,5 @@ pub const CSSPseudoElement = struct {
         pub const element = bridge.accessor(CSSPseudoElement.getElement, null, .{});
         pub const parent = bridge.accessor(CSSPseudoElement.getParent, null, .{});
         pub const pseudo = bridge.function(CSSPseudoElement.pseudo, .{});
-    };
-};
-
-// The base of the Typed OM value hierarchy, and as far as we take it. Chrome
-// hands back subclasses depending on the value — CSSKeywordValue for a bare
-// keyword, CSSUnitValue for a number with a unit, CSSStyleValue itself for
-// anything more involved like a colour or a font list — and those subclasses,
-// with CSSNumericValue's arithmetic between them, belong with the rest of the
-// Typed OM globals rather than here. So every value a style map yields is a
-// CSSStyleValue stringifying to the computed value: right shape, one brand
-// short in the keyword and unit cases.
-pub const CSSStyleValue = struct {
-    _text: []const u8,
-
-    pub fn init(text: []const u8, frame: *Frame) !*CSSStyleValue {
-        return frame._factory.create(CSSStyleValue{ ._text = text });
-    }
-
-    pub fn toString(self: *const CSSStyleValue) []const u8 {
-        return self._text;
-    }
-
-    pub fn parse(_: []const u8, value: []const u8, frame: *Frame) !*CSSStyleValue {
-        return CSSStyleValue.init(try frame.arena.dupe(u8, value), frame);
-    }
-
-    pub fn parseAll(property: []const u8, value: []const u8, frame: *Frame) ![]const *CSSStyleValue {
-        const list = try frame.local_arena.alloc(*CSSStyleValue, 1);
-        list[0] = try CSSStyleValue.parse(property, value, frame);
-        return list;
-    }
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(CSSStyleValue);
-
-        pub const Meta = struct {
-            pub const name = "CSSStyleValue";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-        };
-
-        pub const toString = bridge.function(CSSStyleValue.toString, .{});
-        pub const parse = bridge.function(CSSStyleValue.parse, .{ .static = true });
-        pub const parseAll = bridge.function(CSSStyleValue.parseAll, .{ .static = true });
-    };
-};
-
-// element.computedStyleMap(): the Typed OM view of a computed style. It
-// enumerates the same 474 longhands getComputedStyle does, in the same order,
-// because it is the same list.
-pub const StylePropertyMapReadOnly = struct {
-    _style: *CSSStyleDeclaration,
-    // The iterators reach values through here: their `next` only receives an
-    // Execution, which cannot reach a Frame.
-    _frame: *Frame,
-
-    pub fn init(style: *CSSStyleDeclaration, frame: *Frame) !*StylePropertyMapReadOnly {
-        return frame._factory.create(StylePropertyMapReadOnly{ ._style = style, ._frame = frame });
-    }
-
-    pub fn getSize(_: *const StylePropertyMapReadOnly) u32 {
-        return @intCast(chrome_properties.computed.len);
-    }
-
-    pub fn has(_: *const StylePropertyMapReadOnly, property: []const u8) bool {
-        return known(property);
-    }
-
-    fn known(property: []const u8) bool {
-        for (chrome_properties.computed) |name| {
-            if (std.mem.eql(u8, name, property)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    pub fn get(self: *StylePropertyMapReadOnly, property: []const u8) !?*CSSStyleValue {
-        if (!known(property)) {
-            return null;
-        }
-        const frame = self._frame;
-        const value = self._style.getPropertyValue(property, frame);
-        // frame.arena, not local_arena: the CSSStyleValue outlives this call and
-        // hands the text back from toString() later.
-        return CSSStyleValue.init(try frame.arena.dupe(u8, value), frame);
-    }
-
-    // A property can hold a list of values, so getAll returns a sequence where
-    // get returns one. entries() and values() yield these sequences, not bare
-    // values (measured: [...map.values()][0] is an Array).
-    pub fn getAll(self: *StylePropertyMapReadOnly, property: []const u8) ![]const *CSSStyleValue {
-        const single = try self.get(property) orelse return &.{};
-        const list = try self._frame.local_arena.alloc(*CSSStyleValue, 1);
-        list[0] = single;
-        return list;
-    }
-
-    pub fn keys(self: *StylePropertyMapReadOnly, exec: *const Execution) !*KeyIterator {
-        return .init(.{ .map = self }, exec);
-    }
-
-    pub fn values(self: *StylePropertyMapReadOnly, exec: *const Execution) !*ValueIterator {
-        return .init(.{ .map = self }, exec);
-    }
-
-    pub fn entries(self: *StylePropertyMapReadOnly, exec: *const Execution) !*EntryIterator {
-        return .init(.{ .map = self }, exec);
-    }
-
-    pub fn forEach(self: *StylePropertyMapReadOnly, cb_: js.Function, js_this_: ?js.Object) !void {
-        const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
-        for (chrome_properties.computed) |name| {
-            const list = try self.getAll(name);
-            var caught: js.TryCatch.Caught = undefined;
-            cb.tryCall(void, .{ list, name, self }, &caught) catch {};
-        }
-    }
-
-    pub const Iterator = struct {
-        index: u32 = 0,
-        map: *StylePropertyMapReadOnly,
-
-        pub const Entry = struct { []const u8, []const *CSSStyleValue };
-
-        pub fn next(self: *Iterator, _: *const Execution) !?Iterator.Entry {
-            const index = self.index;
-            if (index >= chrome_properties.computed.len) {
-                return null;
-            }
-            self.index = index + 1;
-            const name = chrome_properties.computed[index];
-            return .{ name, try self.map.getAll(name) };
-        }
-    };
-
-    const GenericIterator = @import("../collections/iterator.zig").Entry;
-    pub const KeyIterator = GenericIterator(Iterator, "0");
-    pub const ValueIterator = GenericIterator(Iterator, "1");
-    pub const EntryIterator = GenericIterator(Iterator, null);
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(StylePropertyMapReadOnly);
-
-        pub const Meta = struct {
-            pub const name = "StylePropertyMapReadOnly";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-        };
-
-        pub const size = bridge.accessor(StylePropertyMapReadOnly.getSize, null, .{});
-        pub const get = bridge.function(StylePropertyMapReadOnly.get, .{});
-        pub const getAll = bridge.function(StylePropertyMapReadOnly.getAll, .{});
-        pub const has = bridge.function(StylePropertyMapReadOnly.has, .{});
-        pub const entries = bridge.function(StylePropertyMapReadOnly.entries, .{});
-        pub const forEach = bridge.function(StylePropertyMapReadOnly.forEach, .{});
-        pub const keys = bridge.function(StylePropertyMapReadOnly.keys, .{});
-        pub const values = bridge.function(StylePropertyMapReadOnly.values, .{});
-        pub const symbol_iterator = bridge.iterator(StylePropertyMapReadOnly.entries, .{});
     };
 };

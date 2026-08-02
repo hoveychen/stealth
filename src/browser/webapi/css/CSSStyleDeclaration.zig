@@ -30,12 +30,17 @@ const String = lp.String;
 const Allocator = std.mem.Allocator;
 
 const chrome_properties = @import("chrome_properties.zig");
+const typed_om = @import("typed_om.zig");
 
 const CSSStyleDeclaration = @This();
 
 _element: ?*Element = null,
 _properties: std.DoublyLinkedList = .{},
 _is_computed: bool = false,
+/// The Typed OM view of this declaration, created on first use. Measured:
+/// `el.attributeStyleMap` and `rule.styleMap` are stable objects, so the map
+/// has to be cached rather than rebuilt per access.
+_property_map: ?*typed_om.StylePropertyMap = null,
 
 /// Chrome has one interface for both kinds of declaration -- an element's inline
 /// `style` and the view `getComputedStyle` hands back are both branded
@@ -66,6 +71,24 @@ pub fn parseInlineStyle(self: *CSSStyleDeclaration, frame: *Frame) !void {
             try self.applyParsedDeclaration(declaration, frame);
         }
     }
+}
+
+/// The writable Typed OM view: `element.attributeStyleMap` and
+/// `cssRule.styleMap` are both StylePropertyMaps over the declaration.
+pub fn getPropertyMap(self: *CSSStyleDeclaration, frame: *Frame) !*typed_om.StylePropertyMap {
+    if (self._property_map) |map| {
+        return map;
+    }
+    const map = try typed_om.StylePropertyMap.init(self, frame);
+    self._property_map = map;
+    return map;
+}
+
+/// Whether Chrome answers this property name at all, under either spelling.
+/// Exposed for the style maps, whose accessors throw rather than answer null
+/// for a name Chrome has never heard of.
+pub fn isKnownPropertyName(name: []const u8) bool {
+    return isAliasSpelling(name);
 }
 
 pub fn length(self: *const CSSStyleDeclaration) u32 {

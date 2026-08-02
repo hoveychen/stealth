@@ -36,6 +36,7 @@ const Selector = @import("selector/Selector.zig");
 const Animation = @import("animation/Animation.zig");
 const global_event_handlers = @import("global_event_handlers.zig");
 const document_services = @import("document/services.zig");
+const typed_om = @import("css/typed_om.zig");
 const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 
@@ -2449,8 +2450,8 @@ pub const JsApi = struct {
     fn _setPart(self: *Element, value: []const u8, frame: *Frame) !void {
         return self.setAttributeSafe(comptime .wrap("part"), .wrap(value), frame);
     }
-    fn _computedStyleMap(self: *Element, frame: *Frame) !*document_services.StylePropertyMapReadOnly {
-        return document_services.StylePropertyMapReadOnly.init(try frame.window.getComputedStyle(self, null, frame), frame);
+    fn _computedStyleMap(self: *Element, frame: *Frame) !*typed_om.StylePropertyMapReadOnly {
+        return typed_om.StylePropertyMapReadOnly.init(try frame.window.getComputedStyle(self, null, frame), frame);
     }
     // The namespace is ignored, as it already is for getAttributeNS,
     // hasAttributeNS and setAttributeNS: attributes are stored by local name.

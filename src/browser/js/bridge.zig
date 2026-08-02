@@ -128,11 +128,18 @@ pub const Constructor = struct {
         // js.Function) as its first parameter. Used by HTMLElement to support
         // direct instantiation of custom elements via `new MyElement()`.
         new_target: bool = false,
+
+        // Overrides the arity derived from the Zig signature. WebIDL says a
+        // variadic argument contributes nothing to `length`, but a variadic and
+        // a sequence argument are the same slice parameter here, so the ones
+        // that are really variadic say so: `new CSSMathSum(a, b)` takes any
+        // number of arguments and Chrome reports CSSMathSum.length === 0.
+        arity: ?usize = null,
     };
 
     fn init(comptime T: type, comptime func: anytype, comptime opts: Opts) Constructor {
         return .{
-            .arity = comptime Function.getArity(@TypeOf(func), if (opts.new_target) 1 else 0),
+            .arity = comptime opts.arity orelse Function.getArity(@TypeOf(func), if (opts.new_target) 1 else 0),
             .func = struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                     const v8_isolate = v8.v8__FunctionCallbackInfo__GetIsolate(handle).?;
@@ -182,7 +189,7 @@ pub const Function = struct {
             .exposed = opts.exposed,
             // Non-static methods receive `self` as their first param; static
             // methods don't, so don't skip the first param for them.
-            .arity = getArity(@TypeOf(func), if (opts.static) 0 else 1),
+            .arity = opts.arity orelse getArity(@TypeOf(func), if (opts.static) 0 else 1),
             .func = if (opts.noop) noopFunction else struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                     Caller.Function.call(T, handle.?, func, opts);
@@ -950,6 +957,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/css/CSSRuleList.zig"),
     @import("../webapi/css/rules.zig"),
     @import("../webapi/css/iterators.zig"),
+    @import("../webapi/css/typed_om.zig"),
     @import("../webapi/css/StyleSheet.zig"),
     @import("../webapi/css/MediaList.zig"),
     @import("../webapi/css/CSSStyleDeclaration.zig"),

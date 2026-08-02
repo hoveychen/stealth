@@ -1727,6 +1727,13 @@ pub const JsApi = struct {
     fn _setStyle(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
         return self.asElement().setStyle(value, frame);
     }
+    /// Measured on Chrome 150: `attributeStyleMap` sits on
+    /// HTMLElement.prototype (not Element.prototype) and is a StylePropertyMap
+    /// over the same declaration `style` hands out.
+    fn _attributeStyleMap(self: *HtmlElement, frame: *Frame) !*@import("../css/typed_om.zig").StylePropertyMap {
+        const declaration = try self.asElement().getOrCreateStyle(frame);
+        return declaration.getPropertyMap(frame);
+    }
     fn _offsetTop(self: *HtmlElement, frame: *Frame) f64 {
         return self.asElement().getOffsetTop(frame);
     }
@@ -1770,6 +1777,7 @@ pub const JsApi = struct {
     pub const nonce = bridge.accessor(HtmlElement.getNonce, HtmlElement.setNonce, .{ .ce_reactions = true });
     pub const tabIndex = bridge.accessor(HtmlElement.getTabIndex, HtmlElement.setTabIndex, .{ .ce_reactions = true });
     pub const style = bridge.accessor(_style, _setStyle, .{});
+    pub const attributeStyleMap = bridge.accessor(_attributeStyleMap, null, .{});
     pub const blur = bridge.function(_blur, .{});
     pub const title = bridge.accessor(HtmlElement.getTitle, HtmlElement.setTitle, .{ .ce_reactions = true });
 

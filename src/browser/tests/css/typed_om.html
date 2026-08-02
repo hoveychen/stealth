@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  CSS Typed OM. Every expectation here was measured on a headed Chrome 150 over
+  http://localhost (probes probe-css1.js, probe-css7.js .. probe-css10.js in
+  agent-workspace/stealth-detector-probes/css-batch). Where Chrome disagrees
+  with the CSS Typed OM spec, Chrome wins and the line says so.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test). Must come
+// before any block that uses it: scripts run in document order.
+function protoKeys(ctor) {
+    return Object.getOwnPropertyNames(ctor.prototype).join(' ');
+}
+function chainOf(ctor) {
+    const out = [];
+    let p = Object.getPrototypeOf(ctor.prototype);
+    while (p && p !== Object.prototype) {
+        out.push(p.constructor.name);
+        p = Object.getPrototypeOf(p);
+    }
+    return out.join(' ');
+}
+function errorName(fn) {
+    try {
+        fn();
+    } catch (e) {
+        return e.name;
+    }
+    return null;
+}
+// brand + serialisation, the pair the probes compared.
+function brand(v) {
+    if (v === null) return 'null';
+    if (v === undefined) return 'undefined';
+    return `${v.constructor.name}|${String(v)}`;
+}
+function U(n, u) {
+    return new CSSUnitValue(n, u);
+}
+// The runner executes these blocks while the document is still parsing, so
+// document.body is not there yet; documentElement always is.
+function attach(el) {
+    (document.body || document.documentElement).appendChild(el);
+    return el;
+}
+</script>
+
+<script id="typedom_interface_shapes">
+{
+    // Arity, prototype chain and prototype own-property order, all measured.
+    testing.expectEqual(0, CSSStyleValue.length);
+    testing.expectEqual('toString constructor', protoKeys(CSSStyleValue));
+    testing.expectEqual('', chainOf(CSSStyleValue));
+
+    testing.expectEqual(1, CSSKeywordValue.length);
+    testing.expectEqual('value constructor', protoKeys(CSSKeywordValue));
+    testing.expectEqual('CSSStyleValue', chainOf(CSSKeywordValue));
+
+    testing.expectEqual(2, CSSUnitValue.length);
+    testing.expectEqual('value unit constructor', protoKeys(CSSUnitValue));
+    testing.expectEqual('CSSNumericValue CSSStyleValue', chainOf(CSSUnitValue));
+
+    testing.expectEqual(0, CSSNumericValue.length);
+    testing.expectEqual('add div equals max min mul sub to toSum type constructor',
+        protoKeys(CSSNumericValue));
+    testing.expectEqual('CSSStyleValue', chainOf(CSSNumericValue));
+    testing.expectEqual('function', typeof CSSNumericValue.parse);
+    testing.expectEqual(1, CSSNumericValue.parse.length);
+
+    testing.expectEqual(1, CSSUnparsedValue.length);
+    testing.expectEqual('entries keys values forEach length constructor',
+        protoKeys(CSSUnparsedValue));
+    testing.expectEqual('CSSStyleValue', chainOf(CSSUnparsedValue));
+
+    // Measured: CSSVariableReferenceValue and CSSNumericArray hang straight off
+    // Object.prototype, they are not CSSStyleValues.
+    testing.expectEqual(1, CSSVariableReferenceValue.length);
+    testing.expectEqual('variable fallback constructor', protoKeys(CSSVariableReferenceValue));
+    testing.expectEqual('', chainOf(CSSVariableReferenceValue));
+
+    testing.expectEqual(0, CSSImageValue.length);
+    testing.expectEqual('constructor', protoKeys(CSSImageValue));
+    testing.expectEqual('CSSStyleValue', chainOf(CSSImageValue));
+
+    testing.expectEqual(0, CSSNumericArray.length);
+    testing.expectEqual('entries keys values forEach length constructor',
+        protoKeys(CSSNumericArray));
+    testing.expectEqual('', chainOf(CSSNumericArray));
+
+    testing.expectEqual(0, CSSMathValue.length);
+    testing.expectEqual('operator constructor', protoKeys(CSSMathValue));
+    testing.expectEqual('CSSNumericValue CSSStyleValue', chainOf(CSSMathValue));
+
+    for (const name of ['CSSMathSum', 'CSSMathProduct', 'CSSMathMin', 'CSSMathMax']) {
+        testing.expectEqual(0, window[name].length);
+        testing.expectEqual('values constructor', protoKeys(window[name]));
+        testing.expectEqual('CSSMathValue CSSNumericValue CSSStyleValue', chainOf(window[name]));
+    }
+    for (const name of ['CSSMathNegate', 'CSSMathInvert']) {
+        testing.expectEqual(1, window[name].length);
+        testing.expectEqual('value constructor', protoKeys(window[name]));
+        testing.expectEqual('CSSMathValue CSSNumericValue CSSStyleValue', chainOf(window[name]));
+    }
+    testing.expectEqual(3, CSSMathClamp.length);
+    testing.expectEqual('lower value upper constructor', protoKeys(CSSMathClamp));
+
+    testing.expectEqual(1, CSSTransformValue.length);
+    testing.expectEqual('entries keys values forEach length is2D toMatrix constructor',
+        protoKeys(CSSTransformValue));
+    testing.expectEqual('CSSStyleValue', chainOf(CSSTransformValue));
+
+    // Measured: the transform components do NOT go through CSSStyleValue.
+    testing.expectEqual(0, CSSTransformComponent.length);
+    testing.expectEqual('is2D toMatrix toString constructor', protoKeys(CSSTransformComponent));
+    testing.expectEqual('', chainOf(CSSTransformComponent));
+
+    testing.expectEqual(2, CSSTranslate.length);
+    testing.expectEqual('x y z constructor', protoKeys(CSSTranslate));
+    testing.expectEqual('CSSTransformComponent', chainOf(CSSTranslate));
+    testing.expectEqual(1, CSSRotate.length);
+    testing.expectEqual('angle x y z constructor', protoKeys(CSSRotate));
+    testing.expectEqual(2, CSSScale.length);
+    testing.expectEqual('x y z constructor', protoKeys(CSSScale));
+    testing.expectEqual(2, CSSSkew.length);
+    testing.expectEqual('ax ay constructor', protoKeys(CSSSkew));
+    testing.expectEqual(1, CSSSkewX.length);
+    testing.expectEqual('ax constructor', protoKeys(CSSSkewX));
+    testing.expectEqual(1, CSSSkewY.length);
+    testing.expectEqual('ay constructor', protoKeys(CSSSkewY));
+    testing.expectEqual(1, CSSPerspective.length);
+    testing.expectEqual('length constructor', protoKeys(CSSPerspective));
+    testing.expectEqual(1, CSSMatrixComponent.length);
+    testing.expectEqual('matrix constructor', protoKeys(CSSMatrixComponent));
+    testing.expectEqual(2, CSSPositionValue.length);
+    testing.expectEqual('x y constructor', protoKeys(CSSPositionValue));
+    testing.expectEqual('CSSStyleValue', chainOf(CSSPositionValue));
+
+    testing.expectEqual(0, StylePropertyMap.length);
+    testing.expectEqual('append clear delete set constructor', protoKeys(StylePropertyMap));
+    testing.expectEqual('StylePropertyMapReadOnly', chainOf(StylePropertyMap));
+}
+</script>
+
+<script id="typedom_illegal_constructors">
+{
+    // Measured: eight of the family are not constructible.
+    for (const name of ['CSSStyleValue', 'CSSNumericValue', 'CSSImageValue', 'CSSNumericArray',
+        'CSSMathValue', 'CSSTransformComponent', 'StylePropertyMap', 'StylePropertyMapReadOnly']) {
+        testing.expectEqual('TypeError', errorName(() => new window[name]()));
+    }
+}
+</script>
+
+<script id="typedom_keyword_value">
+{
+    testing.expectEqual('CSSKeywordValue|auto', brand(new CSSKeywordValue('auto')));
+    testing.expectEqual('auto', new CSSKeywordValue('auto').value);
+    // Measured: an empty keyword is a TypeError, from the constructor and the setter.
+    testing.expectEqual('TypeError', errorName(() => new CSSKeywordValue('')));
+    testing.expectEqual('TypeError', errorName(() => new CSSKeywordValue()));
+    const k = new CSSKeywordValue('auto');
+    k.value = 'none';
+    testing.expectEqual('none', k.value);
+    testing.expectEqual('TypeError', errorName(() => { k.value = ''; }));
+    testing.expectEqual('none', k.value);
+
+    // toString runs the value through CSS identifier serialisation.
+    testing.expectEqual('\\35 ', String(new CSSKeywordValue(5)));
+    testing.expectEqual('5', new CSSKeywordValue(5).value);
+    testing.expectEqual('a\\ b', String(new CSSKeywordValue('a b')));
+    testing.expectEqual('a\\.b', String(new CSSKeywordValue('a.b')));
+    testing.expectEqual('--x', String(new CSSKeywordValue('--x')));
+}
+</script>
+
+<script id="typedom_unit_value">
+{
+    testing.expectEqual('CSSUnitValue|5px', brand(U(5, 'px')));
+    testing.expectEqual('CSSUnitValue|5', brand(U(5, 'number')));
+    testing.expectEqual('CSSUnitValue|50%', brand(U(50, 'percent')));
+    testing.expectEqual('CSSUnitValue|90deg', brand(U(90, 'deg')));
+    // Measured: the unit is lower-cased, unknown units and non-finite numbers
+    // are TypeErrors, and a numeric string is coerced.
+    testing.expectEqual('px', U(5, 'PX').unit);
+    testing.expectEqual('TypeError', errorName(() => U(5, 'bogus')));
+    testing.expectEqual('TypeError', errorName(() => U(5, '')));
+    testing.expectEqual('TypeError', errorName(() => new CSSUnitValue()));
+    testing.expectEqual('TypeError', errorName(() => U(NaN, 'px')));
+    testing.expectEqual('TypeError', errorName(() => U(Infinity, 'px')));
+    testing.expectEqual('CSSUnitValue|7px', brand(U('7', 'px')));
+    testing.expectEqual('CSSUnitValue|0px', brand(U(-0, 'px')));
+
+    const u = U(5, 'px');
+    u.value = 9;
+    testing.expectEqual('CSSUnitValue|9px', brand(u));
+    // Measured: `unit` has no setter, so assigning is a silent no-op.
+    u.unit = 'em';
+    testing.expectEqual('px', u.unit);
+
+    // Serialisation is printf %g: six significant digits, exponent at least
+    // two digits, trailing zeros dropped. `value` keeps the full double.
+    testing.expectEqual('0.333333px', String(U(1 / 3, 'px')));
+    testing.expectEqual(1 / 3, U(1 / 3, 'px').value);
+    testing.expectEqual('1e+21px', String(U(1e21, 'px')));
+    testing.expectEqual('1e-07px', String(U(1e-7, 'px')));
+    testing.expectEqual('1.23457e+08px', String(U(123456789, 'px')));
+    testing.expectEqual('0.000123457px', String(U(0.000123456789, 'px')));
+    testing.expectEqual('-2.5px', String(U(-2.5, 'px')));
+    testing.expectEqual('100px', String(U(100, 'px')));
+    testing.expectEqual('1e+100px', String(U(1e100, 'px')));
+    testing.expectEqual('2px', String(U(2.0000001, 'px')));
+    testing.expectEqual('12345.7px', String(U(12345.6789, 'px')));
+    testing.expectEqual('1e+06px', String(U(999999.9, 'px')));
+}
+</script>
+
+<script id="typedom_numeric_type">
+{
+    testing.expectEqual('{}', JSON.stringify(U(1, 'number').type()));
+    testing.expectEqual('{"length":1}', JSON.stringify(U(1, 'px').type()));
+    testing.expectEqual('{"percent":1}', JSON.stringify(U(1, 'percent').type()));
+    testing.expectEqual('{"angle":1}', JSON.stringify(U(1, 'deg').type()));
+    testing.expectEqual('{"time":1}', JSON.stringify(U(1, 's').type()));
+    testing.expectEqual('{"frequency":1}', JSON.stringify(U(1, 'hz').type()));
+    testing.expectEqual('{"resolution":1}', JSON.stringify(U(1, 'dpi').type()));
+    testing.expectEqual('{"flex":1}', JSON.stringify(U(1, 'fr').type()));
+    // Measured: cqw..cqmax are lengths, `x` is a resolution.
+    testing.expectEqual('{"length":1}', JSON.stringify(U(1, 'cqw').type()));
+    testing.expectEqual('{"resolution":1}', JSON.stringify(U(1, 'x').type()));
+    // Exponents combine through the math nodes, and a length+percent sum
+    // reports a percentHint.
+    testing.expectEqual('{"length":2}',
+        JSON.stringify(new CSSMathProduct(U(1, 'px'), U(2, 'px')).type()));
+    testing.expectEqual('{"angle":1,"length":1}',
+        JSON.stringify(new CSSMathProduct(U(1, 'px'), U(2, 'deg')).type()));
+    testing.expectEqual('{"length":-1}', JSON.stringify(new CSSMathInvert(U(1, 'px')).type()));
+    testing.expectEqual('{"length":1}', JSON.stringify(new CSSMathNegate(U(1, 'px')).type()));
+    testing.expectEqual('{"length":1,"percentHint":"length"}',
+        JSON.stringify(new CSSMathSum(U(1, 'px'), U(2, 'percent')).type()));
+}
+</script>
+
+<script id="typedom_unit_conversion">
+{
+    testing.expectEqual('CSSUnitValue|1px', brand(U(1, 'px').to('px')));
+    testing.expectEqual('CSSUnitValue|2.54cm', brand(U(96, 'px').to('cm')));
+    testing.expectEqual('CSSUnitValue|1in', brand(U(96, 'px').to('in')));
+    testing.expectEqual('CSSUnitValue|25.4mm', brand(U(96, 'px').to('mm')));
+    testing.expectEqual('CSSUnitValue|72pt', brand(U(96, 'px').to('pt')));
+    testing.expectEqual('CSSUnitValue|6pc', brand(U(96, 'px').to('pc')));
+    testing.expectEqual('CSSUnitValue|101.6q', brand(U(96, 'px').to('q')));
+    testing.expectEqual('CSSUnitValue|3.14159rad', brand(U(180, 'deg').to('rad')));
+    testing.expectEqual('CSSUnitValue|0.5turn', brand(U(180, 'deg').to('turn')));
+    testing.expectEqual('CSSUnitValue|200grad', brand(U(180, 'deg').to('grad')));
+    testing.expectEqual('CSSUnitValue|1000ms', brand(U(1, 's').to('ms')));
+    testing.expectEqual('CSSUnitValue|1khz', brand(U(1000, 'hz').to('khz')));
+    testing.expectEqual('CSSUnitValue|37.7953dpcm', brand(U(96, 'dpi').to('dpcm')));
+    // Blink multiplies by the reciprocal of the target factor, so the last bits
+    // of the raw double are not what a single division would give.
+    testing.expectEqual(2.5400000000000005, U(96, 'px').to('cm').value);
+    testing.expectEqual(101.60000000000002, U(96, 'px').to('q').value);
+    testing.expectEqual(3.141592653589793, U(180, 'deg').to('rad').value);
+    testing.expectEqual(37.79527559055118, U(96, 'dpi').to('dpcm').value);
+    // A relative unit only converts to itself.
+    testing.expectEqual('CSSUnitValue|1em', brand(U(1, 'em').to('em')));
+    testing.expectEqual('TypeError', errorName(() => U(1, 'px').to('deg')));
+    testing.expectEqual('TypeError', errorName(() => U(1, 'px').to('em')));
+    // Measured: an unknown target unit is a SyntaxError, not a TypeError.
+    testing.expectEqual('SyntaxError', errorName(() => U(1, 'px').to('bogus')));
+}
+</script>
+
+<script id="typedom_arithmetic">
+{
+    // Same unit collapses to a CSSUnitValue, different units build a sum.
+    testing.expectEqual('CSSUnitValue|3px', brand(U(1, 'px').add(U(2, 'px'))));
+    testing.expectEqual('CSSUnitValue|3', brand(U(1, 'number').add(2)));
+    testing.expectEqual('CSSUnitValue|6px', brand(U(1, 'px').add(U(2, 'px'), U(3, 'px'))));
+    testing.expectEqual('CSSUnitValue|1px', brand(U(1, 'px').add()));
+    testing.expectEqual('CSSMathSum|calc(1px + 2em)', brand(U(1, 'px').add(U(2, 'em'))));
+    testing.expectEqual('CSSMathSum|calc(1px + 2%)', brand(U(1, 'px').add(U(2, 'percent'))));
+    testing.expectEqual('TypeError', errorName(() => U(1, 'px').add(U(2, 'deg'))));
+    // Measured: sub is add-of-negated, and a unit value negates in place.
+    testing.expectEqual('CSSUnitValue|3px', brand(U(5, 'px').sub(U(2, 'px'))));
+    testing.expectEqual('CSSMathSum|calc(1px + -2em)', brand(U(1, 'px').sub(U(2, 'em'))));
+    testing.expectEqual('CSSUnitValue|10px', brand(U(5, 'px').mul(2)));
+    testing.expectEqual('CSSUnitValue|6px', brand(U(2, 'px').mul('3')));
+    testing.expectEqual('CSSMathProduct|calc(5px * 2px)', brand(U(5, 'px').mul(U(2, 'px'))));
+    testing.expectEqual('CSSUnitValue|3px', brand(U(6, 'px').div(2)));
+    // Measured: divide-by-zero is a RangeError.
+    testing.expectEqual('RangeError', errorName(() => U(6, 'px').div(0)));
+    testing.expectEqual('CSSUnitValue|1px', brand(U(1, 'px').min(U(2, 'px'))));
+    testing.expectEqual('CSSUnitValue|2px', brand(U(1, 'px').max(U(2, 'px'))));
+    testing.expectEqual('CSSMathMin|min(1px, 2em, 3px)', brand(U(1, 'px').min(U(2, 'em'), U(3, 'px'))));
+    testing.expectTrue(U(1, 'px').equals(U(1, 'px')));
+    testing.expectFalse(U(1, 'px').equals(U(2, 'px')));
+    testing.expectFalse(U(1, 'px').equals(U(1, 'em')));
+    testing.expectTrue(U(1, 'px').equals(U(1, 'px'), U(1, 'px')));
+    testing.expectTrue(U(1, 'px').equals());
+
+    // Sums flatten their own terms but not the argument's.
+    const sum = new CSSMathSum(U(1, 'px'), U(2, 'em'));
+    testing.expectEqual('CSSMathSum|calc(1px + 2em + 3px)', brand(sum.add(U(3, 'px'))));
+    testing.expectEqual('CSSMathSum|calc(1px + 2em + (3px + 4em))',
+        brand(sum.add(new CSSMathSum(U(3, 'px'), U(4, 'em')))));
+    // Measured: div by n is mul by 1/n, and both wrap the whole sum.
+    testing.expectEqual('CSSMathProduct|calc((1px + 2em) * 2)', brand(sum.mul(2)));
+    testing.expectEqual('CSSMathProduct|calc((1px + 2em) * 0.5)', brand(sum.div(2)));
+    testing.expectTrue(sum.equals(new CSSMathSum(U(1, 'px'), U(2, 'em'))));
+    testing.expectEqual('CSSUnitValue|3px', brand(new CSSMathSum(U(1, 'px'), U(2, 'px')).to('px')));
+}
+</script>
+
+<script id="typedom_to_sum">
+{
+    let s = U(1, 'px').toSum();
+    testing.expectEqual('CSSMathSum|calc(1px)', brand(s));
+    testing.expectEqual('CSSUnitValue|1px', brand(s.values[0]));
+    // With explicit units the terms come out in the requested order, zero-filled.
+    s = U(1, 'px').toSum('px', 'em');
+    testing.expectEqual('CSSMathSum|calc(1px + 0em)', brand(s));
+    testing.expectEqual(2, s.values.length);
+    // Without them the terms are summed per unit and sorted by unit name.
+    s = new CSSMathSum(U(1, 'px'), U(2, 'em'), U(3, 'px')).toSum();
+    testing.expectEqual('CSSMathSum|calc(2em + 4px)', brand(s));
+    testing.expectEqual(2, s.values.length);
+    testing.expectEqual('CSSMathSum|calc(3px)', brand(new CSSMathSum(U(1, 'px'), U(2, 'px')).toSum()));
+    testing.expectEqual('TypeError', errorName(() => U(1, 'px').toSum('em')));
+}
+</script>
+
+<script id="typedom_math_nodes">
+{
+    let m = new CSSMathNegate(U(5, 'px'));
+    testing.expectEqual('CSSMathNegate|calc(-5px)', brand(m));
+    testing.expectEqual('negate', m.operator);
+    testing.expectEqual('CSSUnitValue|5px', brand(m.value));
+    testing.expectEqual('CSSMathNegate|calc(-3)', brand(new CSSMathNegate(3)));
+    testing.expectEqual('CSSMathNegate|calc(-(-1px))',
+        brand(new CSSMathNegate(new CSSMathNegate(U(1, 'px')))));
+
+    m = new CSSMathInvert(U(5, 'px'));
+    testing.expectEqual('CSSMathInvert|calc(1 / 5px)', brand(m));
+    testing.expectEqual('invert', m.operator);
+
+    m = new CSSMathSum(U(1, 'px'), U(2, 'em'));
+    testing.expectEqual('CSSMathSum|calc(1px + 2em)', brand(m));
+    testing.expectEqual('sum', m.operator);
+    testing.expectEqual('CSSNumericArray|[object CSSNumericArray]', brand(m.values));
+    testing.expectEqual(2, m.values.length);
+    testing.expectEqual('CSSUnitValue|1px', brand(m.values[0]));
+    testing.expectEqual('["0","1"]', JSON.stringify(Object.getOwnPropertyNames(m.values)));
+    testing.expectEqual('undefined', String(m.values[5]));
+    testing.expectEqual('CSSUnitValue|1px ; CSSUnitValue|2em', [...m.values].map(brand).join(' ; '));
+
+    // Measured: a one-term sum is legal, an empty one is a SyntaxError, and
+    // mixing incompatible types is a TypeError.
+    testing.expectEqual('CSSMathSum|calc(1px)', brand(new CSSMathSum(U(1, 'px'))));
+    testing.expectEqual('SyntaxError', errorName(() => new CSSMathSum()));
+    testing.expectEqual('TypeError', errorName(() => new CSSMathSum(U(1, 'px'), U(2, 'deg'))));
+
+    m = new CSSMathProduct(U(2, 'px'), 3);
+    testing.expectEqual('CSSMathProduct|calc(2px * 3)', brand(m));
+    testing.expectEqual('product', m.operator);
+    testing.expectEqual('CSSUnitValue|3', brand(m.values[1]));
+    testing.expectEqual('CSSMathMin|min(1px, 2px)', brand(new CSSMathMin(U(1, 'px'), U(2, 'px'))));
+    testing.expectEqual('CSSMathMax|max(1px, 2px)', brand(new CSSMathMax(U(1, 'px'), U(2, 'px'))));
+
+    m = new CSSMathClamp(U(1, 'px'), U(2, 'px'), U(3, 'px'));
+    testing.expectEqual('CSSMathClamp|clamp(1px, 2px, 3px)', brand(m));
+    testing.expectEqual('clamp', m.operator);
+    testing.expectEqual('CSSUnitValue|1px', brand(m.lower));
+    testing.expectEqual('CSSUnitValue|2px', brand(m.value));
+    testing.expectEqual('CSSUnitValue|3px', brand(m.upper));
+    testing.expectEqual('CSSMathSum|calc((2px * 3) + 1em)',
+        brand(new CSSMathSum(new CSSMathProduct(U(2, 'px'), 3), U(1, 'em'))));
+}
+</script>
+
+<script id="typedom_unparsed_and_var">
+{
+    let u = new CSSUnparsedValue(['a', ' ', 'b']);
+    testing.expectEqual('CSSUnparsedValue|a b', brand(u));
+    testing.expectEqual(3, u.length);
+    testing.expectEqual('a', u[0]);
+    testing.expectEqual('undefined', String(u[5]));
+    testing.expectEqual('[[0,"a"],[1,"b"]]',
+        JSON.stringify([...new CSSUnparsedValue(['a', 'b']).entries()]));
+    testing.expectEqual('[0,1]', JSON.stringify([...new CSSUnparsedValue(['a', 'b']).keys()]));
+    testing.expectEqual('["0","1"]',
+        JSON.stringify(Object.getOwnPropertyNames(new CSSUnparsedValue(['a', 'b']))));
+    testing.expectEqual('CSSUnparsedValue|', brand(new CSSUnparsedValue([])));
+    testing.expectEqual('TypeError', errorName(() => new CSSUnparsedValue()));
+    // Measured: two adjacent strings serialise with a /**/ separator so they
+    // cannot merge into one token.
+    testing.expectEqual('a/**/b', String(new CSSUnparsedValue(['a', 'b'])));
+    testing.expectEqual('a', String(new CSSUnparsedValue(['a'])));
+    testing.expectEqual(' a b', String(new CSSUnparsedValue([' a ', 'b'])));
+    u = new CSSUnparsedValue(['a', 'b']);
+    u[0] = 'z';
+    testing.expectEqual('z', u[0]);
+
+    const v = new CSSVariableReferenceValue('--x');
+    testing.expectEqual('--x', v.variable);
+    testing.expectEqual(null, v.fallback);
+    // Measured: it has no toString of its own, so Object.prototype's runs.
+    testing.expectEqual('[object CSSVariableReferenceValue]', String(v));
+    v.variable = '--y';
+    testing.expectEqual('--y', v.variable);
+    testing.expectEqual('TypeError', errorName(() => { v.variable = 'y'; }));
+    testing.expectEqual('TypeError', errorName(() => new CSSVariableReferenceValue('x')));
+    testing.expectEqual('TypeError', errorName(() => new CSSVariableReferenceValue()));
+
+    const withFallback = new CSSVariableReferenceValue('--x', new CSSUnparsedValue(['red']));
+    testing.expectEqual('CSSUnparsedValue|red', brand(withFallback.fallback));
+    testing.expectEqual('var(--x,red)', String(new CSSUnparsedValue([withFallback])));
+    testing.expectEqual('calc(var(--x))',
+        String(new CSSUnparsedValue(['calc(', new CSSVariableReferenceValue('--x'), ')'])));
+}
+</script>
+
+<script id="typedom_transform_components">
+{
+    let t = new CSSTranslate(U(1, 'px'), U(2, 'px'));
+    testing.expectEqual('CSSTranslate|translate(1px, 2px)', brand(t));
+    testing.expectEqual('CSSUnitValue|0px', brand(t.z));
+    testing.expectTrue(t.is2D);
+    testing.expectEqual('CSSTranslate|translate3d(1px, 2px, 3px)',
+        brand(new CSSTranslate(U(1, 'px'), U(2, 'px'), U(3, 'px'))));
+    testing.expectEqual('CSSTranslate|translate(10%, 2px)',
+        brand(new CSSTranslate(U(10, 'percent'), U(2, 'px'))));
+    testing.expectEqual('TypeError', errorName(() => new CSSTranslate(U(1, 'deg'), U(2, 'px'))));
+    // Measured: is2D is writable and switches the serialisation; setting z
+    // does NOT flip is2D.
+    t.is2D = false;
+    testing.expectEqual('CSSTranslate|translate3d(1px, 2px, 0px)', brand(t));
+    t = new CSSTranslate(U(1, 'px'), U(2, 'px'));
+    t.z = U(5, 'px');
+    testing.expectTrue(t.is2D);
+    testing.expectEqual('CSSTranslate|translate(1px, 2px)', brand(t));
+
+    let r = new CSSRotate(U(45, 'deg'));
+    testing.expectEqual('CSSRotate|rotate(45deg)', brand(r));
+    testing.expectEqual('CSSUnitValue|0', brand(r.x));
+    testing.expectEqual('CSSUnitValue|1', brand(r.z));
+    testing.expectEqual('CSSRotate|rotate3d(1, 2, 3, 45deg)', brand(new CSSRotate(1, 2, 3, U(45, 'deg'))));
+    testing.expectEqual('TypeError', errorName(() => new CSSRotate(U(45, 'px'))));
+    r.angle = U(90, 'deg');
+    testing.expectEqual('rotate(90deg)', String(r));
+    // Measured: assigning x/y on a 2D rotate leaves it 2D.
+    r = new CSSRotate(U(45, 'deg'));
+    r.x = 1;
+    r.y = 1;
+    testing.expectTrue(r.is2D);
+    r = new CSSRotate(U(45, 'deg'));
+    r.is2D = false;
+    testing.expectEqual('rotate3d(0, 0, 1, 45deg)', String(r));
+
+    testing.expectEqual('CSSScale|scale(2, 3)', brand(new CSSScale(2, 3)));
+    testing.expectEqual('CSSUnitValue|1', brand(new CSSScale(2, 3).z));
+    testing.expectEqual('CSSScale|scale3d(2, 3, 4)', brand(new CSSScale(2, 3, 4)));
+    testing.expectEqual('CSSScale|scale(2, 3)', brand(new CSSScale(U(2, 'number'), U(3, 'number'))));
+    testing.expectEqual('TypeError', errorName(() => new CSSScale(U(2, 'px'), 3)));
+
+    testing.expectEqual('CSSSkew|skew(1deg, 2deg)', brand(new CSSSkew(U(1, 'deg'), U(2, 'deg'))));
+    testing.expectEqual('CSSSkewX|skewX(1deg)', brand(new CSSSkewX(U(1, 'deg'))));
+    testing.expectEqual('CSSSkewY|skewY(1deg)', brand(new CSSSkewY(U(1, 'deg'))));
+    testing.expectEqual('TypeError', errorName(() => new CSSSkew(U(1, 'px'), U(2, 'deg'))));
+    // Measured: the three skews are always 2D, and is2D refuses to change.
+    const sk = new CSSSkewX(U(1, 'deg'));
+    sk.is2D = false;
+    testing.expectTrue(sk.is2D);
+
+    // Measured: a perspective is never 2D, and takes `none` as a keyword.
+    const p = new CSSPerspective(U(10, 'px'));
+    testing.expectEqual('CSSPerspective|perspective(10px)', brand(p));
+    testing.expectFalse(p.is2D);
+    testing.expectEqual('CSSPerspective|perspective(none)',
+        brand(new CSSPerspective(new CSSKeywordValue('none'))));
+    testing.expectEqual('TypeError', errorName(() => new CSSPerspective(U(10, 'deg'))));
+    p.length = U(20, 'px');
+    testing.expectEqual('perspective(20px)', String(p));
+
+    const mc = new CSSMatrixComponent(new DOMMatrix());
+    testing.expectEqual('CSSMatrixComponent|matrix(1, 0, 0, 1, 0, 0)', brand(mc));
+    testing.expectTrue(mc.is2D);
+    testing.expectEqual('DOMMatrix', mc.matrix.constructor.name);
+    testing.expectEqual('matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)',
+        String(new CSSMatrixComponent(new DOMMatrix(), { is2D: false })));
+    testing.expectEqual('TypeError', errorName(() => new CSSMatrixComponent(1)));
+    mc.matrix = new DOMMatrix('scale(2)');
+    testing.expectEqual('matrix(2, 0, 0, 2, 0, 0)', String(mc));
+}
+</script>
+
+<script id="typedom_component_matrices">
+{
+    // Measured against Chrome's DOMMatrix serialisation, full precision.
+    testing.expectEqual('matrix(1, 0, 0, 1, 1, 2)',
+        String(new CSSTranslate(U(1, 'px'), U(2, 'px')).toMatrix()));
+    testing.expectEqual('matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 2, 3, 1)',
+        String(new CSSTranslate(U(1, 'px'), U(2, 'px'), U(3, 'px')).toMatrix()));
+    testing.expectEqual('matrix(0, 1, -1, 0, 0, 0)',
+        String(new CSSRotate(U(90, 'deg')).toMatrix()));
+    testing.expectEqual('matrix3d(1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1)',
+        String(new CSSRotate(1, 0, 0, U(90, 'deg')).toMatrix()));
+    testing.expectEqual('matrix3d(2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 0, 0, 0, 1)',
+        String(new CSSScale(2, 3, 4).toMatrix()));
+    testing.expectEqual('matrix(1, 0, 0.9999999999999999, 1, 0, 0)',
+        String(new CSSSkewX(U(45, 'deg')).toMatrix()));
+    testing.expectEqual('matrix(1, 0.9999999999999999, 0, 1, 0, 0)',
+        String(new CSSSkewY(U(45, 'deg')).toMatrix()));
+    testing.expectEqual('matrix(1, 0.9999999999999999, 0.5773502691896256, 1, 0, 0)',
+        String(new CSSSkew(U(30, 'deg'), U(45, 'deg')).toMatrix()));
+    // Measured: a perspective's matrix drops the 3D term entirely.
+    testing.expectEqual('matrix(1, 0, 0, 1, 0, 0)',
+        String(new CSSPerspective(U(100, 'px')).toMatrix()));
+    // Measured: toMatrix and `matrix` both hand back fresh DOMMatrix copies.
+    const m = new DOMMatrix();
+    m.e = 5;
+    const c = new CSSMatrixComponent(m);
+    testing.expectEqual('matrix(1, 0, 0, 1, 5, 0)', String(c.toMatrix()));
+    testing.expectFalse(c.toMatrix() === m);
+    testing.expectFalse(c.matrix === m);
+}
+</script>
+
+<script id="typedom_transform_value">
+{
+    let t = new CSSTransformValue([new CSSTranslate(U(1, 'px'), U(2, 'px'))]);
+    testing.expectEqual('CSSTransformValue|translate(1px, 2px)', brand(t));
+    testing.expectEqual(1, t.length);
+    testing.expectTrue(t.is2D);
+    testing.expectEqual('CSSTranslate|translate(1px, 2px)', brand(t[0]));
+    testing.expectEqual('["0"]', JSON.stringify(Object.getOwnPropertyNames(t)));
+    // Measured: an empty list and a missing argument are both TypeErrors.
+    testing.expectEqual('TypeError', errorName(() => new CSSTransformValue([])));
+    testing.expectEqual('TypeError', errorName(() => new CSSTransformValue()));
+
+    t = new CSSTransformValue([new CSSTranslate(U(1, 'px'), U(2, 'px')), new CSSScale(2, 3)]);
+    testing.expectEqual('CSSTransformValue|translate(1px, 2px) scale(2, 3)', brand(t));
+    testing.expectEqual(2, t.length);
+    testing.expectTrue(t.is2D);
+    // is2D is false as soon as any component is 3D.
+    testing.expectFalse(new CSSTransformValue([new CSSTranslate(U(1, 'px'), U(2, 'px'), U(3, 'px'))]).is2D);
+
+    testing.expectEqual('matrix(1, 0, 0, 1, 1, 2)',
+        String(new CSSTransformValue([new CSSTranslate(U(1, 'px'), U(2, 'px'))]).toMatrix()));
+    testing.expectEqual('matrix(2, 0, 0, 3, 1, 2)', String(t.toMatrix()));
+    // Measured: a non-px length cannot become a matrix.
+    testing.expectEqual('TypeError',
+        errorName(() => new CSSTransformValue([new CSSTranslate(U(1, 'em'), U(2, 'px'))]).toMatrix()));
+
+    t = new CSSTransformValue([new CSSScale(2, 3)]);
+    testing.expectEqual('CSSScale|scale(2, 3)', [...t].map(brand).join(' ; '));
+    t[0] = new CSSScale(4, 5);
+    testing.expectEqual('CSSTransformValue|scale(4, 5)', brand(t));
+    t[1] = new CSSScale(6, 7);
+    testing.expectEqual(2, t.length);
+
+    const pos = new CSSPositionValue(U(1, 'px'), U(2, 'px'));
+    testing.expectEqual('CSSPositionValue|1px 2px', brand(pos));
+    testing.expectEqual('CSSUnitValue|1px', brand(pos.x));
+    testing.expectEqual('TypeError', errorName(() => new CSSPositionValue(U(1, 'deg'), U(2, 'px'))));
+}
+</script>
+
+<script id="typedom_numeric_parse">
+{
+    testing.expectEqual('CSSUnitValue|42', brand(CSSNumericValue.parse('42')));
+    testing.expectEqual('CSSUnitValue|42px', brand(CSSNumericValue.parse('42px')));
+    testing.expectEqual('CSSUnitValue|10px', brand(CSSNumericValue.parse('  10px  ')));
+    testing.expectEqual('CSSUnitValue|10%', brand(CSSNumericValue.parse('10%')));
+    testing.expectEqual('CSSUnitValue|-3.5em', brand(CSSNumericValue.parse('-3.5em')));
+    testing.expectEqual('CSSUnitValue|100px', brand(CSSNumericValue.parse('1e2px')));
+    // Measured: calc() always comes back as a CSSMathSum, already folded per
+    // unit, while min()/max() fold all the way to a unit value when they can.
+    testing.expectEqual('CSSMathSum|calc(3px)', brand(CSSNumericValue.parse('calc(1px + 2px)')));
+    testing.expectEqual('CSSMathSum|calc(1px + 2em)', brand(CSSNumericValue.parse('calc(1px + 2em)')));
+    testing.expectEqual('CSSMathSum|calc(6px)', brand(CSSNumericValue.parse('calc(2px * 3)')));
+    testing.expectEqual('CSSUnitValue|1px', brand(CSSNumericValue.parse('min(1px, 2px)')));
+    testing.expectEqual('SyntaxError', errorName(() => CSSNumericValue.parse('auto')));
+    testing.expectEqual('SyntaxError', errorName(() => CSSNumericValue.parse('')));
+    testing.expectEqual('SyntaxError', errorName(() => CSSNumericValue.parse('var(--x)')));
+}
+</script>
+
+<script id="typedom_style_value_parse">
+{
+    testing.expectEqual('CSSUnitValue|10px', brand(CSSStyleValue.parse('width', '10px')));
+    testing.expectEqual('CSSKeywordValue|block', brand(CSSStyleValue.parse('display', 'block')));
+    // Measured: a colour property is not Typed-OM-supported, so a named colour
+    // stays a bare CSSStyleValue rather than becoming a keyword.
+    testing.expectEqual('CSSStyleValue|red', brand(CSSStyleValue.parse('color', 'red')));
+    testing.expectEqual('CSSTransformValue|translate(1px, 2px)',
+        brand(CSSStyleValue.parse('transform', 'translate(1px, 2px)')));
+    testing.expectEqual('TypeError', errorName(() => CSSStyleValue.parse('nope', '1px')));
+    testing.expectEqual('CSSStyleValue|1px', CSSStyleValue.parseAll('margin', '1px').map(brand).join(' ; '));
+}
+</script>
+
+<script id="typedom_attribute_style_map">
+{
+    const el = attach(document.createElement('div'));
+    el.style.width = '10px';
+    el.style.color = 'rgb(1, 2, 3)';
+    el.style.display = 'block';
+    el.style.opacity = '0.5';
+    el.style.setProperty('--custom', 'hello');
+    el.style.transform = 'translate(1px, 2px)';
+
+    testing.expectEqual('StylePropertyMap', el.attributeStyleMap.constructor.name);
+    testing.expectEqual('[object StylePropertyMap]', String(el.attributeStyleMap));
+    testing.expectTrue(el.attributeStyleMap === el.attributeStyleMap);
+    testing.expectEqual(6, el.attributeStyleMap.size);
+    // The measured dispatch: numeric -> unit, bare keyword -> keyword,
+    // custom property -> unparsed, transform list -> transform value, and
+    // anything a Typed-OM-unsupported property holds -> CSSStyleValue.
+    testing.expectEqual('CSSUnitValue|10px', brand(el.attributeStyleMap.get('width')));
+    testing.expectEqual('CSSStyleValue|rgb(1, 2, 3)', brand(el.attributeStyleMap.get('color')));
+    testing.expectEqual('CSSKeywordValue|block', brand(el.attributeStyleMap.get('display')));
+    testing.expectEqual('CSSUnitValue|0.5', brand(el.attributeStyleMap.get('opacity')));
+    testing.expectEqual('CSSUnparsedValue|hello', brand(el.attributeStyleMap.get('--custom')));
+    testing.expectEqual('CSSTransformValue|translate(1px, 2px)',
+        brand(el.attributeStyleMap.get('transform')));
+    testing.expectEqual('undefined', String(el.attributeStyleMap.get('height')));
+    testing.expectEqual('["width","color","display","opacity","--custom","transform"]',
+        JSON.stringify([...el.attributeStyleMap.keys()]));
+    testing.expectEqual('CSSUnitValue|10px', el.attributeStyleMap.getAll('width').map(brand).join(' ; '));
+    testing.expectTrue(el.attributeStyleMap.has('width'));
+    testing.expectFalse(el.attributeStyleMap.has('height'));
+    // Measured: an unknown property name throws everywhere, not just on set.
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.get('nope')));
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.has('nope')));
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.getAll('nope')));
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.delete('nope')));
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.set('nope', '1px')));
+
+    el.attributeStyleMap.set('height', U(3, 'px'));
+    testing.expectEqual('3px', el.style.height);
+    el.attributeStyleMap.set('top', '4px');
+    testing.expectEqual('4px', el.style.top);
+    el.attributeStyleMap.set('position', new CSSKeywordValue('absolute'));
+    testing.expectEqual('absolute', el.style.position);
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.set('left', U(3, 'deg'))));
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.set('width')));
+    // Measured: Blink has no list-valued append at all, so it always throws.
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.append('width', U(1, 'px'))));
+    testing.expectEqual('TypeError', errorName(() => el.attributeStyleMap.append('--custom', '1')));
+
+    testing.expectEqual(undefined, el.attributeStyleMap.delete('top'));
+    testing.expectEqual('', el.style.top);
+    testing.expectEqual(undefined, el.attributeStyleMap.delete('bottom'));
+
+    // Measured: clear() empties the attribute but leaves it in place.
+    const d = document.createElement('div');
+    d.style.width = '1px';
+    d.attributeStyleMap.clear();
+    testing.expectEqual('', d.getAttribute('style'));
+    testing.expectEqual(0, d.attributeStyleMap.size);
+}
+</script>
+
+<script id="typedom_rule_style_map">
+{
+    const style = document.createElement('style');
+    style.textContent = '#tom { width: 12px; color: red; }';
+    document.head.appendChild(style);
+    const rule = style.sheet.cssRules[0];
+    testing.expectEqual('StylePropertyMap', rule.styleMap.constructor.name);
+    testing.expectTrue(rule.styleMap === rule.styleMap);
+    testing.expectEqual('CSSUnitValue|12px', brand(rule.styleMap.get('width')));
+    testing.expectEqual(2, rule.styleMap.size);
+    testing.expectEqual('["width","color"]', JSON.stringify([...rule.styleMap.keys()]));
+    rule.styleMap.set('height', U(7, 'px'));
+    testing.expectEqual('#tom { width: 12px; color: red; height: 7px; }', rule.cssText);
+}
+</script>
+
+<script id="typedom_computed_style_map">
+{
+    const el = attach(document.createElement('div'));
+    // Measured: computedStyleMap() stays read-only and enumerates the same 474
+    // longhands getComputedStyle does.
+    testing.expectEqual('StylePropertyMapReadOnly', el.computedStyleMap().constructor.name);
+    testing.expectEqual(474, el.computedStyleMap().size);
+    testing.expectEqual('undefined', String(el.computedStyleMap().set));
+    // The dispatch runs over computed values too.
+    testing.expectEqual('CSSKeywordValue|block', brand(el.computedStyleMap().get('display')));
+    // `align-items` is one of the 154 properties Blink's Typed OM does not
+    // model, so Chrome answers a bare CSSStyleValue("normal"). We answer
+    // undefined instead, because this engine's computed view has no initial
+    // value for it -- a pre-existing getComputedStyle gap, not a Typed OM one.
+    testing.expectEqual('undefined', brand(el.computedStyleMap().get('align-items')));
+    testing.expectFalse(el.computedStyleMap().has('--nope'));
+}
+</script>

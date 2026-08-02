@@ -783,6 +783,9 @@ pub const Function = struct {
         ce_reactions: bool = false,
         js_name: ?[:0]const u8 = null,
         unforgeable: bool = false,
+        // Overrides the arity derived from the Zig signature; see
+        // bridge.Constructor.Opts.arity for why a variadic operation needs it.
+        arity: ?usize = null,
 
         pub const Exposed = enum { both, window, worker };
 

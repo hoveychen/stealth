@@ -6,6 +6,7 @@ const CSSRule = @import("CSSRule.zig");
 const CSSRuleList = @import("CSSRuleList.zig");
 const CSSStyleDeclaration = @import("CSSStyleDeclaration.zig");
 const rules = @import("rules.zig");
+const typed_om = @import("typed_om.zig");
 
 const CSSStyleRule = @This();
 
@@ -51,6 +52,13 @@ pub fn getStyle(self: *CSSStyleRule, frame: *Frame) !*CSSStyleDeclaration {
 pub fn setStyle(self: *CSSStyleRule, text: []const u8, frame: *Frame) !void {
     const style = try self.getStyle(frame);
     try style.setCssText(text, frame);
+}
+
+/// Measured: a style rule's styleMap is a writable StylePropertyMap over the
+/// same declaration `style` hands out, and it is a stable object.
+pub fn getStyleMap(self: *CSSStyleRule, frame: *Frame) !*typed_om.StylePropertyMap {
+    const declaration = try self.getStyle(frame);
+    return declaration.getPropertyMap(frame);
 }
 
 pub fn getCssRules(self: *CSSStyleRule, frame: *Frame) !*CSSRuleList {
@@ -117,6 +125,7 @@ pub const JsApi = struct {
 
     pub const selectorText = bridge.accessor(CSSStyleRule.getSelectorText, CSSStyleRule.setSelectorText, .{});
     pub const style = bridge.accessor(CSSStyleRule.getStyle, CSSStyleRule.setStyle, .{});
+    pub const styleMap = bridge.accessor(CSSStyleRule.getStyleMap, null, .{});
     pub const cssRules = bridge.accessor(CSSStyleRule.getCssRules, null, .{});
     pub const deleteRule = bridge.function(CSSStyleRule.deleteRule, .{});
     pub const insertRule = bridge.function(CSSStyleRule.insertRule, .{});
