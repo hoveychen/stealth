@@ -132,6 +132,7 @@ pub const JsApi = struct {
     pub const upY = bridge.accessor(AudioListener.getUpY, null, .{});
     pub const upZ = bridge.accessor(AudioListener.getUpZ, null, .{});
 
-    pub const setPosition = bridge.function(AudioListener.setPosition, .{});
+    // Chrome puts setOrientation before setPosition (measured).
     pub const setOrientation = bridge.function(AudioListener.setOrientation, .{});
+    pub const setPosition = bridge.function(AudioListener.setPosition, .{});
 };

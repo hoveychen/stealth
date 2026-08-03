@@ -676,13 +676,15 @@ was the highest-value item: deviceandbrowserinfo's `collectFingerprint()` return
 `undefined` the moment `typeof AudioContext != "function"`, and the whole verdict
 panel hangs off that.
 
-Deliberately absent: `OfflineAudioContext`, and therefore no audio *hash*. The
-engine has no audio thread, so rendering it would mean a fabricated constant
-buffer — and a constant audio hash matches no real Chrome at all, which is a
-stronger signal than the missing constructor. The analyser's four `get*Data()`
-calls report silence, which is not a fabrication: it is exactly what Chrome
-returns for an analyser with nothing connected (byte frequency 0, byte
-time-domain 128, float frequency `-Infinity`, float time-domain 0, all measured).
+Deliberately absent at the time: `OfflineAudioContext`, and therefore no audio
+*hash*. The reasoning was that the engine has no audio thread, so rendering it
+would mean a fabricated constant buffer, and a constant audio hash matches no
+real Chrome at all. **That decision was revisited in G17 batch 13-B and the
+constructor now exists** — see the note under G17 below. The analyser's four
+`get*Data()` calls report silence, which is not a fabrication: it is exactly what
+Chrome returns for an analyser with nothing connected (byte frequency 0, byte
+time-domain 128, float frequency `-Infinity`, float time-domain 0, all
+measured).
 
 `resume()` returns a promise that never settles and leaves the state
 `suspended`, and `currentTime` stays 0. That is Chrome, measured on a headed
@@ -748,12 +750,17 @@ rebrowser tests, and `Content-Security-Policy-Report-Only` never blocks.
 
 ### What is still open after F1–F4
 
-- **CreepJS `audio` stays `blocked`** — see the `OfflineAudioContext` decision
-  above. This is a choice, not an omission, and it *is* visible: a headed Chrome
-  renders real numbers there (`sum: 124.04347624466754`, `gain:
-  -20.538288116455078`, `unique: 4736`, measured), so the row differs rather than
-  matching. The trade is a differing row against a fabricated hash that matches no
-  machine at all.
+- **CreepJS `audio`** — was `blocked` for want of an `OfflineAudioContext`.
+  G17 batch 13-B added the constructor, and its `startRendering()` now resolves
+  with a silent buffer, which is exactly what Chrome renders for the graph this
+  engine can render (an unconnected destination — measured, `allZero: true`).
+  What still differs is a graph with a *source* in it: a headed Chrome renders
+  real numbers through CreepJS's oscillator-and-compressor chain (`sum:
+  124.04347624466754`, `gain: -20.538288116455078`, `unique: 4736`, measured) and
+  this engine renders silence, so the row now reports a constant rather than
+  nothing. That trade is written up in `OfflineAudioContext.zig`'s header; the
+  alternative, a `startRendering()` that never settles, is something no Chrome
+  does.
 - **CreepJS still shows 13 `blocked` rows against Chrome's 3.** The remaining
   ones are WebRTC (`sdp capabilities`), SVG (`bBox`), the nine audio rows, MIME
   types (`mimes (0/12)`), and CSS media queries (`@media`). Each is a separate

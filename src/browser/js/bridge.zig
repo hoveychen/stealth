@@ -1221,6 +1221,7 @@ pub const PageJsApis = flattenTypes(&.{
     // Media type support: CreepJS reads canPlayType, MediaSource.isTypeSupported
     // and MediaRecorder.isTypeSupported as one grid, so all three exist.
     @import("../webapi/media/MediaSource.zig"),
+    @import("../webapi/media/streams.zig"),
     @import("../webapi/media/MediaRecorder.zig"),
     @import("../webapi/BatteryManager.zig"),
     @import("../webapi/navigator/services.zig"),
@@ -1276,11 +1277,19 @@ pub const PageJsApis = flattenTypes(&.{
     // Web Audio: window-only in Chrome (no AudioContext in workers).
     @import("../webapi/audio/BaseAudioContext.zig"),
     @import("../webapi/audio/AudioContext.zig"),
+    @import("../webapi/audio/OfflineAudioContext.zig"),
     @import("../webapi/audio/AudioNode.zig"),
     @import("../webapi/audio/AudioDestinationNode.zig"),
     @import("../webapi/audio/AnalyserNode.zig"),
     @import("../webapi/audio/AudioListener.zig"),
     @import("../webapi/audio/AudioParam.zig"),
+    @import("../webapi/audio/AudioBuffer.zig"),
+    @import("../webapi/audio/PeriodicWave.zig"),
+    @import("../webapi/audio/AudioScheduledSourceNode.zig"),
+    @import("../webapi/audio/nodes.zig"),
+    @import("../webapi/audio/worklet.zig"),
+    @import("../webapi/audio/media_nodes.zig"),
+    @import("../webapi/audio/events.zig"),
     // Web Speech synthesis: window-only in Chrome, like the audio types
     // (measured: typeof self.speechSynthesis === 'undefined' in a worker).
     @import("../webapi/speech/SpeechSynthesis.zig"),

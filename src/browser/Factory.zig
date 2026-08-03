@@ -548,13 +548,14 @@ pub fn xhrEventTarget(_: *const Factory, allocator: Allocator, child: anytype) !
     ).create(allocator, child);
 }
 
-// {EventTarget, AudioNode, Leaf}. The leaf's `_context` is set by the caller
-// once the chain exists — the middle can only be default-initialised here.
+// {EventTarget, AudioNode, [AudioScheduledSourceNode,] Leaf}. The leaf's
+// `_context` is set by the caller once the chain exists — the middles can only
+// be default-initialised here. The chain is read off the leaf's own Proto
+// links, because the three scheduled sources sit one level deeper than the
+// rest.
 pub fn audioNode(self: *Factory, child: anytype) !*@TypeOf(child) {
-    const AudioNode = @import("webapi/audio/AudioNode.zig");
-
     return try AutoPrototypeChain(
-        &.{ EventTarget, AudioNode, @TypeOf(child) },
+        prototypeTypes(@TypeOf(child)),
     ).create(self._slab.allocator(), child);
 }
 
@@ -564,6 +565,13 @@ pub fn audioContext(self: *Factory, child: anytype) !*@TypeOf(child) {
 
     return try AutoPrototypeChain(
         &.{ EventTarget, BaseAudioContext, @TypeOf(child) },
+    ).create(self._slab.allocator(), child);
+}
+
+// {Worklet, AudioWorklet}
+pub fn audioWorklet(self: *Factory, child: anytype) !*@TypeOf(child) {
+    return try AutoPrototypeChain(
+        prototypeTypes(@TypeOf(child)),
     ).create(self._slab.allocator(), child);
 }
 
