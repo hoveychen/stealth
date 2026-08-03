@@ -36,7 +36,7 @@ pub const Proto = EventTarget;
 
 const NavigationKind = @import("root.zig").NavigationKind;
 const NavigationActivation = @import("NavigationActivation.zig");
-const NavigationTransition = @import("root.zig").NavigationTransition;
+const NavigationTransition = @import("NavigationTransition.zig");
 const NavigationState = @import("root.zig").NavigationState;
 
 const NavigationHistoryEntry = @import("NavigationHistoryEntry.zig");
@@ -94,7 +94,7 @@ pub fn getCurrentEntry(self: *Navigation) *NavigationHistoryEntry {
     return self.getCurrentEntryOrNull().?;
 }
 
-pub fn getTransition(_: *const Navigation) ?NavigationTransition {
+pub fn getTransition(_: *const Navigation) ?*NavigationTransition {
     // For now, all transitions are just considered complete.
     return null;
 }

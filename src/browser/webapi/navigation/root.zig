@@ -18,10 +18,6 @@
 
 const std = @import("std");
 
-const js = @import("../../js/js.zig");
-
-const NavigationHistoryEntry = @import("NavigationHistoryEntry.zig");
-
 pub const NavigationType = enum {
     push,
     replace,
@@ -43,11 +39,4 @@ pub const NavigationKind = union(NavigationType) {
 pub const NavigationState = struct {
     source: enum { history, navigation },
     value: ?[]const u8,
-};
-
-// https://developer.mozilla.org/en-US/docs/Web/API/NavigationTransition
-pub const NavigationTransition = struct {
-    finished: js.Promise.Global,
-    from: NavigationHistoryEntry,
-    navigation_type: NavigationType,
 };

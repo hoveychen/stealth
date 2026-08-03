@@ -325,7 +325,7 @@ pub fn getOnSuccess(self: *const IDBRequest) ?js.Function.Global {
 }
 
 pub fn setOnSuccess(self: *IDBRequest, setter: ?FunctionSetter) void {
-    self._on_success = getFunctionFromSetter(setter);
+    self._on_success = idb.functionFromSetter(setter);
 }
 
 pub fn getOnError(self: *const IDBRequest) ?js.Function.Global {
@@ -333,7 +333,7 @@ pub fn getOnError(self: *const IDBRequest) ?js.Function.Global {
 }
 
 pub fn setOnError(self: *IDBRequest, setter: ?FunctionSetter) void {
-    self._on_error = getFunctionFromSetter(setter);
+    self._on_error = idb.functionFromSetter(setter);
 }
 
 pub fn getOnUpgradeNeeded(self: *const IDBRequest) ?js.Function.Global {
@@ -341,15 +341,7 @@ pub fn getOnUpgradeNeeded(self: *const IDBRequest) ?js.Function.Global {
 }
 
 pub fn setOnUpgradeNeeded(self: *IDBRequest, setter: ?FunctionSetter) void {
-    self._on_upgrade_needed = getFunctionFromSetter(setter);
-}
-
-fn getFunctionFromSetter(setter: ?FunctionSetter) ?js.Function.Global {
-    const s = setter orelse return null;
-    return switch (s) {
-        .func => |f| f,
-        .anything => null,
-    };
+    self._on_upgrade_needed = idb.functionFromSetter(setter);
 }
 
 // A database operation, captured when a request method is called and run later.
@@ -456,12 +448,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const readyState = bridge.accessor(IDBRequest.getReadyState, null, .{});
+    // Chrome's own member order (measured, probe-win36); `onupgradeneeded` is
+    // not here -- it belongs to IDBOpenDBRequest.
     pub const result = bridge.accessor(IDBRequest.getResult, null, .{});
+    pub const @"error" = bridge.accessor(IDBRequest.getError, null, .{ .null_as_undefined = true });
     pub const source = bridge.accessor(IDBRequest.getSource, null, .{});
     pub const transaction = bridge.accessor(IDBRequest.getTransaction, null, .{ .null_as_undefined = true });
-    pub const @"error" = bridge.accessor(IDBRequest.getError, null, .{ .null_as_undefined = true });
+    pub const readyState = bridge.accessor(IDBRequest.getReadyState, null, .{});
     pub const onsuccess = bridge.accessor(IDBRequest.getOnSuccess, IDBRequest.setOnSuccess, .{});
     pub const onerror = bridge.accessor(IDBRequest.getOnError, IDBRequest.setOnError, .{});
-    pub const onupgradeneeded = bridge.accessor(IDBRequest.getOnUpgradeNeeded, IDBRequest.setOnUpgradeNeeded, .{});
 };

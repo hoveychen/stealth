@@ -366,15 +366,19 @@ fn createSnapshotContext(
 
         if (@hasDecl(JsApi.Meta, "name") and !no_interface_object) {
             if (@hasDecl(JsApi.Meta, "constructor_alias")) {
+                // Both names, and both non-enumerable: an interface object is
+                // never enumerable on the global, and neither is a legacy
+                // factory function (measured on a headed Chrome 150 --
+                // `Option`, `Image` and `Audio` all read back as value[-cw]).
                 const alias = JsApi.Meta.constructor_alias;
                 const v8_class_name = v8.v8__String__NewFromUtf8(isolate, alias.ptr, v8.kNormal, @intCast(alias.len));
                 var maybe_result: v8.MaybeBool = undefined;
-                v8.v8__Object__Set(global_obj, context, v8_class_name, func, &maybe_result);
+                v8.v8__Object__DefineOwnProperty(global_obj, context, v8_class_name, func, v8.DontEnum, &maybe_result);
 
                 const name = JsApi.Meta.name;
                 const illegal_class_name = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
                 var maybe_result2: v8.MaybeBool = undefined;
-                v8.v8__Object__DefineOwnProperty(global_obj, context, illegal_class_name, func, 0, &maybe_result2);
+                v8.v8__Object__DefineOwnProperty(global_obj, context, illegal_class_name, func, v8.DontEnum, &maybe_result2);
             } else {
                 const name = JsApi.Meta.name;
                 const v8_class_name = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));

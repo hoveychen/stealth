@@ -43,6 +43,7 @@ const Event = @import("../Event.zig");
 const DOMRect = @import("../DOMRect.zig");
 const DOMException = @import("../DOMException.zig");
 const DataTransfer = @import("../DataTransfer.zig");
+const dictionary = @import("../dictionary.zig");
 const TextTrack = @import("../media/text_tracks.zig").TextTrack;
 const PictureInPictureWindow = @import("../media/PictureInPictureWindow.zig");
 
@@ -66,170 +67,13 @@ pub fn registerTypes() []const type {
     };
 }
 
-fn throwTypeError(message: []const u8, exec: *const Execution) anyerror {
-    const isolate = exec.js.isolate;
-    _ = isolate.throwException(isolate.createTypeError(message));
-    return error.JsException;
-}
+const throwTypeError = dictionary.throwTypeError;
+const Init = dictionary.Init;
 
 fn rejectDom(comptime name: []const u8, message: []const u8, exec: *const Execution) js.Promise {
     var resolver = exec.js.local.?.createPromiseResolver();
     resolver.reject("misc_events", DOMException.init(message, name));
     return resolver.promise();
-}
-
-/// The dictionary reader. One instance per constructor call, parameterised by
-/// the interface and dictionary names so every message it produces is a
-/// comptime string.
-fn Init(comptime interface: []const u8, comptime dict: []const u8) type {
-    return struct {
-        object: ?js.Object = null,
-        event: Event.Options = .{},
-
-        const Self = @This();
-        const CTOR = "Failed to construct '" ++ interface ++ "': ";
-
-        fn read(value_: ?js.Value, exec: *const Execution) !Self {
-            const value = value_ orelse return .{};
-            if (value.isNullOrUndefined()) {
-                return .{};
-            }
-            if (!value.isObject()) {
-                return throwTypeError(
-                    CTOR ++ "The provided value is not of type '" ++ dict ++ "'.",
-                    exec,
-                );
-            }
-            return .{ .object = value.toObject(), .event = try Event.optionsFromJs(value) };
-        }
-
-        /// The member if the dictionary has it and it is not undefined.
-        fn present(self: Self, comptime name: []const u8) !?js.Value {
-            const object = self.object orelse return null;
-            const member = try object.get(name);
-            if (member.isUndefined()) {
-                return null;
-            }
-            return member;
-        }
-
-        fn required(self: Self, comptime name: []const u8, exec: *const Execution) !js.Value {
-            return (try self.present(name)) orelse throwTypeError(
-                CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
-                    "': Required member is undefined.",
-                exec,
-            );
-        }
-
-        fn convertFailed(comptime name: []const u8, comptime idl: []const u8, exec: *const Execution) anyerror {
-            return throwTypeError(
-                CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
-                    "': Failed to convert value to '" ++ idl ++ "'.",
-                exec,
-            );
-        }
-
-        fn boolean(self: Self, comptime name: []const u8, default: bool) !bool {
-            const member = (try self.present(name)) orelse return default;
-            return member.toBool();
-        }
-
-        /// WebIDL `double`: restricted, so a non-finite value is a TypeError
-        /// rather than a stored NaN (measured with `{timecode: NaN}`).
-        fn double(self: Self, comptime name: []const u8, default: f64, exec: *const Execution) !f64 {
-            const member = (try self.present(name)) orelse return default;
-            return try finite(name, member, exec);
-        }
-
-        /// WebIDL `double?`: null stays null, everything else is restricted.
-        fn nullableDouble(self: Self, comptime name: []const u8, exec: *const Execution) !?f64 {
-            const member = (try self.present(name)) orelse return null;
-            if (member.isNull()) {
-                return null;
-            }
-            return try finite(name, member, exec);
-        }
-
-        fn finite(comptime name: []const u8, member: js.Value, exec: *const Execution) !f64 {
-            const number = try member.toF64();
-            if (std.math.isFinite(number) == false) {
-                return throwTypeError(
-                    CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
-                        "': The provided double value is non-finite.",
-                    exec,
-                );
-            }
-            return number;
-        }
-
-        /// WebIDL `long`, which is ToInt32: a fractional value truncates and a
-        /// non-finite one is 0, neither of them an error (measured:
-        /// `{lineNumber: '3.7'}` reads back 3).
-        fn long(self: Self, comptime name: []const u8, default: i32) !i32 {
-            const member = (try self.present(name)) orelse return default;
-            return member.toI32() catch 0;
-        }
-
-        fn string(
-            self: Self,
-            comptime name: []const u8,
-            default: []const u8,
-            allocator: std.mem.Allocator,
-        ) ![]const u8 {
-            const member = (try self.present(name)) orelse return default;
-            return member.toStringSliceWithAlloc(allocator);
-        }
-
-        /// An interface-typed member: present and convertible, or Chrome's
-        /// conversion message. `null` counts as a failed conversion for a
-        /// non-nullable member, which is how a page finds out it cannot build
-        /// one of these (measured with `{data: null}`).
-        fn interfaceMember(
-            self: Self,
-            comptime name: []const u8,
-            comptime T: type,
-            comptime idl: []const u8,
-            exec: *const Execution,
-        ) !*T {
-            const member = try self.required(name, exec);
-            return member.toZig(*T) catch convertFailed(name, idl, exec);
-        }
-
-        fn nullableInterface(
-            self: Self,
-            comptime name: []const u8,
-            comptime T: type,
-            comptime idl: []const u8,
-            exec: *const Execution,
-        ) !?*T {
-            const member = (try self.present(name)) orelse return null;
-            if (member.isNull()) {
-                return null;
-            }
-            return member.toZig(*T) catch convertFailed(name, idl, exec);
-        }
-
-        /// A union-typed member fails differently: Chrome says the value "is
-        /// not of type" the union rather than that it failed to convert to it
-        /// (measured with `new TrackEvent('addtrack', {track: 5})`).
-        fn unionMember(
-            self: Self,
-            comptime name: []const u8,
-            comptime T: type,
-            comptime idl: []const u8,
-            exec: *const Execution,
-        ) !?*T {
-            const member = (try self.present(name)) orelse return null;
-            if (member.isNull()) {
-                return null;
-            }
-            return member.toZig(*T) catch throwTypeError(
-                CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
-                    "': The provided value is not of type '" ++ idl ++ "'.",
-                exec,
-            );
-        }
-    };
 }
 
 /// Reads the type argument, with Chrome's count message when it is missing.

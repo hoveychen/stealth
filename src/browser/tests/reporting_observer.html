@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<head>
+  <title>ReportingObserver Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=reporting_observer_shape>
+  {
+    testing.expectEqual(1, ReportingObserver.length);
+    testing.expectEqual('disconnect,observe,takeRecords',
+      Object.getOwnPropertyNames(ReportingObserver.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectTrue(Object.getPrototypeOf(ReportingObserver.prototype) === Object.prototype);
+    testing.expectEqual('ReportingObserver', ReportingObserver.prototype[Symbol.toStringTag]);
+    testing.expectEqual(0, ReportingObserver.prototype.observe.length);
+    testing.expectEqual(0, ReportingObserver.prototype.disconnect.length);
+    testing.expectEqual(0, ReportingObserver.prototype.takeRecords.length);
+  }
+</script>
+
+<script id=reporting_observer_constructor_errors>
+  {
+    let err;
+    try { new ReportingObserver(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual("Failed to construct 'ReportingObserver': 1 argument required, but only 0 present.", err.message);
+
+    err = undefined;
+    try { new ReportingObserver(5); } catch (e) { err = e; }
+    testing.expectEqual("Failed to construct 'ReportingObserver': parameter 1 is not of type 'Function'.", err.message);
+
+    err = undefined;
+    try { new ReportingObserver(null); } catch (e) { err = e; }
+    testing.expectEqual("Failed to construct 'ReportingObserver': parameter 1 is not of type 'Function'.", err.message);
+
+    err = undefined;
+    try { new ReportingObserver(() => {}, { types: 'nope' }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'ReportingObserver': Failed to read the 'types' property from 'ReportingObserverOptions': The provided value cannot be converted to a sequence.",
+      err.message);
+  }
+</script>
+
+<script id=reporting_observer_never_reports>
+  {
+    // Nothing in this engine queues a report, so an observer -- buffered or not
+    // -- has nothing to take, and both of its other methods answer undefined.
+    const observer = new ReportingObserver(() => {});
+    testing.expectEqual('[object ReportingObserver]', String(observer));
+    testing.expectEqual('', Object.getOwnPropertyNames(observer).join(','));
+    testing.expectEqual(undefined, observer.observe());
+    testing.expectEqual(0, observer.takeRecords().length);
+    testing.expectEqual(true, Array.isArray(observer.takeRecords()));
+    testing.expectEqual(undefined, observer.disconnect());
+
+    const buffered = new ReportingObserver(() => {}, { types: ['deprecation'], buffered: true });
+    buffered.observe();
+    testing.expectEqual(0, buffered.takeRecords().length);
+    buffered.disconnect();
+
+    // A null `types` is the same as an absent one.
+    const untyped = new ReportingObserver(() => {}, { types: null });
+    testing.expectEqual(0, untyped.takeRecords().length);
+  }
+</script>
