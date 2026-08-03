@@ -60,6 +60,7 @@ _nav: timing.Timing = .{},
 _nav_name: []const u8 = "",
 _nav_entry: ?*timing.NavigationTiming = null,
 _nav_phase: NavPhase = .none,
+_paint_entries: bool = false,
 
 // Nothing fires it — the resource buffer never fills because nothing fills it
 // — but the accessor pair is on Chrome's Performance.prototype and reads back
@@ -178,7 +179,7 @@ pub fn toJSON(self: *Performance) Json {
 // --- Navigation timing -----------------------------------------------------
 //
 // The Frame calls these as the load progresses. They only move numbers around;
-// the JS object is built lazily in ensureNavigationEntry so none of this needs
+// the JS objects are built lazily in ensureImplicitEntries so none of this needs
 // an Execution.
 
 pub fn navigationStarted(self: *Performance, url: []const u8, navigation_type: []const u8) void {
@@ -252,30 +253,85 @@ pub fn navigationComplete(self: *Performance) void {
     }
 }
 
-/// Builds the navigation entry on first use and keeps it at the head of the
-/// buffer, which is where Chrome's getEntries() has it.
-fn ensureNavigationEntry(self: *Performance, exec: *const Execution) !void {
-    if (self._nav_entry != null or self._nav_phase == .none) {
+/// Builds the entries a document has without anyone asking for them — the one
+/// navigation entry, the `visible` visibility-state entry, and the paint pair
+/// — and leaves the buffer sorted by startTime, which is the order Chrome's
+/// getEntries() answers in (measured: a measure at startTime 0 came back ahead
+/// of marks made before it).
+///
+/// Built lazily rather than at each milestone because none of the milestone
+/// callbacks have an Execution to allocate with. The entry objects read
+/// through to `_nav`, so building late loses nothing.
+fn ensureImplicitEntries(self: *Performance, exec: *const Execution) !void {
+    if (self._nav_phase == .none) {
         return;
     }
 
-    const entry = try exec._factory.chained(.{
-        Entry{
-            ._name = self._nav_name,
-            ._duration = self._nav.load_event_end,
-            ._type = undefined,
-        },
-        timing.ResourceTiming{
-            ._proto = undefined,
-            ._timing = &self._nav,
-        },
-        timing.NavigationTiming{
-            ._proto = undefined,
-        },
-    });
-    entry._proto._proto._type = .{ .navigation = entry };
-    self._nav_entry = entry;
-    try self._entries.insert(exec.arena, 0, entry._proto._proto);
+    if (self._nav_entry == null) {
+        const entry = try exec._factory.chained(.{
+            Entry{
+                ._name = self._nav_name,
+                ._duration = self._nav.load_event_end,
+                ._type = undefined,
+            },
+            timing.ResourceTiming{
+                ._proto = undefined,
+                ._timing = &self._nav,
+            },
+            timing.NavigationTiming{
+                ._proto = undefined,
+            },
+        });
+        entry._proto._proto._type = .{ .navigation = entry };
+        self._nav_entry = entry;
+        try self._entries.append(exec.arena, entry._proto._proto);
+
+        // Chrome logs one of these per visibilitychange and always starts with
+        // a `visible` one at startTime 0 (measured).
+        const visibility = try exec._factory.chained(.{
+            Entry{
+                ._name = "visible",
+                ._type = undefined,
+            },
+            timing.VisibilityStateEntry{
+                ._proto = undefined,
+            },
+        });
+        visibility._proto._type = .{ .@"visibility-state" = visibility };
+        try self._entries.append(exec.arena, visibility._proto);
+    }
+
+    // Nothing here paints, so the pair is pinned to milestones that did
+    // happen: the content exists once the parser is done with it
+    // (domInteractive), and the frame it would have been presented in is the
+    // one that closed the load (domComplete). Chrome's own numbers have the
+    // same shape — paintTime before presentationTime, startTime equal to
+    // presentationTime, duration 0.
+    if (!self._paint_entries and self._nav_phase == .complete) {
+        self._paint_entries = true;
+        for ([_][]const u8{ "first-paint", "first-contentful-paint" }) |name| {
+            const paint = try exec._factory.chained(.{
+                Entry{
+                    ._name = name,
+                    ._start_time = self._nav.dom_complete,
+                    ._type = undefined,
+                },
+                timing.PaintTiming{
+                    ._proto = undefined,
+                    ._paint_time = self._nav.dom_interactive,
+                },
+            });
+            paint._proto._type = .{ .paint = paint };
+            try self._entries.append(exec.arena, paint._proto);
+        }
+    }
+
+    const Sort = struct {
+        fn lessThan(_: void, a: *Entry, b: *Entry) bool {
+            return a._start_time < b._start_time;
+        }
+    };
+    std.sort.block(*Entry, self._entries.items, {}, Sort.lessThan);
 }
 
 pub fn mark(
@@ -404,17 +460,17 @@ pub fn setResourceTimingBufferSize(self: *Performance, max_size: u32) void {
 }
 
 pub fn getEntries(self: *Performance, exec: *const Execution) ![]*Entry {
-    try self.ensureNavigationEntry(exec);
+    try self.ensureImplicitEntries(exec);
     return self._entries.items;
 }
 
 pub fn getEntriesByType(self: *Performance, entry_type: []const u8, exec: *const Execution) ![]const *Entry {
-    try self.ensureNavigationEntry(exec);
+    try self.ensureImplicitEntries(exec);
     return filterEntriesByType(exec.local_arena, self._entries.items, entry_type);
 }
 
 pub fn getEntriesByName(self: *Performance, name: []const u8, entry_type: ?[]const u8, exec: *const Execution) ![]const *Entry {
-    try self.ensureNavigationEntry(exec);
+    try self.ensureImplicitEntries(exec);
     return filterEntriesByName(exec.local_arena, self._entries.items, name, entry_type);
 }
 

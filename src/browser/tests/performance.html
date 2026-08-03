@@ -910,3 +910,53 @@
     });
   }
 </script>
+
+<script id=implicit_entries type=module>
+  {
+    // Chrome's buffer is never empty: one navigation entry, one `visible`
+    // visibility-state entry at startTime 0, and the paint pair — and
+    // getEntries() answers sorted by startTime, not insertion order (measured:
+    // a measure at startTime 0 came back ahead of marks made before it).
+    const state = await testing.async();
+    if (document.readyState === 'complete') {
+      state.resolve(true);
+    } else {
+      window.addEventListener('load', () => state.resolve(true));
+    }
+
+    await state.done(() => {
+      const v = performance.getEntriesByType('visibility-state');
+      testing.expectEqual(1, v.length);
+      testing.expectEqual('visible', v[0].name);
+      testing.expectEqual(0, v[0].startTime);
+      testing.expectEqual(0, v[0].duration);
+      testing.expectEqual('VisibilityStateEntry', v[0].constructor.name);
+      testing.expectEqual(
+        '{"name":"visible","entryType":"visibility-state","startTime":0,"duration":0}',
+        JSON.stringify(v[0]),
+      );
+
+      const paint = performance.getEntriesByType('paint');
+      testing.expectEqual(2, paint.length);
+      testing.expectEqual(['first-paint', 'first-contentful-paint'], paint.map((p) => p.name));
+      for (const p of paint) {
+        testing.expectEqual('PerformancePaintTiming', p.constructor.name);
+        testing.expectEqual(0, p.duration);
+        testing.expectEqual(p.startTime, p.presentationTime);
+        testing.expectEqual(true, p.paintTime <= p.presentationTime);
+        testing.expectEqual(true, p.paintTime > 0);
+        testing.expectEqual(
+          ['name', 'entryType', 'startTime', 'duration', 'paintTime', 'presentationTime'],
+          Object.keys(p.toJSON()),
+        );
+      }
+
+      // Sorted by startTime, with the navigation entry (startTime 0) first.
+      const all = performance.getEntries();
+      testing.expectEqual('navigation', all[0].entryType);
+      for (let i = 1; i < all.length; i++) {
+        testing.expectEqual(true, all[i].startTime >= all[i - 1].startTime);
+      }
+    });
+  }
+</script>

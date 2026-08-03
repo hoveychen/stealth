@@ -637,6 +637,7 @@ pub const PaintTiming = struct {
     pub const Proto = Entry;
 
     _proto: *Entry,
+    _paint_time: f64,
 
     pub const Json = struct {
         name: []const u8,
@@ -653,13 +654,13 @@ pub const PaintTiming = struct {
             .entryType = self._proto.getEntryType(),
             .startTime = self._proto._start_time,
             .duration = self._proto._duration,
-            .paintTime = 0,
+            .paintTime = self._paint_time,
             .presentationTime = self._proto._start_time,
         };
     }
 
-    fn paintTime(_: *const PaintTiming) f64 {
-        return 0;
+    fn paintTime(self: *const PaintTiming) f64 {
+        return self._paint_time;
     }
 
     fn presentationTime(self: *const PaintTiming) f64 {
