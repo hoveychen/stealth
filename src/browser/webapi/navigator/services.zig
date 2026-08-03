@@ -47,7 +47,6 @@ pub fn registerTypes() []const type {
         UserActivation,
         Geolocation,
         ProtectedAudience,
-        CredentialsContainer,
         NavigatorLogin,
         MediaCapabilities,
         MediaSession,
@@ -232,52 +231,6 @@ pub const ProtectedAudience = struct {
             ProtectedAudience.queryFeatureSupport,
             .{ .null_as_undefined = true },
         );
-    };
-};
-
-pub const CredentialsContainer = struct {
-    _pad: bool = false,
-
-    // We store no credentials, so get() finds none. Chrome resolves null for a
-    // request that matches nothing, which is the same answer (measured).
-    pub fn get(_: *const CredentialsContainer, _: ?js.Object, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise(null);
-    }
-
-    // Measured: create({}) rejects NotSupportedError ("Only exactly one of
-    // 'password', 'federated', and 'publicKey' credential types are currently
-    // supported."). We have no credential store to create into, so every call
-    // lands on that same rejection rather than on an invented success.
-    pub fn create(_: *const CredentialsContainer, _: ?js.Object, exec: *const Execution) js.Promise {
-        return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
-    }
-
-    pub fn preventSilentAccess(_: *const CredentialsContainer, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise({});
-    }
-
-    // Chrome type-checks the argument against Credential, which no page can
-    // construct here, so every call is the TypeError it measured as.
-    pub fn store(_: *const CredentialsContainer, _: js.Value, exec: *const Execution) js.Promise {
-        return exec.js.local.?.rejectPromise(.{
-            .type_error = "Failed to execute 'store' on 'CredentialsContainer': parameter 1 is not of type 'Credential'.",
-        });
-    }
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(CredentialsContainer);
-
-        pub const Meta = struct {
-            pub const name = "CredentialsContainer";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
-        };
-
-        pub const create = bridge.function(CredentialsContainer.create, .{});
-        pub const get = bridge.function(CredentialsContainer.get, .{});
-        pub const preventSilentAccess = bridge.function(CredentialsContainer.preventSilentAccess, .{});
-        pub const store = bridge.function(CredentialsContainer.store, .{});
     };
 };
 

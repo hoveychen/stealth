@@ -35,6 +35,7 @@ const DOMException = @import("DOMException.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
 const services = @import("navigator/services.zig");
+const credential = @import("navigator/credentials.zig");
 const devices = @import("navigator/devices.zig");
 
 const Navigator = @This();
@@ -53,7 +54,7 @@ _scheduling: ?*services.Scheduling = null,
 _user_activation: ?*services.UserActivation = null,
 _geolocation: ?*services.Geolocation = null,
 _protected_audience: ?*services.ProtectedAudience = null,
-_credentials: ?*services.CredentialsContainer = null,
+_credentials: ?*credential.CredentialsContainer = null,
 _login: ?*services.NavigatorLogin = null,
 _media_capabilities: ?*services.MediaCapabilities = null,
 _media_session: ?*services.MediaSession = null,
@@ -280,8 +281,8 @@ pub fn getProtectedAudience(self: *Navigator, frame: *Frame) !*services.Protecte
     return service(services.ProtectedAudience, &self._protected_audience, frame);
 }
 
-pub fn getCredentials(self: *Navigator, frame: *Frame) !*services.CredentialsContainer {
-    return service(services.CredentialsContainer, &self._credentials, frame);
+pub fn getCredentials(self: *Navigator, frame: *Frame) !*credential.CredentialsContainer {
+    return service(credential.CredentialsContainer, &self._credentials, frame);
 }
 
 pub fn getLogin(self: *Navigator, frame: *Frame) !*services.NavigatorLogin {
