@@ -1455,7 +1455,10 @@ fn biquad(kind: BiquadFilterType, normalized_cutoff: f64, q: f64, db_gain: f64) 
             const high = kind == .highpass;
             if (cutoff >= 1) return if (high) zeroed() else passthrough();
             if (cutoff <= 0) return if (high) passthrough() else zeroed();
-            const resonance = std.math.pow(f64, 10, 0.05 * @max(q, 0));
+            // Not clamped at zero: a negative Q is a negative *decibel* figure
+            // and puts 10^(Q/20) < 1 at the cutoff, which is what Chrome
+            // reports (measured: Q = -6 dB gives 0.5011873 there).
+            const resonance = std.math.pow(f64, 10, 0.05 * q);
             const theta = std.math.pi * cutoff;
             const alpha = @sin(theta) / (2 * resonance);
             const k = @cos(theta);
@@ -1483,6 +1486,14 @@ fn biquad(kind: BiquadFilterType, normalized_cutoff: f64, q: f64, db_gain: f64) 
                 .a = .{ -2 * k / a0, (1 - alpha) / a0 },
             };
         },
+        // The two shelves are RBJ's cookbook entries with the shelf slope S
+        // fixed at 1, so alpha collapses to sin(w)/sqrt(2). They are written out
+        // per branch rather than folded behind a sign, because the b1/a1 terms
+        // do not mirror each other the way b0/b2 and a0/a2 do: the low shelf's
+        // b1 pairs with (A-1) - (A+1)cos while its a1 pairs with the sum, and
+        // the high shelf swaps *and* negates both. An earlier revision folded
+        // them and was wrong by three orders of magnitude at DC, which went
+        // unnoticed because only lowpass and highpass had been measured.
         .lowshelf, .highshelf => {
             const high = kind == .highshelf;
             const amp = std.math.pow(f64, 10, db_gain / 40);
@@ -1493,17 +1504,30 @@ fn biquad(kind: BiquadFilterType, normalized_cutoff: f64, q: f64, db_gain: f64) 
             const k2 = 2 * @sqrt(amp) * @sin(theta) * @sqrt(@as(f64, 2)) / 2;
             const plus = amp + 1;
             const minus = amp - 1;
-            const sign: f64 = if (high) 1 else -1;
-            const a0 = plus - sign * minus * k + k2;
+            if (high) {
+                const a0 = plus - minus * k + k2;
+                return .{
+                    .b = .{
+                        amp * (plus + minus * k + k2) / a0,
+                        -2 * amp * (minus + plus * k) / a0,
+                        amp * (plus + minus * k - k2) / a0,
+                    },
+                    .a = .{
+                        2 * (minus - plus * k) / a0,
+                        (plus - minus * k - k2) / a0,
+                    },
+                };
+            }
+            const a0 = plus + minus * k + k2;
             return .{
                 .b = .{
-                    amp * (plus + sign * minus * k + k2) / a0,
-                    sign * 2 * amp * (minus + sign * plus * k) / a0,
-                    amp * (plus + sign * minus * k - k2) / a0,
+                    amp * (plus - minus * k + k2) / a0,
+                    2 * amp * (minus - plus * k) / a0,
+                    amp * (plus - minus * k - k2) / a0,
                 },
                 .a = .{
-                    -sign * 2 * (minus + sign * plus * k) / a0,
-                    (plus - sign * minus * k - k2) / a0,
+                    -2 * (minus + plus * k) / a0,
+                    (plus + minus * k - k2) / a0,
                 },
             };
         },
@@ -1597,27 +1621,46 @@ fn respondN(
 
     const nyquist = sample_rate / 2;
     for (freq, mag, phase) |f, *m, *p| {
-        const w = std.math.pi * (@as(f64, f) / nyquist);
-        var numerator_real: f64 = 0;
-        var numerator_imaginary: f64 = 0;
-        for (feedforward, 0..) |b, i| {
-            const angle = w * @as(f64, @floatFromInt(i));
-            numerator_real += b * @cos(angle);
-            numerator_imaginary -= b * @sin(angle);
-        }
-        var denominator_real: f64 = 0;
-        var denominator_imaginary: f64 = 0;
-        for (feedback, 0..) |a, i| {
-            const angle = w * @as(f64, @floatFromInt(i));
-            denominator_real += a * @cos(angle);
-            denominator_imaginary -= a * @sin(angle);
-        }
-        const magnitude_squared = denominator_real * denominator_real + denominator_imaginary * denominator_imaginary;
-        const real = (numerator_real * denominator_real + numerator_imaginary * denominator_imaginary) / magnitude_squared;
-        const imaginary = (numerator_imaginary * denominator_real - numerator_real * denominator_imaginary) / magnitude_squared;
+        // Blink stores the normalised frequency in a float32 array before it
+        // evaluates anything, so the rounding of that narrowing is part of the
+        // answer. It is not a detail: at a notch's own centre frequency the
+        // numerator would otherwise cancel to exactly zero and report phase 0,
+        // where Chrome reports pi/2 off the float32 residue (measured, and
+        // reproduced bit for bit once the narrowing was in).
+        const normalized: f32 = @floatCast(@as(f64, f) / nyquist);
+        const w = -std.math.pi * @as(f64, normalized);
+        const z_real = @cos(w);
+        const z_imaginary = @sin(w);
+
+        const numerator = evaluate(feedforward, z_real, z_imaginary);
+        const denominator = evaluate(feedback, z_real, z_imaginary);
+
+        const magnitude_squared = denominator.real * denominator.real + denominator.imaginary * denominator.imaginary;
+        const real = (numerator.real * denominator.real + numerator.imaginary * denominator.imaginary) / magnitude_squared;
+        const imaginary = (numerator.imaginary * denominator.real - numerator.real * denominator.imaginary) / magnitude_squared;
         m.* = @floatCast(@sqrt(real * real + imaginary * imaginary));
         p.* = @floatCast(std.math.atan2(imaginary, real));
     }
+}
+
+const Complex = struct { real: f64, imaginary: f64 };
+
+// Horner from the top coefficient down, which is how Blink evaluates both the
+// biquad's three-term numerator and the IIR node's arbitrary-length one. The
+// nesting matters for the same reason the float32 narrowing above does: a
+// straight sum of b[i] * z^i rounds differently and loses the residue that
+// decides the phase at a filter's own centre frequency.
+fn evaluate(coefficients: []const f64, z_real: f64, z_imaginary: f64) Complex {
+    var real: f64 = 0;
+    var imaginary: f64 = 0;
+    var i = coefficients.len;
+    while (i > 0) {
+        i -= 1;
+        const next_real = real * z_real - imaginary * z_imaginary + coefficients[i];
+        imaginary = real * z_imaginary + imaginary * z_real;
+        real = next_real;
+    }
+    return .{ .real = real, .imaginary = imaginary };
 }
 
 fn floats(

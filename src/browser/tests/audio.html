@@ -420,6 +420,58 @@
 }
 </script>
 
+<script id=audio_frequency_response_types>
+{
+  // The seven filter types the first pass never checked against Chrome, plus a
+  // negative-decibel Q on each of the two that were already anchored. Every row
+  // is Chrome 150's own getFrequencyResponse output at 48kHz
+  // (win18-chrome.json), measured on a headed window over http://localhost.
+  //
+  // Three things this pinned down that a spec reading got wrong:
+  //   * the shelving coefficients are RBJ's with b1 and a1 exactly as written
+  //     there; an earlier sign-folded form was off by three orders of magnitude
+  //   * Q is not clamped at zero for lowpass/highpass -- Q = -6 dB puts
+  //     10^(-6/20) at the cutoff, not 1
+  //   * the frequency is narrowed to float32 before the transfer function is
+  //     evaluated, which is the whole reason a notch reports phase pi/2 at its
+  //     own centre frequency rather than 0
+  const ac = new AudioContext();
+  const f = new Float32Array([100, 350, 1000, 5000, 20000]);
+  const near = (got, want) => [...got].every((v, i) => Math.abs(v - want[i]) <= Math.abs(want[i]) * 1e-6 + 2e-7);
+
+  // Compared as strings so a mismatch prints both rows: expectEqual(true, false)
+  // would only say "expected true".
+  const check = (type, cfg, wantMag, wantPhase) => {
+    const b = ac.createBiquadFilter();
+    b.type = type;
+    for (const k in cfg) b[k].value = cfg[k];
+    const mag = new Float32Array(5), phase = new Float32Array(5);
+    b.getFrequencyResponse(f, mag, phase);
+    const label = `${type} ${JSON.stringify(cfg)}`;
+    testing.expectEqual(`${label} mag ok`, near(mag, wantMag) ? `${label} mag ok` : `${label} mag ${[...mag]}`);
+    testing.expectEqual(`${label} phase ok`, near(phase, wantPhase) ? `${label} phase ok` : `${label} phase ${[...phase]}`);
+  };
+
+  check('bandpass', {}, [0.29701530933380127, 1, 0.36996549367904663, 0.06764853000640869, 0.00613922206684947], [1.2692309617996216, -8.517972993615786e-09, -1.1918244361877441, -1.503096103668213, -1.5646570920944214]);
+  check('bandpass', {"frequency": 1000, "Q": 2}, [0.050368186086416245, 0.19527728855609894, 1, 0.0997806042432785, 0.008783530443906784], [1.5204068422317505, 1.3742561340332031, -1.1955042111821967e-07, -1.4708493947982788, -1.5620126724243164]);
+  check('notch', {}, [0.954872727394104, 8.51799075718418e-09, 0.9290454983711243, 0.9977092146873474, 0.999981164932251], [-0.30156540870666504, 1.5707968473434448, 0.3789718747138977, 0.06770023703575134, 0.006139260716736317]);
+  check('notch', {"frequency": 1000, "Q": 0.5}, [0.9802533984184265, 0.7822245359420776, 2.988759817412756e-08, 0.9281164407730103, 0.9993833303451538], [-0.19905729591846466, -0.6725677847862244, 1.570796251296997, 0.38147518038749695, 0.03512103110551834]);
+  check('allpass', {}, [1, 1, 1, 1, 1], [-0.6031308174133301, 3.1415927410125732, 0.7579437494277954, 0.13540047407150269, 0.012278521433472633]);
+  check('allpass', {"frequency": 2000, "Q": 3}, [1, 1, 1, 1, 1], [-0.0332222655415535, -0.11950099468231201, -0.4343157112598419, 0.3020172417163849, 0.02354567125439644]);
+  check('lowshelf', {}, [1, 1, 1, 1, 1], [-2.223961930813133e-17, -3.2496842434487283e-19, -3.3414900521255413e-17, -1.6079936158693954e-17, -2.4369784747745237e-17]);
+  check('lowshelf', {"frequency": 1000, "gain": 6}, [1.9951142072677612, 1.9735325574874878, 1.4125375747680664, 1.0010371208190918, 1.0000001192092896], [-0.04952184483408928, -0.19019420444965363, -0.4813680052757263, -0.09830383956432343, -0.008623819798231125]);
+  check('lowshelf', {"frequency": 1000, "gain": -6}, [0.5012244582176208, 0.5067055821418762, 0.7079457640647888, 0.9989640116691589, 0.9999999403953552], [0.04952184855937958, 0.19019420444965363, 0.4813680052757263, 0.09830383956432343, 0.008623819798231125]);
+  check('highshelf', {}, [1, 1, 1, 1, 1], [-2.223961930813133e-17, -3.2496842434487283e-19, -3.3414900521255413e-17, -1.6079936158693954e-17, -2.4369784747745237e-17]);
+  check('highshelf', {"frequency": 1000, "gain": 6}, [1.0000742673873901, 1.0110106468200684, 1.4125375747680664, 1.9931952953338623, 1.9952622652053833], [0.04952184483408928, 0.19019420444965363, 0.4813680052757263, 0.09830383956432343, 0.008623819798231125]);
+  check('highshelf', {"frequency": 1000, "gain": -6}, [0.9999257326126099, 0.9891092777252197, 0.7079457640647888, 0.5017069578170776, 0.501187264919281], [-0.04952184855937958, -0.19019420444965363, -0.4813680052757263, -0.09830383956432343, -0.008623819798231125]);
+  check('peaking', {}, [1, 1, 1, 1, 1], [-1.2934231982061956e-17, 8.602164484595939e-19, 1.4868192661920123e-17, -3.416184130566835e-17, -6.0193350013151974e-18]);
+  check('peaking', {"frequency": 1000, "Q": 2, "gain": 6}, [1.001895785331726, 1.0286295413970947, 1.9952623844146729, 1.0074470043182373, 1.000057578086853], [0.03542913496494293, 0.13413165509700775, -8.423421604675241e-08, -0.0698399692773819, -0.006188485771417618]);
+  check('peaking', {"frequency": 1000, "Q": 2, "gain": -6}, [0.9981077909469604, 0.9721673727035522, 0.5011872053146362, 0.9926080107688904, 0.9999423623085022], [-0.03542913496494293, -0.13413165509700775, 8.423421604675241e-08, 0.0698399692773819, 0.006188485771417618]);
+  check('lowpass', {"frequency": 1000, "Q": -6}, [0.9902183413505554, 0.8919317126274109, 0.501187264919281, 0.03595356643199921, 0.0003083408810198307], [-0.19859807193279266, -0.6714122891426086, -1.5707963705062866, -2.7609362602233887, -3.1065547466278076]);
+  check('highpass', {"frequency": 1000, "Q": 6}, [0.010059332475066185, 0.13651037216186523, 1.9952623844146729, 1.0335172414779663, 1.0002697706222534], [3.0910837650299072, 2.9445977210998535, 1.570796251296997, 0.1001826673746109, 0.008804499171674252]);
+}
+</script>
+
 <script id=audio_node_constructors>
 {
   // The four refusals every node constructor shares, in Chrome's own order.
