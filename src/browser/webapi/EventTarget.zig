@@ -84,6 +84,7 @@ pub const Type = union(enum) {
     xr_system: *@import("navigator/devices.zig").XRSystem,
     wake_lock_sentinel: *@import("navigator/devices.zig").WakeLockSentinel,
     sensor: *@import("sensor.zig").Sensor,
+    permission_status: *@import("Permissions.zig").PermissionStatus,
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -288,6 +289,7 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .xr_system => writer.writeAll("<XRSystem>"),
         .wake_lock_sentinel => writer.writeAll("<WakeLockSentinel>"),
         .sensor => writer.writeAll("<Sensor>"),
+        .permission_status => writer.writeAll("<PermissionStatus>"),
     };
 }
 
@@ -344,6 +346,7 @@ pub fn toString(self: *EventTarget) []const u8 {
         .xr_system => return "[object XRSystem]",
         .wake_lock_sentinel => return "[object WakeLockSentinel]",
         .sensor => return "[object Sensor]",
+        .permission_status => return "[object PermissionStatus]",
     };
 }
 

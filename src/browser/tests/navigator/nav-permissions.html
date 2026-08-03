@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  navigator.permissions. Every name, state, message and shape below was
+  measured on a headed Chrome 150 over http://localhost; the snapshots live in
+  agent-workspace/stealth-detector-probes/win-batch/ (probe-perm1.js with
+  perm1-chrome.json, and probe-perm2.js for the gated descriptors).
+
+  The point of the exercise: query() used to answer 'prompt' for absolutely
+  any name, including names no browser has ever heard of. Chrome rejects those,
+  and it does not echo the queried name back either -- PermissionStatus.name is
+  Blink's own snake_case enum name, so 'camera' comes back as 'video_capture'
+  and all three motion sensors come back as 'sensors'.
+-->
+
+<script id="permissions_surface">
+  {
+    testing.expectEqual('[object Permissions]', Object.prototype.toString.call(navigator.permissions));
+    testing.expectEqual(true, navigator.permissions === navigator.permissions);
+    testing.expectEqual('query,constructor', Object.getOwnPropertyNames(Permissions.prototype).join(','));
+    testing.expectEqual('Permissions', Permissions.prototype[Symbol.toStringTag]);
+    testing.expectEqual(1, Permissions.prototype.query.length);
+    testing.expectEqual(0, Permissions.length);
+
+    // PermissionStatus is an EventTarget, and it has an onchange handler.
+    testing.expectEqual('name,state,onchange,constructor', Object.getOwnPropertyNames(PermissionStatus.prototype).join(','));
+    testing.expectEqual('PermissionStatus', PermissionStatus.prototype[Symbol.toStringTag]);
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(PermissionStatus.prototype));
+    testing.expectEqual(0, PermissionStatus.length);
+    for (const k of ['name', 'state']) {
+      const d = Object.getOwnPropertyDescriptor(PermissionStatus.prototype, k);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+      testing.expectEqual(true, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+    }
+    const onchange = Object.getOwnPropertyDescriptor(PermissionStatus.prototype, 'onchange');
+    testing.expectEqual('function', typeof onchange.get);
+    testing.expectEqual('function', typeof onchange.set);
+
+    const message = (fn) => { try { fn(); } catch (e) { return e.name + ': ' + e.message; } return 'no throw'; };
+    testing.expectEqual(
+      "TypeError: Failed to construct 'PermissionStatus': Illegal constructor",
+      message(() => new PermissionStatus()),
+    );
+    testing.expectEqual(
+      "TypeError: Failed to construct 'Permissions': Illegal constructor",
+      message(() => new Permissions()),
+    );
+  }
+</script>
+
+<script id="permissions_name_table" type=module>
+  {
+    const state = await testing.async();
+    // queried name -> [state, PermissionStatus.name]. Chrome's own answers on a
+    // secure top-level context, all 24 of the names that resolve without a
+    // gating dictionary member.
+    const TABLE = {
+      'geolocation': ['prompt', 'geolocation'],
+      'notifications': ['prompt', 'notifications'],
+      'midi': ['prompt', 'midi'],
+      'camera': ['prompt', 'video_capture'],
+      'microphone': ['prompt', 'audio_capture'],
+      'background-fetch': ['granted', 'background_fetch'],
+      'background-sync': ['granted', 'background_sync'],
+      'persistent-storage': ['prompt', 'durable_storage'],
+      'accelerometer': ['granted', 'sensors'],
+      'gyroscope': ['granted', 'sensors'],
+      'magnetometer': ['granted', 'sensors'],
+      'clipboard-read': ['prompt', 'clipboard_read'],
+      'clipboard-write': ['granted', 'clipboard_write'],
+      'display-capture': ['prompt', 'display_capture'],
+      'screen-wake-lock': ['granted', 'screen_wake_lock'],
+      'payment-handler': ['granted', 'payment_handler'],
+      'periodic-background-sync': ['denied', 'periodic_background_sync'],
+      'storage-access': ['granted', 'storage-access'],
+      'window-management': ['prompt', 'window-management'],
+      'local-fonts': ['prompt', 'local_fonts'],
+      'captured-surface-control': ['prompt', 'captured-surface-control'],
+      'idle-detection': ['prompt', 'idle_detection'],
+      'pointer-lock': ['granted', 'pointer-lock'],
+      'keyboard-lock': ['granted', 'keyboard-lock'],
+    };
+    const got = {};
+    for (const name of Object.keys(TABLE)) {
+      try {
+        const s = await navigator.permissions.query({ name });
+        got[name] = [s.state, s.name];
+      } catch (e) { got[name] = 'THREW: ' + e.name + ': ' + e.message; }
+    }
+    // Two queries for the same name are two objects.
+    const a = await navigator.permissions.query({ name: 'geolocation' });
+    const b = await navigator.permissions.query({ name: 'geolocation' });
+    const fresh = a !== b;
+    const brand = Object.prototype.toString.call(a);
+    const isTarget = a instanceof EventTarget && typeof a.addEventListener === 'function';
+    const ownKeys = Object.getOwnPropertyNames(a).length;
+
+    // onchange is a real slot: it reads back, clears, and ignores a non-function.
+    const fn = () => {};
+    a.onchange = fn;
+    const readsBack = a.onchange === fn;
+    a.onchange = null;
+    const cleared = a.onchange;
+    a.onchange = 7;
+    const nonFunction = a.onchange;
+
+    state.resolve();
+    await state.done(() => {
+      for (const name of Object.keys(TABLE)) {
+        testing.expectEqual(name + ' -> ' + TABLE[name].join(','), name + ' -> ' + String(got[name]));
+      }
+      testing.expectEqual(true, fresh);
+      testing.expectEqual('[object PermissionStatus]', brand);
+      testing.expectEqual(true, isTarget);
+      testing.expectEqual(0, ownKeys);
+      testing.expectEqual(true, readsBack);
+      testing.expectEqual(null, cleared);
+      testing.expectEqual(null, nonFunction);
+    });
+  }
+</script>
+
+<script id="permissions_rejections" type=module>
+  {
+    const state = await testing.async();
+    const PREFIX = "Failed to execute 'query' on 'Permissions': ";
+    const ENUM = (v) => PREFIX + "Failed to read the 'name' property from 'PermissionDescriptor': " +
+      `The provided value '${v}' is not a valid enum value of type PermissionName.`;
+    const REQUIRED = PREFIX + "Failed to read the 'name' property from 'PermissionDescriptor': " +
+      'Required member is undefined.';
+
+    // Every failure is a rejection, never a synchronous throw (measured). The
+    // two are collected apart so the test can tell them apart.
+    const out = {};
+    const probe = async (label, hasArg, arg) => {
+      let p;
+      try { p = hasArg ? navigator.permissions.query(arg) : navigator.permissions.query(); }
+      catch (e) { out[label] = 'SYNC: ' + e.name + ': ' + e.message; return; }
+      try { const s = await p; out[label] = 'resolved: ' + s.state + ',' + s.name; }
+      catch (e) { out[label] = e.name + ': ' + e.message; }
+    };
+
+    await probe('noArg', false);
+    await probe('nonObject:1', true, 1);
+    await probe('nonObject:null', true, null);
+    await probe('nonObject:str', true, 'x');
+    await probe('empty', true, {});
+    await probe('nameUndefined', true, { name: undefined });
+    await probe('array', true, []);
+    await probe('nameNull', true, { name: null });
+    await probe('nameNumber', true, { name: 1 });
+    await probe('bogus', true, { name: 'bogus-name' });
+    await probe('emptyName', true, { name: '' });
+    await probe('upper', true, { name: 'GEOLOCATION' });
+    await probe('bluetooth', true, { name: 'bluetooth' });
+    await probe('speaker', true, { name: 'speaker' });
+
+    // Valid enum names whose feature is off: their own wording, not the enum one.
+    await probe('ambientLight', true, { name: 'ambient-light-sensor' });
+    await probe('nfc', true, { name: 'nfc' });
+    await probe('systemWakeLock', true, { name: 'system-wake-lock' });
+    await probe('speakerSelection', true, { name: 'speaker-selection' });
+    await probe('webAppInstall', true, { name: 'web-app-installation' });
+
+    // Three names that need a specific dictionary member before they answer.
+    await probe('push', true, { name: 'push' });
+    await probe('pushFalse', true, { name: 'push', userVisibleOnly: false });
+    await probe('pushTrue', true, { name: 'push', userVisibleOnly: true });
+    await probe('fullscreen', true, { name: 'fullscreen' });
+    await probe('fullscreenTrue', true, { name: 'fullscreen', allowWithoutGesture: true });
+    await probe('tlsa', true, { name: 'top-level-storage-access' });
+    await probe('tlsaBad', true, { name: 'top-level-storage-access', requestedOrigin: 'notaurl' });
+    await probe('tlsaGood', true, { name: 'top-level-storage-access', requestedOrigin: 'https://example.com' });
+
+    // Members Chrome reads but that do not change the answer.
+    await probe('midiSysex', true, { name: 'midi', sysex: true });
+    await probe('cameraPtz', true, { name: 'camera', panTiltZoom: true });
+    await probe('geoExtra', true, { name: 'geolocation', bogus: 1 });
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('TypeError: ' + PREFIX + '1 argument required, but only 0 present.', out.noArg);
+      for (const k of ['nonObject:1', 'nonObject:null', 'nonObject:str']) {
+        testing.expectEqual(k + ' | TypeError: ' + PREFIX + "parameter 1 is not of type 'object'.", k + ' | ' + out[k]);
+      }
+      for (const k of ['empty', 'nameUndefined', 'array']) {
+        testing.expectEqual(k + ' | TypeError: ' + REQUIRED, k + ' | ' + out[k]);
+      }
+      testing.expectEqual('TypeError: ' + ENUM('null'), out.nameNull);
+      testing.expectEqual('TypeError: ' + ENUM('1'), out.nameNumber);
+      testing.expectEqual('TypeError: ' + ENUM('bogus-name'), out.bogus);
+      testing.expectEqual('TypeError: ' + ENUM(''), out.emptyName);
+      testing.expectEqual('TypeError: ' + ENUM('GEOLOCATION'), out.upper);
+      testing.expectEqual('TypeError: ' + ENUM('bluetooth'), out.bluetooth);
+      testing.expectEqual('TypeError: ' + ENUM('speaker'), out.speaker);
+
+      testing.expectEqual('TypeError: ' + PREFIX + 'GenericSensorExtraClasses flag is not enabled.', out.ambientLight);
+      testing.expectEqual('TypeError: ' + PREFIX + 'Web NFC is not enabled.', out.nfc);
+      testing.expectEqual('TypeError: ' + PREFIX + 'System Wake Lock is not enabled.', out.systemWakeLock);
+      testing.expectEqual('TypeError: ' + PREFIX + 'The Speaker Selection API is not enabled.', out.speakerSelection);
+      testing.expectEqual('TypeError: ' + PREFIX + 'The Web App Install API is not enabled.', out.webAppInstall);
+
+      // push is the one that is not a TypeError.
+      const PUSH = 'NotSupportedError: ' + PREFIX +
+        "Push Permission without userVisibleOnly:true isn't supported yet.";
+      testing.expectEqual(PUSH, out.push);
+      testing.expectEqual(PUSH, out.pushFalse);
+      testing.expectEqual('resolved: prompt,notifications', out.pushTrue);
+
+      const FS = 'TypeError: ' + PREFIX + 'Fullscreen Permission only supports allowWithoutGesture:true.';
+      testing.expectEqual(FS, out.fullscreen);
+      testing.expectEqual('resolved: denied,fullscreen', out.fullscreenTrue);
+
+      const TLSA = 'TypeError: ' + PREFIX + 'The requested origin is invalid.';
+      testing.expectEqual(TLSA, out.tlsa);
+      testing.expectEqual(TLSA, out.tlsaBad);
+      testing.expectEqual('resolved: prompt,top-level-storage-access', out.tlsaGood);
+
+      testing.expectEqual('resolved: prompt,midi', out.midiSysex);
+      testing.expectEqual('resolved: prompt,video_capture', out.cameraPtz);
+      testing.expectEqual('resolved: prompt,geolocation', out.geoExtra);
+    });
+  }
+</script>

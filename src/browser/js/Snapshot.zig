@@ -773,7 +773,10 @@ fn hasNamedIndexedGetter(comptime JsApi: type) bool {
 
 // Generic prototype index lookup for a given API list
 fn protoIndexLookup(comptime JsApi: type) ?u16 {
-    @setEvalBranchQuota(100_000);
+    // Scales with the number of registered interfaces times the length of each
+    // one's prototype chain, so it needs headroom every time a batch of
+    // interfaces lands.
+    @setEvalBranchQuota(400_000);
     comptime {
         const T = JsApi.bridge.type;
         const F = reflect.Proto(T) orelse return null;
