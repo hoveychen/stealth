@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<head>
+  <title>IdleDetector Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=idle_detector_shape>
+  {
+    const d = new IdleDetector();
+    testing.expectEqual('[object IdleDetector]', Object.prototype.toString.call(d));
+    testing.expectTrue(d instanceof EventTarget);
+    testing.expectEqual('', Object.getOwnPropertyNames(d).join(','));
+    testing.expectEqual(null, d.userState);
+    testing.expectEqual(null, d.screenState);
+    testing.expectEqual(null, d.onchange);
+    testing.expectEqual(0, IdleDetector.length);
+    testing.expectEqual('requestPermission',
+      Object.getOwnPropertyNames(IdleDetector).filter((k) => !['length', 'name', 'prototype'].includes(k)).join(','));
+    testing.expectEqual('userState,screenState,onchange,start',
+      Object.getOwnPropertyNames(IdleDetector.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectTrue(Object.getPrototypeOf(IdleDetector.prototype) === EventTarget.prototype);
+
+    const p = d.start();
+    testing.expectTrue(p instanceof Promise);
+    p.catch(() => {});
+  }
+</script>
+
+<script type=module id=idle_detector_permission_denied>
+  const d = new IdleDetector();
+  let err;
+  try { await d.start({ threshold: 60000 }); } catch (e) { err = e; }
+  testing.expectEqual('NotAllowedError', err.name);
+  // No "Failed to execute" prefix on this one, unlike almost every other.
+  testing.expectEqual('Idle detection permission denied', err.message);
+
+  // The failed start still marks it started.
+  err = undefined;
+  try { await d.start(); } catch (e) { err = e; }
+  testing.expectEqual('InvalidStateError', err.name);
+  testing.expectEqual(
+    "Failed to execute 'start' on 'IdleDetector': Idle detector is already started.",
+    err.message);
+</script>
+
+<script type=module id=idle_detector_request_permission>
+  let err;
+  try { await IdleDetector.requestPermission(); } catch (e) { err = e; }
+  testing.expectEqual('NotAllowedError', err.name);
+  testing.expectEqual(
+    "Failed to execute 'requestPermission' on 'IdleDetector': Must be handling a user gesture to show a permission request.",
+    err.message);
+</script>

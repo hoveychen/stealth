@@ -104,6 +104,7 @@ pub const Type = union(enum) {
     text_track_list: *@import("media/text_tracks.zig").TextTrackList,
     capture_controller: *@import("media/capture.zig").CaptureController,
     picture_in_picture_window: *@import("media/PictureInPictureWindow.zig"),
+    idle_detector: *@import("IdleDetector.zig"),
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -328,6 +329,7 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .text_track_list => writer.writeAll("<TextTrackList>"),
         .capture_controller => writer.writeAll("<CaptureController>"),
         .picture_in_picture_window => writer.writeAll("<PictureInPictureWindow>"),
+        .idle_detector => writer.writeAll("<IdleDetector>"),
     };
 }
 
@@ -404,6 +406,7 @@ pub fn toString(self: *EventTarget) []const u8 {
         .text_track_list => return "[object TextTrackList]",
         .capture_controller => return "[object CaptureController]",
         .picture_in_picture_window => return "[object PictureInPictureWindow]",
+        .idle_detector => return "[object IdleDetector]",
     };
 }
 
