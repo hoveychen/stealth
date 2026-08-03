@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<head>
+  <title>KeyframeEffect Test</title>
+  <script src="../testing.js"></script>
+</head>
+<body>
+<div id="box"></div>
+
+<script id=keyframe_effect_shape>
+  {
+    testing.expectEqual(1, KeyframeEffect.length);
+    testing.expectEqual('target,pseudoElement,composite,getKeyframes,setKeyframes',
+      Object.getOwnPropertyNames(KeyframeEffect.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectTrue(Object.getPrototypeOf(KeyframeEffect.prototype) === AnimationEffect.prototype);
+    testing.expectTrue(Object.getPrototypeOf(KeyframeEffect) === AnimationEffect);
+    testing.expectEqual('KeyframeEffect', KeyframeEffect.prototype[Symbol.toStringTag]);
+    testing.expectEqual(0, KeyframeEffect.prototype.getKeyframes.length);
+    testing.expectEqual(1, KeyframeEffect.prototype.setKeyframes.length);
+
+    let err;
+    try { new KeyframeEffect(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual("Failed to construct 'KeyframeEffect': 1 argument required, but only 0 present.", err.message);
+  }
+</script>
+
+<script id=keyframe_effect_full>
+  {
+    const box = document.getElementById('box');
+    const effect = new KeyframeEffect(box, [{ opacity: 0 }, { opacity: 1 }], { duration: 500, iterations: 2 });
+
+    testing.expectEqual('[object KeyframeEffect]', String(effect));
+    testing.expectEqual(box, effect.target);
+    testing.expectEqual(null, effect.pseudoElement);
+    testing.expectEqual('replace', effect.composite);
+    testing.expectEqual('', Object.getOwnPropertyNames(effect).join(','));
+
+    testing.expectEqual(
+      '[{"offset":null,"easing":"linear","composite":"auto","opacity":"0","computedOffset":0},' +
+      '{"offset":null,"easing":"linear","composite":"auto","opacity":"1","computedOffset":1}]',
+      JSON.stringify(effect.getKeyframes()));
+
+    testing.expectEqual(
+      '{"delay":0,"direction":"normal","duration":500,"easing":"linear","endDelay":0,' +
+      '"fill":"auto","iterationStart":0,"iterations":2}',
+      JSON.stringify(effect.getTiming()));
+
+    testing.expectEqual(
+      '{"delay":0,"direction":"normal","duration":500,"easing":"linear","endDelay":0,' +
+      '"fill":"none","iterationStart":0,"iterations":2,"activeDuration":1000,' +
+      '"currentIteration":null,"endTime":1000,"localTime":null,"progress":null}',
+      JSON.stringify(effect.getComputedTiming()));
+
+    // A lone keyframe computes to offset 1, not 0.
+    effect.setKeyframes([{ opacity: 0.5 }]);
+    testing.expectEqual(
+      '[{"offset":null,"easing":"linear","composite":"auto","opacity":"0.5","computedOffset":1}]',
+      JSON.stringify(effect.getKeyframes()));
+  }
+</script>
+
+<script id=keyframe_effect_empty>
+  {
+    // Both arguments null is legal, and answers the WebIDL defaults.
+    const effect = new KeyframeEffect(null, null);
+    testing.expectEqual(null, effect.target);
+    testing.expectEqual(0, effect.getKeyframes().length);
+    testing.expectEqual(
+      '{"delay":0,"direction":"normal","duration":"auto","easing":"linear","endDelay":0,' +
+      '"fill":"auto","iterationStart":0,"iterations":1}',
+      JSON.stringify(effect.getTiming()));
+
+    // The copy constructor.
+    const copied = new KeyframeEffect(new KeyframeEffect(null, [{ opacity: 0 }], 250));
+    testing.expectTrue(copied instanceof KeyframeEffect);
+    testing.expectEqual(1, copied.getKeyframes().length);
+    testing.expectEqual(250, copied.getTiming().duration);
+  }
+</script>
+
+<script id=keyframe_effect_object_form>
+  {
+    // `{opacity: [0, 1]}` is the form element.animate() is usually called with.
+    const effect = new KeyframeEffect(null, { opacity: [0, 1] }, 500);
+    testing.expectEqual(
+      '[{"offset":null,"easing":"linear","composite":"auto","opacity":"0","computedOffset":0},' +
+      '{"offset":null,"easing":"linear","composite":"auto","opacity":"1","computedOffset":1}]',
+      JSON.stringify(effect.getKeyframes()));
+    testing.expectEqual(500, effect.getTiming().duration);
+  }
+</script>
+
+<script id=keyframe_effect_writable_members>
+  {
+    const effect = new KeyframeEffect(null, null);
+    const box = document.getElementById('box');
+
+    effect.target = box;
+    testing.expectEqual(box, effect.target);
+    effect.target = null;
+    testing.expectEqual(null, effect.target);
+
+    effect.pseudoElement = '::before';
+    testing.expectEqual('::before', effect.pseudoElement);
+
+    effect.composite = 'add';
+    testing.expectEqual('add', effect.composite);
+    // An enumerated attribute ignores what it does not know.
+    effect.composite = 'nope';
+    testing.expectEqual('add', effect.composite);
+  }
+</script>
+
+<script id=animate_produces_a_keyframe_effect>
+  {
+    const animation = document.getElementById('box').animate({ opacity: [0, 1] }, 300);
+    testing.expectTrue(animation.effect instanceof KeyframeEffect);
+    testing.expectEqual(document.getElementById('box'), animation.effect.target);
+    testing.expectEqual(300, animation.effect.getTiming().duration);
+    testing.expectEqual(2, animation.effect.getKeyframes().length);
+
+    // The same effect object every time it is read.
+    testing.expectTrue(animation.effect === animation.effect);
+  }
+</script>
+</body>

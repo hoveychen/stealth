@@ -35,6 +35,7 @@ const DOMRectList = @import("collections/DOMRectList.zig");
 
 const Selector = @import("selector/Selector.zig");
 const Animation = @import("animation/Animation.zig");
+const KeyframeEffect = @import("animation/KeyframeEffect.zig");
 const global_event_handlers = @import("global_event_handlers.zig");
 const document_services = @import("document/services.zig");
 const typed_om = @import("css/typed_om.zig");
@@ -1418,8 +1419,20 @@ pub fn getAnimations(_: *const Element) []*Animation {
     return &.{};
 }
 
-pub fn animate(_: *Element, _: ?js.Object, _: ?js.Object, frame: *Frame) !*Animation {
-    return Animation.init(frame);
+/// Chrome answers with an Animation whose `effect` is a KeyframeEffect built
+/// from the two arguments; ours used to leave `effect` null, which no browser
+/// does (measured on a headed Chrome 150, probe-win29).
+pub fn animate(self: *Element, keyframes: ?js.Value, options: ?js.Value, exec: *js.Execution) !*Animation {
+    const frame = switch (exec.js.global) {
+        .frame => |f| f,
+        .worker => return error.NotSupportedError,
+    };
+
+    const animation = try Animation.init(frame);
+    const effect = try KeyframeEffect.initForTarget(self, keyframes, options, exec);
+    const value = try exec.js.local.?.zigValueToJs(effect, .{});
+    animation._effect = try value.toObject().persist();
+    return animation;
 }
 
 pub fn closest(self: *Element, input: []const u8, frame: *Frame) !?*Element {

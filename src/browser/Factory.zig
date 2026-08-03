@@ -570,6 +570,21 @@ fn svgPrototypeTypes(comptime Child: type) []const type {
     return types;
 }
 
+// {AnimationEffect, KeyframeEffect}. AnimationEffect carries the timing, which
+// the leaf fills in; it has no `_type` union, so the base is set by hand.
+pub fn animationEffect(_: *const Factory, allocator: Allocator, child: anytype) !*@TypeOf(child) {
+    const AnimationEffect = @import("webapi/animation/effects.zig").AnimationEffect;
+
+    const chain = try PrototypeChain(
+        &.{ AnimationEffect, @TypeOf(child) },
+    ).allocate(allocator);
+
+    chain.get(0).* = .{};
+    chain.setLeaf(1, child);
+
+    return chain.get(1);
+}
+
 // {EventTarget, IDBRequest, IDBOpenDBRequest}. IDBRequest is itself concrete
 // (a store request is one) so it carries no `_type` union naming a leaf; the
 // middle is therefore default-initialised by hand rather than by setMiddle.
