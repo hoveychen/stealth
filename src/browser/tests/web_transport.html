@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<!--
+  WebTransport, measured on a headed Chrome 150 over http://localhost
+  (win20-chrome.json for the shapes, win22 / win26 for the behaviours).
+  Member lists are Chrome's own getOwnPropertyNames order.
+-->
+
+<script id=shapes>
+  {
+    const shapes = {
+      WebTransport: ['incomingUnidirectionalStreams', 'incomingBidirectionalStreams', 'datagrams', 'ready', 'closed', 'close', 'createBidirectionalStream', 'createUnidirectionalStream', 'protocol', 'constructor'],
+      WebTransportBidirectionalStream: ['readable', 'writable', 'constructor'],
+      WebTransportDatagramDuplexStream: ['readable', 'writable', 'maxDatagramSize', 'incomingMaxAge', 'outgoingMaxAge', 'incomingHighWaterMark', 'outgoingHighWaterMark', 'constructor'],
+      WebTransportError: ['streamErrorCode', 'source', 'constructor'],
+    };
+    for (const [name, keys] of Object.entries(shapes)) {
+      testing.expectEqual('function', typeof window[name], { label: name });
+      testing.expectEqual(keys.join(','), Object.getOwnPropertyNames(window[name].prototype).join(','), { label: name });
+      testing.expectEqual(name, window[name].prototype[Symbol.toStringTag], { label: name });
+    }
+
+    testing.expectEqual([1, 0, 0, 0], [
+      WebTransport.length, WebTransportBidirectionalStream.length,
+      WebTransportDatagramDuplexStream.length, WebTransportError.length,
+    ]);
+    testing.expectEqual([0, 0, 0], [
+      WebTransport.prototype.close.length,
+      WebTransport.prototype.createBidirectionalStream.length,
+      WebTransport.prototype.createUnidirectionalStream.length,
+    ]);
+
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(WebTransport.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(WebTransportBidirectionalStream.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(WebTransportDatagramDuplexStream.prototype));
+    // WebTransportError -> DOMException -> Error -> Object
+    testing.expectEqual(DOMException.prototype, Object.getPrototypeOf(WebTransportError.prototype));
+
+    // The two that only a live connection produces are not constructible.
+    for (const name of ['WebTransportBidirectionalStream', 'WebTransportDatagramDuplexStream']) {
+      let err = null;
+      try { new window[name](); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(`TypeError: Failed to construct '${name}': Illegal constructor`, err, { label: name });
+    }
+  }
+</script>
+
+<script id=url_validation>
+  {
+    const attempt = (arg) => {
+      try { new WebTransport(arg); return 'NO THROW'; } catch (e) { return `${e.name}: ${e.message}`; }
+    };
+    testing.expectEqual(
+      "TypeError: Failed to construct 'WebTransport': 1 argument required, but only 0 present.",
+      (() => { try { new WebTransport(); return 'NO THROW'; } catch (e) { return `${e.name}: ${e.message}`; } })());
+    testing.expectEqual(
+      "SyntaxError: Failed to construct 'WebTransport': The URL 'nope' is invalid.",
+      attempt('nope'));
+    testing.expectEqual(
+      "SyntaxError: Failed to construct 'WebTransport': The URL '/x' is invalid.",
+      attempt('/x'));
+    testing.expectEqual(
+      "SyntaxError: Failed to construct 'WebTransport': The URL's scheme must be 'https'. 'http' is not allowed.",
+      attempt('http://localhost:1/'));
+    testing.expectEqual(
+      "SyntaxError: Failed to construct 'WebTransport': The URL's scheme must be 'https'. 'wss' is not allowed.",
+      attempt('wss://localhost:1/'));
+    testing.expectEqual(
+      "SyntaxError: Failed to construct 'WebTransport': The URL contains a fragment identifier ('#f'). Fragment identifiers are not allowed in WebTransport URLs.",
+      attempt('https://localhost:1/x#f'));
+    // An empty fragment still counts.
+    testing.expectEqual(
+      "SyntaxError: Failed to construct 'WebTransport': The URL contains a fragment identifier ('#'). Fragment identifiers are not allowed in WebTransport URLs.",
+      attempt('https://localhost:1/x#'));
+
+    // The options dictionary is accepted and ignored, valid enum or not.
+    testing.expectEqual('object', typeof new WebTransport('https://localhost:1/', { allowPooling: true }));
+    testing.expectEqual('object', typeof new WebTransport('https://localhost:1/', { congestionControl: 'nope' }));
+  }
+</script>
+
+<script id=instance_shape>
+  {
+    const t = new WebTransport('https://localhost:1/nothing');
+    testing.expectEqual([], Object.getOwnPropertyNames(t));
+    testing.expectEqual('', t.protocol);
+    testing.expectEqual('[object WebTransportDatagramDuplexStream]', Object.prototype.toString.call(t.datagrams));
+    testing.expectEqual('[object ReadableStream]', Object.prototype.toString.call(t.incomingUnidirectionalStreams));
+    testing.expectEqual('[object ReadableStream]', Object.prototype.toString.call(t.incomingBidirectionalStreams));
+
+    // Every one of them is the same object on a second read.
+    testing.expectTrue(t.datagrams === t.datagrams);
+    testing.expectTrue(t.incomingUnidirectionalStreams === t.incomingUnidirectionalStreams);
+    testing.expectTrue(t.incomingBidirectionalStreams === t.incomingBidirectionalStreams);
+    testing.expectTrue(t.ready === t.ready);
+    testing.expectTrue(t.closed === t.closed);
+
+    const d = t.datagrams;
+    testing.expectEqual(1024, d.maxDatagramSize);
+    testing.expectEqual(null, d.incomingMaxAge);
+    testing.expectEqual(null, d.outgoingMaxAge);
+    testing.expectEqual(1, d.incomingHighWaterMark);
+    testing.expectEqual(1, d.outgoingHighWaterMark);
+    testing.expectEqual('[object ReadableStream]', Object.prototype.toString.call(d.readable));
+    testing.expectEqual('[object WritableStream]', Object.prototype.toString.call(d.writable));
+
+    // All four of the writable ones round-trip.
+    d.incomingHighWaterMark = 5;
+    d.outgoingHighWaterMark = 0;
+    d.incomingMaxAge = 100;
+    testing.expectEqual([5, 0, 100], [d.incomingHighWaterMark, d.outgoingHighWaterMark, d.incomingMaxAge]);
+
+    // close() answers undefined, with or without a CloseInfo.
+    testing.expectEqual(undefined, t.close({ closeCode: 3, reason: 'bye' }));
+  }
+</script>
+
+<script id=error_constructor>
+  {
+    const e = new WebTransportError();
+    testing.expectEqual('WebTransportError', e.name);
+    testing.expectEqual('', e.message);
+    testing.expectEqual('stream', e.source);
+    testing.expectEqual(null, e.streamErrorCode);
+    testing.expectEqual(0, e.code);
+    testing.expectEqual('WebTransportError', String(e));
+    testing.expectEqual([], Object.getOwnPropertyNames(e));
+    testing.expectTrue(e instanceof DOMException);
+    testing.expectTrue(e instanceof Error);
+
+    // One optional dictionary, not (message, options): a string first argument
+    // is what fails, whatever follows it.
+    for (const args of [['x', { source: 'stream' }], ['boom'], ['x', { streamErrorCode: 1e9 }]]) {
+      let err = null;
+      try { new WebTransportError(...args); } catch (ex) { err = `${ex.name}: ${ex.message}`; }
+      testing.expectEqual(
+        "TypeError: Failed to construct 'WebTransportError': The provided value is not of type 'WebTransportErrorInit'.",
+        err, { label: JSON.stringify(args) });
+    }
+
+    const full = new WebTransportError({ source: 'stream', streamErrorCode: 7 });
+    testing.expectEqual([7, '', 'stream'], [full.streamErrorCode, full.message, full.source]);
+    const msg = new WebTransportError({ message: 'boom' });
+    testing.expectEqual(['boom', null, 'WebTransportError: boom'], [msg.message, msg.streamErrorCode, String(msg)]);
+    // `source` is not actually settable through the dictionary.
+    testing.expectEqual('stream', new WebTransportError({ source: 'session' }).source);
+    // streamErrorCode is a clamped octet.
+    testing.expectEqual(255, new WebTransportError({ streamErrorCode: 4294967295 }).streamErrorCode);
+    testing.expectEqual(0, new WebTransportError({ streamErrorCode: -1 }).streamErrorCode);
+    testing.expectEqual('undefined', typeof new WebTransportError().stack);
+    // null and undefined both mean "the default dictionary".
+    testing.expectEqual('stream', new WebTransportError(null).source);
+    testing.expectEqual('stream', new WebTransportError(undefined).source);
+  }
+</script>
+
+<script id=handshake_failure type=module>
+  {
+    const state = await testing.async();
+    const t = new WebTransport('https://localhost:1/nothing');
+    const seen = {};
+    const note = (k) => (e) => { seen[k] = `${e.name}: ${e.message}`; };
+    Promise.all([
+      t.ready.then(() => { seen.ready = 'RESOLVED'; }, note('ready')),
+      t.closed.then(() => { seen.closed = 'RESOLVED'; }, note('closed')),
+      t.createBidirectionalStream().then(() => { seen.bidi = 'RESOLVED'; }, note('bidi')),
+      t.createUnidirectionalStream().then(() => { seen.uni = 'RESOLVED'; }, note('uni')),
+    ]).then(() => state.resolve(seen));
+
+    await state.done((data) => {
+      testing.expectEqual('WebTransportError: Opening handshake failed.', data.ready);
+      testing.expectEqual('WebTransportError: Opening handshake failed.', data.closed);
+      testing.expectEqual("NetworkError: Failed to execute 'createBidirectionalStream' on 'WebTransport': No connection.", data.bidi);
+      testing.expectEqual("NetworkError: Failed to execute 'createUnidirectionalStream' on 'WebTransport': No connection.", data.uni);
+    });
+  }
+</script>
+
+<script id=close_while_connecting type=module>
+  {
+    // close() called before the handshake gives up wins the race, and both
+    // promises then carry its wording instead (measured on Chrome 150).
+    const state = await testing.async();
+    const t = new WebTransport('https://localhost:1/nothing');
+    t.close();
+    const seen = {};
+    Promise.all([
+      t.ready.catch((e) => { seen.ready = `${e.name}: ${e.message}`; }),
+      t.closed.catch((e) => { seen.closed = `${e.name}: ${e.message}`; }),
+    ]).then(() => state.resolve(seen));
+
+    await state.done((data) => {
+      testing.expectEqual('WebTransportError: close() is called while connecting.', data.ready);
+      testing.expectEqual('WebTransportError: close() is called while connecting.', data.closed);
+    });
+  }
+</script>

@@ -1261,6 +1261,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/gamepad.zig"),
     @import("../webapi/geolocation.zig"),
     @import("../webapi/service_worker.zig"),
+    @import("../webapi/web_transport.zig"),
     @import("../webapi/External.zig"),
     @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),
