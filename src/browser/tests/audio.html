@@ -1094,8 +1094,20 @@
   const fresh = new OfflineAudioContext(1, 256, 8000);
   const resumed = await settle(fresh.resume());
   const suspendPending = await race(new OfflineAudioContext(1, 256, 8000).suspend(0));
-  const negative = await settle(new OfflineAudioContext(1, 256, 8000).suspend(-1));
-  const pastEnd = await settle(new OfflineAudioContext(1, 256, 8000).suspend(99));
+  // No argument at all is *not* refused: Chrome converts the missing value to
+  // NaN, which is neither negative nor past the end, so it returns a promise
+  // that never settles (measured).
+  const noArg = await (() => {
+    try { return race(new OfflineAudioContext(1, 256, 8000).suspend()); }
+    catch (e) { return Promise.resolve(`threw:${e.name}:${e.message}`); }
+  })();
+
+  // Both rejections built in flight, before either is awaited. Awaiting them one
+  // at a time hides a message that outlives its buffer; this does not.
+  const negativePromise = new OfflineAudioContext(1, 256, 8000).suspend(-1);
+  const pastEndPromise = new OfflineAudioContext(1, 256, 8000).suspend(99);
+  const negative = await settle(negativePromise);
+  const pastEnd = await settle(pastEndPromise);
 
   state.resolve();
   await state.done(() => {
@@ -1119,6 +1131,7 @@
       'cannot resume an offline context that has not started',
       resumed);
     testing.expectEqual('pending', suspendPending);
+    testing.expectEqual('pending', noArg);
     testing.expectEqual(
       "rejected:InvalidStateError:Failed to execute 'suspend' on 'OfflineAudioContext': " +
       'negative suspend time (-1) is not allowed',

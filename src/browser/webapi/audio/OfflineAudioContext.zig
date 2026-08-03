@@ -245,10 +245,11 @@ pub fn @"resume"(self: *OfflineAudioContext, exec: *const Execution) !js.Promise
 // where it was asked to (all three measured).
 pub fn @"suspend"(self: *OfflineAudioContext, when: ?f64, exec: *const Execution) !js.Promise {
     const local = exec.js.local.?;
-    const at = when orelse return idl.typeError(
-        "Failed to execute 'suspend' on 'OfflineAudioContext': 1 argument required, but only 0 present.",
-        exec,
-    );
+    // `suspend()` with no argument is *not* refused, even though the arity is 1:
+    // the missing value converts to NaN, which is neither negative nor past the
+    // end, so both checks below fall through to the never-settling promise
+    // (measured — Chrome hands back a pending promise rather than throwing).
+    const at = when orelse std.math.nan(f64);
 
     if (at < 0) {
         return reject(try std.fmt.allocPrint(
