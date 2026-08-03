@@ -619,6 +619,17 @@ pub fn jsValueToZig(self: *const Local, comptime T: type, js_val: js.Value) !T {
                 };
             }
 
+            // An event handler IDL attribute -- `?js.Function.Global` is only
+            // ever a handler setter's parameter -- takes `any`. Anything that
+            // is not callable clears the slot instead of failing: Chrome reads
+            // `signal.onabort = 7` back as null (measured on a headed Chrome
+            // 150), where a conversion error here would have thrown.
+            if (comptime o.child == js.Function.Global) {
+                if (!js_val.isFunction()) {
+                    return null;
+                }
+            }
+
             if (js_val.isNullOrUndefined()) {
                 return null;
             }
