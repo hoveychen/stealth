@@ -23,12 +23,13 @@ const js = @import("../js/js.zig");
 
 const EventCounts = @import("EventCounts.zig");
 const PerformanceObserver = @import("PerformanceObserver.zig");
+const timing = @import("performance/timing.zig");
 
 const Execution = js.Execution;
 const Allocator = std.mem.Allocator;
 
 pub fn registerTypes() []const type {
-    return &.{ Performance, Entry, Mark, Measure, PerformanceTiming, PerformanceNavigation };
+    return &.{ Performance, Entry, Mark, Measure, MemoryInfo, PerformanceTiming, PerformanceNavigation };
 }
 
 const Performance = @This();
@@ -49,6 +50,37 @@ _event_counts: EventCounts = .{},
 // Frame/WorkerGlobalScope) so that both contexts get observers for free.
 _observers: std.ArrayList(*PerformanceObserver) = .empty,
 _delivery_scheduled: bool = false,
+
+// The navigation entry. `_nav` is filled in by the Frame as the load passes
+// each milestone; `_nav_entry` is the JS-visible object built the first time a
+// script asks for the entry list, which reads through to `_nav` so a script
+// that grabbed it early still sees the later milestones. Chrome always has
+// exactly one of these, so a page that reports none is a tell on its own.
+_nav: timing.Timing = .{},
+_nav_name: []const u8 = "",
+_nav_entry: ?*timing.NavigationTiming = null,
+_nav_phase: NavPhase = .none,
+
+// Nothing fires it — the resource buffer never fills because nothing fills it
+// — but the accessor pair is on Chrome's Performance.prototype and reads back
+// what a script sets.
+_on_resource_timing_buffer_full: ?js.Function.Global = null,
+
+/// How far the current navigation has got. Level 2 can read an unreached
+/// milestone straight off `_nav` because it is 0 there anyway, but Level 1
+/// reports epoch stamps, where 0 and "the epoch origin" are very different
+/// answers — and on localhost a milestone can legitimately land within the
+/// same rounded millisecond as the origin. So the phase is tracked rather
+/// than inferred from the offsets.
+pub const NavPhase = enum(u8) {
+    none,
+    started,
+    response,
+    response_end,
+    interactive,
+    content_loaded,
+    complete,
+};
 
 /// Get high-resolution timestamp in microseconds, rounded to 5μs increments
 /// to match browser behavior (prevents fingerprinting)
@@ -88,6 +120,162 @@ pub fn getNavigation(self: *Performance) *PerformanceNavigation {
 
 pub fn getEventCounts(self: *Performance) *EventCounts {
     return &self._event_counts;
+}
+
+/// V8's live heap numbers, which is what Chrome's performance.memory reports
+/// too. A fresh object every read (measured: `performance.memory !==
+/// performance.memory`).
+pub fn getMemory(_: *Performance, exec: *const Execution) !*MemoryInfo {
+    const stats = exec.js.isolate.getHeapStatistics();
+    return exec._factory.create(MemoryInfo{
+        ._total = stats.total_heap_size,
+        ._used = stats.used_heap_size,
+        // Not V8's own heap_size_limit: ours is sized for this process (1.46 GB
+        // measured), a number no Chrome reports. Chrome caps the old space at
+        // ~4 GiB on any 64-bit desktop with enough RAM and answered exactly
+        // this on the reference machine (win24-chrome.json).
+        ._limit = 4395630592,
+    });
+}
+
+pub fn getInteractionCount(_: *const Performance) u32 {
+    return 0;
+}
+
+pub fn getOnResourceTimingBufferFull(self: *const Performance) ?js.Function.Global {
+    return self._on_resource_timing_buffer_full;
+}
+
+pub fn setOnResourceTimingBufferFull(self: *Performance, callback: ?js.Function) !void {
+    self._on_resource_timing_buffer_full = if (callback) |c| try c.persist() else null;
+}
+
+pub fn clearResourceTimings(self: *Performance) void {
+    var i: usize = 0;
+    while (i < self._entries.items.len) {
+        if (self._entries.items[i]._type == .resource) {
+            _ = self._entries.orderedRemove(i);
+        } else {
+            i += 1;
+        }
+    }
+}
+
+pub const Json = struct {
+    timeOrigin: f64,
+    timing: *PerformanceTiming,
+    navigation: *PerformanceNavigation,
+};
+
+pub fn toJSON(self: *Performance) Json {
+    return .{
+        .timeOrigin = self.getTimeOrigin(),
+        .timing = &self._timing,
+        .navigation = &self._navigation,
+    };
+}
+
+// --- Navigation timing -----------------------------------------------------
+//
+// The Frame calls these as the load progresses. They only move numbers around;
+// the JS object is built lazily in ensureNavigationEntry so none of this needs
+// an Execution.
+
+pub fn navigationStarted(self: *Performance, url: []const u8, navigation_type: []const u8) void {
+    const at = self.now();
+    self._nav_name = url;
+    self._nav = .{
+        .navigation_type = navigation_type,
+        .fetch_start = at,
+        .domain_lookup_start = at,
+        .domain_lookup_end = at,
+        .connect_start = at,
+        .connect_end = at,
+        .request_start = at,
+    };
+    self._nav_phase = .started;
+}
+
+pub fn navigationResponseStarted(
+    self: *Performance,
+    status: u16,
+    content_type: []const u8,
+    next_hop_protocol: []const u8,
+) void {
+    const at = self.now();
+    self._nav.response_start = at;
+    self._nav.final_response_headers_start = at;
+    self._nav.response_status = status;
+    self._nav.content_type = content_type;
+    self._nav.next_hop_protocol = next_hop_protocol;
+    self._nav_phase = .response;
+}
+
+pub fn navigationBodyChunk(self: *Performance, len: usize) void {
+    self._nav.encoded_body_size += len;
+    self._nav.decoded_body_size += len;
+}
+
+pub fn navigationResponseEnded(self: *Performance) void {
+    self._nav.response_end = self.now();
+    self._nav_phase = .response_end;
+}
+
+pub fn navigationInteractive(self: *Performance) void {
+    const at = self.now();
+    self._nav.dom_interactive = at;
+    self._nav.dom_content_loaded_event_start = at;
+    self._nav_phase = .interactive;
+}
+
+pub fn navigationContentLoaded(self: *Performance) void {
+    self._nav.dom_content_loaded_event_end = self.now();
+    self._nav_phase = .content_loaded;
+}
+
+/// The load event bookends domComplete. Chrome reports duration ==
+/// loadEventEnd on the navigation entry (measured), so the entry's duration
+/// tracks this too.
+pub fn navigationComplete(self: *Performance) void {
+    const at = self.now();
+    if (self._nav.dom_content_loaded_event_end == 0) {
+        self._nav.dom_interactive = at;
+        self._nav.dom_content_loaded_event_start = at;
+        self._nav.dom_content_loaded_event_end = at;
+    }
+    self._nav.dom_complete = at;
+    self._nav.load_event_start = at;
+    self._nav.load_event_end = at;
+    self._nav_phase = .complete;
+    if (self._nav_entry) |entry| {
+        entry._proto._proto._duration = at;
+    }
+}
+
+/// Builds the navigation entry on first use and keeps it at the head of the
+/// buffer, which is where Chrome's getEntries() has it.
+fn ensureNavigationEntry(self: *Performance, exec: *const Execution) !void {
+    if (self._nav_entry != null or self._nav_phase == .none) {
+        return;
+    }
+
+    const entry = try exec._factory.chained(.{
+        Entry{
+            ._name = self._nav_name,
+            ._duration = self._nav.load_event_end,
+            ._type = undefined,
+        },
+        timing.ResourceTiming{
+            ._proto = undefined,
+            ._timing = &self._nav,
+        },
+        timing.NavigationTiming{
+            ._proto = undefined,
+        },
+    });
+    entry._proto._proto._type = .{ .navigation = entry };
+    self._nav_entry = entry;
+    try self._entries.insert(exec.arena, 0, entry._proto._proto);
 }
 
 pub fn mark(
@@ -215,15 +403,18 @@ pub fn setResourceTimingBufferSize(self: *Performance, max_size: u32) void {
     _ = max_size;
 }
 
-pub fn getEntries(self: *const Performance) []*Entry {
+pub fn getEntries(self: *Performance, exec: *const Execution) ![]*Entry {
+    try self.ensureNavigationEntry(exec);
     return self._entries.items;
 }
 
-pub fn getEntriesByType(self: *const Performance, entry_type: []const u8, exec: *const Execution) ![]const *Entry {
+pub fn getEntriesByType(self: *Performance, entry_type: []const u8, exec: *const Execution) ![]const *Entry {
+    try self.ensureNavigationEntry(exec);
     return filterEntriesByType(exec.local_arena, self._entries.items, entry_type);
 }
 
-pub fn getEntriesByName(self: *const Performance, name: []const u8, entry_type: ?[]const u8, exec: *const Execution) ![]const *Entry {
+pub fn getEntriesByName(self: *Performance, name: []const u8, entry_type: ?[]const u8, exec: *const Execution) ![]const *Entry {
+    try self.ensureNavigationEntry(exec);
     return filterEntriesByName(exec.local_arena, self._entries.items, name, entry_type);
 }
 
@@ -360,19 +551,70 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const now = bridge.function(Performance.now, .{});
-    pub const mark = bridge.function(Performance.mark, .{});
-    pub const measure = bridge.function(Performance.measure, .{});
+    // Declared in Chrome's own prototype order (win25-chrome.json), which puts
+    // the partial-interface members — timing, navigation, memory, eventCounts,
+    // interactionCount — after `constructor`.
+    pub const timeOrigin = bridge.accessor(Performance.getTimeOrigin, null, .{});
+    pub const onresourcetimingbufferfull = bridge.accessor(
+        Performance.getOnResourceTimingBufferFull,
+        Performance.setOnResourceTimingBufferFull,
+        .{},
+    );
     pub const clearMarks = bridge.function(Performance.clearMarks, .{});
     pub const clearMeasures = bridge.function(Performance.clearMeasures, .{});
-    pub const setResourceTimingBufferSize = bridge.function(Performance.setResourceTimingBufferSize, .{ .noop = true });
+    pub const clearResourceTimings = bridge.function(Performance.clearResourceTimings, .{});
     pub const getEntries = bridge.function(Performance.getEntries, .{});
-    pub const getEntriesByType = bridge.function(Performance.getEntriesByType, .{});
     pub const getEntriesByName = bridge.function(Performance.getEntriesByName, .{});
-    pub const timeOrigin = bridge.accessor(Performance.getTimeOrigin, null, .{});
+    pub const getEntriesByType = bridge.function(Performance.getEntriesByType, .{});
+    pub const mark = bridge.function(Performance.mark, .{});
+    pub const measure = bridge.function(Performance.measure, .{});
+    pub const setResourceTimingBufferSize = bridge.function(Performance.setResourceTimingBufferSize, .{ .noop = true });
+    pub const toJSON = bridge.function(Performance.toJSON, .{});
+    pub const now = bridge.function(Performance.now, .{});
     pub const timing = bridge.accessor(Performance.getTiming, null, .{ .exposed = .window });
     pub const navigation = bridge.accessor(Performance.getNavigation, null, .{ .exposed = .window });
+    pub const memory = bridge.accessor(Performance.getMemory, null, .{ .exposed = .window });
     pub const eventCounts = bridge.accessor(Performance.getEventCounts, null, .{ .exposed = .window });
+    pub const interactionCount = bridge.accessor(Performance.getInteractionCount, null, .{ .exposed = .window });
+};
+
+/// performance.memory. Chrome has no MemoryInfo global — the class is only
+/// reachable through the instance's brand (measured: `typeof window.MemoryInfo
+/// === 'undefined'`, `Object.prototype.toString.call(performance.memory) ===
+/// '[object MemoryInfo]'`, and `memory.constructor.name === 'Object'`).
+pub const MemoryInfo = struct {
+    _total: usize,
+    _used: usize,
+    _limit: usize,
+
+    fn totalJSHeapSize(self: *const MemoryInfo) f64 {
+        return @floatFromInt(self._total);
+    }
+
+    fn usedJSHeapSize(self: *const MemoryInfo) f64 {
+        return @floatFromInt(self._used);
+    }
+
+    fn jsHeapSizeLimit(self: *const MemoryInfo) f64 {
+        return @floatFromInt(self._limit);
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(MemoryInfo);
+
+        pub const Meta = struct {
+            pub const name = "MemoryInfo";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            // No `window.MemoryInfo`, and so no own `constructor` on the
+            // prototype either: Chrome's memory.constructor is Object.
+            pub const no_interface_object = true;
+        };
+
+        pub const totalJSHeapSize = bridge.accessor(MemoryInfo.totalJSHeapSize, null, .{});
+        pub const usedJSHeapSize = bridge.accessor(MemoryInfo.usedJSHeapSize, null, .{});
+        pub const jsHeapSizeLimit = bridge.accessor(MemoryInfo.jsHeapSizeLimit, null, .{});
+    };
 };
 
 pub const Entry = struct {
@@ -382,25 +624,25 @@ pub const Entry = struct {
     _start_time: f64 = 0.0,
 
     pub const Type = union(Enum) {
-        element,
-        event,
-        first_input,
-        @"largest-contentful-paint",
-        @"layout-shift",
+        element: *timing.ElementTiming,
+        event: *timing.EventTiming,
+        @"first-input": *timing.EventTiming,
+        @"largest-contentful-paint": *timing.LargestContentfulPaint,
+        @"layout-shift": *timing.LayoutShift,
         @"long-animation-frame",
-        longtask,
+        longtask: *timing.LongTaskTiming,
         measure: *Measure,
-        navigation,
-        paint,
-        resource,
-        taskattribution,
-        @"visibility-state",
+        navigation: *timing.NavigationTiming,
+        paint: *timing.PaintTiming,
+        resource: *timing.ResourceTiming,
+        taskattribution: *timing.TaskAttributionTiming,
+        @"visibility-state": *timing.VisibilityStateEntry,
         mark: *Mark,
 
         pub const Enum = enum(u8) {
             element = 1, // Changing this affect PerformanceObserver's behavior.
             event = 2,
-            first_input = 3,
+            @"first-input" = 3,
             @"largest-contentful-paint" = 4,
             @"layout-shift" = 5,
             @"long-animation-frame" = 6,
@@ -422,9 +664,7 @@ pub const Entry = struct {
     }
 
     pub fn getEntryType(self: *const Entry) []const u8 {
-        return switch (self._type) {
-            else => |t| @tagName(t),
-        };
+        return @tagName(std.meta.activeTag(self._type));
     }
 
     pub fn getName(self: *const Entry) []const u8 {
@@ -433,6 +673,26 @@ pub const Entry = struct {
 
     pub fn getStartTime(self: *const Entry) f64 {
         return self._start_time;
+    }
+
+    pub const Json = struct {
+        name: []const u8,
+        entryType: []const u8,
+        startTime: f64,
+        duration: f64,
+    };
+
+    /// Chrome's PerformanceEntry.toJSON() is these four keys in this order, and
+    /// the subclasses that add nothing of their own (PerformanceMark,
+    /// PerformanceMeasure, VisibilityStateEntry) inherit it verbatim — a mark's
+    /// `detail` is not in its JSON (measured).
+    pub fn toJSON(self: *const Entry) Entry.Json {
+        return .{
+            .name = self._name,
+            .entryType = self.getEntryType(),
+            .startTime = self._start_time,
+            .duration = self._duration,
+        };
     }
 
     pub const JsApi = struct {
@@ -444,9 +704,10 @@ pub const Entry = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
         pub const name = bridge.accessor(Entry.getName, null, .{});
-        pub const duration = bridge.accessor(Entry.getDuration, null, .{});
         pub const entryType = bridge.accessor(Entry.getEntryType, null, .{});
         pub const startTime = bridge.accessor(Entry.getStartTime, null, .{});
+        pub const duration = bridge.accessor(Entry.getDuration, null, .{});
+        pub const toJSON = bridge.function(Entry.toJSON, .{});
     };
 };
 
@@ -486,6 +747,30 @@ pub const Mark = struct {
         return self._detail;
     }
 
+    /// `new PerformanceMark(name, options)`. Unlike `performance.mark()`, the
+    /// constructor does not add the mark to the entry buffer — Chrome answers
+    /// `getEntriesByName()` with 0 for a mark built this way (measured).
+    pub fn constructor(
+        name: []const u8,
+        options: ?Options,
+        exec: *const Execution,
+    ) !*Mark {
+        const opts = options orelse Options{};
+        const start_time = opts.startTime orelse (exec.performance().now());
+        if (start_time < 0.0) {
+            const isolate = exec.js.isolate;
+            var buf: [256]u8 = undefined;
+            const message = std.fmt.bufPrint(
+                &buf,
+                "Failed to construct 'PerformanceMark': '{s}' cannot have a negative start time.",
+                .{name},
+            ) catch "Failed to construct 'PerformanceMark': cannot have a negative start time.";
+            _ = isolate.throwException(isolate.createTypeError(message));
+            return error.JsException;
+        }
+        return Mark.init(name, opts.detail, start_time, exec);
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(Mark);
 
@@ -495,6 +780,7 @@ pub const Mark = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
         pub const detail = bridge.accessor(Mark.getDetail, null, .{});
+        pub const constructor = bridge.constructor(Mark.constructor, .{ .arity = 1 });
     };
 };
 
@@ -564,11 +850,149 @@ pub const Measure = struct {
 
 /// PerformanceTiming — Navigation Timing Level 1 (legacy, but widely used).
 /// https://developer.mozilla.org/en-US/docs/Web/API/PerformanceTiming
-/// All properties return 0 as stub values; the object must not be undefined
-/// so that scripts accessing performance.timing.navigationStart don't crash.
+///
+/// Every member is wall-clock epoch milliseconds, not a time-origin offset —
+/// Chrome's navigationStart on this machine read 1.7e12 (measured). They come
+/// from the same milestones the Level 2 navigation entry reports, shifted onto
+/// the epoch origin recorded when the Performance was created; a member the
+/// load never reached stays 0, which is also what Chrome does for
+/// unloadEvent*/redirect* on a first navigation.
 pub const PerformanceTiming = struct {
     // Padding to avoid zero-size struct, which causes identity_map pointer collisions.
     _pad: bool = false,
+
+    fn perf(self: *const PerformanceTiming) *const Performance {
+        return @alignCast(@fieldParentPtr("_timing", self));
+    }
+
+    /// Level 2's offsets are fractional milliseconds from the time origin;
+    /// Level 1 is an integer epoch stamp. A milestone the load has not reached
+    /// yet reads 0 rather than the origin, which is what Chrome answers from a
+    /// script running mid-parse.
+    fn epoch(self: *const PerformanceTiming, needs: NavPhase, offset: f64) f64 {
+        const p = self.perf();
+        if (@intFromEnum(p._nav_phase) < @intFromEnum(needs)) {
+            return 0;
+        }
+        return @as(f64, @floatFromInt(p._epoch_origin_ms)) + @round(offset);
+    }
+
+    fn navigationStart(self: *const PerformanceTiming) f64 {
+        return @floatFromInt(self.perf()._epoch_origin_ms);
+    }
+
+    fn zero(_: *const PerformanceTiming) f64 {
+        return 0;
+    }
+
+    fn fetchStart(self: *const PerformanceTiming) f64 {
+        return self.epoch(.started, self.perf()._nav.fetch_start);
+    }
+
+    fn domainLookupStart(self: *const PerformanceTiming) f64 {
+        return self.epoch(.started, self.perf()._nav.domain_lookup_start);
+    }
+
+    fn domainLookupEnd(self: *const PerformanceTiming) f64 {
+        return self.epoch(.started, self.perf()._nav.domain_lookup_end);
+    }
+
+    fn connectStart(self: *const PerformanceTiming) f64 {
+        return self.epoch(.started, self.perf()._nav.connect_start);
+    }
+
+    fn connectEnd(self: *const PerformanceTiming) f64 {
+        return self.epoch(.started, self.perf()._nav.connect_end);
+    }
+
+    fn requestStart(self: *const PerformanceTiming) f64 {
+        return self.epoch(.started, self.perf()._nav.request_start);
+    }
+
+    fn responseStart(self: *const PerformanceTiming) f64 {
+        return self.epoch(.response, self.perf()._nav.response_start);
+    }
+
+    fn responseEnd(self: *const PerformanceTiming) f64 {
+        return self.epoch(.response_end, self.perf()._nav.response_end);
+    }
+
+    fn domInteractive(self: *const PerformanceTiming) f64 {
+        return self.epoch(.interactive, self.perf()._nav.dom_interactive);
+    }
+
+    fn domContentLoadedEventStart(self: *const PerformanceTiming) f64 {
+        return self.epoch(.interactive, self.perf()._nav.dom_content_loaded_event_start);
+    }
+
+    fn domContentLoadedEventEnd(self: *const PerformanceTiming) f64 {
+        return self.epoch(.content_loaded, self.perf()._nav.dom_content_loaded_event_end);
+    }
+
+    fn domComplete(self: *const PerformanceTiming) f64 {
+        return self.epoch(.complete, self.perf()._nav.dom_complete);
+    }
+
+    fn loadEventStart(self: *const PerformanceTiming) f64 {
+        return self.epoch(.complete, self.perf()._nav.load_event_start);
+    }
+
+    fn loadEventEnd(self: *const PerformanceTiming) f64 {
+        return self.epoch(.complete, self.perf()._nav.load_event_end);
+    }
+
+    /// Chrome's own toJSON order, which is neither the prototype's order nor
+    /// alphabetical — it is V8's hash iteration order for this object and is
+    /// stable per build (measured, win24-chrome.json).
+    pub const Json = struct {
+        connectStart: f64,
+        secureConnectionStart: f64,
+        unloadEventEnd: f64,
+        domainLookupStart: f64,
+        domainLookupEnd: f64,
+        responseStart: f64,
+        connectEnd: f64,
+        responseEnd: f64,
+        requestStart: f64,
+        domLoading: f64,
+        redirectStart: f64,
+        loadEventEnd: f64,
+        domComplete: f64,
+        navigationStart: f64,
+        loadEventStart: f64,
+        domContentLoadedEventEnd: f64,
+        unloadEventStart: f64,
+        redirectEnd: f64,
+        domInteractive: f64,
+        fetchStart: f64,
+        domContentLoadedEventStart: f64,
+    };
+
+    fn json(self: *const PerformanceTiming) PerformanceTiming.Json {
+        return .{
+            .connectStart = self.connectStart(),
+            .secureConnectionStart = 0,
+            .unloadEventEnd = 0,
+            .domainLookupStart = self.domainLookupStart(),
+            .domainLookupEnd = self.domainLookupEnd(),
+            .responseStart = self.responseStart(),
+            .connectEnd = self.connectEnd(),
+            .responseEnd = self.responseEnd(),
+            .requestStart = self.requestStart(),
+            .domLoading = self.responseStart(),
+            .redirectStart = 0,
+            .loadEventEnd = self.loadEventEnd(),
+            .domComplete = self.domComplete(),
+            .navigationStart = self.navigationStart(),
+            .loadEventStart = self.loadEventStart(),
+            .domContentLoadedEventEnd = self.domContentLoadedEventEnd(),
+            .unloadEventStart = 0,
+            .redirectEnd = 0,
+            .domInteractive = self.domInteractive(),
+            .fetchStart = self.fetchStart(),
+            .domContentLoadedEventStart = self.domContentLoadedEventStart(),
+        };
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PerformanceTiming);
@@ -577,39 +1001,53 @@ pub const PerformanceTiming = struct {
             pub const name = "PerformanceTiming";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
         };
 
-        pub const navigationStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const unloadEventStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const unloadEventEnd = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const redirectStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const redirectEnd = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const fetchStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const domainLookupStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const domainLookupEnd = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const connectStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const connectEnd = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const secureConnectionStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const requestStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const responseStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const responseEnd = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const domLoading = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const domInteractive = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const domContentLoadedEventStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const domContentLoadedEventEnd = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const domComplete = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const loadEventStart = bridge.property(0.0, .{ .template = false, .readonly = true });
-        pub const loadEventEnd = bridge.property(0.0, .{ .template = false, .readonly = true });
+        const T = PerformanceTiming;
+
+        pub const navigationStart = bridge.accessor(T.navigationStart, null, .{});
+        pub const unloadEventStart = bridge.accessor(T.zero, null, .{});
+        pub const unloadEventEnd = bridge.accessor(T.zero, null, .{});
+        pub const redirectStart = bridge.accessor(T.zero, null, .{});
+        pub const redirectEnd = bridge.accessor(T.zero, null, .{});
+        pub const fetchStart = bridge.accessor(T.fetchStart, null, .{});
+        pub const domainLookupStart = bridge.accessor(T.domainLookupStart, null, .{});
+        pub const domainLookupEnd = bridge.accessor(T.domainLookupEnd, null, .{});
+        pub const connectStart = bridge.accessor(T.connectStart, null, .{});
+        pub const connectEnd = bridge.accessor(T.connectEnd, null, .{});
+        pub const secureConnectionStart = bridge.accessor(T.zero, null, .{});
+        pub const requestStart = bridge.accessor(T.requestStart, null, .{});
+        pub const responseStart = bridge.accessor(T.responseStart, null, .{});
+        pub const responseEnd = bridge.accessor(T.responseEnd, null, .{});
+        // Chrome's domLoading is when the parser started, which here is the
+        // moment the first response byte arrived.
+        pub const domLoading = bridge.accessor(T.responseStart, null, .{});
+        pub const domInteractive = bridge.accessor(T.domInteractive, null, .{});
+        pub const domContentLoadedEventStart = bridge.accessor(T.domContentLoadedEventStart, null, .{});
+        pub const domContentLoadedEventEnd = bridge.accessor(T.domContentLoadedEventEnd, null, .{});
+        pub const domComplete = bridge.accessor(T.domComplete, null, .{});
+        pub const loadEventStart = bridge.accessor(T.loadEventStart, null, .{});
+        pub const loadEventEnd = bridge.accessor(T.loadEventEnd, null, .{});
+        pub const toJSON = bridge.function(T.json, .{});
     };
 };
 
 // PerformanceNavigation implements the Navigation Timing Level 1 API.
 // https://www.w3.org/TR/navigation-timing/#sec-navigation-navigation-timing-interface
-// Stub implementation — returns 0 for type (TYPE_NAVIGATE) and 0 for redirectCount.
+// The four TYPE_ constants sit on the prototype next to the two attributes
+// (measured); Chrome does not put them on the interface object.
 pub const PerformanceNavigation = struct {
     // Padding to avoid zero-size struct, which causes identity_map pointer collisions.
     _pad: bool = false,
+
+    pub const Json = struct {
+        type: u16,
+        redirectCount: u32,
+    };
+
+    fn json(_: *const PerformanceNavigation) PerformanceNavigation.Json {
+        return .{ .type = 0, .redirectCount = 0 };
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PerformanceNavigation);
@@ -623,6 +1061,11 @@ pub const PerformanceNavigation = struct {
 
         pub const @"type" = bridge.property(0.0, .{ .template = false, .readonly = true });
         pub const redirectCount = bridge.property(0.0, .{ .template = false, .readonly = true });
+        pub const TYPE_NAVIGATE = bridge.property(0, .{ .template = false, .readonly = true });
+        pub const TYPE_RELOAD = bridge.property(1, .{ .template = false, .readonly = true });
+        pub const TYPE_BACK_FORWARD = bridge.property(2, .{ .template = false, .readonly = true });
+        pub const TYPE_RESERVED = bridge.property(255, .{ .template = false, .readonly = true });
+        pub const toJSON = bridge.function(PerformanceNavigation.json, .{});
     };
 };
 

@@ -284,10 +284,11 @@
 
 <script id=performance_timing_navigationStart>
   {
-    // navigationStart must be a number (sites access performance.timing.navigationStart)
+    // navigationStart is wall-clock epoch milliseconds, the way every browser
+    // reports it — a 0 here is the single loudest tell in Navigation Timing.
     const timing = performance.timing;
     testing.expectEqual('number', typeof timing.navigationStart);
-    testing.expectEqual(0, timing.navigationStart);
+    testing.expectEqual(true, timing.navigationStart > 1e12);
   }
 </script>
 
@@ -359,7 +360,7 @@
   {
     // The most commonly used property — must be a number (not undefined)
     testing.expectEqual('number', typeof performance.timing.navigationStart);
-    testing.expectEqual(0, performance.timing.navigationStart);
+    testing.expectEqual(true, performance.timing.navigationStart > 1e12);
   }
 </script>
 
@@ -601,6 +602,311 @@
       testing.expectEqual('observed-1', data.first_name);
       testing.expectEqual('mark', data.first_type);
       testing.expectEqual(true, data.same_observer);
+    });
+  }
+</script>
+
+<script id=navigation_timing_entry>
+  {
+    // Chrome always answers exactly one navigation entry, and hands back the
+    // same object every call (measured, win24-chrome.json).
+    const entries = performance.getEntriesByType('navigation');
+    testing.expectEqual(1, entries.length);
+    testing.expectEqual(true, entries[0] === performance.getEntriesByType('navigation')[0]);
+
+    const nav = entries[0];
+    testing.expectEqual('[object PerformanceNavigationTiming]', Object.prototype.toString.call(nav));
+    testing.expectEqual('PerformanceNavigationTiming', nav.constructor.name);
+    testing.expectEqual('navigation', nav.entryType);
+    testing.expectEqual('navigate', nav.type);
+    testing.expectEqual(0, nav.startTime);
+    testing.expectEqual(0, nav.redirectCount);
+    testing.expectEqual(0, nav.activationStart);
+    testing.expectEqual(200, nav.responseStatus);
+    testing.expectEqual('navigation', nav.initiatorType);
+    testing.expectEqual('text/html', nav.contentType);
+    testing.expectEqual(null, nav.notRestoredReasons);
+    testing.expectEqual(0, nav.serverTiming.length);
+    testing.expectEqual(true, nav.name.endsWith('/src/browser/tests/performance.html'));
+
+    // transferSize is the body plus Chrome's flat 300 bytes of header overhead.
+    testing.expectEqual(true, nav.encodedBodySize > 0);
+    testing.expectEqual(nav.decodedBodySize, nav.encodedBodySize);
+    testing.expectEqual(nav.encodedBodySize + 300, nav.transferSize);
+
+    // The milestones are ordered, and they are real: the response cannot start
+    // before the fetch did, and the DOM cannot be interactive before the body
+    // arrived.
+    testing.expectEqual(true, nav.fetchStart >= 0);
+    testing.expectEqual(true, nav.requestStart >= nav.fetchStart);
+    testing.expectEqual(true, nav.responseStart >= nav.requestStart);
+    testing.expectEqual(true, nav.responseEnd >= nav.responseStart);
+
+    // A synchronous script runs mid-parse, so the DOM milestones have not
+    // happened yet and read 0 — the same thing they read in Chrome at this
+    // point. They are checked after load below.
+    testing.expectEqual(0, nav.domInteractive);
+    testing.expectEqual(0, nav.loadEventEnd);
+
+    // The entry is at the head of the buffer, which is where Chrome has it.
+    testing.expectEqual('navigation', performance.getEntries()[0].entryType);
+    testing.expectEqual(1, performance.getEntriesByName(nav.name, 'navigation').length);
+  }
+</script>
+
+<script id=navigation_timing_chain>
+  {
+    const nav = performance.getEntriesByType('navigation')[0];
+    testing.expectEqual(true, nav instanceof PerformanceNavigationTiming);
+    testing.expectEqual(true, nav instanceof PerformanceResourceTiming);
+    testing.expectEqual(true, nav instanceof PerformanceEntry);
+
+    const chain = [];
+    let p = Object.getPrototypeOf(nav);
+    while (p && p !== Object.prototype) {
+      chain.push(Object.getOwnPropertyDescriptor(p, Symbol.toStringTag).value);
+      p = Object.getPrototypeOf(p);
+    }
+    testing.expectEqual(
+      ['PerformanceNavigationTiming', 'PerformanceResourceTiming', 'PerformanceEntry'],
+      chain,
+    );
+  }
+</script>
+
+<script id=navigation_timing_to_json>
+  {
+    // The 47 keys Chrome's navigation toJSON() answers, in Chrome's order
+    // (win25-chrome.json).
+    const json = performance.getEntriesByType('navigation')[0].toJSON();
+    testing.expectEqual([
+      'name', 'entryType', 'startTime', 'duration', 'initiatorType',
+      'deliveryType', 'nextHopProtocol', 'renderBlockingStatus', 'contentType',
+      'contentEncoding', 'workerStart', 'workerRouterEvaluationStart',
+      'workerCacheLookupStart', 'workerMatchedSourceType',
+      'workerFinalSourceType', 'redirectStart', 'redirectEnd', 'fetchStart',
+      'domainLookupStart', 'domainLookupEnd', 'connectStart',
+      'secureConnectionStart', 'connectEnd', 'requestStart', 'responseStart',
+      'firstInterimResponseStart', 'finalResponseHeadersStart', 'responseEnd',
+      'transferSize', 'encodedBodySize', 'decodedBodySize', 'responseStatus',
+      'serverTiming', 'unloadEventStart', 'unloadEventEnd', 'domInteractive',
+      'domContentLoadedEventStart', 'domContentLoadedEventEnd', 'domComplete',
+      'loadEventStart', 'loadEventEnd', 'type', 'redirectCount',
+      'activationStart', 'criticalCHRestart', 'notRestoredReasons',
+      'confidence',
+    ], Object.keys(json));
+    testing.expectEqual('non-blocking', json.renderBlockingStatus);
+    testing.expectEqual('', json.deliveryType);
+    testing.expectEqual('', json.contentEncoding);
+  }
+</script>
+
+<script id=navigation_timing_confidence>
+  {
+    const c = performance.getEntriesByType('navigation')[0].confidence;
+    testing.expectEqual('[object PerformanceTimingConfidence]', Object.prototype.toString.call(c));
+    testing.expectEqual('high', c.value);
+    testing.expectEqual(0.4994798, c.randomizedTriggerRate);
+    testing.expectEqual('{"randomizedTriggerRate":0.4994798,"value":"high"}', JSON.stringify(c));
+  }
+</script>
+
+<script id=entry_to_json>
+  {
+    // PerformanceEntry.toJSON() is four keys, and the subclasses that add
+    // nothing of their own inherit it verbatim — a mark's detail is not in it.
+    const mark = performance.mark('json-mark', { detail: { a: 1 } });
+    testing.expectEqual(['name', 'entryType', 'startTime', 'duration'], Object.keys(mark.toJSON()));
+    testing.expectEqual(0, PerformanceEntry.prototype.toJSON.length);
+    const parsed = JSON.parse(JSON.stringify(mark));
+    testing.expectEqual('json-mark', parsed.name);
+    testing.expectEqual('mark', parsed.entryType);
+    testing.expectEqual(0, parsed.duration);
+    testing.expectEqual(undefined, parsed.detail);
+  }
+</script>
+
+<script id=performance_mark_constructor>
+  {
+    testing.expectEqual(1, PerformanceMark.length);
+
+    // Unlike performance.mark(), the constructor does not add the mark to the
+    // entry buffer (measured).
+    const m = new PerformanceMark('ctor-mark');
+    testing.expectEqual('mark', m.entryType);
+    testing.expectEqual('ctor-mark', m.name);
+    testing.expectEqual(0, m.duration);
+    testing.expectEqual(true, m.startTime > 0);
+    testing.expectEqual(null, m.detail);
+    testing.expectEqual(0, performance.getEntriesByName('ctor-mark').length);
+
+    const withOptions = new PerformanceMark('ctor-mark-b', { startTime: 12.5, detail: { a: 1 } });
+    testing.expectEqual(12.5, withOptions.startTime);
+    testing.expectEqual(1, withOptions.detail.a);
+
+    testing.expectError(
+      "TypeError: Failed to construct 'PerformanceMark': 1 argument required, but only 0 present.",
+      () => new PerformanceMark(),
+    );
+    testing.expectError(
+      "TypeError: Failed to construct 'PerformanceMark': 'neg' cannot have a negative start time.",
+      () => new PerformanceMark('neg', { startTime: -1 }),
+    );
+  }
+</script>
+
+<script id=performance_memory>
+  {
+    const m = performance.memory;
+    testing.expectEqual('[object MemoryInfo]', Object.prototype.toString.call(m));
+    // Chrome has no MemoryInfo global, so the instance's constructor is Object.
+    testing.expectEqual('undefined', typeof window.MemoryInfo);
+    testing.expectEqual('Object', m.constructor.name);
+    testing.expectEqual('{}', JSON.stringify(m));
+    // A fresh object every read (measured: memory !== memory).
+    testing.expectEqual(false, performance.memory === performance.memory);
+    testing.expectEqual(
+      ['totalJSHeapSize', 'usedJSHeapSize', 'jsHeapSizeLimit'],
+      Object.getOwnPropertyNames(Object.getPrototypeOf(m)),
+    );
+    testing.expectEqual(true, m.jsHeapSizeLimit > m.totalJSHeapSize);
+    testing.expectEqual(true, m.totalJSHeapSize >= m.usedJSHeapSize);
+    testing.expectEqual(true, m.usedJSHeapSize > 0);
+  }
+</script>
+
+<script id=performance_host_members>
+  {
+    testing.expectEqual(0, performance.interactionCount);
+    testing.expectEqual(null, performance.onresourcetimingbufferfull);
+    const fn = () => {};
+    performance.onresourcetimingbufferfull = fn;
+    testing.expectEqual(true, performance.onresourcetimingbufferfull === fn);
+    performance.onresourcetimingbufferfull = null;
+
+    testing.expectEqual(undefined, performance.clearResourceTimings());
+    // Clearing resource timings leaves the navigation entry alone.
+    testing.expectEqual(1, performance.getEntriesByType('navigation').length);
+
+    testing.expectEqual(['timeOrigin', 'timing', 'navigation'], Object.keys(performance.toJSON()));
+    testing.expectEqual(performance.timeOrigin, performance.toJSON().timeOrigin);
+  }
+</script>
+
+<script id=performance_timing_globals>
+  {
+    // The shape-only half: eleven interfaces nothing here ever instantiates,
+    // all refusing construction with Chrome's wording (win20-chrome.json).
+    const shapeOnly = {
+      PerformanceElementTiming: ['renderTime', 'loadTime', 'intersectionRect', 'identifier', 'naturalWidth', 'naturalHeight', 'id', 'element', 'url', 'toJSON', 'paintTime', 'presentationTime', 'constructor'],
+      PerformanceEventTiming: ['processingStart', 'processingEnd', 'cancelable', 'target', 'interactionId', 'toJSON', 'constructor'],
+      PerformanceLongTaskTiming: ['attribution', 'toJSON', 'constructor'],
+      PerformancePaintTiming: ['paintTime', 'presentationTime', 'toJSON', 'constructor'],
+      PerformanceServerTiming: ['name', 'duration', 'description', 'toJSON', 'constructor'],
+      LargestContentfulPaint: ['renderTime', 'loadTime', 'size', 'id', 'url', 'element', 'toJSON', 'paintTime', 'presentationTime', 'constructor'],
+      LayoutShift: ['value', 'hadRecentInput', 'lastInputTime', 'sources', 'toJSON', 'constructor'],
+      LayoutShiftAttribution: ['node', 'previousRect', 'currentRect', 'toJSON', 'constructor'],
+      TaskAttributionTiming: ['containerType', 'containerSrc', 'containerId', 'containerName', 'toJSON', 'constructor'],
+      VisibilityStateEntry: ['constructor'],
+      PerformanceTimingConfidence: ['randomizedTriggerRate', 'value', 'toJSON', 'constructor'],
+    };
+
+    for (const [name, protoKeys] of Object.entries(shapeOnly)) {
+      const C = window[name];
+      testing.expectEqual('function', typeof C);
+      testing.expectEqual(0, C.length);
+      testing.expectEqual(name, C.name);
+      testing.expectEqual(protoKeys, Object.getOwnPropertyNames(C.prototype));
+      testing.expectEqual(
+        name,
+        Object.getOwnPropertyDescriptor(C.prototype, Symbol.toStringTag).value,
+      );
+      testing.expectError(
+        `TypeError: Failed to construct '${name}': Illegal constructor`,
+        () => new C(),
+      );
+    }
+
+    // The four that subclass PerformanceEntry say so.
+    for (const name of ['PerformanceElementTiming', 'PerformanceEventTiming', 'PerformanceLongTaskTiming', 'PerformancePaintTiming', 'LargestContentfulPaint', 'LayoutShift', 'TaskAttributionTiming', 'VisibilityStateEntry']) {
+      testing.expectEqual(
+        PerformanceEntry.prototype,
+        Object.getPrototypeOf(window[name].prototype),
+      );
+    }
+    // ...and the three that do not are direct Object subclasses.
+    for (const name of ['PerformanceServerTiming', 'LayoutShiftAttribution', 'PerformanceTimingConfidence']) {
+      testing.expectEqual(
+        Object.prototype,
+        Object.getPrototypeOf(window[name].prototype),
+      );
+    }
+  }
+</script>
+
+<script id=navigation_timing_after_load type=module>
+  {
+    // The same entry object a mid-parse script grabbed keeps filling in, so
+    // the DOM milestones are only readable once the load event has fired.
+    const state = await testing.async();
+    const early = performance.getEntriesByType('navigation')[0];
+    if (document.readyState === 'complete') {
+      state.resolve(true);
+    } else {
+      window.addEventListener('load', () => state.resolve(true));
+    }
+
+    await state.done(() => {
+      const nav = performance.getEntriesByType('navigation')[0];
+      testing.expectEqual(true, nav === early);
+      testing.expectEqual(true, nav.domInteractive >= nav.responseEnd);
+      testing.expectEqual(true, nav.domContentLoadedEventStart >= nav.domInteractive);
+      testing.expectEqual(true, nav.domContentLoadedEventEnd >= nav.domContentLoadedEventStart);
+      testing.expectEqual(true, nav.domComplete >= nav.domContentLoadedEventEnd);
+      testing.expectEqual(true, nav.loadEventStart >= nav.domComplete);
+      testing.expectEqual(nav.loadEventStart, nav.loadEventEnd);
+      // Chrome reports duration === loadEventEnd on the navigation entry.
+      testing.expectEqual(nav.loadEventEnd, nav.duration);
+
+      // Navigation Timing Level 1 reports the same milestones as wall-clock
+      // epoch milliseconds, not offsets (Chrome's navigationStart read 1.7e12).
+      const t = performance.timing;
+      testing.expectEqual(true, t.navigationStart > 1e12);
+      testing.expectEqual(true, t.fetchStart >= t.navigationStart);
+      testing.expectEqual(true, t.responseEnd >= t.responseStart);
+      testing.expectEqual(true, t.loadEventEnd >= t.domComplete);
+      // Never navigated away from, never redirected: Chrome leaves these 0
+      // rather than reporting the origin.
+      testing.expectEqual(0, t.unloadEventStart);
+      testing.expectEqual(0, t.unloadEventEnd);
+      testing.expectEqual(0, t.redirectStart);
+      testing.expectEqual(0, t.redirectEnd);
+      testing.expectEqual(0, t.secureConnectionStart);
+      testing.expectEqual(true, Number.isInteger(t.navigationStart));
+
+      // Chrome's toJSON order here is V8's hash order for the object, not the
+      // prototype's order and not alphabetical (measured).
+      testing.expectEqual([
+        'connectStart', 'secureConnectionStart', 'unloadEventEnd',
+        'domainLookupStart', 'domainLookupEnd', 'responseStart', 'connectEnd',
+        'responseEnd', 'requestStart', 'domLoading', 'redirectStart',
+        'loadEventEnd', 'domComplete', 'navigationStart', 'loadEventStart',
+        'domContentLoadedEventEnd', 'unloadEventStart', 'redirectEnd',
+        'domInteractive', 'fetchStart', 'domContentLoadedEventStart',
+      ], Object.keys(t.toJSON()));
+
+      const n = performance.navigation;
+      testing.expectEqual(0, n.type);
+      testing.expectEqual(0, n.redirectCount);
+      testing.expectEqual(0, n.TYPE_NAVIGATE);
+      testing.expectEqual(1, n.TYPE_RELOAD);
+      testing.expectEqual(2, n.TYPE_BACK_FORWARD);
+      testing.expectEqual(255, n.TYPE_RESERVED);
+      testing.expectEqual(['type', 'redirectCount'], Object.keys(n.toJSON()));
+      testing.expectEqual([
+        'type', 'redirectCount', 'TYPE_NAVIGATE', 'TYPE_RELOAD',
+        'TYPE_BACK_FORWARD', 'TYPE_RESERVED', 'toJSON', 'constructor',
+      ], Object.getOwnPropertyNames(Object.getPrototypeOf(n)));
     });
   }
 </script>

@@ -94,7 +94,12 @@ pub fn observe(self: *PerformanceObserver, maybe_options: ?ObserveOptions, exec:
             break :blk entry_types;
         }
 
-        return error.TypeError;
+        const isolate = exec.js.isolate;
+        _ = isolate.throwException(isolate.createTypeError(
+            "Failed to execute 'observe' on 'PerformanceObserver': " ++
+                "An observe() call must include either entryTypes or type arguments.",
+        ));
+        return error.JsException;
     };
 
     // Update entries.
@@ -156,8 +161,25 @@ pub fn takeRecords(self: *PerformanceObserver) ![]*Performance.Entry {
     return records;
 }
 
+/// Chrome's thirteen, in Chrome's order (measured, win24-chrome.json). Note
+/// what is *not* here: `taskattribution` is a real entryType with a real
+/// interface, but Chrome leaves it off this list.
 pub fn getSupportedEntryTypes() []const []const u8 {
-    return &.{ "mark", "measure" };
+    return &.{
+        "element",
+        "event",
+        "first-input",
+        "largest-contentful-paint",
+        "layout-shift",
+        "long-animation-frame",
+        "longtask",
+        "mark",
+        "measure",
+        "navigation",
+        "paint",
+        "resource",
+        "visibility-state",
+    };
 }
 
 /// Returns true if observer interested with given entry.
@@ -199,8 +221,10 @@ pub const JsApi = struct {
 
     pub const constructor = bridge.constructor(PerformanceObserver.init, .{});
 
-    pub const observe = bridge.function(PerformanceObserver.observe, .{});
+    // Chrome's prototype order (measured), which is not the order a reader
+    // would pick: disconnect first, then observe.
     pub const disconnect = bridge.function(PerformanceObserver.disconnect, .{});
+    pub const observe = bridge.function(PerformanceObserver.observe, .{});
     pub const takeRecords = bridge.function(PerformanceObserver.takeRecords, .{});
     pub const supportedEntryTypes = bridge.accessor(PerformanceObserver.getSupportedEntryTypes, null, .{ .static = true });
 };

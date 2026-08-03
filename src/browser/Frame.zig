@@ -735,6 +735,13 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
     self._load_state = .parsing;
     self._last_navigate_error = null;
 
+    // Chrome always has exactly one PerformanceNavigationTiming entry, so the
+    // record starts here and the milestones below fill it in.
+    self.performance().navigationStarted(try self.arena.dupe(u8, request_url), switch (opts.reason) {
+        .history => "back_forward",
+        else => "navigate",
+    });
+
     log.info(.frame, "navigate", .{
         .url = request_url,
         .method = opts.method,
@@ -1184,6 +1191,7 @@ pub fn documentIsLoaded(self: *Frame) void {
 }
 
 pub fn _documentIsLoaded(self: *Frame) !void {
+    self.performance().navigationInteractive();
     try self.dispatchReadyStateChange();
 
     const event = try Event.initTrusted(.wrap("DOMContentLoaded"), .{ .bubbles = true }, self._page);
@@ -1191,6 +1199,7 @@ pub fn _documentIsLoaded(self: *Frame) !void {
         self.document.asEventTarget(),
         event,
     );
+    self.performance().navigationContentLoaded();
 
     self._session.notification.dispatch(.frame_dom_content_loaded, &.{
         .req_id = self._req_id,
@@ -1287,6 +1296,7 @@ pub fn documentIsComplete(self: *Frame) void {
 
 fn _documentIsComplete(self: *Frame) !void {
     self.document._ready_state = .complete;
+    self.performance().navigationComplete();
     // chrome.csi() and chrome.loadTimes() both report when the load event
     // fired; recording it here is what keeps those values real instead of
     // invented.
@@ -1574,6 +1584,24 @@ fn isUtf16Encoding(charset: []const u8) bool {
 fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
     var self: *Frame = @ptrCast(@alignCast(transfer.req.ctx));
 
+    const perf = self.performance();
+    if (self._parse_state == .pre) {
+        // Navigation Timing's contentType is the MIME essence, not the raw
+        // header: Chrome answered "text/html" for a `text/html; charset=utf-8`
+        // response (win20-chrome.json).
+        var essence: []const u8 = "";
+        if (transfer.contentType()) |ct| {
+            const end = std.mem.indexOfScalar(u8, ct, ';') orelse ct.len;
+            essence = try std.ascii.allocLowerString(self.arena, std.mem.trim(u8, ct[0..end], " \t"));
+        }
+        perf.navigationResponseStarted(
+            transfer.responseStatus() orelse 0,
+            essence,
+            transfer.nextHopProtocol(),
+        );
+    }
+    perf.navigationBodyChunk(data.len);
+
     if (self._parse_state == .pre) {
         // we lazily do this, because we might need the first chunk of data
         // to sniff the content type
@@ -1689,6 +1717,8 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
 
 fn frameDoneCallback(ctx: *anyopaque) !void {
     var self: *Frame = @ptrCast(@alignCast(ctx));
+
+    self.performance().navigationResponseEnded();
 
     if (comptime IS_DEBUG) {
         log.debug(.frame, "navigate done", .{ .type = self._type, .url = self.url });

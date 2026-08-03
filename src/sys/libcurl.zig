@@ -243,6 +243,7 @@ pub const CurlInfo = enum(c.CURLINFO) {
     redirect_count = c.CURLINFO_REDIRECT_COUNT,
     response_code = c.CURLINFO_RESPONSE_CODE,
     connect_code = c.CURLINFO_HTTP_CONNECTCODE,
+    http_version = c.CURLINFO_HTTP_VERSION,
     total_time_t = c.CURLINFO_TOTAL_TIME_T,
     num_connects = c.CURLINFO_NUM_CONNECTS,
     conn_id = c.CURLINFO_CONN_ID,
@@ -647,6 +648,18 @@ pub fn curl_easy_setopt(easy: *Curl, comptime option: CurlOption, value: anytype
     return errorCheck(code);
 }
 
+/// Turns a CURLINFO_HTTP_VERSION value into the ALPN-style label Navigation
+/// and Resource Timing report as `nextHopProtocol`.
+pub fn httpVersionLabel(version: c_long) []const u8 {
+    return switch (version) {
+        c.CURL_HTTP_VERSION_1_0 => "http/1.0",
+        c.CURL_HTTP_VERSION_1_1 => "http/1.1",
+        c.CURL_HTTP_VERSION_2_0 => "h2",
+        c.CURL_HTTP_VERSION_3 => "h3",
+        else => "",
+    };
+}
+
 pub fn curl_easy_getinfo(easy: *Curl, comptime info: CurlInfo, out: anytype) Error!void {
     if (@typeInfo(@TypeOf(out)) != .pointer) {
         @compileError("curl_easy_getinfo out must be a pointer, got " ++ @typeName(@TypeOf(out)));
@@ -660,6 +673,7 @@ pub fn curl_easy_getinfo(easy: *Curl, comptime info: CurlInfo, out: anytype) Err
         },
         .response_code,
         .connect_code,
+        .http_version,
         .redirect_count,
         .num_connects,
         => blk: {

@@ -2720,6 +2720,7 @@ pub const Transfer = struct {
             .url = url,
             .status = status,
             .redirect_count = self._redirect_count,
+            .next_hop_protocol = conn.getHttpVersion() catch "",
         };
 
         if (conn.getResponseHeader("content-type", 0)) |ct| {
@@ -2980,6 +2981,11 @@ pub const Transfer = struct {
             return rh.contentType();
         }
         return null;
+    }
+
+    pub fn nextHopProtocol(self: *const Transfer) []const u8 {
+        const rh = self.res.header orelse return "";
+        return rh.next_hop_protocol;
     }
 
     pub fn redirectCount(self: *const Transfer) ?u32 {
