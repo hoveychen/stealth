@@ -940,3 +940,196 @@
     msg(() => new AudioProcessingEvent('a', { playbackTime: 1, inputBuffer: 7, outputBuffer: buf })));
 }
 </script>
+
+<script id=audio_offline_context>
+{
+  // OfflineAudioContext's shape and its two constructor overloads. Every value
+  // and message is Chrome 150's, measured on a headed window over
+  // http://localhost (win15/win17/win18/win19-chrome.json).
+  const msg = (fn) => { try { const v = fn(); return `no throw: ${v}`; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+
+  testing.expectEqual(1, OfflineAudioContext.length);
+  testing.expectEqual('oncomplete length resume startRendering suspend constructor',
+                      proto(OfflineAudioContext));
+  testing.expectEqual(true, Object.getPrototypeOf(OfflineAudioContext.prototype) === BaseAudioContext.prototype);
+  testing.expectEqual(1, OfflineAudioContext.prototype.suspend.length);
+  testing.expectEqual(0, OfflineAudioContext.prototype.resume.length);
+  testing.expectEqual(0, OfflineAudioContext.prototype.startRendering.length);
+
+  const oc = new OfflineAudioContext(2, 256, 44100);
+  testing.expectEqual('[object OfflineAudioContext]', Object.prototype.toString.call(oc));
+  testing.expectEqual(true, oc instanceof BaseAudioContext);
+  testing.expectEqual('suspended', oc.state);
+  testing.expectEqual(256, oc.length);
+  testing.expectEqual(44100, oc.sampleRate);
+  testing.expectEqual(0, oc.currentTime);
+  testing.expectEqual(null, oc.oncomplete);
+  // Present on BaseAudioContext, absent on the offline one: no output device to
+  // describe, no device to close, and the three createMedia* are AudioContext's.
+  testing.expectEqual(false, 'baseLatency' in oc);
+  testing.expectEqual(false, 'close' in oc);
+  testing.expectEqual(false, 'createMediaElementSource' in oc);
+  testing.expectEqual(false, 'createMediaStreamDestination' in oc);
+  testing.expectEqual(false, 'createMediaStreamSource' in oc);
+  testing.expectEqual(true, 'onstatechange' in oc);
+  testing.expectEqual(true, 'audioWorklet' in oc);
+  testing.expectEqual('[object AudioListener]', Object.prototype.toString.call(oc.listener));
+
+  // The destination takes the context's channel count as both its count and its
+  // ceiling — but is not pinned the way a real-time destination is.
+  testing.expectEqual(2, oc.destination.channelCount);
+  testing.expectEqual(2, oc.destination.maxChannelCount);
+  testing.expectEqual('explicit', oc.destination.channelCountMode);
+  testing.expectEqual(1, new OfflineAudioContext(1, 256, 44100).destination.maxChannelCount);
+  testing.expectEqual(32, new OfflineAudioContext(32, 256, 44100).destination.channelCount);
+  testing.expectEqual('no throw: 1', msg(() => {
+    const o = new OfflineAudioContext(2, 256, 44100);
+    o.destination.channelCount = 1;
+    return o.destination.channelCount;
+  }));
+  testing.expectEqual('no throw: 3', msg(() => {
+    const o = new OfflineAudioContext(2, 256, 44100);
+    o.destination.channelCount = 3;
+    return o.destination.channelCount;
+  }));
+  // A node built on it belongs to it.
+  testing.expectEqual(true, oc.createGain().context === oc);
+
+  // Three positional arguments, or one dictionary. Nothing else.
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioContext': 1 argument required, but only 0 present.",
+    msg(() => new OfflineAudioContext()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioContext': The provided value is not of type 'OfflineAudioContextOptions'.",
+    msg(() => new OfflineAudioContext(1)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioContext': Overload resolution failed.",
+    msg(() => new OfflineAudioContext(1, 2)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioContext': Please use the 'new' operator, " +
+    'this DOM object constructor cannot be called as a function.',
+    msg(() => OfflineAudioContext(1, 256, 8000)));
+
+  // The dictionary form: numberOfChannels defaults to 1, the other two are
+  // required, and an unknown member is ignored.
+  testing.expectEqual('no throw: 1/8000/64', msg(() => {
+    const o = new OfflineAudioContext({ numberOfChannels: 1, length: 64, sampleRate: 8000 });
+    return `${o.destination.channelCount}/${o.sampleRate}/${o.length}`;
+  }));
+  testing.expectEqual(1, new OfflineAudioContext({ length: 64, sampleRate: 8000 }).destination.channelCount);
+  testing.expectEqual(64, new OfflineAudioContext({ length: 64, sampleRate: 8000, nope: 1 }).length);
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioContext': Failed to read the 'length' property " +
+    "from 'OfflineAudioContextOptions': Required member is undefined.",
+    msg(() => new OfflineAudioContext({ sampleRate: 8000 })));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioContext': Failed to read the 'sampleRate' property " +
+    "from 'OfflineAudioContextOptions': Required member is undefined.",
+    msg(() => new OfflineAudioContext({ length: 64 })));
+
+  // Ranges, checked in Chrome's order: channels, length, sample rate.
+  testing.expectEqual(
+    "NotSupportedError: Failed to construct 'OfflineAudioContext': The number of channels provided (33) " +
+    'is outside the range [1, 32].',
+    msg(() => new OfflineAudioContext(33, 256, 44100)));
+  testing.expectEqual(
+    "NotSupportedError: Failed to construct 'OfflineAudioContext': The number of channels provided (0) " +
+    'is outside the range [1, 32].',
+    msg(() => new OfflineAudioContext({ numberOfChannels: 0, length: 64, sampleRate: 8000 })));
+  testing.expectEqual(
+    "NotSupportedError: Failed to construct 'OfflineAudioContext': The number of frames provided (0) " +
+    'is less than the minimum bound (1).',
+    msg(() => new OfflineAudioContext(1, 0, 44100)));
+  testing.expectEqual(
+    "NotSupportedError: Failed to construct 'OfflineAudioContext': The sampleRate provided (1) " +
+    'is outside the range [3000, 768000].',
+    msg(() => new OfflineAudioContext(1, 256, 1)));
+  testing.expectEqual(
+    "NotSupportedError: Failed to construct 'OfflineAudioContext': The sampleRate provided (2999) " +
+    'is outside the range [3000, 768000].',
+    msg(() => new OfflineAudioContext(1, 256, 2999)));
+  testing.expectEqual(
+    "NotSupportedError: Failed to construct 'OfflineAudioContext': The sampleRate provided (768001) " +
+    'is outside the range [3000, 768000].',
+    msg(() => new OfflineAudioContext(1, 256, 768001)));
+  testing.expectEqual(3000, new OfflineAudioContext(1, 256, 3000).sampleRate);
+  // A fractional frame count truncates.
+  testing.expectEqual(256, new OfflineAudioContext(1, 256.7, 8000).length);
+}
+</script>
+
+<script id=audio_offline_render type=module>
+{
+  // Rendering. The graph is empty, so the buffer is silent — which is exactly
+  // what Chrome renders for an unconnected destination (measured: allZero true).
+  // Everything around it is measured too: two state transitions, a clock that
+  // lands on length/sampleRate, a trusted and *bubbling* `complete` event, and a
+  // second startRendering() refused for being in a stopped state.
+  const state = await testing.async();
+  const settle = (p) => p.then((v) => v, (e) => `rejected:${e.name}:${e.message}`);
+  const race = (p) => Promise.race([
+    p.then(() => 'resolved', (e) => `rejected:${e.name}`),
+    new Promise((r) => setTimeout(() => r('pending'), 100)),
+  ]);
+
+  const oc = new OfflineAudioContext(2, 256, 44100);
+  const seen = [];
+  oc.onstatechange = () => seen.push(oc.state);
+  let complete = 'never fired';
+  oc.oncomplete = (e) => {
+    complete = [
+      e.type, Object.prototype.toString.call(e), Object.prototype.toString.call(e.renderedBuffer),
+      e.renderedBuffer.length, e.renderedBuffer.numberOfChannels, e.renderedBuffer.sampleRate,
+      e.bubbles, e.isTrusted,
+    ].join('/');
+  };
+
+  const buffer = await settle(oc.startRendering());
+  const after = { state: oc.state, currentTime: oc.currentTime, seen: seen.join(',') };
+  const twice = await settle(oc.startRendering());
+
+  // resume() before a render rejects; suspend() in range never settles, and out
+  // of range rejects.
+  const fresh = new OfflineAudioContext(1, 256, 8000);
+  const resumed = await settle(fresh.resume());
+  const suspendPending = await race(new OfflineAudioContext(1, 256, 8000).suspend(0));
+  const negative = await settle(new OfflineAudioContext(1, 256, 8000).suspend(-1));
+  const pastEnd = await settle(new OfflineAudioContext(1, 256, 8000).suspend(99));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object AudioBuffer]', Object.prototype.toString.call(buffer));
+    testing.expectEqual(256, buffer.length);
+    testing.expectEqual(2, buffer.numberOfChannels);
+    testing.expectEqual(44100, buffer.sampleRate);
+    testing.expectEqual(true, [...buffer.getChannelData(0)].every((v) => v === 0));
+    testing.expectEqual('closed', after.state);
+    testing.expectEqual(256 / 44100, after.currentTime);
+    testing.expectEqual('running,closed', after.seen);
+    testing.expectEqual(
+      'complete/[object OfflineAudioCompletionEvent]/[object AudioBuffer]/256/2/44100/true/true',
+      complete);
+    testing.expectEqual(
+      "rejected:InvalidStateError:Failed to execute 'startRendering' on 'OfflineAudioContext': " +
+      'cannot call startRendering on an OfflineAudioContext in a stopped state.',
+      twice);
+    testing.expectEqual(
+      "rejected:InvalidStateError:Failed to execute 'resume' on 'OfflineAudioContext': " +
+      'cannot resume an offline context that has not started',
+      resumed);
+    testing.expectEqual('pending', suspendPending);
+    testing.expectEqual(
+      "rejected:InvalidStateError:Failed to execute 'suspend' on 'OfflineAudioContext': " +
+      'negative suspend time (-1) is not allowed',
+      negative);
+    // The duration in this message is computed in single precision, which is why
+    // 256 frames at 8000 Hz reads 0.03200000151991844 rather than 0.032.
+    testing.expectEqual(
+      "rejected:InvalidStateError:Failed to execute 'suspend' on 'OfflineAudioContext': " +
+      'cannot schedule a suspend at 99 seconds because it is greater than or equal to the total ' +
+      'render duration of 256 frames (0.03200000151991844 seconds)',
+      pastEnd);
+  });
+}
+</script>

@@ -1277,6 +1277,7 @@ pub const PageJsApis = flattenTypes(&.{
     // Web Audio: window-only in Chrome (no AudioContext in workers).
     @import("../webapi/audio/BaseAudioContext.zig"),
     @import("../webapi/audio/AudioContext.zig"),
+    @import("../webapi/audio/OfflineAudioContext.zig"),
     @import("../webapi/audio/AudioNode.zig"),
     @import("../webapi/audio/AudioDestinationNode.zig"),
     @import("../webapi/audio/AnalyserNode.zig"),

@@ -29,12 +29,17 @@ pub const Proto = AudioNode;
 
 _proto: *AudioNode,
 
+// Two on a real-time context, and the context's own numberOfChannels on an
+// offline one (measured: `new OfflineAudioContext(1, 256, 44100)` reports
+// maxChannelCount 1, and a 32-channel one reports 32).
+_max_channel_count: u32 = 2,
+
 pub fn asAudioNode(self: *AudioDestinationNode) *AudioNode {
     return self._proto;
 }
 
-pub fn getMaxChannelCount(_: *const AudioDestinationNode) u32 {
-    return 2;
+pub fn getMaxChannelCount(self: *const AudioDestinationNode) u32 {
+    return self._max_channel_count;
 }
 
 pub const JsApi = struct {

@@ -58,12 +58,17 @@ _destination: ?*AudioDestinationNode = null,
 _listener: ?*AudioListener = null,
 _on_state_change: ?js.Function.Global = null,
 
+// Zero on a real-time context, which never starts; an offline one lands on
+// length/sampleRate once it has rendered (measured).
+_current_time: f64 = 0,
+
 // Built on first read and kept, because Chrome hands back the same object every
 // time (measured: ctx.audioWorklet === ctx.audioWorklet).
 _audio_worklet: ?*worklet.AudioWorklet = null,
 
 pub const Type = union(enum) {
     audio_context: *@import("AudioContext.zig"),
+    offline_audio_context: *@import("OfflineAudioContext.zig"),
 };
 
 pub const State = enum {
@@ -84,13 +89,12 @@ pub fn getState(self: *const BaseAudioContext) []const u8 {
     return @tagName(self._state);
 }
 
-// Always zero, which is what Chrome reports for a context that never started —
-// measured on a headed window as well as a headless one, because the reason is
-// the autoplay policy and not the absence of an audio device. The clock would
-// advance in render-quantum steps once a context ran; nothing here can start one,
-// so there is no clock to advance.
-pub fn getCurrentTime(_: *const BaseAudioContext) f64 {
-    return 0;
+// Zero on a real-time context, which never starts — measured on a headed window
+// as well as a headless one, because the reason is the autoplay policy and not
+// the absence of an audio device. An OfflineAudioContext does move it: rendering
+// puts it at length/sampleRate in one step, which is where Chrome leaves it too.
+pub fn getCurrentTime(self: *const BaseAudioContext) f64 {
+    return self._current_time;
 }
 
 pub fn getDestination(self: *const BaseAudioContext) *AudioDestinationNode {

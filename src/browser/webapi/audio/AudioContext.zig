@@ -17,12 +17,9 @@
 // renders a verdict, and every other script that reads an audio fingerprint
 // reads it from here.
 //
-// Deliberately *not* implemented: OfflineAudioContext. Rendering it would mean
-// either real DSP (which this engine has no audio thread for) or a fabricated
-// constant buffer — and a constant audio fingerprint is a stronger bot signal
-// than a missing OfflineAudioContext, since every real Chrome on the same build
-// and the same hardware family shares a handful of known-good hashes and a
-// made-up one matches none of them.
+// OfflineAudioContext lives next door, and the reasoning behind what its
+// startRendering() does — silence, which is what Chrome renders for an
+// unconnected destination — is in its own header.
 //
 // The values are Chrome 150's, measured (see tools/fingerprint/README.md):
 // sampleRate 48000, baseLatency 256/48000, outputLatency 0, sinkId "", initial
