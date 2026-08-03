@@ -67,6 +67,8 @@ pub const Type = union(enum) {
     base_audio_context: *@import("audio/BaseAudioContext.zig"),
     speech_synthesis: *@import("speech/SpeechSynthesis.zig"),
     speech_synthesis_utterance: *@import("speech/SpeechSynthesisUtterance.zig"),
+    media_stream: *@import("media/streams.zig").MediaStream,
+    media_stream_track: *@import("media/streams.zig").MediaStreamTrack,
     media_source: *@import("media/MediaSource.zig"),
     media_recorder: *@import("media/MediaRecorder.zig"),
     rtc_peer_connection: *@import("webrtc/RTCPeerConnection.zig"),
@@ -298,6 +300,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .bluetooth_gatt_characteristic => writer.writeAll("<BluetoothRemoteGATTCharacteristic>"),
         .hid_device => writer.writeAll("<HIDDevice>"),
         .serial_port => writer.writeAll("<SerialPort>"),
+        .media_stream => writer.writeAll("<MediaStream>"),
+        .media_stream_track => writer.writeAll("<MediaStreamTrack>"),
     };
 }
 
@@ -359,6 +363,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .bluetooth_gatt_characteristic => return "[object BluetoothRemoteGATTCharacteristic]",
         .hid_device => return "[object HIDDevice]",
         .serial_port => return "[object SerialPort]",
+        .media_stream => return "[object MediaStream]",
+        .media_stream_track => return "[object MediaStreamTrack]",
     };
 }
 

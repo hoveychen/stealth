@@ -113,6 +113,8 @@ pub const Type = union(enum) {
     usb_connection_event: *@import("navigator/usb.zig").USBConnectionEvent,
     hid_connection_event: *@import("navigator/hid_serial.zig").HIDConnectionEvent,
     hid_input_report_event: *@import("navigator/hid_serial.zig").HIDInputReportEvent,
+    media_stream_track_event: *@import("media/streams.zig").MediaStreamTrackEvent,
+    media_stream_event: *@import("media/streams.zig").MediaStreamEvent,
 };
 
 pub const Options = struct {
@@ -274,6 +276,8 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .usb_connection_event => |e| return if (T == @import("navigator/usb.zig").USBConnectionEvent) e else null,
         .hid_connection_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDConnectionEvent) e else null,
         .hid_input_report_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDInputReportEvent) e else null,
+        .media_stream_track_event => |e| return if (T == @import("media/streams.zig").MediaStreamTrackEvent) e else null,
+        .media_stream_event => |e| return if (T == @import("media/streams.zig").MediaStreamEvent) e else null,
     }
     return null;
 }

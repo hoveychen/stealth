@@ -1,0 +1,158 @@
+<!--
+  MediaStream, MediaStreamTrack and the two events that carry them.
+
+  Only the parts a page can reach without a permission are here. The track's
+  own values need a MediaStreamAudioDestinationNode to produce one, so they are
+  pinned in tests/audio.html next to the node that hands them out.
+
+  Every expectation is Chrome 150's, measured on a headed window over
+  http://localhost (win17/win19-chrome.json).
+-->
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<script id=media_stream_shape>
+{
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+
+  testing.expectEqual(0, MediaStream.length);
+  testing.expectEqual(0, MediaStreamTrack.length);
+  testing.expectEqual(0, MediaStreamTrackAudioStats.length);
+  testing.expectEqual(2, MediaStreamTrackEvent.length);
+  testing.expectEqual(1, MediaStreamEvent.length);
+
+  // Chrome's prototype order, verbatim (constructor sits last here where Blink
+  // puts it last too, so these are the whole strings).
+  testing.expectEqual(
+    'id active onaddtrack onremovetrack onactive oninactive addTrack clone ' +
+    'getAudioTracks getTrackById getTracks getVideoTracks removeTrack constructor',
+    proto(MediaStream));
+  testing.expectEqual(
+    'kind id label enabled muted onmute onunmute readyState onended stats ' +
+    'contentHint applyConstraints clone getCapabilities getConstraints ' +
+    'getSettings stop oncapturehandlechange getCaptureHandle constructor',
+    proto(MediaStreamTrack));
+  testing.expectEqual(
+    'deliveredFrames deliveredFramesDuration totalFrames totalFramesDuration ' +
+    'latency averageLatency minimumLatency maximumLatency resetLatency toJSON constructor',
+    proto(MediaStreamTrackAudioStats));
+  testing.expectEqual('track constructor', proto(MediaStreamTrackEvent));
+  testing.expectEqual('stream constructor', proto(MediaStreamEvent));
+
+  // The prefixed alias Chrome still ships is the same function object.
+  testing.expectEqual(true, webkitMediaStream === MediaStream);
+  testing.expectEqual('MediaStream', webkitMediaStream.name);
+
+  testing.expectEqual(true, Object.getPrototypeOf(MediaStream.prototype) === EventTarget.prototype);
+  testing.expectEqual(true, Object.getPrototypeOf(MediaStreamTrack.prototype) === EventTarget.prototype);
+  testing.expectEqual(true, Object.getPrototypeOf(MediaStreamTrackEvent.prototype) === Event.prototype);
+  testing.expectEqual(true, Object.getPrototypeOf(MediaStreamEvent.prototype) === Event.prototype);
+  testing.expectEqual(true, Object.getPrototypeOf(MediaStreamTrackAudioStats.prototype) === Object.prototype);
+}
+</script>
+
+<script id=media_stream_constructor>
+{
+  const msg = (fn) => { try { const v = fn(); return `no throw: ${v}`; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  const empty = new MediaStream();
+  testing.expectEqual('[object MediaStream]', Object.prototype.toString.call(empty));
+  testing.expectEqual(0, empty.getTracks().length);
+  testing.expectEqual(0, empty.getAudioTracks().length);
+  testing.expectEqual(0, empty.getVideoTracks().length);
+  testing.expectEqual(false, empty.active);
+  testing.expectEqual(36, empty.id.length);
+  testing.expectEqual(true, uuid.test(empty.id));
+  testing.expectEqual(false, new MediaStream().id === empty.id);
+
+  // An empty sequence is a valid overload; null and undefined are not — Chrome
+  // does not treat either as an absent argument.
+  testing.expectEqual('no throw: 0', msg(() => new MediaStream([]).getTracks().length));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStream': Overload resolution failed.",
+    msg(() => new MediaStream(null)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStream': Overload resolution failed.",
+    msg(() => new MediaStream(undefined)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStream': Overload resolution failed.",
+    msg(() => new MediaStream(7)));
+  testing.expectEqual('no throw: 0', msg(() => new MediaStream(empty).getTracks().length));
+
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStream': Please use the 'new' operator, " +
+    'this DOM object constructor cannot be called as a function.',
+    msg(() => MediaStream()));
+
+  // A cloned empty stream is a new object with a new id.
+  testing.expectEqual(false, empty.clone() === empty);
+  testing.expectEqual(false, empty.clone().id === empty.id);
+
+  testing.expectEqual(
+    "TypeError: Failed to execute 'addTrack' on 'MediaStream': 1 argument required, but only 0 present.",
+    msg(() => empty.addTrack()));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'addTrack' on 'MediaStream': parameter 1 is not of type 'MediaStreamTrack'.",
+    msg(() => empty.addTrack(7)));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'removeTrack' on 'MediaStream': 1 argument required, but only 0 present.",
+    msg(() => empty.removeTrack()));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getTrackById' on 'MediaStream': 1 argument required, but only 0 present.",
+    msg(() => empty.getTrackById()));
+  testing.expectEqual('no throw: null', msg(() => String(empty.getTrackById('nope'))));
+
+  // Neither of these can be built by a page.
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamTrack': Illegal constructor",
+    msg(() => new MediaStreamTrack()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamTrackAudioStats': Illegal constructor",
+    msg(() => new MediaStreamTrackAudioStats()));
+  testing.expectEqual('TypeError: Illegal constructor', msg(() => MediaStreamTrackAudioStats()));
+}
+</script>
+
+<script id=media_stream_events>
+{
+  const msg = (fn) => { try { const v = fn(); return `no throw: ${v}`; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const stream = new MediaStream();
+
+  // MediaStreamTrackEvent needs a track, which a page cannot produce on its
+  // own, so only its refusals are reachable here. The success path is pinned in
+  // tests/audio.html.
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamTrackEvent': 2 arguments required, but only 0 present.",
+    msg(() => new MediaStreamTrackEvent()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamTrackEvent': 2 arguments required, but only 1 present.",
+    msg(() => new MediaStreamTrackEvent('addtrack')));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamTrackEvent': Failed to read the 'track' property " +
+    "from 'MediaStreamTrackEventInit': Required member is undefined.",
+    msg(() => new MediaStreamTrackEvent('addtrack', {})));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamTrackEvent': Failed to read the 'track' property " +
+    "from 'MediaStreamTrackEventInit': Failed to convert value to 'MediaStreamTrack'.",
+    msg(() => new MediaStreamTrackEvent('addtrack', { track: 7 })));
+
+  // MediaStreamEvent's member is optional, and its arity is 1.
+  const e = new MediaStreamEvent('addstream', { stream });
+  testing.expectEqual('addstream', e.type);
+  testing.expectEqual(true, e.stream === stream);
+  testing.expectEqual(false, e.bubbles);
+  testing.expectEqual(false, e.cancelable);
+  testing.expectEqual(false, e.isTrusted);
+  testing.expectEqual('no throw: null', msg(() => String(new MediaStreamEvent('addstream').stream)));
+  testing.expectEqual('no throw: null', msg(() => String(new MediaStreamEvent('a', {}).stream)));
+  testing.expectEqual('no throw: null', msg(() => String(new MediaStreamEvent('a', { stream: null }).stream)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamEvent': 1 argument required, but only 0 present.",
+    msg(() => new MediaStreamEvent()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamEvent': Failed to read the 'stream' property " +
+    "from 'MediaStreamEventInit': Failed to convert value to 'MediaStream'.",
+    msg(() => new MediaStreamEvent('a', { stream: 7 })));
+}
+</script>
