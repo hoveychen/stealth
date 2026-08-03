@@ -42,6 +42,7 @@ const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 
 pub const Svg = @import("element/Svg.zig");
+pub const MathML = @import("element/MathML.zig");
 pub const Html = @import("element/Html.zig");
 const slotting = @import("element/slotting.zig");
 pub const Attribute = @import("element/Attribute.zig");
@@ -124,6 +125,9 @@ _proto_canary: if (IS_DEBUG) *Node else void = undefined,
 pub const Type = union(enum) {
     html: *Html,
     svg: *Svg,
+    // The whole MathML namespace is one interface, so there is nothing under
+    // this the way there is under Html and Svg.
+    mathml: *MathML,
 };
 
 pub fn is(self: *Element, comptime T: type) ?*T {
@@ -143,6 +147,11 @@ pub fn is(self: *Element, comptime T: type) ?*T {
             }
             if (comptime std.mem.startsWith(u8, type_name, "browser.webapi.element.svg.")) {
                 return svg.is(T);
+            }
+        },
+        .mathml => |mathml| {
+            if (T == MathML) {
+                return mathml;
             }
         },
     }
@@ -265,6 +274,8 @@ pub fn getTagNameLower(self: *const Element) []const u8 {
             },
         },
         .svg => |svg| return svg._tag_name.str(),
+        // Case-preserving, like SVG: 'mSpace' stays 'mSpace'.
+        .mathml => |mathml| return mathml._tag_name.str(),
     }
 }
 
@@ -348,6 +359,7 @@ pub fn getTagNameSpec(self: *const Element, buf: []u8) []const u8 {
             },
         },
         .svg => |svg| svg._tag_name.str(),
+        .mathml => |mathml| mathml._tag_name.str(),
     };
 }
 
@@ -355,6 +367,7 @@ pub fn getTagNameDump(self: *const Element) []const u8 {
     switch (self._type) {
         .html => return self.getTagNameLower(),
         .svg => |svg| return svg._tag_name.str(),
+        .mathml => |mathml| return mathml._tag_name.str(),
     }
 }
 
@@ -2205,6 +2218,9 @@ pub fn getTag(self: *const Element) Tag {
             .unknown => .unknown,
         },
         .svg => |se| se.getTag(),
+        // No MathML tag is in Element.Tag; tag-name matching falls back to
+        // _tag_name, the way it does for generic SVG elements.
+        .mathml => .unknown,
     };
 }
 

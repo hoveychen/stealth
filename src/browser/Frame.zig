@@ -574,6 +574,10 @@ pub fn deinit(self: *Frame) void {
             f.releaseRef(page);
         }
 
+        if (self.window._css_highlights) |highlights| {
+            highlights.releaseRef(page);
+        }
+
         // Release our reference to location.
         self.window._location.releaseRef(page);
     }

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<head>
+  <title>XSLTProcessor Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=xslt_shape>
+  {
+    const p = new XSLTProcessor();
+    testing.expectEqual('[object XSLTProcessor]', Object.prototype.toString.call(p));
+    testing.expectEqual('', Object.getOwnPropertyNames(p).join(','));
+    testing.expectEqual(0, XSLTProcessor.length);
+    testing.expectEqual(
+      'clearParameters,getParameter,importStylesheet,removeParameter,reset,setParameter,transformToDocument,transformToFragment',
+      Object.getOwnPropertyNames(XSLTProcessor.prototype).filter((k) => k !== 'constructor').join(','));
+
+    let err;
+    try { XSLTProcessor(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'XSLTProcessor': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+      err.message);
+  }
+</script>
+
+<script id=xslt_parameters>
+  {
+    const p = new XSLTProcessor();
+    testing.expectEqual(null, p.getParameter(null, 'a'));
+
+    testing.expectEqual(undefined, p.setParameter(null, 'a', 'b'));
+    testing.expectEqual('b', p.getParameter(null, 'a'));
+
+    // The namespace is dropped: what goes in under one namespace reads back
+    // under any other, including null.
+    p.setParameter('urn:x', 'ns', 'v1');
+    testing.expectEqual('v1', p.getParameter('urn:x', 'ns'));
+    testing.expectEqual('v1', p.getParameter(null, 'ns'));
+    testing.expectEqual('v1', p.getParameter('', 'ns'));
+
+    // Values are stringified.
+    p.setParameter(null, 'num', 7);
+    testing.expectEqual('7', p.getParameter(null, 'num'));
+
+    // Setting the same name twice replaces.
+    p.setParameter(null, 'a', 'c');
+    testing.expectEqual('c', p.getParameter(null, 'a'));
+
+    testing.expectEqual(undefined, p.removeParameter(null, 'a'));
+    testing.expectEqual(null, p.getParameter(null, 'a'));
+    testing.expectEqual('v1', p.getParameter(null, 'ns'));
+
+    testing.expectEqual(undefined, p.clearParameters());
+    testing.expectEqual(null, p.getParameter(null, 'ns'));
+  }
+</script>
+
+<script id=xslt_reset_drops_parameters_and_sheet>
+  {
+    const p = new XSLTProcessor();
+    p.setParameter(null, 'a', 'b');
+    p.importStylesheet(document);
+    testing.expectEqual(undefined, p.reset());
+    testing.expectEqual(null, p.getParameter(null, 'a'));
+    // Back to the no-stylesheet answer.
+    testing.expectEqual(null, p.transformToDocument(document));
+  }
+</script>
+
+<script id=xslt_argument_counts>
+  {
+    const p = new XSLTProcessor();
+    const cases = [
+      [() => p.setParameter(), '3 arguments required, but only 0 present.'],
+      [() => p.setParameter(null, 'a'), '3 arguments required, but only 2 present.'],
+      [() => p.getParameter(), '2 arguments required, but only 0 present.'],
+      [() => p.removeParameter(), '2 arguments required, but only 0 present.'],
+      [() => p.importStylesheet(), '1 argument required, but only 0 present.'],
+      [() => p.transformToDocument(), '1 argument required, but only 0 present.'],
+      [() => p.transformToFragment(), '2 arguments required, but only 0 present.'],
+      [() => p.transformToFragment(document), '2 arguments required, but only 1 present.'],
+    ];
+    for (const [fn, tail] of cases) {
+      let err;
+      try { fn(); } catch (e) { err = e; }
+      testing.expectEqual('TypeError', err.name);
+      testing.expectTrue(err.message.endsWith(tail));
+      testing.expectTrue(err.message.startsWith("Failed to execute '"));
+    }
+  }
+</script>
+
+<script id=xslt_node_arguments>
+  {
+    const p = new XSLTProcessor();
+    let err;
+    try { p.importStylesheet({}); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'importStylesheet' on 'XSLTProcessor': parameter 1 is not of type 'Node'.",
+      err.message);
+
+    err = undefined;
+    try { p.transformToDocument({}); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'transformToDocument' on 'XSLTProcessor': parameter 1 is not of type 'Node'.",
+      err.message);
+
+    // No stylesheet yet, so both transforms are null.
+    testing.expectEqual(null, p.transformToDocument(document));
+    testing.expectEqual(null, p.transformToFragment(document, document));
+  }
+</script>
+
+<script id=xslt_transform_is_not_implemented>
+  {
+    // With a stylesheet in hand Chrome runs the transform; we log
+    // not_implemented and answer null. The two logs the runner expects come
+    // from here.
+    const p = new XSLTProcessor();
+    p.importStylesheet(document);
+    testing.expectEqual(null, p.transformToDocument(document));
+    testing.expectEqual(null, p.transformToFragment(document, document));
+  }
+</script>

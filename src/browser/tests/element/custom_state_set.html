@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<head>
+  <title>CustomStateSet Test</title>
+  <script src="../testing.js"></script>
+</head>
+
+<script id=custom_state_set_shape>
+  {
+    // No instance is reachable: the only source is
+    // element.attachInternals().states, and ElementInternals is not here yet.
+    // So this pins the shape, which is all a page can read.
+    testing.expectEqual('function', typeof CustomStateSet);
+    testing.expectEqual('CustomStateSet', CustomStateSet.name);
+    testing.expectEqual(0, CustomStateSet.length);
+    testing.expectEqual('CustomStateSet', CustomStateSet.prototype[Symbol.toStringTag]);
+    testing.expectEqual(
+      'size,add,clear,delete,entries,forEach,has,keys,values',
+      Object.getOwnPropertyNames(CustomStateSet.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual('function values() { [native code] }', String(CustomStateSet.prototype[Symbol.iterator]));
+
+    for (const [member, arity] of [['add', 1], ['clear', 0], ['delete', 1], ['entries', 0], ['forEach', 1], ['has', 1], ['keys', 0], ['values', 0]]) {
+      const d = Object.getOwnPropertyDescriptor(CustomStateSet.prototype, member);
+      testing.expectEqual(arity, d.value.length);
+      testing.expectTrue(d.enumerable);
+      testing.expectTrue(d.writable);
+    }
+
+    const size = Object.getOwnPropertyDescriptor(CustomStateSet.prototype, 'size');
+    testing.expectEqual('function', typeof size.get);
+    testing.expectEqual(undefined, size.set);
+
+    let err;
+    try { new CustomStateSet(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+
+    // attachInternals is the missing link; recorded so this test fails loudly
+    // once it arrives and the set needs its real implementation.
+    testing.expectEqual('undefined', typeof document.createElement('div').attachInternals);
+  }
+</script>

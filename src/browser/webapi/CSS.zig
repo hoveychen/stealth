@@ -20,6 +20,7 @@ const std = @import("std");
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const units = @import("../css/units.zig");
+const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
 
 const CSS = @This();
 _pad: bool = false,
@@ -186,6 +187,13 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
         pub const empty_with_no_proto = true;
     };
+
+    // `CSS.highlights` is an own accessor on the namespace object and answers
+    // the same HighlightRegistry every time (measured on Chrome 150).
+    pub const highlights = bridge.accessor(_highlights, null, .{ .static = true });
+    fn _highlights(frame: *Frame) !*HighlightRegistry {
+        return frame.window.getHighlights(frame);
+    }
 
     pub const escape = bridge.function(CSS.escape, .{ .static = true });
     pub const supports = bridge.function(CSS.supports, .{ .static = true });

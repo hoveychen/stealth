@@ -1006,11 +1006,27 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
             const tag = std.meta.stringToEnum(Element.Tag, lower) orelse .unknown;
             return createSvgElementT(frame, Element.Svg.Generic, name, attribute_iterator, .{ ._proto = undefined, ._tag = tag });
         },
+        // The whole MathML namespace is MathMLElement -- there are no per-tag
+        // subclasses -- so no tag dispatch here at all.
+        .mathml => return createMathmlElement(frame, name, attribute_iterator),
         else => {
             const tag_name = try String.init(frame.arena, name, .{});
             return createHtmlElementT(frame, Element.Html.Unknown, namespace, attribute_iterator, .{ ._proto = undefined, ._tag_name = tag_name });
         },
     }
+}
+
+fn createMathmlElement(frame: *Frame, name: []const u8, attribute_iterator: anytype) !*Node {
+    const mathml = try frame._factory.element(Element.MathML{
+        ._proto = undefined,
+        ._tag_name = try String.init(frame.arena, name, .{}),
+    });
+    const element = mathml.asElement();
+    element._namespace = .mathml;
+    // Case-preserving, like SVG.
+    element._attributes.normalize = false;
+    try populateElementAttributes(frame, element, attribute_iterator);
+    return element.asNode();
 }
 
 fn createHtmlElementT(frame: *Frame, comptime E: type, namespace: Element.Namespace, attribute_iterator: anytype, html_element: E) !*Node {

@@ -262,7 +262,7 @@ fn isVoidElement(el: *const Node.Element) bool {
             .br, .hr, .img, .input, .link, .meta => true,
             else => false,
         },
-        .svg => false,
+        .svg, .mathml => false,
     };
 }
 
