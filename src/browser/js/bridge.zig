@@ -1172,6 +1172,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/event/DeviceOrientationEvent.zig"),
     @import("../webapi/event/TouchEvent.zig"),
     @import("../webapi/event/touch.zig"),
+    @import("../webapi/event/misc_events.zig"),
     @import("../webapi/event/UIEvent.zig"),
     @import("../webapi/event/MouseEvent.zig"),
     @import("../webapi/event/PointerEvent.zig"),
@@ -1431,6 +1432,13 @@ const worker_common_apis = [_]type{
     @import("../webapi/BroadcastChannel.zig"),
     @import("../webapi/event/CustomEvent.zig"),
     @import("../webapi/event/ProgressEvent.zig"),
+    // The only two of the misc Event subclasses a Chrome worker carries
+    // (measured, probe-win30 `worker`).
+    @import("../webapi/event/misc_events.zig").SecurityPolicyViolationEvent,
+    @import("../webapi/event/misc_events.zig").WebGLContextEvent,
+    // CropTarget is on a worker too (measured); the rest of the capture family
+    // is window-only.
+    @import("../webapi/media/capture.zig").CropTarget,
     @import("../webapi/Notification.zig"),
     @import("../webapi/FileList.zig"),
     @import("../webapi/MessageChannel.zig"),

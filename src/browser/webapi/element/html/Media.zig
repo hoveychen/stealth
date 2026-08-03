@@ -29,6 +29,8 @@ pub const Video = @import("Video.zig");
 const MediaError = @import("../../media/MediaError.zig");
 const TimeRanges = @import("../../media/TimeRanges.zig");
 const text_tracks = @import("../../media/text_tracks.zig");
+const misc_events = @import("../../event/misc_events.zig");
+const String = @import("lightpanda").String;
 const mime = @import("../../media/mime.zig");
 
 const Media = @This();
@@ -320,6 +322,15 @@ pub fn addTextTrack(
     const track = try text_tracks.TextTrack.create(parsed, label_ orelse "", language_ orelse "", page);
     const list = try self.getTextTracks(page);
     try list._items.append(page.frame_arena, track);
+
+    // Chrome fires both, in this order, on the list itself (measured: an
+    // addtrack listener sees a TrackEvent carrying the new track, then onchange
+    // runs).
+    const add_track = try misc_events.TrackEvent.initTrusted("addtrack", track, exec);
+    try exec.dispatch(list.asEventTarget(), add_track.asEvent(), list._on_add_track, .{ .context = "TextTrackList addtrack" });
+
+    const change = try Event.initTrusted(try String.init(page.frame_arena, "change", .{}), null, page);
+    try exec.dispatch(list.asEventTarget(), change, list._on_change, .{ .context = "TextTrackList change" });
     return track;
 }
 
