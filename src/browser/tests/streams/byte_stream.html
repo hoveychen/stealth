@@ -17,7 +17,7 @@
       ReadableStreamBYOBReader: 'read,releaseLock,closed,cancel,constructor',
       ReadableStreamDefaultReader: 'read,releaseLock,closed,cancel,constructor',
       WritableStreamDefaultWriter: 'closed,desiredSize,ready,abort,close,releaseLock,write,constructor',
-      ReadableStream: 'locked,cancel,getReader,pipeThrough,pipeTo,values,constructor',
+      ReadableStream: 'locked,cancel,getReader,pipeThrough,pipeTo,tee,values,constructor',
       ReadableStreamDefaultController: 'desiredSize,close,enqueue,error,constructor',
       WritableStream: 'locked,abort,close,getWriter,constructor',
     };
@@ -236,5 +236,42 @@
         "TypeError: Failed to execute 'read' on 'ReadableStreamBYOBReader': parameter 1 is not of type 'ArrayBufferView'.",
         msg);
     });
+  }
+</script>
+
+<script id=tee_and_signal type=module>
+  {
+    // tee() locks the source and both branches see everything.
+    const state = await testing.async();
+    const rs = new ReadableStream({ start(c) { c.enqueue('a'); c.enqueue('b'); c.close(); } });
+    const [one, two] = rs.tee();
+    testing.expectEqual(true, rs.locked);
+    testing.expectEqual(['ReadableStream', 'ReadableStream'], [one.constructor.name, two.constructor.name]);
+    testing.expectEqual(0, ReadableStream.prototype.tee.length);
+
+    const drain = async (branch) => {
+      const reader = branch.getReader();
+      const out = [];
+      for (;;) { const { done, value } = await reader.read(); if (done) break; out.push(value); }
+      return out.join(',');
+    };
+    Promise.all([drain(one), drain(two)]).then((r) => state.resolve(r));
+    await state.done((r) => testing.expectEqual(['a,b', 'a,b'], r));
+  }
+</script>
+
+<script id=writer_promises type=module>
+  {
+    const state = await testing.async();
+    let ctrl;
+    const ws = new WritableStream({ start(c) { ctrl = c; } });
+    testing.expectEqual('[object AbortSignal]', Object.prototype.toString.call(ctrl.signal));
+    testing.expectTrue(ctrl.signal === ctrl.signal);
+    testing.expectEqual(false, ctrl.signal.aborted);
+
+    // write / close / ready / closed all resolve with undefined.
+    const w = ws.getWriter();
+    Promise.all([w.write(new Uint8Array(1)), w.ready, w.close(), w.closed]).then((r) => state.resolve(r));
+    await state.done((r) => testing.expectEqual([undefined, undefined, undefined, undefined], r));
   }
 </script>

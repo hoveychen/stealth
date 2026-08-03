@@ -157,7 +157,7 @@ pub fn closeStream(self: *WritableStream, exec: *const Execution) !void {
 /// answer a resolved promise, as Chrome's do for a stream nothing is writing.
 pub fn abort(self: *WritableStream, _: ?js.Value, exec: *const Execution) !js.Promise {
     self._state = .errored;
-    return exec.js.local.?.resolvePromise(.{});
+    return exec.js.local.?.resolvePromise({});
 }
 
 pub fn close(self: *WritableStream, exec: *const Execution) !js.Promise {
@@ -166,7 +166,7 @@ pub fn close(self: *WritableStream, exec: *const Execution) !js.Promise {
         return local.rejectPromise(.{ .type_error = "Cannot close a stream using a locked writer" });
     }
     try self.closeStream(exec);
-    return local.resolvePromise(.{});
+    return local.resolvePromise({});
 }
 
 pub const JsApi = struct {

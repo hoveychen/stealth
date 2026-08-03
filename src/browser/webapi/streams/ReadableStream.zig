@@ -197,6 +197,70 @@ pub fn getAsyncIterator(self: *ReadableStream, exec: *const Execution) !*AsyncIt
     return AsyncIterator.init(self, exec);
 }
 
+/// Two streams that both see everything this one produces. Like Chrome's, it
+/// locks the source: the branches are the only way to read it afterwards.
+pub fn tee(self: *ReadableStream, exec: *const Execution) ![2]*ReadableStream {
+    if (self.getLocked()) {
+        return error.ReaderLocked;
+    }
+
+    const branches = [2]*ReadableStream{
+        try ReadableStream.init(null, null, exec),
+        try ReadableStream.init(null, null, exec),
+    };
+
+    const state = try exec.arena.create(TeeState);
+    state.* = .{
+        .execution = exec,
+        .reader = try self.defaultReader(exec),
+        .branches = branches,
+    };
+    try state.pump();
+    return branches;
+}
+
+/// Pumps the source into both branches, one read at a time.
+const TeeState = struct {
+    execution: *const Execution,
+    reader: *ReadableStreamDefaultReader,
+    branches: [2]*ReadableStream,
+
+    fn pump(state: *TeeState) !void {
+        const local = state.execution.js.local.?;
+        const read_promise = try state.reader.read(state.execution);
+        _ = read_promise.thenAndCatch(
+            local.newCallback(onChunk, state),
+            local.newCallback(onDone, state),
+        ) catch state.close();
+    }
+
+    const ReadData = struct {
+        done: bool,
+        value: js.Value,
+    };
+
+    fn onChunk(state: *TeeState, data_: ?ReadData) void {
+        const data = data_ orelse return state.close();
+        if (data.done) {
+            return state.close();
+        }
+        for (state.branches) |branch| {
+            branch._controller.enqueueValue(data.value) catch {};
+        }
+        state.pump() catch state.close();
+    }
+
+    fn onDone(state: *TeeState) void {
+        state.close();
+    }
+
+    fn close(state: *TeeState) void {
+        for (state.branches) |branch| {
+            branch._controller.close() catch {};
+        }
+    }
+};
+
 pub fn getLocked(self: *const ReadableStream) bool {
     return self._reader != null or self._byob_reader != null;
 }
@@ -490,6 +554,7 @@ pub const JsApi = struct {
     pub const getReader = bridge.function(ReadableStream.getReader, .{});
     pub const pipeThrough = bridge.function(ReadableStream.pipeThrough, .{});
     pub const pipeTo = bridge.function(ReadableStream.pipeTo, .{});
+    pub const tee = bridge.function(ReadableStream.tee, .{});
     pub const values = bridge.function(ReadableStream.getAsyncIterator, .{});
     pub const symbol_async_iterator = bridge.iterator(ReadableStream.getAsyncIterator, .{ .async = true });
 };

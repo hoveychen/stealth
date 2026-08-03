@@ -51,7 +51,7 @@ pub fn abort(self: *WritableStreamDefaultWriter, _: ?js.Value, exec: *const Exec
         return local.rejectPromise(.{ .type_error = "Writer has been released" });
     };
     stream._state = .errored;
-    return local.resolvePromise(.{});
+    return local.resolvePromise({});
 }
 
 pub fn write(self: *WritableStreamDefaultWriter, chunk: js.Value, exec: *const Execution) !js.Promise {
@@ -64,9 +64,15 @@ pub fn write(self: *WritableStreamDefaultWriter, chunk: js.Value, exec: *const E
         return local.rejectPromise(.{ .type_error = "Stream is not writable" });
     }
 
-    try stream.writeChunk(chunk, exec);
+    stream.writeChunk(chunk, exec) catch |err| {
+        // A chunk a native sink will not take never settles, which is what
+        // Chrome does for `compressionStream.writable.getWriter().write('x')`
+        // (measured, win26-chrome.json).
+        if (err == error.ChunkNotAccepted) return local.createPromiseResolver().promise();
+        return err;
+    };
 
-    return local.resolvePromise(.{});
+    return local.resolvePromise({});
 }
 
 pub fn close(self: *WritableStreamDefaultWriter, exec: *const Execution) !js.Promise {
@@ -81,7 +87,7 @@ pub fn close(self: *WritableStreamDefaultWriter, exec: *const Execution) !js.Pro
 
     try stream.closeStream(exec);
 
-    return local.resolvePromise(.{});
+    return local.resolvePromise({});
 }
 
 pub fn releaseLock(self: *WritableStreamDefaultWriter) void {
@@ -98,10 +104,10 @@ pub fn getClosed(self: *WritableStreamDefaultWriter, exec: *const Execution) !js
     };
 
     if (stream._state == .closed) {
-        return local.resolvePromise(.{});
+        return local.resolvePromise({});
     }
 
-    return local.resolvePromise(.{});
+    return local.resolvePromise({});
 }
 
 pub fn getDesiredSize(self: *const WritableStreamDefaultWriter) ?i32 {
@@ -115,7 +121,7 @@ pub fn getDesiredSize(self: *const WritableStreamDefaultWriter) ?i32 {
 
 pub fn getReady(self: *WritableStreamDefaultWriter, exec: *const Execution) !js.Promise {
     _ = self;
-    return exec.js.local.?.resolvePromise(.{});
+    return exec.js.local.?.resolvePromise({});
 }
 
 pub const JsApi = struct {

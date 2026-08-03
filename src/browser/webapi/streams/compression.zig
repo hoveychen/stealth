@@ -125,11 +125,10 @@ const Codec = struct {
 
     fn nativeWrite(ctx: *anyopaque, chunk: js.Value, _: *const Execution) anyerror!void {
         const self = fromCtx(ctx);
-        // A chunk that is not a BufferSource is dropped rather than compressed;
-        // Chrome leaves its write promise pending, which is not reproducible
-        // here without a full transform-stream backpressure model.
+        // Chrome leaves the write promise of a chunk that is not a BufferSource
+        // pending forever (measured); refusing it here does the same.
         if (!chunk.isArrayBufferView() and !chunk.isArrayBuffer()) {
-            return;
+            return error.ChunkNotAccepted;
         }
         const ref = Bytes{ .local = chunk.local, .handle = chunk.handle };
         try self._input.appendSlice(self._arena, ref.slice());
