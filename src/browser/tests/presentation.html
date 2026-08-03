@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<!--
+  The Presentation API, measured on headed Chrome 150 over http://localhost
+  (win20-chrome.json for the shapes, win21 / win23 for the behaviours). Member
+  lists are Chrome's own getOwnPropertyNames order.
+-->
+
+<script id=shapes>
+  {
+    const shapes = {
+      Presentation: ['defaultRequest', 'receiver', 'constructor'],
+      PresentationRequest: ['onconnectionavailable', 'getAvailability', 'reconnect', 'start', 'constructor'],
+      PresentationAvailability: ['value', 'onchange', 'constructor'],
+      PresentationConnection: ['id', 'url', 'state', 'onconnect', 'onclose', 'onterminate', 'binaryType', 'onmessage', 'close', 'send', 'terminate', 'constructor'],
+      PresentationConnectionList: ['connections', 'onconnectionavailable', 'constructor'],
+      PresentationReceiver: ['connectionList', 'constructor'],
+      PresentationConnectionAvailableEvent: ['connection', 'constructor'],
+      PresentationConnectionCloseEvent: ['reason', 'message', 'constructor'],
+    };
+    for (const [name, keys] of Object.entries(shapes)) {
+      testing.expectEqual('function', typeof window[name], { label: name });
+      testing.expectEqual(keys.join(','), Object.getOwnPropertyNames(window[name].prototype).join(','));
+    }
+    // Four of them are EventTargets; Presentation and PresentationReceiver are not.
+    for (const name of ['PresentationRequest', 'PresentationAvailability', 'PresentationConnection', 'PresentationConnectionList']) {
+      testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(window[name].prototype), { label: name });
+    }
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(Presentation.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(PresentationReceiver.prototype));
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(PresentationConnectionAvailableEvent.prototype));
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(PresentationConnectionCloseEvent.prototype));
+
+    testing.expectEqual([1, 0, 0, 0, 0, 0, 2, 2], [
+      PresentationRequest.length, PresentationAvailability.length, PresentationConnection.length,
+      PresentationConnectionList.length, PresentationReceiver.length, Presentation.length,
+      PresentationConnectionAvailableEvent.length, PresentationConnectionCloseEvent.length,
+    ]);
+    testing.expectEqual([0, 1, 0], [
+      PresentationRequest.prototype.getAvailability.length,
+      PresentationRequest.prototype.reconnect.length,
+      PresentationRequest.prototype.start.length,
+    ]);
+
+    // navigator.presentation is the same object every read, and both of its
+    // members read null on a page that is not presenting.
+    testing.expectEqual('[object Presentation]', Object.prototype.toString.call(navigator.presentation));
+    testing.expectEqual(navigator.presentation, navigator.presentation);
+    testing.expectEqual(null, navigator.presentation.receiver);
+    testing.expectEqual(null, navigator.presentation.defaultRequest);
+    const desc = Object.getOwnPropertyDescriptor(Presentation.prototype, 'defaultRequest');
+    testing.expectEqual(['function', 'function', true, true], [typeof desc.get, typeof desc.set, desc.enumerable, desc.configurable]);
+  }
+</script>
+
+<script id=request>
+  {
+    // Anything stringifiable is accepted, because it resolves against the
+    // document (measured: 5 and '' both build a request).
+    for (const arg of ['receiver.html', 'https://a.example/x', 'http://a.example/x', 5, '', ['https://a.example/x', 'cast:ABCD'], ['ftp://a/b', 'https://ok.example/x']]) {
+      testing.expectEqual('[object PresentationRequest]', Object.prototype.toString.call(new PresentationRequest(arg)), { label: String(arg) });
+    }
+    testing.expectEqual(true, new PresentationRequest('https://a.example/x') instanceof EventTarget);
+
+    // A set that filters down to nothing is the empty-sequence refusal, whether
+    // it started empty or was all unsupported schemes.
+    const empty = "NotSupportedError: Failed to construct 'PresentationRequest': An empty sequence of URLs is not supported.";
+    for (const arg of [[], 'ftp://x/y', ['ftp://a/b', 'gopher://x']]) {
+      let err = null;
+      try { new PresentationRequest(arg); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(empty, err, { label: JSON.stringify(arg) });
+    }
+    let noArg = null;
+    try { new PresentationRequest(); } catch (e) { noArg = `${e.name}: ${e.message}`; }
+    testing.expectEqual("TypeError: Failed to construct 'PresentationRequest': 1 argument required, but only 0 present.", noArg);
+
+    // defaultRequest round-trips by identity; null and undefined clear it; a
+    // wrong type is refused by name.
+    const request = new PresentationRequest('https://a.example/x');
+    navigator.presentation.defaultRequest = request;
+    testing.expectEqual(true, navigator.presentation.defaultRequest === request);
+    navigator.presentation.defaultRequest = null;
+    testing.expectEqual(null, navigator.presentation.defaultRequest);
+    navigator.presentation.defaultRequest = request;
+    navigator.presentation.defaultRequest = undefined;
+    testing.expectEqual(null, navigator.presentation.defaultRequest);
+    let badValue = null;
+    try { navigator.presentation.defaultRequest = 5; } catch (e) { badValue = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to set the 'defaultRequest' property on 'Presentation': Failed to convert value to 'PresentationRequest'.",
+      badValue,
+    );
+  }
+</script>
+
+<script id=events>
+  {
+    // Both events need two arguments, and both refuse every value a script can
+    // pass for their required member.
+    const refusals = [
+      [() => new PresentationConnectionAvailableEvent('connectionavailable'), "TypeError: Failed to construct 'PresentationConnectionAvailableEvent': 2 arguments required, but only 1 present."],
+      [() => new PresentationConnectionAvailableEvent('connectionavailable', {}), "TypeError: Failed to construct 'PresentationConnectionAvailableEvent': Failed to read the 'connection' property from 'PresentationConnectionAvailableEventInit': Required member is undefined."],
+      [() => new PresentationConnectionAvailableEvent('connectionavailable', { connection: null }), "TypeError: Failed to construct 'PresentationConnectionAvailableEvent': Failed to read the 'connection' property from 'PresentationConnectionAvailableEventInit': Failed to convert value to 'PresentationConnection'."],
+      [() => new PresentationConnectionCloseEvent('close'), "TypeError: Failed to construct 'PresentationConnectionCloseEvent': 2 arguments required, but only 1 present."],
+      [() => new PresentationConnectionCloseEvent('close', {}), "TypeError: Failed to construct 'PresentationConnectionCloseEvent': Failed to read the 'reason' property from 'PresentationConnectionCloseEventInit': Required member is undefined."],
+      [() => new PresentationConnectionCloseEvent('close', { reason: 'went-away' }), "TypeError: Failed to construct 'PresentationConnectionCloseEvent': Failed to read the 'reason' property from 'PresentationConnectionCloseEventInit': The provided value 'went-away' is not a valid enum value of type PresentationConnectionCloseReason."],
+    ];
+    for (const [fn, expected] of refusals) {
+      let err = null;
+      try { fn(); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(expected, err);
+    }
+
+    // The three enum members, without a hyphen in "wentaway".
+    for (const reason of ['error', 'closed', 'wentaway']) {
+      testing.expectEqual(reason, new PresentationConnectionCloseEvent('close', { reason }).reason, { label: reason });
+    }
+
+    const close = new PresentationConnectionCloseEvent('close', { reason: 'closed' });
+    testing.expectEqual(['closed', '', false, false, false, false], [close.reason, close.message, close.bubbles, close.cancelable, close.composed, close.isTrusted]);
+    const loud = new PresentationConnectionCloseEvent('close', { reason: 'closed', message: 'bye', bubbles: true });
+    testing.expectEqual(['bye', true, 'close'], [loud.message, loud.bubbles, loud.type]);
+    testing.expectEqual('[object PresentationConnectionCloseEvent]', Object.prototype.toString.call(loud));
+    testing.expectEqual(true, loud instanceof Event);
+  }
+</script>
+
+<script id=availability type=module>
+  {
+    const state = await testing.async();
+    const r = {};
+    const err = async (p) => { try { await p; return 'NO THROW'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    const request = new PresentationRequest('https://a.example/x');
+    r.first = await request.getAvailability();
+    r.second = await request.getAvailability();
+    r.start = await err(new PresentationRequest('https://a.example/x').start());
+    r.reconnect = await err(new PresentationRequest('https://a.example/x').reconnect('nope'));
+    r.reconnectNoArg = await err(new PresentationRequest('https://a.example/x').reconnect());
+    state.resolve();
+
+    await state.done(() => {
+      // The same object on every call, reporting no display (measured).
+      testing.expectEqual(true, r.first === r.second);
+      testing.expectEqual('[object PresentationAvailability]', Object.prototype.toString.call(r.first));
+      testing.expectEqual(false, r.first.value);
+      testing.expectEqual(null, r.first.onchange);
+      testing.expectEqual(true, r.first instanceof EventTarget);
+      testing.expectEqual([], Object.getOwnPropertyNames(r.first));
+
+      testing.expectEqual(
+        "InvalidAccessError: Failed to execute 'start' on 'PresentationRequest': PresentationRequest::start() requires user gesture.",
+        r.start,
+      );
+      testing.expectEqual('NotFoundError: Route not found', r.reconnect);
+      testing.expectEqual(
+        "TypeError: Failed to execute 'reconnect' on 'PresentationRequest': 1 argument required, but only 0 present.",
+        r.reconnectNoArg,
+      );
+    });
+  }
+</script>

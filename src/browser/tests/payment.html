@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<!--
+  The Payment Request family, measured on headed Chrome 150 over
+  http://localhost (win20-chrome.json for the shapes, win21 / win23 for the
+  behaviours). Member lists are Chrome's own getOwnPropertyNames order.
+-->
+
+<script id=shapes>
+  {
+    const shapes = {
+      PaymentRequest: ['id', 'shippingAddress', 'shippingOption', 'shippingType', 'onshippingaddresschange', 'onshippingoptionchange', 'abort', 'canMakePayment', 'hasEnrolledInstrument', 'show', 'onpaymentmethodchange', 'constructor'],
+      PaymentResponse: ['requestId', 'methodName', 'details', 'shippingAddress', 'shippingOption', 'payerName', 'payerEmail', 'payerPhone', 'onpayerdetailchange', 'complete', 'retry', 'toJSON', 'constructor'],
+      PaymentAddress: ['city', 'country', 'dependentLocality', 'organization', 'phone', 'postalCode', 'recipient', 'region', 'sortingCode', 'addressLine', 'toJSON', 'constructor'],
+      PaymentManager: ['userHint', 'enableDelegations', 'constructor'],
+      PaymentRequestUpdateEvent: ['updateWith', 'constructor'],
+      PaymentMethodChangeEvent: ['methodName', 'methodDetails', 'constructor'],
+    };
+    for (const [name, keys] of Object.entries(shapes)) {
+      testing.expectEqual('function', typeof window[name], { label: name });
+      testing.expectEqual(keys.join(','), Object.getOwnPropertyNames(window[name].prototype).join(','));
+    }
+
+    // The chains: two EventTargets, one three-deep event chain.
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(PaymentRequest.prototype));
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(PaymentResponse.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(PaymentAddress.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(PaymentManager.prototype));
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(PaymentRequestUpdateEvent.prototype));
+    testing.expectEqual(PaymentRequestUpdateEvent.prototype, Object.getPrototypeOf(PaymentMethodChangeEvent.prototype));
+
+    testing.expectEqual([1, 0, 0, 0, 1, 1], [
+      PaymentRequest.length, PaymentResponse.length, PaymentAddress.length,
+      PaymentManager.length, PaymentRequestUpdateEvent.length, PaymentMethodChangeEvent.length,
+    ]);
+    testing.expectEqual([0, 0, 0, 0], [
+      PaymentRequest.prototype.abort.length, PaymentRequest.prototype.canMakePayment.length,
+      PaymentRequest.prototype.hasEnrolledInstrument.length, PaymentRequest.prototype.show.length,
+    ]);
+    // Two statics, in Chrome's order, both arity 0.
+    testing.expectEqual(
+      ['getSecurePaymentConfirmationCapabilities', 'securePaymentConfirmationAvailability'],
+      Object.getOwnPropertyNames(PaymentRequest).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+    );
+
+    // The four unconstructible ones.
+    for (const name of ['PaymentResponse', 'PaymentAddress', 'PaymentManager']) {
+      let err = null;
+      try { new window[name](); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(`TypeError: Failed to construct '${name}': Illegal constructor`, err, { label: name });
+    }
+  }
+</script>
+
+<script id=construction>
+  {
+    const methods = [{ supportedMethods: 'basic-card' }];
+    const details = { total: { label: 'Total', amount: { currency: 'USD', value: '1.00' } } };
+
+    const request = new PaymentRequest(methods, details);
+    testing.expectEqual('[object PaymentRequest]', Object.prototype.toString.call(request));
+    testing.expectEqual(true, request instanceof EventTarget);
+    testing.expectEqual([], Object.getOwnPropertyNames(request));
+    // A lowercase v4 UUID, fresh per request (measured).
+    testing.expectEqual(36, request.id.length);
+    testing.expectEqual('8,4,4,4,12', request.id.split('-').map((s) => s.length).join(','));
+    testing.expectEqual(request.id, request.id.toLowerCase());
+    testing.expectEqual(false, request.id === new PaymentRequest(methods, details).id);
+    // Nothing is ever picked, so all three shipping members stay null.
+    testing.expectEqual([null, null, null, null], [request.shippingAddress, request.shippingOption, request.shippingType, request.onshippingaddresschange]);
+    // details.id wins when given; shippingType echoes the option.
+    testing.expectEqual('my-id', new PaymentRequest(methods, { ...details, id: 'my-id' }).id);
+    testing.expectEqual('delivery', new PaymentRequest(methods, details, { requestShipping: true, shippingType: 'delivery' }).shippingType);
+    // A URL identifier is a valid payment method.
+    testing.expectEqual('[object PaymentRequest]', Object.prototype.toString.call(new PaymentRequest([{ supportedMethods: 'https://pay.example' }], details)));
+
+    const refusals = [
+      [() => new PaymentRequest(), "TypeError: Failed to construct 'PaymentRequest': 1 argument required, but only 0 present."],
+      [() => new PaymentRequest(methods), "TypeError: Failed to construct 'PaymentRequest': required member details is undefined."],
+      [() => new PaymentRequest(methods, {}), "TypeError: Failed to construct 'PaymentRequest': required member details is undefined."],
+      [() => new PaymentRequest([], details), "TypeError: Failed to construct 'PaymentRequest': At least one payment method is required"],
+      [() => new PaymentRequest('basic-card', details), "TypeError: Failed to construct 'PaymentRequest': The provided value cannot be converted to a sequence."],
+      [() => new PaymentRequest(methods, 5), "TypeError: Failed to construct 'PaymentRequest': The provided value is not of type 'PaymentDetailsInit'."],
+      // A bad method identifier or currency is a RangeError, not a TypeError.
+      [() => new PaymentRequest([{ supportedMethods: '' }], details), 'RangeError: Failed to construct \'PaymentRequest\': Invalid payment method identifier format'],
+      [() => new PaymentRequest([{ supportedMethods: 5 }], details), 'RangeError: Failed to construct \'PaymentRequest\': Invalid payment method identifier format'],
+      [() => new PaymentRequest(methods, { total: { label: 'x', amount: { currency: 'zz!', value: '1' } } }), "RangeError: Failed to construct 'PaymentRequest': 'zz!' is not a valid ISO 4217 currency code, should be well-formed 3-letter alphabetic code."],
+      // The amount checks name where they failed.
+      [() => new PaymentRequest(methods, { total: { label: 'x', amount: { currency: 'USD', value: 'abc' } } }), "TypeError: Failed to construct 'PaymentRequest': 'abc' is not a valid amount format for total"],
+      [() => new PaymentRequest(methods, { ...details, displayItems: [{ label: 'a', amount: { currency: 'USD', value: 'x' } }] }), "TypeError: Failed to construct 'PaymentRequest': 'x' is not a valid amount format for display items"],
+      [() => new PaymentRequest(methods, { total: { label: 'x', amount: { currency: 'USD', value: '-1' } } }), "TypeError: Failed to construct 'PaymentRequest': Total amount value should be non-negative"],
+      [() => new PaymentRequest(methods, details, { shippingType: 'nope' }), "TypeError: Failed to construct 'PaymentRequest': Failed to read the 'shippingType' property from 'PaymentOptions': The provided value 'nope' is not a valid enum value of type PaymentShippingType."],
+    ];
+    for (const [fn, expected] of refusals) {
+      let err = null;
+      try { fn(); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(expected, err);
+    }
+  }
+</script>
+
+<script id=events>
+  {
+    const update = new PaymentRequestUpdateEvent('shippingaddresschange');
+    testing.expectEqual('[object PaymentRequestUpdateEvent]', Object.prototype.toString.call(update));
+    testing.expectEqual(['shippingaddresschange', false, false, false], [update.type, update.isTrusted, update.bubbles, update.cancelable]);
+    testing.expectEqual(true, update instanceof Event);
+    const loud = new PaymentRequestUpdateEvent('shippingaddresschange', { bubbles: true, cancelable: true });
+    testing.expectEqual([true, true], [loud.bubbles, loud.cancelable]);
+
+    // updateWith() refuses a script-built event, and counts its argument first.
+    let noArg = null;
+    try { update.updateWith(); } catch (e) { noArg = `${e.name}: ${e.message}`; }
+    testing.expectEqual("TypeError: Failed to execute 'updateWith' on 'PaymentRequestUpdateEvent': 1 argument required, but only 0 present.", noArg);
+    let untrusted = null;
+    try { update.updateWith(Promise.resolve({})); } catch (e) { untrusted = `${e.name}: ${e.message}`; }
+    testing.expectEqual("InvalidStateError: Failed to execute 'updateWith' on 'PaymentRequestUpdateEvent': Cannot update details when the event is not trusted", untrusted);
+
+    const change = new PaymentMethodChangeEvent('paymentmethodchange');
+    testing.expectEqual('[object PaymentMethodChangeEvent]', Object.prototype.toString.call(change));
+    // Measured defaults: an empty name and a null details object.
+    testing.expectEqual(['', null], [change.methodName, change.methodDetails]);
+    testing.expectEqual(true, change instanceof PaymentRequestUpdateEvent);
+    testing.expectEqual(true, change instanceof Event);
+    // It inherits updateWith from the middle of the chain.
+    testing.expectEqual('function', typeof change.updateWith);
+
+    const full = new PaymentMethodChangeEvent('paymentmethodchange', { methodName: 'basic-card', methodDetails: { a: 1 } });
+    testing.expectEqual(['basic-card', '{"a":1}'], [full.methodName, JSON.stringify(full.methodDetails)]);
+    let noArgEvent = null;
+    try { new PaymentMethodChangeEvent(); } catch (e) { noArgEvent = `${e.name}: ${e.message}`; }
+    testing.expectEqual("TypeError: Failed to construct 'PaymentMethodChangeEvent': 1 argument required, but only 0 present.", noArgEvent);
+    let badDetails = null;
+    try { new PaymentMethodChangeEvent('paymentmethodchange', { methodDetails: 5 }); } catch (e) { badDetails = `${e.name}: ${e.message}`; }
+    testing.expectEqual("TypeError: Failed to construct 'PaymentMethodChangeEvent': Failed to read the 'methodDetails' property from 'PaymentMethodChangeEventInit': Failed to convert value to 'object'.", badDetails);
+  }
+</script>
+
+<script id=requestMethods type=module>
+  {
+    const state = await testing.async();
+    const methods = [{ supportedMethods: 'basic-card' }];
+    const details = { total: { label: 'Total', amount: { currency: 'USD', value: '1.00' } } };
+    const err = async (p) => { try { return await p; } catch (e) { return `${e.name}: ${e.message}`; } };
+    const r = {};
+    const request = new PaymentRequest(methods, details);
+    r.canMakePayment = await request.canMakePayment();
+    r.hasEnrolled = await request.hasEnrolledInstrument();
+    r.abort = await err(request.abort());
+    // The first show() of a page load rejects by naming the method; a second
+    // show() on the same request is refused outright (both measured).
+    r.show = await err(request.show());
+    r.showAgain = await err(request.show());
+    r.spcAvailability = await PaymentRequest.securePaymentConfirmationAvailability();
+    r.spcCaps = await PaymentRequest.getSecurePaymentConfirmationCapabilities();
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(false, r.canMakePayment);
+      testing.expectEqual(false, r.hasEnrolled);
+      testing.expectEqual("InvalidStateError: Failed to execute 'abort' on 'PaymentRequest': No show() or retry() in progress, so nothing to abort", r.abort);
+      testing.expectEqual('NotSupportedError: The payment method "basic-card" is not supported.', r.show);
+      testing.expectEqual("InvalidStateError: Failed to execute 'show' on 'PaymentRequest': Already called show() once", r.showAgain);
+      testing.expectEqual('available', r.spcAvailability);
+      testing.expectEqual('{"browserBoundKeyHardware":true}', JSON.stringify(r.spcCaps));
+    });
+  }
+</script>

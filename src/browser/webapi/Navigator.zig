@@ -36,6 +36,7 @@ const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
 const services = @import("navigator/services.zig");
 const credential = @import("navigator/credentials.zig");
+const presentation = @import("presentation.zig");
 const devices = @import("navigator/devices.zig");
 
 const Navigator = @This();
@@ -58,7 +59,7 @@ _credentials: ?*credential.CredentialsContainer = null,
 _login: ?*services.NavigatorLogin = null,
 _media_capabilities: ?*services.MediaCapabilities = null,
 _media_session: ?*services.MediaSession = null,
-_presentation: ?*services.Presentation = null,
+_presentation: ?*presentation.Presentation = null,
 _gpu: ?*services.GPU = null,
 _keyboard: ?*services.Keyboard = null,
 _locks: ?*services.LockManager = null,
@@ -297,8 +298,8 @@ pub fn getMediaSession(self: *Navigator, frame: *Frame) !*services.MediaSession 
     return service(services.MediaSession, &self._media_session, frame);
 }
 
-pub fn getPresentation(self: *Navigator, frame: *Frame) !*services.Presentation {
-    return service(services.Presentation, &self._presentation, frame);
+pub fn getPresentation(self: *Navigator, frame: *Frame) !*presentation.Presentation {
+    return service(presentation.Presentation, &self._presentation, frame);
 }
 
 pub fn getGpu(self: *Navigator, frame: *Frame) !*services.GPU {

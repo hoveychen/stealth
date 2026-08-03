@@ -50,7 +50,6 @@ pub fn registerTypes() []const type {
         NavigatorLogin,
         MediaCapabilities,
         MediaSession,
-        Presentation,
         GPU,
         WGSLLanguageFeatures,
         WGSLLanguageFeatures.KeyIterator,
@@ -430,37 +429,6 @@ pub const MediaSession = struct {
         pub const setCameraActive = bridge.function(MediaSession.setCameraActive, .{});
         pub const setMicrophoneActive = bridge.function(MediaSession.setMicrophoneActive, .{});
         pub const setPositionState = bridge.function(MediaSession.setPositionState, .{});
-    };
-};
-
-pub const Presentation = struct {
-    _pad: bool = false,
-
-    // Both null with no presentation display around, as on the reference
-    // Chrome. PresentationRequest has no constructor here, so nothing can set
-    // defaultRequest to anything but null either.
-    pub fn getDefaultRequest(_: *const Presentation) ?bool {
-        return null;
-    }
-
-    pub fn setDefaultRequest(_: *Presentation, _: ?js.Value) void {}
-
-    pub fn getReceiver(_: *const Presentation) ?bool {
-        return null;
-    }
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(Presentation);
-
-        pub const Meta = struct {
-            pub const name = "Presentation";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
-        };
-
-        pub const defaultRequest = bridge.accessor(Presentation.getDefaultRequest, Presentation.setDefaultRequest, .{});
-        pub const receiver = bridge.accessor(Presentation.getReceiver, null, .{});
     };
 };
 

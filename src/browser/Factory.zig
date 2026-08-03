@@ -126,6 +126,34 @@ pub fn speechSynthesisEvent(_: *const Factory, arena: *lp.Arena, typ: String, mi
     return chain.get(2);
 }
 
+// {Event, PaymentRequestUpdateEvent, PaymentMethodChangeEvent}. Same shape as
+// speechSynthesisEvent: the middle is itself constructible, so it carries a
+// _type union naming the leaf.
+pub fn paymentMethodChangeEvent(
+    _: *const Factory,
+    arena: *lp.Arena,
+    typ: String,
+    middle: anytype,
+    child: anytype,
+) !*@TypeOf(child) {
+    const PaymentRequestUpdateEvent = @import("webapi/payment.zig").PaymentRequestUpdateEvent;
+
+    const chain = try PrototypeChain(
+        &.{ Event, PaymentRequestUpdateEvent, @TypeOf(child) },
+    ).allocate(arena.allocator());
+
+    const event_ptr = chain.get(0);
+    event_ptr.* = try eventInit(arena, typ, chain.get(1));
+
+    const middle_ptr = chain.get(1);
+    middle_ptr.* = middle;
+    middle_ptr._proto = chain.get(0);
+    middle_ptr._type = unionInit(PaymentRequestUpdateEvent.Type, chain.get(2));
+
+    chain.setLeaf(2, child);
+    return chain.get(2);
+}
+
 pub fn mouseEvent(_: *const Factory, arena: *lp.Arena, typ: String, mouse: MouseEvent, child: anytype) !*@TypeOf(child) {
     const chain = try PrototypeChain(
         &.{ Event, UIEvent, MouseEvent, @TypeOf(child) },

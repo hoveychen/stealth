@@ -117,6 +117,9 @@ pub const Type = union(enum) {
     media_stream_event: *@import("media/streams.zig").MediaStreamEvent,
     offline_audio_completion_event: *@import("audio/events.zig").OfflineAudioCompletionEvent,
     audio_processing_event: *@import("audio/events.zig").AudioProcessingEvent,
+    payment_request_update_event: *@import("payment.zig").PaymentRequestUpdateEvent,
+    presentation_connection_available_event: *@import("presentation.zig").PresentationConnectionAvailableEvent,
+    presentation_connection_close_event: *@import("presentation.zig").PresentationConnectionCloseEvent,
 };
 
 pub const Options = struct {
@@ -279,6 +282,9 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .hid_connection_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDConnectionEvent) e else null,
         .hid_input_report_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDInputReportEvent) e else null,
         .media_stream_track_event => |e| return if (T == @import("media/streams.zig").MediaStreamTrackEvent) e else null,
+        .payment_request_update_event => |e| return if (T == @import("payment.zig").PaymentRequestUpdateEvent) e else null,
+        .presentation_connection_available_event => |e| return if (T == @import("presentation.zig").PresentationConnectionAvailableEvent) e else null,
+        .presentation_connection_close_event => |e| return if (T == @import("presentation.zig").PresentationConnectionCloseEvent) e else null,
         .media_stream_event => |e| return if (T == @import("media/streams.zig").MediaStreamEvent) e else null,
         .offline_audio_completion_event => |e| return if (T == @import("audio/events.zig").OfflineAudioCompletionEvent) e else null,
         .audio_processing_event => |e| return if (T == @import("audio/events.zig").AudioProcessingEvent) e else null,
