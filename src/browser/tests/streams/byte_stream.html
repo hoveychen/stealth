@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Byte streams and the two constructible readers, measured on a headed
+  Chrome 150 (win20-chrome.json for the shapes, win22 / win26 / win27 for the
+  behaviour). Member lists are Chrome's own getOwnPropertyNames order, except
+  that this bridge always puts `constructor` last -- Chrome puts it third on
+  both readers, between releaseLock and closed.
+-->
+
+<script id=shapes>
+  {
+    const shapes = {
+      ReadableByteStreamController: 'byobRequest,desiredSize,close,enqueue,error,constructor',
+      ReadableStreamBYOBRequest: 'view,respond,respondWithNewView,constructor',
+      ReadableStreamBYOBReader: 'read,releaseLock,closed,cancel,constructor',
+      ReadableStreamDefaultReader: 'read,releaseLock,closed,cancel,constructor',
+      WritableStreamDefaultWriter: 'closed,desiredSize,ready,abort,close,releaseLock,write,constructor',
+      ReadableStream: 'locked,cancel,getReader,pipeThrough,pipeTo,tee,values,constructor',
+      ReadableStreamDefaultController: 'desiredSize,close,enqueue,error,constructor',
+      WritableStream: 'locked,abort,close,getWriter,constructor',
+    };
+    for (const [name, keys] of Object.entries(shapes)) {
+      testing.expectEqual('function', typeof window[name], { label: name });
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[name].prototype).join(','), { label: name });
+      testing.expectEqual(name, window[name].prototype[Symbol.toStringTag], { label: name });
+    }
+
+    testing.expectEqual([0, 0, 1, 1, 1], [
+      ReadableByteStreamController.length, ReadableStreamBYOBRequest.length,
+      ReadableStreamBYOBReader.length, ReadableStreamDefaultReader.length,
+      WritableStreamDefaultWriter.length,
+    ]);
+    testing.expectEqual([1, 1, 0, 0], [
+      ReadableStreamBYOBReader.prototype.read.length,
+      ReadableStreamBYOBRequest.prototype.respondWithNewView.length,
+      ReadableStreamDefaultController.prototype.enqueue.length,
+      ReadableStreamDefaultController.prototype.error.length,
+    ]);
+    testing.expectEqual([1, 0], [
+      ReadableByteStreamController.prototype.enqueue.length,
+      ReadableByteStreamController.prototype.error.length,
+    ]);
+
+    // Only the two readers are constructible.
+    for (const name of ['ReadableByteStreamController', 'ReadableStreamBYOBRequest']) {
+      let err = null;
+      try { new window[name](); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(`TypeError: Failed to construct '${name}': Illegal constructor`, err, { label: name });
+    }
+  }
+</script>
+
+<script id=reader_constructors>
+  {
+    const attempt = (fn) => { try { fn(); return 'NO THROW'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+    const rs = new ReadableStream();
+    const reader = new ReadableStreamDefaultReader(rs);
+    testing.expectEqual('ReadableStreamDefaultReader', reader.constructor.name);
+    testing.expectEqual(true, rs.locked);
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ReadableStreamDefaultReader': 1 argument required, but only 0 present.",
+      attempt(() => new ReadableStreamDefaultReader()));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ReadableStreamDefaultReader': parameter 1 is not of type 'ReadableStream'.",
+      attempt(() => new ReadableStreamDefaultReader({})));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ReadableStreamDefaultReader': ReadableStreamDefaultReader constructor can only accept readable streams that are not yet locked to a reader",
+      attempt(() => new ReadableStreamDefaultReader(rs)));
+
+    const ws = new WritableStream();
+    testing.expectEqual('WritableStreamDefaultWriter', new WritableStreamDefaultWriter(ws).constructor.name);
+    testing.expectEqual(true, ws.locked);
+    testing.expectEqual(
+      "TypeError: Failed to construct 'WritableStreamDefaultWriter': 1 argument required, but only 0 present.",
+      attempt(() => new WritableStreamDefaultWriter()));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'WritableStreamDefaultWriter': parameter 1 is not of type 'WritableStream'.",
+      attempt(() => new WritableStreamDefaultWriter({})));
+
+    // A BYOB reader only attaches to a byte stream, and both refusals name
+    // their own operation.
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ReadableStreamBYOBReader': Cannot use a BYOB reader with a non-byte stream",
+      attempt(() => new ReadableStreamBYOBReader(new ReadableStream())));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ReadableStreamBYOBReader': parameter 1 is not of type 'ReadableStream'.",
+      attempt(() => new ReadableStreamBYOBReader({})));
+    testing.expectEqual(
+      "TypeError: Failed to execute 'getReader' on 'ReadableStream': Cannot use a BYOB reader with a non-byte stream",
+      attempt(() => new ReadableStream().getReader({ mode: 'byob' })));
+
+    const bytes = new ReadableStream({ type: 'bytes' });
+    const byob = new ReadableStreamBYOBReader(bytes);
+    testing.expectEqual(['ReadableStreamBYOBReader', true], [byob.constructor.name, bytes.locked]);
+  }
+</script>
+
+<script id=byte_stream_construction>
+  {
+    const attempt = (fn) => { try { fn(); return 'NO THROW'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    testing.expectEqual(
+      "RangeError: Failed to construct 'ReadableStream': Invalid type is specified",
+      attempt(() => new ReadableStream({ type: 'nope' })));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ReadableStream': autoAllocateChunkSize cannot be 0",
+      attempt(() => new ReadableStream({ type: 'bytes', autoAllocateChunkSize: 0 })));
+
+    let ctrl;
+    const rs = new ReadableStream({ type: 'bytes', start(c) { ctrl = c; } });
+    testing.expectEqual('[object ReadableByteStreamController]', Object.prototype.toString.call(ctrl));
+    testing.expectEqual('ReadableByteStreamController', ctrl.constructor.name);
+    // A byte stream's default high water mark is 0, not 1.
+    testing.expectEqual(0, ctrl.desiredSize);
+    testing.expectEqual(null, ctrl.byobRequest);
+    testing.expectEqual([], Object.getOwnPropertyNames(ctrl));
+    testing.expectEqual(
+      "TypeError: Failed to execute 'enqueue' on 'ReadableByteStreamController': parameter 1 is not of type 'ArrayBufferView'.",
+      attempt(() => ctrl.enqueue('abc')));
+
+    // A plain stream still gets the default controller.
+    let plain;
+    new ReadableStream({ start(c) { plain = c; } });
+    testing.expectEqual('ReadableStreamDefaultController', plain.constructor.name);
+  }
+</script>
+
+<script id=byob_round_trip type=module>
+  {
+    const state = await testing.async();
+    let ctrl;
+    const rs = new ReadableStream({ type: 'bytes', autoAllocateChunkSize: 16, start(c) { ctrl = c; } });
+    const reader = rs.getReader({ mode: 'byob' });
+    const info = {
+      readerCtor: reader.constructor.name,
+      readerBrand: Object.prototype.toString.call(reader),
+    };
+    const view = new Uint8Array(4);
+    const readPromise = reader.read(view);
+    const request = ctrl.byobRequest;
+    info.requestBrand = Object.prototype.toString.call(request);
+    info.viewBrand = Object.prototype.toString.call(request.view);
+    info.viewLen = request.view.byteLength;
+    info.requestOwn = Object.getOwnPropertyNames(request).join(',');
+    info.sameTwice = ctrl.byobRequest === ctrl.byobRequest;
+    info.viewSameTwice = request.view === request.view;
+
+    // The two refusals respond() has.
+    try { request.respond(0); } catch (e) { info.respondZero = `${e.name}: ${e.message}`; }
+    try { request.respond(99); } catch (e) { info.respondTooMuch = `${e.name}: ${e.message}`; }
+
+    request.view[0] = 42;
+    request.respond(1);
+    info.byobRequestAfter = String(ctrl.byobRequest);
+    readPromise.then((r) => {
+      info.done = r.done;
+      info.len = r.value.byteLength;
+      info.first = r.value[0];
+      info.brand = Object.prototype.toString.call(r.value);
+      state.resolve(info);
+    });
+
+    await state.done((data) => {
+      testing.expectEqual(['ReadableStreamBYOBReader', '[object ReadableStreamBYOBReader]'], [data.readerCtor, data.readerBrand]);
+      testing.expectEqual(['[object ReadableStreamBYOBRequest]', '[object Uint8Array]', 4], [data.requestBrand, data.viewBrand, data.viewLen]);
+      testing.expectEqual(['', true, true], [data.requestOwn, data.sameTwice, data.viewSameTwice]);
+      testing.expectEqual("TypeError: Failed to execute 'respond' on 'ReadableStreamBYOBRequest': bytes written is 0", data.respondZero);
+      testing.expectEqual("RangeError: Failed to execute 'respond' on 'ReadableStreamBYOBRequest': available read buffer is too small for specified number of bytes", data.respondTooMuch);
+      testing.expectEqual('null', data.byobRequestAfter);
+      testing.expectEqual([false, 1, 42, '[object Uint8Array]'], [data.done, data.len, data.first, data.brand]);
+    });
+  }
+</script>
+
+<script id=auto_allocate_default_read type=module>
+  {
+    // A *default* reader on a byte stream gets the auto-allocated buffer.
+    const state = await testing.async();
+    let ctrl;
+    const rs = new ReadableStream({ type: 'bytes', autoAllocateChunkSize: 8, start(c) { ctrl = c; } });
+    const reader = rs.getReader();
+    const info = { readerCtor: reader.constructor.name };
+    const p = reader.read();
+    info.viewLen = ctrl.byobRequest.view.byteLength;
+    ctrl.byobRequest.view[0] = 9;
+    ctrl.byobRequest.respond(1);
+    p.then((r) => {
+      info.read = { done: r.done, len: r.value.byteLength, first: r.value[0], brand: Object.prototype.toString.call(r.value) };
+      state.resolve(info);
+    });
+
+    await state.done((data) => {
+      testing.expectEqual('ReadableStreamDefaultReader', data.readerCtor);
+      testing.expectEqual(8, data.viewLen);
+      testing.expectEqual([false, 1, 9, '[object Uint8Array]'], [data.read.done, data.read.len, data.read.first, data.read.brand]);
+    });
+  }
+</script>
+
+<script id=no_auto_allocate type=module>
+  {
+    // Without autoAllocateChunkSize there is no byobRequest; enqueue is the
+    // only way in, and it delivers the whole view.
+    const state = await testing.async();
+    let ctrl;
+    const rs = new ReadableStream({ type: 'bytes', start(c) { ctrl = c; } });
+    const reader = rs.getReader();
+    const p = reader.read();
+    const info = { byobRequest: String(ctrl.byobRequest), desiredSize: ctrl.desiredSize };
+    ctrl.enqueue(new Uint8Array([1, 2, 3]));
+    p.then((r) => {
+      info.read = { done: r.done, len: r.value.byteLength, first: r.value[0], brand: Object.prototype.toString.call(r.value) };
+      state.resolve(info);
+    });
+
+    await state.done((data) => {
+      testing.expectEqual(['null', 0], [data.byobRequest, data.desiredSize]);
+      testing.expectEqual([false, 3, 1, '[object Uint8Array]'], [data.read.done, data.read.len, data.read.first, data.read.brand]);
+    });
+  }
+</script>
+
+<script id=byob_read_non_view type=module>
+  {
+    const state = await testing.async();
+    const rs = new ReadableStream({ type: 'bytes' });
+    const reader = rs.getReader({ mode: 'byob' });
+    reader.read('nope').then(
+      () => state.resolve('RESOLVED'),
+      (e) => state.resolve(`${e.name}: ${e.message}`));
+
+    await state.done((msg) => {
+      testing.expectEqual(
+        "TypeError: Failed to execute 'read' on 'ReadableStreamBYOBReader': parameter 1 is not of type 'ArrayBufferView'.",
+        msg);
+    });
+  }
+</script>
+
+<script id=tee_and_signal type=module>
+  {
+    // tee() locks the source and both branches see everything.
+    const state = await testing.async();
+    const rs = new ReadableStream({ start(c) { c.enqueue('a'); c.enqueue('b'); c.close(); } });
+    const [one, two] = rs.tee();
+    testing.expectEqual(true, rs.locked);
+    testing.expectEqual(['ReadableStream', 'ReadableStream'], [one.constructor.name, two.constructor.name]);
+    testing.expectEqual(0, ReadableStream.prototype.tee.length);
+
+    const drain = async (branch) => {
+      const reader = branch.getReader();
+      const out = [];
+      for (;;) { const { done, value } = await reader.read(); if (done) break; out.push(value); }
+      return out.join(',');
+    };
+    Promise.all([drain(one), drain(two)]).then((r) => state.resolve(r));
+    await state.done((r) => testing.expectEqual(['a,b', 'a,b'], r));
+  }
+</script>
+
+<script id=writer_promises type=module>
+  {
+    const state = await testing.async();
+    let ctrl;
+    const ws = new WritableStream({ start(c) { ctrl = c; } });
+    testing.expectEqual('[object AbortSignal]', Object.prototype.toString.call(ctrl.signal));
+    testing.expectTrue(ctrl.signal === ctrl.signal);
+    testing.expectEqual(false, ctrl.signal.aborted);
+
+    // write / close / ready / closed all resolve with undefined.
+    const w = ws.getWriter();
+    Promise.all([w.write(new Uint8Array(1)), w.ready, w.close(), w.closed]).then((r) => state.resolve(r));
+    await state.done((r) => testing.expectEqual([undefined, undefined, undefined, undefined], r));
+  }
+</script>

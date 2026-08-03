@@ -69,6 +69,15 @@ pub const Type = union(enum) {
     speech_synthesis_utterance: *@import("speech/SpeechSynthesisUtterance.zig"),
     media_stream: *@import("media/streams.zig").MediaStream,
     media_stream_track: *@import("media/streams.zig").MediaStreamTrack,
+    service_worker: *@import("service_worker.zig").ServiceWorker,
+    service_worker_registration: *@import("service_worker.zig").ServiceWorkerRegistration,
+    background_fetch_registration: *@import("service_worker.zig").BackgroundFetchRegistration,
+    payment_request: *@import("payment.zig").PaymentRequest,
+    payment_response: *@import("payment.zig").PaymentResponse,
+    presentation_request: *@import("presentation.zig").PresentationRequest,
+    presentation_availability: *@import("presentation.zig").PresentationAvailability,
+    presentation_connection: *@import("presentation.zig").PresentationConnection,
+    presentation_connection_list: *@import("presentation.zig").PresentationConnectionList,
     media_source: *@import("media/MediaSource.zig"),
     media_recorder: *@import("media/MediaRecorder.zig"),
     rtc_peer_connection: *@import("webrtc/RTCPeerConnection.zig"),
@@ -302,6 +311,15 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .serial_port => writer.writeAll("<SerialPort>"),
         .media_stream => writer.writeAll("<MediaStream>"),
         .media_stream_track => writer.writeAll("<MediaStreamTrack>"),
+        .service_worker => writer.writeAll("<ServiceWorker>"),
+        .service_worker_registration => writer.writeAll("<ServiceWorkerRegistration>"),
+        .background_fetch_registration => writer.writeAll("<BackgroundFetchRegistration>"),
+        .payment_request => writer.writeAll("<PaymentRequest>"),
+        .payment_response => writer.writeAll("<PaymentResponse>"),
+        .presentation_request => writer.writeAll("<PresentationRequest>"),
+        .presentation_availability => writer.writeAll("<PresentationAvailability>"),
+        .presentation_connection => writer.writeAll("<PresentationConnection>"),
+        .presentation_connection_list => writer.writeAll("<PresentationConnectionList>"),
     };
 }
 
@@ -365,6 +383,15 @@ pub fn toString(self: *EventTarget) []const u8 {
         .serial_port => return "[object SerialPort]",
         .media_stream => return "[object MediaStream]",
         .media_stream_track => return "[object MediaStreamTrack]",
+        .service_worker => return "[object ServiceWorker]",
+        .service_worker_registration => return "[object ServiceWorkerRegistration]",
+        .background_fetch_registration => return "[object BackgroundFetchRegistration]",
+        .payment_request => return "[object PaymentRequest]",
+        .payment_response => return "[object PaymentResponse]",
+        .presentation_request => return "[object PresentationRequest]",
+        .presentation_availability => return "[object PresentationAvailability]",
+        .presentation_connection => return "[object PresentationConnection]",
+        .presentation_connection_list => return "[object PresentationConnectionList]",
     };
 }
 

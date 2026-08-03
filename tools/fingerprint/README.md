@@ -775,3 +775,49 @@ rebrowser tests, and `Content-Security-Policy-Report-Only` never blocks.
   shows a report that had not finished rendering when the sweep read it — so the
   ratio says nothing about the engine either way. Node counts (4146 vs 3760) are
   the honest comparison.
+
+## G17 batch 14: the streams remainder and WebTransport (P8)
+
+Eleven more window (and worker) globals, all measured on a headed Chrome 150
+first: `ByteLengthQueuingStrategy`, `CountQueuingStrategy`,
+`ReadableByteStreamController`, `ReadableStreamBYOBReader`,
+`ReadableStreamBYOBRequest`, `CompressionStream`, `DecompressionStream`,
+`WebTransport`, `WebTransportBidirectionalStream`,
+`WebTransportDatagramDuplexStream`, `WebTransportError`. The ground truth is in
+`stealth-detector-probes/win-batch/`: `win20` for the shapes, `win22` and
+`win26` for the behaviour, `win27` for the worker scope.
+
+CreepJS after the batch: window missing keys **185 → 163**, window spans
+**236 → 204**, total `.unsupport` spans **360 → 328**, own window keys
+**958 → 982**.
+
+### Where this engine now differs from Chrome, on purpose or otherwise
+
+- **`CompressionStream` compresses for real.** The bytes *are* the fingerprint —
+  a detector can gzip a known string and compare — so this links the same zlib
+  curl already carries rather than reporting a shape. Chrome's answers for
+  `'hello hello hello'` (28 gzip / 16 deflate / 10 deflate-raw bytes) come back
+  byte for byte, and the test asserts the arrays, not the lengths. Zig's own
+  `std.compress.flate` does *not* match: it emits 9 raw bytes for that input
+  where zlib emits 10, so it was not an option.
+- **A BYOB read copies rather than transfers.** Chrome detaches the view and
+  transfers its buffer, so the chunk a read resolves with shares the source's
+  `ArrayBuffer`. Here the bytes are copied into a fresh `Uint8Array`: the
+  contents and the length are Chrome's, the buffer identity is not.
+- **`constructor` sits last on both readers.** Chrome puts it third on
+  `ReadableStreamDefaultReader` and `ReadableStreamBYOBReader`, between
+  `releaseLock` and `closed`, because `closed`/`cancel` come from a mixin. This
+  bridge always appends it, which is the same structural limitation already
+  recorded for `PerformanceNavigationTiming`. It is the only shape difference
+  left across all sixteen streams and WebTransport interfaces; `win22` and
+  `win26` behaviour diffs are at zero.
+- **A WebTransport handshake fails on the next task, not in the constructor.**
+  Chrome exposes the race: `close()` called before the handshake gives up wins,
+  and both promises then reject with "close() is called while connecting."
+  instead of "Opening handshake failed." Scheduling the failure reproduces both
+  measurements; raising it in the constructor would only reproduce one.
+- **`WebTransportError` takes one dictionary, not `(message, options)`.**
+  `new WebTransportError('x', {...})` reports "The provided value is not of type
+  'WebTransportErrorInit'." because the *string* is what fails the conversion —
+  measured, and easy to get backwards from the spec text. `source` always reads
+  "stream" and `streamErrorCode` is a clamped octet (4294967295 → 255, -1 → 0).

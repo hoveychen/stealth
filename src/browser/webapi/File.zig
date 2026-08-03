@@ -130,7 +130,9 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(File.init, .{});
+    // Chrome requires both the parts and the name: `new File([])` is refused
+    // (measured), so the count is stated rather than derived from the optionals.
+    pub const constructor = bridge.constructor(File.init, .{ .arity = 2 });
     pub const name = bridge.accessor(File.getName, null, .{});
     pub const lastModified = bridge.accessor(File.getLastModified, null, .{});
 };

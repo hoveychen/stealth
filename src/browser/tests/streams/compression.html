@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  CompressionStream / DecompressionStream. Every byte array below is what a
+  headed Chrome 150 produced for the same input (win22-chrome.json,
+  win26-chrome.json) — these are not spec-derived values.
+-->
+
+<script id=shapes>
+  {
+    for (const name of ['CompressionStream', 'DecompressionStream']) {
+      testing.expectEqual('function', typeof window[name], { label: name });
+      testing.expectEqual('readable,writable,constructor', Object.getOwnPropertyNames(window[name].prototype).join(','), { label: name });
+      testing.expectEqual(name, window[name].prototype[Symbol.toStringTag], { label: name });
+      testing.expectEqual(1, window[name].length, { label: name });
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[name].prototype), { label: name });
+    }
+
+    const attempt = (fn) => { try { fn(); return 'NO THROW'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    testing.expectEqual(
+      "TypeError: Failed to construct 'CompressionStream': 1 argument required, but only 0 present.",
+      attempt(() => new CompressionStream()));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'CompressionStream': Unsupported compression format: 'nope'",
+      attempt(() => new CompressionStream('nope')));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'DecompressionStream': Unsupported compression format: 'nope'",
+      attempt(() => new DecompressionStream('nope')));
+    // The argument is stringified before it is rejected.
+    testing.expectEqual(
+      "TypeError: Failed to construct 'CompressionStream': Unsupported compression format: 'undefined'",
+      attempt(() => new CompressionStream(undefined)));
+
+    const cs = new CompressionStream('gzip');
+    testing.expectEqual([], Object.getOwnPropertyNames(cs));
+    testing.expectEqual('[object ReadableStream]', Object.prototype.toString.call(cs.readable));
+    testing.expectEqual('[object WritableStream]', Object.prototype.toString.call(cs.writable));
+    testing.expectEqual('ReadableStream', cs.readable.constructor.name);
+    testing.expectTrue(cs.readable === cs.readable && cs.writable === cs.writable);
+    testing.expectEqual([false, false], [cs.readable.locked, cs.writable.locked]);
+  }
+</script>
+
+<script id=compress_bytes type=module>
+  {
+    const state = await testing.async();
+    const roundTrip = async (fmt, input) => {
+      const cs = new CompressionStream(fmt);
+      const w = cs.writable.getWriter();
+      w.write(input);
+      w.close();
+      const chunks = [];
+      const sizes = [];
+      const reader = cs.readable.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        sizes.push(value.byteLength);
+        chunks.push(...value);
+      }
+      return { bytes: chunks, sizes };
+    };
+
+    const enc = new TextEncoder();
+    const out = {};
+    out.gzip = await roundTrip('gzip', enc.encode('hello hello hello'));
+    out.deflate = await roundTrip('deflate', enc.encode('hello hello hello'));
+    out.raw = await roundTrip('deflate-raw', enc.encode('hello hello hello'));
+    out.abcRaw = await roundTrip('deflate-raw', enc.encode('abc'));
+    out.gzipEmpty = await roundTrip('gzip', new Uint8Array(0));
+    out.deflateEmpty = await roundTrip('deflate', new Uint8Array(0));
+    out.rawEmpty = await roundTrip('deflate-raw', new Uint8Array(0));
+    const big = new Uint8Array(70000);
+    for (let i = 0; i < big.length; i++) big[i] = (i * 7) & 0xff;
+    out.big = await roundTrip('deflate-raw', big);
+    state.resolve(out);
+
+    await state.done((data) => {
+      // 'hello hello hello'
+      testing.expectEqual(
+        [31, 139, 8, 0, 0, 0, 0, 0, 0, 19, 203, 72, 205, 201, 201, 87, 200, 64, 144, 0, 128, 136, 249, 229, 17, 0, 0, 0],
+        data.gzip.bytes);
+      testing.expectEqual(
+        [120, 156, 203, 72, 205, 201, 201, 87, 200, 64, 144, 0, 58, 46, 6, 125],
+        data.deflate.bytes);
+      testing.expectEqual([203, 72, 205, 201, 201, 87, 200, 64, 144, 0], data.raw.bytes);
+      testing.expectEqual([75, 76, 74, 6, 0], data.abcRaw.bytes);
+
+      // Empty input.
+      testing.expectEqual(
+        [31, 139, 8, 0, 0, 0, 0, 0, 0, 19, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        data.gzipEmpty.bytes);
+      testing.expectEqual([120, 156, 3, 0, 0, 0, 0, 1], data.deflateEmpty.bytes);
+      testing.expectEqual([3, 0], data.rawEmpty.bytes);
+
+      // 70 KB in, and Chrome still answers in a single chunk.
+      testing.expectEqual([597], data.big.sizes);
+      testing.expectEqual([237, 207, 67, 2, 24, 6, 0, 0], data.big.bytes.slice(0, 8));
+      testing.expectEqual([191, 191, 191, 255, 95, 248, 255, 1], data.big.bytes.slice(-8));
+    });
+  }
+</script>
+
+<script id=decompress type=module>
+  {
+    const state = await testing.async();
+    const out = {};
+
+    const pump = async (ds) => {
+      const reader = ds.readable.getReader();
+      const dec = new TextDecoder();
+      let text = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += dec.decode(value, { stream: true });
+      }
+      return text;
+    };
+
+    // gzip -> gunzip round trip.
+    {
+      const cs = new CompressionStream('gzip');
+      const w = cs.writable.getWriter();
+      w.write(new TextEncoder().encode('round trip'));
+      w.close();
+      const compressed = [];
+      const reader = cs.readable.getReader();
+      for (;;) { const { done, value } = await reader.read(); if (done) break; compressed.push(...value); }
+
+      const ds = new DecompressionStream('gzip');
+      const dw = ds.writable.getWriter();
+      dw.write(new Uint8Array(compressed));
+      dw.close();
+      out.roundTrip = await pump(ds);
+    }
+
+    // A bad stream is not a synchronous throw: Chrome errors the readable
+    // side, so it is the read that rejects (measured, win22 / win26).
+    const failure = async (fmt, bytes) => {
+      const ds = new DecompressionStream(fmt);
+      const w = ds.writable.getWriter();
+      w.write(new Uint8Array(bytes));
+      w.close();
+      try {
+        await ds.readable.getReader().read();
+        return 'NO THROW';
+      } catch (e) { return `${e.name}: ${e.message}`; }
+    };
+    out.garbage = await failure('gzip', [1, 2, 3, 4]);
+    out.truncated = await failure('gzip', [31, 139, 8, 0, 0, 0, 0, 0, 0, 19]);
+    out.rawGarbage = await failure('deflate-raw', [255, 255, 255, 255]);
+    state.resolve(out);
+
+    await state.done((data) => {
+      testing.expectEqual('round trip', data.roundTrip);
+      testing.expectEqual('TypeError: The compressed data was not valid: incorrect header check.', data.garbage);
+      testing.expectEqual('TypeError: Compressed input was truncated.', data.truncated);
+      testing.expectEqual('TypeError: The compressed data was not valid: invalid block type.', data.rawGarbage);
+    });
+  }
+</script>

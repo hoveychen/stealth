@@ -45,13 +45,10 @@ pub fn registerTypes() []const type {
     return &.{
         Scheduling,
         UserActivation,
-        Geolocation,
         ProtectedAudience,
-        CredentialsContainer,
         NavigatorLogin,
         MediaCapabilities,
         MediaSession,
-        Presentation,
         GPU,
         WGSLLanguageFeatures,
         WGSLLanguageFeatures.KeyIterator,
@@ -127,56 +124,6 @@ pub const UserActivation = struct {
     };
 };
 
-pub const Geolocation = struct {
-    // Chrome's watch ids are a 1-based counter (measured: two calls in a row
-    // returned 1 then 2).
-    _next_watch_id: u32 = 0,
-
-    const PositionOptions = struct {
-        enableHighAccuracy: bool = false,
-        timeout: ?u32 = null,
-        maximumAge: ?u32 = null,
-    };
-
-    // Neither callback is ever invoked. On the reference Chrome the permission
-    // request stayed pending and no callback had fired after five seconds, so a
-    // pending request is a state a real Chrome is observably in. We have no
-    // position and won't invent either a fix or a denial: a fabricated location
-    // is a worse tell than a permission prompt nobody answered.
-    pub fn getCurrentPosition(
-        _: *Geolocation,
-        _: js.Function,
-        _: ?js.Function,
-        _: ?PositionOptions,
-    ) void {}
-
-    pub fn watchPosition(
-        self: *Geolocation,
-        _: js.Function,
-        _: ?js.Function,
-        _: ?PositionOptions,
-    ) u32 {
-        self._next_watch_id += 1;
-        return self._next_watch_id;
-    }
-
-    pub fn clearWatch(_: *Geolocation, _: u32) void {}
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(Geolocation);
-
-        pub const Meta = struct {
-            pub const name = "Geolocation";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-        };
-
-        pub const clearWatch = bridge.function(Geolocation.clearWatch, .{});
-        pub const getCurrentPosition = bridge.function(Geolocation.getCurrentPosition, .{});
-        pub const watchPosition = bridge.function(Geolocation.watchPosition, .{});
-    };
-};
-
 pub const ProtectedAudience = struct {
     _pad: bool = false,
 
@@ -232,52 +179,6 @@ pub const ProtectedAudience = struct {
             ProtectedAudience.queryFeatureSupport,
             .{ .null_as_undefined = true },
         );
-    };
-};
-
-pub const CredentialsContainer = struct {
-    _pad: bool = false,
-
-    // We store no credentials, so get() finds none. Chrome resolves null for a
-    // request that matches nothing, which is the same answer (measured).
-    pub fn get(_: *const CredentialsContainer, _: ?js.Object, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise(null);
-    }
-
-    // Measured: create({}) rejects NotSupportedError ("Only exactly one of
-    // 'password', 'federated', and 'publicKey' credential types are currently
-    // supported."). We have no credential store to create into, so every call
-    // lands on that same rejection rather than on an invented success.
-    pub fn create(_: *const CredentialsContainer, _: ?js.Object, exec: *const Execution) js.Promise {
-        return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
-    }
-
-    pub fn preventSilentAccess(_: *const CredentialsContainer, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise({});
-    }
-
-    // Chrome type-checks the argument against Credential, which no page can
-    // construct here, so every call is the TypeError it measured as.
-    pub fn store(_: *const CredentialsContainer, _: js.Value, exec: *const Execution) js.Promise {
-        return exec.js.local.?.rejectPromise(.{
-            .type_error = "Failed to execute 'store' on 'CredentialsContainer': parameter 1 is not of type 'Credential'.",
-        });
-    }
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(CredentialsContainer);
-
-        pub const Meta = struct {
-            pub const name = "CredentialsContainer";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
-        };
-
-        pub const create = bridge.function(CredentialsContainer.create, .{});
-        pub const get = bridge.function(CredentialsContainer.get, .{});
-        pub const preventSilentAccess = bridge.function(CredentialsContainer.preventSilentAccess, .{});
-        pub const store = bridge.function(CredentialsContainer.store, .{});
     };
 };
 
@@ -477,37 +378,6 @@ pub const MediaSession = struct {
         pub const setCameraActive = bridge.function(MediaSession.setCameraActive, .{});
         pub const setMicrophoneActive = bridge.function(MediaSession.setMicrophoneActive, .{});
         pub const setPositionState = bridge.function(MediaSession.setPositionState, .{});
-    };
-};
-
-pub const Presentation = struct {
-    _pad: bool = false,
-
-    // Both null with no presentation display around, as on the reference
-    // Chrome. PresentationRequest has no constructor here, so nothing can set
-    // defaultRequest to anything but null either.
-    pub fn getDefaultRequest(_: *const Presentation) ?bool {
-        return null;
-    }
-
-    pub fn setDefaultRequest(_: *Presentation, _: ?js.Value) void {}
-
-    pub fn getReceiver(_: *const Presentation) ?bool {
-        return null;
-    }
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(Presentation);
-
-        pub const Meta = struct {
-            pub const name = "Presentation";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
-        };
-
-        pub const defaultRequest = bridge.accessor(Presentation.getDefaultRequest, Presentation.setDefaultRequest, .{});
-        pub const receiver = bridge.accessor(Presentation.getReceiver, null, .{});
     };
 };
 

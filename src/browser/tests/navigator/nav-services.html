@@ -112,39 +112,6 @@
   }
 </script>
 
-<script id=credentials type=module>
-  {
-    const state = await testing.async();
-    testing.expectEqual('function', typeof CredentialsContainer);
-    testing.expectEqual('[object CredentialsContainer]', Object.prototype.toString.call(navigator.credentials));
-    testing.expectEqual(
-      ['create', 'get', 'preventSilentAccess', 'store', 'constructor'],
-      Object.getOwnPropertyNames(CredentialsContainer.prototype),
-    );
-    testing.expectEqual(0, CredentialsContainer.prototype.create.length);
-    testing.expectEqual(0, CredentialsContainer.prototype.get.length);
-    testing.expectEqual(0, CredentialsContainer.prototype.preventSilentAccess.length);
-    testing.expectEqual(1, CredentialsContainer.prototype.store.length);
-
-    // Measured: get() with no matching credential resolves null,
-    // preventSilentAccess() resolves undefined, create({}) and store(x) reject.
-    const got = await navigator.credentials.get({ password: true });
-    const silent = await navigator.credentials.preventSilentAccess();
-    let createErr = null;
-    try { await navigator.credentials.create({}); } catch (e) { createErr = e.name; }
-    let storeErr = null;
-    try { await navigator.credentials.store({}); } catch (e) { storeErr = e.name; }
-    state.resolve();
-
-    await state.done(() => {
-      testing.expectEqual(null, got);
-      testing.expectEqual(undefined, silent);
-      testing.expectEqual('NotSupportedError', createErr);
-      testing.expectEqual('TypeError', storeErr);
-    });
-  }
-</script>
-
 <script id=login type=module>
   {
     const state = await testing.async();

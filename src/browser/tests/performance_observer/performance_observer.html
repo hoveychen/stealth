@@ -71,7 +71,14 @@
 </script>
 
 <script>
-  testing.expectEqual(['mark', 'measure'], PerformanceObserver.supportedEntryTypes);
+  // Chrome's thirteen, in Chrome's order (measured on a headed Chrome 150).
+  // taskattribution is deliberately absent: it is a real entryType with a real
+  // interface, but Chrome does not advertise it here.
+  testing.expectEqual([
+    'element', 'event', 'first-input', 'largest-contentful-paint',
+    'layout-shift', 'long-animation-frame', 'longtask', 'mark', 'measure',
+    'navigation', 'paint', 'resource', 'visibility-state',
+  ], PerformanceObserver.supportedEntryTypes);
 </script>
 
 <script id="list_get_entries_by_type">

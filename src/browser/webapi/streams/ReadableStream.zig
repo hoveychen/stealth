@@ -24,6 +24,10 @@ const js = @import("../../js/js.zig");
 const ReadableStreamDefaultReader = @import("ReadableStreamDefaultReader.zig");
 const ReadableStreamDefaultController = @import("ReadableStreamDefaultController.zig");
 const WritableStream = @import("WritableStream.zig");
+const byte_stream = @import("byte_stream.zig");
+
+const ReadableByteStreamController = byte_stream.ReadableByteStreamController;
+const ReadableStreamBYOBReader = byte_stream.ReadableStreamBYOBReader;
 
 const log = lp.log;
 const Execution = js.Execution;
@@ -54,12 +58,17 @@ _pulling: bool = false,
 _pull_again: bool = false,
 _cancel: ?Cancel = null,
 _collected: bool = false,
+/// Set for `{type: 'bytes'}` streams, which run on their own controller and
+/// are the only ones a BYOB reader will attach to.
+_byte_controller: ?*ReadableByteStreamController = null,
+_byob_reader: ?*ReadableStreamBYOBReader = null,
 
 const UnderlyingSource = struct {
     start: ?js.Function = null,
     pull: ?js.Function.Global = null,
     cancel: ?js.Function.Global = null,
     type: ?[]const u8 = null,
+    autoAllocateChunkSize: ?u32 = null,
 };
 
 const QueueingStrategy = struct {
@@ -81,8 +90,37 @@ pub fn init(src_: ?UnderlyingSource, strategy_: ?QueueingStrategy, exec: *const 
     self._controller = try ReadableStreamDefaultController.init(self, strategy.highWaterMark, exec);
 
     if (src_) |src| {
+        // Chrome reads `type` before anything else, and both refusals below are
+        // its own wording — the bad-type one is a RangeError, not a TypeError
+        // (measured, win26-chrome.json).
+        if (src.type) |kind| {
+            if (!std.mem.eql(u8, kind, "bytes")) {
+                const isolate = exec.js.isolate;
+                _ = isolate.throwException(isolate.createRangeError(
+                    "Failed to construct 'ReadableStream': Invalid type is specified",
+                ));
+                return error.JsException;
+            }
+            if (src.autoAllocateChunkSize) |size| {
+                if (size == 0) {
+                    const isolate = exec.js.isolate;
+                    _ = isolate.throwException(isolate.createTypeError(
+                        "Failed to construct 'ReadableStream': autoAllocateChunkSize cannot be 0",
+                    ));
+                    return error.JsException;
+                }
+            }
+            // A byte stream's default high water mark is 0, not 1.
+            const hwm: f64 = if (strategy_) |s| @floatFromInt(s.highWaterMark) else 0;
+            self._byte_controller = try ReadableByteStreamController.init(self, src.autoAllocateChunkSize, hwm, exec);
+        }
+
         if (src.start) |start| {
-            try start.call(void, .{self._controller});
+            if (self._byte_controller) |byte_controller| {
+                try start.call(void, .{byte_controller});
+            } else {
+                try start.call(void, .{self._controller});
+            }
         }
 
         if (src.cancel) |callback| {
@@ -110,11 +148,42 @@ pub fn initWithData(data: []const u8, exec: *const Execution) !*ReadableStream {
     return stream;
 }
 
-pub fn getReader(self: *ReadableStream, exec: *const Execution) !*ReadableStreamDefaultReader {
+const GetReaderOptions = struct {
+    mode: ?[]const u8 = null,
+};
+
+pub const Reader = union(enum) {
+    default: *ReadableStreamDefaultReader,
+    byob: *ReadableStreamBYOBReader,
+};
+
+pub fn getReader(self: *ReadableStream, options_: ?GetReaderOptions, exec: *const Execution) !Reader {
     if (self.getLocked()) {
         return error.ReaderLocked;
     }
 
+    if (options_) |options| {
+        if (options.mode) |mode| {
+            if (std.mem.eql(u8, mode, "byob")) {
+                return .{ .byob = try ReadableStreamBYOBReader.initFrom(
+                    self,
+                    "Failed to execute 'getReader' on 'ReadableStream'",
+                    exec,
+                ) };
+            }
+        }
+    }
+
+    const reader = try ReadableStreamDefaultReader.init(self, exec);
+    self._reader = reader;
+    return .{ .default = reader };
+}
+
+/// The Zig-side callers only ever want the default reader.
+pub fn defaultReader(self: *ReadableStream, exec: *const Execution) !*ReadableStreamDefaultReader {
+    if (self.getLocked()) {
+        return error.ReaderLocked;
+    }
     const reader = try ReadableStreamDefaultReader.init(self, exec);
     self._reader = reader;
     return reader;
@@ -128,8 +197,72 @@ pub fn getAsyncIterator(self: *ReadableStream, exec: *const Execution) !*AsyncIt
     return AsyncIterator.init(self, exec);
 }
 
+/// Two streams that both see everything this one produces. Like Chrome's, it
+/// locks the source: the branches are the only way to read it afterwards.
+pub fn tee(self: *ReadableStream, exec: *const Execution) ![2]*ReadableStream {
+    if (self.getLocked()) {
+        return error.ReaderLocked;
+    }
+
+    const branches = [2]*ReadableStream{
+        try ReadableStream.init(null, null, exec),
+        try ReadableStream.init(null, null, exec),
+    };
+
+    const state = try exec.arena.create(TeeState);
+    state.* = .{
+        .execution = exec,
+        .reader = try self.defaultReader(exec),
+        .branches = branches,
+    };
+    try state.pump();
+    return branches;
+}
+
+/// Pumps the source into both branches, one read at a time.
+const TeeState = struct {
+    execution: *const Execution,
+    reader: *ReadableStreamDefaultReader,
+    branches: [2]*ReadableStream,
+
+    fn pump(state: *TeeState) !void {
+        const local = state.execution.js.local.?;
+        const read_promise = try state.reader.read(state.execution);
+        _ = read_promise.thenAndCatch(
+            local.newCallback(onChunk, state),
+            local.newCallback(onDone, state),
+        ) catch state.close();
+    }
+
+    const ReadData = struct {
+        done: bool,
+        value: js.Value,
+    };
+
+    fn onChunk(state: *TeeState, data_: ?ReadData) void {
+        const data = data_ orelse return state.close();
+        if (data.done) {
+            return state.close();
+        }
+        for (state.branches) |branch| {
+            branch._controller.enqueueValue(data.value) catch {};
+        }
+        state.pump() catch state.close();
+    }
+
+    fn onDone(state: *TeeState) void {
+        state.close();
+    }
+
+    fn close(state: *TeeState) void {
+        for (state.branches) |branch| {
+            branch._controller.close() catch {};
+        }
+    }
+};
+
 pub fn getLocked(self: *const ReadableStream) bool {
-    return self._reader != null;
+    return self._reader != null or self._byob_reader != null;
 }
 
 /// Drain a closed stream's internal queue into bytes for outbound HTTP
@@ -325,7 +458,7 @@ const PipeState = struct {
         resolver: ?js.PromiseResolver.Global,
         exec: *const Execution,
     ) !void {
-        const reader = try stream.getReader(exec);
+        const reader = try stream.defaultReader(exec);
         const state = try exec.arena.create(PipeState);
         state.* = .{
             .execution = exec,
@@ -416,11 +549,13 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(ReadableStream.init, .{});
+    pub const locked = bridge.accessor(ReadableStream.getLocked, null, .{});
     pub const cancel = bridge.function(ReadableStream.cancel, .{});
     pub const getReader = bridge.function(ReadableStream.getReader, .{});
     pub const pipeThrough = bridge.function(ReadableStream.pipeThrough, .{});
     pub const pipeTo = bridge.function(ReadableStream.pipeTo, .{});
-    pub const locked = bridge.accessor(ReadableStream.getLocked, null, .{});
+    pub const tee = bridge.function(ReadableStream.tee, .{});
+    pub const values = bridge.function(ReadableStream.getAsyncIterator, .{});
     pub const symbol_async_iterator = bridge.iterator(ReadableStream.getAsyncIterator, .{ .async = true });
 };
 
@@ -429,7 +564,7 @@ pub const AsyncIterator = struct {
     _reader: *ReadableStreamDefaultReader,
 
     pub fn init(stream: *ReadableStream, exec: *const Execution) !*AsyncIterator {
-        const reader = try stream.getReader(exec);
+        const reader = try stream.defaultReader(exec);
         return exec._factory.create(AsyncIterator{
             ._reader = reader,
             ._stream = stream,

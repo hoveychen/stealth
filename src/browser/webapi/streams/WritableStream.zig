@@ -39,6 +39,15 @@ _stored_error: ?[]const u8,
 _write_fn: ?js.Function.Global,
 _close_fn: ?js.Function.Global,
 _transform_stream: ?*TransformStream,
+/// A sink written in Zig rather than in JS — what the compression streams
+/// hang off the writable side.
+_native: ?Native = null,
+
+pub const Native = struct {
+    ctx: *anyopaque,
+    write: *const fn (*anyopaque, js.Value, *const Execution) anyerror!void,
+    close: *const fn (*anyopaque, *const Execution) anyerror!void,
+};
 
 const UnderlyingSink = struct {
     start: ?js.Function = null,
@@ -104,6 +113,10 @@ pub fn getLocked(self: *const WritableStream) bool {
 pub fn writeChunk(self: *WritableStream, chunk: js.Value, exec: *const Execution) !void {
     if (self._state != .writable) return;
 
+    if (self._native) |native| {
+        return native.write(native.ctx, chunk, exec);
+    }
+
     if (self._transform_stream) |ts| {
         try ts.transformWrite(chunk, exec);
         return;
@@ -122,6 +135,10 @@ pub fn closeStream(self: *WritableStream, exec: *const Execution) !void {
     if (self._state != .writable) return;
     self._state = .closed;
 
+    if (self._native) |native| {
+        return native.close(native.ctx, exec);
+    }
+
     if (self._transform_stream) |ts| {
         try ts.transformClose(exec);
         return;
@@ -136,6 +153,22 @@ pub fn closeStream(self: *WritableStream, exec: *const Execution) !void {
     }
 }
 
+/// Aborting or closing with no sink attached just moves the state along; both
+/// answer a resolved promise, as Chrome's do for a stream nothing is writing.
+pub fn abort(self: *WritableStream, _: ?js.Value, exec: *const Execution) !js.Promise {
+    self._state = .errored;
+    return exec.js.local.?.resolvePromise({});
+}
+
+pub fn close(self: *WritableStream, exec: *const Execution) !js.Promise {
+    const local = exec.js.local.?;
+    if (self.getLocked()) {
+        return local.rejectPromise(.{ .type_error = "Cannot close a stream using a locked writer" });
+    }
+    try self.closeStream(exec);
+    return local.resolvePromise({});
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(WritableStream);
 
@@ -146,8 +179,10 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(WritableStream.init, .{});
-    pub const getWriter = bridge.function(WritableStream.getWriter, .{});
     pub const locked = bridge.accessor(WritableStream.getLocked, null, .{});
+    pub const abort = bridge.function(WritableStream.abort, .{});
+    pub const close = bridge.function(WritableStream.close, .{});
+    pub const getWriter = bridge.function(WritableStream.getWriter, .{});
 };
 
 pub fn registerTypes() []const type {

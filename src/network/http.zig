@@ -331,6 +331,9 @@ pub const ResponseHead = struct {
     status: u16,
     url: [*c]const u8,
     redirect_count: u32,
+    // ALPN-style label for Navigation/Resource Timing's nextHopProtocol. Empty
+    // when the response did not come off a live connection (cache hits).
+    next_hop_protocol: []const u8 = "",
     _content_type_len: usize = 0,
     _content_type: [MAX_CONTENT_TYPE_LEN]u8 = undefined,
 
@@ -652,6 +655,16 @@ pub const Connection = struct {
             return 0;
         }
         return @intCast(status);
+    }
+
+    /// The ALPN-style protocol label Navigation/Resource Timing's
+    /// `nextHopProtocol` reports. Chrome answered "http/1.0" against the local
+    /// static server and uses "h2"/"h3" for the negotiated HTTP/2 and /3
+    /// (measured in win20-chrome.json).
+    pub fn getHttpVersion(self: *const Connection) ![]const u8 {
+        var version: c_long = undefined;
+        try libcurl.curl_easy_getinfo(self._easy, .http_version, &version);
+        return libcurl.httpVersionLabel(version);
     }
 
     pub fn getRedirectCount(self: *const Connection) !u32 {

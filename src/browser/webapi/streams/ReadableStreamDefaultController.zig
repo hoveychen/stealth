@@ -178,7 +178,7 @@ pub fn doError(self: *ReadableStreamDefaultController, err: []const u8) !void {
 
     // Reject all pending reads
     for (self._pending_reads.items) |resolver| {
-        self._execution.js.toLocal(resolver).reject("stream error", err);
+        self._execution.js.toLocal(resolver).rejectError("stream error", .{ .type_error = err });
     }
     self._pending_reads.clearRetainingCapacity();
 }
@@ -216,8 +216,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const enqueue = bridge.function(ReadableStreamDefaultController.enqueueValue, .{});
-    pub const close = bridge.function(ReadableStreamDefaultController.close, .{});
-    pub const @"error" = bridge.function(ReadableStreamDefaultController.doError, .{});
-    pub const desiredSize = bridge.accessor(ReadableStreamDefaultController.getDesiredSize, null, .{});
+    const T = ReadableStreamDefaultController;
+
+    // Chrome reports length 0 for both enqueue and error -- their arguments
+    // are optional in the IDL (measured, win20-chrome.json).
+    pub const desiredSize = bridge.accessor(T.getDesiredSize, null, .{});
+    pub const close = bridge.function(T.close, .{});
+    pub const enqueue = bridge.function(T.enqueueValue, .{ .arity = 0 });
+    pub const @"error" = bridge.function(T.doError, .{ .arity = 0 });
 };

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<!--
+  The twelve interfaces reached through a ServiceWorkerRegistration, measured on
+  a headed Chrome 150 over http://localhost (win20-chrome.json). Nothing here is
+  reachable from script: navigator.serviceWorker never hands out a registration,
+  so shape is the whole surface.
+
+  Two member lists deliberately differ from Chrome's: Blink puts `onerror` after
+  `constructor` on ServiceWorker and six runtime-enabled members after it on
+  ServiceWorkerRegistration, and V8 can only append `constructor` last.
+-->
+
+<script id=shapes>
+  {
+    const shapes = {
+      ServiceWorker: ['scriptURL', 'state', 'onstatechange', 'postMessage', 'onerror', 'constructor'],
+      ServiceWorkerRegistration: ['installing', 'waiting', 'active', 'navigationPreload', 'scope', 'updateViaCache', 'onupdatefound', 'unregister', 'update', 'paymentManager', 'backgroundFetch', 'periodicSync', 'sync', 'cookies', 'pushManager', 'getNotifications', 'showNotification', 'constructor'],
+      PushManager: ['getSubscription', 'permissionState', 'subscribe', 'constructor'],
+      PushSubscription: ['endpoint', 'expirationTime', 'options', 'getKey', 'toJSON', 'unsubscribe', 'constructor'],
+      PushSubscriptionOptions: ['userVisibleOnly', 'applicationServerKey', 'constructor'],
+      BackgroundFetchManager: ['fetch', 'get', 'getIds', 'constructor'],
+      BackgroundFetchRecord: ['request', 'responseReady', 'constructor'],
+      BackgroundFetchRegistration: ['id', 'uploadTotal', 'uploaded', 'downloadTotal', 'downloaded', 'result', 'failureReason', 'recordsAvailable', 'onprogress', 'abort', 'match', 'matchAll', 'constructor'],
+      SyncManager: ['getTags', 'register', 'constructor'],
+      PeriodicSyncManager: ['getTags', 'register', 'unregister', 'constructor'],
+      NavigationPreloadManager: ['disable', 'enable', 'getState', 'setHeaderValue', 'constructor'],
+      CookieStoreManager: ['getSubscriptions', 'subscribe', 'unsubscribe', 'constructor'],
+    };
+    for (const [name, keys] of Object.entries(shapes)) {
+      testing.expectEqual('function', typeof window[name], { label: name });
+      testing.expectEqual(keys.join(','), Object.getOwnPropertyNames(window[name].prototype).join(','));
+      // None of the twelve is constructible.
+      let err = null;
+      try { new window[name](); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(`TypeError: Failed to construct '${name}': Illegal constructor`, err, { label: name });
+      testing.expectEqual(0, window[name].length, { label: name });
+    }
+
+    // Three of them are EventTargets, the rest are plain interfaces.
+    for (const name of ['ServiceWorker', 'ServiceWorkerRegistration', 'BackgroundFetchRegistration']) {
+      testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(window[name].prototype), { label: name });
+    }
+    for (const name of ['PushManager', 'PushSubscription', 'SyncManager', 'CookieStoreManager']) {
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[name].prototype), { label: name });
+    }
+
+    // Arities Chrome reports.
+    testing.expectEqual([1, 2, 1, 0, 1], [
+      ServiceWorker.prototype.postMessage.length,
+      BackgroundFetchManager.prototype.fetch.length,
+      BackgroundFetchManager.prototype.get.length,
+      BackgroundFetchManager.prototype.getIds.length,
+      PushSubscription.prototype.getKey.length,
+    ]);
+    testing.expectEqual([0, 1, 1], [
+      ServiceWorkerRegistration.prototype.getNotifications.length,
+      ServiceWorkerRegistration.prototype.showNotification.length,
+      PeriodicSyncManager.prototype.unregister.length,
+    ]);
+
+    // PushManager's one live value: a static list of content encodings.
+    testing.expectEqual(
+      ['supportedContentEncodings'],
+      Object.getOwnPropertyNames(PushManager).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+    );
+    testing.expectEqual(['aes128gcm', 'aesgcm'], PushManager.supportedContentEncodings);
+    const desc = Object.getOwnPropertyDescriptor(PushManager, 'supportedContentEncodings');
+    testing.expectEqual(['function', undefined], [typeof desc.get, desc.set]);
+  }
+</script>

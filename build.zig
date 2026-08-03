@@ -352,6 +352,16 @@ fn linkCurl(b: *Build, mod: *Build.Module, is_tsan: bool) !void {
     const zlib = buildZlib(b, target, mod.optimize.?, is_tsan);
     curl.root_module.linkLibrary(zlib);
 
+    // CompressionStream / DecompressionStream deflate with the same library
+    // Chrome does, which is the only way their output matches it byte for byte.
+    mod.linkLibrary(zlib);
+    const zlib_translate_c = b.addTranslateC(.{
+        .root_source_file = zlib.getEmittedIncludeTree().path(b, "zlib.h"),
+        .target = target,
+        .optimize = mod.optimize.?,
+    });
+    mod.addImport("zlib", zlib_translate_c.createModule());
+
     const brotli = buildBrotli(b, target, mod.optimize.?, is_tsan);
     for (brotli) |lib| curl.root_module.linkLibrary(lib);
 

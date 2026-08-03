@@ -1020,28 +1020,31 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(WebSocket.init, .{});
+    // WebIDL says `WebSocket(url, optional protocols)` has length 1; `protocols`
+    // is a sequence, which is the same non-optional slice parameter here, so the
+    // count has to be stated (measured: Chrome reports 1).
+    pub const constructor = bridge.constructor(WebSocket.init, .{ .arity = 1 });
+
+    // Chrome's own member order (measured, win27-chrome.json): the four
+    // constants sit between binaryType and close, not at the front.
+    pub const url = bridge.accessor(WebSocket.getUrl, null, .{});
+    pub const readyState = bridge.accessor(WebSocket.getReadyState, null, .{});
+    pub const bufferedAmount = bridge.accessor(WebSocket.getBufferedAmount, null, .{});
+    pub const onopen = bridge.accessor(WebSocket.getOnOpen, WebSocket.setOnOpen, .{});
+    pub const onerror = bridge.accessor(WebSocket.getOnError, WebSocket.setOnError, .{});
+    pub const onclose = bridge.accessor(WebSocket.getOnClose, WebSocket.setOnClose, .{});
+    pub const extensions = bridge.property("", .{ .template = false });
+    pub const protocol = bridge.accessor(WebSocket.getProtocol, null, .{});
+    pub const onmessage = bridge.accessor(WebSocket.getOnMessage, WebSocket.setOnMessage, .{});
+    pub const binaryType = bridge.accessor(WebSocket.getBinaryType, WebSocket.setBinaryType, .{});
 
     pub const CONNECTING = bridge.property(@intFromEnum(ReadyState.connecting), .{ .template = true });
     pub const OPEN = bridge.property(@intFromEnum(ReadyState.open), .{ .template = true });
     pub const CLOSING = bridge.property(@intFromEnum(ReadyState.closing), .{ .template = true });
     pub const CLOSED = bridge.property(@intFromEnum(ReadyState.closed), .{ .template = true });
 
-    pub const url = bridge.accessor(WebSocket.getUrl, null, .{});
-    pub const readyState = bridge.accessor(WebSocket.getReadyState, null, .{});
-    pub const bufferedAmount = bridge.accessor(WebSocket.getBufferedAmount, null, .{});
-    pub const binaryType = bridge.accessor(WebSocket.getBinaryType, WebSocket.setBinaryType, .{});
-
-    pub const protocol = bridge.accessor(WebSocket.getProtocol, null, .{});
-    pub const extensions = bridge.property("", .{ .template = false });
-
-    pub const onopen = bridge.accessor(WebSocket.getOnOpen, WebSocket.setOnOpen, .{});
-    pub const onmessage = bridge.accessor(WebSocket.getOnMessage, WebSocket.setOnMessage, .{});
-    pub const onerror = bridge.accessor(WebSocket.getOnError, WebSocket.setOnError, .{});
-    pub const onclose = bridge.accessor(WebSocket.getOnClose, WebSocket.setOnClose, .{});
-
-    pub const send = bridge.function(WebSocket.send, .{});
     pub const close = bridge.function(WebSocket.close, .{});
+    pub const send = bridge.function(WebSocket.send, .{});
 };
 
 const testing = @import("../../../testing.zig");

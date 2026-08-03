@@ -17,6 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const js = @import("../../js/js.zig");
+const AbortSignal = @import("../AbortSignal.zig");
 const WritableStream = @import("WritableStream.zig");
 
 const Execution = js.Execution;
@@ -24,11 +25,21 @@ const Execution = js.Execution;
 const WritableStreamDefaultController = @This();
 
 _stream: *WritableStream,
+_signal: ?*AbortSignal = null,
 
 pub fn init(stream: *WritableStream, exec: *const Execution) !*WritableStreamDefaultController {
     return exec._factory.create(WritableStreamDefaultController{
         ._stream = stream,
     });
+}
+
+/// The signal a sink's abort() would fire. Nothing aborts here, but it is the
+/// same object on every read, as Chrome's is.
+pub fn getSignal(self: *WritableStreamDefaultController, exec: *const Execution) !*AbortSignal {
+    if (self._signal == null) {
+        self._signal = try AbortSignal.init(exec);
+    }
+    return self._signal.?;
 }
 
 pub fn doError(self: *WritableStreamDefaultController, reason: []const u8) void {
@@ -46,5 +57,6 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const @"error" = bridge.function(WritableStreamDefaultController.doError, .{});
+    pub const signal = bridge.accessor(WritableStreamDefaultController.getSignal, null, .{});
+    pub const @"error" = bridge.function(WritableStreamDefaultController.doError, .{ .arity = 0 });
 };

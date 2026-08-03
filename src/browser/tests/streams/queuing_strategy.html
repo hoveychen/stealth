@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  ByteLengthQueuingStrategy / CountQueuingStrategy, measured on a headed
+  Chrome 150 (win20-chrome.json for the shapes, win22 / win26 for the
+  behaviour). Member lists are Chrome's own getOwnPropertyNames order.
+-->
+
+<script id=shapes>
+  {
+    for (const name of ['ByteLengthQueuingStrategy', 'CountQueuingStrategy']) {
+      testing.expectEqual('function', typeof window[name], { label: name });
+      testing.expectEqual('highWaterMark,size,constructor', Object.getOwnPropertyNames(window[name].prototype).join(','), { label: name });
+      testing.expectEqual(name, window[name].prototype[Symbol.toStringTag], { label: name });
+      testing.expectEqual(1, window[name].length, { label: name });
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[name].prototype), { label: name });
+    }
+
+    const desc = Object.getOwnPropertyDescriptor(ByteLengthQueuingStrategy.prototype, 'size');
+    testing.expectEqual(['function', undefined, true, true], [typeof desc.get, desc.set, desc.enumerable, desc.configurable]);
+    testing.expectEqual([0], [desc.get.length]);
+  }
+</script>
+
+<script id=construction>
+  {
+    const attempt = (Ctor, ...args) => {
+      try { new Ctor(...args); return 'NO THROW'; } catch (e) { return `${e.name}: ${e.message}`; }
+    };
+    for (const name of ['ByteLengthQueuingStrategy', 'CountQueuingStrategy']) {
+      const Ctor = window[name];
+      testing.expectEqual(
+        `TypeError: Failed to construct '${name}': 1 argument required, but only 0 present.`,
+        attempt(Ctor), { label: name });
+      testing.expectEqual(
+        `TypeError: Failed to construct '${name}': Failed to read the 'highWaterMark' property from 'QueuingStrategyInit': Required member is undefined.`,
+        attempt(Ctor, {}), { label: name });
+      // null and a primitive are both refused, unlike most dictionaries.
+      testing.expectEqual(
+        `TypeError: Failed to construct '${name}': The provided value is not of type 'QueuingStrategyInit'.`,
+        attempt(Ctor, null), { label: name });
+      testing.expectEqual(
+        `TypeError: Failed to construct '${name}': The provided value is not of type 'QueuingStrategyInit'.`,
+        attempt(Ctor, 'x'), { label: name });
+    }
+
+    // Unrestricted double: nothing is clamped and nothing is rejected.
+    testing.expectEqual([], Object.getOwnPropertyNames(new CountQueuingStrategy({ highWaterMark: 2 })));
+    testing.expectEqual(3, new ByteLengthQueuingStrategy({ highWaterMark: 3 }).highWaterMark);
+    testing.expectTrue(Number.isNaN(new ByteLengthQueuingStrategy({ highWaterMark: NaN }).highWaterMark));
+    testing.expectTrue(Number.isNaN(new ByteLengthQueuingStrategy({ highWaterMark: 'abc' }).highWaterMark));
+    testing.expectEqual(-3, new CountQueuingStrategy({ highWaterMark: -3 }).highWaterMark);
+    testing.expectEqual(Infinity, new CountQueuingStrategy({ highWaterMark: Infinity }).highWaterMark);
+    testing.expectEqual(0, new CountQueuingStrategy({ highWaterMark: null }).highWaterMark);
+  }
+</script>
+
+<script id=size_function>
+  {
+    const a = new ByteLengthQueuingStrategy({ highWaterMark: 1 });
+    const b = new ByteLengthQueuingStrategy({ highWaterMark: 2 });
+    const c = new CountQueuingStrategy({ highWaterMark: 1 });
+    const d = new CountQueuingStrategy({ highWaterMark: 9 });
+
+    // One function object per realm per family, not per instance.
+    testing.expectTrue(a.size === a.size);
+    testing.expectTrue(a.size === b.size);
+    testing.expectTrue(c.size === d.size);
+    testing.expectTrue(a.size !== c.size);
+
+    const size = a.size;
+    testing.expectEqual('function', typeof size);
+    testing.expectEqual('size', size.name);
+    testing.expectEqual(1, size.length);
+    testing.expectEqual(0, c.size.length);
+    testing.expectEqual(Function.prototype, Object.getPrototypeOf(size));
+    testing.expectEqual('length,name', Object.getOwnPropertyNames(size).join(','));
+    testing.expectEqual('function size() { [native code] }', String(size));
+    testing.expectEqual('function size() { [native code] }', String(c.size));
+    testing.expectEqual(false, 'prototype' in size);
+    testing.expectEqual(
+      JSON.stringify({ value: 'size', writable: false, enumerable: false, configurable: true }),
+      JSON.stringify(Object.getOwnPropertyDescriptor(size, 'name')));
+    testing.expectEqual(
+      JSON.stringify({ value: 1, writable: false, enumerable: false, configurable: true }),
+      JSON.stringify(Object.getOwnPropertyDescriptor(size, 'length')));
+
+    let err = null;
+    try { new size({}); } catch (e) { err = e.name; }
+    testing.expectEqual('TypeError', err);
+
+    // The byte-length one reads the member back raw.
+    testing.expectEqual(5, size(new Uint8Array(5)));
+    testing.expectEqual(7, size({ byteLength: 7 }));
+    testing.expectEqual(undefined, size({}));
+    for (const arg of [[], [null]]) {
+      let msg = null;
+      try { size(...arg); } catch (e) { msg = `${e.name}: ${e.message}`; }
+      testing.expectEqual('TypeError: Cannot convert undefined or null to object', msg);
+    }
+
+    // The counting one answers 1 for anything, including nothing.
+    testing.expectEqual(1, c.size({}));
+    testing.expectEqual(1, c.size());
+    testing.expectEqual(1, c.size(new Uint8Array(5)));
+  }
+</script>
+
+<script id=used_by_stream type=module>
+  {
+    const state = await testing.async();
+    const rs = new ReadableStream({ start(ctrl) { ctrl.enqueue('a'); ctrl.close(); } }, new CountQueuingStrategy({ highWaterMark: 1 }));
+    rs.getReader().read().then((r) => state.resolve(r));
+    await state.done((r) => {
+      testing.expectEqual('a', r.value);
+      testing.expectEqual(false, r.done);
+    });
+  }
+</script>

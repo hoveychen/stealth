@@ -39,7 +39,19 @@ const PromiseRejectionEventOptions = struct {
 
 const Options = Event.inheritOptions(PromiseRejectionEvent, PromiseRejectionEventOptions);
 
+// `promise` is a required member of the init dictionary: Chrome refuses
+// `new PromiseRejectionEvent('x', {reason: r})` by naming it, and refuses a lone
+// type string as a missing second argument (both measured on a headed Chrome
+// 150). The argument count is checked centrally from the declared arity.
 pub fn init(typ: []const u8, opts_: ?Options, page: *Page) !*PromiseRejectionEvent {
+    if (opts_ == null or opts_.?.promise == null) {
+        const isolate = page.session.browser.env.isolate;
+        _ = isolate.throwException(isolate.createTypeError(
+            "Failed to construct 'PromiseRejectionEvent': Failed to read the 'promise' property from " ++
+                "'PromiseRejectionEventInit': Required member is undefined.",
+        ));
+        return error.JsException;
+    }
     const arena = try page.getArena(.tiny, "PromiseRejectionEvent");
     errdefer arena.release();
     const type_string = try String.init(arena.allocator(), typ, .{});
@@ -98,8 +110,11 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(PromiseRejectionEvent.init, .{});
-    pub const reason = bridge.accessor(PromiseRejectionEvent.getReason, null, .{});
+    // The init dictionary carries a required `promise`, so Chrome counts two
+    // arguments (measured).
+    pub const constructor = bridge.constructor(PromiseRejectionEvent.init, .{ .arity = 2 });
+    // An absent `reason` reads back as undefined, not null (measured).
+    pub const reason = bridge.accessor(PromiseRejectionEvent.getReason, null, .{ .null_as_undefined = true });
     pub const promise = bridge.accessor(PromiseRejectionEvent.getPromise, null, .{});
 };
 

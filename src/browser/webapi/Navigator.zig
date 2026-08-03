@@ -35,6 +35,9 @@ const DOMException = @import("DOMException.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
 const services = @import("navigator/services.zig");
+const credential = @import("navigator/credentials.zig");
+const presentation = @import("presentation.zig");
+const geo = @import("geolocation.zig");
 const devices = @import("navigator/devices.zig");
 
 const Navigator = @This();
@@ -51,13 +54,13 @@ _ua_data: NavigatorUAData = .{},
 // branded [object Navigator].
 _scheduling: ?*services.Scheduling = null,
 _user_activation: ?*services.UserActivation = null,
-_geolocation: ?*services.Geolocation = null,
+_geolocation: ?*geo.Geolocation = null,
 _protected_audience: ?*services.ProtectedAudience = null,
-_credentials: ?*services.CredentialsContainer = null,
+_credentials: ?*credential.CredentialsContainer = null,
 _login: ?*services.NavigatorLogin = null,
 _media_capabilities: ?*services.MediaCapabilities = null,
 _media_session: ?*services.MediaSession = null,
-_presentation: ?*services.Presentation = null,
+_presentation: ?*presentation.Presentation = null,
 _gpu: ?*services.GPU = null,
 _keyboard: ?*services.Keyboard = null,
 _locks: ?*services.LockManager = null,
@@ -272,16 +275,16 @@ pub fn getUserActivation(self: *Navigator, frame: *Frame) !*services.UserActivat
     return service(services.UserActivation, &self._user_activation, frame);
 }
 
-pub fn getGeolocation(self: *Navigator, frame: *Frame) !*services.Geolocation {
-    return service(services.Geolocation, &self._geolocation, frame);
+pub fn getGeolocation(self: *Navigator, frame: *Frame) !*geo.Geolocation {
+    return service(geo.Geolocation, &self._geolocation, frame);
 }
 
 pub fn getProtectedAudience(self: *Navigator, frame: *Frame) !*services.ProtectedAudience {
     return service(services.ProtectedAudience, &self._protected_audience, frame);
 }
 
-pub fn getCredentials(self: *Navigator, frame: *Frame) !*services.CredentialsContainer {
-    return service(services.CredentialsContainer, &self._credentials, frame);
+pub fn getCredentials(self: *Navigator, frame: *Frame) !*credential.CredentialsContainer {
+    return service(credential.CredentialsContainer, &self._credentials, frame);
 }
 
 pub fn getLogin(self: *Navigator, frame: *Frame) !*services.NavigatorLogin {
@@ -296,8 +299,8 @@ pub fn getMediaSession(self: *Navigator, frame: *Frame) !*services.MediaSession 
     return service(services.MediaSession, &self._media_session, frame);
 }
 
-pub fn getPresentation(self: *Navigator, frame: *Frame) !*services.Presentation {
-    return service(services.Presentation, &self._presentation, frame);
+pub fn getPresentation(self: *Navigator, frame: *Frame) !*presentation.Presentation {
+    return service(presentation.Presentation, &self._presentation, frame);
 }
 
 pub fn getGpu(self: *Navigator, frame: *Frame) !*services.GPU {
