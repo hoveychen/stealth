@@ -62,6 +62,11 @@ _volume: f64 = 1.0,
 _muted: bool = false,
 _playback_rate: f64 = 1.0,
 _ready_state: ReadyState = .HAVE_NOTHING,
+
+// Set once a MediaElementAudioSourceNode has claimed this element. An element
+// can only ever back one of them, and Chrome refuses the second attempt rather
+// than handing back the first node (measured).
+_audio_source_connected: bool = false,
 _network_state: NetworkState = .NETWORK_EMPTY,
 _error: ?*MediaError = null,
 

@@ -95,6 +95,25 @@ pub fn context(
     );
 }
 
+// The same, for the three nodes whose IDL takes an `AudioContext` rather than a
+// `BaseAudioContext`. Chrome names the narrower type in the refusal, so an
+// OfflineAudioContext handed to one of these reads "parameter 1 is not of type
+// 'AudioContext'" (measured).
+pub fn realtimeContext(
+    comptime interface: []const u8,
+    comptime required: usize,
+    args: []const ?js.Value,
+    exec: *const Execution,
+) !*@import("AudioContext.zig") {
+    const got = present(args);
+    if (got < required) return argCount(interface, required, got, exec);
+    const value = args[0].?;
+    return value.toZig(*@import("AudioContext.zig")) catch typeError(
+        "Failed to construct '" ++ interface ++ "': parameter 1 is not of type 'AudioContext'.",
+        exec,
+    );
+}
+
 // The optional dictionary. Absent, null and undefined all mean "defaults";
 // anything that is not an object is refused by the dictionary's own name.
 pub fn options(

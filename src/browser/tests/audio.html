@@ -190,18 +190,18 @@
   // Chrome's own prototype member lists, measured. A missing or extra member
   // here is exactly the kind of thing a fingerprint script enumerates.
   //
-  // AudioContext.prototype is the one list that is still short of Chrome's:
-  // `createMediaElementSource`, `createMediaStreamSource`,
-  // `createMediaStreamDestination` and `playbackStats` all need MediaStream,
-  // which this engine does not have yet. Asserted as-is so the gap is visible
-  // rather than filtered away.
+  // AudioContext.prototype now matches Chrome's set exactly. The *order* still
+  // differs in one place -- Blink puts `constructor` in the middle and V8 can
+  // only put it last -- which is why this compares sorted names; the unsorted
+  // order is pinned in audio_media_stream_nodes below.
   testing.expectEqual(
-    ['baseLatency', 'close', 'constructor', 'getOutputTimestamp', 'onerror', 'onsinkchange', 'outputLatency',
+    ['baseLatency', 'close', 'constructor', 'createMediaElementSource', 'createMediaStreamDestination',
+     'createMediaStreamSource', 'getOutputTimestamp', 'onerror', 'onsinkchange', 'outputLatency',
      'playbackStats', 'resume', 'setSinkId', 'sinkId', 'suspend'],
     Object.getOwnPropertyNames(AudioContext.prototype).sort(),
   );
-  // BaseAudioContext now carries all eighteen factories and decodeAudioData;
-  // only `audioWorklet` is still missing (it needs Worklet).
+  // BaseAudioContext carries all eighteen factories, decodeAudioData and
+  // audioWorklet.
   testing.expectEqual(
     ['constructor', 'createAnalyser', 'createBiquadFilter', 'createBuffer', 'createBufferSource',
      'createChannelMerger', 'createChannelSplitter', 'createConstantSource', 'createConvolver',
@@ -602,6 +602,263 @@
       "rejected:TypeError:Failed to execute 'addModule' on 'Worklet': 1 argument required, but only 0 present.",
       noArg);
     testing.expectEqual("rejected:AbortError:Unable to load a worklet's module.", withUrl);
+  });
+}
+</script>
+
+<script id=audio_media_stream_nodes>
+{
+  // The three nodes that bridge Web Audio and MediaStream, and the one live
+  // MediaStreamTrack a page can reach without a permission. Every value and
+  // every message is Chrome 150's, measured on a headed window over
+  // http://localhost (win18/win19-chrome.json).
+  const msg = (fn) => { try { const v = fn(); return `no throw: ${v}`; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const ac = new AudioContext();
+
+  testing.expectEqual(1, MediaStreamAudioDestinationNode.length);
+  testing.expectEqual(2, MediaElementAudioSourceNode.length);
+  testing.expectEqual(2, MediaStreamAudioSourceNode.length);
+  testing.expectEqual('stream constructor', proto(MediaStreamAudioDestinationNode));
+  testing.expectEqual('mediaElement constructor', proto(MediaElementAudioSourceNode));
+  testing.expectEqual('mediaStream constructor', proto(MediaStreamAudioSourceNode));
+  for (const C of [MediaStreamAudioDestinationNode, MediaElementAudioSourceNode, MediaStreamAudioSourceNode]) {
+    testing.expectEqual(true, Object.getPrototypeOf(C.prototype) === AudioNode.prototype);
+  }
+
+  // Chrome's AudioContext.prototype order, with the three factories between
+  // `close` and `getOutputTimestamp`. One known deviation, the same one the
+  // whole batch runs into: Blink puts `constructor` before sinkId/onsinkchange/
+  // setSinkId and V8 can only put it last, so this asserts our order with
+  // `constructor` moved to the end.
+  testing.expectEqual(
+    'baseLatency outputLatency onerror close createMediaElementSource ' +
+    'createMediaStreamDestination createMediaStreamSource getOutputTimestamp ' +
+    'resume suspend playbackStats sinkId onsinkchange setSinkId constructor',
+    proto(AudioContext));
+
+  // --- MediaStreamAudioDestinationNode ---
+  const dest = ac.createMediaStreamDestination();
+  testing.expectEqual('[object MediaStreamAudioDestinationNode]', Object.prototype.toString.call(dest));
+  testing.expectEqual(1, dest.numberOfInputs);
+  testing.expectEqual(0, dest.numberOfOutputs);
+  testing.expectEqual(2, dest.channelCount);
+  testing.expectEqual('explicit', dest.channelCountMode);
+  testing.expectEqual('speakers', dest.channelInterpretation);
+  testing.expectEqual(true, dest.stream === dest.stream);
+  testing.expectEqual(false, ac.createMediaStreamDestination().stream === dest.stream);
+  testing.expectEqual(true, dest.context === ac);
+  // The factory ignores whatever it is handed.
+  testing.expectEqual(2, ac.createMediaStreamDestination(5).channelCount);
+  testing.expectEqual('no throw: 0/2/1', msg(() => {
+    const n = new MediaStreamAudioDestinationNode(ac);
+    return `${n.numberOfOutputs}/${n.channelCount}/${n.stream.getTracks().length}`;
+  }));
+  testing.expectEqual(1, new MediaStreamAudioDestinationNode(ac, { channelCount: 1 }).channelCount);
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamAudioDestinationNode': 1 argument required, but only 0 present.",
+    msg(() => new MediaStreamAudioDestinationNode()));
+  // These three name AudioContext, not BaseAudioContext.
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamAudioDestinationNode': parameter 1 is not of type 'AudioContext'.",
+    msg(() => new MediaStreamAudioDestinationNode({})));
+
+  // --- its track ---
+  const track = dest.stream.getAudioTracks()[0];
+  testing.expectEqual('[object MediaStreamTrack]', Object.prototype.toString.call(track));
+  testing.expectEqual(1, dest.stream.getTracks().length);
+  testing.expectEqual(0, dest.stream.getVideoTracks().length);
+  testing.expectEqual(true, dest.stream.active);
+  testing.expectEqual('audio', track.kind);
+  testing.expectEqual('MediaStreamAudioDestinationNode', track.label);
+  testing.expectEqual(true, track.enabled);
+  testing.expectEqual(false, track.muted);
+  testing.expectEqual('live', track.readyState);
+  testing.expectEqual('', track.contentHint);
+  testing.expectEqual(true, uuid.test(track.id));
+  testing.expectEqual(true, dest.stream.getTrackById(track.id) === track);
+  testing.expectEqual('no throw: null', msg(() => String(dest.stream.getTrackById('nope'))));
+  testing.expectEqual('no throw: null', msg(() => String(track.getCaptureHandle())));
+  testing.expectEqual(true, track.stats === track.stats);
+  testing.expectEqual('{}', JSON.stringify(track.getConstraints()));
+
+  const settings = track.getSettings();
+  testing.expectEqual('WebAudio-', settings.deviceId.slice(0, 9));
+  testing.expectEqual(45, settings.deviceId.length);
+  testing.expectEqual(true, uuid.test(settings.deviceId.slice(9)));
+  testing.expectEqual(settings.deviceId, track.getCapabilities().deviceId);
+  // A new object each call, with Chrome's member order.
+  testing.expectEqual(false, track.getSettings() === track.getSettings());
+  testing.expectEqual(
+    '{"channelCount":2,"deviceId":"' + settings.deviceId + '","latency":0.01,"sampleRate":48000,"sampleSize":16}',
+    JSON.stringify(settings));
+  testing.expectEqual(
+    '{"autoGainControl":[false],"deviceId":"' + settings.deviceId + '","echoCancellation":[false],' +
+    '"noiseSuppression":[false],"sampleSize":{"max":16,"min":16},"voiceIsolation":[false]}',
+    JSON.stringify(track.getCapabilities()));
+  testing.expectEqual(
+    '{"deliveredFrames":0,"deliveredFramesDuration":0,"totalFrames":0,"totalFramesDuration":0,' +
+    '"latency":0,"averageLatency":0,"minimumLatency":0,"maximumLatency":0}',
+    JSON.stringify(track.stats));
+  testing.expectEqual(JSON.stringify(track.stats), JSON.stringify(track.stats.toJSON()));
+  testing.expectEqual('no throw: undefined', msg(() => String(track.stats.resetLatency())));
+
+  // Only "", "speech" and "music" are taken on an audio track; the spec's
+  // "speech-recognition" and every video hint are silently dropped.
+  for (const [hint, want] of [['speech', 'speech'], ['music', 'music'], ['', ''],
+                              ['speech-recognition', ''], ['motion', ''], ['nope', '']]) {
+    const t = dest.stream.clone().getAudioTracks()[0];
+    t.contentHint = hint;
+    testing.expectEqual(want, t.contentHint);
+  }
+
+  // A clone is a new track object with a new id and device id, same label.
+  const clone = dest.stream.clone();
+  const cloned = clone.getAudioTracks()[0];
+  testing.expectEqual(false, clone.id === dest.stream.id);
+  testing.expectEqual(false, cloned === track);
+  testing.expectEqual(false, cloned.id === track.id);
+  testing.expectEqual('MediaStreamAudioDestinationNode', cloned.label);
+  testing.expectEqual(false, cloned.getSettings().deviceId === settings.deviceId);
+
+  // stop() is idempotent, leaves `enabled` alone, and does not fire `ended`.
+  let endedFired = 'no';
+  cloned.onended = () => { endedFired = 'yes'; };
+  cloned.stop();
+  cloned.stop();
+  testing.expectEqual('ended', cloned.readyState);
+  testing.expectEqual(true, cloned.enabled);
+  testing.expectEqual(false, cloned.muted);
+  testing.expectEqual('no', endedFired);
+  testing.expectEqual(false, clone.active);
+  testing.expectEqual('live', track.readyState);
+  cloned.enabled = false;
+  testing.expectEqual(false, cloned.enabled);
+
+  // addTrack dedups and does not fire `addtrack`; removeTrack of an absent
+  // track is quiet.
+  const bag = new MediaStream();
+  let addFired = 'no';
+  bag.onaddtrack = () => { addFired = 'yes'; };
+  bag.addTrack(track);
+  bag.addTrack(track);
+  testing.expectEqual(1, bag.getTracks().length);
+  testing.expectEqual('no', addFired);
+  testing.expectEqual(true, bag.active);
+  bag.removeTrack(track);
+  testing.expectEqual(0, bag.getTracks().length);
+  bag.removeTrack(track);
+  testing.expectEqual(0, bag.getTracks().length);
+  // Both the sequence and the stream overload share the very track handed in.
+  testing.expectEqual(true, new MediaStream([track]).getTracks()[0] === track);
+  testing.expectEqual(true, new MediaStream(dest.stream).getTracks()[0] === track);
+
+  // The success path for MediaStreamTrackEvent, which needs a real track.
+  const ev = new MediaStreamTrackEvent('addtrack', { track });
+  testing.expectEqual('addtrack', ev.type);
+  testing.expectEqual(true, ev.track === track);
+  testing.expectEqual(false, ev.bubbles);
+  testing.expectEqual(false, ev.isTrusted);
+
+  // --- MediaElementAudioSourceNode ---
+  const el = document.createElement('audio');
+  const elSource = ac.createMediaElementSource(el);
+  testing.expectEqual('[object MediaElementAudioSourceNode]', Object.prototype.toString.call(elSource));
+  testing.expectEqual(true, elSource.mediaElement === el);
+  testing.expectEqual(0, elSource.numberOfInputs);
+  testing.expectEqual(1, elSource.numberOfOutputs);
+  testing.expectEqual(2, elSource.channelCount);
+  testing.expectEqual('max', elSource.channelCountMode);
+  testing.expectEqual(
+    "TypeError: Failed to execute 'createMediaElementSource' on 'AudioContext': 1 argument required, but only 0 present.",
+    msg(() => ac.createMediaElementSource()));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'createMediaElementSource' on 'AudioContext': parameter 1 is not of type 'HTMLMediaElement'.",
+    msg(() => ac.createMediaElementSource({})));
+  // An element backs one source node, ever.
+  testing.expectEqual(
+    "InvalidStateError: Failed to execute 'createMediaElementSource' on 'AudioContext': " +
+    'HTMLMediaElement already connected previously to a different MediaElementSourceNode.',
+    msg(() => ac.createMediaElementSource(el)));
+  testing.expectEqual('no throw: VIDEO', msg(() =>
+    new MediaElementAudioSourceNode(ac, { mediaElement: document.createElement('video') }).mediaElement.tagName));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaElementAudioSourceNode': 2 arguments required, but only 0 present.",
+    msg(() => new MediaElementAudioSourceNode()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaElementAudioSourceNode': 2 arguments required, but only 1 present.",
+    msg(() => new MediaElementAudioSourceNode(ac)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaElementAudioSourceNode': parameter 1 is not of type 'AudioContext'.",
+    msg(() => new MediaElementAudioSourceNode({}, { mediaElement: document.createElement('audio') })));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaElementAudioSourceNode': Failed to read the 'mediaElement' " +
+    "property from 'MediaElementAudioSourceOptions': Required member is undefined.",
+    msg(() => new MediaElementAudioSourceNode(ac, {})));
+  // A number and a <div> both read as the same conversion failure.
+  for (const bad of [7, document.createElement('div')]) {
+    testing.expectEqual(
+      "TypeError: Failed to construct 'MediaElementAudioSourceNode': Failed to read the 'mediaElement' " +
+      "property from 'MediaElementAudioSourceOptions': Failed to convert value to 'HTMLMediaElement'.",
+      msg(() => new MediaElementAudioSourceNode(ac, { mediaElement: bad })));
+  }
+
+  // --- MediaStreamAudioSourceNode ---
+  const streamSource = ac.createMediaStreamSource(dest.stream);
+  testing.expectEqual('[object MediaStreamAudioSourceNode]', Object.prototype.toString.call(streamSource));
+  testing.expectEqual(true, streamSource.mediaStream === dest.stream);
+  testing.expectEqual(0, streamSource.numberOfInputs);
+  testing.expectEqual(1, streamSource.numberOfOutputs);
+  testing.expectEqual(2, streamSource.channelCount);
+  testing.expectEqual('max', streamSource.channelCountMode);
+  testing.expectEqual(
+    "TypeError: Failed to execute 'createMediaStreamSource' on 'AudioContext': 1 argument required, but only 0 present.",
+    msg(() => ac.createMediaStreamSource()));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'createMediaStreamSource' on 'AudioContext': parameter 1 is not of type 'MediaStream'.",
+    msg(() => ac.createMediaStreamSource({})));
+  // Note: no full stop on this one, unlike every other message in the family.
+  testing.expectEqual(
+    "InvalidStateError: Failed to execute 'createMediaStreamSource' on 'AudioContext': " +
+    'MediaStream has no audio track',
+    msg(() => ac.createMediaStreamSource(new MediaStream())));
+  testing.expectEqual('no throw: true', msg(() =>
+    new MediaStreamAudioSourceNode(ac, { mediaStream: dest.stream }).mediaStream === dest.stream));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamAudioSourceNode': 2 arguments required, but only 1 present.",
+    msg(() => new MediaStreamAudioSourceNode(ac)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamAudioSourceNode': Failed to read the 'mediaStream' " +
+    "property from 'MediaStreamAudioSourceOptions': Required member is undefined.",
+    msg(() => new MediaStreamAudioSourceNode(ac, {})));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MediaStreamAudioSourceNode': Failed to read the 'mediaStream' " +
+    "property from 'MediaStreamAudioSourceOptions': Failed to convert value to 'MediaStream'.",
+    msg(() => new MediaStreamAudioSourceNode(ac, { mediaStream: 7 })));
+}
+</script>
+
+<script id=audio_track_apply_constraints type=module>
+{
+  // An empty constraint set resolves; any recognised member rejects, even one
+  // the track already satisfies (measured: {channelCount: 1} rejects on a
+  // two-channel track). A key outside MediaTrackConstraints is dropped by the
+  // dictionary conversion and cannot overconstrain anything.
+  const state = await testing.async();
+  const track = new AudioContext().createMediaStreamDestination().stream.getAudioTracks()[0];
+  const settle = (p) => p.then((v) => `resolved:${v}`, (e) => `rejected:${e.name}:${e.message}`);
+
+  const empty = await settle(track.applyConstraints());
+  const emptyDict = await settle(track.applyConstraints({}));
+  const unknown = await settle(track.applyConstraints({ nope: 1 }));
+  const constrained = await settle(track.applyConstraints({ channelCount: 1 }));
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('resolved:undefined', empty);
+    testing.expectEqual('resolved:undefined', emptyDict);
+    testing.expectEqual('resolved:undefined', unknown);
+    testing.expectEqual('rejected:OverconstrainedError:Cannot satisfy constraints', constrained);
   });
 }
 </script>

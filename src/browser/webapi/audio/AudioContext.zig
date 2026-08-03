@@ -46,6 +46,10 @@ const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
 
+const idl = @import("idl.zig");
+const media_nodes = @import("media_nodes.zig");
+const streams = @import("../media/streams.zig");
+const Media = @import("../element/html/Media.zig");
 const BaseAudioContext = @import("BaseAudioContext.zig");
 const worklet = @import("worklet.zig");
 const AudioListener = @import("AudioListener.zig");
@@ -121,6 +125,54 @@ pub fn getSinkId(self: *const AudioContext) lp.String {
 pub fn setSinkId(self: *AudioContext, sink_id: lp.String.Global, exec: *const Execution) !js.Promise {
     self._sink_id = sink_id.str;
     return exec.js.local.?.resolvePromise({});
+}
+
+// The three MediaStream factories. Each is the constructor's dictionary
+// flattened into a positional parameter, and each blames itself rather than the
+// node in its refusals — the same split as BaseAudioContext's eighteen.
+//
+// createMediaStreamDestination ignores anything it is handed (measured:
+// createMediaStreamDestination(5) returns an ordinary stereo node).
+pub fn createMediaStreamDestination(
+    self: *AudioContext,
+    _: ?js.Value,
+    exec: *Execution,
+) !*media_nodes.MediaStreamAudioDestinationNode {
+    return media_nodes.MediaStreamAudioDestinationNode.create(self, exec);
+}
+
+pub fn createMediaElementSource(
+    self: *AudioContext,
+    element: ?js.Value,
+    exec: *Execution,
+) !*media_nodes.MediaElementAudioSourceNode {
+    const where = "Failed to execute 'createMediaElementSource' on 'AudioContext'";
+    const given = element orelse return idl.typeError(
+        where ++ ": 1 argument required, but only 0 present.",
+        exec,
+    );
+    const media = given.toZig(*Media) catch return idl.typeError(
+        where ++ ": parameter 1 is not of type 'HTMLMediaElement'.",
+        exec,
+    );
+    return media_nodes.MediaElementAudioSourceNode.create(where, self, media, exec);
+}
+
+pub fn createMediaStreamSource(
+    self: *AudioContext,
+    stream: ?js.Value,
+    exec: *Execution,
+) !*media_nodes.MediaStreamAudioSourceNode {
+    const where = "Failed to execute 'createMediaStreamSource' on 'AudioContext'";
+    const given = stream orelse return idl.typeError(
+        where ++ ": 1 argument required, but only 0 present.",
+        exec,
+    );
+    const media_stream = given.toZig(*streams.MediaStream) catch return idl.typeError(
+        where ++ ": parameter 1 is not of type 'MediaStream'.",
+        exec,
+    );
+    return media_nodes.MediaStreamAudioSourceNode.create(where, self, media_stream, exec);
 }
 
 pub fn getOutputTimestamp(self: *const AudioContext, exec: *const Execution) OutputTimestamp {
@@ -213,12 +265,13 @@ pub const JsApi = struct {
 
     // Chrome's order. `sinkId` / `onsinkchange` / `setSinkId` sit after
     // `constructor` there, which V8 cannot reproduce, so they land last here.
-    // The three createMedia* factories belong between `close` and
-    // `getOutputTimestamp` and are still missing: each needs a MediaStream.
     pub const baseLatency = bridge.accessor(AudioContext.getBaseLatency, null, .{});
     pub const outputLatency = bridge.accessor(AudioContext.getOutputLatency, null, .{});
     pub const onerror = bridge.accessor(AudioContext.getOnError, AudioContext.setOnError, .{});
     pub const close = bridge.function(AudioContext.close, .{ .arity = 0 });
+    pub const createMediaElementSource = bridge.function(AudioContext.createMediaElementSource, .{ .arity = 1 });
+    pub const createMediaStreamDestination = bridge.function(AudioContext.createMediaStreamDestination, .{ .arity = 0 });
+    pub const createMediaStreamSource = bridge.function(AudioContext.createMediaStreamSource, .{ .arity = 1 });
     pub const getOutputTimestamp = bridge.function(AudioContext.getOutputTimestamp, .{ .arity = 0 });
     pub const @"resume" = bridge.function(AudioContext.@"resume", .{ .arity = 0 });
     pub const @"suspend" = bridge.function(AudioContext.@"suspend", .{ .arity = 0 });
