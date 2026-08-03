@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<head>
+  <title>DOMRectList Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+  <div id=visible>content</div>
+  <div id=hidden style="display: none">content</div>
+</body>
+
+<script id=element_client_rects>
+  {
+    const rects = document.getElementById('visible').getClientRects();
+    testing.expectTrue(rects instanceof DOMRectList);
+    testing.expectEqual('DOMRectList', rects.constructor.name);
+    testing.expectEqual('[object DOMRectList]', Object.prototype.toString.call(rects));
+    testing.expectEqual(1, rects.length);
+    testing.expectTrue(rects[0] instanceof DOMRect);
+    testing.expectTrue(rects.item(0) instanceof DOMRect);
+    testing.expectEqual(null, rects.item(9));
+    testing.expectEqual(undefined, rects[9]);
+    testing.expectEqual(1, Array.from(rects).length);
+  }
+</script>
+
+<script id=hidden_element_is_empty>
+  {
+    const rects = document.getElementById('hidden').getClientRects();
+    testing.expectTrue(rects instanceof DOMRectList);
+    testing.expectEqual(0, rects.length);
+    testing.expectEqual(null, rects.item(0));
+  }
+</script>
+
+<script id=range_client_rects>
+  {
+    const range = document.createRange();
+    testing.expectTrue(range.getClientRects() instanceof DOMRectList);
+    testing.expectEqual(0, range.getClientRects().length);
+
+    range.selectNodeContents(document.getElementById('visible'));
+    testing.expectTrue(range.getClientRects() instanceof DOMRectList);
+  }
+</script>
+
+<script id=not_constructible>
+  {
+    let err;
+    try { new DOMRectList(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(0, DOMRectList.length);
+    testing.expectEqual(1, DOMRectList.prototype.item.length);
+  }
+</script>

@@ -570,16 +570,25 @@ pub const NamedIndexed = struct {
 pub const Iterator = struct {
     func: *const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void,
     async: bool,
+    // What `String(obj[Symbol.iterator])` reports. Chrome names the function
+    // after the default iterator the interface declares -- "values" for a
+    // list, "entries" for a maplike -- and leaving it unset prints an anonymous
+    // `function () { [native code] }`, which no browser does. Null keeps that
+    // older behaviour for the classes whose Chrome name has not been measured
+    // yet.
+    js_name: ?[:0]const u8,
 
     const Opts = struct {
         async: bool = false,
         null_as_undefined: bool = false,
+        js_name: ?[:0]const u8 = null,
     };
 
     fn init(comptime T: type, comptime struct_or_func: anytype, comptime opts: Opts) Iterator {
         if (@typeInfo(@TypeOf(struct_or_func)) == .type) {
             return .{
                 .async = opts.async,
+                .js_name = opts.js_name,
                 .func = struct {
                     fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                         const info = Caller.FunctionCallbackInfo{ .handle = handle.? };
@@ -591,6 +600,7 @@ pub const Iterator = struct {
 
         return .{
             .async = opts.async,
+            .js_name = opts.js_name,
             .func = struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                     return Caller.Function.call(T, handle.?, struct_or_func, .{
@@ -991,6 +1001,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/DOMMatrix.zig"),
     @import("../webapi/DOMPointReadOnly.zig"),
     @import("../webapi/DOMPoint.zig"),
+    @import("../webapi/DOMQuad.zig"),
+    @import("../webapi/collections/DOMRectList.zig"),
     @import("../webapi/DOMParser.zig"),
     @import("../webapi/XMLSerializer.zig"),
     @import("../webapi/AbstractRange.zig"),
@@ -1159,6 +1171,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/event/GamepadEvent.zig"),
     @import("../webapi/event/DeviceOrientationEvent.zig"),
     @import("../webapi/event/TouchEvent.zig"),
+    @import("../webapi/event/touch.zig"),
     @import("../webapi/event/UIEvent.zig"),
     @import("../webapi/event/MouseEvent.zig"),
     @import("../webapi/event/PointerEvent.zig"),
@@ -1181,6 +1194,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/SharedWorker.zig"),
     @import("../webapi/media/MediaError.zig"),
     @import("../webapi/media/TextTrackCue.zig"),
+    @import("../webapi/media/TimeRanges.zig"),
     @import("../webapi/media/VTTCue.zig"),
     @import("../webapi/animation/Animation.zig"),
     @import("../webapi/document/services.zig"),
@@ -1277,6 +1291,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/canvas/webgl_objects.zig"),
     @import("../webapi/canvas/OffscreenCanvas.zig"),
     @import("../webapi/canvas/OffscreenCanvasRenderingContext2D.zig"),
+    @import("../webapi/canvas/Path2D.zig"),
     @import("../webapi/canvas/TextMetrics.zig"),
     @import("../webapi/canvas/canvas_objects.zig"),
     @import("../webapi/SubtleCrypto.zig"),
@@ -1357,6 +1372,7 @@ const worker_common_apis = [_]type{
     @import("../webapi/DOMMatrix.zig"),
     @import("../webapi/DOMPointReadOnly.zig"),
     @import("../webapi/DOMPoint.zig"),
+    @import("../webapi/DOMQuad.zig"),
     @import("../webapi/net/URLSearchParams.zig"),
     @import("../webapi/encoding/TextEncoder.zig"),
     @import("../webapi/encoding/TextDecoder.zig"),
@@ -1394,6 +1410,7 @@ const worker_common_apis = [_]type{
     @import("../webapi/canvas/WebGLRenderingContext.zig"),
     @import("../webapi/canvas/WebGL2RenderingContext.zig"),
     @import("../webapi/canvas/webgl_objects.zig"),
+    @import("../webapi/canvas/Path2D.zig"),
     @import("../webapi/canvas/TextMetrics.zig"),
     @import("../webapi/canvas/canvas_objects.zig"),
     @import("../webapi/net/XMLHttpRequest.zig"),

@@ -31,6 +31,7 @@ const ShadowRoot = @import("ShadowRoot.zig");
 const EventTarget = @import("EventTarget.zig");
 const collections = @import("collections.zig");
 pub const DOMRect = @import("DOMRect.zig");
+const DOMRectList = @import("collections/DOMRectList.zig");
 
 const Selector = @import("selector/Selector.zig");
 const Animation = @import("animation/Animation.zig");
@@ -1543,13 +1544,17 @@ pub fn boundingClientRectValuesForVisible(self: *Element, frame: *Frame) DOMRect
     };
 }
 
-pub fn getClientRects(self: *Element, frame: *Frame) ![]*DOMRect {
+// A DOMRectList, not a JS Array: `getClientRects().constructor.name` is read
+// directly by fingerprinting scripts, and Array is not an answer any browser
+// gives. The list and its rects both come from the frame arena because the
+// wrapper a script keeps outlives this call.
+pub fn getClientRects(self: *Element, frame: *Frame) !*DOMRectList {
     if (!self.checkVisibilityCached(null, frame)) {
-        return &.{};
+        return frame._factory.create(DOMRectList{});
     }
-    const rects = try frame.local_arena.alloc(*DOMRect, 1);
+    const rects = try frame.arena.alloc(*DOMRect, 1);
     rects[0] = try DOMRect.create(self.boundingClientRectValuesForVisible(frame), frame._factory);
-    return rects;
+    return frame._factory.create(DOMRectList{ ._rects = rects });
 }
 
 // Scroll positions live in the map of the element's own frame — not the

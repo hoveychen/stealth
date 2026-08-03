@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<head>
+  <title>TimeRanges Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<script id=media_element_ranges>
+  {
+    const v = document.createElement('video');
+    testing.expectTrue(v.buffered instanceof TimeRanges);
+    testing.expectTrue(v.played instanceof TimeRanges);
+    testing.expectTrue(v.seekable instanceof TimeRanges);
+    testing.expectEqual(0, v.buffered.length);
+    testing.expectEqual(0, v.played.length);
+    testing.expectEqual(0, v.seekable.length);
+    testing.expectEqual('[object TimeRanges]', Object.prototype.toString.call(v.buffered));
+  }
+</script>
+
+<script id=out_of_bounds>
+  {
+    const b = document.createElement('audio').buffered;
+    let err;
+    try { b.start(0); } catch (e) { err = e; }
+    testing.expectEqual('IndexSizeError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'start' on 'TimeRanges': The index provided (0) is greater than or equal to the maximum bound (0).",
+      err.message);
+
+    err = undefined;
+    try { b.end(0); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'end' on 'TimeRanges': The index provided (0) is greater than or equal to the maximum bound (0).",
+      err.message);
+
+    // An unsigned long wraps, so a negative index lands past the bound and
+    // takes Chrome's other branch.
+    err = undefined;
+    try { b.start(-1); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'start' on 'TimeRanges': The index provided (4294967295) is greater than the maximum bound (0).",
+      err.message);
+  }
+</script>
+
+<script id=not_constructible>
+  {
+    let err;
+    try { new TimeRanges(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(0, TimeRanges.length);
+    testing.expectEqual(1, TimeRanges.prototype.start.length);
+    testing.expectEqual(1, TimeRanges.prototype.end.length);
+  }
+</script>

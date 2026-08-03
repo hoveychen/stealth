@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<head>
+  <title>Touch Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+  <div id=target>x</div>
+</body>
+
+<script id=required_members>
+  {
+    testing.expectEqual(1, Touch.length);
+    let err;
+    try { new Touch({}); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to construct 'Touch': Failed to read the 'identifier' property from 'TouchInit': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new Touch({ identifier: 1 }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'Touch': Failed to read the 'target' property from 'TouchInit': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new Touch(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'Touch': 1 argument required, but only 0 present.",
+      err.message);
+  }
+</script>
+
+<script id=defaults>
+  {
+    const target = document.getElementById('target');
+    const t = new Touch({ identifier: 3, target: target });
+    testing.expectEqual(3, t.identifier);
+    testing.expectTrue(t.target === target);
+    testing.expectEqual(0, t.screenX);
+    testing.expectEqual(0, t.screenY);
+    testing.expectEqual(0, t.clientX);
+    testing.expectEqual(0, t.clientY);
+    testing.expectEqual(0, t.pageX);
+    testing.expectEqual(0, t.pageY);
+    testing.expectEqual(0, t.radiusX);
+    testing.expectEqual(0, t.radiusY);
+    testing.expectEqual(0, t.rotationAngle);
+    testing.expectEqual(0, t.force);
+    testing.expectEqual('[object Touch]', Object.prototype.toString.call(t));
+  }
+</script>
+
+<script id=full_init>
+  {
+    const t = new Touch({
+      identifier: 1, target: document.body, clientX: 10, clientY: 20,
+      screenX: 30, screenY: 40, pageX: 50, pageY: 60,
+      radiusX: 2, radiusY: 3, rotationAngle: 45, force: 0.5,
+    });
+    testing.expectEqual(10, t.clientX);
+    testing.expectEqual(60, t.pageY);
+    testing.expectEqual(3, t.radiusY);
+    testing.expectEqual(45, t.rotationAngle);
+    testing.expectEqual(0.5, t.force);
+  }
+</script>
+
+<script id=touch_lists_on_event>
+  {
+    const e = new TouchEvent('touchstart');
+    testing.expectTrue(e.touches instanceof TouchList);
+    testing.expectTrue(e.targetTouches instanceof TouchList);
+    testing.expectTrue(e.changedTouches instanceof TouchList);
+    testing.expectEqual(0, e.touches.length);
+    testing.expectEqual(null, e.touches.item(0));
+    testing.expectEqual(undefined, e.touches[0]);
+    testing.expectEqual('[object TouchList]', Object.prototype.toString.call(e.touches));
+  }
+</script>
+
+<script id=touch_lists_from_init>
+  {
+    const t = new Touch({ identifier: 7, target: document.body });
+    const e = new TouchEvent('touchstart', { touches: [t], changedTouches: [t] });
+    testing.expectEqual(1, e.touches.length);
+    testing.expectTrue(e.touches[0] === t);
+    testing.expectTrue(e.touches.item(0) === t);
+    testing.expectEqual(1, e.changedTouches.length);
+    testing.expectEqual(0, e.targetTouches.length);
+    testing.expectEqual(1, Array.from(e.touches).length);
+  }
+</script>
+
+<script id=no_create_touch_list>
+  {
+    testing.expectEqual('undefined', typeof document.createTouchList);
+  }
+</script>

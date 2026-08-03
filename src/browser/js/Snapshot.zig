@@ -957,6 +957,12 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
             },
             bridge.Iterator => {
                 const function_template = v8.v8__FunctionTemplate__New__Config(isolate, &.{ .callback = value.func }).?;
+                if (value.js_name) |fn_name| {
+                    v8.v8__FunctionTemplate__SetClassName(
+                        function_template,
+                        v8.v8__String__NewFromUtf8(isolate, fn_name.ptr, v8.kNormal, @intCast(fn_name.len)),
+                    );
+                }
                 const js_name = if (value.async)
                     v8.v8__Symbol__GetAsyncIterator(isolate)
                 else

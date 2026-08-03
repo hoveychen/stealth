@@ -27,6 +27,7 @@ const Event = @import("../../Event.zig");
 pub const Audio = @import("Audio.zig");
 pub const Video = @import("Video.zig");
 const MediaError = @import("../../media/MediaError.zig");
+const TimeRanges = @import("../../media/TimeRanges.zig");
 const mime = @import("../../media/mime.zig");
 
 const Media = @This();
@@ -261,6 +262,23 @@ pub fn setPreload(self: *Media, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("preload"), .wrap(value), frame);
 }
 
+// No media is ever loaded, so all three ranges are empty -- which is also what
+// a real Chrome answers for an element that was never given a src (measured:
+// `document.createElement('video').buffered.length === 0`). Before this they
+// were undefined, and a media element without them is not a shape any browser
+// has.
+pub fn getBuffered(_: *const Media, frame: *Frame) !*TimeRanges {
+    return frame._factory.create(TimeRanges{});
+}
+
+pub fn getPlayed(_: *const Media, frame: *Frame) !*TimeRanges {
+    return frame._factory.create(TimeRanges{});
+}
+
+pub fn getSeekable(_: *const Media, frame: *Frame) !*TimeRanges {
+    return frame._factory.create(TimeRanges{});
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Media);
 
@@ -296,6 +314,9 @@ pub const JsApi = struct {
     pub const ended = bridge.accessor(Media.getEnded, null, .{});
     pub const seeking = bridge.accessor(Media.getSeeking, null, .{});
     pub const readyState = bridge.accessor(Media.getReadyState, null, .{});
+    pub const buffered = bridge.accessor(Media.getBuffered, null, .{});
+    pub const played = bridge.accessor(Media.getPlayed, null, .{});
+    pub const seekable = bridge.accessor(Media.getSeekable, null, .{});
     pub const networkState = bridge.accessor(Media.getNetworkState, null, .{});
     pub const @"error" = bridge.accessor(Media.getError, null, .{});
 
