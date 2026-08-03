@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<head>
+  <title>URLPattern Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=url_pattern_shape>
+  {
+    testing.expectEqual(0, URLPattern.length);
+    testing.expectEqual(
+      'protocol,username,password,hostname,port,pathname,search,hash,hasRegExpGroups,exec,test',
+      Object.getOwnPropertyNames(URLPattern.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectTrue(Object.getPrototypeOf(URLPattern.prototype) === Object.prototype);
+    testing.expectEqual('URLPattern', URLPattern.prototype[Symbol.toStringTag]);
+    testing.expectEqual(0, URLPattern.prototype.exec.length);
+    testing.expectEqual(0, URLPattern.prototype.test.length);
+  }
+</script>
+
+<script id=url_pattern_bare>
+  {
+    const p = new URLPattern();
+    testing.expectEqual('[object URLPattern]', String(p));
+    testing.expectEqual('', Object.getOwnPropertyNames(p).join(','));
+    testing.expectEqual('*,*,*,*,*,*,*,*',
+      [p.protocol, p.username, p.password, p.hostname, p.port, p.pathname, p.search, p.hash].join(','));
+    testing.expectEqual(false, p.hasRegExpGroups);
+
+    // A full wildcard matches anything, and every component reports its own
+    // slice of the input under the group name "0".
+    testing.expectEqual(true, p.test('https://x.com/books/7'));
+  }
+</script>
+
+<script id=url_pattern_init_dictionary>
+  {
+    const p = new URLPattern({ pathname: '/books/:id' });
+    testing.expectEqual('/books/:id', p.pathname);
+    testing.expectEqual('*', p.protocol);
+    testing.expectEqual(false, p.hasRegExpGroups);
+    testing.expectEqual(true, p.test('https://x.com/books/7'));
+    testing.expectEqual(false, p.test('https://x.com/n'));
+
+    testing.expectEqual(
+      '{"hash":{"groups":{"0":""},"input":""},' +
+      '"hostname":{"groups":{"0":"x.com"},"input":"x.com"},' +
+      '"inputs":["https://x.com/books/7"],' +
+      '"password":{"groups":{"0":""},"input":""},' +
+      '"pathname":{"groups":{"id":"7"},"input":"/books/7"},' +
+      '"port":{"groups":{"0":""},"input":""},' +
+      '"protocol":{"groups":{"0":"https"},"input":"https"},' +
+      '"search":{"groups":{"0":""},"input":""},' +
+      '"username":{"groups":{"0":""},"input":""}}',
+      JSON.stringify(p.exec('https://x.com/books/7')));
+
+    testing.expectEqual(null, p.exec('https://x.com/n'));
+  }
+</script>
+
+<script id=url_pattern_constructor_string>
+  {
+    const p = new URLPattern('https://example.com/a/:b');
+    testing.expectEqual('https', p.protocol);
+    testing.expectEqual('example.com', p.hostname);
+    testing.expectEqual('/a/:b', p.pathname);
+    testing.expectEqual(true, p.test('https://example.com/a/z'));
+    testing.expectEqual(false, p.test('http://example.com/a/z'));
+    testing.expectEqual(false, p.test('https://other.com/a/z'));
+
+    // A relative string takes its other components from the base URL.
+    const based = new URLPattern('/x/:y', 'https://base.test/');
+    testing.expectEqual('base.test', based.hostname);
+    testing.expectEqual('/x/:y', based.pathname);
+    testing.expectEqual(false, based.hasRegExpGroups);
+    testing.expectEqual(true, based.test('https://base.test/x/1'));
+
+    let err;
+    try { new URLPattern('{'); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to construct 'URLPattern': Relative constructor string '{' must have a base URL passed as the second argument.",
+      err.message);
+  }
+</script>
+
+<script id=url_pattern_regexp_groups>
+  {
+    // A named group does not count as a regexp group; an explicit one does.
+    testing.expectEqual(false, new URLPattern({ pathname: '/books/:id' }).hasRegExpGroups);
+    testing.expectEqual(true, new URLPattern({ pathname: '/(\\d+)' }).hasRegExpGroups);
+
+    const p = new URLPattern({ pathname: '/(\\d+)' });
+    testing.expectEqual(true, p.test('https://x.com/42'));
+    testing.expectEqual(false, p.test('https://x.com/abc'));
+    testing.expectEqual('42', p.exec('https://x.com/42').pathname.groups['0']);
+
+    // A named group with its own regexp keeps the name.
+    const named = new URLPattern({ pathname: '/:id(\\d+)' });
+    testing.expectEqual(true, named.hasRegExpGroups);
+    testing.expectEqual('7', named.exec('https://x.com/7').pathname.groups.id);
+
+    // A `:name` group stops at the path separator.
+    const one = new URLPattern({ pathname: '/books/:id' });
+    testing.expectEqual(false, one.test('https://x.com/books/7/pages'));
+  }
+</script>
