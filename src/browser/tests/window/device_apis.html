@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  WebUSB, WebHID, Web Serial and Web Bluetooth. Every shape, value and message
+  below was measured on a headed Chrome 150 over http://localhost; the
+  snapshots live in agent-workspace/stealth-detector-probes/win-batch/
+  (win13-chrome.json for the interface shapes, win13b-chrome.json for the
+  behaviours, win13c-chrome.json for the BluetoothUUID tables).
+-->
+
+<script id="device_choosers_reject" type=module>
+  // Nothing here ever holds a user gesture, so all four choosers refuse. Chrome
+  // refuses by REJECTING the promise, not by throwing out of the call, and the
+  // message names the interface and the operation.
+  {
+    const state = await testing.async();
+    const results = {};
+    const cases = [
+      ['usb', () => navigator.usb.requestDevice({ filters: [] }), 'requestDevice', 'USB'],
+      ['hid', () => navigator.hid.requestDevice({ filters: [] }), 'requestDevice', 'HID'],
+      ['serial', () => navigator.serial.requestPort(), 'requestPort', 'Serial'],
+      ['bluetooth', () => navigator.bluetooth.requestDevice({ filters: [] }), 'requestDevice', 'Bluetooth'],
+    ];
+    (async () => {
+      for (const [key, call] of cases) {
+        let p;
+        try {
+          p = call();
+        } catch (e) {
+          results[key] = 'THREW SYNCHRONOUSLY: ' + e.name + ': ' + e.message;
+          results[key + 'Return'] = 'THREW SYNCHRONOUSLY';
+          continue;
+        }
+        results[key + 'Return'] = Object.prototype.toString.call(p);
+        try {
+          await p;
+          results[key] = 'resolved';
+        } catch (e) {
+          results[key] = e.name + ': ' + e.message;
+        }
+      }
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      for (const [key, , op, iface] of cases) {
+        testing.expectEqual('[object Promise]', results[key + 'Return']);
+        testing.expectEqual(
+          "SecurityError: Failed to execute '" + op + "' on '" + iface + "': " +
+            'Must be handling a user gesture to show a permission request.',
+          results[key],
+        );
+      }
+    });
+  }
+</script>
+
+<script id="device_enumerations_resolve_empty" type=module>
+  // Nothing is paired, so the three enumerations hand back an empty list and
+  // the radio reports itself available -- the same answers the reference
+  // Chrome gave on a desktop with no device attached.
+  {
+    const state = await testing.async();
+    const results = {};
+    (async () => {
+      results.usb = await navigator.usb.getDevices();
+      results.hid = await navigator.hid.getDevices();
+      results.serial = await navigator.serial.getPorts();
+      results.bluetooth = await navigator.bluetooth.getAvailability();
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      for (const k of ['usb', 'hid', 'serial']) {
+        testing.expectEqual(true, Array.isArray(results[k]));
+        testing.expectEqual(0, results[k].length);
+      }
+      testing.expectEqual(true, results.bluetooth);
+    });
+  }
+</script>

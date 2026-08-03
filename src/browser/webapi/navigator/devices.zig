@@ -28,10 +28,30 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const DOMException = @import("../DOMException.zig");
 const DOMRect = @import("../DOMRect.zig");
 const EventTarget = @import("../EventTarget.zig");
 const Frame = @import("../../Frame.zig");
 const Execution = js.Execution;
+
+// Chrome will not open a device chooser without a user gesture, and nothing
+// here ever has one. It refuses by REJECTING the promise -- throwing out of the
+// call instead is itself a fingerprint, because a page that wraps the call in
+// try/catch sees the difference. The wording names the interface and the
+// operation; all four were measured on a headed Chrome 150 (win13b-chrome.json).
+fn noUserGesture(
+    comptime iface: []const u8,
+    comptime operation: []const u8,
+    exec: *const Execution,
+) js.Promise {
+    const resolver = exec.js.local.?.createPromiseResolver();
+    resolver.reject(iface ++ "." ++ operation, DOMException.init(
+        "Failed to execute '" ++ operation ++ "' on '" ++ iface ++ "': " ++
+            "Must be handling a user gesture to show a permission request.",
+        "SecurityError",
+    ));
+    return resolver.promise();
+}
 
 pub fn registerTypes() []const type {
     return &.{
@@ -118,11 +138,8 @@ pub const Bluetooth = struct {
         return exec.js.local.?.resolvePromise(true);
     }
 
-    // Chrome refuses to open the chooser outside a user gesture, and nothing
-    // here ever has one (measured: "Must be handling a user gesture to show a
-    // permission request.").
-    pub fn requestDevice(_: *const Bluetooth, _: ?js.Object) !void {
-        return error.SecurityError;
+    pub fn requestDevice(_: *const Bluetooth, _: ?js.Object, exec: *const Execution) js.Promise {
+        return noUserGesture("Bluetooth", "requestDevice", exec);
     }
 
     pub const JsApi = struct {
@@ -402,8 +419,8 @@ pub const HID = struct {
         return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
     }
 
-    pub fn requestDevice(_: *const HID, _: js.Value) !void {
-        return error.SecurityError;
+    pub fn requestDevice(_: *const HID, _: js.Value, exec: *const Execution) js.Promise {
+        return noUserGesture("HID", "requestDevice", exec);
     }
 
     const connect = handlerAccessors(HID, "_on_connect");
@@ -440,8 +457,8 @@ pub const Serial = struct {
         return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
     }
 
-    pub fn requestPort(_: *const Serial, _: ?js.Object) !void {
-        return error.SecurityError;
+    pub fn requestPort(_: *const Serial, _: ?js.Object, exec: *const Execution) js.Promise {
+        return noUserGesture("Serial", "requestPort", exec);
     }
 
     const connect = handlerAccessors(Serial, "_on_connect");
@@ -478,8 +495,8 @@ pub const USB = struct {
         return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
     }
 
-    pub fn requestDevice(_: *const USB, _: js.Value) !void {
-        return error.SecurityError;
+    pub fn requestDevice(_: *const USB, _: js.Value, exec: *const Execution) js.Promise {
+        return noUserGesture("USB", "requestDevice", exec);
     }
 
     const connect = handlerAccessors(USB, "_on_connect");
