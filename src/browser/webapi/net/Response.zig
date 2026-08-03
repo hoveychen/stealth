@@ -342,7 +342,7 @@ const StreamConsumer = struct {
         var resolver = local.createPromiseResolver();
         const promise = resolver.promise();
 
-        const reader = try stream.getReader(exec);
+        const reader = try stream.defaultReader(exec);
 
         const state = try exec.arena.create(StreamConsumer);
         state.* = .{

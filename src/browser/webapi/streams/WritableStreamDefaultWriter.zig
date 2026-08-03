@@ -31,6 +31,29 @@ pub fn init(stream: *WritableStream, exec: *const Execution) !*WritableStreamDef
     });
 }
 
+/// `new WritableStreamDefaultWriter(stream)`, with Chrome's own refusal for a
+/// non-stream (measured, win26-chrome.json).
+pub fn constructor(stream_: ?js.Value, exec: *Execution) !*WritableStreamDefaultWriter {
+    const isolate = exec.js.isolate;
+    const stream = exec.js.local.?.jsValueToZig(*WritableStream, stream_.?) catch {
+        _ = isolate.throwException(isolate.createTypeError(
+            "Failed to construct 'WritableStreamDefaultWriter': parameter 1 is not of type 'WritableStream'.",
+        ));
+        return error.JsException;
+    };
+    return stream.getWriter(exec);
+}
+
+/// Aborting a sink that never existed simply closes the stream.
+pub fn abort(self: *WritableStreamDefaultWriter, _: ?js.Value, exec: *const Execution) !js.Promise {
+    const local = exec.js.local.?;
+    const stream = self._stream orelse {
+        return local.rejectPromise(.{ .type_error = "Writer has been released" });
+    };
+    stream._state = .errored;
+    return local.resolvePromise(.{});
+}
+
 pub fn write(self: *WritableStreamDefaultWriter, chunk: js.Value, exec: *const Execution) !js.Promise {
     const local = exec.js.local.?;
     const stream = self._stream orelse {
@@ -104,10 +127,14 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const write = bridge.function(WritableStreamDefaultWriter.write, .{});
-    pub const close = bridge.function(WritableStreamDefaultWriter.close, .{});
-    pub const releaseLock = bridge.function(WritableStreamDefaultWriter.releaseLock, .{});
-    pub const closed = bridge.accessor(WritableStreamDefaultWriter.getClosed, null, .{});
-    pub const ready = bridge.accessor(WritableStreamDefaultWriter.getReady, null, .{});
-    pub const desiredSize = bridge.accessor(WritableStreamDefaultWriter.getDesiredSize, null, .{});
+    const T = WritableStreamDefaultWriter;
+
+    pub const constructor = bridge.constructor(T.constructor, .{ .arity = 1 });
+    pub const closed = bridge.accessor(T.getClosed, null, .{});
+    pub const desiredSize = bridge.accessor(T.getDesiredSize, null, .{});
+    pub const ready = bridge.accessor(T.getReady, null, .{});
+    pub const abort = bridge.function(T.abort, .{});
+    pub const close = bridge.function(T.close, .{});
+    pub const releaseLock = bridge.function(T.releaseLock, .{});
+    pub const write = bridge.function(T.write, .{});
 };

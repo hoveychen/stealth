@@ -27,12 +27,50 @@ const ReadableStreamDefaultReader = @This();
 
 _stream: ?*ReadableStream,
 _execution: *const Execution,
+_closed: ?js.PromiseResolver.Global = null,
 
 pub fn init(stream: *ReadableStream, exec: *const Execution) !*ReadableStreamDefaultReader {
     return exec._factory.create(ReadableStreamDefaultReader{
         ._stream = stream,
         ._execution = exec,
     });
+}
+
+/// `new ReadableStreamDefaultReader(stream)`. Chrome constructs one directly,
+/// with these two refusals (measured, win26-chrome.json).
+pub fn constructor(stream_: ?js.Value, exec: *Execution) !*ReadableStreamDefaultReader {
+    const isolate = exec.js.isolate;
+    const stream = exec.js.local.?.jsValueToZig(*ReadableStream, stream_.?) catch {
+        _ = isolate.throwException(isolate.createTypeError(
+            "Failed to construct 'ReadableStreamDefaultReader': parameter 1 is not of type 'ReadableStream'.",
+        ));
+        return error.JsException;
+    };
+    if (stream.getLocked()) {
+        _ = isolate.throwException(isolate.createTypeError(
+            "Failed to construct 'ReadableStreamDefaultReader': ReadableStreamDefaultReader " ++
+                "constructor can only accept readable streams that are not yet locked to a reader",
+        ));
+        return error.JsException;
+    }
+    return stream.defaultReader(exec);
+}
+
+/// Resolves when the stream closes. Nothing here ever rejects it: a stream
+/// that errors takes the read promise with it.
+pub fn getClosed(self: *ReadableStreamDefaultReader, exec: *const Execution) !js.Promise {
+    const local = exec.js.local.?;
+    if (self._closed) |resolver| {
+        return local.toLocal(resolver).promise();
+    }
+    const resolver = local.createPromiseResolver();
+    self._closed = try resolver.persist();
+    if (self._stream) |stream| {
+        if (stream._state == .closed) {
+            resolver.resolve("reader closed", {});
+        }
+    }
+    return resolver.promise();
 }
 
 pub const ReadResult = struct {
@@ -65,6 +103,10 @@ pub fn read(self: *ReadableStreamDefaultReader, exec: *const Execution) !js.Prom
     if (stream._state == .errored) {
         //const err = stream._stored_error orelse "Stream errored";
         return local.rejectPromise(.{ .type_error = "Stream errored" });
+    }
+
+    if (stream._byte_controller) |byte_controller| {
+        return byte_controller.addRead(null, exec);
     }
 
     if (stream._controller.dequeue()) |chunk| {
@@ -113,7 +155,9 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const constructor = bridge.constructor(ReadableStreamDefaultReader.constructor, .{ .arity = 1 });
     pub const read = bridge.function(ReadableStreamDefaultReader.read, .{});
-    pub const cancel = bridge.function(ReadableStreamDefaultReader.cancel, .{});
     pub const releaseLock = bridge.function(ReadableStreamDefaultReader.releaseLock, .{});
+    pub const closed = bridge.accessor(ReadableStreamDefaultReader.getClosed, null, .{});
+    pub const cancel = bridge.function(ReadableStreamDefaultReader.cancel, .{});
 };

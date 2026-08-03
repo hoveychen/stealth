@@ -216,8 +216,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const enqueue = bridge.function(ReadableStreamDefaultController.enqueueValue, .{});
-    pub const close = bridge.function(ReadableStreamDefaultController.close, .{});
-    pub const @"error" = bridge.function(ReadableStreamDefaultController.doError, .{});
-    pub const desiredSize = bridge.accessor(ReadableStreamDefaultController.getDesiredSize, null, .{});
+    const T = ReadableStreamDefaultController;
+
+    // Chrome reports length 0 for both enqueue and error -- their arguments
+    // are optional in the IDL (measured, win20-chrome.json).
+    pub const desiredSize = bridge.accessor(T.getDesiredSize, null, .{});
+    pub const close = bridge.function(T.close, .{});
+    pub const enqueue = bridge.function(T.enqueueValue, .{ .arity = 0 });
+    pub const @"error" = bridge.function(T.doError, .{ .arity = 0 });
 };

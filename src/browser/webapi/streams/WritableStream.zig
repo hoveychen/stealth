@@ -136,6 +136,22 @@ pub fn closeStream(self: *WritableStream, exec: *const Execution) !void {
     }
 }
 
+/// Aborting or closing with no sink attached just moves the state along; both
+/// answer a resolved promise, as Chrome's do for a stream nothing is writing.
+pub fn abort(self: *WritableStream, _: ?js.Value, exec: *const Execution) !js.Promise {
+    self._state = .errored;
+    return exec.js.local.?.resolvePromise(.{});
+}
+
+pub fn close(self: *WritableStream, exec: *const Execution) !js.Promise {
+    const local = exec.js.local.?;
+    if (self.getLocked()) {
+        return local.rejectPromise(.{ .type_error = "Cannot close a stream using a locked writer" });
+    }
+    try self.closeStream(exec);
+    return local.resolvePromise(.{});
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(WritableStream);
 
@@ -146,8 +162,10 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(WritableStream.init, .{});
-    pub const getWriter = bridge.function(WritableStream.getWriter, .{});
     pub const locked = bridge.accessor(WritableStream.getLocked, null, .{});
+    pub const abort = bridge.function(WritableStream.abort, .{});
+    pub const close = bridge.function(WritableStream.close, .{});
+    pub const getWriter = bridge.function(WritableStream.getWriter, .{});
 };
 
 pub fn registerTypes() []const type {
