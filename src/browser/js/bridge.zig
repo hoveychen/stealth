@@ -1248,6 +1248,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/scheduler.zig"),
     @import("../webapi/sensor.zig"),
     @import("../webapi/midi.zig"),
+    @import("../webapi/navigator/bluetooth.zig"),
     @import("../webapi/External.zig"),
     @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),

@@ -80,3 +80,178 @@
     });
   }
 </script>
+
+<script id="bluetooth_family_shapes">
+  {
+    const expected = {
+      BluetoothUUID: 'constructor',
+      BluetoothCharacteristicProperties:
+        'broadcast,read,writeWithoutResponse,write,notify,indicate,' +
+        'authenticatedSignedWrites,reliableWrite,writableAuxiliaries,constructor',
+      BluetoothDevice: 'id,name,gatt,ongattserverdisconnected,constructor',
+      BluetoothRemoteGATTServer:
+        'device,connected,connect,disconnect,getPrimaryService,getPrimaryServices,constructor',
+      BluetoothRemoteGATTService:
+        'device,uuid,isPrimary,getCharacteristic,getCharacteristics,constructor',
+      BluetoothRemoteGATTCharacteristic:
+        'service,uuid,properties,value,oncharacteristicvaluechanged,getDescriptor,' +
+        'getDescriptors,readValue,startNotifications,stopNotifications,writeValue,' +
+        'writeValueWithResponse,writeValueWithoutResponse,constructor',
+      BluetoothRemoteGATTDescriptor: 'characteristic,uuid,value,readValue,writeValue,constructor',
+    };
+    for (const [n, keys] of Object.entries(expected)) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[n].prototype).join(','));
+    }
+
+    // Only two of the six are EventTargets on Chrome.
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(BluetoothDevice.prototype));
+    testing.expectEqual(
+      EventTarget.prototype,
+      Object.getPrototypeOf(BluetoothRemoteGATTCharacteristic.prototype),
+    );
+    for (const n of [
+      'BluetoothUUID', 'BluetoothCharacteristicProperties', 'BluetoothRemoteGATTServer',
+      'BluetoothRemoteGATTService', 'BluetoothRemoteGATTDescriptor',
+    ]) {
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[n].prototype));
+    }
+
+    // None of them is constructible, and Chrome's two wordings differ.
+    for (const n of Object.keys(expected)) {
+      testing.expectError('TypeError: Illegal constructor', () => window[n]());
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+
+    // BluetoothUUID carries its four functions as statics, in Chrome's order.
+    testing.expectEqual(
+      'canonicalUUID,getCharacteristic,getDescriptor,getService',
+      Object.getOwnPropertyNames(BluetoothUUID).filter(
+        (k) => !['length', 'name', 'prototype'].includes(k),
+      ).join(','),
+    );
+    for (const k of ['canonicalUUID', 'getCharacteristic', 'getDescriptor', 'getService']) {
+      testing.expectEqual(1, BluetoothUUID[k].length);
+    }
+  }
+</script>
+
+<script id="bluetooth_uuid_resolution">
+  {
+    const SUFFIX = '-0000-1000-8000-00805f9b34fb';
+
+    // The canonical form is the value as eight lowercase hex digits. Verified
+    // against Chrome for every alias from 0x0000 to 0xffff.
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.canonicalUUID(0));
+    testing.expectEqual('0000000f' + SUFFIX, BluetoothUUID.canonicalUUID(0xf));
+    testing.expectEqual('00001234' + SUFFIX, BluetoothUUID.canonicalUUID(0x1234));
+    testing.expectEqual('0000ffff' + SUFFIX, BluetoothUUID.canonicalUUID(0xffff));
+    testing.expectEqual('00010000' + SUFFIX, BluetoothUUID.canonicalUUID(0x10000));
+    testing.expectEqual('ffffffff' + SUFFIX, BluetoothUUID.canonicalUUID(0xffffffff));
+
+    // canonicalUUID enforces the range; the three lookups do not.
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is outside the 'unsigned long' value range.",
+      () => BluetoothUUID.canonicalUUID(-1),
+    );
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is not of type 'unsigned long'.",
+      () => BluetoothUUID.canonicalUUID('x'),
+    );
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        '1 argument required, but only 0 present.',
+      () => BluetoothUUID.canonicalUUID(),
+    );
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is not of type 'unsigned long'.",
+      () => BluetoothUUID.canonicalUUID(NaN),
+    );
+    // An infinity gets its own wording, distinct from a finite out-of-range one.
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is infinite and not of type 'unsigned long'.",
+      () => BluetoothUUID.canonicalUUID(Infinity),
+    );
+    // A fractional value truncates rather than throwing.
+    testing.expectEqual('00000001' + SUFFIX, BluetoothUUID.canonicalUUID(1.7));
+    testing.expectEqual('00000001' + SUFFIX, BluetoothUUID.getService(1.7));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(-Infinity));
+
+    // getService(-1) wraps to ffffffff where canonicalUUID(-1) throws. The
+    // wrap used to reach an out-of-range @intFromFloat, which crashed the
+    // engine outright -- a page could take the process down with one call.
+    testing.expectEqual('ffffffff' + SUFFIX, BluetoothUUID.getService(-1));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(0));
+    testing.expectEqual('00010000' + SUFFIX, BluetoothUUID.getService(0x10000));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(NaN));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(Infinity));
+
+    // Standard names resolve off Chrome's own tables.
+    testing.expectEqual('0000180f' + SUFFIX, BluetoothUUID.getService('battery_service'));
+    testing.expectEqual('00001800' + SUFFIX, BluetoothUUID.getService('generic_access'));
+    testing.expectEqual('0000180f' + SUFFIX, BluetoothUUID.getService(0x180f));
+    testing.expectEqual('00002a19' + SUFFIX, BluetoothUUID.getCharacteristic('battery_level'));
+    testing.expectEqual('00002a19' + SUFFIX, BluetoothUUID.getCharacteristic(0x2a19));
+    testing.expectEqual(
+      '00002904' + SUFFIX,
+      BluetoothUUID.getDescriptor('gatt.characteristic_presentation_format'),
+    );
+
+    // A custom UUID passes through, but only in the lowercase canonical form.
+    const custom = '12345678-1234-5678-1234-56789abcdef0';
+    testing.expectEqual(custom, BluetoothUUID.getService(custom));
+    testing.expectEqual(custom, BluetoothUUID.getCharacteristic(custom));
+    testing.expectEqual(custom, BluetoothUUID.getDescriptor(custom));
+
+    const invalid = (kind, plural, example, value) =>
+      "TypeError: Failed to execute 'get" + kind + "' on 'BluetoothUUID': Invalid " + kind +
+      " name: '" + value + "'. It must be a valid UUID alias (e.g. 0x1234), UUID (lowercase " +
+      "hex characters e.g. '00001234" + SUFFIX + "'), or recognized standard name from " +
+      'https://www.bluetooth.com/specifications/gatt/' + plural + " e.g. '" + example + "'.";
+
+    // Uppercase, an 0x-prefixed string and a bare alias string are all refused,
+    // and null becomes the string 'null' rather than the number zero.
+    for (const bad of [
+      '0000180F-0000-1000-8000-00805F9B34FB', '0x180f', '180f', 'bogus',
+    ]) {
+      testing.expectError(
+        invalid('Service', 'services', 'alert_notification', bad),
+        () => BluetoothUUID.getService(bad),
+      );
+    }
+    testing.expectError(
+      invalid('Service', 'services', 'alert_notification', 'null'),
+      () => BluetoothUUID.getService(null),
+    );
+    testing.expectError(
+      invalid('Characteristic', 'characteristics', 'aerobic_heart_rate_lower_limit', 'bogus'),
+      () => BluetoothUUID.getCharacteristic('bogus'),
+    );
+    testing.expectError(
+      invalid('Descriptor', 'descriptors', 'gatt.characteristic_presentation_format', 'bogus'),
+      () => BluetoothUUID.getDescriptor('bogus'),
+    );
+
+    // Names Chrome does not know are absent here too, by construction.
+    for (const bad of ['media_control', 'microphone_control', 'battery']) {
+      testing.expectError(
+        invalid('Service', 'services', 'alert_notification', bad),
+        () => BluetoothUUID.getService(bad),
+      );
+    }
+  }
+</script>

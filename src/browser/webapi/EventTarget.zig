@@ -85,6 +85,8 @@ pub const Type = union(enum) {
     wake_lock_sentinel: *@import("navigator/devices.zig").WakeLockSentinel,
     sensor: *@import("sensor.zig").Sensor,
     permission_status: *@import("Permissions.zig").PermissionStatus,
+    bluetooth_device: *@import("navigator/bluetooth.zig").BluetoothDevice,
+    bluetooth_gatt_characteristic: *@import("navigator/bluetooth.zig").BluetoothRemoteGATTCharacteristic,
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -290,6 +292,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .wake_lock_sentinel => writer.writeAll("<WakeLockSentinel>"),
         .sensor => writer.writeAll("<Sensor>"),
         .permission_status => writer.writeAll("<PermissionStatus>"),
+        .bluetooth_device => writer.writeAll("<BluetoothDevice>"),
+        .bluetooth_gatt_characteristic => writer.writeAll("<BluetoothRemoteGATTCharacteristic>"),
     };
 }
 
@@ -347,6 +351,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .wake_lock_sentinel => return "[object WakeLockSentinel]",
         .sensor => return "[object Sensor]",
         .permission_status => return "[object PermissionStatus]",
+        .bluetooth_device => return "[object BluetoothDevice]",
+        .bluetooth_gatt_characteristic => return "[object BluetoothRemoteGATTCharacteristic]",
     };
 }
 
