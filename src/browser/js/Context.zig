@@ -154,6 +154,12 @@ execution: Execution,
 
 unknown_properties: (if (IS_DEBUG) std.StringHashMapUnmanaged(UnknownPropertyStat) else void) = if (IS_DEBUG) .{} else {},
 
+// The two `size` functions the queuing strategies hand out. They belong to
+// the realm, not to the instance: every ByteLengthQueuingStrategy in a
+// context reports the same function object, and so does every
+// CountQueuingStrategy (measured on Chrome 150, win26-chrome.json).
+queuing_strategy_size: [2]?js.Function.Global = .{ null, null },
+
 const ModuleEntry = struct {
     // Can be null if we're asynchronously loading the module, in
     // which case resolver_promise cannot be null.

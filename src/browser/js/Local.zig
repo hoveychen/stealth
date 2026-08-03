@@ -123,6 +123,36 @@ pub fn newCallback(
     return .{ .local = self, .handle = handle };
 }
 
+/// Like newCallback, but for a function a script can see: it reports the
+/// `name` and `length` WebIDL declares, and it is not a constructor.
+/// `Function::New` (what newCallback uses) always allows construction and so
+/// always carries a `prototype` property, which no built-in function has —
+/// going through a FunctionTemplate with the default kThrow behaviour is what
+/// the bridge already does for every interface method.
+pub fn newNamedCallback(
+    self: *const Local,
+    comptime name: []const u8,
+    comptime length: u8,
+    callback: anytype,
+    data: anytype,
+) !js.Function {
+    const isolate = self.isolate;
+    const external = isolate.createExternal(data);
+    const template = v8.v8__FunctionTemplate__New__Config(isolate.handle, &.{
+        .callback = struct {
+            fn wrap(info_handle: ?*const js.v8.FunctionCallbackInfo) callconv(.c) void {
+                Caller.Function.call(@TypeOf(data), info_handle.?, callback, .{ .embedded_receiver = true });
+            }
+        }.wrap,
+        .data = @ptrCast(external),
+        .length = length,
+    }) orelse return error.OutOfMemory;
+
+    v8.v8__FunctionTemplate__SetClassName(template, isolate.initStringHandle(name));
+    const handle = v8.v8__FunctionTemplate__GetFunction(template, self.handle) orelse return error.OutOfMemory;
+    return .{ .local = self, .handle = handle };
+}
+
 pub fn runMacrotasks(self: *const Local) void {
     const env = self.ctx.env;
     env.pumpMessageLoop();
