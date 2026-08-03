@@ -174,6 +174,10 @@ pub const JsApi = struct {
     pub const Meta = struct {
         pub const name = "Css";
 
+        // The namespace's identifier is all upper case. Measured on Chrome 150:
+        //   Object.prototype.toString.call(CSS) -> '[object CSS]'
+        pub const to_string_tag = "CSS";
+
         // Per the CSSOM spec, CSS is a namespace object — members are own
         // properties so Object.entries(CSS) returns them.
         pub const own_properties = true;

@@ -24,6 +24,7 @@ const Frame = @import("../../Frame.zig");
 const Page = @import("../../Page.zig");
 const units = @import("../../css/units.zig");
 const Element = @import("../Element.zig");
+const Rect = @import("Rect.zig");
 
 const String = lp.String;
 const Length = @This();
@@ -41,6 +42,17 @@ _direction: Direction = .unspecified,
 _read_only: bool = false,
 _default_value: f64 = 0,
 _default_unit: Unit = .number,
+// Set while this length is an item of an SVGLengthList. The attribute then
+// holds the whole list, so the item neither reads nor writes it directly:
+// reads come from the fields the list parsed into, and a write asks the list
+// to re-serialize. `_element` stays set so percentage units still resolve
+// against the right viewport.
+_attachment: ?Attachment = null,
+
+pub const Attachment = struct {
+    owner: *anyopaque,
+    mutate: *const fn (*anyopaque, *Length) anyerror!void,
+};
 
 pub const Direction = enum {
     horizontal,
@@ -74,6 +86,52 @@ pub fn detached(frame: *Frame) !*Length {
 
 pub fn deinit(self: *Length, _: *Page) void {
     self._arena.?.release();
+}
+
+/// An SVGLengthList item: its own arena and refcount like a detached length,
+/// but bound to the element whose attribute the list reflects.
+pub fn listItem(element: *Element, direction: Direction, value: f64, unit: Unit, frame: *Frame) !*Length {
+    const self = try detached(frame);
+    self._element = element;
+    self._direction = direction;
+    self._value = value;
+    self._unit = unit;
+    return self;
+}
+
+pub fn attach(self: *Length, attachment: Attachment, read_only: bool) void {
+    self._attachment = attachment;
+    if (read_only) self._read_only = true;
+}
+
+pub fn detach(self: *Length, owner: *anyopaque) void {
+    const attachment = self._attachment orelse return;
+    if (attachment.owner == owner) self._attachment = null;
+}
+
+pub fn isAttached(self: *const Length) bool {
+    return self._attachment != null;
+}
+
+pub fn isAttachedTo(self: *const Length, owner: *anyopaque) bool {
+    const attachment = self._attachment orelse return false;
+    return attachment.owner == owner;
+}
+
+pub fn rawValue(self: *const Length) f64 {
+    return self._value;
+}
+
+pub fn rawUnit(self: *const Length) Unit {
+    return self._unit;
+}
+
+pub fn writeTo(self: *const Length, writer: *std.Io.Writer) !void {
+    try writer.print("{d}{s}", .{ self._value, units.suffix(toShared(self._unit)) });
+}
+
+pub fn parseValue(input: []const u8) !Parsed {
+    return parse(input);
 }
 
 pub fn acquireRef(self: *Length) void {
@@ -195,6 +253,10 @@ fn ensureFinite(value: f64) !void {
 }
 
 fn syncFromAttribute(self: *Length) void {
+    // A list item's fields are authoritative; the attribute holds the list.
+    if (self._attachment != null) {
+        return;
+    }
     const element = self._element orelse return;
     const raw = element.getAttributeSafe(self._attr_name) orelse {
         self._value = self._default_value;
@@ -211,6 +273,9 @@ fn syncFromAttribute(self: *Length) void {
 }
 
 fn writeBack(self: *Length, frame: *Frame) !void {
+    if (self._attachment) |attachment| {
+        return attachment.mutate(attachment.owner, self);
+    }
     const element = self._element orelse return;
     const value = try self.serialize(frame);
     try element.setAttributeSafe(self._attr_name, .wrap(value), frame);
@@ -260,6 +325,13 @@ fn ancestorViewportDimensionAt(element: *Element, direction: Direction, frame: *
         .unspecified => unreachable,
     };
 
+    // A viewBox redefines the user coordinate system its children measure
+    // percentages against: <svg width="200" viewBox="0 0 40 20"> makes 50%
+    // resolve to 20, not 100. Measured on Chrome 150.
+    if (viewBoxDimension(viewport_element, direction)) |dimension| {
+        return dimension;
+    }
+
     const raw = viewport_element.getAttributeSafe(attr_name) orelse {
         // SVG2 treats an omitted nested width/height as auto, whose used value
         // is 100% of the containing SVG viewport.
@@ -267,6 +339,33 @@ fn ancestorViewportDimensionAt(element: *Element, direction: Direction, frame: *
     };
     const parsed = parse(raw) catch return ancestorViewportDimensionAt(viewport_element, direction, frame, depth + 1);
     return resolveParsedLength(parsed, viewport_element, direction, frame, depth + 1);
+}
+
+fn viewBoxDimension(element: *Element, direction: Direction) ?f64 {
+    const values = Rect.viewBoxOf(element) orelse return null;
+    return switch (direction) {
+        .horizontal => values[2],
+        .vertical => values[3],
+        .unspecified => unreachable,
+    };
+}
+
+/// The used `width`/`height` of a viewport-establishing element, in the user
+/// units of the coordinate system it sits in. An omitted or unusable value is
+/// `auto`, whose used value is 100% of the containing viewport.
+pub fn viewportDimension(element: *Element, direction: Direction, frame: *Frame) f64 {
+    const attr_name: String = switch (direction) {
+        .horizontal => comptime .wrap("width"),
+        .vertical => comptime .wrap("height"),
+        .unspecified => unreachable,
+    };
+    const raw = element.getAttributeSafe(attr_name) orelse {
+        return ancestorViewportDimension(element, direction, frame);
+    };
+    const parsed = parse(raw) catch {
+        return ancestorViewportDimension(element, direction, frame);
+    };
+    return resolveParsedLength(parsed, element, direction, frame, 0);
 }
 
 fn nearestSvgViewport(element: *Element) ?*Element {
@@ -301,7 +400,7 @@ fn fontSize(self: *const Length, frame: *Frame) f64 {
     return frame._style_manager.computedFontSize(self._element);
 }
 
-const Parsed = struct {
+pub const Parsed = struct {
     value: f64,
     unit: Unit,
 };
@@ -368,6 +467,12 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's own member order: attributes, then constants, then the two
+    // operations alphabetically.
+    pub const unitType = bridge.accessor(Length.getUnitType, null, .{});
+    pub const value = bridge.accessor(Length.getValue, Length.setValue, .{});
+    pub const valueInSpecifiedUnits = bridge.accessor(Length.getValueInSpecifiedUnits, Length.setValueInSpecifiedUnits, .{});
+    pub const valueAsString = bridge.accessor(Length.getValueAsString, Length.setValueAsString, .{});
     pub const SVG_LENGTHTYPE_UNKNOWN = bridge.property(0, .{ .template = true });
     pub const SVG_LENGTHTYPE_NUMBER = bridge.property(1, .{ .template = true });
     pub const SVG_LENGTHTYPE_PERCENTAGE = bridge.property(2, .{ .template = true });
@@ -379,11 +484,6 @@ pub const JsApi = struct {
     pub const SVG_LENGTHTYPE_IN = bridge.property(8, .{ .template = true });
     pub const SVG_LENGTHTYPE_PT = bridge.property(9, .{ .template = true });
     pub const SVG_LENGTHTYPE_PC = bridge.property(10, .{ .template = true });
-
-    pub const unitType = bridge.accessor(Length.getUnitType, null, .{});
-    pub const value = bridge.accessor(Length.getValue, Length.setValue, .{});
-    pub const valueInSpecifiedUnits = bridge.accessor(Length.getValueInSpecifiedUnits, Length.setValueInSpecifiedUnits, .{});
-    pub const valueAsString = bridge.accessor(Length.getValueAsString, Length.setValueAsString, .{});
-    pub const newValueSpecifiedUnits = bridge.function(Length.newValueSpecifiedUnits, .{});
     pub const convertToSpecifiedUnits = bridge.function(Length.convertToSpecifiedUnits, .{});
+    pub const newValueSpecifiedUnits = bridge.function(Length.newValueSpecifiedUnits, .{});
 };

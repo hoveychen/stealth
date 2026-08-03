@@ -19,22 +19,23 @@
 const std = @import("std");
 
 const font_metrics = @import("font_metrics.zig");
+const emoji_metrics = @import("emoji_metrics.zig");
 
-// Two measurement paths live here.
+// Two measurement paths live here, both reading the per-glyph tables
+// transcribed from Chrome (font_metrics.zig, emoji_metrics.zig).
 //
-// `measure` below is the real one: it reads the per-glyph table transcribed
-// from Chrome (see font_metrics.zig) and reproduces what `measureText`
-// answers, exactly, for printable ASCII in the families we measured. That is
-// what the canvas uses.
+// `measure` is the canvas one: it reproduces what `measureText` answers,
+// exactly, for printable ASCII in the families we measured.
 //
-// Everything after it is the older heuristic — 0.6em per character and a few
-// buckets — which SVGTextContentElement still uses. It predates the table and
-// should eventually be replaced by it; leaving it in place for now keeps the
-// SVG geometry tests honest about what changed and when.
-
-// Deterministic DOM fallback only. This intentionally does not claim to shape
-// scripts, apply kerning, or select fonts; a real shaping backend can replace
-// this module without changing SVGTextContentElement.
+// `svgWidth` and friends below are the SVG one. It differs in two ways that
+// are Chrome's, not ours: SVG text measures whole shaped clusters, so a ZWJ
+// emoji sequence has one advance rather than the sum of its parts, and it
+// addresses characters by UTF-16 code unit because that is what the DOM
+// counts. Chrome also quantises SVG advances per size where the canvas ones
+// scale exactly; we scale, and are off by well under a tenth of a pixel.
+//
+// Neither path shapes scripts or applies kerning; a real shaping backend can
+// replace this module without changing SVGTextContentElement.
 
 /// Everything a `TextMetrics` reports, in CSS pixels.
 pub const Metrics = struct {
@@ -119,12 +120,6 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
         pen += glyph.advance;
     }
 
-    const toPixels = struct {
-        fn f(value: f64, font_size: f64) f64 {
-            return value * font_size / font_metrics.basis;
-        }
-    }.f;
-
     metrics.width = toPixels(pen, size);
     metrics.actualBoundingBoxAscent = toPixels(ascent, size);
     metrics.actualBoundingBoxDescent = toPixels(descent, size);
@@ -206,39 +201,156 @@ fn unitLength(codepoint: u21) u32 {
     return if (codepoint >= 0x10000) 2 else 1;
 }
 
-pub fn width(text: []const u8, font_size: f64) f64 {
-    var iterator = std.unicode.Utf8Iterator{ .bytes = text, .i = 0 };
-    var result: f64 = 0;
-    while (iterator.nextCodepoint()) |codepoint| result += advance(codepoint, font_size);
-    return result;
+/// Total advance of `text` at `font_size`, cluster by cluster.
+pub fn svgWidth(family: font_metrics.Family, text: []const u8, font_size: f64) f64 {
+    var offset: usize = 0;
+    var total: f64 = 0;
+    while (offset < text.len) {
+        const cluster = nextCluster(family, text[offset..]);
+        total += cluster.advance;
+        offset += cluster.bytes;
+    }
+    return toPixels(total, font_size);
 }
 
-pub fn substringWidth(text: []const u8, charnum: u32, nchars: u32, font_size: f64) !f64 {
-    if (charnum >= utf16Length(text)) return error.IndexSizeError;
+/// The advance of the `nchars` characters starting at `charnum`, counted in
+/// UTF-16 code units like every DOM string index.
+pub fn svgSubstringWidth(family: font_metrics.Family, text: []const u8, charnum: u32, nchars: u32, font_size: f64) !f64 {
+    const range = try clusterRange(family, text, charnum, nchars);
+    return toPixels(range.advance, font_size);
+}
+
+/// Where the cluster addressed by `charnum` starts, and how wide it is. Both
+/// in user units at `font_size`, and both measured from the start of `text`.
+pub fn svgCharExtent(family: font_metrics.Family, text: []const u8, charnum: u32, font_size: f64) !struct { offset: f64, advance: f64 } {
+    const range = try clusterRange(family, text, charnum, 1);
+    return .{
+        .offset = toPixels(range.before, font_size),
+        .advance = toPixels(range.advance, font_size),
+    };
+}
+
+/// Accumulates at the tables' 100px basis and converts once, so a sum of
+/// dyadic rationals stays exact until the last step.
+fn toPixels(value: f64, font_size: f64) f64 {
+    if (font_size <= 0 or !std.math.isFinite(font_size)) {
+        return 0;
+    }
+    return value * font_size / font_metrics.basis;
+}
+
+/// A cluster is measured whenever its unit range intersects the request, so
+/// addressing either half of a surrogate pair — or any code unit inside a ZWJ
+/// sequence — yields the whole glyph, like Chrome does.
+fn clusterRange(family: font_metrics.Family, text: []const u8, charnum: u32, nchars: u32) !struct { before: f64, advance: f64 } {
+    if (charnum >= utf16Length(text)) {
+        return error.IndexSizeError;
+    }
     const end = charnum +| nchars;
 
-    // A glyph is measured whenever its unit range intersects the request, so
-    // addressing either half of a surrogate pair yields the full glyph, like
-    // Chrome does.
-    var iterator = std.unicode.Utf8Iterator{ .bytes = text, .i = 0 };
+    var offset: usize = 0;
     var unit: u32 = 0;
-    var result: f64 = 0;
-    while (iterator.nextCodepoint()) |codepoint| {
-        const units = unitLength(codepoint);
+    var before: f64 = 0;
+    var inside: f64 = 0;
+    while (offset < text.len) {
+        const cluster = nextCluster(family, text[offset..]);
         if (unit >= end) break;
-        if (unit + units > charnum) result += advance(codepoint, font_size);
-        unit += units;
+        if (unit + cluster.units > charnum) {
+            inside += cluster.advance;
+        } else {
+            before += cluster.advance;
+        }
+        unit += cluster.units;
+        offset += cluster.bytes;
     }
-    return result;
+    return .{ .before = before, .advance = inside };
 }
 
-fn advance(codepoint: u21, font_size: f64) f64 {
+const Cluster = struct {
+    /// Bytes of UTF-8 the cluster spans.
+    bytes: usize,
+    /// UTF-16 code units the cluster spans.
+    units: u32,
+    /// Advance at the 100px basis.
+    advance: f64,
+};
+
+/// The shaped cluster at the front of `text`. A measured emoji sequence wins
+/// outright; otherwise a base character absorbs the joiners, variation
+/// selectors, skin-tone modifiers and combining marks that follow it, which
+/// is what makes a ZWJ sequence one glyph wide instead of several.
+fn nextCluster(family: font_metrics.Family, text: []const u8) Cluster {
+    if (emoji_metrics.match(text)) |measured| {
+        return .{
+            .bytes = measured.text.len,
+            .units = measured.units,
+            .advance = measured.advance,
+        };
+    }
+
+    var iterator = std.unicode.Utf8Iterator{ .bytes = text, .i = 0 };
+    const base = iterator.nextCodepoint() orelse return .{ .bytes = text.len, .units = 0, .advance = 0 };
+    var cluster = Cluster{
+        .bytes = iterator.i,
+        .units = unitLength(base),
+        .advance = advance(family, base),
+    };
+
+    // A flag is a pair of regional indicators and one glyph.
+    if (isRegionalIndicator(base)) {
+        const save = iterator.i;
+        if (iterator.nextCodepoint()) |next| {
+            if (isRegionalIndicator(next)) {
+                cluster.bytes = iterator.i;
+                cluster.units += unitLength(next);
+                return cluster;
+            }
+        }
+        iterator.i = save;
+    }
+
+    while (iterator.nextCodepoint()) |codepoint| {
+        if (codepoint == ZERO_WIDTH_JOINER) {
+            // The joined half is part of the same glyph and carries no
+            // advance of its own.
+            const joined = iterator.nextCodepoint() orelse break;
+            cluster.units += unitLength(codepoint) + unitLength(joined);
+            cluster.bytes = iterator.i;
+            continue;
+        }
+        if (!isClusterExtender(codepoint)) {
+            break;
+        }
+        cluster.units += unitLength(codepoint);
+        cluster.bytes = iterator.i;
+    }
+    return cluster;
+}
+
+const ZERO_WIDTH_JOINER = 0x200d;
+
+fn isRegionalIndicator(codepoint: u21) bool {
+    return codepoint >= 0x1f1e6 and codepoint <= 0x1f1ff;
+}
+
+fn isClusterExtender(codepoint: u21) bool {
+    return isZeroWidth(codepoint) or
+        codepoint == 0x20e3 or // combining enclosing keycap
+        (codepoint >= 0x1f3fb and codepoint <= 0x1f3ff); // skin tone modifiers
+}
+
+/// One character's advance at the 100px basis. Tabulated for the ASCII we
+/// measured; a guess, and marked as one, outside it.
+fn advance(family: font_metrics.Family, codepoint: u21) f64 {
+    if (font_metrics.glyph(family, codepoint)) |g| {
+        return g.advance;
+    }
     if (isZeroWidth(codepoint)) return 0;
     if (codepoint == '\n' or codepoint == '\r') return 0;
-    if (codepoint == '\t') return font_size * 1.32;
-    if (std.ascii.isWhitespace(@intCast(@min(codepoint, 0x7f)))) return font_size * 0.33;
-    if (isWide(codepoint)) return font_size;
-    return font_size * 0.6;
+    if (codepoint == '\t') return font_metrics.basis * 1.32;
+    if (std.ascii.isWhitespace(@intCast(@min(codepoint, 0x7f)))) return font_metrics.basis * 0.33;
+    if (isWide(codepoint)) return font_metrics.basis;
+    return font_metrics.basis * 0.6;
 }
 
 fn isZeroWidth(codepoint: u21) bool {
@@ -266,15 +378,41 @@ fn isWide(codepoint: u21) bool {
         (codepoint >= 0x20000 and codepoint <= 0x3fffd);
 }
 
-test "fallback metrics count utf-16 units and ignore combining marks" {
+test "svg metrics measure whole clusters, addressed by utf-16 unit" {
+    const serif = font_metrics.fallback;
     try std.testing.expectEqual(@as(u32, 3), utf16Length("Aé界"));
     try std.testing.expectEqual(@as(u32, 2), utf16Length("🌍"));
-    try std.testing.expectApproxEqAbs(@as(f64, 16), width("A\u{0301}界", 10), 0.0001);
-    try std.testing.expectApproxEqAbs(@as(f64, 10), try substringWidth("A界", 1, 1, 10), 0.0001);
-    try std.testing.expectApproxEqAbs(@as(f64, 10), try substringWidth("🌍", 0, 1, 10), 0.0001);
-    try std.testing.expectApproxEqAbs(@as(f64, 10), try substringWidth("🌍", 1, 1, 10), 0.0001);
-    try std.testing.expectApproxEqAbs(@as(f64, 0), try substringWidth("A界", 1, 0, 10), 0.0001);
-    try std.testing.expectError(error.IndexSizeError, substringWidth("A", 2, 1, 10));
-    try std.testing.expectError(error.IndexSizeError, substringWidth("A", 1, 0, 10));
-    try std.testing.expectError(error.IndexSizeError, substringWidth("", 0, 0, 10));
+
+    // 'A' from the table, the combining acute absorbed into it, and an
+    // untabulated wide glyph charged one em.
+    try std.testing.expectApproxEqAbs(@as(f64, 7.2216796875 + 10), svgWidth(serif, "A\u{0301}界", 10), 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f64, 10), try svgSubstringWidth(serif, "A界", 1, 1, 10), 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f64, 10), try svgSubstringWidth(serif, "🌍", 0, 1, 10), 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f64, 10), try svgSubstringWidth(serif, "🌍", 1, 1, 10), 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f64, 0), try svgSubstringWidth(serif, "A界", 1, 0, 10), 0.0001);
+    try std.testing.expectError(error.IndexSizeError, svgSubstringWidth(serif, "A", 2, 1, 10));
+    try std.testing.expectError(error.IndexSizeError, svgSubstringWidth(serif, "A", 1, 0, 10));
+    try std.testing.expectError(error.IndexSizeError, svgSubstringWidth(serif, "", 0, 0, 10));
+
+    // Straight from the emoji table: Chrome makes these 73.6875 and 60.2109375
+    // at 100px, not one em each.
+    try std.testing.expectEqual(@as(f64, 73.6875), svgWidth(serif, "☺", 100));
+    try std.testing.expectEqual(@as(f64, 60.2109375), svgWidth(serif, "☠", 100));
+
+    // A ZWJ sequence is five code units and a single glyph, so summing its
+    // parts (which would charge the ♂ separately) is wrong.
+    try std.testing.expectEqual(@as(u32, 5), utf16Length("🤵‍♂️"));
+    try std.testing.expectEqual(@as(f64, 100), svgWidth(serif, "🤵‍♂️", 100));
+    try std.testing.expectEqual(@as(f64, 100), try svgSubstringWidth(serif, "🤵‍♂️", 3, 1, 100));
+
+    // An unmeasured ZWJ sequence still collapses to one cluster.
+    try std.testing.expectEqual(@as(f64, 100), svgWidth(serif, "🧑\u{200d}🚀", 100));
+    // As does a flag, which is a pair of regional indicators.
+    try std.testing.expectEqual(@as(f64, 100), svgWidth(serif, "🇫🇷", 100));
+
+    // Chrome's own answer for the SVG default font.
+    try std.testing.expectEqual(@as(f64, 444.3359375), svgWidth(serif, "Hello", 200));
+    const extent = try svgCharExtent(serif, "Hello", 4, 20);
+    try std.testing.expectEqual(@as(f64, 34.43359375), extent.offset);
+    try std.testing.expectEqual(@as(f64, 10), extent.advance);
 }

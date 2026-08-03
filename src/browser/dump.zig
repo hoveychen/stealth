@@ -64,7 +64,7 @@ pub fn root(doc: *Node.Document, opts: Opts, writer: *std.Io.Writer, frame: *Fra
         }
 
         if (opts.with_base) {
-            const parent = if (html_doc.getHead()) |head| head.asNode() else doc.asNode();
+            const parent = if (html_doc.asDocument().getHead()) |head| head.asNode() else doc.asNode();
             const base = try doc.createElement("base", null, frame);
             try base.setAttributeSafe(comptime .wrap("base"), .wrap(frame.base()), frame);
             _ = try parent.insertBefore(base.asNode(), parent.firstChild(), frame);

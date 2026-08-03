@@ -97,6 +97,22 @@ pub const Type = union(enum) {
     idb_version_change_event: *@import("storage/idb/IDBVersionChangeEvent.zig"),
     toggle_event: *@import("event/ToggleEvent.zig"),
     speech_synthesis_event: *@import("speech/SpeechSynthesisEvent.zig"),
+    rtc_peer_connection_ice_event: *@import("webrtc/RTCPeerConnectionIceEvent.zig"),
+    rtc_peer_connection_ice_error_event: *@import("webrtc/events.zig").RTCPeerConnectionIceErrorEvent,
+    rtc_error_event: *@import("webrtc/events.zig").RTCErrorEvent,
+    rtc_data_channel_event: *@import("webrtc/events.zig").RTCDataChannelEvent,
+    rtc_dtmf_tone_change_event: *@import("webrtc/events.zig").RTCDTMFToneChangeEvent,
+    transition_event: *@import("event/css_events.zig").TransitionEvent,
+    animation_event: *@import("event/css_events.zig").AnimationEvent,
+    media_query_list_event: *@import("event/css_events.zig").MediaQueryListEvent,
+    font_face_set_load_event: *@import("event/css_events.zig").FontFaceSetLoadEvent,
+    task_priority_change_event: *@import("scheduler.zig").TaskPriorityChangeEvent,
+    sensor_error_event: *@import("sensor.zig").SensorErrorEvent,
+    midi_message_event: *@import("midi.zig").MIDIMessageEvent,
+    midi_connection_event: *@import("midi.zig").MIDIConnectionEvent,
+    usb_connection_event: *@import("navigator/usb.zig").USBConnectionEvent,
+    hid_connection_event: *@import("navigator/hid_serial.zig").HIDConnectionEvent,
+    hid_input_report_event: *@import("navigator/hid_serial.zig").HIDInputReportEvent,
 };
 
 pub const Options = struct {
@@ -104,6 +120,26 @@ pub const Options = struct {
     cancelable: bool = false,
     composed: bool = false,
 };
+
+/// EventInit's three members, read by hand. For the constructors that read
+/// their whole dictionary themselves because one of their own members needs a
+/// message the bridge cannot produce.
+pub fn optionsFromJs(value_: ?js.Value) !Options {
+    const value = value_ orelse return .{};
+    if (!value.isObject()) {
+        return .{};
+    }
+    const object = value.toObject();
+
+    var options: Options = .{};
+    inline for (@typeInfo(Options).@"struct".fields) |field| {
+        const member = try object.get(field.name);
+        if (!member.isUndefined()) {
+            @field(options, field.name) = member.toBool();
+        }
+    }
+    return options;
+}
 
 pub fn init(typ: []const u8, opts_: ?Options, page: *Page) !*Event {
     const arena = try page.getArena(.tiny, "Event");
@@ -222,6 +258,22 @@ pub fn is(self: *Event, comptime T: type) ?*T {
             }
             return e.is(T);
         },
+        .rtc_peer_connection_ice_event => |e| return if (T == @import("webrtc/RTCPeerConnectionIceEvent.zig")) e else null,
+        .rtc_peer_connection_ice_error_event => |e| return if (T == @import("webrtc/events.zig").RTCPeerConnectionIceErrorEvent) e else null,
+        .rtc_error_event => |e| return if (T == @import("webrtc/events.zig").RTCErrorEvent) e else null,
+        .rtc_data_channel_event => |e| return if (T == @import("webrtc/events.zig").RTCDataChannelEvent) e else null,
+        .rtc_dtmf_tone_change_event => |e| return if (T == @import("webrtc/events.zig").RTCDTMFToneChangeEvent) e else null,
+        .transition_event => |e| return if (T == @import("event/css_events.zig").TransitionEvent) e else null,
+        .animation_event => |e| return if (T == @import("event/css_events.zig").AnimationEvent) e else null,
+        .media_query_list_event => |e| return if (T == @import("event/css_events.zig").MediaQueryListEvent) e else null,
+        .font_face_set_load_event => |e| return if (T == @import("event/css_events.zig").FontFaceSetLoadEvent) e else null,
+        .task_priority_change_event => |e| return if (T == @import("scheduler.zig").TaskPriorityChangeEvent) e else null,
+        .sensor_error_event => |e| return if (T == @import("sensor.zig").SensorErrorEvent) e else null,
+        .midi_message_event => |e| return if (T == @import("midi.zig").MIDIMessageEvent) e else null,
+        .midi_connection_event => |e| return if (T == @import("midi.zig").MIDIConnectionEvent) e else null,
+        .usb_connection_event => |e| return if (T == @import("navigator/usb.zig").USBConnectionEvent) e else null,
+        .hid_connection_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDConnectionEvent) e else null,
+        .hid_input_report_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDInputReportEvent) e else null,
     }
     return null;
 }

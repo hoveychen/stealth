@@ -17,12 +17,17 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 
 const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
-const DOMRect = @import("../../DOMRect.zig");
+const SvgRect = @import("../../svg/Rect.zig");
+const SvgPoint = @import("../../svg/Point.zig");
+const SvgMatrix = @import("../../svg/Matrix.zig");
+const SvgLength = @import("../../svg/Length.zig");
+const PreserveAspectRatio = @import("../../svg/PreserveAspectRatio.zig");
 const DOMMatrixReadOnly = @import("../../DOMMatrixReadOnly.zig");
 const SvgElement = @import("../Svg.zig");
 const AnimatedTransformList = @import("../../svg/AnimatedTransformList.zig");
@@ -95,15 +100,195 @@ pub const JsApi = struct {
     };
 
     pub const transform = bridge.accessor(Graphics.getTransform, null, .{});
+    pub const nearestViewportElement = bridge.accessor(Graphics.getNearestViewportElement, null, .{});
+    pub const farthestViewportElement = bridge.accessor(Graphics.getFarthestViewportElement, null, .{});
     pub const requiredExtensions = bridge.accessor(Graphics.getRequiredExtensions, null, .{});
     pub const systemLanguage = bridge.accessor(Graphics.getSystemLanguage, null, .{});
     pub const getBBox = bridge.function(Graphics.getBBox, .{});
+    pub const getCTM = bridge.function(Graphics.getCTM, .{});
+    pub const getScreenCTM = bridge.function(Graphics.getScreenCTM, .{});
 };
+
+// The viewport-establishing elements, measured on Chrome 150 by asking a
+// child for its nearestViewportElement: <marker>, <pattern>, <mask>,
+// <clipPath>, <view>, <use> and <defs> all answer with the enclosing <svg>
+// instead, so none of them establish one.
+fn establishesViewport(element: *Element) bool {
+    if (element._namespace != .svg) {
+        return false;
+    }
+    const tag = element.getTagNameLower();
+    return std.mem.eql(u8, tag, "svg") or
+        std.mem.eql(u8, tag, "symbol") or
+        std.mem.eql(u8, tag, "image") or
+        std.mem.eql(u8, tag, "foreignObject");
+}
+
+pub fn getNearestViewportElement(self: *Graphics) ?*Element {
+    var current = self.asElement().parentElement();
+    while (current) |element| : (current = element.parentElement()) {
+        if (establishesViewport(element)) {
+            return element;
+        }
+    }
+    return null;
+}
+
+pub fn getFarthestViewportElement(self: *Graphics) ?*Element {
+    var farthest: ?*Element = null;
+    var current = self.asElement().parentElement();
+    while (current) |element| : (current = element.parentElement()) {
+        if (establishesViewport(element)) {
+            farthest = element;
+        }
+    }
+    return farthest;
+}
+
+/// The transform from this element's user space to the coordinate system of
+/// `nearestViewportElement`. Chrome hands back the identity rather than null
+/// for an element that is not in a document.
+pub fn getCTM(self: *Graphics, frame: *Frame) !*SvgMatrix {
+    return SvgMatrix.create(self.currentTransform(true, frame), frame._page);
+}
+
+// getScreenCTM walks all the way out and then offsets by where the outermost
+// <svg> sits on the page, so it is getCTM plus the root's client origin.
+pub fn getScreenCTM(self: *Graphics, frame: *Frame) !*SvgMatrix {
+    var value = self.currentTransform(false, frame);
+    if (self.outermostSvg()) |root| {
+        const rect = try root.getBoundingClientRect(frame);
+        value.e += rect.getX();
+        value.f += rect.getY();
+    }
+    return SvgMatrix.create(value, frame._page);
+}
+
+fn outermostSvg(self: *Graphics) ?*Element {
+    var outermost: ?*Element = null;
+    var current: ?*Element = self.asElement();
+    while (current) |element| : (current = element.parentElement()) {
+        if (element._namespace != .svg) {
+            break;
+        }
+        if (std.mem.eql(u8, element.getTagNameLower(), "svg")) {
+            outermost = element;
+        }
+    }
+    return outermost;
+}
+
+// Accumulates the ancestor chain outwards. Each element contributes its
+// `transform` attribute; a viewport-establishing one additionally contributes
+// its own x/y placement and viewBox, and ends the walk when `stop_at_viewport`
+// is set. The outermost <svg> is the exception: it contributes its viewBox
+// but neither its placement nor its transform, which Chrome ignores there.
+fn currentTransform(self: *Graphics, stop_at_viewport: bool, frame: *Frame) SvgMatrix.Value {
+    var value: SvgMatrix.Value = .{};
+    var current: ?*Element = self.asElement();
+    var first = true;
+    while (current) |element| : (current = element.parentElement()) {
+        if (element._namespace != .svg) {
+            break;
+        }
+        const viewport = establishesViewport(element);
+        if (viewport) {
+            value = SvgMatrix.multiplyValues(viewportTransform(element, frame), value);
+        } else {
+            value = SvgMatrix.multiplyValues(transformValue(element), value);
+        }
+        if (viewport and !first and stop_at_viewport) {
+            break;
+        }
+        first = false;
+    }
+    return value;
+}
+
+// A nested viewport places itself with x/y and then rescales its children
+// through viewBox; <symbol>, <image> and <foreignObject> have no viewBox of
+// their own to apply here, and an outermost <svg> has nowhere to be placed.
+fn viewportTransform(element: *Element, frame: *Frame) SvgMatrix.Value {
+    const is_svg = std.mem.eql(u8, element.getTagNameLower(), "svg");
+    if (!is_svg) {
+        return .{};
+    }
+
+    const view_box = viewBoxTransform(element, frame);
+    const graphics = element.as(SvgElement).is(Graphics) orelse return view_box;
+    if (graphics.getNearestViewportElement() == null) {
+        return view_box;
+    }
+
+    const placement = SvgMatrix.Value{
+        .e = attributeLength(element, comptime .wrap("x"), .horizontal, frame),
+        .f = attributeLength(element, comptime .wrap("y"), .vertical, frame),
+    };
+    return SvgMatrix.multiplyValues(
+        SvgMatrix.multiplyValues(transformValue(element), placement),
+        view_box,
+    );
+}
+
+fn attributeLength(element: *Element, attr_name: lp.String, direction: SvgLength.Direction, frame: *Frame) f64 {
+    const raw = element.getAttributeSafe(attr_name) orelse return 0;
+    const parsed = SvgLength.parseValue(raw) catch return 0;
+    if (parsed.unit == .percentage) {
+        return SvgLength.viewportDimension(element, direction, frame) * parsed.value / 100.0;
+    }
+    return parsed.value;
+}
+
+fn viewBoxTransform(element: *Element, frame: *Frame) SvgMatrix.Value {
+    const box = SvgRect.viewBoxOf(element) orelse return .{};
+    if (box[2] <= 0 or box[3] <= 0) {
+        return .{};
+    }
+    const width = SvgLength.viewportDimension(element, .horizontal, frame);
+    const height = SvgLength.viewportDimension(element, .vertical, frame);
+
+    var scale_x = width / box[2];
+    var scale_y = height / box[3];
+    const ratio = PreserveAspectRatio.valueOf(element);
+    if (ratio.alignment != 1) {
+        const uniform = if (ratio.meet_or_slice == 2)
+            @max(scale_x, scale_y)
+        else
+            @min(scale_x, scale_y);
+        scale_x = uniform;
+        scale_y = uniform;
+    }
+
+    // xMinYMin is 2 and the nine aligned values run x-fastest, so the index
+    // within the row is the horizontal anchor and the row is the vertical one.
+    const anchor = if (ratio.alignment >= 2 and ratio.alignment <= 10) ratio.alignment - 2 else 4;
+    const anchor_x: f64 = @as(f64, @floatFromInt(anchor % 3)) / 2.0;
+    const anchor_y: f64 = @as(f64, @floatFromInt(anchor / 3)) / 2.0;
+
+    return .{
+        .a = scale_x,
+        .d = scale_y,
+        .e = -box[0] * scale_x + anchor_x * (width - box[2] * scale_x),
+        .f = -box[1] * scale_y + anchor_y * (height - box[3] * scale_y),
+    };
+}
+
+fn transformValue(element: *Element) SvgMatrix.Value {
+    const matrix = transformMatrix(element);
+    return .{
+        .a = matrix.a,
+        .b = matrix.b,
+        .c = matrix.c,
+        .d = matrix.d,
+        .e = matrix.e,
+        .f = matrix.f,
+    };
+}
 
 // SVGBoundingBoxOptions is not modelled: Chrome declares no parameter at all
 // and Firefox's flags degenerate to the fill geometry, so both engines answer
 // every call with the fill box.
-pub fn getBBox(self: *Graphics, frame: *Frame) !*DOMRect {
+pub fn getBBox(self: *Graphics, frame: *Frame) !*SvgRect {
     var bounds: PathData.Bounds = .{};
     switch (self._type) {
         .geometry => |geometry| {
@@ -112,14 +297,15 @@ pub fn getBBox(self: *Graphics, frame: *Frame) !*DOMRect {
             bounds = path.bounds(.{});
         },
         .foreign_object => |foreign_object| bounds = try foreign_object.getBounds(frame),
+        .text_content => |text_content| bounds = try text_content.getBounds(frame),
         .g, .a, .svg => try accumulateChildren(self, .{}, &bounds, frame),
-        .defs, .symbol, .switch_element, .use, .image, .text_content => {},
+        .defs, .symbol, .switch_element, .use, .image => {},
     }
     if (bounds.isEmpty()) {
-        return DOMRect.create(.{}, frame._factory);
+        return SvgRect.create(.{}, frame._factory);
     }
 
-    return DOMRect.create(.{
+    return SvgRect.create(.{
         .x = bounds.min_x,
         .y = bounds.min_y,
         .width = bounds.width(),
@@ -160,32 +346,42 @@ fn accumulateChildren(parent: *Graphics, matrix: PathData.Matrix, bounds: *PathD
                 bounds.merge(path.bounds(child_matrix));
             },
             .foreign_object => |foreign_object| {
-                const child_bounds = try foreign_object.getBounds(frame);
-                if (!child_bounds.isEmpty()) {
-                    var foreign_path: PathData.Path = .{};
-                    defer foreign_path.deinit(frame.local_arena);
-                    const top_left = PathData.Point{ .x = child_bounds.min_x, .y = child_bounds.min_y };
-                    const top_right = PathData.Point{ .x = child_bounds.max_x, .y = child_bounds.min_y };
-                    const bottom_right = PathData.Point{ .x = child_bounds.max_x, .y = child_bounds.max_y };
-                    const bottom_left = PathData.Point{ .x = child_bounds.min_x, .y = child_bounds.max_y };
-                    try foreign_path.appendLine(top_left, top_right, frame.local_arena);
-                    try foreign_path.appendLine(top_right, bottom_right, frame.local_arena);
-                    try foreign_path.appendLine(bottom_right, bottom_left, frame.local_arena);
-                    try foreign_path.appendLine(bottom_left, top_left, frame.local_arena);
-                    bounds.merge(foreign_path.bounds(child_matrix));
-                }
+                try mergeBox(bounds, try foreign_object.getBounds(frame), child_matrix, frame);
+            },
+            .text_content => |text_content| {
+                try mergeBox(bounds, try text_content.getBounds(frame), child_matrix, frame);
             },
             .g, .a => try cursors.append(frame.local_arena, .{
                 .next = graphics.asNode().firstChild(),
                 .matrix = child_matrix,
             }),
             // <defs> and <symbol> never render. Nested viewports, <switch>,
-            // <use>, <image> and text have geometry we cannot resolve yet, so
-            // they contribute nothing rather than making the whole box
+            // <use> and <image> have geometry we cannot resolve yet, so they
+            // contribute nothing rather than making the whole box
             // unavailable.
-            .defs, .symbol, .svg, .switch_element, .use, .image, .text_content => {},
+            .defs, .symbol, .svg, .switch_element, .use, .image => {},
         }
     }
+}
+
+/// Folds an axis-aligned child box into `bounds` under `matrix`, which can
+/// rotate or skew it, so the box goes through the path machinery as four
+/// corners rather than as a min/max pair.
+fn mergeBox(bounds: *PathData.Bounds, box: PathData.Bounds, matrix: PathData.Matrix, frame: *Frame) !void {
+    if (box.isEmpty()) {
+        return;
+    }
+    var path: PathData.Path = .{};
+    defer path.deinit(frame.local_arena);
+    const top_left = PathData.Point{ .x = box.min_x, .y = box.min_y };
+    const top_right = PathData.Point{ .x = box.max_x, .y = box.min_y };
+    const bottom_right = PathData.Point{ .x = box.max_x, .y = box.max_y };
+    const bottom_left = PathData.Point{ .x = box.min_x, .y = box.max_y };
+    try path.appendLine(top_left, top_right, frame.local_arena);
+    try path.appendLine(top_right, bottom_right, frame.local_arena);
+    try path.appendLine(bottom_right, bottom_left, frame.local_arena);
+    try path.appendLine(bottom_left, top_left, frame.local_arena);
+    bounds.merge(path.bounds(matrix));
 }
 
 fn transformMatrix(element: *Element) PathData.Matrix {

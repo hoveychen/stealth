@@ -21,16 +21,24 @@
   testing.expectEqual('object', typeof document.forms);
   testing.expectEqual('object', typeof document.location);
 
-  // Plain Document should NOT have HTML-specific properties
+  // The HTML-flavoured members live on Document.prototype, not on
+  // HTMLDocument.prototype, so a plain Document reaches them too — it just has
+  // no elements to report. Values below are measured on a headed Chrome 150.
   const plainDoc = new Document();
-  testing.expectEqual('undefined', typeof plainDoc.head);
-  testing.expectEqual('undefined', typeof plainDoc.body);
-  testing.expectEqual('undefined', typeof plainDoc.title);
-  testing.expectEqual('undefined', typeof plainDoc.images);
-  testing.expectEqual('undefined', typeof plainDoc.scripts);
-  testing.expectEqual('undefined', typeof plainDoc.links);
-  testing.expectEqual('undefined', typeof plainDoc.forms);
-  // location lives on Document (returns null for non-HTMLDocument).
+  testing.expectEqual(null, plainDoc.head);
+  testing.expectEqual(null, plainDoc.body);
+  testing.expectEqual('', plainDoc.title);
+  testing.expectEqual('', plainDoc.dir);
+  testing.expectEqual(null, plainDoc.currentScript);
+  testing.expectEqual(null, plainDoc.doctype);
+  testing.expectEqual('HTMLCollection', plainDoc.images.constructor.name);
+  testing.expectEqual('HTMLCollection', plainDoc.scripts.constructor.name);
+  testing.expectEqual('HTMLCollection', plainDoc.links.constructor.name);
+  testing.expectEqual('HTMLCollection', plainDoc.forms.constructor.name);
+  testing.expectEqual('HTMLAllCollection', plainDoc.all.constructor.name);
+  // location lives on the instance, not the prototype (`[LegacyUnforgeable]`),
+  // and returns null for a document with no browsing context.
+  testing.expectEqual(['location'], Object.getOwnPropertyNames(plainDoc));
   testing.expectEqual(null, plainDoc.location);
 
   // Both should have common Document properties

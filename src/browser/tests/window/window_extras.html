@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The window-owned surface Chrome exposes that we were missing. Every shape and
+  value below was measured on a headed Chrome 150 over http://localhost (a
+  potentially-trustworthy origin, same as the 127.0.0.1 this runner serves
+  from), not recalled from a spec.
+-->
+
+<script id="own_not_inherited">
+  {
+    // Chrome puts all of these directly on the global object; a script that
+    // walks Object.getOwnPropertyNames(window) sees them there, not on
+    // Window.prototype.
+    const names = [
+      'BarProp', 'locationbar', 'menubar', 'personalbar', 'scrollbars', 'statusbar', 'toolbar',
+      'devicePixelRatio', 'isSecureContext', 'crossOriginIsolated', 'originAgentCluster',
+      'credentialless', 'clientInformation', 'external', 'External', 'status', 'styleMedia',
+      'offscreenBuffering', 'find', 'print', 'stop', 'moveBy', 'moveTo', 'resizeBy', 'resizeTo',
+      'captureEvents', 'releaseEvents', 'webkitURL', 'webkitRequestAnimationFrame',
+      'webkitCancelAnimationFrame', 'console',
+    ];
+    const missing = names.filter((n) => !Object.prototype.hasOwnProperty.call(window, n));
+    testing.expectEqual('', missing.join(','));
+  }
+</script>
+
+<script id="barprop">
+  {
+    testing.expectEqual('function', typeof window.BarProp);
+    testing.expectEqual(0, window.BarProp.length);
+    testing.expectEqual('BarProp', window.BarProp.name);
+    testing.expectEqual('[object BarProp]', String(BarProp.prototype));
+    testing.expectEqual('visible,constructor', Object.getOwnPropertyNames(BarProp.prototype).join(','));
+
+    const bars = ['locationbar', 'menubar', 'personalbar', 'scrollbars', 'statusbar', 'toolbar'];
+    for (const bar of bars) {
+      const value = window[bar];
+      testing.expectEqual('[object BarProp]', Object.prototype.toString.call(value));
+      // headed Chrome reports every bar visible
+      testing.expectEqual(true, value.visible);
+      const d = Object.getOwnPropertyDescriptor(window, bar);
+      testing.expectEqual(true, typeof d.get === 'function');
+      testing.expectEqual(true, typeof d.set === 'function');
+      testing.expectEqual(true, d.enumerable);
+    }
+    // each bar is its own object, and stable across reads
+    testing.expectEqual(false, window.locationbar === window.menubar);
+    testing.expectEqual(true, window.locationbar === window.locationbar);
+  }
+</script>
+
+<script id="secure_context_flags">
+  {
+    // 127.0.0.1 is potentially trustworthy, so Chrome answers true here.
+    testing.expectEqual(true, window.isSecureContext);
+    testing.expectEqual(false, window.crossOriginIsolated);
+    testing.expectEqual(true, window.originAgentCluster);
+    testing.expectEqual(false, window.credentialless);
+
+    // isSecureContext / crossOriginIsolated / originAgentCluster /
+    // credentialless are getter-only in Chrome; devicePixelRatio has a setter.
+    for (const name of ['isSecureContext', 'crossOriginIsolated', 'originAgentCluster', 'credentialless']) {
+      const d = Object.getOwnPropertyDescriptor(window, name);
+      testing.expectEqual(true, typeof d.get === 'function');
+      testing.expectEqual(undefined, d.set);
+      testing.expectEqual(true, d.enumerable);
+    }
+    const dpr = Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
+    testing.expectEqual(true, typeof dpr.get === 'function');
+    testing.expectEqual(true, typeof dpr.set === 'function');
+    testing.expectEqual(1, window.devicePixelRatio);
+  }
+</script>
+
+<script id="offscreen_buffering">
+  {
+    // The one window attribute Chrome marks non-enumerable.
+    testing.expectEqual(true, window.offscreenBuffering);
+    const d = Object.getOwnPropertyDescriptor(window, 'offscreenBuffering');
+    testing.expectEqual(false, d.enumerable);
+    testing.expectEqual(true, typeof d.get === 'function');
+    testing.expectEqual(true, typeof d.set === 'function');
+  }
+</script>
+
+<script id="client_information">
+  {
+    testing.expectEqual(true, window.clientInformation === window.navigator);
+  }
+</script>
+
+<script id="external">
+  {
+    testing.expectEqual('function', typeof window.External);
+    testing.expectEqual(0, window.External.length);
+    testing.expectEqual('[object External]', Object.prototype.toString.call(window.external));
+    testing.expectEqual(
+      'AddSearchProvider,IsSearchProviderInstalled,constructor',
+      Object.getOwnPropertyNames(External.prototype).join(','),
+    );
+    testing.expectEqual(true, window.external === window.external);
+    testing.expectEqual(undefined, window.external.AddSearchProvider());
+    testing.expectEqual(undefined, window.external.IsSearchProviderInstalled());
+  }
+</script>
+
+<script id="style_media">
+  {
+    // [LegacyNoInterfaceObject]: the brand and the prototype exist, the global
+    // constructor does not, and the prototype carries no `constructor`.
+    testing.expectEqual('undefined', typeof window.StyleMedia);
+    testing.expectEqual('[object StyleMedia]', Object.prototype.toString.call(window.styleMedia));
+    testing.expectEqual(
+      'type,matchMedium',
+      Object.getOwnPropertyNames(Object.getPrototypeOf(window.styleMedia)).join(','),
+    );
+    testing.expectEqual('screen', window.styleMedia.type);
+    testing.expectEqual(true, window.styleMedia.matchMedium('screen'));
+    testing.expectEqual(false, window.styleMedia.matchMedium('print'));
+  }
+</script>
+
+<script id="status">
+  {
+    testing.expectEqual('', window.status);
+    window.status = 'hello';
+    testing.expectEqual('hello', window.status);
+    window.status = '';
+  }
+</script>
+
+<script id="window_noop_methods">
+  {
+    // Chrome's arities, measured. find() answers false on a page with no match.
+    testing.expectEqual(0, window.find.length);
+    testing.expectEqual(false, window.find('nothing-matches-this'));
+    testing.expectEqual(0, window.print.length);
+    testing.expectEqual(undefined, window.print());
+    testing.expectEqual(0, window.stop.length);
+    testing.expectEqual(undefined, window.stop());
+    testing.expectEqual(0, window.captureEvents.length);
+    testing.expectEqual(undefined, window.captureEvents());
+    testing.expectEqual(0, window.releaseEvents.length);
+    testing.expectEqual(undefined, window.releaseEvents());
+    for (const name of ['moveBy', 'moveTo', 'resizeBy', 'resizeTo']) {
+      testing.expectEqual(2, window[name].length);
+      testing.expectEqual(undefined, window[name](0, 0));
+    }
+  }
+</script>
+
+<script id="webkit_aliases">
+  {
+    // webkitURL is the very same function object as URL, and non-enumerable.
+    testing.expectEqual(true, window.webkitURL === window.URL);
+    testing.expectEqual(false, Object.getOwnPropertyDescriptor(window, 'webkitURL').enumerable);
+
+    // The rAF aliases are separate function objects with the same behaviour.
+    testing.expectEqual(1, window.webkitRequestAnimationFrame.length);
+    testing.expectEqual(1, window.webkitCancelAnimationFrame.length);
+    testing.expectEqual(false, window.webkitRequestAnimationFrame === window.requestAnimationFrame);
+    const id = window.webkitRequestAnimationFrame(() => {});
+    testing.expectEqual('number', typeof id);
+    testing.expectEqual(undefined, window.webkitCancelAnimationFrame(id));
+  }
+</script>
+
+<script id="console_is_own">
+  {
+    // Chrome has no `Console` global; `console` is an own property of window.
+    testing.expectEqual('undefined', typeof window.Console);
+    testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, 'console'));
+    testing.expectEqual('[object console]', Object.prototype.toString.call(window.console));
+    testing.expectEqual('function', typeof window.console.log);
+  }
+</script>

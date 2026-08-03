@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  window.getScreenDetails and the two interfaces behind it. Measured on a headed
+  Chrome 150 over http://localhost (win1-chrome.json / win7-chrome.json): the
+  call rejects because the window-management permission needs a transient
+  activation, so neither interface is ever instantiated.
+-->
+
+<script id="screen_details_globals">
+  {
+    for (const n of ['ScreenDetails', 'ScreenDetailed']) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, window[n].length);
+      testing.expectEqual(n, window[n].name);
+    }
+
+    const d = Object.getOwnPropertyDescriptor(window, 'getScreenDetails');
+    testing.expectEqual('function', typeof d.value);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+    testing.expectEqual(true, d.writable);
+    testing.expectEqual(0, d.value.length);
+    testing.expectEqual('getScreenDetails', d.value.name);
+  }
+</script>
+
+<script id="screen_details_prototypes">
+  {
+    testing.expectEqual(
+      'screens,currentScreen,onscreenschange,oncurrentscreenchange,constructor',
+      Object.getOwnPropertyNames(ScreenDetails.prototype).join(','),
+    );
+    testing.expectEqual(
+      'left,top,isPrimary,isInternal,devicePixelRatio,label,constructor',
+      Object.getOwnPropertyNames(ScreenDetailed.prototype).join(','),
+    );
+    testing.expectEqual('ScreenDetails', ScreenDetails.prototype[Symbol.toStringTag]);
+    testing.expectEqual('ScreenDetailed', ScreenDetailed.prototype[Symbol.toStringTag]);
+
+    const chain = (ctor) => {
+      const out = [];
+      let p = ctor.prototype;
+      while (p && p !== Object.prototype) {
+        out.push(p.constructor.name);
+        p = Object.getPrototypeOf(p);
+      }
+      out.push('Object.prototype');
+      return out.join(',');
+    };
+    testing.expectEqual('ScreenDetails,EventTarget,Object.prototype', chain(ScreenDetails));
+    testing.expectEqual('ScreenDetailed,Screen,EventTarget,Object.prototype', chain(ScreenDetailed));
+
+    // screens/currentScreen are getter-only; the two handlers are get+set.
+    for (const m of ['screens', 'currentScreen']) {
+      const d = Object.getOwnPropertyDescriptor(ScreenDetails.prototype, m);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+    }
+    for (const m of ['onscreenschange', 'oncurrentscreenchange']) {
+      const d = Object.getOwnPropertyDescriptor(ScreenDetails.prototype, m);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual('function', typeof d.set);
+    }
+    for (const m of ['left', 'top', 'isPrimary', 'isInternal', 'devicePixelRatio', 'label']) {
+      const d = Object.getOwnPropertyDescriptor(ScreenDetailed.prototype, m);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+    }
+  }
+</script>
+
+<script id="screen_details_illegal_constructors">
+  {
+    for (const n of ['ScreenDetails', 'ScreenDetailed']) {
+      testing.expectError(
+        "Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+  }
+</script>
+
+<script id="screen_details_rejects" type=module>
+  {
+    const state = await testing.async();
+    let result = null;
+    const p = window.getScreenDetails();
+    const brand = Object.prototype.toString.call(p);
+    p.then(() => { result = 'resolved'; state.resolve(); },
+           (e) => { result = e.name + ': ' + e.message; state.resolve(); });
+
+    await state.done(() => {
+      testing.expectEqual('[object Promise]', brand);
+      testing.expectEqual(
+        'NotAllowedError: Transient activation is required to request permission.',
+        result,
+      );
+    });
+  }
+</script>

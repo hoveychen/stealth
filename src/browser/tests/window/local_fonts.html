@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  window.queryLocalFonts and FontData. Measured on a headed Chrome 150 over
+  http://localhost (win1-chrome.json / win6-chrome.json): the call rejects with
+  a SecurityError because it needs a user activation, so FontData -- like
+  CSSAnimation -- is a surface nothing ever instantiates.
+-->
+
+<script id="local_fonts_globals">
+  {
+    testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, 'FontData'));
+    const c = Object.getOwnPropertyDescriptor(window, 'FontData');
+    testing.expectEqual(false, c.enumerable);
+    testing.expectEqual(true, c.configurable);
+    testing.expectEqual(true, c.writable);
+    testing.expectEqual(0, FontData.length);
+    testing.expectEqual('FontData', FontData.name);
+
+    const d = Object.getOwnPropertyDescriptor(window, 'queryLocalFonts');
+    testing.expectEqual('function', typeof d.value);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+    testing.expectEqual(true, d.writable);
+    testing.expectEqual(0, d.value.length);
+    testing.expectEqual('queryLocalFonts', d.value.name);
+  }
+</script>
+
+<script id="local_fonts_prototype">
+  {
+    testing.expectEqual(
+      'postscriptName,fullName,family,style,blob,constructor',
+      Object.getOwnPropertyNames(FontData.prototype).join(','),
+    );
+    testing.expectEqual('FontData', FontData.prototype[Symbol.toStringTag]);
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(FontData.prototype));
+    testing.expectEqual(0, FontData.prototype.blob.length);
+    for (const m of ['postscriptName', 'fullName', 'family', 'style']) {
+      const d = Object.getOwnPropertyDescriptor(FontData.prototype, m);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+    }
+    testing.expectError(
+      "Failed to construct 'FontData': Illegal constructor",
+      () => new FontData(),
+    );
+  }
+</script>
+
+<script id="local_fonts_rejects" type=module>
+  {
+    const state = await testing.async();
+    let result = null;
+    const p = window.queryLocalFonts();
+    const brand = Object.prototype.toString.call(p);
+    p.then(() => { result = 'resolved'; state.resolve(); },
+           (e) => { result = e.name + ': ' + e.message; state.resolve(); });
+
+    await state.done(() => {
+      testing.expectEqual('[object Promise]', brand);
+      testing.expectEqual('SecurityError: User activation is required.', result);
+    });
+  }
+</script>

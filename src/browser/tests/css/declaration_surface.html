@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  The shape of a CSSStyleDeclaration, measured off a headed Chrome 150 by
+  tools/fingerprint/dump-css-properties.mjs and carried in
+  webapi/css/chrome_properties.zig.
+
+  This is the surface CreepJS rebuilds to guess a browser version: it reads the
+  prototype's own names, then everything Object.keys() answers, taking the value
+  at each numeric index as a property name. An engine whose declaration
+  enumerates nothing therefore reports every CSS property as missing at once,
+  which was the single largest block of what CreepJS found absent here.
+-->
+
+<script id="computed_style_enumerates_chrome_longhands">
+{
+    const cs = getComputedStyle(document.body);
+
+    // Chrome 150 enumerates 474 computed longhands by index, in its own order:
+    // alphabetical over the unprefixed names, then the -webkit- block.
+    testing.expectEqual(474, cs.length);
+    testing.expectEqual('accent-color', cs[0]);
+    testing.expectEqual('align-content', cs[1]);
+    testing.expectEqual('-webkit-writing-mode', cs[473]);
+    testing.expectEqual(undefined, cs[474]);
+
+    // item() is the same list by another name.
+    testing.expectEqual('accent-color', cs.item(0));
+    testing.expectEqual('-webkit-writing-mode', cs.item(473));
+    testing.expectEqual('', cs.item(474));
+}
+</script>
+
+<script id="computed_style_keys_split_indices_and_aliases">
+{
+    const cs = getComputedStyle(document.body);
+    const keys = Object.keys(cs);
+    const numeric = keys.filter((k) => !isNaN(+k));
+    const named = keys.filter((k) => isNaN(+k));
+
+    // 474 indices plus the 735 camelCase names a declaration answers. The alias
+    // list is the longer one because it also covers the shorthands and legacy
+    // webkit spellings, which are not computed longhands.
+    testing.expectEqual(474, numeric.length);
+    testing.expectEqual(735, named.length);
+    testing.expectEqual('0', numeric[0]);
+    testing.expectEqual('473', numeric[473]);
+    testing.expectEqual('accentColor', named[0]);
+    testing.expectEqual('zoom', named[734]);
+
+    // Chrome reports the aliases as own, enumerable, writable data properties
+    // on the instance rather than as accessors on the prototype.
+    testing.expectTrue(Object.prototype.hasOwnProperty.call(cs, 'accentColor'));
+    testing.expectTrue(Object.prototype.hasOwnProperty.call(cs, '0'));
+}
+</script>
+
+<script id="inline_style_enumerates_aliases_but_no_indices">
+{
+    const style = document.body.style;
+    const keys = Object.keys(style);
+
+    // An untouched inline style has no indices to enumerate, yet still answers
+    // the whole alias set — the list does not depend on what is set.
+    testing.expectEqual(0, style.length);
+    testing.expectEqual(0, keys.filter((k) => !isNaN(+k)).length);
+    testing.expectEqual(735, keys.filter((k) => isNaN(+k)).length);
+
+    // Setting one property adds exactly one index and does not disturb the aliases.
+    style.color = 'red';
+    const after = Object.keys(style);
+    testing.expectEqual(1, style.length);
+    testing.expectEqual('color', style[0]);
+    testing.expectEqual(735, after.filter((k) => isNaN(+k)).length);
+    style.removeProperty('color');
+    testing.expectEqual(0, style.length);
+}
+</script>
+
+<script id="declaration_brand_matches_chrome">
+{
+    const cs = getComputedStyle(document.body);
+    const inline = document.body.style;
+
+    // Chrome brands both as CSSStyleDeclaration and has no CSSStyleProperties
+    // global at all, so exposing one is itself a signal.
+    testing.expectEqual('[object CSSStyleDeclaration]', Object.prototype.toString.call(cs));
+    testing.expectEqual('[object CSSStyleDeclaration]', Object.prototype.toString.call(inline));
+    testing.expectEqual('undefined', typeof CSSStyleProperties);
+
+    const proto = Object.getPrototypeOf(cs);
+    testing.expectEqual('CSSStyleDeclaration', proto.constructor.name);
+    testing.expectTrue(proto === CSSStyleDeclaration.prototype);
+    testing.expectTrue(proto === Object.getPrototypeOf(inline));
+
+    // Chrome's prototype chain stops at Object, and the prototype owns exactly
+    // these ten names in this order.
+    testing.expectTrue(Object.getPrototypeOf(proto) === Object.prototype);
+    testing.expectEqual(
+        'cssText,length,parentRule,cssFloat,getPropertyPriority,getPropertyValue,item,removeProperty,setProperty,constructor',
+        Object.getOwnPropertyNames(proto).join(','),
+    );
+}
+</script>
+
+<script id="dash_case_spellings_answer_in">
+{
+    const cs = getComputedStyle(document.body);
+    const inline = document.body.style;
+
+    // Chrome answers a declaration's properties under both spellings, so the
+    // dash-case form of anything in the alias list is `in` the declaration even
+    // when nothing is set. This is how CreepJS recovers the shorthands: it walks
+    // the camelCase names it enumerated and asks for each dashed counterpart.
+    for (const name of ['border-block', 'margin-inline', 'place-content', 'white-space', 'text-wrap', 'grid-area']) {
+        testing.expectTrue(name in cs);
+        testing.expectTrue(name in inline);
+        testing.expectEqual('string', typeof cs[name]);
+    }
+
+    // A shorthand is not a computed longhand, so it stays out of the indexed list.
+    const indexed = [];
+    for (let i = 0; i < cs.length; i++) indexed.push(cs[i]);
+    testing.expectFalse(indexed.includes('border-block'));
+    testing.expectTrue(indexed.includes('border-block-start-color'));
+
+    // Prefixes Chrome does not support stay absent under either spelling.
+    testing.expectFalse('-moz-user-select' in cs);
+    testing.expectFalse('mozUserSelect' in cs);
+    testing.expectEqual(undefined, inline.mozNotSet);
+}
+</script>
+
+<script id="computed_style_aliases_still_read_values">
+{
+    const cs = getComputedStyle(document.body);
+
+    // Enumerability must not have cost the reads their answers.
+    testing.expectEqual('block', cs.display);
+    testing.expectEqual('block', cs.getPropertyValue('display'));
+    testing.expectEqual('block', cs['display']);
+
+    // A name in the alias list but not set computes to the empty string rather
+    // than undefined, and one outside the list stays undefined.
+    testing.expectEqual('string', typeof cs.accentColor);
+    testing.expectEqual(undefined, cs.notARealCssProperty);
+}
+</script>

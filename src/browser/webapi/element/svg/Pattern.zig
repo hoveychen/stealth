@@ -26,6 +26,9 @@ const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
 const AnimatedString = @import("../../svg/AnimatedString.zig");
 const AnimatedTransformList = @import("../../svg/AnimatedTransformList.zig");
+const AnimatedPreserveAspectRatio = @import("../../svg/AnimatedPreserveAspectRatio.zig");
+const AnimatedRect = @import("../../svg/AnimatedRect.zig");
+const StringList = @import("../../svg/StringList.zig");
 
 const Svg = @import("../Svg.zig");
 
@@ -66,6 +69,19 @@ fn getHref(self: *Pattern, frame: *Frame) !*AnimatedString {
     return AnimatedString.getOrCreate(self.asElement(), .href, frame);
 }
 
+fn getViewBox(self: *Pattern, frame: *Frame) !*AnimatedRect {
+    return AnimatedRect.getOrCreate(self.asElement(), frame);
+}
+fn getPreserveAspectRatio(self: *Pattern, frame: *Frame) !*AnimatedPreserveAspectRatio {
+    return AnimatedPreserveAspectRatio.getOrCreate(self.asElement(), frame);
+}
+fn getRequiredExtensions(self: *Pattern, frame: *Frame) !*StringList {
+    return StringList.getOrCreate(self.asElement(), .required_extensions, frame);
+}
+fn getSystemLanguage(self: *Pattern, frame: *Frame) !*StringList {
+    return StringList.getOrCreate(self.asElement(), .system_language, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Pattern);
     pub const Meta = struct {
@@ -73,12 +89,17 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+    // Chrome's own member order.
+    pub const patternUnits = bridge.accessor(Pattern.getPatternUnits, null, .{});
+    pub const patternContentUnits = bridge.accessor(Pattern.getPatternContentUnits, null, .{});
+    pub const patternTransform = bridge.accessor(Pattern.getPatternTransform, null, .{});
     pub const x = bridge.accessor(Pattern.getX, null, .{});
     pub const y = bridge.accessor(Pattern.getY, null, .{});
     pub const width = bridge.accessor(Pattern.getWidth, null, .{});
     pub const height = bridge.accessor(Pattern.getHeight, null, .{});
-    pub const patternUnits = bridge.accessor(Pattern.getPatternUnits, null, .{});
-    pub const patternContentUnits = bridge.accessor(Pattern.getPatternContentUnits, null, .{});
-    pub const patternTransform = bridge.accessor(Pattern.getPatternTransform, null, .{});
+    pub const viewBox = bridge.accessor(Pattern.getViewBox, null, .{});
+    pub const preserveAspectRatio = bridge.accessor(Pattern.getPreserveAspectRatio, null, .{});
     pub const href = bridge.accessor(Pattern.getHref, null, .{});
+    pub const requiredExtensions = bridge.accessor(Pattern.getRequiredExtensions, null, .{});
+    pub const systemLanguage = bridge.accessor(Pattern.getSystemLanguage, null, .{});
 };

@@ -128,11 +128,18 @@ pub const Constructor = struct {
         // js.Function) as its first parameter. Used by HTMLElement to support
         // direct instantiation of custom elements via `new MyElement()`.
         new_target: bool = false,
+
+        // Overrides the arity derived from the Zig signature. WebIDL says a
+        // variadic argument contributes nothing to `length`, but a variadic and
+        // a sequence argument are the same slice parameter here, so the ones
+        // that are really variadic say so: `new CSSMathSum(a, b)` takes any
+        // number of arguments and Chrome reports CSSMathSum.length === 0.
+        arity: ?usize = null,
     };
 
     fn init(comptime T: type, comptime func: anytype, comptime opts: Opts) Constructor {
         return .{
-            .arity = comptime Function.getArity(@TypeOf(func), if (opts.new_target) 1 else 0),
+            .arity = comptime opts.arity orelse Function.getArity(@TypeOf(func), if (opts.new_target) 1 else 0),
             .func = struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                     const v8_isolate = v8.v8__FunctionCallbackInfo__GetIsolate(handle).?;
@@ -168,6 +175,7 @@ pub const Function = struct {
     arity: usize,
     noop: bool = false,
     wpt_only: bool = false,
+    enumerable: bool = true,
     js_name: ?[:0]const u8 = null,
     exposed: Caller.Function.Opts.Exposed = .both,
     cache: ?Caller.Function.Opts.Caching = null,
@@ -178,11 +186,12 @@ pub const Function = struct {
             .cache = opts.cache,
             .static = opts.static,
             .wpt_only = opts.wpt_only,
+            .enumerable = opts.enumerable,
             .js_name = opts.js_name,
             .exposed = opts.exposed,
             // Non-static methods receive `self` as their first param; static
             // methods don't, so don't skip the first param for them.
-            .arity = getArity(@TypeOf(func), if (opts.static) 0 else 1),
+            .arity = opts.arity orelse getArity(@TypeOf(func), if (opts.static) 0 else 1),
             .func = if (opts.noop) noopFunction else struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                     Caller.Function.call(T, handle.?, func, opts);
@@ -233,6 +242,7 @@ pub const Accessor = struct {
     deletable: bool = true,
     wpt_only: bool = false,
     unforgeable: bool = false, // Web IDL [LegacyUnforgeable]
+    enumerable: bool = true,
     exposed: Caller.Function.Opts.Exposed = .both,
     cache: ?Caller.Function.Opts.Caching = null,
     getter: ?*const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void = null,
@@ -245,6 +255,7 @@ pub const Accessor = struct {
             .wpt_only = opts.wpt_only,
             .deletable = opts.deletable,
             .unforgeable = opts.unforgeable,
+            .enumerable = opts.enumerable,
             .exposed = opts.exposed,
         };
 
@@ -883,6 +894,9 @@ pub const JsApiLookup = struct {
     ///    const index_id = types.getId(@TypeOf(res));
     ///
     pub const Enum = blk: {
+        // std.simd.iota loops once per interface, so the quota has to grow
+        // with the interface list.
+        @setEvalBranchQuota(JsApis.len * 8);
         var names: [JsApis.len][:0]const u8 = undefined;
         for (JsApis, 0..) |JsApi, i| {
             names[i] = @typeName(JsApi);
@@ -945,10 +959,14 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/CSS.zig"),
     @import("../webapi/css/CSSRule.zig"),
     @import("../webapi/css/CSSRuleList.zig"),
+    @import("../webapi/css/rules.zig"),
+    @import("../webapi/css/iterators.zig"),
+    @import("../webapi/css/typed_om.zig"),
+    @import("../webapi/css/StyleSheet.zig"),
+    @import("../webapi/css/MediaList.zig"),
     @import("../webapi/css/CSSStyleDeclaration.zig"),
     @import("../webapi/css/CSSStyleRule.zig"),
     @import("../webapi/css/CSSStyleSheet.zig"),
-    @import("../webapi/css/CSSStyleProperties.zig"),
     @import("../webapi/css/FontFace.zig"),
     @import("../webapi/css/FontFaceSet.zig"),
     @import("../webapi/css/MediaQueryList.zig"),
@@ -1089,8 +1107,24 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/element/svg/Path.zig"),
     @import("../webapi/element/svg/Polygon.zig"),
     @import("../webapi/element/svg/Polyline.zig"),
+    @import("../webapi/element/svg/filter.zig"),
+    @import("../webapi/element/svg/animation.zig"),
+    @import("../webapi/element/svg/Script.zig"),
+    @import("../webapi/element/svg/Style.zig"),
+    @import("../webapi/svg/UnitTypes.zig"),
+    @import("../webapi/svg/NumberList.zig"),
+    @import("../webapi/svg/AnimatedNumberList.zig"),
+    @import("../webapi/svg/LengthList.zig"),
+    @import("../webapi/svg/AnimatedLengthList.zig"),
+    @import("../webapi/svg/AnimatedRect.zig"),
+    @import("../webapi/svg/AnimatedAngle.zig"),
+    @import("../webapi/svg/AnimatedInteger.zig"),
+    @import("../webapi/svg/AnimatedBoolean.zig"),
     @import("../webapi/svg/AnimatedString.zig"),
     @import("../webapi/svg/Number.zig"),
+    @import("../webapi/svg/Rect.zig"),
+    @import("../webapi/svg/Point.zig"),
+    @import("../webapi/svg/Matrix.zig"),
     @import("../webapi/svg/Length.zig"),
     @import("../webapi/svg/Angle.zig"),
     @import("../webapi/svg/Transform.zig"),
@@ -1136,6 +1170,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/event/SubmitEvent.zig"),
     @import("../webapi/event/FormDataEvent.zig"),
     @import("../webapi/event/ToggleEvent.zig"),
+    @import("../webapi/event/css_events.zig"),
+    @import("../webapi/animation/effects.zig"),
     @import("../webapi/MessageChannel.zig"),
     @import("../webapi/MessagePort.zig"),
     @import("../webapi/BroadcastChannel.zig"),
@@ -1145,6 +1181,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/media/TextTrackCue.zig"),
     @import("../webapi/media/VTTCue.zig"),
     @import("../webapi/animation/Animation.zig"),
+    @import("../webapi/document/services.zig"),
     @import("../webapi/EventTarget.zig"),
     @import("../webapi/Location.zig"),
     @import("../webapi/ModelContext.zig"),
@@ -1181,7 +1218,13 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/PluginArray.zig"),
     @import("../webapi/NetworkInformation.zig"),
     @import("../webapi/media/MediaDevices.zig"),
+    // Media type support: CreepJS reads canPlayType, MediaSource.isTypeSupported
+    // and MediaRecorder.isTypeSupported as one grid, so all three exist.
+    @import("../webapi/media/MediaSource.zig"),
+    @import("../webapi/media/MediaRecorder.zig"),
     @import("../webapi/BatteryManager.zig"),
+    @import("../webapi/navigator/services.zig"),
+    @import("../webapi/navigator/devices.zig"),
     @import("../webapi/MutationObserver.zig"),
     @import("../webapi/IntersectionObserver.zig"),
     @import("../webapi/CustomElementRegistry.zig"),
@@ -1194,6 +1237,22 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/DataTransfer.zig"),
     @import("../webapi/Screen.zig"),
     @import("../webapi/VisualViewport.zig"),
+    @import("../webapi/BarProp.zig"),
+    @import("../webapi/trusted_types.zig"),
+    @import("../webapi/screen_details.zig"),
+    @import("../webapi/file_system_access.zig"),
+    @import("../webapi/FontData.zig"),
+    @import("../webapi/launch_queue.zig"),
+    @import("../webapi/canvas/ImageBitmap.zig"),
+    @import("../webapi/storage/cache_storage.zig"),
+    @import("../webapi/scheduler.zig"),
+    @import("../webapi/sensor.zig"),
+    @import("../webapi/midi.zig"),
+    @import("../webapi/navigator/bluetooth.zig"),
+    @import("../webapi/navigator/usb.zig"),
+    @import("../webapi/navigator/hid_serial.zig"),
+    @import("../webapi/External.zig"),
+    @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),
     @import("../webapi/navigation/Navigation.zig"),
     @import("../webapi/navigation/NavigationHistoryEntry.zig"),
@@ -1229,6 +1288,25 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/speech/SpeechSynthesisVoice.zig"),
     @import("../webapi/speech/SpeechSynthesisEvent.zig"),
     @import("../webapi/speech/SpeechSynthesisErrorEvent.zig"),
+    // WebRTC: window-only in Chrome. A worker global carries RTCDataChannel and
+    // the encoded-frame types but no RTCPeerConnection (measured: the RTC* keys
+    // on a DedicatedWorkerGlobalScope are RTCTransformEvent,
+    // RTCRtpScriptTransformer, RTCDataChannel, RTCEncodedVideoFrame,
+    // RTCEncodedAudioFrame), and none of those are reachable without a
+    // connection to hand them out.
+    @import("../webapi/webrtc/RTCPeerConnection.zig"),
+    @import("../webapi/webrtc/RTCSessionDescription.zig"),
+    @import("../webapi/webrtc/RTCIceCandidate.zig"),
+    @import("../webapi/webrtc/RTCDataChannel.zig"),
+    @import("../webapi/webrtc/RTCPeerConnectionIceEvent.zig"),
+    @import("../webapi/webrtc/RTCStatsReport.zig"),
+    @import("../webapi/webrtc/rtp.zig"),
+    @import("../webapi/webrtc/transports.zig"),
+    @import("../webapi/webrtc/RTCCertificate.zig"),
+    @import("../webapi/webrtc/RTCError.zig"),
+    @import("../webapi/webrtc/events.zig"),
+    @import("../webapi/webrtc/encoded_frames.zig"),
+    @import("../webapi/webrtc/RTCRtpScriptTransform.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,
@@ -1312,6 +1390,12 @@ const worker_common_apis = [_]type{
     @import("../webapi/MessageChannel.zig"),
     @import("../webapi/MessagePort.zig"),
     @import("../webapi/collections/DOMStringList.zig"),
+    // The RTC surface a Chrome DedicatedWorkerGlobalScope carries, measured:
+    // exactly RTCTransformEvent, RTCRtpScriptTransformer, RTCDataChannel,
+    // RTCEncodedVideoFrame and RTCEncodedAudioFrame — no RTCPeerConnection.
+    @import("../webapi/webrtc/encoded_frames.zig"),
+    @import("../webapi/webrtc/RTCDataChannel.zig"),
+    @import("../webapi/webrtc/worker_transform.zig"),
 };
 
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/DedicatedWorkerGlobalScope.zig")} ++ worker_common_apis));
@@ -1322,7 +1406,9 @@ pub const SharedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/SharedW
 // to know about all possible types. Individual snapshots use their own
 // subsets (PageJsApis, WorkerSnapshot.JsApis).
 pub const JsApis = blk: {
-    const base = PageJsApis ++ [_]type{
+    // worker_transform holds the only [Exposed=Worker]-only interfaces, so they
+    // are named here rather than reached through PageJsApis.
+    const base = PageJsApis ++ flattenTypes(&.{@import("../webapi/webrtc/worker_transform.zig")}) ++ [_]type{
         @import("../webapi/DedicatedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/SharedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/WorkerGlobalScope.zig").JsApi,

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<body>
+
+<script id=webassembly_streaming_surface>
+  {
+    // V8 provides the WebAssembly namespace; compileStreaming and
+    // instantiateStreaming are the embedder's, which is why they were the only
+    // two names missing. Descriptors measured on a headed Chrome 150: plain
+    // writable, enumerable, configurable data properties of arity 1.
+    const own = Object.getOwnPropertyNames(WebAssembly);
+    testing.expectEqual(true, own.includes('compileStreaming'));
+    testing.expectEqual(true, own.includes('instantiateStreaming'));
+    for (const name of ['compileStreaming', 'instantiateStreaming']) {
+      const d = Object.getOwnPropertyDescriptor(WebAssembly, name);
+      testing.expectEqual(true, d.enumerable, { desc: name + ' enumerable' });
+      testing.expectEqual(true, d.configurable, { desc: name + ' configurable' });
+      testing.expectEqual(true, d.writable, { desc: name + ' writable' });
+      testing.expectEqual('function', typeof d.value, { desc: name + ' is a function' });
+      testing.expectEqual(1, d.value.length, { desc: name + ' arity' });
+      testing.expectEqual(name, d.value.name, { desc: name + ' name' });
+    }
+  }
+</script>
+
+<script id=webassembly_streaming_behaviour type=module>
+  const state = await testing.async();
+
+  const settle = async (f) => {
+    try {
+      const v = await f();
+      return 'resolved:' + Object.prototype.toString.call(v);
+    } catch (e) { return 'rejected:' + e.name; }
+  };
+  // The 8-byte header is a complete, valid module.
+  const bytes = new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]);
+  const wasmResponse = () => new Response(bytes, { headers: { 'content-type': 'application/wasm' } });
+
+  const fromResponse = await settle(() => WebAssembly.compileStreaming(wasmResponse()));
+  // A promise for a Response works too, which is the shape
+  // compileStreaming(fetch(url)) relies on.
+  const fromPromise = await settle(() => WebAssembly.compileStreaming(Promise.resolve(wasmResponse())));
+  // The MIME type is checked, and rejecting is a TypeError.
+  const badMime = await settle(() => WebAssembly.compileStreaming(new Response(bytes)));
+  const noArgs = await settle(() => WebAssembly.compileStreaming());
+  const notAResponse = await settle(() => WebAssembly.compileStreaming('/nope.wasm'));
+  const instantiateNoArgs = await settle(() => WebAssembly.instantiateStreaming());
+  const instantiated = await WebAssembly.instantiateStreaming(wasmResponse());
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('resolved:[object WebAssembly.Module]', fromResponse);
+    testing.expectEqual('resolved:[object WebAssembly.Module]', fromPromise);
+    testing.expectEqual('rejected:TypeError', badMime);
+    testing.expectEqual('rejected:TypeError', noArgs);
+    testing.expectEqual('rejected:TypeError', notAResponse);
+    testing.expectEqual('rejected:TypeError', instantiateNoArgs);
+    // instantiateStreaming resolves a plain object holding both halves.
+    testing.expectEqual(['module', 'instance'], Object.keys(instantiated));
+    testing.expectEqual('[object WebAssembly.Module]', Object.prototype.toString.call(instantiated.module));
+    testing.expectEqual('[object WebAssembly.Instance]', Object.prototype.toString.call(instantiated.instance));
+  });
+</script>
+
+</body>
+</html>

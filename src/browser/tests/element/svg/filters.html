@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<!--
+  Every expectation here was read off a headed Chrome 150 over http://localhost
+  (the filter primitives are inert without a renderer, so the values are the
+  interface surface, not paint results).
+-->
+<svg id=root width="200" height="100">
+  <filter id=filter>
+    <feBlend id=blend></feBlend>
+    <feGaussianBlur id=blur></feGaussianBlur>
+    <feOffset id=offset></feOffset>
+    <feDropShadow id=shadow></feDropShadow>
+    <feMerge id=merge><feMergeNode id=mergeNode></feMergeNode></feMerge>
+    <feDiffuseLighting id=diffuse><feDistantLight id=distant></feDistantLight></feDiffuseLighting>
+    <feSpecularLighting id=specular><feSpotLight id=spot></feSpotLight></feSpecularLighting>
+    <fePointLight id=point></fePointLight>
+    <feComposite id=composite></feComposite>
+    <feDisplacementMap id=displacement></feDisplacementMap>
+    <feMorphology id=morphology></feMorphology>
+    <feComponentTransfer id=component></feComponentTransfer>
+    <feFlood id=flood></feFlood>
+    <feImage id=image></feImage>
+    <feTile id=tile></feTile>
+    <feColorMatrix id=colorMatrix></feColorMatrix>
+    <feConvolveMatrix id=convolve></feConvolveMatrix>
+    <feTurbulence id=turbulence></feTurbulence>
+    <feComponentTransfer><feFuncA id=funcA></feFuncA><feFuncB id=funcB></feFuncB>
+      <feFuncG id=funcG></feFuncG><feFuncR id=funcR></feFuncR></feComponentTransfer>
+  </filter>
+</svg>
+
+<script id=filterIdentities>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const pairs = [
+    ['filter', 'SVGFilterElement'],
+    ['feBlend', 'SVGFEBlendElement'],
+    ['feComponentTransfer', 'SVGFEComponentTransferElement'],
+    ['feComposite', 'SVGFECompositeElement'],
+    ['feDiffuseLighting', 'SVGFEDiffuseLightingElement'],
+    ['feDisplacementMap', 'SVGFEDisplacementMapElement'],
+    ['feDistantLight', 'SVGFEDistantLightElement'],
+    ['feDropShadow', 'SVGFEDropShadowElement'],
+    ['feFlood', 'SVGFEFloodElement'],
+    ['feGaussianBlur', 'SVGFEGaussianBlurElement'],
+    ['feImage', 'SVGFEImageElement'],
+    ['feMerge', 'SVGFEMergeElement'],
+    ['feMergeNode', 'SVGFEMergeNodeElement'],
+    ['feMorphology', 'SVGFEMorphologyElement'],
+    ['feOffset', 'SVGFEOffsetElement'],
+    ['fePointLight', 'SVGFEPointLightElement'],
+    ['feSpecularLighting', 'SVGFESpecularLightingElement'],
+    ['feSpotLight', 'SVGFESpotLightElement'],
+    ['feTile', 'SVGFETileElement'],
+    ['feColorMatrix', 'SVGFEColorMatrixElement'],
+    ['feConvolveMatrix', 'SVGFEConvolveMatrixElement'],
+    ['feTurbulence', 'SVGFETurbulenceElement'],
+    ['feFuncA', 'SVGFEFuncAElement'],
+    ['feFuncB', 'SVGFEFuncBElement'],
+    ['feFuncG', 'SVGFEFuncGElement'],
+    ['feFuncR', 'SVGFEFuncRElement'],
+  ];
+  for (const [tag, name] of pairs) {
+    const created = document.createElementNS(ns, tag);
+    testing.expectEqual(name, created.constructor.name);
+    testing.expectEqual(true, created instanceof window[name]);
+    testing.expectEqual(true, created instanceof SVGElement);
+    testing.expectEqual(`[object ${name}]`, String(window[name].prototype));
+    // SVG tag names are case sensitive, so a respelled primitive is generic.
+    if (tag !== tag.toLowerCase()) {
+      testing.expectEqual(false, document.createElementNS(ns, tag.toLowerCase()) instanceof window[name]);
+    }
+  }
+  // Parsed markup reaches the same classes as createElementNS.
+  testing.expectEqual(true, $('#filter') instanceof SVGFilterElement);
+  testing.expectEqual(true, $('#blend') instanceof SVGFEBlendElement);
+  testing.expectEqual(true, $('#mergeNode') instanceof SVGFEMergeNodeElement);
+  // Illegal constructors, like every other element interface.
+  testing.expectError('TypeError', () => new SVGFEBlendElement());
+  testing.expectError('TypeError', () => new SVGUnitTypes());
+}
+</script>
+
+<script id=filterConstants>
+{
+  // SVGUnitTypes is a constant holder: it is never instantiated, but the
+  // global and its three values are part of the window surface.
+  testing.expectEqual('function', typeof SVGUnitTypes);
+  testing.expectEqual(0, SVGUnitTypes.SVG_UNIT_TYPE_UNKNOWN);
+  testing.expectEqual(1, SVGUnitTypes.SVG_UNIT_TYPE_USERSPACEONUSE);
+  testing.expectEqual(2, SVGUnitTypes.SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
+  testing.expectEqual(2, SVGUnitTypes.prototype.SVG_UNIT_TYPE_OBJECTBOUNDINGBOX);
+
+  testing.expectEqual(0, SVGFEBlendElement.SVG_FEBLEND_MODE_UNKNOWN);
+  testing.expectEqual(1, SVGFEBlendElement.SVG_FEBLEND_MODE_NORMAL);
+  testing.expectEqual(16, SVGFEBlendElement.SVG_FEBLEND_MODE_LUMINOSITY);
+  testing.expectEqual(16, SVGFEBlendElement.prototype.SVG_FEBLEND_MODE_LUMINOSITY);
+  testing.expectEqual(6, SVGFECompositeElement.SVG_FECOMPOSITE_OPERATOR_ARITHMETIC);
+  testing.expectEqual(4, SVGFEDisplacementMapElement.SVG_CHANNEL_A);
+  testing.expectEqual(2, SVGFEMorphologyElement.SVG_MORPHOLOGY_OPERATOR_DILATE);
+
+  // Chrome: the constants are non-writable, enumerable, non-configurable.
+  const d = Object.getOwnPropertyDescriptor(SVGFEBlendElement.prototype, 'SVG_FEBLEND_MODE_NORMAL');
+  testing.expectEqual(false, d.writable);
+  testing.expectEqual(true, d.enumerable);
+  testing.expectEqual(false, d.configurable);
+}
+</script>
+
+<script id=filterDefaults>
+{
+  const filter = $('#filter');
+  testing.expectEqual(2, filter.filterUnits.baseVal);
+  testing.expectEqual(1, filter.primitiveUnits.baseVal);
+  // A filter's default subregion is -10% -10% 120% 120%.
+  testing.expectEqual(2, filter.x.baseVal.unitType);
+  testing.expectEqual(-10, filter.x.baseVal.valueInSpecifiedUnits);
+  testing.expectEqual(-10, filter.y.baseVal.valueInSpecifiedUnits);
+  testing.expectEqual(120, filter.width.baseVal.valueInSpecifiedUnits);
+  testing.expectEqual(120, filter.height.baseVal.valueInSpecifiedUnits);
+  testing.expectEqual('', filter.href.baseVal);
+  testing.expectEqual(true, filter.x === filter.x);
+
+  // A primitive's default subregion is 0% 0% 100% 100%.
+  const blend = $('#blend');
+  testing.expectEqual(2, blend.x.baseVal.unitType);
+  testing.expectEqual(0, blend.x.baseVal.valueInSpecifiedUnits);
+  testing.expectEqual(100, blend.width.baseVal.valueInSpecifiedUnits);
+  testing.expectEqual(100, blend.height.baseVal.valueInSpecifiedUnits);
+  testing.expectEqual('', blend.in1.baseVal);
+  testing.expectEqual('', blend.in2.baseVal);
+  testing.expectEqual('', blend.result.baseVal);
+  testing.expectEqual(1, blend.mode.baseVal);
+  testing.expectEqual(true, blend.in1 === blend.in1);
+
+  testing.expectEqual(0, $('#composite').k1.baseVal);
+  testing.expectEqual(0, $('#composite').k4.baseVal);
+  testing.expectEqual(1, $('#composite').operator.baseVal);
+  testing.expectEqual(1, $('#diffuse').surfaceScale.baseVal);
+  testing.expectEqual(1, $('#diffuse').diffuseConstant.baseVal);
+  testing.expectEqual(0, $('#diffuse').kernelUnitLengthX.baseVal);
+  testing.expectEqual(1, $('#specular').specularConstant.baseVal);
+  testing.expectEqual(1, $('#specular').specularExponent.baseVal);
+  testing.expectEqual(0, $('#distant').azimuth.baseVal);
+  testing.expectEqual(0, $('#distant').elevation.baseVal);
+  testing.expectEqual(0, $('#point').x.baseVal);
+  testing.expectEqual(0, $('#point').z.baseVal);
+  testing.expectEqual(1, $('#spot').specularExponent.baseVal);
+  testing.expectEqual(0, $('#spot').limitingConeAngle.baseVal);
+  testing.expectEqual(0, $('#spot').pointsAtZ.baseVal);
+  testing.expectEqual(0, $('#offset').dx.baseVal);
+  testing.expectEqual(0, $('#blur').stdDeviationX.baseVal);
+  testing.expectEqual(4, $('#displacement').xChannelSelector.baseVal);
+  testing.expectEqual(0, $('#displacement').scale.baseVal);
+  testing.expectEqual(0, $('#morphology').radiusX.baseVal);
+  testing.expectEqual(1, $('#morphology').operator.baseVal);
+  testing.expectEqual('', $('#image').href.baseVal);
+  testing.expectEqual(true, $('#image').preserveAspectRatio.baseVal instanceof SVGPreserveAspectRatio);
+  testing.expectEqual('', $('#mergeNode').in1.baseVal);
+
+  // feDropShadow is the one primitive whose numeric defaults are not zero.
+  testing.expectEqual(2, $('#shadow').dx.baseVal);
+  testing.expectEqual(2, $('#shadow').dy.baseVal);
+  testing.expectEqual(2, $('#shadow').stdDeviationX.baseVal);
+  testing.expectEqual(2, $('#shadow').stdDeviationY.baseVal);
+}
+</script>
+
+<script id=filterEnumerations>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (t) => document.createElementNS(ns, t);
+  const blend = mk('feBlend');
+  blend.setAttribute('mode', 'luminosity');
+  testing.expectEqual(16, blend.mode.baseVal);
+  // An unrecognized keyword reads back as the initial value.
+  blend.setAttribute('mode', 'nope');
+  testing.expectEqual(1, blend.mode.baseVal);
+  blend.mode.baseVal = 3;
+  testing.expectEqual('screen', blend.getAttribute('mode'));
+
+  const displacement = mk('feDisplacementMap');
+  displacement.setAttribute('xChannelSelector', 'B');
+  testing.expectEqual(3, displacement.xChannelSelector.baseVal);
+
+  const composite = mk('feComposite');
+  composite.setAttribute('operator', 'arithmetic');
+  testing.expectEqual(6, composite.operator.baseVal);
+
+  const morphology = mk('feMorphology');
+  morphology.setAttribute('operator', 'dilate');
+  testing.expectEqual(2, morphology.operator.baseVal);
+
+  const filter = mk('filter');
+  filter.setAttribute('filterUnits', 'userSpaceOnUse');
+  testing.expectEqual(1, filter.filterUnits.baseVal);
+}
+</script>
+
+<script id=filterNumberPairs>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (t) => document.createElementNS(ns, t);
+
+  // stdDeviation, radius and kernelUnitLength are "number-optional-number":
+  // one value fills both components.
+  const blur = mk('feGaussianBlur');
+  blur.setAttribute('stdDeviation', '1 4');
+  testing.expectEqual(1, blur.stdDeviationX.baseVal);
+  testing.expectEqual(4, blur.stdDeviationY.baseVal);
+  blur.setAttribute('stdDeviation', '3');
+  testing.expectEqual(3, blur.stdDeviationX.baseVal);
+  testing.expectEqual(3, blur.stdDeviationY.baseVal);
+
+  const morphology = mk('feMorphology');
+  morphology.setAttribute('radius', '2 5');
+  testing.expectEqual(2, morphology.radiusX.baseVal);
+  testing.expectEqual(5, morphology.radiusY.baseVal);
+
+  // Writing one component rewrites the whole attribute.
+  const pair = mk('feGaussianBlur');
+  pair.setAttribute('stdDeviation', '1 4');
+  pair.stdDeviationY.baseVal = 9;
+  testing.expectEqual('1 9', pair.getAttribute('stdDeviation'));
+  testing.expectEqual(1, pair.stdDeviationX.baseVal);
+  testing.expectEqual(9, pair.stdDeviationY.baseVal);
+
+  // setStdDeviation() moves the base values without touching the attribute:
+  // measured on Chrome, outerHTML stays <feGaussianBlur></feGaussianBlur>.
+  const set = mk('feGaussianBlur');
+  set.setStdDeviation(2, 3);
+  testing.expectEqual(false, set.hasAttribute('stdDeviation'));
+  testing.expectEqual(2, set.stdDeviationX.baseVal);
+  testing.expectEqual(3, set.stdDeviationY.baseVal);
+  // A later per-component write serializes both, picking up the y set above.
+  set.stdDeviationX.baseVal = 5;
+  testing.expectEqual('5 3', set.getAttribute('stdDeviation'));
+
+  const shadow = mk('feDropShadow');
+  shadow.setStdDeviation(4, 4);
+  testing.expectEqual(4, shadow.stdDeviationX.baseVal);
+}
+</script>
+
+<script id=filterStringReflection>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const blend = document.createElementNS(ns, 'feBlend');
+  // in1 and in2 reflect "in" and "in2".
+  blend.in1.baseVal = 'SourceGraphic';
+  testing.expectEqual('SourceGraphic', blend.getAttribute('in'));
+  testing.expectEqual('SourceGraphic', blend.in1.animVal);
+  blend.setAttribute('in2', 'BackgroundImage');
+  testing.expectEqual('BackgroundImage', blend.in2.baseVal);
+  blend.result.baseVal = 'r1';
+  testing.expectEqual('r1', blend.getAttribute('result'));
+
+  const filter = document.createElementNS(ns, 'filter');
+  filter.x.baseVal.valueAsString = '5';
+  testing.expectEqual('5', filter.getAttribute('x'));
+  testing.expectEqual(1, filter.x.baseVal.unitType);
+}
+</script>
+
+<script id=transferFunctions>
+{
+  // The four channel functions share every member with their base class and
+  // add nothing but a name.
+  for (const id of ['#funcA', '#funcB', '#funcG', '#funcR']) {
+    const fn = $(id);
+    testing.expectEqual(true, fn instanceof SVGComponentTransferFunctionElement);
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(Object.getPrototypeOf(fn)));
+  }
+  testing.expectEqual(5, SVGComponentTransferFunctionElement.SVG_FECOMPONENTTRANSFER_TYPE_GAMMA);
+  // The constants belong to the base class only; the children inherit them
+  // through the constructor chain rather than owning them.
+  testing.expectEqual(false, SVGFEFuncAElement.hasOwnProperty('SVG_FECOMPONENTTRANSFER_TYPE_GAMMA'));
+
+  const funcA = $('#funcA');
+  testing.expectEqual(1, funcA.type.baseVal);
+  testing.expectEqual(1, funcA.slope.baseVal);
+  testing.expectEqual(0, funcA.intercept.baseVal);
+  testing.expectEqual(1, funcA.amplitude.baseVal);
+  testing.expectEqual(1, funcA.exponent.baseVal);
+  testing.expectEqual(0, funcA.offset.baseVal);
+  testing.expectEqual(0, funcA.tableValues.baseVal.numberOfItems);
+  funcA.setAttribute('type', 'gamma');
+  testing.expectEqual(5, funcA.type.baseVal);
+  funcA.setAttribute('tableValues', '0 1');
+  testing.expectEqual(2, funcA.tableValues.baseVal.numberOfItems);
+}
+</script>
+
+<script id=numberLists>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (t) => document.createElementNS(ns, t);
+  const cm = mk('feColorMatrix');
+  testing.expectEqual(true, cm.values instanceof SVGAnimatedNumberList);
+  testing.expectEqual(true, cm.values.baseVal instanceof SVGNumberList);
+  testing.expectEqual(true, cm.values === cm.values);
+  // baseVal and animVal are distinct objects; animVal is read only.
+  testing.expectEqual(false, cm.values.baseVal === cm.values.animVal);
+
+  cm.setAttribute('values', '1 0.5, -2e1  3');
+  testing.expectEqual(4, cm.values.baseVal.numberOfItems);
+  testing.expectEqual(4, cm.values.baseVal.length);
+  testing.expectEqual(1, cm.values.baseVal.getItem(0).value);
+  testing.expectEqual(0.5, cm.values.baseVal.getItem(1).value);
+  testing.expectEqual(-20, cm.values.baseVal.getItem(2).value);
+  testing.expectError('NoModificationAllowedError', () => cm.values.animVal.clear());
+
+  // One malformed token empties the whole list.
+  const bad = mk('feColorMatrix');
+  bad.setAttribute('values', '1 x 2');
+  testing.expectEqual(0, bad.values.baseVal.numberOfItems);
+
+  // Items are live: writing one rewrites the attribute.
+  const mut = mk('feColorMatrix');
+  mut.setAttribute('values', '1 2 3');
+  mut.values.baseVal.getItem(1).value = 9;
+  testing.expectEqual('1 9 3', mut.getAttribute('values'));
+  testing.expectEqual(9, mut.values.baseVal.getItem(1).value);
+
+  const app = mk('feColorMatrix');
+  const n = mk('svg').createSVGNumber();
+  n.value = 8;
+  app.setAttribute('values', '1 2');
+  app.values.baseVal.appendItem(n);
+  testing.expectEqual('1 2 8', app.getAttribute('values'));
+
+  const rem = mk('feColorMatrix');
+  rem.setAttribute('values', '1 2 3');
+  rem.values.baseVal.removeItem(1);
+  testing.expectEqual('1 3', rem.getAttribute('values'));
+
+  const conv = mk('feConvolveMatrix');
+  conv.setAttribute('kernelMatrix', '1 2 3 4');
+  testing.expectEqual(4, conv.kernelMatrix.baseVal.numberOfItems);
+}
+</script>
+
+<script id=convolveAndTurbulence>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const mk = (t) => document.createElementNS(ns, t);
+  const conv = $('#convolve');
+  testing.expectEqual(true, conv.orderX instanceof SVGAnimatedInteger);
+  testing.expectEqual(3, conv.orderX.baseVal);
+  testing.expectEqual(3, conv.orderY.baseVal);
+  testing.expectEqual(0, conv.targetX.baseVal);
+  testing.expectEqual(1, conv.divisor.baseVal);
+  testing.expectEqual(0, conv.bias.baseVal);
+  testing.expectEqual(1, conv.edgeMode.baseVal);
+  testing.expectEqual(true, conv.preserveAlpha instanceof SVGAnimatedBoolean);
+  testing.expectEqual(false, conv.preserveAlpha.baseVal);
+
+  const order = mk('feConvolveMatrix');
+  order.setAttribute('order', '5 7');
+  testing.expectEqual(5, order.orderX.baseVal);
+  testing.expectEqual(7, order.orderY.baseVal);
+  order.setAttribute('order', '4');
+  testing.expectEqual(4, order.orderX.baseVal);
+  testing.expectEqual(4, order.orderY.baseVal);
+  // order must be positive; Chrome falls back to the initial 3.
+  order.setAttribute('order', '0');
+  testing.expectEqual(3, order.orderX.baseVal);
+
+  const edge = mk('feConvolveMatrix');
+  edge.setAttribute('edgeMode', 'none');
+  testing.expectEqual(3, edge.edgeMode.baseVal);
+
+  // An SVG boolean matches the keyword exactly.
+  const alpha = mk('feConvolveMatrix');
+  alpha.setAttribute('preserveAlpha', 'TRUE');
+  testing.expectEqual(false, alpha.preserveAlpha.baseVal);
+  alpha.setAttribute('preserveAlpha', 'true');
+  testing.expectEqual(true, alpha.preserveAlpha.baseVal);
+
+  const turb = $('#turbulence');
+  testing.expectEqual(1, turb.numOctaves.baseVal);
+  testing.expectEqual(0, turb.seed.baseVal);
+  testing.expectEqual(2, turb.stitchTiles.baseVal);
+  testing.expectEqual(2, turb.type.baseVal);
+  testing.expectEqual(0, turb.baseFrequencyX.baseVal);
+
+  const oct = mk('feTurbulence');
+  oct.numOctaves.baseVal = 5;
+  testing.expectEqual('5', oct.getAttribute('numOctaves'));
+  testing.expectEqual(5, oct.numOctaves.baseVal);
+
+  const freq = mk('feTurbulence');
+  freq.setAttribute('baseFrequency', '0.3');
+  testing.expectEqual(freq.baseFrequencyX.baseVal, freq.baseFrequencyY.baseVal);
+  freq.setAttribute('type', 'fractalNoise');
+  testing.expectEqual(1, freq.type.baseVal);
+  freq.setAttribute('stitchTiles', 'stitch');
+  testing.expectEqual(1, freq.stitchTiles.baseVal);
+
+  const cmt = mk('feColorMatrix');
+  cmt.setAttribute('type', 'luminanceToAlpha');
+  testing.expectEqual(4, cmt.type.baseVal);
+}
+</script>

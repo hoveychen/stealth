@@ -27,6 +27,7 @@ const Event = @import("../../Event.zig");
 pub const Audio = @import("Audio.zig");
 pub const Video = @import("Video.zig");
 const MediaError = @import("../../media/MediaError.zig");
+const mime = @import("../../media/mime.zig");
 
 const Media = @This();
 
@@ -98,45 +99,11 @@ pub fn as(self: *Media, comptime T: type) *T {
     return self.is(T).?;
 }
 
-pub fn canPlayType(_: *const Media, mime_type: []const u8, frame: *Frame) []const u8 {
-    const pos = std.mem.indexOfScalar(u8, mime_type, ';') orelse mime_type.len;
-    const base_type = std.mem.trim(u8, mime_type[0..pos], &std.ascii.whitespace);
-
-    if (base_type.len > frame.buf.len) {
-        return "";
-    }
-    const lower = std.ascii.lowerString(&frame.buf, base_type);
-
-    if (isProbablySupported(lower)) {
-        return "probably";
-    }
-    if (isMaybeSupported(lower)) {
-        return "maybe";
-    }
-    return "";
-}
-
-fn isProbablySupported(mime_type: []const u8) bool {
-    if (std.mem.eql(u8, mime_type, "video/mp4")) return true;
-    if (std.mem.eql(u8, mime_type, "video/webm")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/mp4")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/webm")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/mpeg")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/mp3")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/ogg")) return true;
-    if (std.mem.eql(u8, mime_type, "video/ogg")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/wav")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/wave")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/x-wav")) return true;
-    return false;
-}
-
-fn isMaybeSupported(mime_type: []const u8) bool {
-    if (std.mem.eql(u8, mime_type, "audio/aac")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/x-m4a")) return true;
-    if (std.mem.eql(u8, mime_type, "video/x-m4v")) return true;
-    if (std.mem.eql(u8, mime_type, "audio/flac")) return true;
-    return false;
+// Answered from the shared Chrome table, so that canPlayType(),
+// MediaSource.isTypeSupported() and MediaRecorder.isTypeSupported() cannot
+// contradict each other — see media/mime.zig.
+pub fn canPlayType(_: *const Media, mime_type: []const u8) []const u8 {
+    return mime.canPlayType(mime_type).toString();
 }
 
 pub fn play(self: *Media, frame: *Frame) !js.Promise {

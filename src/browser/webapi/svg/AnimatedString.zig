@@ -32,7 +32,7 @@ const AnimatedString = @This();
 _kind: Kind,
 _element: *Element,
 
-pub const Kind = enum { class, href };
+pub const Kind = enum { class, href, in1, in2, result };
 pub const Key = struct {
     element: *Element,
     kind: Kind,
@@ -69,6 +69,10 @@ fn attributeName(self: *const AnimatedString) String {
     return switch (self._kind) {
         .href => comptime .wrap("href"),
         .class => comptime .wrap("class"),
+        // The IDL attribute is `in1`; the content attribute is `in`.
+        .in1 => comptime .wrap("in"),
+        .in2 => comptime .wrap("in2"),
+        .result => comptime .wrap("result"),
     };
 }
 

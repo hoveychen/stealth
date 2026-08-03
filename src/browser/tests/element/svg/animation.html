@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<!--
+  SMIL animation elements plus <script> and <style> in the SVG namespace.
+  Every expectation was read off a headed Chrome 150 over http://localhost;
+  this engine runs no SMIL timeline, so what is asserted is the interface
+  surface and the attribute reflection behind it.
+-->
+<svg id=root width="200" height="100">
+  <rect id=rect x="1" y="2" width="10" height="20">
+    <animate id=parented attributeName="x"></animate>
+  </rect>
+  <animate id=animate attributeName="x" dur="1000s"></animate>
+  <animateMotion id=motion></animateMotion>
+  <animateTransform id=transform></animateTransform>
+  <set id=set></set>
+  <mpath id=mpath></mpath>
+  <style id=style>.x{fill:red}</style>
+</svg>
+
+<script id=animationIdentities>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const pairs = [
+    ['animate', 'SVGAnimateElement'],
+    ['animateMotion', 'SVGAnimateMotionElement'],
+    ['animateTransform', 'SVGAnimateTransformElement'],
+    ['set', 'SVGSetElement'],
+    ['mpath', 'SVGMPathElement'],
+    ['script', 'SVGScriptElement'],
+    ['style', 'SVGStyleElement'],
+  ];
+  for (const [tag, name] of pairs) {
+    const created = document.createElementNS(ns, tag);
+    testing.expectEqual(name, created.constructor.name);
+    testing.expectEqual(true, created instanceof window[name]);
+    testing.expectEqual(true, created instanceof SVGElement);
+    testing.expectEqual(`[object ${name}]`, String(window[name].prototype));
+    if (tag !== tag.toLowerCase()) {
+      testing.expectEqual(false, document.createElementNS(ns, tag.toLowerCase()) instanceof window[name]);
+    }
+  }
+  // The four timed elements share SVGAnimationElement; <mpath>, <script> and
+  // <style> derive straight from SVGElement.
+  for (const id of ['animate', 'motion', 'transform', 'set']) {
+    testing.expectEqual(true, $('#' + id) instanceof SVGAnimationElement);
+  }
+  testing.expectEqual(false, $('#mpath') instanceof SVGAnimationElement);
+  testing.expectEqual(false, document.createElementNS(ns, 'script') instanceof SVGAnimationElement);
+  testing.expectEqual(true, $('#animate') instanceof SVGAnimateElement);
+  testing.expectEqual(false, $('#animate') instanceof SVGSetElement);
+  testing.expectEqual(false, $('#animate') instanceof SVGGraphicsElement);
+  testing.expectError('TypeError', () => new SVGAnimationElement());
+  testing.expectError('TypeError', () => new SVGStyleElement());
+
+  // Chrome's own prototype member list, in order. `constructor` sits last
+  // here because V8 cannot place it mid-list the way Blink does.
+  testing.expectEqual(
+    'targetElement,onbegin,onend,onrepeat,requiredExtensions,systemLanguage,' +
+    'beginElement,beginElementAt,endElement,endElementAt,getCurrentTime,' +
+    'getSimpleDuration,getStartTime,constructor',
+    Object.getOwnPropertyNames(SVGAnimationElement.prototype).join(','));
+  for (const name of ['SVGAnimateElement', 'SVGAnimateMotionElement',
+                      'SVGAnimateTransformElement', 'SVGSetElement']) {
+    testing.expectEqual('constructor', Object.getOwnPropertyNames(window[name].prototype).join(','));
+  }
+  testing.expectEqual('href,constructor', Object.getOwnPropertyNames(SVGMPathElement.prototype).join(','));
+  testing.expectEqual('type,href,async,constructor', Object.getOwnPropertyNames(SVGScriptElement.prototype).join(','));
+  testing.expectEqual('type,media,title,sheet,disabled,constructor',
+    Object.getOwnPropertyNames(SVGStyleElement.prototype).join(','));
+  testing.expectEqual(0, SVGAnimationElement.prototype.beginElement.length);
+  testing.expectEqual(1, SVGAnimationElement.prototype.beginElementAt.length);
+  testing.expectEqual(1, SVGAnimationElement.prototype.endElementAt.length);
+}
+</script>
+
+<script id=animationTarget>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const animate = $('#animate');
+  // No href: the target is the parent element.
+  testing.expectEqual($('#root'), animate.targetElement);
+  testing.expectEqual($('#rect'), $('#parented').targetElement);
+  // href and xlink:href both win over the parent.
+  animate.setAttribute('href', '#rect');
+  testing.expectEqual($('#rect'), animate.targetElement);
+  animate.setAttribute('href', '#missing');
+  testing.expectEqual(null, animate.targetElement);
+  animate.removeAttribute('href');
+  animate.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#rect');
+  testing.expectEqual($('#rect'), animate.targetElement);
+  animate.removeAttributeNS('http://www.w3.org/1999/xlink', 'href');
+  testing.expectEqual($('#root'), animate.targetElement);
+  // Detached elements have no parent and so no target.
+  testing.expectEqual(null, document.createElementNS(ns, 'animate').targetElement);
+
+  // The conditional-processing lists are SVGStringList, same as on
+  // SVGGraphicsElement.
+  testing.expectEqual('SVGStringList', animate.requiredExtensions.constructor.name);
+  testing.expectEqual('SVGStringList', animate.systemLanguage.constructor.name);
+  testing.expectEqual(true, animate.requiredExtensions === animate.requiredExtensions);
+  testing.expectEqual(0, animate.requiredExtensions.numberOfItems);
+  animate.setAttribute('requiredExtensions', 'a b');
+  animate.setAttribute('systemLanguage', 'en, fr');
+  testing.expectEqual(2, animate.requiredExtensions.numberOfItems);
+  testing.expectEqual('b', animate.requiredExtensions.getItem(1));
+  testing.expectEqual('fr', animate.systemLanguage.getItem(1));
+  animate.removeAttribute('requiredExtensions');
+  animate.removeAttribute('systemLanguage');
+}
+</script>
+
+<script id=animationTiming>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const animate = $('#animate');
+  testing.expectEqual(undefined, animate.beginElement());
+  testing.expectEqual(undefined, animate.beginElementAt(1));
+  testing.expectEqual(undefined, animate.endElement());
+  testing.expectEqual(undefined, animate.endElementAt(1));
+  testing.expectEqual('number', typeof animate.getCurrentTime());
+  // dur="1000s" resolves; a missing or indefinite dur does not.
+  testing.expectEqual(1000, animate.getSimpleDuration());
+  testing.expectError('NotSupportedError', () => $('#set').getSimpleDuration());
+  $('#set').setAttribute('dur', 'indefinite');
+  testing.expectError('NotSupportedError', () => $('#set').getSimpleDuration());
+  $('#set').setAttribute('dur', '00:01:30.5');
+  testing.expectEqual(90.5, $('#set').getSimpleDuration());
+  $('#set').setAttribute('dur', '250ms');
+  testing.expectEqual(0.25, $('#set').getSimpleDuration());
+  $('#set').setAttribute('dur', '2min');
+  testing.expectEqual(120, $('#set').getSimpleDuration());
+  $('#set').removeAttribute('dur');
+
+  // begin defaults to 0; a detached element has no timeline at all.
+  testing.expectEqual(0, animate.getStartTime());
+  testing.expectEqual(0, $('#set').getStartTime());
+  const detached = document.createElementNS(ns, 'animate');
+  testing.expectError('InvalidStateError', () => detached.getStartTime());
+  testing.expectError('NotSupportedError', () => detached.getSimpleDuration());
+  testing.expectEqual('number', typeof detached.getCurrentTime());
+}
+</script>
+
+<script id=animationHandlers>
+{
+  const animate = $('#animate');
+  testing.expectEqual(null, animate.onbegin);
+  testing.expectEqual(null, animate.onend);
+  testing.expectEqual(null, animate.onrepeat);
+  const seen = [];
+  animate.onbegin = () => seen.push('begin');
+  animate.onend = () => seen.push('end');
+  animate.onrepeat = () => seen.push('repeat');
+  testing.expectEqual('function', typeof animate.onbegin);
+  // The handlers listen for the plain event names, not the SMIL DOM 2
+  // "beginEvent" aliases.
+  for (const type of ['begin', 'beginEvent', 'end', 'endEvent', 'repeat', 'repeatEvent']) {
+    animate.dispatchEvent(new Event(type));
+  }
+  testing.expectEqual('begin,end,repeat', seen.join(','));
+  animate.onbegin = null;
+  animate.onend = null;
+  animate.onrepeat = null;
+  // Content attributes install the same handler.
+  animate.setAttribute('onend', 'window.__svgEnd = 1;');
+  testing.expectEqual('function', typeof animate.onend);
+  animate.dispatchEvent(new Event('end'));
+  testing.expectEqual(1, window.__svgEnd);
+  animate.removeAttribute('onend');
+}
+</script>
+
+<script id=svgMPath>
+{
+  const mpath = $('#mpath');
+  testing.expectEqual('SVGAnimatedString', mpath.href.constructor.name);
+  testing.expectEqual('', mpath.href.baseVal);
+  testing.expectEqual('', mpath.href.animVal);
+  testing.expectEqual(true, mpath.href === mpath.href);
+  mpath.setAttribute('href', '#path');
+  testing.expectEqual('#path', mpath.href.baseVal);
+  mpath.removeAttribute('href');
+}
+</script>
+
+<script id=svgScript>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  // Built here rather than in the markup: the runner treats every
+  // id-bearing <script> in the page as a test block of its own.
+  const script = document.createElementNS(ns, 'script');
+  script.setAttribute('type', 'application/ecmascript');
+  $('#root').appendChild(script);
+  const fresh = document.createElementNS(ns, 'script');
+  // type reflects the attribute with an empty default, unlike SVGStyleElement.
+  testing.expectEqual('application/ecmascript', script.type);
+  testing.expectEqual('', fresh.type);
+  fresh.type = 'text/js';
+  testing.expectEqual('text/js', fresh.getAttribute('type'));
+  // href is read-only and animated; async is a boolean attribute.
+  testing.expectEqual('SVGAnimatedString', script.href.constructor.name);
+  testing.expectEqual('', script.href.baseVal);
+  testing.expectEqual(false, fresh.async);
+  fresh.async = true;
+  testing.expectEqual('', fresh.getAttribute('async'));
+  testing.expectEqual(true, fresh.async);
+  fresh.async = false;
+  testing.expectEqual(null, fresh.getAttribute('async'));
+  fresh.setAttribute('async', 'anything');
+  testing.expectEqual(true, fresh.async);
+  fresh.setAttribute('href', '#z');
+  testing.expectEqual('#z', fresh.href.baseVal);
+}
+</script>
+
+<script id=svgStyle>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const style = $('#style');
+  const fresh = document.createElementNS(ns, 'style');
+  // Chrome's defaults come from the getters, not from the markup: type is
+  // "text/css" and media is "all" when the attribute is absent.
+  testing.expectEqual('text/css', style.type);
+  testing.expectEqual('text/css', fresh.type);
+  testing.expectEqual('all', style.media);
+  testing.expectEqual('all', fresh.media);
+  testing.expectEqual('', style.title);
+  fresh.setAttribute('type', '');
+  testing.expectEqual('', fresh.type);
+  fresh.setAttribute('type', 'text/plain');
+  testing.expectEqual('text/plain', fresh.type);
+  fresh.removeAttribute('type');
+  testing.expectEqual('text/css', fresh.type);
+  fresh.setAttribute('media', '');
+  testing.expectEqual('', fresh.media);
+  fresh.media = 'print';
+  testing.expectEqual('print', fresh.getAttribute('media'));
+  fresh.title = 'tt';
+  testing.expectEqual('tt', fresh.getAttribute('title'));
+
+  // sheet is null until the element is in a document.
+  testing.expectEqual(null, fresh.sheet);
+  testing.expectEqual('CSSStyleSheet', style.sheet.constructor.name);
+  testing.expectEqual(1, style.sheet.cssRules.length);
+  // disabled rides the sheet, it is not an attribute.
+  testing.expectEqual(false, style.disabled);
+  style.disabled = true;
+  testing.expectEqual(true, style.disabled);
+  testing.expectEqual(true, style.sheet.disabled);
+  testing.expectEqual(null, style.getAttribute('disabled'));
+  style.disabled = false;
+  testing.expectEqual(false, style.disabled);
+  // A disconnected element has no sheet to disable.
+  fresh.disabled = true;
+  testing.expectEqual(false, fresh.disabled);
+}
+</script>

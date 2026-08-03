@@ -155,8 +155,9 @@
 {
   testing.expectEqual(5, $('#line').getTotalLength());
   let point = $('#line').getPointAtLength(2.5);
-  // As with getBBox, Firefox returns its legacy SVGPoint instead of a DOMPoint.
-  testing.expectEqual(true, point instanceof (window.SVGPoint ?? DOMPoint));
+  // As with getBBox and SVGRect, this is the legacy SVGPoint, not a DOMPoint.
+  testing.expectEqual(true, point instanceof SVGPoint);
+  testing.expectEqual(false, point instanceof DOMPoint);
   testing.expectEqual(2.5, point.x);
   testing.expectEqual(4, point.y);
   point = $('#line').getPointAtLength(-100);

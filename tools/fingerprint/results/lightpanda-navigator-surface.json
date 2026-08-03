@@ -1,0 +1,1501 @@
+{
+ "href": "http://localhost:8731/",
+ "secure": false,
+ "types": {
+  "Scheduling": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "isInputPending": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "UserActivation": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "hasBeenActive": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "isActive": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "Geolocation": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "clearWatch": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "getCurrentPosition": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "watchPosition": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "WindowControlsOverlay": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "visible": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "ongeometrychange": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "getTitlebarAreaRect": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "ProtectedAudience": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "queryFeatureSupport": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "Bluetooth": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "getAvailability": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "requestDevice": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "Clipboard": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "onclipboardchange": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "read": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "readText": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "write": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "writeText": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "CredentialsContainer": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "create": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "get": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "preventSilentAccess": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "store": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "Keyboard": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "getLayoutMap": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "lock": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "unlock": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "NavigatorManagedData": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "onmanagedconfigurationchange": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "getManagedConfiguration": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "ServiceWorkerContainer": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "controller": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "ready": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "oncontrollerchange": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "onmessage": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "onmessageerror": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "getRegistration": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "getRegistrations": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "register": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "startMessages": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "VirtualKeyboard": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "boundingRect": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "overlaysContent": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "ongeometrychange": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "hide": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "show": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "WakeLock": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "request": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "LockManager": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "query": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "request": {
+     "kind": "method",
+     "length": 2,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "GPU": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "wgslLanguageFeatures": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "getPreferredCanvasFormat": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "requestAdapter": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "NavigatorLogin": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "setStatus": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "Ink": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "requestPresenter": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "MediaCapabilities": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "decodingInfo": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "encodingInfo": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "DevicePosture": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "type": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "onchange": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "HID": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "onconnect": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "ondisconnect": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "getDevices": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "requestDevice": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "MediaSession": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "metadata": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "playbackState": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "setActionHandler": {
+     "kind": "method",
+     "length": 2,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "setCameraActive": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "setMicrophoneActive": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "setPositionState": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "Presentation": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "defaultRequest": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "receiver": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "Serial": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "onconnect": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "ondisconnect": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "getPorts": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "requestPort": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "USB": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "onconnect": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "ondisconnect": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "getDevices": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "requestDevice": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "XRSystem": {
+   "ctorLength": 0,
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "ondevicechange": {
+     "kind": "accessor",
+     "set": true,
+     "enumerable": true,
+     "configurable": true
+    },
+    "isSessionSupported": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "requestSession": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "StorageBucketManager": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "delete": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "keys": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "open": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  },
+  "DeprecatedStorageQuota": "ABSENT",
+  "WGSLLanguageFeatures": {
+   "ctorLength": 0,
+   "protoChain": [
+    "Object"
+   ],
+   "toStringTag": null,
+   "symbols": [
+    "Symbol(Symbol.iterator)"
+   ],
+   "newThrows": "TypeError: Illegal Constructor",
+   "props": {
+    "size": {
+     "kind": "accessor",
+     "set": false,
+     "enumerable": true,
+     "configurable": true
+    },
+    "entries": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "forEach": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "has": {
+     "kind": "method",
+     "length": 1,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "keys": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "values": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": true,
+     "configurable": true,
+     "writable": true
+    },
+    "constructor": {
+     "kind": "method",
+     "length": 0,
+     "enumerable": false,
+     "configurable": true,
+     "writable": true
+    }
+   }
+  }
+ },
+ "navMethods": {
+  "getGamepads": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Array(4)"
+  },
+  "vibrate": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "adAuctionComponents": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "runAdAuction": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "canLoadAdAuctionFencedFrame": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "true"
+  },
+  "canShare": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "false"
+  },
+  "share": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "clearAppBadge": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "getUserMedia": {
+   "length": 3,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "requestMIDIAccess": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "requestMediaKeySystemAccess": {
+   "length": 2,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "setAppBadge": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "webkitGetUserMedia": {
+   "length": 3,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "clearOriginJoinedAdInterestGroups": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "createAuctionNonce": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "joinAdInterestGroup": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "leaveAdInterestGroup": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "updateAdInterestGroups": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "undefined"
+  },
+  "deprecatedReplaceInURN": {
+   "length": 2,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "deprecatedURNToURL": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "getInstalledRelatedApps": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "getInterestGroupAdAuctionData": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "javaEnabled": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "false"
+  },
+  "sendBeacon": {
+   "length": 1,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "undefined"
+  },
+  "getBattery": {
+   "length": 0,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "Promise"
+  },
+  "registerProtocolHandler": {
+   "length": 2,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  },
+  "unregisterProtocolHandler": {
+   "length": 2,
+   "enumerable": true,
+   "writable": true,
+   "configurable": true,
+   "callNoArgs": "THROW TypeError: invalid argument"
+  }
+ },
+ "navObjs": {
+  "scheduling": {
+   "descriptor": "accessor",
+   "brand": "[object Scheduling]",
+   "ctor": "Scheduling",
+   "same": true,
+   "values": {}
+  },
+  "userActivation": {
+   "descriptor": "accessor",
+   "brand": "[object UserActivation]",
+   "ctor": "UserActivation",
+   "same": true,
+   "values": {
+    "hasBeenActive": "false",
+    "isActive": "false"
+   }
+  },
+  "geolocation": {
+   "descriptor": "accessor",
+   "brand": "[object Geolocation]",
+   "ctor": "Geolocation",
+   "same": true,
+   "values": {}
+  },
+  "webkitTemporaryStorage": {
+   "descriptor": "accessor",
+   "brand": "[object DeprecatedStorageQuota]",
+   "ctor": "Object",
+   "same": true,
+   "values": {}
+  },
+  "webkitPersistentStorage": {
+   "descriptor": "accessor",
+   "brand": "[object DeprecatedStorageQuota]",
+   "ctor": "Object",
+   "same": true,
+   "values": {}
+  },
+  "windowControlsOverlay": {
+   "descriptor": "accessor",
+   "brand": "[object WindowControlsOverlay]",
+   "ctor": "WindowControlsOverlay",
+   "same": true,
+   "values": {
+    "visible": "false",
+    "ongeometrychange": "null"
+   }
+  },
+  "protectedAudience": {
+   "descriptor": "accessor",
+   "brand": "[object ProtectedAudience]",
+   "ctor": "ProtectedAudience",
+   "same": true,
+   "values": {}
+  },
+  "bluetooth": {
+   "descriptor": "accessor",
+   "brand": "[object Bluetooth]",
+   "ctor": "Bluetooth",
+   "same": true,
+   "values": {}
+  },
+  "clipboard": {
+   "descriptor": "accessor",
+   "brand": "[object Clipboard]",
+   "ctor": "Clipboard",
+   "same": true,
+   "values": {
+    "onclipboardchange": "null"
+   }
+  },
+  "credentials": {
+   "descriptor": "accessor",
+   "brand": "[object CredentialsContainer]",
+   "ctor": "CredentialsContainer",
+   "same": true,
+   "values": {}
+  },
+  "keyboard": {
+   "descriptor": "accessor",
+   "brand": "[object Keyboard]",
+   "ctor": "Keyboard",
+   "same": true,
+   "values": {}
+  },
+  "managed": {
+   "descriptor": "accessor",
+   "brand": "[object NavigatorManagedData]",
+   "ctor": "NavigatorManagedData",
+   "same": true,
+   "values": {
+    "onmanagedconfigurationchange": "null"
+   }
+  },
+  "serviceWorker": {
+   "descriptor": "accessor",
+   "brand": "[object ServiceWorkerContainer]",
+   "ctor": "ServiceWorkerContainer",
+   "same": true,
+   "values": {
+    "controller": "null",
+    "ready": "Promise",
+    "oncontrollerchange": "null",
+    "onmessage": "null",
+    "onmessageerror": "null"
+   }
+  },
+  "virtualKeyboard": {
+   "descriptor": "accessor",
+   "brand": "[object VirtualKeyboard]",
+   "ctor": "VirtualKeyboard",
+   "same": true,
+   "values": {
+    "boundingRect": "[object DOMRect]",
+    "overlaysContent": "false",
+    "ongeometrychange": "null"
+   }
+  },
+  "wakeLock": {
+   "descriptor": "accessor",
+   "brand": "[object WakeLock]",
+   "ctor": "WakeLock",
+   "same": true,
+   "values": {}
+  },
+  "locks": {
+   "descriptor": "accessor",
+   "brand": "[object LockManager]",
+   "ctor": "LockManager",
+   "same": true,
+   "values": {}
+  },
+  "gpu": {
+   "descriptor": "accessor",
+   "brand": "[object GPU]",
+   "ctor": "GPU",
+   "same": true,
+   "values": {
+    "wgslLanguageFeatures": "[object WGSLLanguageFeatures]"
+   }
+  },
+  "login": {
+   "descriptor": "accessor",
+   "brand": "[object NavigatorLogin]",
+   "ctor": "NavigatorLogin",
+   "same": true,
+   "values": {}
+  },
+  "ink": {
+   "descriptor": "accessor",
+   "brand": "[object Ink]",
+   "ctor": "Ink",
+   "same": true,
+   "values": {}
+  },
+  "mediaCapabilities": {
+   "descriptor": "accessor",
+   "brand": "[object MediaCapabilities]",
+   "ctor": "MediaCapabilities",
+   "same": true,
+   "values": {}
+  },
+  "devicePosture": {
+   "descriptor": "accessor",
+   "brand": "[object DevicePosture]",
+   "ctor": "DevicePosture",
+   "same": true,
+   "values": {
+    "type": "continuous",
+    "onchange": "null"
+   }
+  },
+  "hid": {
+   "descriptor": "accessor",
+   "brand": "[object HID]",
+   "ctor": "HID",
+   "same": true,
+   "values": {
+    "onconnect": "null",
+    "ondisconnect": "null"
+   }
+  },
+  "mediaSession": {
+   "descriptor": "accessor",
+   "brand": "[object MediaSession]",
+   "ctor": "MediaSession",
+   "same": true,
+   "values": {
+    "metadata": "null",
+    "playbackState": "none"
+   }
+  },
+  "presentation": {
+   "descriptor": "accessor",
+   "brand": "[object Presentation]",
+   "ctor": "Presentation",
+   "same": true,
+   "values": {
+    "defaultRequest": "null",
+    "receiver": "null"
+   }
+  },
+  "serial": {
+   "descriptor": "accessor",
+   "brand": "[object Serial]",
+   "ctor": "Serial",
+   "same": true,
+   "values": {
+    "onconnect": "null",
+    "ondisconnect": "null"
+   }
+  },
+  "usb": {
+   "descriptor": "accessor",
+   "brand": "[object USB]",
+   "ctor": "USB",
+   "same": true,
+   "values": {
+    "onconnect": "null",
+    "ondisconnect": "null"
+   }
+  },
+  "xr": {
+   "descriptor": "accessor",
+   "brand": "[object XRSystem]",
+   "ctor": "XRSystem",
+   "same": true,
+   "values": {
+    "ondevicechange": "null"
+   }
+  },
+  "storageBuckets": {
+   "descriptor": "accessor",
+   "brand": "[object StorageBucketManager]",
+   "ctor": "StorageBucketManager",
+   "same": true,
+   "values": {}
+  }
+ },
+ "kAnon": {
+  "kind": "accessor",
+  "value": "false"
+ },
+ "note": "Post-G14 capture of this engine's Navigator surface, taken with the same probe as chrome-navigator-surface.json and on the same origin (http://localhost, which Chrome treats as secure). All 51 previously missing members are present, every brand matches, and every object is identity-stable. 23 of the 26 sub-interfaces reproduce Chrome's prototype order exactly; HID, Serial and USB differ only in where `constructor` lands, which a V8 binding cannot choose."
+}

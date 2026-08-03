@@ -29,11 +29,33 @@ const log = lp.log;
 const String = lp.String;
 const Allocator = std.mem.Allocator;
 
+const chrome_properties = @import("chrome_properties.zig");
+const typed_om = @import("typed_om.zig");
+
 const CSSStyleDeclaration = @This();
 
 _element: ?*Element = null,
 _properties: std.DoublyLinkedList = .{},
 _is_computed: bool = false,
+/// The Typed OM view of this declaration, created on first use. Measured:
+/// `el.attributeStyleMap` and `rule.styleMap` are stable objects, so the map
+/// has to be cached rather than rebuilt per access.
+_property_map: ?*typed_om.StylePropertyMap = null,
+
+/// Chrome has one interface for both kinds of declaration -- an element's inline
+/// `style` and the view `getComputedStyle` hands back are both branded
+/// CSSStyleDeclaration, and it has no CSSStyleProperties global at all
+/// (measured; see chrome_properties.zig). The two differ only in what they
+/// enumerate: a computed view lists Chrome's 474 longhands by index, an inline
+/// one lists whatever is actually set.
+pub fn init(element: ?*Element, is_computed: bool, frame: *Frame) !*CSSStyleDeclaration {
+    const self = try frame._factory.create(CSSStyleDeclaration{
+        ._element = element,
+        ._is_computed = is_computed,
+    });
+    try self.parseInlineStyle(frame);
+    return self;
+}
 
 // Parse the element's existing style attribute into _properties so that
 // subsequent JS reads and writes see all CSS properties, not just newly
@@ -51,11 +73,40 @@ pub fn parseInlineStyle(self: *CSSStyleDeclaration, frame: *Frame) !void {
     }
 }
 
+/// The writable Typed OM view: `element.attributeStyleMap` and
+/// `cssRule.styleMap` are both StylePropertyMaps over the declaration.
+pub fn getPropertyMap(self: *CSSStyleDeclaration, frame: *Frame) !*typed_om.StylePropertyMap {
+    if (self._property_map) |map| {
+        return map;
+    }
+    const map = try typed_om.StylePropertyMap.init(self, frame);
+    self._property_map = map;
+    return map;
+}
+
+/// Whether Chrome answers this property name at all, under either spelling.
+/// Exposed for the style maps, whose accessors throw rather than answer null
+/// for a name Chrome has never heard of.
+pub fn isKnownPropertyName(name: []const u8) bool {
+    return isAliasSpelling(name);
+}
+
 pub fn length(self: *const CSSStyleDeclaration) u32 {
+    // A computed view enumerates every longhand Chrome computes, whether or not
+    // the page set any of them, so its length does not depend on _properties.
+    if (self._is_computed) {
+        return chrome_properties.computed.len;
+    }
     return @intCast(self._properties.len());
 }
 
 pub fn item(self: *const CSSStyleDeclaration, index: u32) []const u8 {
+    if (self._is_computed) {
+        if (index >= chrome_properties.computed.len) {
+            return "";
+        }
+        return chrome_properties.computed[index];
+    }
     var i: u32 = 0;
     var node = self._properties.first;
     while (node) |n| {
@@ -67,6 +118,13 @@ pub fn item(self: *const CSSStyleDeclaration, index: u32) []const u8 {
         node = n.next;
     }
     return "";
+}
+
+/// Chrome's parentRule is null for both an inline style and a computed view; only
+/// a declaration reached through a CSSRule has one, and nothing here hands those
+/// out yet.
+pub fn getParentRule(_: *const CSSStyleDeclaration) ?bool {
+    return null;
 }
 
 pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame) []const u8 {
@@ -867,6 +925,236 @@ pub const Property = struct {
     }
 };
 
+fn camelCaseToDashCase(name: []const u8, buf: []u8) []const u8 {
+    if (name.len == 0) {
+        return name;
+    }
+
+    // Special case: cssFloat -> float
+    const lower_name = std.ascii.lowerString(buf, name);
+    if (std.mem.eql(u8, lower_name, "cssfloat")) {
+        return "float";
+    }
+
+    // If already contains dashes, just return lowercased
+    if (std.mem.indexOfScalar(u8, name, '-')) |_| {
+        return lower_name;
+    }
+
+    // Check if this looks like proper camelCase (starts with lowercase)
+    // If not (e.g. "COLOR", "BackgroundColor"), just lowercase it
+    if (name.len == 0 or !std.ascii.isLower(name[0])) {
+        return lower_name;
+    }
+
+    // Check for vendor prefixes: webkitTransform -> -webkit-transform
+    // Must have uppercase letter after the prefix
+    const has_vendor_prefix = blk: {
+        if (name.len > 6 and std.mem.startsWith(u8, name, "webkit") and std.ascii.isUpper(name[6])) break :blk true;
+        if (name.len > 3 and std.mem.startsWith(u8, name, "moz") and std.ascii.isUpper(name[3])) break :blk true;
+        if (name.len > 2 and std.mem.startsWith(u8, name, "ms") and std.ascii.isUpper(name[2])) break :blk true;
+        if (name.len > 1 and std.mem.startsWith(u8, name, "o") and std.ascii.isUpper(name[1])) break :blk true;
+        break :blk false;
+    };
+
+    var write_pos: usize = 0;
+
+    if (has_vendor_prefix) {
+        buf[write_pos] = '-';
+        write_pos += 1;
+    }
+
+    for (name, 0..) |c, i| {
+        if (write_pos >= buf.len) {
+            return lower_name;
+        }
+
+        if (std.ascii.isUpper(c)) {
+            const skip_dash = has_vendor_prefix and i < 10 and write_pos == 1;
+
+            if (i > 0 and !skip_dash) {
+                if (write_pos >= buf.len) break;
+                buf[write_pos] = '-';
+                write_pos += 1;
+            }
+            if (write_pos >= buf.len) break;
+            buf[write_pos] = std.ascii.toLower(c);
+            write_pos += 1;
+        } else {
+            buf[write_pos] = c;
+            write_pos += 1;
+        }
+    }
+
+    return buf[0..write_pos];
+}
+
+// ---------------------------------------------------------------------------
+// Named property access.
+//
+// Chrome answers every name in chrome_properties.aliases as an own enumerable
+// property of the declaration -- 735 of them, the camelCase spelling of each
+// supported property plus the shorthands and legacy webkit aliases -- and
+// answers undefined to anything else. Membership in that list is the whole
+// rule, and it has to be: Chrome reads style.webkitBorderRadius as "" but
+// style.webkitNotSet as undefined, and no test on the `webkit` prefix tells
+// those two apart.
+//
+// Dash-case names are not in the list. They arrive only through bracket
+// notation (style['-moz-user-select']), where Chrome answers the stored value
+// if the page set one and undefined otherwise.
+// ---------------------------------------------------------------------------
+
+const method_names = std.StaticStringMap(void).initComptime(.{
+    .{ "getPropertyValue", {} },
+    .{ "setProperty", {} },
+    .{ "removeProperty", {} },
+    .{ "getPropertyPriority", {} },
+    .{ "item", {} },
+    .{ "cssText", {} },
+    .{ "length", {} },
+    .{ "parentRule", {} },
+    .{ "cssFloat", {} },
+});
+
+pub fn setNamed(self: *CSSStyleDeclaration, name: []const u8, value: []const u8, frame: *Frame) !void {
+    if (method_names.has(name)) {
+        return error.NotHandled;
+    }
+    const dash_case = camelCaseToDashCase(name, &frame.buf);
+    try self.setProperty(dash_case, value, null, frame);
+}
+
+/// Whether Chrome answers this name at all, under either spelling. `border-block`
+/// and `borderBlock` are the same property to a declaration, and the dashed form
+/// is how CreepJS recovers the shorthands, so both have to resolve to the one
+/// alias list. A prefix Chrome does not support (`-moz-user-select`) is in
+/// neither spelling and stays absent.
+fn isAliasSpelling(name: []const u8) bool {
+    if (chrome_properties.alias_set.has(name)) {
+        return true;
+    }
+    if (std.mem.indexOfScalar(u8, name, '-') == null) {
+        return false;
+    }
+    var buf: [128]u8 = undefined;
+    const camel = dashCaseToCamelCase(name, &buf) orelse return false;
+    return chrome_properties.alias_set.has(camel);
+}
+
+fn dashCaseToCamelCase(name: []const u8, buf: []u8) ?[]const u8 {
+    // A leading dash is a vendor prefix: `-webkit-box-align` is `webkitBoxAlign`.
+    const body = if (name.len > 0 and name[0] == '-') name[1..] else name;
+    if (body.len == 0 or body.len > buf.len) {
+        return null;
+    }
+    var write: usize = 0;
+    var upper_next = false;
+    for (body) |c| {
+        if (c == '-') {
+            upper_next = true;
+            continue;
+        }
+        buf[write] = if (upper_next) std.ascii.toUpper(c) else c;
+        upper_next = false;
+        write += 1;
+    }
+    return buf[0..write];
+}
+
+pub fn getNamed(self: *CSSStyleDeclaration, name: []const u8, frame: *Frame) ![]const u8 {
+    if (method_names.has(name)) {
+        return error.NotHandled;
+    }
+
+    const is_alias = isAliasSpelling(name);
+    if (!is_alias and std.mem.indexOfScalar(u8, name, '-') == null) {
+        return error.NotHandled;
+    }
+
+    const dash_case = camelCaseToDashCase(name, &frame.buf);
+    const value = self.getPropertyValue(dash_case, frame);
+    if (value.len > 0) {
+        return value;
+    }
+    // A name Chrome knows reads as the empty string when nothing is set; a
+    // dash-case name reaching here was never set, so it stays undefined.
+    if (is_alias) {
+        return "";
+    }
+    return error.NotHandled;
+}
+
+/// The names Object.keys() reports. Numeric indices come from the indexed
+/// enumerator instead, so this is the alias list alone.
+fn aliasNames(_: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Array {
+    var arr = exec.js.local.?.newArray(chrome_properties.aliases.len);
+    for (chrome_properties.aliases, 0..) |name, i| {
+        _ = try arr.set(@intCast(i), name, .{});
+    }
+    return arr;
+}
+
+fn queryAlias(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame) !u32 {
+    if (method_names.has(name)) {
+        return error.NotHandled;
+    }
+    if (isAliasSpelling(name)) {
+        // Chrome's descriptors are plain data properties: writable, enumerable
+        // and configurable, so no attribute bits are set.
+        return js.v8.None;
+    }
+    if (std.mem.indexOfScalar(u8, name, '-') != null) {
+        const dash_case = camelCaseToDashCase(name, &frame.buf);
+        if (self.getPropertyValue(dash_case, frame).len > 0) {
+            return js.v8.None;
+        }
+    }
+    return error.NotHandled;
+}
+
+fn indexes(self: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Array {
+    const len = self.length();
+    var arr = exec.js.local.?.newArray(len);
+    for (0..len) |i| {
+        _ = try arr.set(@intCast(i), i, .{});
+    }
+    return arr;
+}
+
+fn getAtIndex(self: *const CSSStyleDeclaration, index: u32) ?[]const u8 {
+    if (index >= self.length()) {
+        return null;
+    }
+    return self.item(index);
+}
+
+/// Chrome puts Symbol.iterator on CSSStyleDeclaration.prototype and it walks
+/// the indexed half, yielding property names. Unexposed as keys/values/entries
+/// because Chrome has none of those here.
+pub fn values(self: *CSSStyleDeclaration, exec: *js.Execution) !*ValueIterator {
+    return .init(.{ .declaration = self }, exec);
+}
+
+const Iterator = struct {
+    index: u32 = 0,
+    declaration: *CSSStyleDeclaration,
+
+    const Entry = struct { u32, []const u8 };
+
+    pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
+        const index = self.index;
+        if (index >= self.declaration.length()) {
+            return null;
+        }
+        self.index = index + 1;
+        return .{ index, self.declaration.item(index) };
+    }
+};
+
+const GenericIterator = @import("../collections/iterator.zig").Entry;
+pub const ValueIterator = GenericIterator(Iterator, "1");
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(CSSStyleDeclaration);
 
@@ -876,9 +1164,20 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Declaration order is the prototype's own-property order, and Chrome's is
+    // WebIDL's: the attributes first, then the operations alphabetically.
+    // Measured off a headed Chrome 150 and asserted in
+    // tests/css/declaration_surface.html, so reordering these renames the engine.
     pub const cssText = bridge.accessor(CSSStyleDeclaration.getCssText, CSSStyleDeclaration.setCssText, .{});
     pub const length = bridge.accessor(CSSStyleDeclaration.length, null, .{});
+    pub const parentRule = bridge.accessor(CSSStyleDeclaration.getParentRule, null, .{});
+    pub const cssFloat = bridge.accessor(CSSStyleDeclaration.getFloat, CSSStyleDeclaration.setFloat, .{});
+    pub const getPropertyPriority = bridge.function(CSSStyleDeclaration.getPropertyPriority, .{});
+    pub const getPropertyValue = bridge.function(CSSStyleDeclaration.getPropertyValue, .{});
     pub const item = bridge.function(_item, .{});
+    pub const removeProperty = bridge.function(CSSStyleDeclaration.removeProperty, .{});
+    pub const setProperty = bridge.function(CSSStyleDeclaration.setProperty, .{});
+    pub const symbol_iterator = bridge.iterator(CSSStyleDeclaration.values, .{});
 
     fn _item(self: *const CSSStyleDeclaration, index: i32) []const u8 {
         if (index < 0) {
@@ -887,11 +1186,19 @@ pub const JsApi = struct {
         return self.item(@intCast(index));
     }
 
-    pub const getPropertyValue = bridge.function(CSSStyleDeclaration.getPropertyValue, .{});
-    pub const getPropertyPriority = bridge.function(CSSStyleDeclaration.getPropertyPriority, .{});
-    pub const setProperty = bridge.function(CSSStyleDeclaration.setProperty, .{});
-    pub const removeProperty = bridge.function(CSSStyleDeclaration.removeProperty, .{});
-    pub const cssFloat = bridge.accessor(CSSStyleDeclaration.getFloat, CSSStyleDeclaration.setFloat, .{});
+    // The indexed half is the property list -- Chrome's 474 computed longhands
+    // for a computed view, whatever is set for an inline one -- and the named
+    // half is the 735 aliases. Both need their enumerator: Object.keys() is what
+    // fingerprinting scripts read, and it is empty without them.
+    pub const @"[int]" = bridge.indexed(getAtIndex, indexes, .{ .null_as_undefined = true });
+    pub const @"[str]" = bridge.namedIndexed(
+        CSSStyleDeclaration.getNamed,
+        CSSStyleDeclaration.setNamed,
+        null,
+        aliasNames,
+        queryAlias,
+        .{},
+    );
 };
 
 const testing = @import("../../../testing.zig");
@@ -963,4 +1270,8 @@ test "normalizePropertyValue: anchor() canonical order" {
         const result = try normalizePropertyValue(testing.arena_allocator, case[0], case[1]);
         try testing.expectEqual(case[2], result);
     }
+}
+
+test "WebApi: CSSStyleDeclaration surface" {
+    try testing.htmlRunner("css/declaration_surface.html", .{});
 }

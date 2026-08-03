@@ -10,6 +10,9 @@ const Element = @import("../Element.zig");
 const CSSRuleList = @import("CSSRuleList.zig");
 const CSSRule = @import("CSSRule.zig");
 const CSSStyleRule = @import("CSSStyleRule.zig");
+const StyleSheet = @import("StyleSheet.zig");
+const MediaList = @import("MediaList.zig");
+const rules_mod = @import("rules.zig");
 
 const log = lp.log;
 
@@ -23,39 +26,42 @@ pub const CSSError = error{
     SyntaxError,
 };
 
-_href: ?[]const u8 = null,
-_title: []const u8 = "",
-_disabled: bool = false,
+pub const Proto = StyleSheet;
+
+_proto: *StyleSheet,
 _css_rules: ?*CSSRuleList = null,
 _owner_rule: ?*CSSRule = null,
-_owner_node: ?*Element = null,
 
 pub fn init(frame: *Frame) !*CSSStyleSheet {
-    return frame._factory.create(CSSStyleSheet{});
+    return frame._factory.chained(.{
+        StyleSheet{},
+        CSSStyleSheet{ ._proto = undefined },
+    });
 }
 
 pub fn initWithOwner(owner: *Element, frame: *Frame) !*CSSStyleSheet {
-    return frame._factory.create(CSSStyleSheet{ ._owner_node = owner });
+    return frame._factory.chained(.{
+        StyleSheet{ ._owner_node = owner, ._title = owner.getAttributeSafe(.wrap("title")) },
+        CSSStyleSheet{ ._proto = undefined },
+    });
 }
 
+/// Convenience passthroughs: these members live on StyleSheet in JS, but
+/// engine-side callers reach them through the CSSStyleSheet they hold.
 pub fn getOwnerNode(self: *const CSSStyleSheet) ?*Element {
-    return self._owner_node;
+    return self._proto._owner_node;
 }
 
-pub fn getHref(self: *const CSSStyleSheet) ?[]const u8 {
-    return self._href;
-}
-
-pub fn getTitle(self: *const CSSStyleSheet) []const u8 {
-    return self._title;
+pub fn setHref(self: *CSSStyleSheet, href: []const u8) void {
+    self._proto._href = href;
 }
 
 pub fn getDisabled(self: *const CSSStyleSheet) bool {
-    return self._disabled;
+    return self._proto._disabled;
 }
 
 pub fn setDisabled(self: *CSSStyleSheet, disabled: bool) void {
-    self._disabled = disabled;
+    self._proto._disabled = disabled;
 }
 
 pub fn getCssRules(self: *CSSStyleSheet, frame: *Frame) !*CSSRuleList {
@@ -65,7 +71,11 @@ pub fn getCssRules(self: *CSSStyleSheet, frame: *Frame) !*CSSRuleList {
     self._css_rules = rules;
 
     if (self.getOwnerNode()) |owner| {
+        // <style> in either namespace owns its rules through its text.
         if (owner.is(Element.Html.Style)) |style| {
+            const text = try style.asNode().getTextContentAlloc(frame.local_arena);
+            try self.replaceSync(text, frame);
+        } else if (owner.is(Element.Svg.Style)) |style| {
             const text = try style.asNode().getTextContentAlloc(frame.local_arena);
             try self.replaceSync(text, frame);
         }
@@ -85,22 +95,8 @@ pub fn insertRule(self: *CSSStyleSheet, rule: []const u8, maybe_index: ?u32, fra
 
     if (it.next() != null) return error.SyntaxError;
 
-    const inserted: *CSSRule = switch (parsed_rule) {
-        .style => |s| blk: {
-            const style_rule = try CSSStyleRule.init(frame);
-            try style_rule.setSelectorText(s.selector, frame);
-
-            const style_props = try style_rule.getStyle(frame);
-            const style = style_props.asCSSStyleDeclaration();
-            try style.setCssText(s.block, frame);
-            break :blk style_rule._proto;
-        },
-        // Opaque placeholder for at-rules. The CSS engine doesn't apply
-        // these (`@keyframes`, `@media`, ...) but JS-side reads must see
-        // them via `cssRules` so CSS-in-JS libraries don't fall back to
-        // per-render `<style>` injection. See #2459.
-        .at_rule => |a| try CSSRule.initAtRule(atRuleTypeFor(a.keyword), a.text, frame),
-    };
+    const inserted = (try rules_mod.buildRule(parsed_rule, frame)) orelse return error.SyntaxError;
+    inserted._parent_style_sheet = self;
 
     const rules = try self.getCssRules(frame);
 
@@ -121,42 +117,46 @@ pub fn insertRule(self: *CSSStyleSheet, rule: []const u8, maybe_index: ?u32, fra
     return index;
 }
 
-/// Map an at-rule keyword (without `@`) to the matching `CSSRule.Type`
-/// variant. Vendor prefixes are stripped before matching
-/// (`-webkit-keyframes` -> `keyframes`). Unrecognized keywords fall back
-/// to `.unknown`: which maps to 0 for rule.type.
-fn atRuleTypeFor(keyword_with_prefix: []const u8) CSSRule.Type {
-    var keyword = keyword_with_prefix;
-    inline for (.{ "-webkit-", "-moz-", "-ms-", "-o-" }) |prefix| {
-        if (std.ascii.startsWithIgnoreCase(keyword, prefix)) {
-            keyword = keyword[prefix.len..];
-            break;
-        }
-    }
-
-    const eql = std.ascii.eqlIgnoreCase;
-    if (eql(keyword, "media")) return .media;
-    if (eql(keyword, "keyframes")) return .keyframes;
-    if (eql(keyword, "supports")) return .supports;
-    if (eql(keyword, "font-face")) return .font_face;
-    if (eql(keyword, "import")) return .import;
-    if (eql(keyword, "charset")) return .charset;
-    if (eql(keyword, "namespace")) return .namespace;
-    if (eql(keyword, "page")) return .frame;
-    if (eql(keyword, "counter-style")) return .counter_style;
-    if (eql(keyword, "font-feature-values")) return .font_feature_values;
-    if (eql(keyword, "viewport")) return .viewport;
-    if (eql(keyword, "document")) return .document;
-    if (eql(keyword, "layer")) return .layer;
-    return .unknown;
-}
-
 pub fn deleteRule(self: *CSSStyleSheet, index: u32, frame: *Frame) !void {
     const rules = try self.getCssRules(frame);
     try rules.remove(index);
 
     // Notify StyleManager that rules have changed
     frame._style_manager.sheetModified();
+}
+
+/// How a rule interacts with the leading `@import` window.
+const ImportWindowKind = enum { import, transparent, closes_window };
+
+fn importWindowKind(parsed_rule: Parser.Rule) ImportWindowKind {
+    const at_rule = switch (parsed_rule) {
+        .style => return .closes_window,
+        .at_rule => |a| a,
+    };
+    const eql = std.ascii.eqlIgnoreCase;
+    if (eql(at_rule.keyword, "import")) return .import;
+    if (eql(at_rule.keyword, "charset")) return .transparent;
+    // Only the statement form of @layer is transparent; a block closes it.
+    if (eql(at_rule.keyword, "layer") and at_rule.block == null) return .transparent;
+    return .closes_window;
+}
+
+/// The IE-era aliases Chrome still ships. Measured: `addRule` appends and
+/// answers -1 (not the index), `removeRule` answers undefined, and calling
+/// `addRule()` with no selector is a TypeError.
+pub fn addRule(self: *CSSStyleSheet, selector_: ?[]const u8, declarations_: ?[]const u8, index_: ?u32, frame: *Frame) !i32 {
+    // Chrome declares every argument optional (arity 0) but rejects the
+    // zero-argument call at runtime.
+    const selector = selector_ orelse return error.TypeError;
+    const declarations = declarations_ orelse "";
+    const text = try std.fmt.allocPrint(frame.local_arena, "{s} {{ {s} }}", .{ selector, declarations });
+    const rules = try self.getCssRules(frame);
+    _ = try self.insertRule(text, index_ orelse rules.length(), frame);
+    return -1;
+}
+
+pub fn removeRule(self: *CSSStyleSheet, index_: ?u32, frame: *Frame) !void {
+    return self.deleteRule(index_ orelse 0, frame);
 }
 
 pub fn replace(self: *CSSStyleSheet, text: []const u8, frame: *Frame) CSSError!js.Promise {
@@ -170,19 +170,19 @@ pub fn replaceSync(self: *CSSStyleSheet, text: []const u8, frame: *Frame) CSSErr
 
     var it = Parser.parseStylesheet(text);
     var index: u32 = 0;
+    // Measured on Chrome 150: an `@import` only survives while nothing but
+    // `@charset`, `@layer` *statements* and other `@import`s has been seen.
+    // A `@namespace`, a style rule or a `@layer` block all close the window
+    // and every later `@import` is dropped without a trace.
+    var imports_allowed = true;
     while (it.next()) |parsed_rule| {
-        const inserted: *CSSRule = switch (parsed_rule) {
-            .style => |s| blk: {
-                const style_rule = try CSSStyleRule.init(frame);
-                try style_rule.setSelectorText(s.selector, frame);
+        const kind = importWindowKind(parsed_rule);
+        if (kind == .import and !imports_allowed) continue;
+        if (kind == .closes_window) imports_allowed = false;
 
-                const style_props = try style_rule.getStyle(frame);
-                const style = style_props.asCSSStyleDeclaration();
-                try style.setCssText(s.block, frame);
-                break :blk style_rule._proto;
-            },
-            .at_rule => |a| try CSSRule.initAtRule(atRuleTypeFor(a.keyword), a.text, frame),
-        };
+        // Chrome drops @charset entirely: buildRule answers null for it.
+        const inserted = (try rules_mod.buildRule(parsed_rule, frame)) orelse continue;
+        inserted._parent_style_sheet = self;
 
         try rules.insert(index, inserted, frame);
         index += 1;
@@ -201,15 +201,16 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // ownerNode / href / title / disabled now live on StyleSheet, which is
+    // where Chrome keeps them. Order below is Chrome's own.
     pub const constructor = bridge.constructor(CSSStyleSheet.init, .{});
-    pub const ownerNode = bridge.accessor(CSSStyleSheet.getOwnerNode, null, .{ .null_as_undefined = true });
-    pub const href = bridge.accessor(CSSStyleSheet.getHref, null, .{ .null_as_undefined = true });
-    pub const title = bridge.accessor(CSSStyleSheet.getTitle, null, .{});
-    pub const disabled = bridge.accessor(CSSStyleSheet.getDisabled, CSSStyleSheet.setDisabled, .{});
-    pub const cssRules = bridge.accessor(CSSStyleSheet.getCssRules, null, .{});
     pub const ownerRule = bridge.accessor(CSSStyleSheet.getOwnerRule, null, .{});
-    pub const insertRule = bridge.function(CSSStyleSheet.insertRule, .{});
+    pub const cssRules = bridge.accessor(CSSStyleSheet.getCssRules, null, .{});
+    pub const rules = bridge.accessor(CSSStyleSheet.getCssRules, null, .{});
+    pub const addRule = bridge.function(CSSStyleSheet.addRule, .{});
     pub const deleteRule = bridge.function(CSSStyleSheet.deleteRule, .{});
+    pub const insertRule = bridge.function(CSSStyleSheet.insertRule, .{});
+    pub const removeRule = bridge.function(CSSStyleSheet.removeRule, .{});
     pub const replace = bridge.function(CSSStyleSheet.replace, .{});
     pub const replaceSync = bridge.function(CSSStyleSheet.replaceSync, .{});
 };

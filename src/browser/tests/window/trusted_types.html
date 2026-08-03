@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  window.trustedTypes and the five interfaces behind it. Every shape, value and
+  error below was measured on a headed Chrome 150 over http://localhost; the
+  snapshot lives in agent-workspace/stealth-detector-probes/win-batch/.
+-->
+
+<script id="globals_exist">
+  {
+    const names = [
+      'TrustedTypePolicyFactory', 'TrustedTypePolicy',
+      'TrustedHTML', 'TrustedScript', 'TrustedScriptURL',
+    ];
+    const missing = names.filter((n) => !Object.prototype.hasOwnProperty.call(window, n));
+    testing.expectEqual('', missing.join(','));
+    testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, 'trustedTypes'));
+    for (const n of names) {
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, window[n].length);
+    }
+    // trustedTypes itself is a getter-only, enumerable own property.
+    const d = Object.getOwnPropertyDescriptor(window, 'trustedTypes');
+    testing.expectEqual(true, typeof d.get === 'function');
+    testing.expectEqual(undefined, d.set);
+    testing.expectEqual(true, d.enumerable);
+  }
+</script>
+
+<script id="prototype_shapes">
+  {
+    const expected = {
+      TrustedTypePolicyFactory: 'emptyHTML,emptyScript,defaultPolicy,createPolicy,getAttributeType,getPropertyType,getTypeMapping,isHTML,isScript,isScriptURL,constructor',
+      TrustedTypePolicy: 'name,createHTML,createScript,createScriptURL,constructor',
+      TrustedHTML: 'toJSON,toString,constructor',
+      TrustedScript: 'toJSON,toString,constructor',
+      TrustedScriptURL: 'toJSON,toString,constructor',
+    };
+    for (const [name, keys] of Object.entries(expected)) {
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[name].prototype).join(','));
+      testing.expectEqual(`[object ${name}]`, String(window[name].prototype));
+      // all five hang directly off Object.prototype
+      testing.expectEqual(true, Object.getPrototypeOf(window[name].prototype) === Object.prototype);
+    }
+    // arities, measured
+    testing.expectEqual(1, TrustedTypePolicyFactory.prototype.createPolicy.length);
+    testing.expectEqual(2, TrustedTypePolicyFactory.prototype.getAttributeType.length);
+    testing.expectEqual(2, TrustedTypePolicyFactory.prototype.getPropertyType.length);
+    testing.expectEqual(0, TrustedTypePolicyFactory.prototype.getTypeMapping.length);
+    testing.expectEqual(1, TrustedTypePolicyFactory.prototype.isHTML.length);
+    testing.expectEqual(1, TrustedTypePolicy.prototype.createHTML.length);
+    testing.expectEqual(0, TrustedHTML.prototype.toJSON.length);
+    testing.expectEqual(0, TrustedHTML.prototype.toString.length);
+  }
+</script>
+
+<script id="illegal_constructors">
+  {
+    // Chrome's exact wording, which is engine-wide here, not per-interface.
+    for (const n of ['TrustedTypePolicyFactory', 'TrustedTypePolicy', 'TrustedHTML', 'TrustedScript', 'TrustedScriptURL']) {
+      let caught = null;
+      try { new window[n](); } catch (e) { caught = e; }
+      testing.expectEqual('TypeError', caught && caught.name);
+      testing.expectEqual(`Failed to construct '${n}': Illegal constructor`, caught && caught.message);
+    }
+    // the same wording for an interface that predates this batch
+    let e2 = null;
+    try { new Permissions(); } catch (e) { e2 = e; }
+    testing.expectEqual("Failed to construct 'Permissions': Illegal constructor", e2 && e2.message);
+  }
+</script>
+
+<script id="factory_empties">
+  {
+    const tt = window.trustedTypes;
+    testing.expectEqual(true, window.trustedTypes === window.trustedTypes);
+    testing.expectEqual('[object TrustedTypePolicyFactory]', Object.prototype.toString.call(tt));
+    testing.expectEqual(true, Object.getPrototypeOf(tt) === TrustedTypePolicyFactory.prototype);
+
+    testing.expectEqual('', String(tt.emptyHTML));
+    testing.expectEqual('[object TrustedHTML]', Object.prototype.toString.call(tt.emptyHTML));
+    testing.expectEqual(true, Object.getPrototypeOf(tt.emptyHTML) === TrustedHTML.prototype);
+    testing.expectEqual(true, tt.emptyHTML === tt.emptyHTML);
+
+    testing.expectEqual('', String(tt.emptyScript));
+    testing.expectEqual('[object TrustedScript]', Object.prototype.toString.call(tt.emptyScript));
+
+    // no policy has been installed as the default
+    testing.expectEqual(null, tt.defaultPolicy);
+  }
+</script>
+
+<script id="factory_type_queries">
+  {
+    const tt = window.trustedTypes;
+    testing.expectEqual(false, tt.isHTML('x'));
+    testing.expectEqual(true, tt.isHTML(tt.emptyHTML));
+    testing.expectEqual(true, tt.isScript(tt.emptyScript));
+    testing.expectEqual(false, tt.isScriptURL(tt.emptyHTML));
+
+    testing.expectEqual(null, tt.getAttributeType('img', 'src'));
+    testing.expectEqual(null, tt.getAttributeType('div', 'id'));
+    testing.expectEqual('TrustedScriptURL', tt.getAttributeType('script', 'src'));
+    testing.expectEqual('TrustedHTML', tt.getAttributeType('iframe', 'srcdoc'));
+    // the wildcard row covers every on* attribute, on any element
+    testing.expectEqual('TrustedScript', tt.getAttributeType('div', 'onclick'));
+
+    testing.expectEqual('TrustedScript', tt.getPropertyType('script', 'text'));
+    testing.expectEqual('TrustedHTML', tt.getPropertyType('div', 'innerHTML'));
+    testing.expectEqual('TrustedHTML', tt.getPropertyType('div', 'outerHTML'));
+    testing.expectEqual(null, tt.getPropertyType('div', 'id'));
+  }
+</script>
+
+<script id="factory_type_mapping">
+  {
+    const m = window.trustedTypes.getTypeMapping();
+    testing.expectEqual('embed,iframe,object,script,*', Object.keys(m).join(','));
+    testing.expectEqual('TrustedScriptURL', m.embed.attributes.src);
+    testing.expectEqual('TrustedScriptURL', m.embed.properties.src);
+    testing.expectEqual('TrustedHTML', m.iframe.attributes.srcdoc);
+    testing.expectEqual('TrustedScriptURL', m.object.attributes.codebase);
+    testing.expectEqual('TrustedScriptURL', m.object.properties.codeBase);
+    testing.expectEqual('src,href', Object.keys(m.script.attributes).join(','));
+    testing.expectEqual('innerText,src,text,textContent,href', Object.keys(m.script.properties).join(','));
+    testing.expectEqual('TrustedHTML', m['*'].properties.innerHTML);
+    testing.expectEqual('TrustedHTML', m['*'].properties.outerHTML);
+    // Blink's full handler list, not just the ones this engine dispatches
+    testing.expectEqual(321, Object.keys(m['*'].attributes).length);
+    testing.expectEqual('onabort', Object.keys(m['*'].attributes)[0]);
+    testing.expectEqual('onzoomlevelchange', Object.keys(m['*'].attributes).pop());
+    testing.expectEqual('TrustedScript', m['*'].attributes.onbeforexrselect);
+    // a fresh object each call
+    testing.expectEqual(false, m === window.trustedTypes.getTypeMapping());
+  }
+</script>
+
+<script id="policies">
+  {
+    const tt = window.trustedTypes;
+    const p = tt.createPolicy('probe-policy', {
+      createHTML: (s) => s + '!',
+      createScript: (s) => s + '//',
+      createScriptURL: (s) => s + '?q',
+    });
+    testing.expectEqual('[object TrustedTypePolicy]', Object.prototype.toString.call(p));
+    testing.expectEqual('probe-policy', p.name);
+
+    const h = p.createHTML('a');
+    testing.expectEqual('object', typeof h);
+    testing.expectEqual('[object TrustedHTML]', Object.prototype.toString.call(h));
+    testing.expectEqual('a!', String(h));
+    testing.expectEqual('a!', h.toJSON());
+    testing.expectEqual(true, tt.isHTML(h));
+    testing.expectEqual(false, tt.isScript(h));
+
+    testing.expectEqual('b//', String(p.createScript('b')));
+    testing.expectEqual('c?q', String(p.createScriptURL('c')));
+
+    // a duplicate name is not an error in Chrome
+    testing.expectEqual('probe-policy', tt.createPolicy('probe-policy', {}).name);
+
+    // ...but calling a member the options never supplied is
+    const bare = tt.createPolicy('probe-empty', {});
+    let caught = null;
+    try { bare.createHTML('z'); } catch (e) { caught = e; }
+    testing.expectEqual('TypeError', caught && caught.name);
+    testing.expectEqual(
+      "Failed to execute 'createHTML' on 'TrustedTypePolicy': Policy probe-empty's TrustedTypePolicyOptions did not specify a 'createHTML' member.",
+      caught && caught.message,
+    );
+  }
+</script>

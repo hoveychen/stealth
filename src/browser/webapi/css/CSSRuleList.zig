@@ -40,6 +40,27 @@ pub fn clear(self: *CSSRuleList) void {
     self._rules.clearRetainingCapacity();
 }
 
+pub fn values(self: *CSSRuleList, exec: *js.Execution) !*ValueIterator {
+    return .init(.{ .list = self }, exec);
+}
+
+const Iterator = struct {
+    index: u32 = 0,
+    list: *CSSRuleList,
+
+    const Entry = struct { u32, *CSSRule };
+
+    pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
+        const index = self.index;
+        const value = self.list.item(index) orelse return null;
+        self.index = index + 1;
+        return .{ index, value };
+    }
+};
+
+const GenericIterator = @import("../collections/iterator.zig").Entry;
+pub const ValueIterator = GenericIterator(Iterator, "1");
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(CSSRuleList);
 
@@ -50,5 +71,7 @@ pub const JsApi = struct {
     };
 
     pub const length = bridge.accessor(CSSRuleList.length, null, .{});
+    pub const item = bridge.function(CSSRuleList.item, .{});
     pub const @"[]" = bridge.indexed(CSSRuleList.item, null, .{ .null_as_undefined = true });
+    pub const symbol_iterator = bridge.iterator(CSSRuleList.values, .{});
 };

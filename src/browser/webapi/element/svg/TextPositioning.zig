@@ -17,9 +17,14 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const js = @import("../../../js/js.zig");
+const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
+const LengthList = @import("../../svg/LengthList.zig");
+const NumberList = @import("../../svg/NumberList.zig");
+const AnimatedLengthList = @import("../../svg/AnimatedLengthList.zig");
+const AnimatedNumberList = @import("../../svg/AnimatedNumberList.zig");
 
 const TextContent = @import("TextContent.zig");
 
@@ -53,6 +58,26 @@ pub fn asNode(self: *TextPositioning) *Node {
     return self.asElement().asNode();
 }
 
+fn lengths(self: *TextPositioning, kind: LengthList.Kind, frame: *Frame) !*AnimatedLengthList {
+    return AnimatedLengthList.getOrCreate(self.asElement(), kind, frame);
+}
+
+fn getX(self: *TextPositioning, frame: *Frame) !*AnimatedLengthList {
+    return lengths(self, .x, frame);
+}
+fn getY(self: *TextPositioning, frame: *Frame) !*AnimatedLengthList {
+    return lengths(self, .y, frame);
+}
+fn getDx(self: *TextPositioning, frame: *Frame) !*AnimatedLengthList {
+    return lengths(self, .dx, frame);
+}
+fn getDy(self: *TextPositioning, frame: *Frame) !*AnimatedLengthList {
+    return lengths(self, .dy, frame);
+}
+fn getRotate(self: *TextPositioning, frame: *Frame) !*AnimatedNumberList {
+    return AnimatedNumberList.getOrCreate(self.asElement(), .rotate, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(TextPositioning);
     pub const Meta = struct {
@@ -60,4 +85,10 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+
+    pub const x = bridge.accessor(TextPositioning.getX, null, .{});
+    pub const y = bridge.accessor(TextPositioning.getY, null, .{});
+    pub const dx = bridge.accessor(TextPositioning.getDx, null, .{});
+    pub const dy = bridge.accessor(TextPositioning.getDy, null, .{});
+    pub const rotate = bridge.accessor(TextPositioning.getRotate, null, .{});
 };

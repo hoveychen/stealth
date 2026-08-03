@@ -194,4 +194,37 @@
       testing.expectEqual(baseline + 1, afterReappend);
     });
   </script>
+
+  <!-- Vite's module-preload helper attaches its load listener AFTER inserting
+       the <link>, and awaits it before resolving the dynamic import it guards.
+       Firing the event synchronously from appendChild means that listener
+       never runs: on browserscan.net the awaited promise never settles, so
+       Nuxt's applyPlugins hangs and the app never hydrates. Chrome cannot fire
+       it inline — the fetch is asynchronous there — so neither may we. -->
+  <script id=load_event_is_async type=module>
+    const state = await testing.async();
+
+    const order = [];
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '/styles/visibility2.css';
+
+    const settled = new Promise((resolve) => {
+      order.push('before appendChild');
+      document.head.appendChild(link);
+      order.push('after appendChild');
+      // Attached only now, exactly like __vitePreload does.
+      link.addEventListener('load', () => { order.push('load'); resolve('load'); }, { once: true });
+      link.addEventListener('error', () => { order.push('error'); resolve('error'); }, { once: true });
+      setTimeout(() => resolve('timeout'), 2000);
+    });
+    const outcome = await settled;
+    link.remove();
+
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual('load', outcome);
+      testing.expectEqual('before appendChild,after appendChild,load', order.join(','));
+    });
+  </script>
 </body>

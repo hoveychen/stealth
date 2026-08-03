@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+
+<script id=media_mimes_surface>
+{
+  // Measured off Chrome 150 — see media/mime.zig and media/chrome_mimes.zig.
+  testing.expectEqual('function', typeof MediaSource);
+  testing.expectEqual('function', typeof MediaRecorder);
+  testing.expectEqual(1, MediaSource.isTypeSupported.length);
+  testing.expectEqual(1, MediaRecorder.isTypeSupported.length);
+  testing.expectEqual(0, MediaSource.length);
+  testing.expectEqual(1, MediaRecorder.length);
+
+  const ms = new MediaSource();
+  testing.expectEqual('[object MediaSource]', Object.prototype.toString.call(ms));
+  testing.expectEqual(true, ms instanceof EventTarget);
+  // Never attached to a media element, which is what Chrome reports for a
+  // detached MediaSource too.
+  testing.expectEqual('closed', ms.readyState);
+  testing.expectEqual(true, Number.isNaN(ms.duration));
+  testing.expectEqual(0, ms.sourceBuffers.length);
+  testing.expectEqual(0, ms.activeSourceBuffers.length);
+  testing.expectEqual(null, ms.onsourceopen);
+
+  let threw = null;
+  try { ms.addSourceBuffer('video/webm; codecs="vp8"'); } catch (e) { threw = e.name; }
+  testing.expectEqual('InvalidStateError', threw);
+
+  // The stream argument is required, so no-args is a TypeError like Chrome's.
+  let ctorThrew = null;
+  try { new MediaRecorder(); } catch (e) { ctorThrew = e.name; }
+  testing.expectEqual('TypeError', ctorThrew);
+  // And nothing here can produce a MediaStream to give it.
+  let withArg = null;
+  try { new MediaRecorder({}); } catch (e) { withArg = e.name; }
+  testing.expectEqual('NotSupportedError', withArg);
+  testing.expectEqual(true, Object.getPrototypeOf(MediaRecorder.prototype) === EventTarget.prototype);
+}
+</script>
+
+<script id=media_mimes_creepjs_grid>
+{
+  // CreepJS's twelve types, read exactly the way it reads them: an <audio> and
+  // a <video> element's canPlayType plus the two isTypeSupported statics. A row
+  // where all four are falsy is dropped, and if the whole probe throws the site
+  // renders "mimes (0/12): blocked" — which is what the missing MediaSource
+  // used to cause.
+  const TYPES = [
+    'audio/ogg; codecs="vorbis"', 'audio/mpeg', 'audio/mpegurl', 'audio/wav; codecs="1"',
+    'audio/x-m4a', 'audio/aac', 'video/ogg; codecs="theora"', 'video/quicktime',
+    'video/mp4; codecs="avc1.42E01E"', 'video/webm; codecs="vp8"', 'video/webm; codecs="vp9"',
+    'video/x-matroska',
+  ].sort();
+
+  const videoEl = document.createElement('video');
+  const audioEl = new Audio();
+  const rows = TYPES.map((type) => [
+    type,
+    audioEl.canPlayType(type),
+    videoEl.canPlayType(type),
+    MediaSource.isTypeSupported(type),
+    MediaRecorder.isTypeSupported(type),
+  ]);
+
+  // Chrome 150's answers, verbatim. Chrome dropped Theora, so video/ogg with
+  // that codec is the one CreepJS type nothing here can play.
+  testing.expectEqual([
+    ['audio/aac', 'probably', 'probably', true, false],
+    ['audio/mpeg', 'probably', 'probably', true, false],
+    ['audio/mpegurl', 'maybe', 'maybe', false, false],
+    ['audio/ogg; codecs="vorbis"', 'probably', 'probably', false, false],
+    ['audio/wav; codecs="1"', 'probably', 'probably', false, false],
+    ['audio/x-m4a', 'maybe', 'maybe', false, false],
+    ['video/mp4; codecs="avc1.42E01E"', 'probably', 'probably', true, true],
+    ['video/ogg; codecs="theora"', '', '', false, false],
+    ['video/quicktime', '', '', false, false],
+    ['video/webm; codecs="vp8"', 'probably', 'probably', true, true],
+    ['video/webm; codecs="vp9"', 'probably', 'probably', true, true],
+    ['video/x-matroska', 'maybe', 'maybe', false, true],
+  ], rows);
+
+  // CreepJS keeps only rows where at least one of the four is truthy, and
+  // renders the count as "mimes (N/12)". Ten of the twelve survive.
+  const kept = rows.filter(([, a, v, ms, mr]) => a || v || ms || mr);
+  testing.expectEqual(10, kept.length);
+}
+</script>
+
+<script id=media_mimes_rules>
+{
+  const v = document.createElement('video');
+
+  // No codecs parameter gives the container's own answer, which is not always
+  // "maybe": a container that names its own codec answers "probably".
+  testing.expectEqual('maybe', v.canPlayType('video/mp4'));
+  testing.expectEqual('maybe', v.canPlayType('video/webm'));
+  testing.expectEqual('probably', v.canPlayType('audio/flac'));
+  testing.expectEqual('probably', v.canPlayType('audio/mp3'));
+  testing.expectEqual('', v.canPlayType('bogus/type'));
+
+  // With codecs, every one listed has to be accepted.
+  testing.expectEqual('probably', v.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"'));
+  testing.expectEqual('', v.canPlayType('video/mp4; codecs="avc1.42E01E, bogus"'));
+
+  // An empty codecs parameter reads as absent.
+  testing.expectEqual('maybe', v.canPlayType('video/mp4; codecs=""'));
+
+  // Quoting and spacing are optional, and the container folds case.
+  testing.expectEqual('probably', v.canPlayType('video/mp4;codecs=avc1.42E01E'));
+  testing.expectEqual('probably', v.canPlayType('video/mp4 ; codecs="avc1.42E01E"'));
+  testing.expectEqual('probably', v.canPlayType('VIDEO/MP4; codecs="avc1.42E01E"'));
+
+  // The three APIs are allowed to disagree with each other, and do — that is
+  // why they share one table rather than one answer.
+  testing.expectEqual('probably', v.canPlayType('audio/mpeg'));
+  testing.expectEqual(true, MediaSource.isTypeSupported('audio/mpeg'));
+  testing.expectEqual(false, MediaRecorder.isTypeSupported('audio/mpeg'));
+
+  testing.expectEqual(false, MediaSource.isTypeSupported('video/webm'));
+  testing.expectEqual(true, MediaRecorder.isTypeSupported('video/webm'));
+  testing.expectEqual(true, MediaSource.isTypeSupported('video/webm; codecs="vp8"'));
+
+  testing.expectEqual(true, MediaRecorder.isTypeSupported('audio/webm; codecs="opus"'));
+  testing.expectEqual(false, MediaRecorder.isTypeSupported('audio/webm; codecs="vorbis"'));
+  testing.expectEqual(true, MediaSource.isTypeSupported('audio/webm; codecs="vorbis"'));
+
+  // The empty string splits them: MediaRecorder reads it as "pick a default".
+  testing.expectEqual(false, MediaSource.isTypeSupported(''));
+  testing.expectEqual(true, MediaRecorder.isTypeSupported(''));
+}
+</script>

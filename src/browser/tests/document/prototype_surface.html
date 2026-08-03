@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<body>
+<div id="caret-target" style="width: 100px; height: 50px;">caret text</div>
+
+<script id=document_prototype_html_document_is_empty>
+  {
+    // Measured on a headed Chrome 150: HTMLDocument.prototype carries nothing
+    // but `constructor`. Every document member lives one level up, on
+    // Document.prototype. Detectors that read
+    // Object.getOwnPropertyDescriptors(Document.prototype) look at that one
+    // level only, so anything parked on HTMLDocument reads as missing.
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(HTMLDocument.prototype));
+  }
+</script>
+
+<script id=document_prototype_owns_html_members>
+  {
+    const own = Object.getOwnPropertyNames(Document.prototype);
+    for (const name of [
+      'title', 'dir', 'body', 'head', 'images', 'embeds', 'plugins', 'links',
+      'forms', 'scripts', 'currentScript', 'anchors', 'applets', 'all', 'doctype',
+    ]) {
+      testing.expectEqual(true, own.includes(name), { desc: 'Document.prototype owns ' + name });
+    }
+  }
+</script>
+
+<script id=document_prototype_no_lang>
+  {
+    // Chrome has no `lang` on documents at all: measured `'lang' in document`
+    // is false there. It is an HTMLElement member only.
+    testing.expectEqual(false, 'lang' in document);
+    testing.expectEqual(undefined, document.lang);
+  }
+</script>
+
+<script id=document_prototype_html_members_still_work>
+  {
+    // Moving the declaration must not change behaviour.
+    testing.expectEqual('BODY', document.body.tagName);
+    testing.expectEqual('HEAD', document.head.tagName);
+    testing.expectEqual('HTMLCollection', document.images.constructor.name);
+    testing.expectEqual('HTMLAllCollection', document.all.constructor.name);
+    testing.expectEqual('html', document.doctype.name);
+    document.dir = 'rtl';
+    testing.expectEqual('rtl', document.documentElement.getAttribute('dir'));
+  }
+</script>
+
+
+<script id=document_prototype_event_handlers>
+  {
+    // Every on* property a headed Chrome 150 owns on Document.prototype, in
+    // Chrome's own order. Measured, not taken from the spec: Chrome ships
+    // vendor-prefixed aliases (onwebkitanimationend, onwebkitfullscreenchange)
+    // and legacy ones (onsearch, onfreeze) that no current spec lists.
+    const expected = [
+      'onreadystatechange', 'onpointerlockchange', 'onpointerlockerror', 'onbeforecopy',
+      'onbeforecut', 'onbeforepaste', 'onfreeze', 'onprerenderingchange', 'onresume',
+      'onsearch', 'onvisibilitychange', 'onfullscreenchange', 'onfullscreenerror',
+      'onwebkitfullscreenchange', 'onwebkitfullscreenerror', 'onabort', 'onbeforeinput',
+      'onbeforematch', 'onbeforetoggle', 'onblur', 'oncancel', 'oncanplay', 'oncanplaythrough',
+      'onchange', 'onclick', 'onclose', 'oncommand', 'oncontentvisibilityautostatechange',
+      'oncontextlost', 'oncontextmenu', 'oncontextrestored', 'oncuechange', 'ondblclick',
+      'ondrag', 'ondragend', 'ondragenter', 'ondragleave', 'ondragover', 'ondragstart',
+      'ondrop', 'ondurationchange', 'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata',
+      'oninput', 'oninvalid', 'onkeydown', 'onkeypress', 'onkeyup', 'onload', 'onloadeddata',
+      'onloadedmetadata', 'onloadstart', 'onmousedown', 'onmouseenter', 'onmouseleave',
+      'onmousemove', 'onmouseout', 'onmouseover', 'onmouseup', 'onmousewheel', 'onpause',
+      'onplay', 'onplaying', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
+      'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect',
+      'onslotchange', 'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
+      'onvolumechange', 'onwaiting', 'onwebkitanimationend', 'onwebkitanimationiteration',
+      'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel', 'onauxclick',
+      'ongotpointercapture', 'onlostpointercapture', 'onpointerdown', 'onpointermove',
+      'onpointerup', 'onpointercancel', 'onpointerover', 'onpointerout', 'onpointerenter',
+      'onpointerleave', 'onselectstart', 'onselectionchange', 'onanimationcancel',
+      'onanimationend', 'onanimationiteration', 'onanimationstart', 'ontransitionrun',
+      'ontransitionstart', 'ontransitionend', 'ontransitioncancel', 'onbeforexrselect',
+      'oncopy', 'oncut', 'onpaste', 'onpointerrawupdate', 'onscrollsnapchange',
+      'onscrollsnapchanging'
+    ];
+    const own = Object.getOwnPropertyNames(Document.prototype);
+    const missing = expected.filter((name) => !own.includes(name));
+    testing.expectEqual([], missing);
+
+    // ...and only those. Touch handlers are gated on a touch-capable device:
+    // Chrome at navigator.maxTouchPoints === 0 has none of them, on Document or
+    // anywhere else, so exposing them contradicts our own maxTouchPoints.
+    testing.expectEqual(0, navigator.maxTouchPoints);
+    const surplus = own.filter((name) => name.startsWith('on') && !expected.includes(name));
+    testing.expectEqual([], surplus);
+  }
+</script>
+
+<script id=document_prototype_event_handler_roundtrip>
+  {
+    // A generated handler must behave like the hand-written ones: readable back,
+    // clearable with null, and actually invoked by dispatch.
+    testing.expectEqual(null, document.onvisibilitychange);
+    let seen = 0;
+    const fn = () => { seen++; };
+    document.onvisibilitychange = fn;
+    testing.expectEqual(fn, document.onvisibilitychange);
+    document.dispatchEvent(new Event('visibilitychange'));
+    testing.expectEqual(1, seen);
+    document.onvisibilitychange = null;
+    testing.expectEqual(null, document.onvisibilitychange);
+    document.dispatchEvent(new Event('visibilitychange'));
+    testing.expectEqual(1, seen);
+  }
+</script>
+
+<script id=document_prototype_legacy_members>
+  {
+    // The pre-HTML5 document surface. Values are what a headed Chrome 150
+    // reports on a plain, non-editable page.
+    testing.expectEqual(null, document.xmlEncoding);
+    testing.expectEqual(null, document.xmlVersion);
+    testing.expectEqual(false, document.xmlStandalone);
+    testing.expectEqual('off', document.designMode);
+    testing.expectEqual(false, document.wasDiscarded);
+    testing.expectEqual('visible', document.webkitVisibilityState);
+    testing.expectEqual(false, document.webkitHidden);
+    // Document.rootElement comes from the SVG spec: the document element, but
+    // only when it is an <svg> root. An HTML page therefore reports null.
+    testing.expectEqual(null, document.rootElement);
+    testing.expectEqual('function', typeof document.captureEvents);
+    testing.expectEqual('function', typeof document.releaseEvents);
+    testing.expectEqual('function', typeof document.clear);
+    testing.expectEqual(undefined, document.captureEvents());
+    testing.expectEqual(undefined, document.releaseEvents());
+    testing.expectEqual(undefined, document.clear());
+  }
+</script>
+
+<script id=document_prototype_design_mode>
+  {
+    // Anything that is not an ASCII-case-insensitive "on" reads back as "off".
+    for (const [set, want] of [['on', 'on'], ['ON', 'on'], ['On', 'on'], ['off', 'off'],
+                               ['OFF', 'off'], ['bogus', 'off'], ['', 'off'], [null, 'off'],
+                               [undefined, 'off'], [1, 'off']]) {
+      document.designMode = set;
+      testing.expectEqual(want, document.designMode, { desc: 'designMode = ' + set });
+    }
+    document.designMode = 'off';
+  }
+</script>
+
+<script id=document_prototype_colors>
+  {
+    // The colour properties reflect body attributes. Measured mapping:
+    // bgColor->bgcolor, fgColor->text, linkColor->link, vlinkColor->vlink,
+    // alinkColor->alink. Values pass through verbatim, no colour parsing.
+    for (const [prop, attr] of [['bgColor', 'bgcolor'], ['fgColor', 'text'],
+                                ['linkColor', 'link'], ['vlinkColor', 'vlink'],
+                                ['alinkColor', 'alink']]) {
+      document.body.removeAttribute(attr);
+      testing.expectEqual('', document[prop], { desc: prop + ' unset' });
+      document[prop] = 'lime';
+      testing.expectEqual('lime', document.body.getAttribute(attr), { desc: prop + ' -> ' + attr });
+      document.body.setAttribute(attr, '#ABCdef');
+      testing.expectEqual('#ABCdef', document[prop], { desc: prop + ' reads attribute verbatim' });
+      document.body.removeAttribute(attr);
+    }
+  }
+</script>
+
+<script id=document_prototype_commands>
+  {
+    // execCommand and the queryCommand* family. Chrome's answers were measured
+    // over a 97-name candidate list on a page with no selection and
+    // designMode off; the notable part is which names Blink refuses.
+    for (const fn of ['execCommand', 'queryCommandEnabled', 'queryCommandIndeterm',
+                      'queryCommandState', 'queryCommandSupported', 'queryCommandValue']) {
+      testing.expectEqual('function', typeof document[fn], { desc: 'document.' + fn });
+    }
+    for (const name of ['bold', 'italic', 'underline', 'strikeThrough', 'subscript',
+        'superscript', 'copy', 'cut', 'selectAll', 'insertText', 'insertHTML', 'undo',
+        'redo', 'styleWithCSS', 'useCSS', 'defaultParagraphSeparator', 'formatBlock',
+        'fontName', 'fontSize', 'foreColor', 'backColor', 'hiliteColor', 'justifyCenter',
+        'justifyFull', 'justifyLeft', 'justifyNone', 'justifyRight', 'indent', 'outdent',
+        'createLink', 'unlink', 'removeFormat', 'insertOrderedList', 'insertUnorderedList',
+        'insertHorizontalRule', 'insertImage', 'insertLineBreak', 'insertParagraph',
+        'insertNewlineInQuotedContent', 'delete', 'forwardDelete', 'transpose', 'print',
+        'pasteAndMatchStyle', 'unselect', 'FontSizeDelta']) {
+      testing.expectEqual(true, document.queryCommandSupported(name), { desc: name + ' supported' });
+    }
+    // ...and the names Chrome does not implement, including paste (blocked) and
+    // the Gecko-only editing toggles.
+    for (const name of ['paste', 'heading', 'contentReadOnly', 'enableObjectResizing',
+        'enableInlineTableEditing', 'enableAbsolutePositionEditing', 'increaseFontSize',
+        'decreaseFontSize', 'insertBrOnReturn', 'moveDown', 'selectWord', 'setMark',
+        'scrollPageForward', 'toggleBold', 'yank', 'AlignCenter', 'DeleteBackward',
+        'nosuchcommandxyz', '']) {
+      testing.expectEqual(false, document.queryCommandSupported(name), { desc: name + ' unsupported' });
+    }
+    // Matching is ASCII case-insensitive.
+    testing.expectEqual(true, document.queryCommandSupported('BOLD'));
+    testing.expectEqual(true, document.queryCommandSupported('SelectAll'));
+
+    // With nothing selected and designMode off, only these are enabled, and
+    // execCommand agrees with queryCommandEnabled.
+    const enabled = ['defaultParagraphSeparator', 'print', 'selectAll', 'styleWithCSS', 'useCSS'];
+    for (const name of enabled) {
+      testing.expectEqual(true, document.queryCommandEnabled(name), { desc: name + ' enabled' });
+      testing.expectEqual(true, document.execCommand(name), { desc: name + ' execCommand' });
+    }
+    for (const name of ['bold', 'italic', 'copy', 'insertText', 'undo']) {
+      testing.expectEqual(false, document.queryCommandEnabled(name), { desc: name + ' not enabled' });
+      testing.expectEqual(false, document.execCommand(name), { desc: name + ' execCommand' });
+    }
+
+    // queryCommandState and queryCommandIndeterm are false throughout, and
+    // queryCommandValue is "" except for the boolean-state commands (which
+    // stringify their state) and defaultParagraphSeparator.
+    for (const name of ['bold', 'italic', 'copy', 'selectAll', 'nosuchcommandxyz']) {
+      testing.expectEqual(false, document.queryCommandState(name), { desc: name + ' state' });
+      testing.expectEqual(false, document.queryCommandIndeterm(name), { desc: name + ' indeterm' });
+    }
+    for (const name of ['bold', 'italic', 'underline', 'strikeThrough', 'subscript',
+                        'superscript', 'insertOrderedList', 'insertUnorderedList']) {
+      testing.expectEqual('false', document.queryCommandValue(name), { desc: name + ' value' });
+    }
+    testing.expectEqual('div', document.queryCommandValue('defaultParagraphSeparator'));
+    // Selection-dependent values (fontName, fontSize, foreColor, justify*) read
+    // as "" while nothing is selected; they only report computed values once a
+    // range exists.
+    for (const name of ['fontName', 'fontSize', 'foreColor', 'justifyCenter', 'copy',
+                        'selectAll', 'nosuchcommandxyz']) {
+      testing.expectEqual('', document.queryCommandValue(name), { desc: name + ' value' });
+    }
+
+    // A missing argument is a TypeError, not a silent false.
+    testing.expectError('TypeError', () => document.execCommand());
+  }
+</script>
+
+<script id=document_prototype_fullscreen_and_friends>
+  {
+    // The fullscreen / pointer-lock / picture-in-picture / storage-access
+    // corner of Document, all measured on a headed Chrome 150 at a secure
+    // origin. The webkit* aliases are not historical dead weight: Chrome still
+    // ships every one of them.
+    testing.expectEqual(true, document.fullscreenEnabled);
+    testing.expectEqual(false, document.fullscreen);
+    testing.expectEqual(null, document.fullscreenElement);
+    testing.expectEqual(false, document.webkitIsFullScreen);
+    testing.expectEqual(null, document.webkitCurrentFullScreenElement);
+    testing.expectEqual(true, document.webkitFullscreenEnabled);
+    testing.expectEqual(null, document.webkitFullscreenElement);
+    testing.expectEqual(true, document.pictureInPictureEnabled);
+    testing.expectEqual(null, document.pictureInPictureElement);
+    testing.expectEqual(null, document.pointerLockElement);
+    testing.expectEqual(null, document.activeViewTransition);
+    testing.expectEqual(undefined, document.exitPointerLock());
+    testing.expectEqual(undefined, document.webkitCancelFullScreen());
+    testing.expectEqual(undefined, document.webkitExitFullscreen());
+    testing.expectEqual(undefined, document.ariaNotify('hello'));
+    testing.expectEqual(0, document.getAnimations().length);
+    testing.expectEqual(true, Array.isArray(document.getAnimations()));
+    // document.customElementRegistry is the very same registry as
+    // window.customElements, not a second one.
+    testing.expectEqual(window.customElements, document.customElementRegistry);
+  }
+</script>
+
+<script id=document_prototype_timeline>
+  {
+    testing.expectEqual('object', typeof document.timeline);
+    testing.expectEqual('function', typeof window.DocumentTimeline);
+    testing.expectEqual('function', typeof window.AnimationTimeline);
+    // document.timeline is a DocumentTimeline, whose own prototype carries only
+    // `constructor`; currentTime and duration come from AnimationTimeline one
+    // rung up.
+    testing.expectEqual('DocumentTimeline', document.timeline.constructor.name);
+    testing.expectEqual('[object DocumentTimeline]', String(document.timeline));
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(DocumentTimeline.prototype));
+    testing.expectEqual(['currentTime', 'duration', 'constructor'],
+                        Object.getOwnPropertyNames(AnimationTimeline.prototype));
+    testing.expectEqual('number', typeof document.timeline.currentTime);
+    testing.expectEqual(document.timeline, document.timeline);
+    // Unlike its siblings here, DocumentTimeline is constructible.
+    testing.expectEqual(0, DocumentTimeline.length);
+    testing.expectEqual('number', typeof new DocumentTimeline().currentTime);
+  }
+</script>
+
+<script id=document_prototype_feature_policy>
+  {
+    testing.expectEqual('object', typeof document.featurePolicy);
+    testing.expectEqual('function', typeof window.FeaturePolicy);
+    // document.featurePolicy. Chrome 150 reports 82 permission-policy features
+    // at a top-level document, all of them allowed, each allowlisted to the
+    // document's own origin. The list itself is a version fingerprint, so it is
+    // reproduced in Chrome's own iteration order.
+    const fp = document.featurePolicy;
+    testing.expectEqual('FeaturePolicy', fp.constructor.name);
+    testing.expectEqual(['allowedFeatures', 'allowsFeature', 'features', 'getAllowlistForFeature', 'constructor'],
+                        Object.getOwnPropertyNames(FeaturePolicy.prototype));
+    testing.expectEqual(82, fp.features().length);
+    testing.expectEqual('geolocation', fp.features()[0]);
+    testing.expectEqual('microphone', fp.features()[81]);
+    testing.expectEqual(82, fp.allowedFeatures().length);
+    testing.expectEqual(true, fp.allowsFeature('camera'));
+    testing.expectEqual(false, fp.allowsFeature('bogus-xyz'));
+    testing.expectEqual([location.origin], fp.getAllowlistForFeature('camera'));
+    testing.expectEqual([], fp.getAllowlistForFeature('bogus-xyz'));
+    testing.expectEqual(fp, document.featurePolicy);
+  }
+</script>
+
+<script id=document_prototype_fragment_directive>
+  {
+    testing.expectEqual('object', typeof document.fragmentDirective);
+    testing.expectEqual('function', typeof window.FragmentDirective);
+    testing.expectEqual('FragmentDirective', document.fragmentDirective.constructor.name);
+    testing.expectEqual(['constructor'], Object.getOwnPropertyNames(FragmentDirective.prototype));
+    testing.expectEqual([], Object.keys(document.fragmentDirective));
+    testing.expectEqual(document.fragmentDirective, document.fragmentDirective);
+  }
+</script>
+
+<script id=document_prototype_view_transition>
+  {
+    testing.expectEqual('function', typeof document.startViewTransition);
+    testing.expectEqual('function', typeof window.ViewTransition);
+    testing.expectEqual('function', typeof window.ViewTransitionTypeSet);
+    const vt = document.startViewTransition();
+    testing.expectEqual('ViewTransition', vt.constructor.name);
+    testing.expectEqual(['finished', 'ready', 'updateCallbackDone', 'types', 'skipTransition',
+                         'transitionRoot', 'waitUntil', 'constructor'],
+                        Object.getOwnPropertyNames(ViewTransition.prototype));
+    testing.expectEqual('HTMLHtmlElement', vt.transitionRoot.constructor.name);
+    testing.expectEqual(1, vt.waitUntil.length);
+    testing.expectEqual('ViewTransitionTypeSet', vt.types.constructor.name);
+    testing.expectEqual(0, vt.types.size);
+    testing.expectEqual(['size', 'add', 'clear', 'delete', 'entries', 'forEach', 'has', 'keys',
+                         'values', 'constructor'],
+                        Object.getOwnPropertyNames(ViewTransitionTypeSet.prototype));
+    vt.types.add('slide');
+    testing.expectEqual(1, vt.types.size);
+    testing.expectEqual(true, vt.types.has('slide'));
+    testing.expectEqual(false, vt.types.has('fade'));
+    testing.expectEqual(true, vt.types.delete('slide'));
+    testing.expectEqual(false, vt.types.delete('slide'));
+    vt.types.add('a');
+    vt.types.clear();
+    testing.expectEqual(0, vt.types.size);
+    testing.expectEqual(undefined, vt.skipTransition());
+  }
+</script>
+
+<script id=document_prototype_view_transition_promises>
+  testing.onload(async () => {
+    testing.expectEqual('function', typeof document.startViewTransition);
+    // Measured: skipping a transition rejects ready with an AbortError while
+    // updateCallbackDone and finished both resolve with undefined.
+    const vt = document.startViewTransition();
+    vt.skipTransition();
+    let readyErr = null;
+    try { await vt.ready; } catch (e) { readyErr = e.name + ':' + e.message; }
+    testing.expectEqual('AbortError:Transition was skipped', readyErr);
+    testing.expectEqual(undefined, await vt.updateCallbackDone);
+    testing.expectEqual(undefined, await vt.finished);
+  });
+</script>
+
+<script id=document_prototype_caret_from_point>
+  {
+    testing.expectEqual('function', typeof document.caretRangeFromPoint);
+    testing.expectEqual('function', typeof document.caretPositionFromPoint);
+    testing.expectEqual('function', typeof window.CaretPosition);
+    // caretRangeFromPoint takes no declared arguments in Chrome and tolerates
+    // being called with none; caretPositionFromPoint declares two and requires
+    // them.
+    testing.expectEqual(0, document.caretRangeFromPoint.length);
+    testing.expectEqual(2, document.caretPositionFromPoint.length);
+    testing.expectError('TypeError', () => document.caretPositionFromPoint());
+    testing.expectEqual(['offsetNode', 'offset', 'getClientRect', 'constructor'],
+                        Object.getOwnPropertyNames(CaretPosition.prototype));
+    // Both hit-test the point and then describe a caret inside whatever they
+    // find, so they are only as good as elementFromPoint — which needs a sized
+    // box to resolve anything under our faux layout. Chrome reports a real
+    // offset into the text; we have no text metrics, so the offset is 0.
+    const target = document.getElementById('caret-target');
+    const rect = target.getBoundingClientRect();
+    const x = rect.left + 10;
+    const y = rect.top + 5;
+    testing.expectEqual(true, document.elementFromPoint(x, y) !== null);
+    const r = document.caretRangeFromPoint(x, y);
+    testing.expectEqual('Range', r.constructor.name);
+    testing.expectEqual(true, r.collapsed);
+    testing.expectEqual('#text', r.startContainer.nodeName);
+    const cp = document.caretPositionFromPoint(x, y);
+    testing.expectEqual('CaretPosition', cp.constructor.name);
+    testing.expectEqual('#text', cp.offsetNode.nodeName);
+    testing.expectEqual(0, cp.offset);
+    testing.expectEqual('DOMRect', cp.getClientRect().constructor.name);
+  }
+</script>
+
+<script id=document_prototype_illegal_constructors>
+  {
+    // Only DocumentTimeline is constructible; the rest report an illegal
+    // constructor, as Chrome does.
+    for (const name of ['FeaturePolicy', 'FragmentDirective', 'ViewTransition',
+                        'ViewTransitionTypeSet', 'CaretPosition']) {
+      testing.expectError('TypeError', () => new window[name]());
+    }
+  }
+</script>
+
+<script id=document_prototype_storage_access_promises>
+  testing.onload(async () => {
+    for (const fn of ['hasStorageAccess', 'hasUnpartitionedCookieAccess', 'requestStorageAccess',
+                      'requestStorageAccessFor', 'hasPrivateToken', 'hasRedemptionRecord',
+                      'browsingTopics', 'exitFullscreen', 'exitPictureInPicture']) {
+      testing.expectEqual('function', typeof document[fn], { desc: 'document.' + fn });
+    }
+    const settle = async (p) => {
+      try { return 'resolved:' + JSON.stringify(await p); }
+      catch (e) { return 'rejected:' + e.name; }
+    };
+    // Measured on Chrome at a top-level, same-site document: storage access is
+    // already granted, so the queries resolve true and the request resolves.
+    testing.expectEqual('resolved:true', await settle(document.hasStorageAccess()));
+    testing.expectEqual('resolved:true', await settle(document.hasUnpartitionedCookieAccess()));
+    testing.expectEqual('resolved:undefined', await settle(document.requestStorageAccess()));
+    // ...while the cross-site variant needs a permission we do not have.
+    testing.expectEqual('rejected:NotAllowedError',
+                        await settle(document.requestStorageAccessFor('https://example.com')));
+    // Private State Tokens: no issuer has ever signed for us.
+    testing.expectEqual('resolved:false', await settle(document.hasPrivateToken('https://example.com')));
+    testing.expectEqual('resolved:false', await settle(document.hasRedemptionRecord('https://example.com')));
+    // Topics: an empty list, since nothing has been observed.
+    testing.expectEqual('resolved:[]', await settle(document.browsingTopics()));
+    // Leaving a state we were never in.
+    testing.expectEqual('rejected:TypeError', await settle(document.exitFullscreen()));
+    testing.expectEqual('rejected:InvalidStateError', await settle(document.exitPictureInPicture()));
+  });
+</script>
+
+<script id=document_prototype_full_order>
+  {
+    // The whole of Document.prototype, in order. Declaration order is
+    // own-property order, and own-property order is itself a fingerprint, so
+    // this is Chrome 150's list verbatim with one documented exception:
+    // Blink emits `constructor` in the middle of the run (right after writeln,
+    // before the runtime-enabled tail), while V8 always appends it. Everything
+    // else lines up name for name.
+    const expected = [
+      'implementation', 'URL', 'documentURI', 'compatMode', 'characterSet', 'charset',
+      'inputEncoding', 'contentType', 'doctype', 'documentElement', 'xmlEncoding',
+      'xmlVersion', 'xmlStandalone', 'domain', 'referrer', 'cookie', 'lastModified',
+      'readyState', 'title', 'dir', 'body', 'head', 'images', 'embeds', 'plugins', 'links',
+      'forms', 'scripts', 'currentScript', 'defaultView', 'designMode', 'onreadystatechange',
+      'anchors', 'applets', 'fgColor', 'linkColor', 'vlinkColor', 'alinkColor', 'bgColor',
+      'all', 'scrollingElement', 'onpointerlockchange', 'onpointerlockerror', 'hidden',
+      'visibilityState', 'wasDiscarded', 'prerendering', 'featurePolicy',
+      'webkitVisibilityState', 'webkitHidden', 'onbeforecopy', 'onbeforecut', 'onbeforepaste',
+      'onfreeze', 'onprerenderingchange', 'onresume', 'onsearch', 'onvisibilitychange',
+      'timeline', 'fullscreenEnabled', 'fullscreen', 'onfullscreenchange', 'onfullscreenerror',
+      'webkitIsFullScreen', 'webkitCurrentFullScreenElement', 'webkitFullscreenEnabled',
+      'webkitFullscreenElement', 'onwebkitfullscreenchange', 'onwebkitfullscreenerror',
+      'rootElement', 'pictureInPictureEnabled', 'onabort', 'onbeforeinput', 'onbeforematch',
+      'onbeforetoggle', 'onblur', 'oncancel', 'oncanplay', 'oncanplaythrough', 'onchange',
+      'onclick', 'onclose', 'oncommand', 'oncontentvisibilityautostatechange', 'oncontextlost',
+      'oncontextmenu', 'oncontextrestored', 'oncuechange', 'ondblclick', 'ondrag', 'ondragend',
+      'ondragenter', 'ondragleave', 'ondragover', 'ondragstart', 'ondrop', 'ondurationchange',
+      'onemptied', 'onended', 'onerror', 'onfocus', 'onformdata', 'oninput', 'oninvalid',
+      'onkeydown', 'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata',
+      'onloadstart', 'onmousedown', 'onmouseenter', 'onmouseleave', 'onmousemove',
+      'onmouseout', 'onmouseover', 'onmouseup', 'onmousewheel', 'onpause', 'onplay',
+      'onplaying', 'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll',
+      'onscrollend', 'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect',
+      'onslotchange', 'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle',
+      'onvolumechange', 'onwaiting', 'onwebkitanimationend', 'onwebkitanimationiteration',
+      'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel', 'onauxclick',
+      'ongotpointercapture', 'onlostpointercapture', 'onpointerdown', 'onpointermove',
+      'onpointerup', 'onpointercancel', 'onpointerover', 'onpointerout', 'onpointerenter',
+      'onpointerleave', 'onselectstart', 'onselectionchange', 'onanimationcancel',
+      'onanimationend', 'onanimationiteration', 'onanimationstart', 'ontransitionrun',
+      'ontransitionstart', 'ontransitionend', 'ontransitioncancel', 'onbeforexrselect',
+      'oncopy', 'oncut', 'onpaste', 'children', 'firstElementChild', 'lastElementChild',
+      'childElementCount', 'activeElement', 'styleSheets', 'pointerLockElement',
+      'fullscreenElement', 'adoptedStyleSheets', 'pictureInPictureElement', 'fonts',
+      'adoptNode', 'append', 'captureEvents', 'caretPositionFromPoint', 'caretRangeFromPoint',
+      'clear', 'close', 'createAttribute', 'createAttributeNS', 'createCDATASection',
+      'createComment', 'createDocumentFragment', 'createElement', 'createElementNS',
+      'createEvent', 'createExpression', 'createNSResolver', 'createNodeIterator',
+      'createProcessingInstruction', 'createRange', 'createTextNode', 'createTreeWalker',
+      'elementFromPoint', 'elementsFromPoint', 'evaluate', 'execCommand', 'exitFullscreen',
+      'exitPictureInPicture', 'exitPointerLock', 'getAnimations', 'getElementById',
+      'getElementsByClassName', 'getElementsByName', 'getElementsByTagName',
+      'getElementsByTagNameNS', 'getSelection', 'hasFocus', 'hasStorageAccess',
+      'hasUnpartitionedCookieAccess', 'importNode', 'moveBefore', 'open', 'prepend',
+      'queryCommandEnabled', 'queryCommandIndeterm', 'queryCommandState',
+      'queryCommandSupported', 'queryCommandValue', 'querySelector', 'querySelectorAll',
+      'releaseEvents', 'replaceChildren', 'requestStorageAccess', 'requestStorageAccessFor',
+      'startViewTransition', 'webkitCancelFullScreen', 'webkitExitFullscreen', 'write',
+      'writeln', 'fragmentDirective', 'onpointerrawupdate', 'browsingTopics',
+      'hasPrivateToken', 'hasRedemptionRecord', 'activeViewTransition', 'onscrollsnapchange',
+      'onscrollsnapchanging', 'customElementRegistry', 'ariaNotify', 'constructor'
+    ];
+    testing.expectEqual(expected, Object.getOwnPropertyNames(Document.prototype));
+  }
+</script>
+
+</body>
+</html>

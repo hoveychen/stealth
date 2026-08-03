@@ -21,6 +21,10 @@ const js = @import("../js/js.zig");
 
 const DOMException = @This();
 
+// RTCError sits on top of this (Chrome roots RTCError.prototype at
+// DOMException.prototype), so DOMException is the head of a prototype chain.
+pub const _prototype_root = true;
+
 _code: Code = .none,
 _custom_name: ?[]const u8 = null,
 _custom_message: ?[]const u8 = null,
@@ -32,6 +36,20 @@ pub fn init(message: ?[]const u8, name: ?[]const u8) DOMException {
         ._code = code,
         ._custom_name = name,
         ._custom_message = message,
+    };
+}
+
+// `new DOMException(message, name)`. The strings the bridge hands over are
+// slices of a per-call scratch buffer, so they have to be copied: keeping them
+// meant the next string to cross the bridge -- from any call at all, a
+// `new CustomEvent('yy')` was enough -- overwrote the message in place.
+// init() itself takes its strings from Zig callers, which pass literals, so it
+// stays as it is.
+pub fn constructor(message: ?[]const u8, name: ?[]const u8, exec: *const js.Execution) !DOMException {
+    return .{
+        ._code = if (name) |n| Code.fromName(n) else .none,
+        ._custom_name = if (name) |n| try exec.dupeString(n) else null,
+        ._custom_message = if (message) |m| try exec.dupeString(m) else null,
     };
 }
 
@@ -163,6 +181,13 @@ pub fn toString(self: *const DOMException, exec: *js.Execution) ![]const u8 {
             else => break :blk self.getMessage(),
         }
     };
+    // DOMException does not define its own toString — it inherits
+    // Error.prototype.toString, which drops the separator when the message is
+    // empty. Measured on Chrome 150: String(new RTCError({errorDetail: ...}))
+    // is "OperationError", not "OperationError: ".
+    if (msg.len == 0) {
+        return self.getName();
+    }
     return std.fmt.bufPrint(exec.buf, "{s}: {s}", .{ self.getName(), msg }) catch return msg;
 }
 
@@ -251,7 +276,7 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(DOMException.init, .{});
+    pub const constructor = bridge.constructor(DOMException.constructor, .{});
     pub const code = bridge.accessor(DOMException.getCode, null, .{});
     pub const name = bridge.accessor(DOMException.getName, null, .{});
     pub const message = bridge.accessor(DOMException.getMessage, null, .{});

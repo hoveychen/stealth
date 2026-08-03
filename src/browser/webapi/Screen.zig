@@ -33,9 +33,25 @@ pub const Proto = EventTarget;
 
 _proto: *EventTarget,
 _orientation: ?*Orientation = null,
+_on_change: ?js.Function.Global = null,
 
 pub fn asEventTarget(self: *Screen) *EventTarget {
     return self._proto;
+}
+
+// Nothing ever fires a change event — the screen doesn't move — but the
+// handler has to exist: it is on Chrome's Screen.prototype, and a script that
+// enumerates the prototype would notice it missing.
+pub fn getOnChange(self: *Screen) ?js.Function.Global {
+    return self._on_change;
+}
+
+pub fn setOnChange(self: *Screen, listener: ?js.Function) !void {
+    if (listener) |listen| {
+        self._on_change = try listen.persistWithThis(self);
+    } else {
+        self._on_change = null;
+    }
 }
 
 pub fn getOrientation(self: *Screen, frame: *Frame) !*Orientation {
@@ -64,13 +80,22 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const width = bridge.accessor(Screen.getWidth, null, .{});
-    pub const height = bridge.accessor(Screen.getHeight, null, .{});
+    // Declaration order is Object.getOwnPropertyNames(Screen.prototype) order,
+    // and that list is itself fingerprinted — this is Chrome 150's own order.
     pub const availWidth = bridge.accessor(Screen.getWidth, null, .{});
     pub const availHeight = bridge.property(1040, .{ .template = false });
+    pub const width = bridge.accessor(Screen.getWidth, null, .{});
+    pub const height = bridge.accessor(Screen.getHeight, null, .{});
     pub const colorDepth = bridge.property(24, .{ .template = false });
     pub const pixelDepth = bridge.property(24, .{ .template = false });
+    // The usable area starts at the left edge and below the menu bar, which is
+    // the 40px that separates height from availHeight.
+    pub const availLeft = bridge.property(0, .{ .template = false });
+    pub const availTop = bridge.property(40, .{ .template = false });
     pub const orientation = bridge.accessor(Screen.getOrientation, null, .{});
+    pub const onchange = bridge.accessor(Screen.getOnChange, Screen.setOnChange, .{});
+    // One display. A second one would be extra entropy, not less.
+    pub const isExtended = bridge.property(false, .{ .template = false });
 };
 
 pub const Orientation = struct {

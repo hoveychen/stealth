@@ -60,6 +60,77 @@ const text_path_spacing_entries = [_]Entry{
     .{ .keyword = "auto", .value = 1 },
     .{ .keyword = "exact", .value = 2 },
 };
+// The filter primitive enumerations. Values are SVGFE*Element's own
+// SVG_* constants, measured on Chrome 150.
+const blend_mode_entries = [_]Entry{
+    .{ .keyword = "normal", .value = 1 },
+    .{ .keyword = "multiply", .value = 2 },
+    .{ .keyword = "screen", .value = 3 },
+    .{ .keyword = "darken", .value = 4 },
+    .{ .keyword = "lighten", .value = 5 },
+    .{ .keyword = "overlay", .value = 6 },
+    .{ .keyword = "color-dodge", .value = 7 },
+    .{ .keyword = "color-burn", .value = 8 },
+    .{ .keyword = "hard-light", .value = 9 },
+    .{ .keyword = "soft-light", .value = 10 },
+    .{ .keyword = "difference", .value = 11 },
+    .{ .keyword = "exclusion", .value = 12 },
+    .{ .keyword = "hue", .value = 13 },
+    .{ .keyword = "saturation", .value = 14 },
+    .{ .keyword = "color", .value = 15 },
+    .{ .keyword = "luminosity", .value = 16 },
+};
+const composite_operator_entries = [_]Entry{
+    .{ .keyword = "over", .value = 1 },
+    .{ .keyword = "in", .value = 2 },
+    .{ .keyword = "out", .value = 3 },
+    .{ .keyword = "atop", .value = 4 },
+    .{ .keyword = "xor", .value = 5 },
+    .{ .keyword = "arithmetic", .value = 6 },
+};
+const morphology_operator_entries = [_]Entry{
+    .{ .keyword = "erode", .value = 1 },
+    .{ .keyword = "dilate", .value = 2 },
+};
+const transfer_function_entries = [_]Entry{
+    .{ .keyword = "identity", .value = 1 },
+    .{ .keyword = "table", .value = 2 },
+    .{ .keyword = "discrete", .value = 3 },
+    .{ .keyword = "linear", .value = 4 },
+    .{ .keyword = "gamma", .value = 5 },
+};
+const color_matrix_entries = [_]Entry{
+    .{ .keyword = "matrix", .value = 1 },
+    .{ .keyword = "saturate", .value = 2 },
+    .{ .keyword = "hueRotate", .value = 3 },
+    .{ .keyword = "luminanceToAlpha", .value = 4 },
+};
+const edge_mode_entries = [_]Entry{
+    .{ .keyword = "duplicate", .value = 1 },
+    .{ .keyword = "wrap", .value = 2 },
+    .{ .keyword = "none", .value = 3 },
+};
+const turbulence_type_entries = [_]Entry{
+    .{ .keyword = "fractalNoise", .value = 1 },
+    .{ .keyword = "turbulence", .value = 2 },
+};
+const stitch_entries = [_]Entry{
+    .{ .keyword = "stitch", .value = 1 },
+    .{ .keyword = "noStitch", .value = 2 },
+};
+// A marker's orient. Measured on Chrome 150: "auto" is AUTO(1),
+// "auto-start-reverse" reports UNKNOWN(0) because the IDL has no value for
+// it, and everything else — including a malformed value — is ANGLE(2).
+const marker_orient_entries = [_]Entry{
+    .{ .keyword = "auto", .value = 1 },
+    .{ .keyword = "auto-start-reverse", .value = 0 },
+};
+const channel_entries = [_]Entry{
+    .{ .keyword = "R", .value = 1 },
+    .{ .keyword = "G", .value = 2 },
+    .{ .keyword = "B", .value = 3 },
+    .{ .keyword = "A", .value = 4 },
+};
 
 pub const Kind = enum {
     clip_path_units,
@@ -73,6 +144,19 @@ pub const Kind = enum {
     length_adjust,
     text_path_method,
     text_path_spacing,
+    filter_units,
+    primitive_units,
+    blend_mode,
+    composite_operator,
+    morphology_operator,
+    displacement_x_channel,
+    displacement_y_channel,
+    transfer_function_type,
+    color_matrix_type,
+    convolve_edge_mode,
+    turbulence_type,
+    turbulence_stitch_tiles,
+    marker_orient,
 
     fn attributeName(self: Kind) lp.String {
         return switch (self) {
@@ -87,6 +171,16 @@ pub const Kind = enum {
             .length_adjust => .wrap("lengthAdjust"),
             .text_path_method => .wrap("method"),
             .text_path_spacing => .wrap("spacing"),
+            .filter_units => .wrap("filterUnits"),
+            .primitive_units => .wrap("primitiveUnits"),
+            .blend_mode => .wrap("mode"),
+            .composite_operator, .morphology_operator => .wrap("operator"),
+            .displacement_x_channel => .wrap("xChannelSelector"),
+            .displacement_y_channel => .wrap("yChannelSelector"),
+            .transfer_function_type, .color_matrix_type, .turbulence_type => .wrap("type"),
+            .convolve_edge_mode => .wrap("edgeMode"),
+            .marker_orient => .wrap("orient"),
+            .turbulence_stitch_tiles => .wrap("stitchTiles"),
         };
     }
 
@@ -97,6 +191,16 @@ pub const Kind = enum {
             .length_adjust => &length_adjust_entries,
             .text_path_method => &text_path_method_entries,
             .text_path_spacing => &text_path_spacing_entries,
+            .blend_mode => &blend_mode_entries,
+            .composite_operator => &composite_operator_entries,
+            .morphology_operator => &morphology_operator_entries,
+            .displacement_x_channel, .displacement_y_channel => &channel_entries,
+            .transfer_function_type => &transfer_function_entries,
+            .color_matrix_type => &color_matrix_entries,
+            .convolve_edge_mode => &edge_mode_entries,
+            .turbulence_type => &turbulence_type_entries,
+            .turbulence_stitch_tiles => &stitch_entries,
+            .marker_orient => &marker_orient_entries,
             else => &unit_entries,
         };
     }
@@ -109,7 +213,15 @@ pub const Kind = enum {
             .spread_method,
             .length_adjust,
             .text_path_method,
+            .primitive_units,
+            .blend_mode,
+            .composite_operator,
+            .morphology_operator,
+            .transfer_function_type,
+            .color_matrix_type,
+            .convolve_edge_mode,
             => 1,
+            .displacement_x_channel, .displacement_y_channel => 4,
             else => 2,
         };
     }

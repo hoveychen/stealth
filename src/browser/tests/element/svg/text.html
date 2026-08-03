@@ -28,60 +28,132 @@
 }
 </script>
 
-<!-- This block asserts our deterministic fallback metrics; real browsers
-     shape text and produce different numbers, so it is not expected to pass
-     there. The other blocks are browser-comparable. -->
-<script id=fallbackMetrics>
+<!-- Chrome's own answers, read off headed Chrome, with our departures called
+     out where they exist. The default SVG font is serif, not sans-serif, and
+     ours is the same measured table the canvas uses. -->
+<script id=metrics>
 {
   const text = $('#text');
   // Characters are UTF-16 code units, like DOM strings: the emoji counts as
   // two, and addressing either of its halves measures the full glyph.
   testing.expectEqual(7, text.getNumberOfChars());
-  testing.expectEqual(80, text.getComputedTextLength());
-  testing.expectEqual(60, text.getSubStringLength(0, 5));
+
+  // Chrome: 64.4375 / 44.4375 / 30.0078125. It quantises an SVG advance per
+  // font size where we scale one 100px table, which costs us ~1/256 px.
+  testing.expectEqual(64.43359375, text.getComputedTextLength());
+  testing.expectEqual(44.43359375, text.getSubStringLength(0, 5));
+  testing.expectEqual(30, text.getSubStringLength(4, 99));
   testing.expectEqual(20, text.getSubStringLength(5, 1));
   testing.expectEqual(20, text.getSubStringLength(6, 1));
-  testing.expectEqual(32, text.getSubStringLength(4, 99));
   testing.expectError('IndexSizeError', () => text.getSubStringLength(7, 1));
   testing.expectError('IndexSizeError', () => text.getSubStringLength(7, 0));
   testing.expectEqual(2, $('#tspan').getNumberOfChars());
   testing.expectEqual(20, $('#tspan').getComputedTextLength());
-  testing.expectEqual(9.6, $('#invalidFont').getComputedTextLength());
 
-  // Chrome answers an absent textLength with the computed (shaped) text
-  // length; without shaping we default to 0.
+  // A negative font-size is invalid and drops to the initial 16px. Exactly
+  // Chrome's number.
+  testing.expectEqual(11.5546875, $('#invalidFont').getComputedTextLength());
+
+  // Chrome answers an absent textLength with the computed text length; we
+  // still report the attribute's default.
   testing.expectEqual(0, text.textLength.baseVal.value);
 
-  // Browsers return the shaped text box here; our text geometry is
-  // unmeasured, so like the other unresolved elements getBBox answers an
-  // empty box rather than an error.
-  testing.expectEqual(0, text.getBBox().width);
+  // The advance box, standing on the font's ascent and descent at the text's
+  // origin. Chrome grows this by the ink an Apple Color Emoji bitmap spills
+  // past its advance and above its ascent — it answers x 0, y -18.5, width
+  // 65.4375, height 23.5 — which we do not model.
+  const box = text.getBBox();
+  testing.expectEqual(0, box.x);
+  testing.expectEqual(-18, box.y);
+  testing.expectEqual(64.43359375, box.width);
+  testing.expectEqual(23, box.height);
 }
 </script>
 
-<!-- Same deterministic fallback metrics as above: real browsers shape text and
-     answer with different numbers. -->
 <script id=extentOfChar>
 {
   const text = $('#text');
   testing.expectEqual('function', typeof text.getExtentOfChar);
 
-  // x is how far into the string the character starts, width is its own
-  // advance, and the cell is one em tall sitting on the text's own origin.
+  // x is where the character starts in the element's user space, width is its
+  // own advance, and the cell is the font's ascent plus descent tall. Chrome
+  // answers the same box to within its per-size quantisation: it says width
+  // 14.4453125 for the H and x 34.4296875 / width 10.0078125 for the o.
   testing.expectEqual(0, text.getExtentOfChar(0).x);
-  testing.expectEqual(12, text.getExtentOfChar(0).width);
-  testing.expectEqual(0, text.getExtentOfChar(0).y);
-  testing.expectEqual(20, text.getExtentOfChar(0).height);
+  testing.expectEqual(14.443359375, text.getExtentOfChar(0).width);
+  testing.expectEqual(-18, text.getExtentOfChar(0).y);
+  testing.expectEqual(23, text.getExtentOfChar(0).height);
 
-  testing.expectEqual(48, text.getExtentOfChar(4).x);
-  testing.expectEqual(12, text.getExtentOfChar(4).width);
+  testing.expectEqual(34.43359375, text.getExtentOfChar(4).x);
+  testing.expectEqual(10, text.getExtentOfChar(4).width);
 
   // Addressing either half of the surrogate pair measures the whole emoji.
-  testing.expectEqual(60, text.getExtentOfChar(5).x);
+  testing.expectEqual(44.43359375, text.getExtentOfChar(5).x);
   testing.expectEqual(20, text.getExtentOfChar(5).width);
   testing.expectEqual(20, text.getExtentOfChar(6).width);
 
   testing.expectError('IndexSizeError', () => text.getExtentOfChar(7));
+}
+</script>
+
+<!-- What CreepJS's SVG probe actually measures: a stylesheet-set font-size,
+     a stylesheet-set family, and one <text> per emoji inside a <g> whose box
+     it sums. -->
+<script id=cascadedMetrics>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const style = document.createElement('style');
+  style.textContent = '.svg-big { font-size: 200px !important }'
+    + ' .svg-mono { font-family: monospace; font-size: 20px }'
+    + ' .svg-emoji { font-family: sans-serif; font-size: 200px !important }';
+  document.head.appendChild(style);
+
+  const host = document.createElementNS(ns, 'svg');
+  document.body.appendChild(host);
+  const make = (cls, content, parent) => {
+    const el = document.createElementNS(ns, 'text');
+    el.setAttribute('class', cls);
+    el.setAttribute('x', '32');
+    el.setAttribute('y', '32');
+    el.textContent = content;
+    (parent || host).appendChild(el);
+    return el;
+  };
+
+  // A rule sets the size, so the string is measured at 200px and not at the
+  // initial 16. Chrome answers 444.3359375 too.
+  const big = make('svg-big', 'Hello');
+  testing.expectEqual(444.3359375, big.getComputedTextLength());
+
+  // …and a rule sets the family. Chrome: 60.2109375.
+  testing.expectEqual(60.205078125, make('svg-mono', 'Hello').getComputedTextLength());
+
+  // Every emoji has its own advance, which is the point: a fingerprinter
+  // counts how many *distinct* widths a set of them produces, and answering
+  // one em for all of them answers 1. Chrome, to within the per-size
+  // quantisation, says 147.3671875 / 120.4140625 / 200 / 182.03125.
+  const group = document.createElementNS(ns, 'g');
+  host.appendChild(group);
+  const emojis = ['\u{263A}', '\u{2620}', '\u{1F600}', '\u{2764}', '\u{2708}'];
+  const widths = emojis.map((e) => make('svg-emoji', e, group).getComputedTextLength());
+  testing.expectEqual('147.375,120.421875,200,182.03125,120.421875', widths.join(','));
+  testing.expectEqual(4, new Set(widths).size);
+
+  // A ZWJ sequence is one glyph, so it is one advance and not the sum of its
+  // parts. Chrome: 200.
+  testing.expectEqual(200, make('svg-emoji', '\u{1F935}\u{200D}\u{2642}\u{FE0F}').getComputedTextLength());
+
+  // The <g> unions its children's boxes, which is the call CreepJS reports as
+  // "bBox". Chrome answers x 28.875, y -152, width 209.375, height 230: the
+  // ink of the widest emoji bitmap, where we answer the advance box.
+  const box = group.getBBox();
+  testing.expectEqual(32, box.x);
+  testing.expectEqual(200, box.width);
+  testing.expectEqual(230, box.height);
+  testing.expectEqual(true, box.y < -151 && box.y > -152);
+
+  host.remove();
+  style.remove();
 }
 </script>
 

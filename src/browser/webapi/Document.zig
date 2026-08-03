@@ -38,6 +38,8 @@ const DOMImplementation = @import("DOMImplementation.zig");
 const StyleSheetList = @import("css/StyleSheetList.zig");
 const FontFaceSet = @import("css/FontFaceSet.zig");
 const Selection = @import("Selection.zig");
+const services = @import("document/services.zig");
+const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const XPathResult = @import("XPathResult.zig");
 const XPathExpression = @import("XPathExpression.zig");
 
@@ -84,6 +86,14 @@ _open_popovers: std.ArrayList(*Element) = .empty,
 _throw_on_dynamic_markup_insertion_counter: u32 = 0,
 
 _on_selectionchange: ?js.Function.Global = null,
+_design_mode: bool = false,
+// Chrome keeps whatever a script assigns to these, even on an HTML document
+// where they start out null/false.
+_xml_version: ?[]const u8 = null,
+_xml_standalone: bool = false,
+_timeline: ?*services.DocumentTimeline = null,
+_feature_policy: ?*services.FeaturePolicy = null,
+_fragment_directive: ?*services.FragmentDirective = null,
 
 pub fn getOnSelectionChange(self: *Document) ?js.Function.Global {
     return self._on_selectionchange;
@@ -94,22 +104,6 @@ pub fn setOnSelectionChange(self: *Document, listener: ?js.Function) !void {
         self._on_selectionchange = try listen.persistWithThis(self);
     } else {
         self._on_selectionchange = null;
-    }
-}
-
-// Stored in the frame's attribute-listener map (like element and ShadowRoot
-// property handlers), which the dispatch propagation path consults for any
-// event target.
-pub fn getOnClick(self: *Document, frame: *Frame) ?js.Function.Global {
-    return (self._frame orelse frame)._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = .onclick });
-}
-
-pub fn setOnClick(self: *Document, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    const owner = self._frame orelse frame;
-    if (Window.getFunctionFromSetter(setter)) |cb| {
-        try owner._event_target_attr_listeners.put(owner.arena, .{ .target = self.asEventTarget(), .handler = .onclick }, cb);
-    } else {
-        _ = owner._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = .onclick });
     }
 }
 
@@ -730,8 +724,8 @@ pub fn getActiveElement(self: *Document) ?*Element {
     }
 
     // Default to body if it exists
-    if (self.is(HTMLDocument)) |html_doc| {
-        if (html_doc.getBody()) |body| {
+    if (self.is(HTMLDocument) != null) {
+        if (self.getBody()) |body| {
             return body.asElement();
         }
     }
@@ -949,6 +943,513 @@ pub fn getDocType(self: *Document) ?*Node {
         }
     }
     return null;
+}
+
+// The members below come from the HTML spec's partial interface Document. They
+// belong on Document.prototype, not on HTMLDocument.prototype: a headed Chrome
+// 150 carries nothing but `constructor` on HTMLDocument.prototype. Detectors
+// enumerate Document.prototype one level deep, so a member parked one rung too
+// low reads as missing.
+
+// The head is the first html-namespace child of the document element whose
+// local name is head, whatever its Zig element type (e.g. a createElementNS
+// "blah:head" is an HTMLUnknownElement but still qualifies).
+pub fn getHead(self: *Document) ?*Element {
+    const doc_el = self.getDocumentElement() orelse return null;
+    var it = doc_el.asNode().childrenIterator();
+    while (it.next()) |node| {
+        const el = node.is(Element) orelse continue;
+        if (el._namespace == .html and std.mem.eql(u8, el.getLocalName(), "head")) {
+            return el;
+        }
+    }
+    return null;
+}
+
+pub fn getBody(self: *Document) ?*Element.Html.Body {
+    const document_element = self.getDocumentElement() orelse return null;
+    return findBodyForDoc(document_element);
+}
+
+pub fn setBody(self: *Document, html: []const u8, frame: *Frame) !void {
+    const document_element = self.getDocumentElement() orelse return error.HierarchyError;
+
+    // Build a fresh <body> holding the parsed HTML as its children. Fragment
+    // parsing strips any <html>/<body>/<head> wrappers the author included.
+    const new_body_node = try Frame.node_factory.createElementNS(frame, .html, "body", null);
+    if (html.len > 0) {
+        try Frame.parse.htmlAsChildren(frame, new_body_node, html);
+    }
+
+    const document_node = document_element.asNode();
+    if (findBodyForDoc(document_element)) |current| {
+        _ = try document_node.replaceChild(new_body_node, current.asNode(), frame);
+    } else {
+        _ = try document_node.appendChild(new_body_node, frame);
+    }
+}
+
+fn findBodyForDoc(document_element: *Element) ?*Element.Html.Body {
+    var child = document_element.asNode().firstChild();
+    while (child) |node| {
+        if (node.is(Element.Html.Body)) |body| {
+            return body;
+        }
+        child = node.nextSibling();
+    }
+    return null;
+}
+
+pub fn getTitle(self: *Document, frame: *Frame) ![]const u8 {
+    // Search the entire document for the first <title> element
+    const root = self.getDocumentElement() orelse return "";
+    const title_element = blk: {
+        var walker = @import("TreeWalker.zig").Full.init(root.asNode(), .{});
+        while (walker.next()) |node| {
+            if (node.is(Element.Html.Title)) |title| {
+                break :blk title;
+            }
+        }
+        return "";
+    };
+
+    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+    try title_element.asNode().getTextContent(&buf.writer);
+    const text = buf.written();
+
+    if (text.len == 0) {
+        return "";
+    }
+
+    var started = false;
+    var in_whitespace = false;
+    var result: std.ArrayList(u8) = .empty;
+    try result.ensureTotalCapacity(frame.local_arena, text.len);
+
+    for (text) |c| {
+        const is_ascii_ws = c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == '\x0C';
+
+        if (is_ascii_ws) {
+            if (started) {
+                in_whitespace = true;
+            }
+        } else {
+            if (in_whitespace) {
+                result.appendAssumeCapacity(' ');
+                in_whitespace = false;
+            }
+            result.appendAssumeCapacity(c);
+            started = true;
+        }
+    }
+
+    return result.items;
+}
+
+pub fn setTitle(self: *Document, title: []const u8, frame: *Frame) !void {
+    const head = self.getHead() orelse return;
+
+    // Find existing title element in head
+    var it = head.asNode().childrenIterator();
+    while (it.next()) |node| {
+        if (node.is(Element.Html.Title)) |title_element| {
+            // Replace children, but don't create text node for empty string
+            if (title.len == 0) {
+                return title_element.asElement().replaceChildren(&.{}, frame);
+            } else {
+                return title_element.asElement().replaceChildren(&.{.{ .text = title }}, frame);
+            }
+        }
+    }
+
+    // No title element found, create one
+    const title_node = try Frame.node_factory.createElementNS(frame, .html, "title", null);
+    const title_element = title_node.as(Element);
+
+    // Only add text if non-empty
+    if (title.len > 0) {
+        try title_element.replaceChildren(&.{.{ .text = title }}, frame);
+    }
+
+    _ = try head.asNode().appendChild(title_node, frame);
+}
+
+pub fn getImages(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .img, frame);
+}
+
+pub fn getScripts(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .script, frame);
+}
+
+pub fn getLinks(self: *Document, frame: *Frame) !collections.NodeLive(.links) {
+    return collections.NodeLive(.links).init(self.asNode(), {}, frame);
+}
+
+pub fn getAnchors(self: *Document, frame: *Frame) !collections.NodeLive(.anchors) {
+    return collections.NodeLive(.anchors).init(self.asNode(), {}, frame);
+}
+
+pub fn getForms(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .form, frame);
+}
+
+pub fn getEmbeds(self: *Document, frame: *Frame) !collections.NodeLive(.tag) {
+    return collections.NodeLive(.tag).init(self.asNode(), .embed, frame);
+}
+
+pub fn getApplets(_: *const Document, frame: *Frame) !*collections.HTMLCollection {
+    return frame._factory.create(collections.HTMLCollection{ ._data = .empty });
+}
+
+pub fn getCurrentScript(self: *const Document) ?*Element.Html.Script {
+    return self._current_script;
+}
+
+pub fn getDir(self: *Document) []const u8 {
+    const el = self.getDocumentElement() orelse return "";
+    const html = el.is(Element.Html) orelse return "";
+    return html.getDir();
+}
+
+pub fn setDir(self: *Document, value: []const u8, frame: *Frame) !void {
+    const el = self.getDocumentElement() orelse return;
+    const html = el.is(Element.Html) orelse return;
+    try html.setDir(value, frame);
+}
+
+pub fn getAll(self: *Document, frame: *Frame) !*collections.HTMLAllCollection {
+    return frame._factory.create(collections.HTMLAllCollection.init(self.asNode(), frame));
+}
+
+// We do not retain the XML declaration a document was parsed from, so this is
+// always null. That is what Chrome reports for an HTML document; for an XML one
+// it would echo the declared encoding.
+pub fn getXmlEncoding(_: *const Document) ?[]const u8 {
+    return null;
+}
+
+pub fn getXmlVersion(self: *const Document) ?[]const u8 {
+    if (self._xml_version) |v| {
+        return v;
+    }
+    return if (self._type == .xml) "1.0" else null;
+}
+
+pub fn setXmlVersion(self: *Document, value: ?[]const u8, frame: *Frame) !void {
+    self._xml_version = if (value) |v| try frame.arena.dupe(u8, v) else null;
+}
+
+pub fn getXmlStandalone(self: *const Document) bool {
+    return self._xml_standalone;
+}
+
+pub fn setXmlStandalone(self: *Document, value: bool) void {
+    self._xml_standalone = value;
+}
+
+pub fn getDesignMode(self: *const Document) []const u8 {
+    return if (self._design_mode) "on" else "off";
+}
+
+// Anything that is not an ASCII case-insensitive "on" turns the mode off, which
+// is how Chrome normalises it: "bogus", "", null and 1 all read back as "off".
+pub fn setDesignMode(self: *Document, value: []const u8) void {
+    self._design_mode = std.ascii.eqlIgnoreCase(value, "on");
+}
+
+pub fn getWasDiscarded(_: *const Document) bool {
+    return false;
+}
+
+// From the SVG spec, not HTML: the document element, but only when it is an
+// <svg> root. An HTML page reports null, and so does an XML document whose root
+// is anything else.
+pub fn getRootElement(self: *Document) ?*Element {
+    const el = self.getDocumentElement() orelse return null;
+    if (el._namespace != .svg or !std.mem.eql(u8, el.getLocalName(), "svg")) {
+        return null;
+    }
+    return el;
+}
+
+// document.captureEvents / releaseEvents / clear: Netscape-era no-ops that
+// Chrome still exposes and that return undefined.
+pub fn captureEvents(_: *const Document) void {}
+pub fn releaseEvents(_: *const Document) void {}
+pub fn clear(_: *const Document) void {}
+
+// The editing commands. What a page can observe without a selection is a fixed
+// table, and this is that table as measured on a headed Chrome 150 over a
+// 97-name candidate list: which names Blink admits to knowing, which of those
+// are enabled with nothing selected and designMode off, and what
+// queryCommandValue answers.
+//
+// Names are matched ASCII case-insensitively ("BOLD" and "SelectAll" resolve),
+// so the keys here are lowercase and lookups fold the input.
+const EditingCommand = struct {
+    // Enabled with no selection and designMode off. execCommand agrees with
+    // queryCommandEnabled, so it returns this too.
+    enabled: bool = false,
+    // queryCommandValue. The boolean-state commands stringify their state, so
+    // they read "false" rather than "".
+    value: []const u8 = "",
+};
+
+const editing_commands = std.StaticStringMap(EditingCommand).initComptime(.{
+    .{ "backcolor", EditingCommand{} },
+    .{ "bold", EditingCommand{ .value = "false" } },
+    .{ "copy", EditingCommand{} },
+    .{ "createlink", EditingCommand{} },
+    .{ "cut", EditingCommand{} },
+    .{ "defaultparagraphseparator", EditingCommand{ .enabled = true, .value = "div" } },
+    .{ "delete", EditingCommand{} },
+    .{ "fontname", EditingCommand{} },
+    .{ "fontsize", EditingCommand{} },
+    .{ "fontsizedelta", EditingCommand{} },
+    .{ "forecolor", EditingCommand{} },
+    .{ "formatblock", EditingCommand{} },
+    .{ "forwarddelete", EditingCommand{} },
+    .{ "hilitecolor", EditingCommand{} },
+    .{ "indent", EditingCommand{} },
+    .{ "inserthorizontalrule", EditingCommand{} },
+    .{ "inserthtml", EditingCommand{} },
+    .{ "insertimage", EditingCommand{} },
+    .{ "insertlinebreak", EditingCommand{} },
+    .{ "insertnewlineinquotedcontent", EditingCommand{} },
+    .{ "insertorderedlist", EditingCommand{ .value = "false" } },
+    .{ "insertparagraph", EditingCommand{} },
+    .{ "inserttext", EditingCommand{} },
+    .{ "insertunorderedlist", EditingCommand{ .value = "false" } },
+    .{ "italic", EditingCommand{ .value = "false" } },
+    .{ "justifycenter", EditingCommand{} },
+    .{ "justifyfull", EditingCommand{} },
+    .{ "justifyleft", EditingCommand{} },
+    .{ "justifynone", EditingCommand{} },
+    .{ "justifyright", EditingCommand{} },
+    .{ "outdent", EditingCommand{} },
+    .{ "pasteandmatchstyle", EditingCommand{} },
+    .{ "print", EditingCommand{ .enabled = true } },
+    .{ "redo", EditingCommand{} },
+    .{ "removeformat", EditingCommand{} },
+    .{ "selectall", EditingCommand{ .enabled = true } },
+    .{ "strikethrough", EditingCommand{ .value = "false" } },
+    .{ "stylewithcss", EditingCommand{ .enabled = true } },
+    .{ "subscript", EditingCommand{ .value = "false" } },
+    .{ "superscript", EditingCommand{ .value = "false" } },
+    .{ "transpose", EditingCommand{} },
+    .{ "underline", EditingCommand{ .value = "false" } },
+    .{ "undo", EditingCommand{} },
+    .{ "unlink", EditingCommand{} },
+    .{ "unselect", EditingCommand{} },
+    .{ "usecss", EditingCommand{ .enabled = true } },
+});
+
+fn lookupCommand(name: []const u8, buf: []u8) ?EditingCommand {
+    if (name.len > buf.len) {
+        return null;
+    }
+    return editing_commands.get(std.ascii.lowerString(buf[0..name.len], name));
+}
+
+// Blink refuses "paste" (a clipboard read the page may not have) and never
+// implemented the Gecko-only toggles (heading, contentReadOnly,
+// enableObjectResizing, ...), so those report unsupported here as well.
+pub fn queryCommandSupported(_: *const Document, name: []const u8) bool {
+    var buf: [64]u8 = undefined;
+    return lookupCommand(name, &buf) != null;
+}
+
+pub fn queryCommandEnabled(_: *const Document, name: []const u8) bool {
+    var buf: [64]u8 = undefined;
+    const command = lookupCommand(name, &buf) orelse return false;
+    return command.enabled;
+}
+
+// Nothing here is ever in an indeterminate or "on" state: with no editable
+// selection Chrome answers false for every command, known or not.
+pub fn queryCommandIndeterm(_: *const Document, _: []const u8) bool {
+    return false;
+}
+
+pub fn queryCommandState(_: *const Document, _: []const u8) bool {
+    return false;
+}
+
+// The selection-dependent commands (fontName, fontSize, foreColor, justify*)
+// read "" while nothing is selected; they only report computed values once a
+// range exists, which is why they carry no value in the table above.
+pub fn queryCommandValue(_: *const Document, name: []const u8) []const u8 {
+    var buf: [64]u8 = undefined;
+    const command = lookupCommand(name, &buf) orelse return "";
+    return command.value;
+}
+
+// The commands that are enabled without a selection either set a
+// document-level editing preference (styleWithCSS, useCSS,
+// defaultParagraphSeparator) or belong to the embedder (print). We report the
+// same answer Chrome does but carry out no action.
+pub fn execCommand(self: *const Document, name: []const u8) bool {
+    return self.queryCommandEnabled(name);
+}
+
+// Fullscreen, pointer lock and picture-in-picture. None of the three can ever
+// be entered here — there is no window to fill, no cursor to capture and no
+// video pipeline — so every element query answers null and every exit is a
+// no-op. Chrome nonetheless advertises the capabilities as available
+// (fullscreenEnabled and pictureInPictureEnabled are both true on a normal
+// page), and reporting false would be a signal of its own, so the flags are
+// true and the state is empty. The webkit* spellings are still shipped by
+// Chrome, aliases and all.
+pub fn getFullscreenEnabled(_: *const Document) bool {
+    return true;
+}
+
+pub fn getFullscreen(_: *const Document) bool {
+    return false;
+}
+
+pub fn getFullscreenElement(_: *const Document) ?*Element {
+    return null;
+}
+
+pub fn getPictureInPictureEnabled(_: *const Document) bool {
+    return true;
+}
+
+pub fn exitPointerLock(_: *const Document) void {}
+pub fn webkitCancelFullScreen(_: *const Document) void {}
+pub fn webkitExitFullscreen(_: *const Document) void {}
+
+// Measured rejection shapes: exiting fullscreen when the document is not
+// active is a plain TypeError, while leaving picture-in-picture we never
+// entered is an InvalidStateError.
+pub fn exitFullscreen(_: *const Document, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .type_error = "Document not active" });
+}
+
+pub fn exitPictureInPicture(_: *const Document, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidStateError } });
+}
+
+// Document-wide animations. Element.getAnimations already reports none; there
+// is nothing on the document either.
+pub fn getAnimations(_: *const Document) []*@import("animation/Animation.zig") {
+    return &.{};
+}
+
+// The Storage Access API. A top-level, same-site document already has
+// unpartitioned cookie access, so Chrome resolves both queries true and the
+// request resolves immediately; asking on behalf of another site needs a
+// permission grant we have no way to hold, and Chrome rejects that with
+// NotAllowedError.
+pub fn hasStorageAccess(_: *const Document, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(true);
+}
+
+pub fn requestStorageAccess(_: *const Document, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+pub fn requestStorageAccessFor(_: *const Document, _: []const u8, exec: *const js.Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotAllowedError } });
+}
+
+// Topics and Private State Tokens: we join no interest groups, observe no
+// topics and hold no tokens, which is the same answer a fresh Chrome profile
+// gives.
+pub fn browsingTopics(_: *const Document, _: ?js.Object, exec: *const js.Execution) !js.Promise {
+    const empty: []const js.Object = &.{};
+    return exec.js.local.?.resolvePromise(empty);
+}
+
+pub fn hasPrivateToken(_: *const Document, _: []const u8, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(false);
+}
+
+pub fn hasRedemptionRecord(_: *const Document, _: []const u8, exec: *const js.Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(false);
+}
+
+// Announces a message to assistive technology. There is none listening.
+pub fn ariaNotify(_: *const Document, _: []const u8, _: ?js.Object) void {}
+
+pub fn getTimeline(self: *Document, frame: *Frame) !*services.DocumentTimeline {
+    if (self._timeline) |existing| {
+        return existing;
+    }
+    const created = try services.DocumentTimeline.init(frame);
+    self._timeline = created;
+    return created;
+}
+
+pub fn getFeaturePolicy(self: *Document, frame: *Frame) !*services.FeaturePolicy {
+    return documentService(services.FeaturePolicy, &self._feature_policy, frame);
+}
+
+pub fn getFragmentDirective(self: *Document, frame: *Frame) !*services.FragmentDirective {
+    return documentService(services.FragmentDirective, &self._fragment_directive, frame);
+}
+
+// Created on first read and handed back unchanged after that, so identity
+// holds: Chrome's document.timeline === document.timeline.
+fn documentService(comptime T: type, slot: *?*T, frame: *Frame) !*T {
+    if (slot.*) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(T{});
+    slot.* = created;
+    return created;
+}
+
+// A transition that is already over — see ViewTransition for why. Chrome scopes
+// a document-wide transition to the document element, which is what it reports
+// as transitionRoot.
+pub fn startViewTransition(self: *Document, _: ?js.Object, frame: *Frame) !*services.ViewTransition {
+    return services.ViewTransition.init(self.getDocumentElement(), frame);
+}
+
+// Non-null only while a transition is running, and ours never are.
+pub fn getActiveViewTransition(_: *const Document) ?*services.ViewTransition {
+    return null;
+}
+
+// The same registry as window.customElements, not a second one (measured:
+// document.customElementRegistry === window.customElements).
+pub fn getCustomElementRegistry(self: *const Document, frame: *Frame) ?*CustomElementRegistry {
+    const owner = self._frame orelse frame;
+    return owner.window.getCustomElements();
+}
+
+// caretRangeFromPoint / caretPositionFromPoint. Both hit-test a viewport point
+// and describe where a caret would land inside the node found there. We have no
+// text layout, so the offset is always 0 — the node is real, the position within
+// it is not something we can measure.
+pub fn caretRangeFromPoint(self: *Document, x: ?f64, y: ?f64, frame: *Frame) !?*Range {
+    const node = try self.caretNodeFromPoint(x orelse 0, y orelse 0, frame) orelse return null;
+    const range = try Range.initIn(self.asNode(), frame);
+    try range.setStart(node, 0);
+    try range.setEnd(node, 0);
+    return range;
+}
+
+pub fn caretPositionFromPoint(self: *Document, x: f64, y: f64, frame: *Frame) !?*services.CaretPosition {
+    const node = try self.caretNodeFromPoint(x, y, frame) orelse return null;
+    return services.CaretPosition.init(node, 0, frame);
+}
+
+// Chrome reports the text node under the point rather than its element, so
+// descend into the first text child when there is one.
+fn caretNodeFromPoint(self: *Document, x: f64, y: f64, frame: *Frame) !?*Node {
+    const element = try self.elementFromPoint(x, y, frame) orelse return null;
+    var child = element.asNode().firstChild();
+    while (child) |node| {
+        if (node._type == .cdata) {
+            return node;
+        }
+        child = node.nextSibling();
+    }
+    return element.asNode();
 }
 
 // document.write is complicated and works differently based on the state of
@@ -1509,42 +2010,231 @@ pub const JsApi = struct {
         });
     }
 
-    pub const onselectionchange = bridge.accessor(Document.getOnSelectionChange, Document.setOnSelectionChange, .{});
-    pub const onclick = bridge.accessor(Document.getOnClick, Document.setOnClick, .{});
-    pub const ontouchstart = bridge.accessor(handlerAccessor(.ontouchstart).get, handlerAccessor(.ontouchstart).set, .{});
-    pub const ontouchend = bridge.accessor(handlerAccessor(.ontouchend).get, handlerAccessor(.ontouchend).set, .{});
-    pub const ontouchmove = bridge.accessor(handlerAccessor(.ontouchmove).get, handlerAccessor(.ontouchmove).set, .{});
-    pub const ontouchcancel = bridge.accessor(handlerAccessor(.ontouchcancel).get, handlerAccessor(.ontouchcancel).set, .{});
-    pub const URL = bridge.accessor(Document.getURL, null, .{});
-    pub const location = bridge.accessor(Document.getLocation, Document.setLocation, .{});
-    pub const documentURI = bridge.accessor(Document.getURL, null, .{});
-    pub const documentElement = bridge.accessor(Document.getDocumentElement, null, .{});
-    pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
-    pub const children = bridge.accessor(Document.getChildren, null, .{});
-    pub const readyState = bridge.accessor(Document.getReadyState, null, .{});
+    // Declaration order is the prototype's own-property order, so it is the
+    // order a detector sees. It mirrors a headed Chrome 150's
+    // Object.getOwnPropertyNames(Document.prototype) exactly.
     pub const implementation = bridge.accessor(Document.getImplementation, null, .{});
+    pub const URL = bridge.accessor(Document.getURL, null, .{});
+    pub const documentURI = bridge.accessor(Document.getURL, null, .{});
+    pub const compatMode = bridge.accessor(Document.getCompatMode, null, .{});
+    pub const characterSet = bridge.accessor(getCharacterSet, null, .{});
+    pub const charset = bridge.accessor(getCharacterSet, null, .{});
+    pub const inputEncoding = bridge.accessor(getCharacterSet, null, .{});
+    pub const contentType = bridge.accessor(Document.getContentType, null, .{});
+    pub const doctype = bridge.accessor(Document.getDocType, null, .{});
+    pub const documentElement = bridge.accessor(Document.getDocumentElement, null, .{});
+    pub const xmlEncoding = bridge.accessor(Document.getXmlEncoding, null, .{});
+    pub const xmlVersion = bridge.accessor(Document.getXmlVersion, Document.setXmlVersion, .{});
+    pub const xmlStandalone = bridge.accessor(Document.getXmlStandalone, Document.setXmlStandalone, .{});
+    pub const domain = bridge.accessor(Document.getDomain, Document.setDomain, .{});
+    pub const referrer = bridge.property("", .{ .template = false });
+    pub const cookie = bridge.accessor(Document.getCookie, Document.setCookie, .{});
+    pub const lastModified = bridge.accessor(Document.getLastModified, null, .{});
+    pub const readyState = bridge.accessor(Document.getReadyState, null, .{});
+    pub const title = bridge.accessor(Document.getTitle, Document.setTitle, .{ .ce_reactions = true });
+    pub const dir = bridge.accessor(Document.getDir, Document.setDir, .{ .ce_reactions = true });
+    pub const body = bridge.accessor(Document.getBody, Document.setBody, .{ .ce_reactions = true });
+    pub const head = bridge.accessor(Document.getHead, null, .{});
+    pub const images = bridge.accessor(Document.getImages, null, .{});
+    pub const embeds = bridge.accessor(Document.getEmbeds, null, .{});
+    pub const plugins = bridge.accessor(Document.getEmbeds, null, .{});
+    pub const links = bridge.accessor(Document.getLinks, null, .{});
+    pub const forms = bridge.accessor(Document.getForms, null, .{});
+    pub const scripts = bridge.accessor(Document.getScripts, null, .{});
+    pub const currentScript = bridge.accessor(Document.getCurrentScript, null, .{});
+    pub const defaultView = bridge.accessor(_defaultView, null, .{});
+    pub const designMode = bridge.accessor(Document.getDesignMode, Document.setDesignMode, .{});
+    fn _defaultView(self: *const Document) ?*Window {
+        const frame = self._frame orelse return null;
+        return frame.window;
+    }
+    pub const onreadystatechange = bridge.accessor(handlerAccessor(.onreadystatechange).get, handlerAccessor(.onreadystatechange).set, .{});
+    pub const anchors = bridge.accessor(Document.getAnchors, null, .{});
+    pub const applets = bridge.accessor(Document.getApplets, null, .{});
+    pub const fgColor = bridge.accessor(colorAccessor("text").get, colorAccessor("text").set, .{});
+    pub const linkColor = bridge.accessor(colorAccessor("link").get, colorAccessor("link").set, .{});
+    pub const vlinkColor = bridge.accessor(colorAccessor("vlink").get, colorAccessor("vlink").set, .{});
+    pub const alinkColor = bridge.accessor(colorAccessor("alink").get, colorAccessor("alink").set, .{});
+    pub const bgColor = bridge.accessor(colorAccessor("bgcolor").get, colorAccessor("bgcolor").set, .{});
+    pub const all = bridge.accessor(Document.getAll, null, .{});
+    pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
+    pub const onpointerlockchange = bridge.accessor(handlerAccessor(.onpointerlockchange).get, handlerAccessor(.onpointerlockchange).set, .{});
+    pub const onpointerlockerror = bridge.accessor(handlerAccessor(.onpointerlockerror).get, handlerAccessor(.onpointerlockerror).set, .{});
+    pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
+    pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
+    pub const wasDiscarded = bridge.accessor(Document.getWasDiscarded, null, .{});
+    pub const prerendering = bridge.property(false, .{ .template = false });
+    pub const featurePolicy = bridge.accessor(Document.getFeaturePolicy, null, .{});
+    pub const webkitVisibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
+    pub const webkitHidden = bridge.property(false, .{ .template = false, .readonly = true });
+    pub const onbeforecopy = bridge.accessor(handlerAccessor(.onbeforecopy).get, handlerAccessor(.onbeforecopy).set, .{});
+    pub const onbeforecut = bridge.accessor(handlerAccessor(.onbeforecut).get, handlerAccessor(.onbeforecut).set, .{});
+    pub const onbeforepaste = bridge.accessor(handlerAccessor(.onbeforepaste).get, handlerAccessor(.onbeforepaste).set, .{});
+    pub const onfreeze = bridge.accessor(handlerAccessor(.onfreeze).get, handlerAccessor(.onfreeze).set, .{});
+    pub const onprerenderingchange = bridge.accessor(handlerAccessor(.onprerenderingchange).get, handlerAccessor(.onprerenderingchange).set, .{});
+    pub const onresume = bridge.accessor(handlerAccessor(.onresume).get, handlerAccessor(.onresume).set, .{});
+    pub const onsearch = bridge.accessor(handlerAccessor(.onsearch).get, handlerAccessor(.onsearch).set, .{});
+    pub const onvisibilitychange = bridge.accessor(handlerAccessor(.onvisibilitychange).get, handlerAccessor(.onvisibilitychange).set, .{});
+    pub const timeline = bridge.accessor(Document.getTimeline, null, .{});
+    pub const fullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, null, .{});
+    pub const fullscreen = bridge.accessor(Document.getFullscreen, null, .{});
+    pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
+    pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
+    pub const webkitIsFullScreen = bridge.accessor(Document.getFullscreen, null, .{});
+    pub const webkitCurrentFullScreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const webkitFullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, null, .{});
+    pub const webkitFullscreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
+    pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
+    pub const rootElement = bridge.accessor(Document.getRootElement, null, .{});
+    pub const pictureInPictureEnabled = bridge.accessor(Document.getPictureInPictureEnabled, null, .{});
+    pub const onabort = bridge.accessor(handlerAccessor(.onabort).get, handlerAccessor(.onabort).set, .{});
+    pub const onbeforeinput = bridge.accessor(handlerAccessor(.onbeforeinput).get, handlerAccessor(.onbeforeinput).set, .{});
+    pub const onbeforematch = bridge.accessor(handlerAccessor(.onbeforematch).get, handlerAccessor(.onbeforematch).set, .{});
+    pub const onbeforetoggle = bridge.accessor(handlerAccessor(.onbeforetoggle).get, handlerAccessor(.onbeforetoggle).set, .{});
+    pub const onblur = bridge.accessor(handlerAccessor(.onblur).get, handlerAccessor(.onblur).set, .{});
+    pub const oncancel = bridge.accessor(handlerAccessor(.oncancel).get, handlerAccessor(.oncancel).set, .{});
+    pub const oncanplay = bridge.accessor(handlerAccessor(.oncanplay).get, handlerAccessor(.oncanplay).set, .{});
+    pub const oncanplaythrough = bridge.accessor(handlerAccessor(.oncanplaythrough).get, handlerAccessor(.oncanplaythrough).set, .{});
+    pub const onchange = bridge.accessor(handlerAccessor(.onchange).get, handlerAccessor(.onchange).set, .{});
+    pub const onclick = bridge.accessor(handlerAccessor(.onclick).get, handlerAccessor(.onclick).set, .{});
+    pub const onclose = bridge.accessor(handlerAccessor(.onclose).get, handlerAccessor(.onclose).set, .{});
+    pub const oncommand = bridge.accessor(handlerAccessor(.oncommand).get, handlerAccessor(.oncommand).set, .{});
+    pub const oncontentvisibilityautostatechange = bridge.accessor(handlerAccessor(.oncontentvisibilityautostatechange).get, handlerAccessor(.oncontentvisibilityautostatechange).set, .{});
+    pub const oncontextlost = bridge.accessor(handlerAccessor(.oncontextlost).get, handlerAccessor(.oncontextlost).set, .{});
+    pub const oncontextmenu = bridge.accessor(handlerAccessor(.oncontextmenu).get, handlerAccessor(.oncontextmenu).set, .{});
+    pub const oncontextrestored = bridge.accessor(handlerAccessor(.oncontextrestored).get, handlerAccessor(.oncontextrestored).set, .{});
+    pub const oncuechange = bridge.accessor(handlerAccessor(.oncuechange).get, handlerAccessor(.oncuechange).set, .{});
+    pub const ondblclick = bridge.accessor(handlerAccessor(.ondblclick).get, handlerAccessor(.ondblclick).set, .{});
+    pub const ondrag = bridge.accessor(handlerAccessor(.ondrag).get, handlerAccessor(.ondrag).set, .{});
+    pub const ondragend = bridge.accessor(handlerAccessor(.ondragend).get, handlerAccessor(.ondragend).set, .{});
+    pub const ondragenter = bridge.accessor(handlerAccessor(.ondragenter).get, handlerAccessor(.ondragenter).set, .{});
+    pub const ondragleave = bridge.accessor(handlerAccessor(.ondragleave).get, handlerAccessor(.ondragleave).set, .{});
+    pub const ondragover = bridge.accessor(handlerAccessor(.ondragover).get, handlerAccessor(.ondragover).set, .{});
+    pub const ondragstart = bridge.accessor(handlerAccessor(.ondragstart).get, handlerAccessor(.ondragstart).set, .{});
+    pub const ondrop = bridge.accessor(handlerAccessor(.ondrop).get, handlerAccessor(.ondrop).set, .{});
+    pub const ondurationchange = bridge.accessor(handlerAccessor(.ondurationchange).get, handlerAccessor(.ondurationchange).set, .{});
+    pub const onemptied = bridge.accessor(handlerAccessor(.onemptied).get, handlerAccessor(.onemptied).set, .{});
+    pub const onended = bridge.accessor(handlerAccessor(.onended).get, handlerAccessor(.onended).set, .{});
+    pub const onerror = bridge.accessor(handlerAccessor(.onerror).get, handlerAccessor(.onerror).set, .{});
+    pub const onfocus = bridge.accessor(handlerAccessor(.onfocus).get, handlerAccessor(.onfocus).set, .{});
+    pub const onformdata = bridge.accessor(handlerAccessor(.onformdata).get, handlerAccessor(.onformdata).set, .{});
+    pub const oninput = bridge.accessor(handlerAccessor(.oninput).get, handlerAccessor(.oninput).set, .{});
+    pub const oninvalid = bridge.accessor(handlerAccessor(.oninvalid).get, handlerAccessor(.oninvalid).set, .{});
+    pub const onkeydown = bridge.accessor(handlerAccessor(.onkeydown).get, handlerAccessor(.onkeydown).set, .{});
+    pub const onkeypress = bridge.accessor(handlerAccessor(.onkeypress).get, handlerAccessor(.onkeypress).set, .{});
+    pub const onkeyup = bridge.accessor(handlerAccessor(.onkeyup).get, handlerAccessor(.onkeyup).set, .{});
+    pub const onload = bridge.accessor(handlerAccessor(.onload).get, handlerAccessor(.onload).set, .{});
+    pub const onloadeddata = bridge.accessor(handlerAccessor(.onloadeddata).get, handlerAccessor(.onloadeddata).set, .{});
+    pub const onloadedmetadata = bridge.accessor(handlerAccessor(.onloadedmetadata).get, handlerAccessor(.onloadedmetadata).set, .{});
+    pub const onloadstart = bridge.accessor(handlerAccessor(.onloadstart).get, handlerAccessor(.onloadstart).set, .{});
+    pub const onmousedown = bridge.accessor(handlerAccessor(.onmousedown).get, handlerAccessor(.onmousedown).set, .{});
+    pub const onmouseenter = bridge.accessor(handlerAccessor(.onmouseenter).get, handlerAccessor(.onmouseenter).set, .{});
+    pub const onmouseleave = bridge.accessor(handlerAccessor(.onmouseleave).get, handlerAccessor(.onmouseleave).set, .{});
+    pub const onmousemove = bridge.accessor(handlerAccessor(.onmousemove).get, handlerAccessor(.onmousemove).set, .{});
+    pub const onmouseout = bridge.accessor(handlerAccessor(.onmouseout).get, handlerAccessor(.onmouseout).set, .{});
+    pub const onmouseover = bridge.accessor(handlerAccessor(.onmouseover).get, handlerAccessor(.onmouseover).set, .{});
+    pub const onmouseup = bridge.accessor(handlerAccessor(.onmouseup).get, handlerAccessor(.onmouseup).set, .{});
+    pub const onmousewheel = bridge.accessor(handlerAccessor(.onmousewheel).get, handlerAccessor(.onmousewheel).set, .{});
+    pub const onpause = bridge.accessor(handlerAccessor(.onpause).get, handlerAccessor(.onpause).set, .{});
+    pub const onplay = bridge.accessor(handlerAccessor(.onplay).get, handlerAccessor(.onplay).set, .{});
+    pub const onplaying = bridge.accessor(handlerAccessor(.onplaying).get, handlerAccessor(.onplaying).set, .{});
+    pub const onprogress = bridge.accessor(handlerAccessor(.onprogress).get, handlerAccessor(.onprogress).set, .{});
+    pub const onratechange = bridge.accessor(handlerAccessor(.onratechange).get, handlerAccessor(.onratechange).set, .{});
+    pub const onreset = bridge.accessor(handlerAccessor(.onreset).get, handlerAccessor(.onreset).set, .{});
+    pub const onresize = bridge.accessor(handlerAccessor(.onresize).get, handlerAccessor(.onresize).set, .{});
+    pub const onscroll = bridge.accessor(handlerAccessor(.onscroll).get, handlerAccessor(.onscroll).set, .{});
+    pub const onscrollend = bridge.accessor(handlerAccessor(.onscrollend).get, handlerAccessor(.onscrollend).set, .{});
+    pub const onsecuritypolicyviolation = bridge.accessor(handlerAccessor(.onsecuritypolicyviolation).get, handlerAccessor(.onsecuritypolicyviolation).set, .{});
+    pub const onseeked = bridge.accessor(handlerAccessor(.onseeked).get, handlerAccessor(.onseeked).set, .{});
+    pub const onseeking = bridge.accessor(handlerAccessor(.onseeking).get, handlerAccessor(.onseeking).set, .{});
+    pub const onselect = bridge.accessor(handlerAccessor(.onselect).get, handlerAccessor(.onselect).set, .{});
+    pub const onslotchange = bridge.accessor(handlerAccessor(.onslotchange).get, handlerAccessor(.onslotchange).set, .{});
+    pub const onstalled = bridge.accessor(handlerAccessor(.onstalled).get, handlerAccessor(.onstalled).set, .{});
+    pub const onsubmit = bridge.accessor(handlerAccessor(.onsubmit).get, handlerAccessor(.onsubmit).set, .{});
+    pub const onsuspend = bridge.accessor(handlerAccessor(.onsuspend).get, handlerAccessor(.onsuspend).set, .{});
+    pub const ontimeupdate = bridge.accessor(handlerAccessor(.ontimeupdate).get, handlerAccessor(.ontimeupdate).set, .{});
+    pub const ontoggle = bridge.accessor(handlerAccessor(.ontoggle).get, handlerAccessor(.ontoggle).set, .{});
+    pub const onvolumechange = bridge.accessor(handlerAccessor(.onvolumechange).get, handlerAccessor(.onvolumechange).set, .{});
+    pub const onwaiting = bridge.accessor(handlerAccessor(.onwaiting).get, handlerAccessor(.onwaiting).set, .{});
+    pub const onwebkitanimationend = bridge.accessor(handlerAccessor(.onwebkitanimationend).get, handlerAccessor(.onwebkitanimationend).set, .{});
+    pub const onwebkitanimationiteration = bridge.accessor(handlerAccessor(.onwebkitanimationiteration).get, handlerAccessor(.onwebkitanimationiteration).set, .{});
+    pub const onwebkitanimationstart = bridge.accessor(handlerAccessor(.onwebkitanimationstart).get, handlerAccessor(.onwebkitanimationstart).set, .{});
+    pub const onwebkittransitionend = bridge.accessor(handlerAccessor(.onwebkittransitionend).get, handlerAccessor(.onwebkittransitionend).set, .{});
+    pub const onwheel = bridge.accessor(handlerAccessor(.onwheel).get, handlerAccessor(.onwheel).set, .{});
+    pub const onauxclick = bridge.accessor(handlerAccessor(.onauxclick).get, handlerAccessor(.onauxclick).set, .{});
+    pub const ongotpointercapture = bridge.accessor(handlerAccessor(.ongotpointercapture).get, handlerAccessor(.ongotpointercapture).set, .{});
+    pub const onlostpointercapture = bridge.accessor(handlerAccessor(.onlostpointercapture).get, handlerAccessor(.onlostpointercapture).set, .{});
+    pub const onpointerdown = bridge.accessor(handlerAccessor(.onpointerdown).get, handlerAccessor(.onpointerdown).set, .{});
+    pub const onpointermove = bridge.accessor(handlerAccessor(.onpointermove).get, handlerAccessor(.onpointermove).set, .{});
+    pub const onpointerup = bridge.accessor(handlerAccessor(.onpointerup).get, handlerAccessor(.onpointerup).set, .{});
+    pub const onpointercancel = bridge.accessor(handlerAccessor(.onpointercancel).get, handlerAccessor(.onpointercancel).set, .{});
+    pub const onpointerover = bridge.accessor(handlerAccessor(.onpointerover).get, handlerAccessor(.onpointerover).set, .{});
+    pub const onpointerout = bridge.accessor(handlerAccessor(.onpointerout).get, handlerAccessor(.onpointerout).set, .{});
+    pub const onpointerenter = bridge.accessor(handlerAccessor(.onpointerenter).get, handlerAccessor(.onpointerenter).set, .{});
+    pub const onpointerleave = bridge.accessor(handlerAccessor(.onpointerleave).get, handlerAccessor(.onpointerleave).set, .{});
+    pub const onselectstart = bridge.accessor(handlerAccessor(.onselectstart).get, handlerAccessor(.onselectstart).set, .{});
+    pub const onselectionchange = bridge.accessor(Document.getOnSelectionChange, Document.setOnSelectionChange, .{});
+    pub const onanimationcancel = bridge.accessor(handlerAccessor(.onanimationcancel).get, handlerAccessor(.onanimationcancel).set, .{});
+    pub const onanimationend = bridge.accessor(handlerAccessor(.onanimationend).get, handlerAccessor(.onanimationend).set, .{});
+    pub const onanimationiteration = bridge.accessor(handlerAccessor(.onanimationiteration).get, handlerAccessor(.onanimationiteration).set, .{});
+    pub const onanimationstart = bridge.accessor(handlerAccessor(.onanimationstart).get, handlerAccessor(.onanimationstart).set, .{});
+    pub const ontransitionrun = bridge.accessor(handlerAccessor(.ontransitionrun).get, handlerAccessor(.ontransitionrun).set, .{});
+    pub const ontransitionstart = bridge.accessor(handlerAccessor(.ontransitionstart).get, handlerAccessor(.ontransitionstart).set, .{});
+    pub const ontransitionend = bridge.accessor(handlerAccessor(.ontransitionend).get, handlerAccessor(.ontransitionend).set, .{});
+    pub const ontransitioncancel = bridge.accessor(handlerAccessor(.ontransitioncancel).get, handlerAccessor(.ontransitioncancel).set, .{});
+    pub const onbeforexrselect = bridge.accessor(handlerAccessor(.onbeforexrselect).get, handlerAccessor(.onbeforexrselect).set, .{});
+    pub const oncopy = bridge.accessor(handlerAccessor(.oncopy).get, handlerAccessor(.oncopy).set, .{});
+    pub const oncut = bridge.accessor(handlerAccessor(.oncut).get, handlerAccessor(.oncut).set, .{});
+    pub const onpaste = bridge.accessor(handlerAccessor(.onpaste).get, handlerAccessor(.onpaste).set, .{});
+    pub const children = bridge.accessor(Document.getChildren, null, .{});
+    pub const firstElementChild = bridge.accessor(Document.getFirstElementChild, null, .{});
+    pub const lastElementChild = bridge.accessor(Document.getLastElementChild, null, .{});
+    pub const childElementCount = bridge.accessor(Document.getChildElementCount, null, .{});
     pub const activeElement = bridge.accessor(Document.getActiveElement, null, .{});
     pub const styleSheets = bridge.accessor(Document.getStyleSheets, null, .{});
+    pub const pointerLockElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const fullscreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const adoptedStyleSheets = bridge.accessor(Document.getAdoptedStyleSheets, Document.setAdoptedStyleSheets, .{});
+    pub const pictureInPictureElement = bridge.accessor(Document.getFullscreenElement, null, .{});
     pub const fonts = bridge.accessor(Document.getFonts, null, .{});
-    pub const contentType = bridge.accessor(Document.getContentType, null, .{});
-    pub const domain = bridge.accessor(Document.getDomain, Document.setDomain, .{});
-    pub const cookie = bridge.accessor(Document.getCookie, Document.setCookie, .{});
-    pub const createElement = bridge.function(Document.createElement, .{});
-    pub const createElementNS = bridge.function(Document.createElementNS, .{});
-    pub const createDocumentFragment = bridge.function(Document.createDocumentFragment, .{});
-    pub const createComment = bridge.function(Document.createComment, .{});
-    pub const createTextNode = bridge.function(Document.createTextNode, .{});
+
+    // `[LegacyUnforgeable]`: Chrome puts this on every document instance, not on
+    // Document.prototype. Measured descriptor: enumerable, non-configurable,
+    // get+set.
+    pub const location = bridge.accessor(Document.getLocation, Document.setLocation, .{ .unforgeable = true, .deletable = false });
+
+    // Operations, alphabetical, as WebIDL requires and Chrome emits.
+    pub const adoptNode = bridge.function(Document.adoptNode, .{ .ce_reactions = true });
+    pub const append = bridge.function(Document.append, .{ .ce_reactions = true });
+    pub const captureEvents = bridge.function(Document.captureEvents, .{});
+    pub const caretPositionFromPoint = bridge.function(Document.caretPositionFromPoint, .{});
+    pub const caretRangeFromPoint = bridge.function(Document.caretRangeFromPoint, .{});
+    pub const clear = bridge.function(Document.clear, .{});
+    pub const close = bridge.function(Document.close, .{ .ce_reactions = true });
     pub const createAttribute = bridge.function(Document.createAttribute, .{});
     pub const createAttributeNS = bridge.function(Document.createAttributeNS, .{});
     pub const createCDATASection = bridge.function(Document.createCDATASection, .{});
-    pub const createProcessingInstruction = bridge.function(Document.createProcessingInstruction, .{});
-    pub const createRange = bridge.function(Document.createRange, .{});
+    pub const createComment = bridge.function(Document.createComment, .{});
+    pub const createDocumentFragment = bridge.function(Document.createDocumentFragment, .{});
+    pub const createElement = bridge.function(Document.createElement, .{});
+    pub const createElementNS = bridge.function(Document.createElementNS, .{});
     pub const createEvent = bridge.function(Document.createEvent, .{});
-    pub const createTreeWalker = bridge.function(Document.createTreeWalker, .{});
-    pub const createNodeIterator = bridge.function(Document.createNodeIterator, .{});
-    pub const evaluate = bridge.function(Document.evaluate, .{});
     pub const createExpression = bridge.function(Document.createExpression, .{});
     pub const createNSResolver = bridge.function(Document.createNSResolver, .{});
+    pub const createNodeIterator = bridge.function(Document.createNodeIterator, .{});
+    pub const createProcessingInstruction = bridge.function(Document.createProcessingInstruction, .{});
+    pub const createRange = bridge.function(Document.createRange, .{});
+    pub const createTextNode = bridge.function(Document.createTextNode, .{});
+    pub const createTreeWalker = bridge.function(Document.createTreeWalker, .{});
+    pub const elementFromPoint = bridge.function(Document.elementFromPoint, .{});
+    pub const elementsFromPoint = bridge.function(Document.elementsFromPoint, .{});
+    pub const evaluate = bridge.function(Document.evaluate, .{});
+    pub const execCommand = bridge.function(Document.execCommand, .{});
+    pub const exitFullscreen = bridge.function(Document.exitFullscreen, .{});
+    pub const exitPictureInPicture = bridge.function(Document.exitPictureInPicture, .{});
+    pub const exitPointerLock = bridge.function(Document.exitPointerLock, .{});
+    pub const getAnimations = bridge.function(Document.getAnimations, .{});
     pub const getElementById = bridge.function(_getElementById, .{});
     fn _getElementById(self: *Document, value_: ?js.Value, frame: *Frame) !?*Element {
         const value = value_ orelse return null;
@@ -1556,50 +2246,69 @@ pub const JsApi = struct {
         }
         return self.getElementById(try value.toZig([]const u8), frame);
     }
-    pub const querySelector = bridge.function(Document.querySelector, .{});
-    pub const querySelectorAll = bridge.function(Document.querySelectorAll, .{});
+    pub const getElementsByClassName = bridge.function(Document.getElementsByClassName, .{});
+    pub const getElementsByName = bridge.function(Document.getElementsByName, .{});
     pub const getElementsByTagName = bridge.function(Document.getElementsByTagName, .{});
     pub const getElementsByTagNameNS = bridge.function(Document.getElementsByTagNameNS, .{});
     pub const getSelection = bridge.function(Document.getSelection, .{});
-    pub const getElementsByClassName = bridge.function(Document.getElementsByClassName, .{});
-    pub const getElementsByName = bridge.function(Document.getElementsByName, .{});
-    pub const adoptNode = bridge.function(Document.adoptNode, .{ .ce_reactions = true });
+    pub const hasFocus = bridge.function(Document.hasFocus, .{});
+    pub const hasStorageAccess = bridge.function(Document.hasStorageAccess, .{});
+    pub const hasUnpartitionedCookieAccess = bridge.function(Document.hasStorageAccess, .{});
     pub const importNode = bridge.function(Document.importNode, .{ .ce_reactions = true });
-    pub const append = bridge.function(Document.append, .{ .ce_reactions = true });
-    pub const prepend = bridge.function(Document.prepend, .{ .ce_reactions = true });
     pub const moveBefore = bridge.function(Document.moveBefore, .{ .ce_reactions = true });
+    pub const open = bridge.function(Document.open, .{ .ce_reactions = true });
+    pub const prepend = bridge.function(Document.prepend, .{ .ce_reactions = true });
+    pub const queryCommandEnabled = bridge.function(Document.queryCommandEnabled, .{});
+    pub const queryCommandIndeterm = bridge.function(Document.queryCommandIndeterm, .{});
+    pub const queryCommandState = bridge.function(Document.queryCommandState, .{});
+    pub const queryCommandSupported = bridge.function(Document.queryCommandSupported, .{});
+    pub const queryCommandValue = bridge.function(Document.queryCommandValue, .{});
+    pub const querySelector = bridge.function(Document.querySelector, .{});
+    pub const querySelectorAll = bridge.function(Document.querySelectorAll, .{});
+    pub const releaseEvents = bridge.function(Document.releaseEvents, .{});
     pub const replaceChildren = bridge.function(Document.replaceChildren, .{ .ce_reactions = true });
-    pub const elementFromPoint = bridge.function(Document.elementFromPoint, .{});
-    pub const elementsFromPoint = bridge.function(Document.elementsFromPoint, .{});
+    pub const requestStorageAccess = bridge.function(Document.requestStorageAccess, .{});
+    pub const requestStorageAccessFor = bridge.function(Document.requestStorageAccessFor, .{});
+    pub const startViewTransition = bridge.function(Document.startViewTransition, .{});
+    pub const webkitCancelFullScreen = bridge.function(Document.webkitCancelFullScreen, .{});
+    pub const webkitExitFullscreen = bridge.function(Document.webkitExitFullscreen, .{});
     pub const write = bridge.function(Document.write, .{ .ce_reactions = true });
     pub const writeln = bridge.function(Document.writeln, .{ .ce_reactions = true });
-    pub const open = bridge.function(Document.open, .{ .ce_reactions = true });
-    pub const close = bridge.function(Document.close, .{ .ce_reactions = true });
-    pub const doctype = bridge.accessor(Document.getDocType, null, .{});
-    pub const firstElementChild = bridge.accessor(Document.getFirstElementChild, null, .{});
-    pub const lastElementChild = bridge.accessor(Document.getLastElementChild, null, .{});
-    pub const childElementCount = bridge.accessor(Document.getChildElementCount, null, .{});
-    pub const adoptedStyleSheets = bridge.accessor(Document.getAdoptedStyleSheets, Document.setAdoptedStyleSheets, .{});
-    pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
-    pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
-    pub const defaultView = bridge.accessor(struct {
-        fn defaultView(self: *const Document) ?*@import("Window.zig") {
-            const frame = self._frame orelse return null;
-            return frame.window;
-        }
-    }.defaultView, null, .{});
-    pub const hasFocus = bridge.function(Document.hasFocus, .{});
 
-    pub const prerendering = bridge.property(false, .{ .template = false });
-    pub const characterSet = bridge.accessor(getCharacterSet, null, .{});
-    pub const charset = bridge.accessor(getCharacterSet, null, .{});
-    pub const inputEncoding = bridge.accessor(getCharacterSet, null, .{});
-    pub const compatMode = bridge.accessor(Document.getCompatMode, null, .{});
-    pub const lastModified = bridge.accessor(Document.getLastModified, null, .{});
+    // Chrome emits these after `constructor`, i.e. after the main IDL block:
+    // they are runtime-enabled features, appended as they are switched on.
+    pub const fragmentDirective = bridge.accessor(Document.getFragmentDirective, null, .{});
+    pub const onpointerrawupdate = bridge.accessor(handlerAccessor(.onpointerrawupdate).get, handlerAccessor(.onpointerrawupdate).set, .{});
+    pub const browsingTopics = bridge.function(Document.browsingTopics, .{});
+    pub const hasPrivateToken = bridge.function(Document.hasPrivateToken, .{});
+    pub const hasRedemptionRecord = bridge.function(Document.hasRedemptionRecord, .{});
+    pub const activeViewTransition = bridge.accessor(Document.getActiveViewTransition, null, .{});
+    pub const onscrollsnapchange = bridge.accessor(handlerAccessor(.onscrollsnapchange).get, handlerAccessor(.onscrollsnapchange).set, .{});
+    pub const onscrollsnapchanging = bridge.accessor(handlerAccessor(.onscrollsnapchanging).get, handlerAccessor(.onscrollsnapchanging).set, .{});
+    pub const customElementRegistry = bridge.accessor(Document.getCustomElementRegistry, null, .{});
+    pub const ariaNotify = bridge.function(Document.ariaNotify, .{});
+
     fn getCharacterSet(self: *const Document) []const u8 {
         return self.getCharset();
     }
-    pub const referrer = bridge.property("", .{ .template = false });
+
+    // The colour properties are attribute reflections on <body>, with no colour
+    // parsing in either direction: whatever string goes in comes back out. The
+    // property-to-attribute mapping was measured, since the names do not line up
+    // (fgColor is `text`, not `fgcolor`).
+    fn colorAccessor(comptime attribute: []const u8) type {
+        return struct {
+            pub fn get(self: *Document) []const u8 {
+                const body_element = self.getBody() orelse return "";
+                return body_element.asElement().getAttributeSafe(comptime .wrap(attribute)) orelse "";
+            }
+
+            pub fn set(self: *Document, value: []const u8, frame: *Frame) !void {
+                const body_element = self.getBody() orelse return;
+                try body_element.asElement().setAttributeSafe(comptime .wrap(attribute), .wrap(value), frame);
+            }
+        };
+    }
 
     // Generates a getter/setter pair backed by the frame's attribute-listener
     // map, like onclick above, for other document event handler properties.

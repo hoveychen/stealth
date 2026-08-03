@@ -21,6 +21,7 @@ const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const EventTarget = @import("../EventTarget.zig");
 const MediaQuery = @import("../../css/MediaQuery.zig");
+const Window = @import("../Window.zig");
 
 const MediaQueryList = @This();
 
@@ -56,6 +57,26 @@ pub fn getMatches(self: *const MediaQueryList, frame: *Frame) bool {
 pub fn addListener(_: *const MediaQueryList, _: js.Function) void {}
 pub fn removeListener(_: *const MediaQueryList, _: js.Function) void {}
 
+/// Measured on Chrome 150: MediaQueryList.prototype carries `onchange`, between
+/// `matches` and `addListener`. It goes through the frame's attribute-listener
+/// store, the same mechanism Document and Element use, so a plain
+/// `dispatchEvent(new MediaQueryListEvent('change'))` reaches it.
+fn handlerAccessor(comptime handler: @import("../global_event_handlers.zig").Handler) type {
+    return struct {
+        pub fn get(self: *MediaQueryList, frame: *Frame) ?js.Function.Global {
+            return frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = handler });
+        }
+
+        pub fn set(self: *MediaQueryList, setter: ?Window.FunctionSetter, frame: *Frame) !void {
+            if (Window.getFunctionFromSetter(setter)) |cb| {
+                try frame._event_target_attr_listeners.put(frame.arena, .{ .target = self.asEventTarget(), .handler = handler }, cb);
+            } else {
+                _ = frame._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = handler });
+            }
+        }
+    };
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(MediaQueryList);
 
@@ -67,6 +88,7 @@ pub const JsApi = struct {
 
     pub const media = bridge.accessor(MediaQueryList.getMedia, null, .{});
     pub const matches = bridge.accessor(MediaQueryList.getMatches, null, .{});
+    pub const onchange = bridge.accessor(handlerAccessor(.onchange).get, handlerAccessor(.onchange).set, .{});
     pub const addListener = bridge.function(MediaQueryList.addListener, .{ .noop = true });
     pub const removeListener = bridge.function(MediaQueryList.removeListener, .{ .noop = true });
 };
@@ -78,4 +100,8 @@ test "WebApi: MediaQueryList" {
 
 test "WebApi: media @-rule cascade" {
     try testing.htmlRunner("css/media_at_rule_cascade.html", .{});
+}
+
+test "WebApi: CSS events" {
+    try testing.htmlRunner("css/css_events.html", .{});
 }

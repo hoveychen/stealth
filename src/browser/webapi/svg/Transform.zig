@@ -21,31 +21,16 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const Page = @import("../../Page.zig");
-const DOMMatrix = @import("../DOMMatrix.zig");
+const Matrix = @import("Matrix.zig");
 const RO = @import("../DOMMatrixReadOnly.zig");
 
 const Transform = @This();
-
-pub const DOMMatrix2DInit = struct {
-    a: ?f64 = null,
-    b: ?f64 = null,
-    c: ?f64 = null,
-    d: ?f64 = null,
-    e: ?f64 = null,
-    f: ?f64 = null,
-    m11: ?f64 = null,
-    m12: ?f64 = null,
-    m21: ?f64 = null,
-    m22: ?f64 = null,
-    m41: ?f64 = null,
-    m42: ?f64 = null,
-};
 
 _type: u16 = 1,
 _angle: f64 = 0,
 _cx: f64 = 0,
 _cy: f64 = 0,
-_matrix: *DOMMatrix,
+_matrix: *Matrix,
 _attachment: ?Attachment = null,
 
 // Sticky. An animVal item that a later external attribute change detaches from
@@ -71,31 +56,42 @@ pub const Attachment = struct {
 // keeps the stable SameObject pointer valid across garbage collections, and
 // releasing the last ref frees the transform together with its matrix.
 pub fn acquireRef(self: *Transform) void {
-    self._matrix._proto.acquireRef();
+    self._matrix.acquireRef();
 }
 
 pub fn releaseRef(self: *Transform, page: *Page) void {
-    self._matrix._proto.releaseRef(page);
+    self._matrix.releaseRef(page);
 }
 
 pub fn detached(frame: *Frame) !*Transform {
-    const matrix = try DOMMatrix.create(RO.identity(), true, frame._page);
-    errdefer matrix._proto.deinit(frame._page);
-    const self = try matrix._proto._arena.create(Transform);
-    self.* = .{ ._matrix = matrix };
+    return build(.{}, .{}, frame);
+}
+
+pub fn fromMatrix(source: *const Matrix, frame: *Frame) !*Transform {
+    return build(.{}, source.value(), frame);
+}
+
+fn build(fields: Fields, value: Matrix.Value, frame: *Frame) !*Transform {
+    const matrix = try Matrix.create(value, frame._page);
+    errdefer matrix.deinit(frame._page);
+    const self = try matrix._arena.create(Transform);
+    self.* = .{
+        ._type = fields.typ,
+        ._angle = fields.angle,
+        ._cx = fields.cx,
+        ._cy = fields.cy,
+        ._matrix = matrix,
+    };
     self.attachMatrix();
     return self;
 }
 
-pub fn fromMatrix(init: ?DOMMatrix2DInit, frame: *Frame) !*Transform {
-    const parsed = try fixup2D(init orelse .{});
-    const matrix = try DOMMatrix.create(parsed.m, true, frame._page);
-    errdefer matrix._proto.deinit(frame._page);
-    const self = try matrix._proto._arena.create(Transform);
-    self.* = .{ ._matrix = matrix };
-    self.attachMatrix();
-    return self;
-}
+const Fields = struct {
+    typ: u16 = 1,
+    angle: f64 = 0,
+    cx: f64 = 0,
+    cy: f64 = 0,
+};
 
 pub fn fromParsed(parsed: RO.ParsedTransform, frame: *Frame) !*Transform {
     const typ: u16 = switch (parsed.kind) {
@@ -107,41 +103,29 @@ pub fn fromParsed(parsed: RO.ParsedTransform, frame: *Frame) !*Transform {
         .skew_y => 6,
         else => return error.SyntaxError,
     };
-    const matrix = try DOMMatrix.create(parsed.matrix, parsed.is_2d, frame._page);
-    errdefer matrix._proto.deinit(frame._page);
-    const self = try matrix._proto._arena.create(Transform);
-    self.* = .{
-        ._type = typ,
-        ._angle = if (typ >= 4) parsed.values[0] else 0,
-        ._cx = if (typ == 4 and parsed.count == 3) parsed.values[1] else 0,
-        ._cy = if (typ == 4 and parsed.count == 3) parsed.values[2] else 0,
-        ._matrix = matrix,
-    };
-    self.attachMatrix();
-    return self;
+    return build(.{
+        .typ = typ,
+        .angle = if (typ >= 4) parsed.values[0] else 0,
+        .cx = if (typ == 4 and parsed.count == 3) parsed.values[1] else 0,
+        .cy = if (typ == 4 and parsed.count == 3) parsed.values[2] else 0,
+    }, toValue(parsed.matrix), frame);
 }
 
 pub fn clone(self: *const Transform, frame: *Frame) !*Transform {
     const current = self.getState();
-    const matrix = try DOMMatrix.create(current.matrix, current.is_2d, frame._page);
-    errdefer matrix._proto.deinit(frame._page);
-    const cloned = try matrix._proto._arena.create(Transform);
-    cloned.* = .{
-        ._type = current.typ,
-        ._angle = current.angle,
-        ._cx = current.cx,
-        ._cy = current.cy,
-        ._matrix = matrix,
-    };
-    cloned.attachMatrix();
-    return cloned;
+    return build(.{
+        .typ = current.typ,
+        .angle = current.angle,
+        .cx = current.cx,
+        .cy = current.cy,
+    }, toValue(current.matrix), frame);
 }
 
 pub fn getType(self: *const Transform) u16 {
     return self._type;
 }
 
-pub fn getMatrix(self: *Transform) *DOMMatrix {
+pub fn getMatrix(self: *Transform) *Matrix {
     return self._matrix;
 }
 
@@ -149,9 +133,8 @@ pub fn getAngle(self: *const Transform) f64 {
     return self._angle;
 }
 
-pub fn setMatrix(self: *Transform, init: ?DOMMatrix2DInit) !void {
-    const parsed = try fixup2D(init orelse .{});
-    try self.applyState(.{ .typ = 1, .angle = 0, .cx = 0, .cy = 0, .matrix = parsed.m, .is_2d = true });
+pub fn setMatrix(self: *Transform, source: *const Matrix) !void {
+    try self.applyState(.{ .typ = 1, .angle = 0, .cx = 0, .cy = 0, .matrix = fromValue(source.value()), .is_2d = true });
 }
 
 pub fn setTranslate(self: *Transform, tx: f64, ty: f64) !void {
@@ -166,7 +149,7 @@ pub fn setScale(self: *Transform, sx: f64, sy: f64) !void {
 
 pub fn setRotate(self: *Transform, angle: f64, cx: f64, cy: f64) !void {
     try ensureFinite(&.{ angle, cx, cy });
-    const radians = angle * std.math.pi / 180.0;
+    const radians = angle * Matrix.DEGREES_TO_RADIANS;
     var matrix = RO.translationMatrix(cx, cy, 0);
     matrix = RO.multiplyMatrix(matrix, RO.rotateZMatrix(radians));
     matrix = RO.multiplyMatrix(matrix, RO.translationMatrix(-cx, -cy, 0));
@@ -175,12 +158,12 @@ pub fn setRotate(self: *Transform, angle: f64, cx: f64, cy: f64) !void {
 
 pub fn setSkewX(self: *Transform, angle: f64) !void {
     try ensureFinite(&.{angle});
-    try self.applyState(.{ .typ = 5, .angle = angle, .cx = 0, .cy = 0, .matrix = RO.skewMatrix(angle * std.math.pi / 180.0, 0), .is_2d = true });
+    try self.applyState(.{ .typ = 5, .angle = angle, .cx = 0, .cy = 0, .matrix = RO.skewMatrix(angle * Matrix.DEGREES_TO_RADIANS, 0), .is_2d = true });
 }
 
 pub fn setSkewY(self: *Transform, angle: f64) !void {
     try ensureFinite(&.{angle});
-    try self.applyState(.{ .typ = 6, .angle = angle, .cx = 0, .cy = 0, .matrix = RO.skewMatrix(0, angle * std.math.pi / 180.0), .is_2d = true });
+    try self.applyState(.{ .typ = 6, .angle = angle, .cx = 0, .cy = 0, .matrix = RO.skewMatrix(0, angle * Matrix.DEGREES_TO_RADIANS), .is_2d = true });
 }
 
 pub fn getState(self: *const Transform) State {
@@ -189,8 +172,8 @@ pub fn getState(self: *const Transform) State {
         .angle = self._angle,
         .cx = self._cx,
         .cy = self._cy,
-        .matrix = self._matrix._proto._m,
-        .is_2d = self._matrix._proto._is_2d,
+        .matrix = fromValue(self._matrix.value()),
+        .is_2d = true,
     };
 }
 
@@ -199,10 +182,7 @@ pub fn applyStateRaw(self: *Transform, state: State) void {
     self._angle = state.angle;
     self._cx = state.cx;
     self._cy = state.cy;
-    self._matrix._proto.applyStateRaw(.{
-        .matrix = state.matrix,
-        .is_2d = state.is_2d,
-    });
+    self._matrix.applyValueRaw(toValue(state.matrix));
 }
 
 fn applyState(self: *Transform, state: State) !void {
@@ -251,51 +231,38 @@ pub fn writeState(state: State, writer: anytype) !void {
 }
 
 fn attachMatrix(self: *Transform) void {
-    self._matrix._proto.attach(.{
+    self._matrix.attach(.{
         .owner = self,
         .mutate = Transform.mutateMatrix,
     });
 }
 
+fn toValue(m: [16]f64) Matrix.Value {
+    return .{ .a = m[0], .b = m[1], .c = m[4], .d = m[5], .e = m[12], .f = m[13] };
+}
+
+fn fromValue(v: Matrix.Value) [16]f64 {
+    return .{
+        v.a, v.b, 0, 0,
+        v.c, v.d, 0, 0,
+        0,   0,   1, 0,
+        v.e, v.f, 0, 1,
+    };
+}
+
 // An SVGTransform is a 2D affine transform, and the `transform` attribute has
 // no syntax for anything else, so a write through the live matrix keeps only
 // the six components the transform can represent.
-fn mutateMatrix(context: *anyopaque, _: *RO, state: RO.State) anyerror!void {
+fn mutateMatrix(context: *anyopaque, _: *Matrix, value: Matrix.Value) anyerror!void {
     const self: *Transform = @ptrCast(@alignCast(context));
-    const m = state.matrix;
     try self.applyState(.{
         .typ = 1,
         .angle = 0,
         .cx = 0,
         .cy = 0,
-        .matrix = .{
-            m[0],  m[1],  0, 0,
-            m[4],  m[5],  0, 0,
-            0,     0,     1, 0,
-            m[12], m[13], 0, 1,
-        },
+        .matrix = fromValue(value),
         .is_2d = true,
     });
-}
-
-fn fixup2D(init: DOMMatrix2DInit) !RO.Parsed {
-    const parsed = try RO.fixupDict(.{
-        .a = init.a,
-        .b = init.b,
-        .c = init.c,
-        .d = init.d,
-        .e = init.e,
-        .f = init.f,
-        .m11 = init.m11,
-        .m12 = init.m12,
-        .m21 = init.m21,
-        .m22 = init.m22,
-        .m41 = init.m41,
-        .m42 = init.m42,
-        .is2D = true,
-    });
-    try ensureFinite(&parsed.m);
-    return parsed;
 }
 
 fn ensureFinite(values: []const f64) !void {

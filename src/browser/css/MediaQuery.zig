@@ -23,12 +23,31 @@
 //! Spec subset (Media Queries Level 4 §3) sufficient for the responsive
 //! patterns observed in agentic-AI / scraping targets:
 //!   - Media types: `all`, `screen`, `print`, `speech`, `tv`
-//!   - Features: `width` / `min-width` / `max-width`,
-//!               `height` / `min-height` / `max-height`,
-//!               `orientation` (portrait | landscape).
+//!   - Features: `width` / `height` (with `min-` / `max-`),
+//!               `device-width` / `device-height` (with `min-` / `max-`),
+//!               `orientation`, `aspect-ratio` / `device-aspect-ratio`,
+//!               `resolution`, `color`, `color-index`, `monochrome`, `grid`,
+//!               `update`, `scripting`, `overflow-block` / `overflow-inline`,
+//!               `hover` / `any-hover`, `pointer` / `any-pointer`,
+//!               `display-mode`, `color-gamut`, `dynamic-range`,
+//!               `forced-colors`, `prefers-color-scheme`,
+//!               `prefers-reduced-motion`, `prefers-contrast`,
+//!               `prefers-reduced-transparency`.
 //!   - Length values: `<int>px`, `<int>em` (1em = 16px), `<int>rem`,
 //!     and bare `0`.
 //!   - Operators: `,` (OR), `and`, `not`, `only`.
+//!
+//! The interaction features and the display descriptors answer for one fixed
+//! device persona, and it has to stay consistent with the rest of the fork:
+//! an Apple GPU driving a 1920x1080 display at devicePixelRatio 1 with
+//! `screen.colorDepth` 24, driven with a mouse. Every value below was measured
+//! on a headed Chrome (tools/fingerprint, media-features probe) except the
+//! three that follow from *this* persona rather than from the reference
+//! laptop's built-in panel — see COLOR_BITS_PER_CHANNEL.
+//!
+//! `inverted-colors` and `video-dynamic-range` are deliberately absent: Chrome
+//! does not implement them (measured — neither the boolean nor any value form
+//! matches), so recognising them here would be the anomaly.
 //!
 //! Per spec, any unrecognized media type, unsupported feature, or malformed
 //! value evaluates the containing query to `false`. The remaining
@@ -272,12 +291,23 @@ fn evalFeature(text: []const u8, viewport: Viewport) bool {
     return evalBoolean(trimmed, viewport);
 }
 
+// Bits per colour channel. `screen.colorDepth` is 24 across three channels, so
+// Chrome's `color` feature answers 8. The reference laptop reports 10 because
+// its built-in panel is HDR; copying that while still reporting colorDepth 24
+// would be a self-contradiction, so this persona's display is a plain 8-bit
+// one. `color-gamut: srgb` and `dynamic-range: standard` follow from the same
+// choice, for the same reason.
+const COLOR_BITS_PER_CHANNEL: u32 = 8;
+
+// devicePixelRatio, mirroring Window's own property.
+const DEVICE_PIXEL_RATIO: u32 = 1;
+
 fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
-    if (name.len > 16) {
+    if (name.len > 32) {
         return false;
     }
 
-    var buf: [16]u8 = undefined;
+    var buf: [32]u8 = undefined;
     const lname = std.ascii.lowerString(&buf, name);
     if (std.mem.eql(u8, lname, "min-width")) {
         const px = parseLengthPx(value) orelse return false;
@@ -308,20 +338,196 @@ fn evalNameValue(name: []const u8, value: []const u8, viewport: Viewport) bool {
         if (std.ascii.eqlIgnoreCase(value, "portrait")) return viewport.height > viewport.width;
         return false;
     }
+
+    // The window box matches the viewport in this fork (see the screen section
+    // of tools/fingerprint/README.md), so the device-* lengths are the same
+    // numbers as the viewport ones.
+    if (std.mem.eql(u8, lname, "min-device-width")) {
+        const px = parseLengthPx(value) orelse return false;
+        return viewport.width >= px;
+    }
+    if (std.mem.eql(u8, lname, "max-device-width")) {
+        const px = parseLengthPx(value) orelse return false;
+        return viewport.width <= px;
+    }
+    if (std.mem.eql(u8, lname, "device-width")) {
+        const px = parseLengthPx(value) orelse return false;
+        return viewport.width == px;
+    }
+    if (std.mem.eql(u8, lname, "min-device-height")) {
+        const px = parseLengthPx(value) orelse return false;
+        return viewport.height >= px;
+    }
+    if (std.mem.eql(u8, lname, "max-device-height")) {
+        const px = parseLengthPx(value) orelse return false;
+        return viewport.height <= px;
+    }
+    if (std.mem.eql(u8, lname, "device-height")) {
+        const px = parseLengthPx(value) orelse return false;
+        return viewport.height == px;
+    }
+
+    // `<ratio>` compares as a fraction, so it is done by cross-multiplication
+    // rather than by dividing — 1920/1080 and 16/9 are the same ratio and have
+    // to compare equal.
+    if (std.mem.eql(u8, lname, "aspect-ratio") or std.mem.eql(u8, lname, "device-aspect-ratio")) {
+        return compareRatio(value, viewport.width, viewport.height, .eq);
+    }
+    if (std.mem.eql(u8, lname, "min-aspect-ratio") or std.mem.eql(u8, lname, "min-device-aspect-ratio")) {
+        return compareRatio(value, viewport.width, viewport.height, .ge);
+    }
+    if (std.mem.eql(u8, lname, "max-aspect-ratio") or std.mem.eql(u8, lname, "max-device-aspect-ratio")) {
+        return compareRatio(value, viewport.width, viewport.height, .le);
+    }
+
+    if (std.mem.eql(u8, lname, "resolution")) return parseDppx(value) == DEVICE_PIXEL_RATIO;
+    if (std.mem.eql(u8, lname, "min-resolution")) {
+        const dppx = parseDppx(value) orelse return false;
+        return DEVICE_PIXEL_RATIO >= dppx;
+    }
+    if (std.mem.eql(u8, lname, "max-resolution")) {
+        const dppx = parseDppx(value) orelse return false;
+        return DEVICE_PIXEL_RATIO <= dppx;
+    }
+
+    // Numeric display descriptors. `monochrome: 0` and `color-index: 0` are the
+    // answers a colour screen with no indexed palette gives.
+    if (std.mem.eql(u8, lname, "color")) return parseInteger(value) == COLOR_BITS_PER_CHANNEL;
+    if (std.mem.eql(u8, lname, "min-color")) {
+        const n = parseInteger(value) orelse return false;
+        return COLOR_BITS_PER_CHANNEL >= n;
+    }
+    if (std.mem.eql(u8, lname, "max-color")) {
+        const n = parseInteger(value) orelse return false;
+        return COLOR_BITS_PER_CHANNEL <= n;
+    }
+    if (std.mem.eql(u8, lname, "color-index") or std.mem.eql(u8, lname, "max-color-index")) return parseInteger(value) == 0;
+    if (std.mem.eql(u8, lname, "min-color-index")) return parseInteger(value) == 0;
+    if (std.mem.eql(u8, lname, "monochrome") or std.mem.eql(u8, lname, "max-monochrome")) return parseInteger(value) == 0;
+    if (std.mem.eql(u8, lname, "min-monochrome")) return parseInteger(value) == 0;
+    if (std.mem.eql(u8, lname, "grid")) return parseInteger(value) == 0;
+
+    // Keyword descriptors, all measured on a headed Chrome.
+    if (std.mem.eql(u8, lname, "hover") or std.mem.eql(u8, lname, "any-hover")) {
+        return std.ascii.eqlIgnoreCase(value, "hover");
+    }
+    if (std.mem.eql(u8, lname, "pointer") or std.mem.eql(u8, lname, "any-pointer")) {
+        return std.ascii.eqlIgnoreCase(value, "fine");
+    }
+    if (std.mem.eql(u8, lname, "update")) return std.ascii.eqlIgnoreCase(value, "fast");
+    if (std.mem.eql(u8, lname, "scripting")) return std.ascii.eqlIgnoreCase(value, "enabled");
+    if (std.mem.eql(u8, lname, "overflow-block") or std.mem.eql(u8, lname, "overflow-inline")) {
+        return std.ascii.eqlIgnoreCase(value, "scroll");
+    }
+    if (std.mem.eql(u8, lname, "display-mode")) return std.ascii.eqlIgnoreCase(value, "browser");
+    if (std.mem.eql(u8, lname, "color-gamut")) return std.ascii.eqlIgnoreCase(value, "srgb");
+    if (std.mem.eql(u8, lname, "dynamic-range")) return std.ascii.eqlIgnoreCase(value, "standard");
+    if (std.mem.eql(u8, lname, "forced-colors")) return std.ascii.eqlIgnoreCase(value, "none");
+    if (std.mem.eql(u8, lname, "prefers-color-scheme")) return std.ascii.eqlIgnoreCase(value, "light");
+    if (std.mem.eql(u8, lname, "prefers-reduced-motion") or
+        std.mem.eql(u8, lname, "prefers-reduced-transparency") or
+        std.mem.eql(u8, lname, "prefers-contrast"))
+    {
+        return std.ascii.eqlIgnoreCase(value, "no-preference");
+    }
+
     return false;
 }
 
+// The boolean form asks "is this feature's value something other than zero or
+// none". A colour screen answers false for `monochrome` and `grid` (both are 0)
+// and true for everything it does have.
 fn evalBoolean(name: []const u8, viewport: Viewport) bool {
-    if (name.len > 16) {
+    if (name.len > 32) {
         return false;
     }
-    var buf: [16]u8 = undefined;
+    var buf: [32]u8 = undefined;
     const lname = std.ascii.lowerString(&buf, name);
 
     if (std.mem.eql(u8, lname, "width")) return viewport.width > 0;
     if (std.mem.eql(u8, lname, "height")) return viewport.height > 0;
+    if (std.mem.eql(u8, lname, "device-width")) return viewport.width > 0;
+    if (std.mem.eql(u8, lname, "device-height")) return viewport.height > 0;
     if (std.mem.eql(u8, lname, "orientation")) return true;
+    if (std.mem.eql(u8, lname, "aspect-ratio") or std.mem.eql(u8, lname, "device-aspect-ratio")) return true;
+    if (std.mem.eql(u8, lname, "resolution")) return true;
+    if (std.mem.eql(u8, lname, "color")) return COLOR_BITS_PER_CHANNEL > 0;
+
+    // Zero-valued, so false in the boolean form.
+    if (std.mem.eql(u8, lname, "monochrome")) return false;
+    if (std.mem.eql(u8, lname, "color-index")) return false;
+    if (std.mem.eql(u8, lname, "grid")) return false;
+
+    // `none`-valued features are false in the boolean form; the rest are true.
+    if (std.mem.eql(u8, lname, "forced-colors")) return false;
+    if (std.mem.eql(u8, lname, "hover") or std.mem.eql(u8, lname, "any-hover")) return true;
+    if (std.mem.eql(u8, lname, "pointer") or std.mem.eql(u8, lname, "any-pointer")) return true;
+    if (std.mem.eql(u8, lname, "update")) return true;
+    if (std.mem.eql(u8, lname, "scripting")) return true;
+    if (std.mem.eql(u8, lname, "overflow-block") or std.mem.eql(u8, lname, "overflow-inline")) return true;
+    if (std.mem.eql(u8, lname, "display-mode")) return true;
+    if (std.mem.eql(u8, lname, "color-gamut")) return true;
+    if (std.mem.eql(u8, lname, "dynamic-range")) return true;
+    if (std.mem.eql(u8, lname, "prefers-color-scheme")) return true;
+    if (std.mem.eql(u8, lname, "prefers-reduced-motion") or
+        std.mem.eql(u8, lname, "prefers-reduced-transparency") or
+        std.mem.eql(u8, lname, "prefers-contrast")) return true;
+
     return false;
+}
+
+const RatioCompare = enum { eq, ge, le };
+
+/// `<ratio>` is `<int> / <int>`, or a single number meaning `n / 1`. Compared
+/// by cross-multiplication so 16/9 and 1920/1080 come out equal.
+fn compareRatio(value: []const u8, width: u32, height: u32, op: RatioCompare) bool {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    var num: u64 = undefined;
+    var den: u64 = undefined;
+    if (std.mem.indexOfScalar(u8, trimmed, '/')) |slash| {
+        num = parseInteger(trimmed[0..slash]) orelse return false;
+        den = parseInteger(trimmed[slash + 1 ..]) orelse return false;
+    } else {
+        num = parseInteger(trimmed) orelse return false;
+        den = 1;
+    }
+    if (den == 0) return false;
+
+    // width/height vs num/den  ->  width*den vs num*height
+    const lhs = @as(u64, width) * den;
+    const rhs = num * @as(u64, height);
+    return switch (op) {
+        .eq => lhs == rhs,
+        .ge => lhs >= rhs,
+        .le => lhs <= rhs,
+    };
+}
+
+/// `<resolution>` in whole `dppx` / `x`. `dpi` and `dpcm` are converted against
+/// the CSS-fixed 96dpi. Fractional resolutions are rejected rather than rounded,
+/// which only ever makes a query fail closed.
+fn parseDppx(value: []const u8) ?u32 {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    var i: usize = 0;
+    while (i < trimmed.len and std.ascii.isDigit(trimmed[i])) i += 1;
+    if (i == 0) return null;
+    const num = std.fmt.parseInt(u32, trimmed[0..i], 10) catch return null;
+    const unit = std.mem.trim(u8, trimmed[i..], &std.ascii.whitespace);
+
+    if (std.ascii.eqlIgnoreCase(unit, "dppx") or std.ascii.eqlIgnoreCase(unit, "x")) return num;
+    if (std.ascii.eqlIgnoreCase(unit, "dpi")) return if (num % 96 == 0) num / 96 else null;
+    if (std.ascii.eqlIgnoreCase(unit, "dpcm")) return null;
+    return null;
+}
+
+/// A bare non-negative integer, for the numeric display descriptors.
+fn parseInteger(value: []const u8) ?u32 {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+    for (trimmed) |c| {
+        if (!std.ascii.isDigit(c)) return null;
+    }
+    return std.fmt.parseInt(u32, trimmed, 10) catch null;
 }
 
 /// Parse `<int>px`, `<int>em` (1em=16px), `<int>rem`, or bare `0`.
@@ -477,11 +683,71 @@ test "MediaQuery: bare 0 is valid" {
 
 test "MediaQuery: unknown feature is false" {
     const v = Viewport.default;
-    try testing.expect(!matches("(monochrome)", v));
+    try testing.expect(!matches("(nonsense)", v));
+    try testing.expect(!matches("(nonsense: 1)", v));
+    // Chrome implements neither of these — measured, no value form and no
+    // boolean form matches — so recognising them here would be the anomaly.
+    try testing.expect(!matches("(inverted-colors)", v));
+    try testing.expect(!matches("(inverted-colors: none)", v));
+    try testing.expect(!matches("(video-dynamic-range: standard)", v));
+    // Recognised features still answer false for a value this device is not.
     try testing.expect(!matches("(prefers-color-scheme: dark)", v));
     try testing.expect(!matches("(prefers-reduced-motion: reduce)", v));
-    try testing.expect(!matches("(hover: hover)", v));
-    try testing.expect(!matches("(color)", v));
+    try testing.expect(!matches("(hover: none)", v));
+    try testing.expect(!matches("(pointer: coarse)", v));
+}
+
+test "MediaQuery: the device persona, as measured on a headed Chrome" {
+    const v = Viewport.default;
+    // CreepJS's getCSSMedia probes, in its own order.
+    try testing.expect(matches("(prefers-reduced-motion: no-preference)", v));
+    try testing.expect(matches("(prefers-color-scheme: light)", v));
+    try testing.expect(matches("(monochrome: 0)", v));
+    try testing.expect(matches("(forced-colors: none)", v));
+    try testing.expect(matches("(any-hover: hover)", v));
+    try testing.expect(matches("(hover: hover)", v));
+    try testing.expect(matches("(any-pointer: fine)", v));
+    try testing.expect(matches("(pointer: fine)", v));
+    try testing.expect(matches("(display-mode: browser)", v));
+    try testing.expect(matches("(device-width: 1920px) and (device-height: 1080px)", v));
+
+    // These three follow from this fork's persona (colorDepth 24, dpr 1)
+    // rather than from the reference laptop's HDR panel — see the header.
+    try testing.expect(matches("(color-gamut: srgb)", v));
+    try testing.expect(!matches("(color-gamut: p3)", v));
+    try testing.expect(matches("(color: 8)", v));
+    try testing.expect(!matches("(color: 10)", v));
+    try testing.expect(matches("(dynamic-range: standard)", v));
+    try testing.expect(!matches("(dynamic-range: high)", v));
+
+    try testing.expect(matches("(prefers-contrast: no-preference)", v));
+    try testing.expect(matches("(prefers-reduced-transparency: no-preference)", v));
+    try testing.expect(matches("(update: fast)", v));
+    try testing.expect(matches("(scripting: enabled)", v));
+    try testing.expect(matches("(overflow-block: scroll)", v));
+    try testing.expect(matches("(overflow-inline: scroll)", v));
+    try testing.expect(matches("(grid: 0)", v));
+    try testing.expect(matches("(color-index: 0)", v));
+    try testing.expect(matches("(resolution: 1dppx)", v));
+    try testing.expect(matches("(resolution: 96dpi)", v));
+    try testing.expect(!matches("(resolution: 2dppx)", v));
+}
+
+test "MediaQuery: ratio compares as a fraction, not a division" {
+    const v = Viewport.default; // 1920x1080
+    try testing.expect(matches("(device-aspect-ratio: 16/9)", v));
+    try testing.expect(matches("(device-aspect-ratio: 1920/1080)", v));
+    try testing.expect(matches("(aspect-ratio: 16/9)", v));
+    try testing.expect(!matches("(device-aspect-ratio: 4/3)", v));
+    try testing.expect(matches("(min-aspect-ratio: 4/3)", v));
+    try testing.expect(matches("(max-aspect-ratio: 2/1)", v));
+    // A bare number is `n / 1`, and a zero denominator is malformed.
+    try testing.expect(!matches("(aspect-ratio: 1)", v));
+    try testing.expect(!matches("(aspect-ratio: 16/0)", v));
+
+    const square = Viewport{ .width = 800, .height = 800 };
+    try testing.expect(matches("(aspect-ratio: 1)", square));
+    try testing.expect(matches("(aspect-ratio: 1/1)", square));
 }
 
 test "MediaQuery: malformed value is false" {
@@ -497,8 +763,17 @@ test "MediaQuery: boolean form (feature presence)" {
     try testing.expect(matches("(width)", v));
     try testing.expect(matches("(height)", v));
     try testing.expect(matches("(orientation)", v));
+    // Zero-valued features are false in the boolean form; a colour screen has
+    // monochrome 0, color-index 0 and grid 0, but a non-zero `color`.
     try testing.expect(!matches("(monochrome)", v));
-    try testing.expect(!matches("(color)", v));
+    try testing.expect(!matches("(color-index)", v));
+    try testing.expect(!matches("(grid)", v));
+    try testing.expect(matches("(color)", v));
+    // `none`-valued ones are false too; the rest are true.
+    try testing.expect(!matches("(forced-colors)", v));
+    try testing.expect(matches("(hover)", v));
+    try testing.expect(matches("(pointer)", v));
+    try testing.expect(matches("(prefers-color-scheme)", v));
 }
 
 test "MediaQuery: viewport-default values" {

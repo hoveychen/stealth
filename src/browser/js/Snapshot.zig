@@ -137,7 +137,39 @@ fn isValid(self: Snapshot) bool {
     return v8.v8__StartupData__IsValid(self.startup_data);
 }
 
+// V8 derives an isolate's default JS stack limit from the *thread's* stack
+// start minus --stack-size (984 KB by default), not from where the isolate was
+// created. By the time App.init() gets here the main thread is already about
+// 1.4 MB deep, so that default limit sits above our stack pointer and the very
+// first Script::Compile in createSnapshotContext dies with
+// `RangeError: Maximum call stack size exceeded` -- with no JS recursion
+// anywhere in sight.
+//
+// Measured while adding the File System Access interfaces: startup broke the
+// moment the registry crossed a threshold (five extra interfaces fine, six
+// fatal), the frame between create() and that Compile is only 36 KB, and
+// running the same build with `--v8-flags-unsafe --stack-size=4000` started
+// cleanly. So the budget was already exhausted before we got here and each new
+// interface was just nudging the frame along.
+//
+// So build the snapshot on a thread of its own, where the isolate starts from
+// a fresh stack and the whole default budget is actually available. Nothing
+// about the resulting blob depends on which thread produced it, and page
+// isolates are untouched, so script-visible recursion depth is unchanged.
 pub fn create() !Snapshot {
+    var result: Result = .{ .value = error.SnapshotThreadFailed };
+    const thread = try std.Thread.spawn(.{}, buildOnThread, .{&result});
+    thread.join();
+    return result.value;
+}
+
+const Result = struct { value: anyerror!Snapshot };
+
+fn buildOnThread(result: *Result) void {
+    result.value = build();
+}
+
+fn build() !Snapshot {
     var external_references = collectExternalReferences();
 
     var params: v8.CreateParams = undefined;
@@ -313,7 +345,26 @@ fn createSnapshotContext(
         @setEvalBranchQuota(10_000);
         const template_index = comptime bridge.JsApiLookup.getId(JsApi);
         const func = v8.v8__FunctionTemplate__GetFunction(templates[template_index], context);
-        if (@hasDecl(JsApi.Meta, "name")) {
+
+        // WebIDL [LegacyNoInterfaceObject]: the interface still brands its
+        // instances through Symbol.toStringTag, but there is no constructor on
+        // the global and no `constructor` back-reference on the prototype.
+        // Measured on Chrome 150: navigator.webkitTemporaryStorage is
+        // "[object DeprecatedStorageQuota]" while globalThis
+        // .DeprecatedStorageQuota is undefined and the prototype carries only
+        // queryUsageAndQuota and requestQuota.
+        const no_interface_object = comptime @hasDecl(JsApi.Meta, "no_interface_object");
+        if (comptime no_interface_object) {
+            const func_obj: *const v8.Object = @ptrCast(func);
+            if (v8.v8__Object__Get(func_obj, context, prototype_key)) |proto_handle| {
+                const proto_obj: *const v8.Object = @ptrCast(proto_handle);
+                const constructor_key = v8.v8__String__NewFromUtf8(isolate, "constructor", v8.kNormal, 11);
+                var maybe_deleted: v8.MaybeBool = undefined;
+                v8.v8__Object__Delete(proto_obj, context, constructor_key, &maybe_deleted);
+            }
+        }
+
+        if (@hasDecl(JsApi.Meta, "name") and !no_interface_object) {
             if (@hasDecl(JsApi.Meta, "constructor_alias")) {
                 const alias = JsApi.Meta.constructor_alias;
                 const v8_class_name = v8.v8__String__NewFromUtf8(isolate, alias.ptr, v8.kNormal, @intCast(alias.len));
@@ -330,6 +381,20 @@ fn createSnapshotContext(
                 var maybe_result: v8.MaybeBool = undefined;
                 // Web IDL: interface objects on the global are non-enumerable.
                 v8.v8__Object__DefineOwnProperty(global_obj, context, v8_class_name, func, v8.DontEnum, &maybe_result);
+            }
+
+            // Extra global names for the *same* constructor, for the legacy
+            // vendor-prefixed aliases Chrome still ships (webkitRTCPeerConnection
+            // === RTCPeerConnection is true there, measured). Unlike
+            // constructor_alias above, this does not rename the class: the
+            // function keeps Meta.name, which is what Chrome reports for
+            // webkitRTCPeerConnection.name.
+            if (@hasDecl(JsApi.Meta, "constructor_aliases")) {
+                inline for (JsApi.Meta.constructor_aliases) |alias| {
+                    const alias_name = v8.v8__String__NewFromUtf8(isolate, alias.ptr, v8.kNormal, @intCast(alias.len));
+                    var maybe_alias: v8.MaybeBool = undefined;
+                    v8.v8__Object__DefineOwnProperty(global_obj, context, alias_name, func, v8.DontEnum, &maybe_alias);
+                }
             }
         }
 
@@ -651,6 +716,8 @@ fn illegalConstructorCallback(raw_info: ?*const v8.FunctionCallbackInfo) callcon
     // Recover the constructor's name via NewTarget, whose .name property was
     // set via SetClassName when the FunctionTemplate was built. Lets us tell
     // `new DOMException()` apart from `new MutationRecord()` in the warning.
+    // A plain call has no new.target and gets no name -- which is also what
+    // Chrome does, see the message below.
     var name_buf: [128]u8 = undefined;
     var name: []const u8 = "<unknown>";
     if (v8.v8__FunctionCallbackInfo__NewTarget(raw_info)) |new_target| {
@@ -667,7 +734,22 @@ fn illegalConstructorCallback(raw_info: ?*const v8.FunctionCallbackInfo) callcon
     }
     log.info(.js, "Illegal constructor call", .{ .name = name });
 
-    const message = v8.v8__String__NewFromUtf8(isolate, "Illegal Constructor", v8.kNormal, 19);
+    // Chrome names the interface in the message (measured on a headed Chrome
+    // 150: new Permissions() gives "Failed to construct 'Permissions': Illegal
+    // constructor"), and the class name is already in hand from new.target.
+    // Called as a plain function -- `Permissions()` -- there is no new.target
+    // and Chrome answers a bare "Illegal constructor" (measured the same way),
+    // so the name never reaches the message and never leaks a placeholder.
+    var message_buf: [name_buf.len + 48]u8 = undefined;
+    const message_text = if (v8.v8__FunctionCallbackInfo__IsConstructCall(raw_info))
+        std.fmt.bufPrint(
+            &message_buf,
+            "Failed to construct '{s}': Illegal constructor",
+            .{name},
+        ) catch "Illegal constructor"
+    else
+        "Illegal constructor";
+    const message = v8.v8__String__NewFromUtf8(isolate, message_text.ptr, v8.kNormal, @intCast(message_text.len));
     const js_exception = v8.v8__Exception__TypeError(message);
 
     _ = v8.v8__Isolate__ThrowException(isolate, js_exception);
@@ -691,7 +773,10 @@ fn hasNamedIndexedGetter(comptime JsApi: type) bool {
 
 // Generic prototype index lookup for a given API list
 fn protoIndexLookup(comptime JsApi: type) ?u16 {
-    @setEvalBranchQuota(100_000);
+    // Scales with the number of registered interfaces times the length of each
+    // one's prototype chain, so it needs headroom every time a batch of
+    // interfaces lands.
+    @setEvalBranchQuota(400_000);
     comptime {
         const T = JsApi.bridge.type;
         const F = reflect.Proto(T) orelse return null;
@@ -762,6 +847,27 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     const own_properties = @hasDecl(JsApi.Meta, "own_properties") and JsApi.Meta.own_properties;
     const member_template = if (own_properties) instance else prototype;
 
+    // Web IDL brands the interface *prototype* object, never the instances; a
+    // namespace object (which has no prototype of its own) carries the brand
+    // directly. Measured on a headed Chrome 150:
+    //
+    //   Object.getOwnPropertyDescriptor(Element.prototype, Symbol.toStringTag)
+    //     -> { value: 'Element', writable: false, enumerable: false, configurable: true }
+    //   Object.getOwnPropertySymbols(document.createElement('div')) -> []
+    //   Object.prototype.toString.call(console) -> '[object console]'
+    //
+    // This runs before the member loop so the brand sorts ahead of @@iterator
+    // in getOwnPropertySymbols, the way Blink orders them. In [Global]
+    // flattening mode we skip it: the class already got its brand from the
+    // regular pass, and Chrome's `window` owns no symbol of its own -- it
+    // inherits '[object Window]' from Window.prototype.
+    if (comptime !flatten and @hasDecl(JsApi.Meta, "name")) {
+        const tag = comptime if (@hasDecl(JsApi.Meta, "to_string_tag")) JsApi.Meta.to_string_tag else JsApi.Meta.name;
+        const js_name = v8.v8__Symbol__GetToStringTag(isolate);
+        const js_value = v8.v8__String__NewFromUtf8(isolate, tag.ptr, v8.kNormal, @intCast(tag.len));
+        v8.v8__Template__Set(@ptrCast(if (own_properties) instance else prototype), js_name, js_value, v8.ReadOnly + v8.DontEnum);
+    }
+
     const declarations = @typeInfo(JsApi).@"struct".decls;
     var has_named_index_getter = false;
 
@@ -813,8 +919,10 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     v8.v8__Template__Set(@ptrCast(template), js_name, @ptrCast(function_template), v8.None);
                 } else {
                     // Web IDL: operations on the interface prototype object
-                    // (and mirrored onto [Global] instances) are enumerable.
-                    v8.v8__Template__Set(@ptrCast(define_on orelse member_template), js_name, @ptrCast(function_template), v8.None);
+                    // (and mirrored onto [Global] instances) are enumerable,
+                    // unless the member opted out (window.webkitURL).
+                    const attribute: v8.PropertyAttribute = if (value.enumerable) v8.None else v8.DontEnum;
+                    v8.v8__Template__Set(@ptrCast(define_on orelse member_template), js_name, @ptrCast(function_template), attribute);
                 }
             },
             bridge.Indexed => {
@@ -897,12 +1005,6 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     if (@hasDecl(JsApi.Meta, "htmldda")) {
         v8.v8__ObjectTemplate__MarkAsUndetectable(instance);
         v8.v8__ObjectTemplate__SetCallAsFunctionHandler(instance, JsApi.Meta.callable.func);
-    }
-
-    if (@hasDecl(JsApi.Meta, "name")) {
-        const js_name = v8.v8__Symbol__GetToStringTag(isolate);
-        const js_value = v8.v8__String__NewFromUtf8(isolate, JsApi.Meta.name.ptr, v8.kNormal, @intCast(JsApi.Meta.name.len));
-        v8.v8__Template__Set(@ptrCast(instance), js_name, js_value, v8.ReadOnly + v8.DontDelete);
     }
 
     if (comptime IS_DEBUG) {
@@ -991,6 +1093,9 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
     if (value.deletable == false) {
         attribute |= v8.DontDelete;
     }
+    if (value.enumerable == false) {
+        attribute |= v8.DontEnum;
+    }
 
     if (value.static) {
         v8.v8__Template__SetAccessorProperty(@ptrCast(template), js_name, getter_callback, setter_callback, attribute);
@@ -1004,4 +1109,9 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
             .attribute = attribute,
         });
     }
+}
+
+const testing = @import("../../testing.zig");
+test "Snapshot: Symbol.toStringTag" {
+    try testing.htmlRunner("to_string_tag.html", .{});
 }

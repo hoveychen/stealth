@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  The plain function members of Navigator.prototype, and the one data accessor.
+  Argument counts and answers measured on headed Chrome 150 over
+  http://localhost.
+-->
+
+<script id=navigatorPrototypeOrder>
+  {
+    // Chrome 150's Navigator.prototype, in Chrome's own order. `constructor`
+    // is dropped from the comparison: Blink emits it between vibrate and
+    // deprecatedRunAdAuctionEnforcesKAnonymity, while V8 puts ours last, and
+    // that position isn't something a binding can choose.
+    //
+    // modelContext is ours and not Chrome's — it's the WebMCP surface this fork
+    // exists to expose, so it stays, parked at the end where it perturbs the
+    // rest of the order least.
+    const chrome150 = [
+      'vendorSub', 'productSub', 'vendor', 'maxTouchPoints', 'scheduling',
+      'userActivation', 'geolocation', 'doNotTrack', 'webkitTemporaryStorage',
+      'webkitPersistentStorage', 'windowControlsOverlay', 'hardwareConcurrency',
+      'cookieEnabled', 'appCodeName', 'appName', 'appVersion', 'platform',
+      'product', 'userAgent', 'language', 'languages', 'onLine', 'webdriver',
+      'plugins', 'mimeTypes', 'pdfViewerEnabled', 'connection', 'getGamepads',
+      'javaEnabled', 'sendBeacon', 'vibrate',
+      'deprecatedRunAdAuctionEnforcesKAnonymity', 'protectedAudience',
+      'bluetooth', 'clipboard', 'credentials', 'keyboard', 'managed',
+      'mediaDevices', 'serviceWorker', 'virtualKeyboard', 'wakeLock',
+      'deviceMemory', 'userAgentData', 'locks', 'storage', 'gpu', 'login',
+      'ink', 'mediaCapabilities', 'permissions', 'devicePosture', 'hid',
+      'mediaSession', 'presentation', 'serial', 'usb', 'xr', 'storageBuckets',
+      'adAuctionComponents', 'runAdAuction', 'canLoadAdAuctionFencedFrame',
+      'canShare', 'share', 'clearAppBadge', 'getBattery', 'getUserMedia',
+      'requestMIDIAccess', 'requestMediaKeySystemAccess', 'setAppBadge',
+      'webkitGetUserMedia', 'clearOriginJoinedAdInterestGroups',
+      'createAuctionNonce', 'joinAdInterestGroup', 'leaveAdInterestGroup',
+      'updateAdInterestGroups', 'deprecatedReplaceInURN', 'deprecatedURNToURL',
+      'getInstalledRelatedApps', 'getInterestGroupAdAuctionData',
+      'registerProtocolHandler', 'unregisterProtocolHandler',
+    ];
+    const ours = Object.getOwnPropertyNames(Navigator.prototype)
+      .filter((n) => n !== 'constructor' && n !== 'modelContext');
+    testing.expectEqual(chrome150, ours);
+  }
+</script>
+
+<script id=gamepadsAndVibrate>
+  {
+    testing.expectEqual(0, Navigator.prototype.getGamepads.length);
+    testing.expectEqual(1, Navigator.prototype.vibrate.length);
+    // Four empty slots, exactly as Chrome reported with nothing plugged in.
+    const pads = navigator.getGamepads();
+    testing.expectEqual(true, Array.isArray(pads));
+    testing.expectEqual([null, null, null, null], pads);
+    // No vibration motor on a desktop, so Chrome answers false (measured).
+    testing.expectEqual(false, navigator.vibrate(200));
+    testing.expectEqual(false, navigator.vibrate(0));
+  }
+</script>
+
+<script id=shareAndBadge type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(0, Navigator.prototype.canShare.length);
+    testing.expectEqual(0, Navigator.prototype.share.length);
+    testing.expectEqual(0, Navigator.prototype.setAppBadge.length);
+    testing.expectEqual(0, Navigator.prototype.clearAppBadge.length);
+
+    // canShare is a shape check, and an empty dictionary has nothing to share
+    // (both measured).
+    testing.expectEqual(true, navigator.canShare({ title: 'x' }));
+    testing.expectEqual(false, navigator.canShare({}));
+
+    let shareErr = null;
+    try { await navigator.share({ title: 'x' }); } catch (e) { shareErr = e.name; }
+    const set = await navigator.setAppBadge();
+    const cleared = await navigator.clearAppBadge();
+    state.resolve();
+
+    await state.done(() => {
+      // Sharing needs a user gesture Chrome never sees here.
+      testing.expectEqual('NotAllowedError', shareErr);
+      testing.expectEqual(undefined, set);
+      testing.expectEqual(undefined, cleared);
+    });
+  }
+</script>
+
+<script id=mediaMethods type=module>
+  {
+    const state = await testing.async();
+    // The legacy callback form; Chrome still ships both spellings.
+    testing.expectEqual(3, Navigator.prototype.getUserMedia.length);
+    testing.expectEqual(3, Navigator.prototype.webkitGetUserMedia.length);
+    testing.expectEqual(0, Navigator.prototype.requestMIDIAccess.length);
+    testing.expectEqual(2, Navigator.prototype.requestMediaKeySystemAccess.length);
+
+    // Routed through navigator.mediaDevices.getUserMedia, so the two can't
+    // disagree about what devices exist.
+    let legacyErr = null;
+    await new Promise((resolve) => {
+      navigator.getUserMedia({ audio: true }, () => { legacyErr = 'success'; resolve(); }, (e) => {
+        legacyErr = e.name;
+        resolve();
+      });
+    });
+
+    let edrmErr = null;
+    try {
+      await navigator.requestMediaKeySystemAccess('org.w3.clearkey', [{ initDataTypes: ['cenc'] }]);
+    } catch (e) { edrmErr = e.name; }
+
+    // requestMIDIAccess is left pending, which is the state Chrome's own
+    // permission prompt leaves it in (measured: still pending after four
+    // seconds). Confirm it neither resolves nor rejects on this turn.
+    let midiSettled = false;
+    navigator.requestMIDIAccess().then(() => { midiSettled = true; }, () => { midiSettled = true; });
+    await Promise.resolve();
+    state.resolve();
+
+    await state.done(() => {
+      // The same rejection navigator.mediaDevices.getUserMedia already gives,
+      // routed into the legacy error callback.
+      testing.expectEqual('NotAllowedError', legacyErr);
+      // No CDM here. NotSupportedError is what Chrome answers for a key system
+      // it can't provide, and implementing MediaKeySystemAccess would mean
+      // inventing a CDM's capabilities.
+      testing.expectEqual('NotSupportedError', edrmErr);
+      testing.expectEqual(false, midiSettled);
+    });
+  }
+</script>
+
+<script id=installedRelatedApps type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(0, Navigator.prototype.getInstalledRelatedApps.length);
+    const apps = await navigator.getInstalledRelatedApps();
+    state.resolve();
+    await state.done(() => testing.expectEqual([], apps));
+  }
+</script>
+
+<script id=protectedAudienceMethods type=module>
+  {
+    const state = await testing.async();
+    testing.expectEqual(1, Navigator.prototype.adAuctionComponents.length);
+    testing.expectEqual(1, Navigator.prototype.runAdAuction.length);
+    testing.expectEqual(0, Navigator.prototype.canLoadAdAuctionFencedFrame.length);
+    testing.expectEqual(1, Navigator.prototype.clearOriginJoinedAdInterestGroups.length);
+    testing.expectEqual(0, Navigator.prototype.createAuctionNonce.length);
+    testing.expectEqual(1, Navigator.prototype.joinAdInterestGroup.length);
+    testing.expectEqual(0, Navigator.prototype.leaveAdInterestGroup.length);
+    testing.expectEqual(0, Navigator.prototype.updateAdInterestGroups.length);
+    testing.expectEqual(2, Navigator.prototype.deprecatedReplaceInURN.length);
+    testing.expectEqual(1, Navigator.prototype.deprecatedURNToURL.length);
+    testing.expectEqual(1, Navigator.prototype.getInterestGroupAdAuctionData.length);
+
+    // Measured on Chrome, and true of any frame that wasn't loaded from an
+    // auction.
+    let componentsErr = null;
+    try { navigator.adAuctionComponents(1); } catch (e) { componentsErr = e.name; }
+    testing.expectEqual('InvalidStateError', componentsErr);
+    testing.expectEqual(true, navigator.canLoadAdAuctionFencedFrame());
+    testing.expectEqual(undefined, navigator.updateAdInterestGroups());
+    // A data property, not a method, and false on Chrome (measured).
+    testing.expectEqual(false, navigator.deprecatedRunAdAuctionEnforcesKAnonymity);
+    testing.expectEqual(
+      'function',
+      typeof Object.getOwnPropertyDescriptor(Navigator.prototype, 'deprecatedRunAdAuctionEnforcesKAnonymity').get,
+    );
+
+    // Nothing here joins interest groups or runs auctions, so every call lands
+    // on Chrome's own "no auction happened" answer.
+    const winner = await navigator.runAdAuction({ seller: 'https://example.com', decisionLogicURL: 'https://example.com/d.js' });
+    const nonce = await navigator.createAuctionNonce();
+    const joined = await navigator.joinAdInterestGroup({ owner: 'https://example.com', name: 'x' });
+    const left = await navigator.leaveAdInterestGroup();
+    const cleared = await navigator.clearOriginJoinedAdInterestGroups('https://example.com');
+    const url = await navigator.deprecatedURNToURL('urn:uuid:00000000-0000-0000-0000-000000000000');
+    const replaced = await navigator.deprecatedReplaceInURN('urn:uuid:00000000-0000-0000-0000-000000000000', {});
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(null, winner);
+      // Chrome hands back a UUID; ours comes from the same generator as
+      // crypto.randomUUID.
+      testing.expectEqual(36, nonce.length);
+      testing.expectEqual(true, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(nonce));
+      testing.expectEqual(undefined, joined);
+      testing.expectEqual(undefined, left);
+      testing.expectEqual(undefined, cleared);
+      // An urn that named no auction result maps to the empty string
+      // (measured).
+      testing.expectEqual('', url);
+      testing.expectEqual(undefined, replaced);
+    });
+  }
+</script>

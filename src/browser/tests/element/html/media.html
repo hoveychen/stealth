@@ -6,14 +6,20 @@
 
 <script id="canPlayType_audio">
   {
+    // These answers are Chrome 150's, measured — see media/chrome_mimes.zig.
+    // A container that implies its own codec answers "probably" bare; one that
+    // can hold several answers "maybe" until a codec is named. The two groups
+    // below are exactly that split.
     const audio = document.getElementById('audio1');
     testing.expectEqual('probably', audio.canPlayType('audio/mp3'));
     testing.expectEqual('probably', audio.canPlayType('audio/mpeg'));
-    testing.expectEqual('probably', audio.canPlayType('audio/webm'));
-    testing.expectEqual('probably', audio.canPlayType('audio/ogg'));
-    testing.expectEqual('probably', audio.canPlayType('audio/wav'));
-    testing.expectEqual('maybe', audio.canPlayType('audio/aac'));
-    testing.expectEqual('maybe', audio.canPlayType('audio/flac'));
+    testing.expectEqual('probably', audio.canPlayType('audio/aac'));
+    testing.expectEqual('probably', audio.canPlayType('audio/flac'));
+
+    testing.expectEqual('maybe', audio.canPlayType('audio/webm'));
+    testing.expectEqual('maybe', audio.canPlayType('audio/ogg'));
+    testing.expectEqual('maybe', audio.canPlayType('audio/wav'));
+
     testing.expectEqual('', audio.canPlayType('audio/invalid'));
     testing.expectEqual('', audio.canPlayType('video/invalid'));
   }
@@ -21,10 +27,12 @@
 
 <script id="canPlayType_video">
   {
+    // Every video container Chrome supports can hold more than one codec, so
+    // all three are "maybe" until one is named.
     const video = document.getElementById('video1');
-    testing.expectEqual('probably', video.canPlayType('video/mp4'));
-    testing.expectEqual('probably', video.canPlayType('video/webm'));
-    testing.expectEqual('probably', video.canPlayType('video/ogg'));
+    testing.expectEqual('maybe', video.canPlayType('video/mp4'));
+    testing.expectEqual('maybe', video.canPlayType('video/webm'));
+    testing.expectEqual('maybe', video.canPlayType('video/ogg'));
     testing.expectEqual('', video.canPlayType('video/invalid'));
   }
 </script>
@@ -32,8 +40,11 @@
 <script id="canPlayType_with_codecs">
   {
     const audio = document.getElementById('audio1');
-    testing.expectEqual('probably', audio.canPlayType('audio/mp3; codecs="mp3"'));
     testing.expectEqual('probably', audio.canPlayType('video/mp4; codecs="avc1.42E01E"'));
+    testing.expectEqual('probably', audio.canPlayType('audio/mpeg; codecs="mp3"'));
+    // audio/mp3 is already as specific as it gets, so Chrome accepts no codecs
+    // parameter on it at all — not even the obvious one.
+    testing.expectEqual('', audio.canPlayType('audio/mp3; codecs="mp3"'));
   }
 </script>
 

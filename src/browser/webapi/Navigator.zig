@@ -31,8 +31,11 @@ const StorageManager = @import("StorageManager.zig");
 const NavigatorUAData = @import("NavigatorUAData.zig");
 const ModelContext = @import("ModelContext.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
+const DOMException = @import("DOMException.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
+const services = @import("navigator/services.zig");
+const devices = @import("navigator/devices.zig");
 
 const Navigator = @This();
 _pad: bool = false,
@@ -41,6 +44,41 @@ _mime_types: PluginArray.MimeTypeArray = .{},
 _permissions: Permissions = .{},
 _storage: StorageManager = .{},
 _ua_data: NavigatorUAData = .{},
+// Chrome hands back the same object on every read of these, so each is created
+// once and cached. They are allocated rather than embedded on purpose: the JS
+// identity map is keyed by Zig address alone, and a struct's first-in-memory
+// field shares its owner's address, so an embedded service object can come back
+// branded [object Navigator].
+_scheduling: ?*services.Scheduling = null,
+_user_activation: ?*services.UserActivation = null,
+_geolocation: ?*services.Geolocation = null,
+_protected_audience: ?*services.ProtectedAudience = null,
+_credentials: ?*services.CredentialsContainer = null,
+_login: ?*services.NavigatorLogin = null,
+_media_capabilities: ?*services.MediaCapabilities = null,
+_media_session: ?*services.MediaSession = null,
+_presentation: ?*services.Presentation = null,
+_gpu: ?*services.GPU = null,
+_keyboard: ?*services.Keyboard = null,
+_locks: ?*services.LockManager = null,
+_ink: ?*services.Ink = null,
+_storage_buckets: ?*services.StorageBucketManager = null,
+_temporary_storage: ?*services.DeprecatedStorageQuota = null,
+_persistent_storage: ?*services.DeprecatedStorageQuota = null,
+_wake_lock: ?*devices.WakeLock = null,
+// EventTarget-backed, so these are built through the factory's prototype chain
+// rather than created flat.
+_window_controls_overlay: ?*devices.WindowControlsOverlay = null,
+_bluetooth: ?*devices.Bluetooth = null,
+_clipboard: ?*devices.Clipboard = null,
+_managed: ?*devices.NavigatorManagedData = null,
+_service_worker: ?*devices.ServiceWorkerContainer = null,
+_virtual_keyboard: ?*devices.VirtualKeyboard = null,
+_device_posture: ?*devices.DevicePosture = null,
+_hid: ?*devices.HID = null,
+_serial: ?*devices.Serial = null,
+_usb: ?*devices.USB = null,
+_xr: ?*devices.XRSystem = null,
 
 pub const init: Navigator = .{};
 
@@ -164,14 +202,14 @@ pub fn getWebdriver(_: *const Navigator) bool {
     return false;
 }
 
-// Default to false: per https://w3c.github.io/gpc/#javascript-property the
-// signal reflects an explicit user preference, and none is configured here.
-// Firefox defaults to false; Chrome doesn't expose the property. Returning
-// true made GPC-compliant consent managers treat every page load as "reject
-// tracking" and skip their consent UI entirely.
-pub fn getGlobalPrivacyControl(_: *const Navigator) bool {
-    return false;
-}
+// globalPrivacyControl is deliberately absent. Per
+// https://w3c.github.io/gpc/#javascript-property the signal reflects an
+// explicit user preference, and none is configured here; Chrome only defines
+// the property once one is set, so on a stock Chrome 150 the name isn't on
+// Navigator.prototype at all (measured). Absent and false read the same way to
+// a GPC-compliant consent manager — no preference, show the consent UI — so
+// this keeps the behaviour that made upstream stop returning true, without the
+// extra name for a fingerprinter to enumerate.
 
 pub fn getPlatform(_: *const Navigator) []const u8 {
     return switch (builtin.os.tag) {
@@ -215,6 +253,153 @@ pub fn getUserAgentData(self: *Navigator) *NavigatorUAData {
     return &self._ua_data;
 }
 
+// Creates the service object on first read and hands back the same one after
+// that, the way Chrome does.
+fn service(comptime T: type, slot: *?*T, frame: *Frame) !*T {
+    if (slot.*) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(T{});
+    slot.* = created;
+    return created;
+}
+
+pub fn getScheduling(self: *Navigator, frame: *Frame) !*services.Scheduling {
+    return service(services.Scheduling, &self._scheduling, frame);
+}
+
+pub fn getUserActivation(self: *Navigator, frame: *Frame) !*services.UserActivation {
+    return service(services.UserActivation, &self._user_activation, frame);
+}
+
+pub fn getGeolocation(self: *Navigator, frame: *Frame) !*services.Geolocation {
+    return service(services.Geolocation, &self._geolocation, frame);
+}
+
+pub fn getProtectedAudience(self: *Navigator, frame: *Frame) !*services.ProtectedAudience {
+    return service(services.ProtectedAudience, &self._protected_audience, frame);
+}
+
+pub fn getCredentials(self: *Navigator, frame: *Frame) !*services.CredentialsContainer {
+    return service(services.CredentialsContainer, &self._credentials, frame);
+}
+
+pub fn getLogin(self: *Navigator, frame: *Frame) !*services.NavigatorLogin {
+    return service(services.NavigatorLogin, &self._login, frame);
+}
+
+pub fn getMediaCapabilities(self: *Navigator, frame: *Frame) !*services.MediaCapabilities {
+    return service(services.MediaCapabilities, &self._media_capabilities, frame);
+}
+
+pub fn getMediaSession(self: *Navigator, frame: *Frame) !*services.MediaSession {
+    return service(services.MediaSession, &self._media_session, frame);
+}
+
+pub fn getPresentation(self: *Navigator, frame: *Frame) !*services.Presentation {
+    return service(services.Presentation, &self._presentation, frame);
+}
+
+pub fn getGpu(self: *Navigator, frame: *Frame) !*services.GPU {
+    return service(services.GPU, &self._gpu, frame);
+}
+
+// Same lazy caching as `service`, but through the factory's prototype-chain
+// allocator so EventTarget sits under the instance.
+fn device(comptime T: type, slot: *?*T, frame: *Frame) !*T {
+    if (slot.*) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.eventTarget(T{ ._proto = undefined });
+    slot.* = created;
+    return created;
+}
+
+pub fn getWakeLock(self: *Navigator, frame: *Frame) !*devices.WakeLock {
+    return service(devices.WakeLock, &self._wake_lock, frame);
+}
+
+pub fn getWindowControlsOverlay(self: *Navigator, frame: *Frame) !*devices.WindowControlsOverlay {
+    return device(devices.WindowControlsOverlay, &self._window_controls_overlay, frame);
+}
+
+pub fn getBluetooth(self: *Navigator, frame: *Frame) !*devices.Bluetooth {
+    return device(devices.Bluetooth, &self._bluetooth, frame);
+}
+
+pub fn getClipboard(self: *Navigator, frame: *Frame) !*devices.Clipboard {
+    return device(devices.Clipboard, &self._clipboard, frame);
+}
+
+pub fn getManaged(self: *Navigator, frame: *Frame) !*devices.NavigatorManagedData {
+    return device(devices.NavigatorManagedData, &self._managed, frame);
+}
+
+pub fn getServiceWorker(self: *Navigator, frame: *Frame) !*devices.ServiceWorkerContainer {
+    return device(devices.ServiceWorkerContainer, &self._service_worker, frame);
+}
+
+pub fn getVirtualKeyboard(self: *Navigator, frame: *Frame) !*devices.VirtualKeyboard {
+    return device(devices.VirtualKeyboard, &self._virtual_keyboard, frame);
+}
+
+pub fn getDevicePosture(self: *Navigator, frame: *Frame) !*devices.DevicePosture {
+    return device(devices.DevicePosture, &self._device_posture, frame);
+}
+
+pub fn getHid(self: *Navigator, frame: *Frame) !*devices.HID {
+    return device(devices.HID, &self._hid, frame);
+}
+
+pub fn getSerial(self: *Navigator, frame: *Frame) !*devices.Serial {
+    return device(devices.Serial, &self._serial, frame);
+}
+
+pub fn getUsb(self: *Navigator, frame: *Frame) !*devices.USB {
+    return device(devices.USB, &self._usb, frame);
+}
+
+pub fn getXr(self: *Navigator, frame: *Frame) !*devices.XRSystem {
+    return device(devices.XRSystem, &self._xr, frame);
+}
+
+pub fn getKeyboard(self: *Navigator, frame: *Frame) !*services.Keyboard {
+    return service(services.Keyboard, &self._keyboard, frame);
+}
+
+pub fn getLocks(self: *Navigator, frame: *Frame) !*services.LockManager {
+    return service(services.LockManager, &self._locks, frame);
+}
+
+pub fn getInk(self: *Navigator, frame: *Frame) !*services.Ink {
+    return service(services.Ink, &self._ink, frame);
+}
+
+pub fn getStorageBuckets(self: *Navigator, frame: *Frame) !*services.StorageBucketManager {
+    return service(services.StorageBucketManager, &self._storage_buckets, frame);
+}
+
+// Two distinct objects, one per quota pool, as on Chrome. 4 GiB is what the
+// reference Chrome reported for the temporary pool; the persistent pool grants
+// whatever a page asks for, so its own quota is never read.
+pub fn getWebkitTemporaryStorage(self: *Navigator, frame: *Frame) !*services.DeprecatedStorageQuota {
+    if (self._temporary_storage) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = 4 * 1024 * 1024 * 1024 });
+    self._temporary_storage = created;
+    return created;
+}
+
+pub fn getWebkitPersistentStorage(self: *Navigator, frame: *Frame) !*services.DeprecatedStorageQuota {
+    if (self._persistent_storage) |existing| {
+        return existing;
+    }
+    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = 0 });
+    self._persistent_storage = created;
+    return created;
+}
+
 pub fn getModelContext(_: *const Navigator, frame: *Frame) *ModelContext {
     return &frame.window._model_context;
 }
@@ -246,6 +431,175 @@ pub fn getBattery(_: *const Navigator, exec: *const Execution) !js.Promise {
         break :blk created;
     };
     return exec.js.local.?.resolvePromise(battery);
+}
+
+// == Chrome-only members with no machinery behind them ==
+//
+// Everything below exists because it is on Chrome 150's Navigator.prototype and
+// a missing name is as readable as a wrong value. Each answers with the state a
+// real Chrome is in when the feature has nothing to report — measured on a
+// headed Chrome 150 over http://localhost, not recalled.
+
+// Four empty slots, exactly as Chrome reported with nothing plugged in.
+pub fn getGamepads(_: *const Navigator) [4]?bool {
+    return .{ null, null, null, null };
+}
+
+// No vibration motor on a desktop, so Chrome answers false.
+pub fn vibrate(_: *const Navigator, _: js.Value) bool {
+    return false;
+}
+
+// canShare is a shape check: something to share is true, an empty dictionary is
+// false (both measured).
+pub fn canShare(_: *const Navigator, data_: ?ShareData) bool {
+    const data = data_ orelse return false;
+    return data.title != null or data.text != null or data.url != null or data.files != null;
+}
+
+const ShareData = struct {
+    title: ?[]const u8 = null,
+    text: ?[]const u8 = null,
+    url: ?[]const u8 = null,
+    files: ?js.Value = null,
+};
+
+// Sharing needs a user gesture, and nothing here ever has one.
+pub fn share(_: *const Navigator, _: ?ShareData, exec: *const Execution) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotAllowedError } });
+}
+
+// No launcher icon to badge; Chrome resolves with nothing either way.
+pub fn setAppBadge(_: *const Navigator, _: ?f64, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+pub fn clearAppBadge(_: *const Navigator, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+// The legacy callback spelling of getUserMedia, and its webkit alias. Routed
+// through navigator.mediaDevices.getUserMedia's answer so the two can't
+// disagree about what devices exist: that rejects NotAllowedError, so the error
+// callback gets the same DOMException.
+pub fn getUserMedia(
+    _: *const Navigator,
+    _: js.Value,
+    _: js.Function,
+    on_error: js.Function,
+    exec: *const Execution,
+) !void {
+    const dom = try exec.arena.create(DOMException);
+    dom.* = DOMException.fromError(error.NotAllowedError).?;
+    _ = try on_error.call(void, .{dom});
+}
+
+// Chrome's permission prompt leaves this pending, and it was still pending four
+// seconds later (measured). Resolving it with a MIDI access object we don't
+// have would be the invention, and rejecting it claims a decision nobody made.
+//
+// A MIDIOptions that is not a dictionary never reaches the prompt: it is a
+// rejection, not a synchronous throw (measured -- `requestMIDIAccess(1)`
+// rejects while `requestMIDIAccess(null)` stays pending like the rest).
+pub fn requestMIDIAccess(_: *const Navigator, options_: ?js.Value, exec: *const Execution) js.Promise {
+    const local = exec.js.local.?;
+    if (options_) |options| {
+        if (!options.isNullOrUndefined() and !options.isObject()) {
+            return local.rejectPromise(.{
+                .type_error = "Failed to execute 'requestMIDIAccess' on 'Navigator': The provided value " ++
+                    "is not of type 'MIDIOptions'.",
+            });
+        }
+    }
+    const resolver = local.createPromiseResolver();
+    const promise = resolver.promise();
+    promise.markAsHandled();
+    return promise;
+}
+
+// No CDM here. NotSupportedError is what Chrome answers for a key system it
+// can't provide, and implementing MediaKeySystemAccess would mean inventing a
+// CDM's capabilities.
+pub fn requestMediaKeySystemAccess(
+    _: *const Navigator,
+    _: []const u8,
+    _: js.Value,
+    exec: *const Execution,
+) js.Promise {
+    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
+}
+
+// Nothing is installed alongside this browser.
+pub fn getInstalledRelatedApps(_: *const Navigator, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(@as([]const []const u8, &.{}));
+}
+
+// == Protected Audience ==
+//
+// This engine joins no interest groups and runs no auctions, so every entry
+// point answers with Chrome's own "no auction happened" outcome. The k-anonymity
+// flag is a data accessor, not a method, and false on Chrome (measured).
+
+pub fn getDeprecatedRunAdAuctionEnforcesKAnonymity(_: *const Navigator) bool {
+    return false;
+}
+
+// Measured, and true of any frame that was not itself loaded from an auction.
+pub fn adAuctionComponents(_: *const Navigator, _: u32) !void {
+    return error.InvalidStateError;
+}
+
+// No interest groups joined means no bids, and no bids means no winner. Chrome
+// resolves null for an auction nobody wins.
+pub fn runAdAuction(_: *const Navigator, _: js.Value, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(null);
+}
+
+pub fn canLoadAdAuctionFencedFrame(_: *const Navigator) bool {
+    return true;
+}
+
+pub fn joinAdInterestGroup(_: *const Navigator, _: js.Value, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+pub fn leaveAdInterestGroup(_: *const Navigator, _: ?js.Value, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+pub fn clearOriginJoinedAdInterestGroups(
+    _: *const Navigator,
+    _: []const u8,
+    _: ?js.Value,
+    exec: *const Execution,
+) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+pub fn updateAdInterestGroups(_: *const Navigator) void {}
+
+// The same generator crypto.randomUUID uses, so the two can't be told apart.
+pub fn createAuctionNonce(_: *const Navigator, exec: *const Execution) !js.Promise {
+    var hex: [36]u8 = undefined;
+    @import("../../id.zig").uuidv4(&hex);
+    return exec.js.local.?.resolvePromise(try exec.call_arena.dupe(u8, &hex));
+}
+
+// An urn that named no auction result maps to the empty string (measured).
+pub fn deprecatedURNToURL(_: *const Navigator, _: js.Value, _: ?bool, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(@as([]const u8, ""));
+}
+
+pub fn deprecatedReplaceInURN(_: *const Navigator, _: js.Value, _: js.Value, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
+}
+
+// Chrome resolves an AdAuctionData here; we have no auction server to build a
+// request for, so this reports the same absence the rest of the family does.
+// Unlike its siblings the shape of Chrome's success value was not measured —
+// the probe origin was http, where Chrome refuses the call outright.
+pub fn getInterestGroupAdAuctionData(_: *const Navigator, _: js.Value, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(null);
 }
 
 pub fn registerProtocolHandler(_: *const Navigator, scheme: []const u8, url: [:0]const u8, frame: *const Frame) !void {
@@ -323,45 +677,112 @@ pub const JsApi = struct {
         pub const name = "Navigator";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
-        pub const empty_with_no_proto = true;
+        // Deliberately not `empty_with_no_proto`: some of the service objects
+        // above carry state (Geolocation's watch counter, MediaSession's
+        // playbackState), and an empty binding hands the getters a pointer to a
+        // comptime constant, so writing through it faults.
     };
 
-    pub const userAgent = bridge.accessor(Navigator.getUserAgent, null, .{});
-    pub const appName = bridge.accessor(Navigator.getAppName, null, .{});
+    // Declaration order is Chrome 150's own `Object.getOwnPropertyNames(
+    // Navigator.prototype)` order, measured on a secure origin. The order is a
+    // surface a fingerprinter can hash, so it is not alphabetical and not
+    // grouped by kind — it is Blink's, quirks included.
+    //
+    // Two things can't be matched exactly. Blink emits `constructor` between
+    // vibrate and deprecatedRunAdAuctionEnforcesKAnonymity; V8 gives us ours
+    // first and puts it last in the enumeration, and a binding can't choose
+    // that. And modelContext is ours and not Chrome's — it is the WebMCP
+    // surface this fork exists to expose, so it stays, parked at the end where
+    // it perturbs the rest of the order least.
+    pub const vendorSub = bridge.accessor(Navigator.getVendorSub, null, .{});
+    pub const productSub = bridge.accessor(Navigator.getProductSub, null, .{});
+    pub const vendor = bridge.accessor(Navigator.getVendor, null, .{});
+    pub const maxTouchPoints = bridge.accessor(Navigator.getMaxTouchPoints, null, .{});
+    pub const scheduling = bridge.accessor(Navigator.getScheduling, null, .{ .exposed = .window });
+    pub const userActivation = bridge.accessor(Navigator.getUserActivation, null, .{ .exposed = .window });
+    pub const geolocation = bridge.accessor(Navigator.getGeolocation, null, .{ .exposed = .window });
+    pub const doNotTrack = bridge.accessor(Navigator.getDoNotTrack, null, .{});
+    pub const webkitTemporaryStorage = bridge.accessor(Navigator.getWebkitTemporaryStorage, null, .{ .exposed = .window });
+    pub const webkitPersistentStorage = bridge.accessor(Navigator.getWebkitPersistentStorage, null, .{ .exposed = .window });
+    pub const windowControlsOverlay = bridge.accessor(Navigator.getWindowControlsOverlay, null, .{ .exposed = .window });
+    pub const hardwareConcurrency = bridge.accessor(Navigator.getHardwareConcurrency, null, .{});
+    pub const cookieEnabled = bridge.accessor(Navigator.getCookieEnabled, null, .{});
     pub const appCodeName = bridge.accessor(Navigator.getAppCodeName, null, .{});
+    pub const appName = bridge.accessor(Navigator.getAppName, null, .{});
     pub const appVersion = bridge.accessor(Navigator.getAppVersion, null, .{});
     pub const platform = bridge.accessor(Navigator.getPlatform, null, .{});
+    pub const product = bridge.accessor(Navigator.getProduct, null, .{});
+    pub const userAgent = bridge.accessor(Navigator.getUserAgent, null, .{});
     pub const language = bridge.accessor(Navigator.getLanguage, null, .{});
     pub const languages = bridge.accessor(Navigator.getLanguages, null, .{});
     pub const onLine = bridge.accessor(Navigator.getOnLine, null, .{});
-    pub const cookieEnabled = bridge.accessor(Navigator.getCookieEnabled, null, .{});
-    pub const hardwareConcurrency = bridge.accessor(Navigator.getHardwareConcurrency, null, .{});
-    pub const deviceMemory = bridge.accessor(Navigator.getDeviceMemory, null, .{});
-    pub const maxTouchPoints = bridge.accessor(Navigator.getMaxTouchPoints, null, .{});
-    pub const vendor = bridge.accessor(Navigator.getVendor, null, .{});
-    pub const vendorSub = bridge.accessor(Navigator.getVendorSub, null, .{});
-    pub const product = bridge.accessor(Navigator.getProduct, null, .{});
-    pub const productSub = bridge.accessor(Navigator.getProductSub, null, .{});
-    pub const pdfViewerEnabled = bridge.accessor(Navigator.getPdfViewerEnabled, null, .{});
     pub const webdriver = bridge.accessor(Navigator.getWebdriver, null, .{});
-    pub const doNotTrack = bridge.accessor(Navigator.getDoNotTrack, null, .{});
-    pub const globalPrivacyControl = bridge.accessor(Navigator.getGlobalPrivacyControl, null, .{});
-
-    pub const javaEnabled = bridge.function(Navigator.javaEnabled, .{});
-    pub const sendBeacon = bridge.function(Navigator.sendBeacon, .{ .exposed = .window, .noop = true });
-    pub const permissions = bridge.accessor(Navigator.getPermissions, null, .{});
-    pub const storage = bridge.accessor(Navigator.getStorage, null, .{});
-    pub const userAgentData = bridge.accessor(Navigator.getUserAgentData, null, .{});
-
-    // window only
     pub const plugins = bridge.accessor(Navigator.getPlugins, null, .{ .exposed = .window });
     pub const mimeTypes = bridge.accessor(Navigator.getMimeTypes, null, .{ .exposed = .window });
-    pub const modelContext = bridge.accessor(Navigator.getModelContext, null, .{ .exposed = .window });
+    pub const pdfViewerEnabled = bridge.accessor(Navigator.getPdfViewerEnabled, null, .{});
     pub const connection = bridge.accessor(Navigator.getConnection, null, .{ .exposed = .window });
+    pub const getGamepads = bridge.function(Navigator.getGamepads, .{ .exposed = .window });
+    pub const javaEnabled = bridge.function(Navigator.javaEnabled, .{});
+    pub const sendBeacon = bridge.function(Navigator.sendBeacon, .{ .exposed = .window, .noop = true });
+    pub const vibrate = bridge.function(Navigator.vibrate, .{ .exposed = .window });
+    pub const deprecatedRunAdAuctionEnforcesKAnonymity = bridge.accessor(
+        Navigator.getDeprecatedRunAdAuctionEnforcesKAnonymity,
+        null,
+        .{ .exposed = .window },
+    );
+    pub const protectedAudience = bridge.accessor(Navigator.getProtectedAudience, null, .{ .exposed = .window });
+    pub const bluetooth = bridge.accessor(Navigator.getBluetooth, null, .{ .exposed = .window });
+    pub const clipboard = bridge.accessor(Navigator.getClipboard, null, .{ .exposed = .window });
+    pub const credentials = bridge.accessor(Navigator.getCredentials, null, .{ .exposed = .window });
+    pub const keyboard = bridge.accessor(Navigator.getKeyboard, null, .{ .exposed = .window });
+    pub const managed = bridge.accessor(Navigator.getManaged, null, .{ .exposed = .window });
     pub const mediaDevices = bridge.accessor(Navigator.getMediaDevices, null, .{ .exposed = .window });
+    pub const serviceWorker = bridge.accessor(Navigator.getServiceWorker, null, .{ .exposed = .window });
+    pub const virtualKeyboard = bridge.accessor(Navigator.getVirtualKeyboard, null, .{ .exposed = .window });
+    pub const wakeLock = bridge.accessor(Navigator.getWakeLock, null, .{ .exposed = .window });
+    pub const deviceMemory = bridge.accessor(Navigator.getDeviceMemory, null, .{});
+    pub const userAgentData = bridge.accessor(Navigator.getUserAgentData, null, .{});
+    pub const locks = bridge.accessor(Navigator.getLocks, null, .{ .exposed = .window });
+    pub const storage = bridge.accessor(Navigator.getStorage, null, .{});
+    pub const gpu = bridge.accessor(Navigator.getGpu, null, .{ .exposed = .window });
+    pub const login = bridge.accessor(Navigator.getLogin, null, .{ .exposed = .window });
+    pub const ink = bridge.accessor(Navigator.getInk, null, .{ .exposed = .window });
+    pub const mediaCapabilities = bridge.accessor(Navigator.getMediaCapabilities, null, .{ .exposed = .window });
+    pub const permissions = bridge.accessor(Navigator.getPermissions, null, .{});
+    pub const devicePosture = bridge.accessor(Navigator.getDevicePosture, null, .{ .exposed = .window });
+    pub const hid = bridge.accessor(Navigator.getHid, null, .{ .exposed = .window });
+    pub const mediaSession = bridge.accessor(Navigator.getMediaSession, null, .{ .exposed = .window });
+    pub const presentation = bridge.accessor(Navigator.getPresentation, null, .{ .exposed = .window });
+    pub const serial = bridge.accessor(Navigator.getSerial, null, .{ .exposed = .window });
+    pub const usb = bridge.accessor(Navigator.getUsb, null, .{ .exposed = .window });
+    pub const xr = bridge.accessor(Navigator.getXr, null, .{ .exposed = .window });
+    pub const storageBuckets = bridge.accessor(Navigator.getStorageBuckets, null, .{ .exposed = .window });
+    pub const adAuctionComponents = bridge.function(Navigator.adAuctionComponents, .{ .exposed = .window });
+    pub const runAdAuction = bridge.function(Navigator.runAdAuction, .{ .exposed = .window });
+    pub const canLoadAdAuctionFencedFrame = bridge.function(Navigator.canLoadAdAuctionFencedFrame, .{ .exposed = .window });
+    pub const canShare = bridge.function(Navigator.canShare, .{ .exposed = .window });
+    pub const share = bridge.function(Navigator.share, .{ .exposed = .window });
+    pub const clearAppBadge = bridge.function(Navigator.clearAppBadge, .{ .exposed = .window });
     pub const getBattery = bridge.function(Navigator.getBattery, .{ .exposed = .window });
+    pub const getUserMedia = bridge.function(Navigator.getUserMedia, .{ .exposed = .window });
+    pub const requestMIDIAccess = bridge.function(Navigator.requestMIDIAccess, .{ .exposed = .window });
+    pub const requestMediaKeySystemAccess = bridge.function(Navigator.requestMediaKeySystemAccess, .{ .exposed = .window });
+    pub const setAppBadge = bridge.function(Navigator.setAppBadge, .{ .exposed = .window });
+    pub const webkitGetUserMedia = bridge.function(Navigator.getUserMedia, .{ .exposed = .window, .js_name = "webkitGetUserMedia" });
+    pub const clearOriginJoinedAdInterestGroups = bridge.function(Navigator.clearOriginJoinedAdInterestGroups, .{ .exposed = .window });
+    pub const createAuctionNonce = bridge.function(Navigator.createAuctionNonce, .{ .exposed = .window });
+    pub const joinAdInterestGroup = bridge.function(Navigator.joinAdInterestGroup, .{ .exposed = .window });
+    pub const leaveAdInterestGroup = bridge.function(Navigator.leaveAdInterestGroup, .{ .exposed = .window });
+    pub const updateAdInterestGroups = bridge.function(Navigator.updateAdInterestGroups, .{ .exposed = .window });
+    pub const deprecatedReplaceInURN = bridge.function(Navigator.deprecatedReplaceInURN, .{ .exposed = .window });
+    pub const deprecatedURNToURL = bridge.function(Navigator.deprecatedURNToURL, .{ .exposed = .window });
+    pub const getInstalledRelatedApps = bridge.function(Navigator.getInstalledRelatedApps, .{ .exposed = .window });
+    pub const getInterestGroupAdAuctionData = bridge.function(Navigator.getInterestGroupAdAuctionData, .{ .exposed = .window });
     pub const registerProtocolHandler = bridge.function(Navigator.registerProtocolHandler, .{ .exposed = .window });
     pub const unregisterProtocolHandler = bridge.function(Navigator.unregisterProtocolHandler, .{ .exposed = .window });
+
+    // Not Chrome's; see the note above.
+    pub const modelContext = bridge.accessor(Navigator.getModelContext, null, .{ .exposed = .window });
 };
 
 const testing = @import("../../testing.zig");

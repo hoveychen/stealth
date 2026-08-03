@@ -72,6 +72,7 @@ pub extern "c" fn html5ever_parse_fragment(
     len: usize,
     context_name: [*c]const u8,
     context_name_len: usize,
+    context_ns: u8,
     doc: *anyopaque,
     ctx: *anyopaque,
     createElementCallback: *const fn (ctx: *anyopaque, data: *anyopaque, QualName, AttributeIterator) callconv(.c) ?*anyopaque,

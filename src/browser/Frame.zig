@@ -65,10 +65,18 @@ const slotting = @import("webapi/element/slotting.zig");
 const NavigationKind = @import("webapi/navigation/root.zig").NavigationKind;
 
 const PointList = @import("webapi/svg/PointList.zig");
+const NumberList = @import("webapi/svg/NumberList.zig");
+const LengthList = @import("webapi/svg/LengthList.zig");
 const StringList = @import("webapi/svg/StringList.zig");
 const AnimatedEnumeration = @import("webapi/svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("webapi/svg/AnimatedLength.zig");
 const AnimatedNumber = @import("webapi/svg/AnimatedNumber.zig");
+const AnimatedNumberList = @import("webapi/svg/AnimatedNumberList.zig");
+const AnimatedLengthList = @import("webapi/svg/AnimatedLengthList.zig");
+const AnimatedRect = @import("webapi/svg/AnimatedRect.zig");
+const AnimatedAngle = @import("webapi/svg/AnimatedAngle.zig");
+const AnimatedInteger = @import("webapi/svg/AnimatedInteger.zig");
+const AnimatedBoolean = @import("webapi/svg/AnimatedBoolean.zig");
 const AnimatedString = @import("webapi/svg/AnimatedString.zig");
 const AnimatedTransformList = @import("webapi/svg/AnimatedTransformList.zig");
 const AnimatedPreserveAspectRatio = @import("webapi/svg/AnimatedPreserveAspectRatio.zig");
@@ -153,6 +161,14 @@ _element_namespace_uris: Element.NamespaceUriLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,
 _svg_animated_lengths: AnimatedLength.Lookup = .empty,
 _svg_animated_numbers: AnimatedNumber.Lookup = .empty,
+_svg_animated_number_lists: AnimatedNumberList.Lookup = .empty,
+_svg_animated_integers: AnimatedInteger.Lookup = .empty,
+_svg_animated_booleans: AnimatedBoolean.Lookup = .empty,
+_svg_number_lists: NumberList.Lookup = .empty,
+_svg_length_lists: LengthList.Lookup = .empty,
+_svg_animated_length_lists: AnimatedLengthList.Lookup = .empty,
+_svg_animated_rects: AnimatedRect.Lookup = .empty,
+_svg_animated_angles: AnimatedAngle.Lookup = .empty,
 _svg_animated_preserve_aspect_ratios: AnimatedPreserveAspectRatio.Lookup = .empty,
 _svg_animated_strings: AnimatedString.Lookup = .empty,
 _svg_animated_transform_lists: AnimatedTransformList.Lookup = .empty,
@@ -531,6 +547,21 @@ pub fn deinit(self: *Frame) void {
             list.*.deinit(page);
         }
 
+        var svg_number_lists = self._svg_number_lists.valueIterator();
+        while (svg_number_lists.next()) |list| {
+            list.*.deinit(page);
+        }
+
+        var svg_length_lists = self._svg_length_lists.valueIterator();
+        while (svg_length_lists.next()) |list| {
+            list.*.deinit(page);
+        }
+
+        var svg_animated_angles = self._svg_animated_angles.valueIterator();
+        while (svg_animated_angles.next()) |angle| {
+            angle.*.deinit(page);
+        }
+
         var svg_transform_lists = self._svg_animated_transform_lists.valueIterator();
         while (svg_transform_lists.next()) |list| {
             list.*.deinit(page);
@@ -635,7 +666,7 @@ fn collectCsp(self: *Frame, policies: *std.ArrayList(Csp.Policy)) !void {
 
 pub fn getTitle(self: *Frame) !?[]const u8 {
     if (self.window._document.is(Document.HTMLDocument)) |html_doc| {
-        return try html_doc.getTitle(self);
+        return try html_doc.asDocument().getTitle(self);
     }
     return null;
 }
@@ -2239,6 +2270,13 @@ const MAX_STYLESHEET_BYTES: usize = 2 * 1024 * 1024;
 // Synchronously fetch and parse an external `<link rel=stylesheet>`.
 // href is passed in as an optimization since the [currently] only callsite has
 // it, so why look it up again?
+/// Fetches a `rel="stylesheet"` link's sheet and registers it. The fetch is
+/// synchronous so the cascade sees the sheet before the statement after the
+/// insertion runs, but the load/error event is queued: a browser cannot fire it
+/// from inside `appendChild`, and code that attaches its listener straight
+/// after inserting the link — Vite's module-preload helper does exactly that,
+/// and awaits the event before resolving the import it guards — would
+/// otherwise never see it.
 pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []const u8) !void {
     if (self.isGoingAway() or href.len == 0) {
         return;
@@ -2265,7 +2303,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
 
     const resolved = URL.resolve(arena.allocator(), self.base(), href, .{ .encoding = self.charset }) catch |err| {
         log.warn(.http, "external stylesheet resolve", .{ .err = err, .href = href });
-        try self.fireElementEvent(element, comptime .wrap("error"));
+        try self.queueElementEvent(link._proto, .@"error");
         return;
     };
 
@@ -2305,13 +2343,13 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .shutdown_callback = HttpClient.noopShutdown, // syncRequest installs its own
     }, &self._http_owner) catch |err| {
         log.warn(.http, "external stylesheet fetch", .{ .err = err, .url = resolved });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     };
     defer response.deinit(arena.allocator());
 
     if (response.status < 200 or response.status >= 300) {
         log.info(.http, "external stylesheet status", .{ .status = response.status, .url = resolved });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     }
 
     if (response.body.items.len > MAX_STYLESHEET_BYTES) {
@@ -2320,7 +2358,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
             .max = MAX_STYLESHEET_BYTES,
             .url = resolved,
         });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     }
 
     // Reuse the cached sheet on re-fetch (href mutation on a connected
@@ -2349,11 +2387,11 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // minimum.
     sheet.replaceSync(response.body.items, self) catch |err| {
         log.warn(.http, "external stylesheet parse", .{ .err = err, .url = resolved });
-        return self.fireElementEvent(element, comptime .wrap("error"));
+        return self.queueElementEvent(link._proto, .@"error");
     };
-    sheet._href = try self.arena.dupe(u8, resolved);
+    sheet.setHref(try self.arena.dupe(u8, resolved));
 
-    try self.fireElementEvent(element, comptime .wrap("load"));
+    try self.queueElementEvent(link._proto, .load);
 }
 
 // Fetch an `<img src>` and throw the bytes away.
@@ -3177,6 +3215,12 @@ fn nodeIsReady(self: *Frame, comptime from_parser: bool, node: *Node) !void {
         const frame = if (comptime from_parser) self else node.ownerFrame(self);
         style.styleAddedCallback(frame) catch |err| {
             log.err(.frame, "frame.nodeIsReady", .{ .err = err, .element = "style", .type = frame._type });
+            return error.StyleLoadError;
+        };
+    } else if (node.is(Element.Svg.Style)) |style| {
+        const frame = if (comptime from_parser) self else node.ownerFrame(self);
+        style.styleAddedCallback(frame) catch |err| {
+            log.err(.frame, "frame.nodeIsReady", .{ .err = err, .element = "svg style", .type = frame._type });
             return error.StyleLoadError;
         };
     }

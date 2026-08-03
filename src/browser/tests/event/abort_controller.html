@@ -125,6 +125,8 @@
   testing.expectEqual(true, signal.aborted);
   testing.expectEqual(true, signal.reason instanceof DOMException);
   testing.expectEqual("AbortError", signal.reason.name);
+  // Chrome's wording for an abort with no reason of its own, measured.
+  testing.expectEqual("signal is aborted without reason", signal.reason.message);
 }
 </script>
 
@@ -327,9 +329,39 @@
       testing.expectEqual(true, s3.aborted);
       testing.expectEqual(true, s3.reason instanceof DOMException);
       testing.expectEqual('TimeoutError', s3.reason.name);
-      testing.expectError('TimeoutError: The operation timed out', () => {
+      // Chrome's wording, measured; not the generic "The operation timed out"
+      // a TimeoutError carries by default.
+      testing.expectEqual('signal timed out', s3.reason.message);
+      testing.expectError('TimeoutError: signal timed out', () => {
         s3.throwIfAborted()
       });
     });
+  }
+</script>
+
+<script id=onabort_ignores_non_functions>
+  {
+    // An event handler IDL attribute takes `any`, and anything that is not
+    // callable clears it rather than throwing -- measured on a headed Chrome
+    // 150, where `signal.onabort = 7` reads back as null. This engine used to
+    // answer "TypeError: invalid argument", which is not a message any browser
+    // produces.
+    const signal = AbortSignal.abort();
+    const fn = () => {};
+    signal.onabort = fn;
+    testing.expectEqual(fn, signal.onabort);
+
+    for (const bad of [7, 'x', true, {}, [], Symbol.iterator]) {
+      signal.onabort = fn;
+      signal.onabort = bad;
+      testing.expectEqual(null, signal.onabort);
+    }
+
+    signal.onabort = fn;
+    signal.onabort = null;
+    testing.expectEqual(null, signal.onabort);
+    signal.onabort = fn;
+    signal.onabort = undefined;
+    testing.expectEqual(null, signal.onabort);
   }
 </script>

@@ -210,9 +210,19 @@ pub const JsApi = struct {
     pub const Meta = struct {
         pub const name = "Console";
 
+        // A namespace is branded with its own identifier, which for console is
+        // lower case. Measured on Chrome 150:
+        //   Object.prototype.toString.call(console) -> '[object console]'
+        pub const to_string_tag = "console";
+
         // Per the console spec, members are own properties of the namespace
         // object, so Object.entries(console) returns them.
         pub const own_properties = true;
+
+        // A namespace has no interface object: Chrome exposes `console` and no
+        // `Console` (measured -- globalThis.Console is undefined there, while
+        // we were handing detectors an extra global nothing else has).
+        pub const no_interface_object = true;
 
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;

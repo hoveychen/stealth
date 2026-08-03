@@ -465,6 +465,11 @@ pub extern "C" fn html5ever_parse_fragment(
     len: usize,
     context_name: *const c_uchar,
     context_name_len: usize,
+    // Namespace of the context element: 0 = HTML, 1 = SVG, 2 = MathML. The
+    // fragment parsing algorithm switches to foreign content when the context
+    // element is not HTML, which is what makes `svgEl.innerHTML = '<path/>'`
+    // produce an SVG path rather than an unknown HTML element.
+    context_ns: u8,
     document: Ref,
     ctx: Ref,
     create_element_callback: CreateElementCallback,
@@ -540,7 +545,12 @@ pub extern "C" fn html5ever_parse_fragment(
         ..Default::default()
     };
 
-    let context_qname = QualName::new(None, ns!(html), context_local);
+    let context_namespace = match context_ns {
+        1 => ns!(svg),
+        2 => ns!(mathml),
+        _ => ns!(html),
+    };
+    let context_qname = QualName::new(None, context_namespace, context_local);
     let context_data = arena.alloc(sink::ElementData {
         qname: context_qname.clone(),
         mathml_annotation_xml_integration_point: false,

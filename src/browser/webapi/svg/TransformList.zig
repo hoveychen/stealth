@@ -141,7 +141,7 @@ fn mutateTransform(context: *anyopaque, transform: *Transform, state: Transform.
     transform.applyStateRaw(state);
 }
 
-fn parse(raw: []const u8, frame: *Frame) !std.ArrayList(*Transform) {
+fn parse(_: *TransformList, raw: []const u8, frame: *Frame) !std.ArrayList(*Transform) {
     var parsed: std.ArrayList(*Transform) = .empty;
     errdefer for (parsed.items) |transform| transform.releaseRef(frame._page);
     const trimmed = std.mem.trim(u8, raw, " \t\r\n");

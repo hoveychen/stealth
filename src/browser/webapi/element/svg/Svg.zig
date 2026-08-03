@@ -24,15 +24,16 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const TreeWalker = @import("../../TreeWalker.zig");
-const DOMRect = @import("../../DOMRect.zig");
-const DOMPoint = @import("../../DOMPoint.zig");
-const DOMMatrix = @import("../../DOMMatrix.zig");
+const SvgRect = @import("../../svg/Rect.zig");
+const SvgPoint = @import("../../svg/Point.zig");
+const SvgMatrix = @import("../../svg/Matrix.zig");
 const SvgNumber = @import("../../svg/Number.zig");
 const SvgLength = @import("../../svg/Length.zig");
 const SvgAngle = @import("../../svg/Angle.zig");
 const SvgTransform = @import("../../svg/Transform.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
 const AnimatedPreserveAspectRatio = @import("../../svg/AnimatedPreserveAspectRatio.zig");
+const AnimatedRect = @import("../../svg/AnimatedRect.zig");
 
 const Graphics = @import("Graphics.zig");
 
@@ -79,28 +80,24 @@ pub fn getHeight(self: *Svg, frame: *Frame) !*AnimatedLength {
     return AnimatedLength.getOrCreate(self.asElement(), .svg_height, frame);
 }
 
+pub fn getViewBox(self: *Svg, frame: *Frame) !*AnimatedRect {
+    return AnimatedRect.getOrCreate(self.asElement(), frame);
+}
+
 pub fn getPreserveAspectRatio(self: *Svg, frame: *Frame) !*AnimatedPreserveAspectRatio {
     return AnimatedPreserveAspectRatio.getOrCreate(self.asElement(), frame);
 }
 
-pub fn createSVGPoint(_: *Svg, frame: *Frame) !*DOMPoint {
-    const point = try DOMPoint.create(0, 0, 0, 1, frame._page);
-    point._proto.restrict();
-    return point;
+pub fn createSVGPoint(_: *Svg, frame: *Frame) !*SvgPoint {
+    return SvgPoint.create(0, 0, frame._page);
 }
 
-pub fn createSVGMatrix(_: *Svg, frame: *Frame) !*DOMMatrix {
-    const identity: [16]f64 = .{
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-    };
-    return DOMMatrix.create(identity, true, frame._page);
+pub fn createSVGMatrix(_: *Svg, frame: *Frame) !*SvgMatrix {
+    return SvgMatrix.create(.{}, frame._page);
 }
 
-pub fn createSVGRect(_: *Svg, frame: *Frame) !*DOMRect {
-    return DOMRect.create(.{}, frame._factory);
+pub fn createSVGRect(_: *Svg, frame: *Frame) !*SvgRect {
+    return SvgRect.create(.{}, frame._factory);
 }
 
 pub fn createSVGNumber(_: *Svg, frame: *Frame) !*SvgNumber {
@@ -119,8 +116,8 @@ pub fn createSVGTransform(_: *Svg, frame: *Frame) !*SvgTransform {
     return SvgTransform.detached(frame);
 }
 
-pub fn createSVGTransformFromMatrix(_: *Svg, init: ?SvgTransform.DOMMatrix2DInit, frame: *Frame) !*SvgTransform {
-    return SvgTransform.fromMatrix(init, frame);
+pub fn createSVGTransformFromMatrix(_: *Svg, matrix: *const SvgMatrix, frame: *Frame) !*SvgTransform {
+    return SvgTransform.fromMatrix(matrix, frame);
 }
 
 pub const JsApi = struct {
@@ -138,6 +135,7 @@ pub const JsApi = struct {
     pub const y = bridge.accessor(Svg.getY, null, .{});
     pub const width = bridge.accessor(Svg.getWidth, null, .{});
     pub const height = bridge.accessor(Svg.getHeight, null, .{});
+    pub const viewBox = bridge.accessor(Svg.getViewBox, null, .{});
     pub const preserveAspectRatio = bridge.accessor(Svg.getPreserveAspectRatio, null, .{});
 
     pub const createSVGPoint = bridge.function(Svg.createSVGPoint, .{});

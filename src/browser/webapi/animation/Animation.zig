@@ -20,10 +20,25 @@ const lp = @import("lightpanda");
 const js = @import("../../js/js.zig");
 const Page = @import("../../Page.zig");
 const Frame = @import("../../Frame.zig");
+const EventTarget = @import("../EventTarget.zig");
+const services = @import("../document/services.zig");
 
 const log = lp.log;
 
 const Animation = @This();
+
+/// Measured on Chrome 150: Animation is an EventTarget, and CSSAnimation /
+/// CSSTransition hang off it. Without this layer `new Animation() instanceof
+/// EventTarget` is false and addEventListener is missing entirely.
+pub const Proto = EventTarget;
+
+/// Measured: `replaceState` starts at "active" and `persist()` moves it to
+/// "persisted".
+const ReplaceState = enum {
+    active,
+    persisted,
+    removed,
+};
 
 const PlayState = enum {
     idle,
@@ -32,17 +47,24 @@ const PlayState = enum {
     finished,
 };
 
+_proto: *EventTarget,
 _rc: lp.RC = .{},
 _frame: *Frame,
 _arena: *lp.Arena,
 
 _effect: ?js.Object.Global = null,
-_timeline: ?js.Object.Global = null,
+_timeline: ?*services.DocumentTimeline = null,
 _ready_resolver: ?js.PromiseResolver.Global = null,
 _finished_resolver: ?js.PromiseResolver.Global = null,
 _startTime: ?f64 = null,
 _onFinish: ?js.Function.Global = null,
+_onCancel: ?js.Function.Global = null,
+_onRemove: ?js.Function.Global = null,
 _playState: PlayState = .idle,
+_current_time: ?f64 = null,
+_playback_rate: f64 = 1,
+_id: []const u8 = "",
+_replace_state: ReplaceState = .active,
 
 // Fake the animation by passing the states:
 // .idle => .running once play() is called.
@@ -53,16 +75,30 @@ pub fn init(frame: *Frame) !*Animation {
     const arena = try frame.getArena(.tiny, "Animation");
     errdefer arena.release();
 
-    const self = try arena.create(Animation);
-    self.* = .{
+    return frame._factory.eventTargetWithAllocator(arena.allocator(), Animation{
+        ._proto = undefined,
         ._frame = frame,
         ._arena = arena,
-    };
+    });
+}
 
+pub fn asEventTarget(self: *Animation) *EventTarget {
+    return self._proto;
+}
+
+/// `new Animation(effect, timeline)`. Measured: both arguments are optional, so
+/// Chrome reports Animation.length === 0, and a bare `new Animation()` is legal.
+pub fn construct(effect: ?js.Object.Global, timeline: ?*services.DocumentTimeline, frame: *Frame) !*Animation {
+    const self = try init(frame);
+    self._effect = effect;
+    self._timeline = timeline;
     return self;
 }
 
 pub fn deinit(self: *Animation, _: *Page) void {
+    if (self._onFinish) |func| func.release();
+    if (self._onCancel) |func| func.release();
+    if (self._onRemove) |func| func.release();
     self._arena.release();
 }
 
@@ -154,11 +190,18 @@ pub fn setEffect(self: *Animation, effect: ?js.Object.Global) !void {
     self._effect = effect;
 }
 
-pub fn getTimeline(self: *const Animation) ?js.Object.Global {
-    return self._timeline;
+/// Measured: a fresh Animation already reports the document's timeline, not
+/// null.
+pub fn getTimeline(self: *Animation, frame: *Frame) !?*services.DocumentTimeline {
+    if (self._timeline) |timeline| {
+        return timeline;
+    }
+    const timeline = try services.DocumentTimeline.init(frame);
+    self._timeline = timeline;
+    return timeline;
 }
 
-pub fn setTimeline(self: *Animation, timeline: ?js.Object.Global) !void {
+pub fn setTimeline(self: *Animation, timeline: ?*services.DocumentTimeline) !void {
     self._timeline = timeline;
 }
 
@@ -221,6 +264,93 @@ pub fn playState(self: *const Animation) []const u8 {
     return @tagName(self._playState);
 }
 
+/// Measured: pending is an accessor on Chrome, not a data property, and a
+/// fresh animation is not pending. Nothing here ever enters the pending state
+/// because play() takes effect synchronously.
+pub fn getPending(_: *const Animation) bool {
+    return false;
+}
+
+pub fn getCurrentTime(self: *const Animation) ?f64 {
+    return self._current_time;
+}
+
+pub fn setCurrentTime(self: *Animation, value: ?f64) !void {
+    self._current_time = value;
+}
+
+pub fn getPlaybackRate(self: *const Animation) f64 {
+    return self._playback_rate;
+}
+
+pub fn setPlaybackRate(self: *Animation, value: f64) !void {
+    self._playback_rate = value;
+}
+
+/// Measured: `updatePlaybackRate` is the "seamless" setter, and with no running
+/// effect it lands on the same value the plain setter would.
+pub fn updatePlaybackRate(self: *Animation, value: f64) !void {
+    self._playback_rate = value;
+}
+
+/// Measured: both range ends read back the string "normal" on a fresh
+/// animation. They are accessor pairs, but we do not model timeline ranges, so
+/// the setter is deliberately a no-op rather than a lie about what it stored.
+pub fn getRangeStart(_: *const Animation) []const u8 {
+    return "normal";
+}
+
+pub fn setRangeStart(_: *Animation, _: ?js.Value) void {}
+
+pub fn getRangeEnd(_: *const Animation) []const u8 {
+    return "normal";
+}
+
+pub fn setRangeEnd(_: *Animation, _: ?js.Value) void {}
+
+pub fn getReplaceState(self: *const Animation) []const u8 {
+    return @tagName(self._replace_state);
+}
+
+pub fn persist(self: *Animation) void {
+    self._replace_state = .persisted;
+}
+
+pub fn getId(self: *const Animation) []const u8 {
+    return self._id;
+}
+
+pub fn setId(self: *Animation, value: []const u8, frame: *Frame) !void {
+    self._id = try frame.dupeString(value);
+}
+
+/// Measured: null on a fresh animation -- there is no progress to report until
+/// an effect is attached.
+pub fn getOverallProgress(_: *const Animation) ?f64 {
+    return null;
+}
+
+/// Measured: with no effect to commit, Chrome throws NoModificationAllowedError.
+pub fn commitStyles(_: *Animation) !void {
+    return error.NoModificationAllowed;
+}
+
+pub fn getOnCancel(self: *const Animation) ?js.Function.Global {
+    return self._onCancel;
+}
+
+pub fn setOnCancel(self: *Animation, cb: ?js.Function.Global) !void {
+    self._onCancel = cb;
+}
+
+pub fn getOnRemove(self: *const Animation) ?js.Function.Global {
+    return self._onRemove;
+}
+
+pub fn setOnRemove(self: *Animation, cb: ?js.Function.Global) !void {
+    self._onRemove = cb;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Animation);
 
@@ -230,19 +360,36 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const play = bridge.function(Animation.play, .{});
-    pub const pause = bridge.function(Animation.pause, .{});
-    pub const cancel = bridge.function(Animation.cancel, .{});
-    pub const finish = bridge.function(Animation.finish, .{});
-    pub const reverse = bridge.function(Animation.reverse, .{});
-    pub const playState = bridge.accessor(Animation.playState, null, .{});
-    pub const pending = bridge.property(false, .{ .template = false });
-    pub const finished = bridge.accessor(Animation.getFinished, null, .{});
-    pub const ready = bridge.accessor(Animation.getReady, null, .{});
+    pub const constructor = bridge.constructor(Animation.construct, .{});
+
+    // Chrome's own Object.getOwnPropertyNames(Animation.prototype) order:
+    // attributes first, then operations alphabetically, with overallProgress
+    // trailing the operations (measured -- it is not in alphabetical position).
     pub const effect = bridge.accessor(Animation.getEffect, Animation.setEffect, .{});
     pub const timeline = bridge.accessor(Animation.getTimeline, Animation.setTimeline, .{});
     pub const startTime = bridge.accessor(Animation.getStartTime, Animation.setStartTime, .{});
+    pub const currentTime = bridge.accessor(Animation.getCurrentTime, Animation.setCurrentTime, .{});
+    pub const playbackRate = bridge.accessor(Animation.getPlaybackRate, Animation.setPlaybackRate, .{});
+    pub const rangeStart = bridge.accessor(Animation.getRangeStart, Animation.setRangeStart, .{});
+    pub const rangeEnd = bridge.accessor(Animation.getRangeEnd, Animation.setRangeEnd, .{});
+    pub const playState = bridge.accessor(Animation.playState, null, .{});
+    pub const replaceState = bridge.accessor(Animation.getReplaceState, null, .{});
+    pub const pending = bridge.accessor(Animation.getPending, null, .{});
+    pub const id = bridge.accessor(Animation.getId, Animation.setId, .{});
     pub const onfinish = bridge.accessor(Animation.getOnFinish, Animation.setOnFinish, .{});
+    pub const oncancel = bridge.accessor(Animation.getOnCancel, Animation.setOnCancel, .{});
+    pub const onremove = bridge.accessor(Animation.getOnRemove, Animation.setOnRemove, .{});
+    pub const finished = bridge.accessor(Animation.getFinished, null, .{});
+    pub const ready = bridge.accessor(Animation.getReady, null, .{});
+    pub const cancel = bridge.function(Animation.cancel, .{});
+    pub const commitStyles = bridge.function(Animation.commitStyles, .{});
+    pub const finish = bridge.function(Animation.finish, .{});
+    pub const pause = bridge.function(Animation.pause, .{});
+    pub const persist = bridge.function(Animation.persist, .{});
+    pub const play = bridge.function(Animation.play, .{});
+    pub const reverse = bridge.function(Animation.reverse, .{});
+    pub const updatePlaybackRate = bridge.function(Animation.updatePlaybackRate, .{});
+    pub const overallProgress = bridge.accessor(Animation.getOverallProgress, null, .{});
 };
 
 const testing = @import("../../../testing.zig");

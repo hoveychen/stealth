@@ -31,6 +31,7 @@ const ContentTypeIterator = @import("../../Mime.zig").ContentTypeIterator;
 const Headers = @import("Headers.zig");
 const FormData = @import("FormData.zig");
 const body_init = @import("body_init.zig");
+const ReadableStream = @import("../streams/ReadableStream.zig");
 const BodyInit = body_init.BodyInit;
 
 const Execution = js.Execution;
@@ -42,6 +43,10 @@ _url: [:0]const u8,
 _method: http.Method,
 _headers: ?*Headers,
 _body: ?[]const u8,
+// A body handed over as a ReadableStream stays one until something reads it:
+// Chrome exposes it on `.body` and only drains it when the request is sent or
+// a body method is called.
+_body_stream: ?*ReadableStream = null,
 _arena: *lp.Arena,
 _cache: Cache,
 _credentials: Credentials,
@@ -63,7 +68,12 @@ pub const InitOpts = struct {
     redirect: Redirect = .follow,
     signal: ?*AbortSignal = null,
     priority: ?[]const u8 = null,
+    duplex: ?[]const u8 = null,
 };
+
+// The only value RequestDuplex has. A streaming body must name it, which is
+// what Vite's module-preload helper feature-tests for on every page it ships.
+const DUPLEX_HALF = "half";
 
 const Priority = enum { high, low, auto };
 
@@ -122,7 +132,27 @@ pub fn init(input: Input, opts_: ?InitOpts, exec: *const Execution) !*Request {
         .request => |r| r._headers,
     };
 
+    if (opts.duplex) |duplex| {
+        if (!std.mem.eql(u8, duplex, DUPLEX_HALF)) {
+            return error.TypeError;
+        }
+    }
+
+    var body_stream: ?*ReadableStream = null;
     const body = if (opts.body) |b| blk: {
+        if (b == .stream) {
+            if (opts.duplex == null) {
+                return error.TypeError;
+            }
+            if (method == .GET or method == .HEAD) {
+                return error.TypeError;
+            }
+            body_stream = b.stream;
+            break :blk null;
+        }
+        if (method == .GET or method == .HEAD) {
+            return error.TypeError;
+        }
         const extracted = try b.extract(arena.allocator());
         // Per Fetch §6.5 step 11, the default Content-Type only applies if
         // the user has not already set one via the headers init dict.
@@ -158,6 +188,7 @@ pub fn init(input: Input, opts_: ?InitOpts, exec: *const Execution) !*Request {
         ._credentials = opts.credentials,
         ._redirect = opts.redirect,
         ._body = body,
+        ._body_stream = body_stream,
         ._signal = signal,
     };
     arena.report();
@@ -231,15 +262,43 @@ pub fn getHeaders(self: *Request, exec: *const Execution) !*Headers {
 }
 
 pub fn getBodyUsed(self: *const Request) bool {
-    if (self._body == null) {
+    if (self._body == null and self._body_stream == null) {
         return false;
     }
     return self._body_used;
 }
 
+/// The body as a stream, which is what Chrome puts on `.body` whichever shape
+/// it was given in: a stream body is handed back as-is, and bytes are wrapped.
+pub fn getBody(self: *Request, exec: *const Execution) !?*ReadableStream {
+    if (self._body_stream) |stream| {
+        return stream;
+    }
+    const body = self._body orelse return null;
+    if (body.len == 0) {
+        const stream = try ReadableStream.init(null, null, exec);
+        try stream._controller.close();
+        return stream;
+    }
+    return ReadableStream.initWithData(body, exec);
+}
+
+/// The body as bytes, draining a streaming one on first read. Chrome streams
+/// it to the wire instead; we buffer, which is visible only in how much of a
+/// slow stream has to exist before the request goes out.
+pub fn bodyBytes(self: *Request) ![]const u8 {
+    if (self._body) |body| {
+        return body;
+    }
+    const stream = self._body_stream orelse return "";
+    const bytes_ = try stream.collectBodyBytes(self._arena.allocator());
+    self._body = bytes_;
+    return bytes_;
+}
+
 // Marks a present body consumed; returns a rejected promise if it already was.
 fn consume(self: *Request, local: *const js.Local) ?js.Promise {
-    if (self._body == null) {
+    if (self._body == null and self._body_stream == null) {
         return null;
     }
 
@@ -256,7 +315,7 @@ pub fn blob(self: *Request, exec: *const Execution) !js.Promise {
         return rejected;
     }
 
-    const body = self._body orelse "";
+    const body = try self.bodyBytes();
     const headers = try self.getHeaders(exec);
     const content_type = try headers.get("content-type", exec) orelse "";
 
@@ -269,7 +328,7 @@ pub fn text(self: *Request, exec: *const Execution) !js.Promise {
     if (self.consume(local)) |rejected| {
         return rejected;
     }
-    return local.resolvePromise(body_init.stripUtf8Bom(self._body orelse ""));
+    return local.resolvePromise(body_init.stripUtf8Bom(try self.bodyBytes()));
 }
 
 pub fn json(self: *Request, exec: *const Execution) !js.Promise {
@@ -278,7 +337,7 @@ pub fn json(self: *Request, exec: *const Execution) !js.Promise {
         return rejected;
     }
 
-    const value = local.parseJSON(body_init.stripUtf8Bom(self._body orelse "")) catch {
+    const value = local.parseJSON(body_init.stripUtf8Bom(try self.bodyBytes())) catch {
         return local.rejectPromise(.{ .syntax_error = "failed to parse" });
     };
     return local.resolvePromise(try value.persist());
@@ -289,7 +348,7 @@ pub fn arrayBuffer(self: *Request, exec: *const Execution) !js.Promise {
     if (self.consume(local)) |rejected| {
         return rejected;
     }
-    return local.resolvePromise(js.ArrayBuffer{ .values = self._body orelse "" });
+    return local.resolvePromise(js.ArrayBuffer{ .values = try self.bodyBytes() });
 }
 
 pub fn bytes(self: *Request, exec: *const Execution) !js.Promise {
@@ -297,7 +356,7 @@ pub fn bytes(self: *Request, exec: *const Execution) !js.Promise {
     if (self.consume(local)) |rejected| {
         return rejected;
     }
-    return local.resolvePromise(js.TypedArray(u8){ .values = self._body orelse "" });
+    return local.resolvePromise(js.TypedArray(u8){ .values = try self.bodyBytes() });
 }
 
 pub fn formData(self: *Request, exec: *const Execution) !js.Promise {
@@ -307,7 +366,7 @@ pub fn formData(self: *Request, exec: *const Execution) !js.Promise {
     }
 
     // Per Fetch, a null body acts as an empty byte sequence.
-    const body = self._body orelse "";
+    const body = try self.bodyBytes();
 
     const headers = try self.getHeaders(exec);
     const content_type = try headers.get("content-type", exec) orelse {
@@ -343,8 +402,9 @@ pub fn formData(self: *Request, exec: *const Execution) !js.Promise {
     return local.rejectPromise(.{ .type_error = "Failed to parse body as FormData" });
 }
 
-pub fn clone(self: *const Request, exec: *const Execution) !*Request {
-    const arena = try exec.getPinnedArena(if (self._body) |b| b.len else 512, "Request.clone");
+pub fn clone(self: *Request, exec: *const Execution) !*Request {
+    const body = try self.bodyBytes();
+    const arena = try exec.getPinnedArena(if (body.len != 0) body.len else 512, "Request.clone");
     errdefer arena.release();
 
     const request = try arena.create(Request);
@@ -357,6 +417,7 @@ pub fn clone(self: *const Request, exec: *const Execution) !*Request {
         ._credentials = self._credentials,
         ._redirect = self._redirect,
         ._body = if (self._body) |b| try arena.dupe(u8, b) else null,
+        ._body_stream = null,
         ._signal = self._signal,
     };
     arena.report();
@@ -380,6 +441,7 @@ pub const JsApi = struct {
     pub const credentials = bridge.accessor(Request.getCredentials, null, .{});
     pub const redirect = bridge.accessor(Request.getRedirect, null, .{});
     pub const signal = bridge.accessor(Request.getSignal, null, .{});
+    pub const body = bridge.accessor(Request.getBody, null, .{});
     pub const bodyUsed = bridge.accessor(Request.getBodyUsed, null, .{});
     pub const blob = bridge.function(Request.blob, .{});
     pub const text = bridge.function(Request.text, .{});

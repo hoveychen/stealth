@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<!--
+  SVGPoint and SVGMatrix. SVG2 folds them into DOMPoint and DOMMatrix, but no
+  browser shipped that: Chrome still answers createSVGPoint(),
+  createSVGMatrix(), getCTM(), getScreenCTM() and SVGTransform.matrix with
+  distinct SVGPoint / SVGMatrix interfaces whose prototypes descend straight
+  from Object. The CTM rules and every number below were read off a headed
+  Chrome 150 over http://localhost.
+-->
+<svg id=root width="200" height="100" viewBox="0 0 40 20">
+  <defs>
+    <g id=inDefs transform="translate(2,2)"></g>
+    <symbol id=symbol viewBox="0 0 2 1"><g id=inSymbol transform="translate(2,2)"></g></symbol>
+  </defs>
+  <rect id=rect x="1" y="2" width="10" height="20"></rect>
+  <g id=g transform="translate(3,4)"><rect id=nested width="5" height="5"></rect></g>
+  <g id=chainOuter transform="translate(1,2) scale(2)"><g id=chainInner transform="rotate(90)"></g></g>
+  <svg id=innerSvg x="10" y="5" width="20" height="10" viewBox="0 0 10 5"><rect id=innerChild></rect></svg>
+  <svg id=bareSvg></svg>
+</svg>
+
+<script>
+  function mm(m) {
+    return m === null ? 'null' : `${m.a},${m.b},${m.c},${m.d},${m.e},${m.f}`;
+  }
+  // Rounded to 10 decimals, for the two places where our cos() lands an ulp
+  // away from V8's. See the comments at the call sites.
+  function mmr(m) {
+    const r = (v) => Number(v.toFixed(10)) + 0;
+    return m === null ? 'null' : `${r(m.a)},${r(m.b)},${r(m.c)},${r(m.d)},${r(m.e)},${r(m.f)}`;
+  }
+  // testing.expectError only substring-matches the stringified error, which
+  // lets a wrong DOMException name through. Compare the name itself.
+  function errorName(fn) {
+    try {
+      fn();
+    } catch (err) {
+      return err.name;
+    }
+    return 'no error';
+  }
+</script>
+
+<script id=matrixShape>
+{
+  const svg = $('#root');
+  testing.expectEqual('SVGPoint', svg.createSVGPoint().constructor.name);
+  testing.expectEqual('SVGMatrix', svg.createSVGMatrix().constructor.name);
+  testing.expectEqual('[object SVGPoint]', String(svg.createSVGPoint()));
+  testing.expectEqual('[object SVGMatrix]', String(svg.createSVGMatrix()));
+
+  // Neither is an alias of the DOM geometry type.
+  testing.expectFalse(SVGPoint === DOMPoint);
+  testing.expectFalse(SVGMatrix === DOMMatrix);
+  testing.expectFalse(svg.createSVGPoint() instanceof DOMPoint);
+  testing.expectFalse(svg.createSVGMatrix() instanceof DOMMatrix);
+
+  testing.expectEqual('x,y,matrixTransform,constructor',
+    Object.getOwnPropertyNames(SVGPoint.prototype).join(','));
+  testing.expectEqual('a,b,c,d,e,f,flipX,flipY,inverse,multiply,rotate,' +
+    'rotateFromVector,scale,scaleNonUniform,skewX,skewY,translate,constructor',
+    Object.getOwnPropertyNames(SVGMatrix.prototype).join(','));
+
+  // Both prototypes hang straight off Object.prototype.
+  testing.expectTrue(Object.getPrototypeOf(SVGPoint.prototype) === Object.prototype);
+  testing.expectTrue(Object.getPrototypeOf(SVGMatrix.prototype) === Object.prototype);
+  testing.expectEqual(0, SVGPoint.length);
+  testing.expectEqual(0, SVGMatrix.length);
+  testing.expectError('TypeError', () => new SVGPoint());
+  testing.expectError('TypeError', () => new SVGMatrix());
+
+  // SVGPoint has no z/w: it is not a truncated DOMPoint.
+  testing.expectFalse('z' in svg.createSVGPoint());
+  testing.expectFalse('w' in svg.createSVGPoint());
+
+  // Both are plain accessors on the prototype, so JSON sees no own data.
+  testing.expectEqual('{}', JSON.stringify(svg.createSVGPoint()));
+  testing.expectEqual('{}', JSON.stringify(svg.createSVGMatrix()));
+
+  testing.expectEqual(0, svg.createSVGPoint.length);
+  testing.expectEqual(0, svg.createSVGMatrix.length);
+  // Every call hands back a fresh object.
+  testing.expectFalse(svg.createSVGPoint() === svg.createSVGPoint());
+  testing.expectFalse(svg.createSVGMatrix() === svg.createSVGMatrix());
+}
+</script>
+
+<script id=pointValues>
+{
+  const svg = $('#root');
+  const p = svg.createSVGPoint();
+  testing.expectEqual(0, p.x);
+  testing.expectEqual(0, p.y);
+
+  // x and y are WebIDL floats, so a double is stored at single precision.
+  p.x = 0.1;
+  testing.expectEqual(0.10000000149011612, p.x);
+  p.y = 1 / 3;
+  testing.expectEqual(0.3333333432674408, p.y);
+  p.x = 1.2345678901234567;
+  testing.expectEqual(1.2345678806304932, p.x);
+  p.x = 3.5;
+  testing.expectEqual(3.5, p.x);
+
+  // Restricted float: anything that is not finite *as a float* is rejected,
+  // which catches 1e40 even though it is a perfectly finite double.
+  testing.expectEqual('TypeError', errorName(() => { p.x = NaN; }));
+  testing.expectEqual('TypeError', errorName(() => { p.x = Infinity; }));
+  testing.expectEqual('TypeError', errorName(() => { p.y = 'abc'; }));
+  testing.expectEqual('TypeError', errorName(() => { p.x = 1e40; }));
+  testing.expectEqual('TypeError', errorName(() => { p.x = 3.5e38; }));
+  // A numeric string still converts.
+  p.y = '5';
+  testing.expectEqual(5, p.y);
+}
+</script>
+
+<script id=pointMatrixTransform>
+{
+  const svg = $('#root');
+  const point = () => { const q = svg.createSVGPoint(); q.x = 1; q.y = 2; return q; };
+
+  const moved = point().matrixTransform(svg.createSVGMatrix().translate(10, 20));
+  testing.expectEqual('SVGPoint', moved.constructor.name);
+  testing.expectEqual(11, moved.x);
+  testing.expectEqual(22, moved.y);
+
+  // The receiver is left alone.
+  const source = point();
+  source.matrixTransform(svg.createSVGMatrix().translate(9, 9));
+  testing.expectEqual('1,2', `${source.x},${source.y}`);
+
+  // The result is rounded to float, so a rotated unit vector keeps the float
+  // spelling of cos(90deg) rather than the double one.
+  const spun = svg.createSVGPoint();
+  spun.x = 1;
+  const rotated = spun.matrixTransform(svg.createSVGMatrix().rotate(90));
+  testing.expectEqual('6.123234262925839e-17,1', `${rotated.x},${rotated.y}`);
+
+  // The argument has to be a real SVGMatrix.
+  testing.expectEqual(1, SVGPoint.prototype.matrixTransform.length);
+  testing.expectEqual('TypeError', errorName(() => point().matrixTransform()));
+  testing.expectEqual('TypeError', errorName(() => point().matrixTransform(null)));
+  testing.expectEqual('TypeError', errorName(() => point().matrixTransform(new DOMMatrix())));
+  testing.expectEqual('TypeError', errorName(() => point().matrixTransform({ a: 3, b: 0, c: 0, d: 3, e: 0, f: 0 })));
+
+  // A point made by one <svg> works with a matrix made by another.
+  const crossed = $('#bareSvg').createSVGPoint();
+  crossed.x = 1;
+  crossed.y = 1;
+  const scaled = crossed.matrixTransform(svg.createSVGMatrix().scale(3));
+  testing.expectEqual('3,3', `${scaled.x},${scaled.y}`);
+}
+</script>
+
+<script id=matrixValues>
+{
+  const svg = $('#root');
+  const m = svg.createSVGMatrix();
+  testing.expectEqual('1,0,0,1,0,0', mm(m));
+
+  // a..f are WebIDL doubles, unlike SVGPoint's floats.
+  m.a = 0.1;
+  testing.expectEqual(0.1, m.a);
+  m.b = 1 / 3;
+  testing.expectEqual(0.3333333333333333, m.b);
+  m.c = 1e308;
+  testing.expectEqual(1e308, m.c);
+  m.d = 1e40;
+  testing.expectEqual(1e40, m.d);
+  m.e = '5';
+  testing.expectEqual(5, m.e);
+
+  testing.expectEqual('TypeError', errorName(() => { m.a = NaN; }));
+  testing.expectEqual('TypeError', errorName(() => { m.a = Infinity; }));
+  testing.expectEqual('TypeError', errorName(() => { m.a = 'abc'; }));
+}
+</script>
+
+<script id=matrixArithmetic>
+{
+  const svg = $('#root');
+  const c = () => svg.createSVGMatrix();
+
+  testing.expectEqual('1,0,0,1,2,3', mm(c().translate(2, 3)));
+  testing.expectEqual('2,0,0,2,0,0', mm(c().scale(2)));
+  testing.expectEqual('-2,0,0,-2,0,0', mm(c().scale(-2)));
+  testing.expectEqual('2,0,0,3,0,0', mm(c().scaleNonUniform(2, 3)));
+  testing.expectEqual('-1,0,0,1,0,0', mm(c().flipX()));
+  testing.expectEqual('1,0,0,-1,0,0', mm(c().flipY()));
+  testing.expectEqual('1,0,0,1,-2,-3', mm(c().translate(2, 3).inverse()));
+  testing.expectEqual('0.25,0,0,0.25,0,0', mm(c().scale(4).inverse()));
+
+  // rotate() takes degrees and goes through cos/sin at double precision.
+  testing.expectEqual('6.123233995736766e-17,1,-1,6.123233995736766e-17,0,0', mm(c().rotate(90)));
+  testing.expectEqual('6.123233995736766e-17,-1,1,6.123233995736766e-17,0,0', mm(c().rotate(-90)));
+  testing.expectEqual('-1,1.2246467991473532e-16,-1.2246467991473532e-16,-1,0,0', mm(c().rotate(180)));
+  testing.expectEqual('0.7071067811865476,0.7071067811865475,-0.7071067811865475,0.7071067811865476,0,0',
+    mm(c().rotate(45)));
+
+  // skewX/skewY are tan() of the angle.
+  testing.expectEqual('1,0,0.9999999999999999,1,0,0', mm(c().skewX(45)));
+  testing.expectEqual('1,0.9999999999999999,0,1,0,0', mm(c().skewY(45)));
+  testing.expectEqual('1,0,57.289961630759144,1,0,0', mm(c().skewX(89)));
+
+  // rotateFromVector is rotate(atan2(y, x)), not the normalised vector: the
+  // (3, 4) triangle comes back as 0.6 / 0.7999999999999999, not 0.6 / 0.8.
+  // Chrome spells this '0.6,0.7999999999999999,-0.7999999999999999,0.6,0,0'.
+  // We land on 0.6000000000000001 for a and d because Zig's cos() disagrees
+  // with V8's by one ulp at exactly this angle; every other angle matches bit
+  // for bit, so only the last digit is relaxed here.
+  testing.expectEqual('0.6,0.8,-0.8,0.6,0,0', mmr(c().rotateFromVector(3, 4)));
+  testing.expectEqual('0.7071067811865476,0.7071067811865475,-0.7071067811865475,0.7071067811865476,0,0',
+    mm(c().rotateFromVector(1, 1)));
+  testing.expectEqual('-0.7071067811865475,0.7071067811865476,-0.7071067811865476,-0.7071067811865475,0,0',
+    mm(c().rotateFromVector(-1, 1)));
+  // Either component being zero is an error, even though the angle is defined.
+  testing.expectEqual('InvalidAccessError', errorName(() => c().rotateFromVector(1, 0)));
+  testing.expectEqual('InvalidAccessError', errorName(() => c().rotateFromVector(0, 1)));
+  testing.expectEqual('InvalidAccessError', errorName(() => c().rotateFromVector(0, 0)));
+
+  // multiply() post-multiplies, so the order shows up in the translation.
+  testing.expectEqual('2,0,0,2,2,3', mm(c().translate(2, 3).multiply(c().scale(2))));
+  testing.expectEqual('2,0,0,2,4,6', mm(c().scale(2).multiply(c().translate(2, 3))));
+  testing.expectEqual('1.8369701987210297e-16,3,-3,1.8369701987210297e-16,1,2',
+    mm(c().translate(1, 2).scale(3).rotate(90)));
+
+  // Every operation returns a new matrix and leaves the receiver alone.
+  const kept = c();
+  kept.translate(5, 5);
+  testing.expectEqual('1,0,0,1,0,0', mm(kept));
+
+  const general = c();
+  general.a = 2; general.b = 1; general.c = 3; general.d = 4; general.e = 5; general.f = 6;
+  testing.expectEqual('0.8,-0.2,-0.6,0.4,-0.4,-1.4', mm(general.inverse()));
+
+  // A singular matrix cannot be inverted.
+  const flat = c();
+  flat.a = 0; flat.d = 0;
+  testing.expectEqual('InvalidStateError', errorName(() => flat.inverse()));
+  const degenerate = c();
+  degenerate.a = 2; degenerate.b = 2; degenerate.c = 1; degenerate.d = 1;
+  testing.expectEqual('InvalidStateError', errorName(() => degenerate.inverse()));
+}
+</script>
+
+<script id=matrixArguments>
+{
+  const svg = $('#root');
+  const c = () => svg.createSVGMatrix();
+
+  testing.expectEqual(2, SVGMatrix.prototype.translate.length);
+  testing.expectEqual(1, SVGMatrix.prototype.scale.length);
+  testing.expectEqual(2, SVGMatrix.prototype.scaleNonUniform.length);
+  testing.expectEqual(1, SVGMatrix.prototype.rotate.length);
+  testing.expectEqual(2, SVGMatrix.prototype.rotateFromVector.length);
+  testing.expectEqual(1, SVGMatrix.prototype.skewX.length);
+  testing.expectEqual(1, SVGMatrix.prototype.skewY.length);
+  testing.expectEqual(1, SVGMatrix.prototype.multiply.length);
+  testing.expectEqual(0, SVGMatrix.prototype.inverse.length);
+  testing.expectEqual(0, SVGMatrix.prototype.flipX.length);
+
+  // None of the arguments are optional.
+  testing.expectEqual('TypeError', errorName(() => c().translate()));
+  testing.expectEqual('TypeError', errorName(() => c().translate(1)));
+  testing.expectEqual('TypeError', errorName(() => c().scale()));
+  testing.expectEqual('TypeError', errorName(() => c().scaleNonUniform(2)));
+  testing.expectEqual('TypeError', errorName(() => c().rotate()));
+  testing.expectEqual('TypeError', errorName(() => c().skewX()));
+
+  // multiply() wants a real SVGMatrix, not a DOMMatrix or a dictionary.
+  testing.expectEqual('TypeError', errorName(() => c().multiply()));
+  testing.expectEqual('TypeError', errorName(() => c().multiply(null)));
+  testing.expectEqual('TypeError', errorName(() => c().multiply(new DOMMatrix([2, 0, 0, 2, 0, 0]))));
+  testing.expectEqual('TypeError', errorName(() => c().multiply({ a: 2, b: 0, c: 0, d: 2, e: 0, f: 0 })));
+}
+</script>
+
+<script id=transformMatrix>
+{
+  const svg = $('#root');
+  const t = $('#g').transform.baseVal.getItem(0);
+  testing.expectEqual('SVGMatrix', t.matrix.constructor.name);
+  // SameObject: the matrix is the transform's live view, not a copy.
+  testing.expectTrue(t.matrix === t.matrix);
+  testing.expectEqual('1,0,0,1,3,4', mm(t.matrix));
+
+  // Writing through the live matrix rewrites the attribute and demotes the
+  // transform to a plain matrix.
+  const live = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  live.setAttribute('transform', 'translate(3,4)');
+  svg.appendChild(live);
+  const item = live.transform.baseVal.getItem(0);
+  testing.expectEqual(2, item.type);
+  item.matrix.e = 9;
+  testing.expectEqual('1,0,0,1,9,4', mm(item.matrix));
+  testing.expectEqual(1, item.type);
+  testing.expectEqual(0, item.angle);
+  testing.expectEqual('matrix(1 0 0 1 9 4)', live.getAttribute('transform'));
+  live.remove();
+
+  // A rotate() item reports its angle until the matrix is written through.
+  const spun = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  spun.setAttribute('transform', 'rotate(45)');
+  svg.appendChild(spun);
+  const rotation = spun.transform.baseVal.getItem(0);
+  testing.expectEqual(4, rotation.type);
+  testing.expectEqual(45, rotation.angle);
+  rotation.matrix.a = 2;
+  testing.expectEqual(1, rotation.type);
+  testing.expectEqual(0, rotation.angle);
+  spun.remove();
+
+  // A detached transform starts as an identity matrix and stays writable.
+  const free = svg.createSVGTransform();
+  testing.expectEqual('SVGMatrix', free.matrix.constructor.name);
+  testing.expectEqual('1,0,0,1,0,0', mm(free.matrix));
+  free.matrix.e = 4;
+  testing.expectEqual('1,0,0,1,4,0', mm(free.matrix));
+  testing.expectEqual(1, free.type);
+
+  // setMatrix() and createSVGTransformFromMatrix() both want an SVGMatrix.
+  testing.expectEqual(1, SVGTransform.prototype.setMatrix.length);
+  testing.expectEqual(1, svg.createSVGTransformFromMatrix.length);
+  const set = svg.createSVGTransform();
+  set.setMatrix(svg.createSVGMatrix().translate(7, 8));
+  testing.expectEqual('1,0,0,1,7,8', mm(set.matrix));
+  testing.expectEqual(1, set.type);
+  testing.expectEqual('TypeError', errorName(() => svg.createSVGTransform().setMatrix()));
+  testing.expectEqual('TypeError', errorName(() => svg.createSVGTransform().setMatrix(new DOMMatrix())));
+  testing.expectEqual('TypeError', errorName(() => svg.createSVGTransform().setMatrix({ a: 1 })));
+
+  const built = svg.createSVGTransformFromMatrix(svg.createSVGMatrix().translate(7, 8));
+  testing.expectEqual('SVGMatrix', built.matrix.constructor.name);
+  testing.expectEqual('1,0,0,1,7,8', mm(built.matrix));
+  testing.expectEqual(1, built.type);
+  testing.expectEqual('TypeError', errorName(() => svg.createSVGTransformFromMatrix()));
+  testing.expectEqual('TypeError', errorName(() => svg.createSVGTransformFromMatrix(new DOMMatrix())));
+  testing.expectEqual('TypeError', errorName(() => svg.createSVGTransformFromMatrix({ a: 2, b: 0, c: 0, d: 2, e: 1, f: 1 })));
+}
+</script>
+
+<script id=graphicsShape>
+{
+  testing.expectEqual('transform,nearestViewportElement,farthestViewportElement,' +
+    'requiredExtensions,systemLanguage,getBBox,getCTM,getScreenCTM,constructor',
+    Object.getOwnPropertyNames(SVGGraphicsElement.prototype).join(','));
+  testing.expectEqual(0, SVGGraphicsElement.prototype.getCTM.length);
+  testing.expectEqual(0, SVGGraphicsElement.prototype.getScreenCTM.length);
+
+  const viewport = Object.getOwnPropertyDescriptor(SVGGraphicsElement.prototype, 'nearestViewportElement');
+  testing.expectTrue(typeof viewport.get === 'function');
+  testing.expectTrue(viewport.set === undefined);
+  testing.expectTrue(viewport.enumerable);
+  testing.expectTrue(viewport.configurable);
+}
+</script>
+
+<script id=viewportElements>
+{
+  // The outermost <svg> has no viewport ancestor of its own.
+  testing.expectEqual(null, $('#root').nearestViewportElement);
+  testing.expectEqual(null, $('#root').farthestViewportElement);
+
+  testing.expectTrue($('#g').nearestViewportElement === $('#root'));
+  testing.expectTrue($('#g').farthestViewportElement === $('#root'));
+  testing.expectTrue($('#bareSvg').nearestViewportElement === $('#root'));
+  testing.expectTrue($('#innerSvg').nearestViewportElement === $('#root'));
+  testing.expectTrue($('#innerChild').nearestViewportElement === $('#innerSvg'));
+  testing.expectTrue($('#innerChild').farthestViewportElement === $('#root'));
+  testing.expectTrue($('#inDefs').nearestViewportElement === $('#root'));
+  // <symbol> establishes a viewport too.
+  testing.expectTrue($('#inSymbol').nearestViewportElement === $('#symbol'));
+
+  const orphan = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  testing.expectEqual(null, orphan.nearestViewportElement);
+  testing.expectEqual(null, orphan.farthestViewportElement);
+}
+</script>
+
+<script id=currentTransformMatrix>
+{
+  // <svg width="200" viewBox="0 0 40 20"> scales user units by 5.
+  testing.expectEqual('SVGMatrix', $('#g').getCTM().constructor.name);
+  testing.expectEqual('5,0,0,5,0,0', mm($('#root').getCTM()));
+  testing.expectEqual('5,0,0,5,0,0', mm($('#rect').getCTM()));
+  testing.expectEqual('5,0,0,5,15,20', mm($('#g').getCTM()));
+  testing.expectEqual('5,0,0,5,15,20', mm($('#nested').getCTM()));
+  testing.expectEqual('5,0,0,5,10,10', mm($('#inDefs').getCTM()));
+
+  // The transform list is applied left to right.
+  testing.expectEqual('10,0,0,10,5,10', mm($('#chainOuter').getCTM()));
+  // Chrome answers '0,10,-10,0,5,10': its CTM pipeline flushes the 1e-16
+  // residue of cos(90deg) to zero, which the SVGMatrix methods themselves do
+  // not do -- createSVGMatrix().rotate(90).a is 6.123233995736766e-17 in both
+  // engines. We keep the residue here, so compare the significant digits.
+  testing.expectEqual('0,10,-10,0,5,10', mmr($('#chainInner').getCTM()));
+
+  // A nested <svg> contributes translate(x, y) and then its own viewBox; the
+  // CTM stops at the nearest viewport, so the child sees only that much.
+  testing.expectEqual('10,0,0,10,50,25', mm($('#innerSvg').getCTM()));
+  testing.expectEqual('2,0,0,2,10,5', mm($('#innerChild').getCTM()));
+  // A nested <svg> with neither size nor viewBox contributes nothing.
+  testing.expectEqual('5,0,0,5,0,0', mm($('#bareSvg').getCTM()));
+  // <symbol> is a viewport but has no size of its own to scale into.
+  testing.expectEqual('1,0,0,1,2,2', mm($('#inSymbol').getCTM()));
+
+  // Every call hands back a fresh, writable matrix.
+  testing.expectFalse($('#g').getCTM() === $('#g').getCTM());
+  const copy = $('#g').getCTM();
+  copy.e = 99;
+  testing.expectEqual('5,0,0,5,99,20', mm(copy));
+  testing.expectEqual('5,0,0,5,15,20', mm($('#g').getCTM()));
+
+  // An unrooted element answers with the identity rather than null.
+  const orphan = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  testing.expectEqual('1,0,0,1,0,0', mm(orphan.getCTM()));
+  testing.expectEqual('1,0,0,1,0,0', mm(orphan.getScreenCTM()));
+  testing.expectEqual('SVGMatrix', $('#g').getScreenCTM().constructor.name);
+}
+</script>
+
+<script id=viewBoxTransform>
+{
+  const svg = $('#root');
+  const el = (name, attrs) => {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', name);
+    for (const key in attrs) node.setAttribute(key, attrs[key]);
+    return node;
+  };
+
+  // A nested <svg> with x/y but no viewBox only translates.
+  const plain = el('svg', { x: '10', y: '5', width: '20', height: '10' });
+  const plainChild = el('rect', {});
+  plain.appendChild(plainChild);
+  svg.appendChild(plain);
+  testing.expectEqual('5,0,0,5,50,25', mm(plain.getCTM()));
+  testing.expectEqual('1,0,0,1,10,5', mm(plainChild.getCTM()));
+  plain.remove();
+
+  // An omitted width/height is 100% of the containing viewport, which the
+  // viewBox then redefines: 40 user units over a viewBox of 4 scales by 10.
+  const auto = el('svg', { viewBox: '0 0 4 2' });
+  const autoChild = el('rect', {});
+  auto.appendChild(autoChild);
+  svg.appendChild(auto);
+  testing.expectEqual('50,0,0,50,0,0', mm(auto.getCTM()));
+  testing.expectEqual('10,0,0,10,0,0', mm(autoChild.getCTM()));
+  auto.remove();
+
+  // The nested <svg>'s own transform wraps its x/y translation.
+  const moved = el('svg', {
+    x: '10', y: '5', width: '20', height: '10', viewBox: '0 0 10 5', transform: 'translate(1,1)',
+  });
+  const movedChild = el('rect', {});
+  moved.appendChild(movedChild);
+  svg.appendChild(moved);
+  testing.expectEqual('10,0,0,10,55,30', mm(moved.getCTM()));
+  testing.expectEqual('2,0,0,2,11,6', mm(movedChild.getCTM()));
+  moved.remove();
+
+  // preserveAspectRatio on a 200x100 viewport with a square 40x40 viewBox.
+  const box = el('svg', { width: '200', height: '100', viewBox: '0 0 40 40' });
+  document.body.appendChild(box);
+  testing.expectEqual('2.5,0,0,2.5,50,0', mm(box.getCTM()));
+  box.setAttribute('preserveAspectRatio', 'none');
+  testing.expectEqual('5,0,0,2.5,0,0', mm(box.getCTM()));
+  box.setAttribute('preserveAspectRatio', 'xMaxYMax meet');
+  testing.expectEqual('2.5,0,0,2.5,100,0', mm(box.getCTM()));
+  box.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+  testing.expectEqual('5,0,0,5,0,-50', mm(box.getCTM()));
+  box.remove();
+
+  // The outermost <svg> ignores its own transform attribute in the CTM.
+  svg.setAttribute('transform', 'scale(2)');
+  testing.expectEqual('5,0,0,5,0,0', mm(svg.getCTM()));
+  testing.expectEqual('5,0,0,5,15,20', mm($('#g').getCTM()));
+  svg.removeAttribute('transform');
+}
+</script>
+

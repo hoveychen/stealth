@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  WebUSB, WebHID, Web Serial and Web Bluetooth. Every shape, value and message
+  below was measured on a headed Chrome 150 over http://localhost; the
+  snapshots live in agent-workspace/stealth-detector-probes/win-batch/
+  (win13-chrome.json for the interface shapes, win13b-chrome.json for the
+  behaviours, win13c-chrome.json for the BluetoothUUID tables).
+-->
+
+<script id="device_choosers_reject" type=module>
+  // Nothing here ever holds a user gesture, so all four choosers refuse. Chrome
+  // refuses by REJECTING the promise, not by throwing out of the call, and the
+  // message names the interface and the operation.
+  {
+    const state = await testing.async();
+    const results = {};
+    const cases = [
+      ['usb', () => navigator.usb.requestDevice({ filters: [] }), 'requestDevice', 'USB'],
+      ['hid', () => navigator.hid.requestDevice({ filters: [] }), 'requestDevice', 'HID'],
+      ['serial', () => navigator.serial.requestPort(), 'requestPort', 'Serial'],
+      ['bluetooth', () => navigator.bluetooth.requestDevice({ filters: [] }), 'requestDevice', 'Bluetooth'],
+    ];
+    (async () => {
+      for (const [key, call] of cases) {
+        let p;
+        try {
+          p = call();
+        } catch (e) {
+          results[key] = 'THREW SYNCHRONOUSLY: ' + e.name + ': ' + e.message;
+          results[key + 'Return'] = 'THREW SYNCHRONOUSLY';
+          continue;
+        }
+        results[key + 'Return'] = Object.prototype.toString.call(p);
+        try {
+          await p;
+          results[key] = 'resolved';
+        } catch (e) {
+          results[key] = e.name + ': ' + e.message;
+        }
+      }
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      for (const [key, , op, iface] of cases) {
+        testing.expectEqual('[object Promise]', results[key + 'Return']);
+        testing.expectEqual(
+          "SecurityError: Failed to execute '" + op + "' on '" + iface + "': " +
+            'Must be handling a user gesture to show a permission request.',
+          results[key],
+        );
+      }
+    });
+  }
+</script>
+
+<script id="device_enumerations_resolve_empty" type=module>
+  // Nothing is paired, so the three enumerations hand back an empty list and
+  // the radio reports itself available -- the same answers the reference
+  // Chrome gave on a desktop with no device attached.
+  {
+    const state = await testing.async();
+    const results = {};
+    (async () => {
+      results.usb = await navigator.usb.getDevices();
+      results.hid = await navigator.hid.getDevices();
+      results.serial = await navigator.serial.getPorts();
+      results.bluetooth = await navigator.bluetooth.getAvailability();
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      for (const k of ['usb', 'hid', 'serial']) {
+        testing.expectEqual(true, Array.isArray(results[k]));
+        testing.expectEqual(0, results[k].length);
+      }
+      testing.expectEqual(true, results.bluetooth);
+    });
+  }
+</script>
+
+<script id="bluetooth_family_shapes">
+  {
+    const expected = {
+      BluetoothUUID: 'constructor',
+      BluetoothCharacteristicProperties:
+        'broadcast,read,writeWithoutResponse,write,notify,indicate,' +
+        'authenticatedSignedWrites,reliableWrite,writableAuxiliaries,constructor',
+      BluetoothDevice: 'id,name,gatt,ongattserverdisconnected,constructor',
+      BluetoothRemoteGATTServer:
+        'device,connected,connect,disconnect,getPrimaryService,getPrimaryServices,constructor',
+      BluetoothRemoteGATTService:
+        'device,uuid,isPrimary,getCharacteristic,getCharacteristics,constructor',
+      BluetoothRemoteGATTCharacteristic:
+        'service,uuid,properties,value,oncharacteristicvaluechanged,getDescriptor,' +
+        'getDescriptors,readValue,startNotifications,stopNotifications,writeValue,' +
+        'writeValueWithResponse,writeValueWithoutResponse,constructor',
+      BluetoothRemoteGATTDescriptor: 'characteristic,uuid,value,readValue,writeValue,constructor',
+    };
+    for (const [n, keys] of Object.entries(expected)) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(0, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[n].prototype).join(','));
+    }
+
+    // Only two of the six are EventTargets on Chrome.
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(BluetoothDevice.prototype));
+    testing.expectEqual(
+      EventTarget.prototype,
+      Object.getPrototypeOf(BluetoothRemoteGATTCharacteristic.prototype),
+    );
+    for (const n of [
+      'BluetoothUUID', 'BluetoothCharacteristicProperties', 'BluetoothRemoteGATTServer',
+      'BluetoothRemoteGATTService', 'BluetoothRemoteGATTDescriptor',
+    ]) {
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(window[n].prototype));
+    }
+
+    // None of them is constructible, and Chrome's two wordings differ.
+    for (const n of Object.keys(expected)) {
+      testing.expectError('TypeError: Illegal constructor', () => window[n]());
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+
+    // BluetoothUUID carries its four functions as statics, in Chrome's order.
+    testing.expectEqual(
+      'canonicalUUID,getCharacteristic,getDescriptor,getService',
+      Object.getOwnPropertyNames(BluetoothUUID).filter(
+        (k) => !['length', 'name', 'prototype'].includes(k),
+      ).join(','),
+    );
+    for (const k of ['canonicalUUID', 'getCharacteristic', 'getDescriptor', 'getService']) {
+      testing.expectEqual(1, BluetoothUUID[k].length);
+    }
+  }
+</script>
+
+<script id="bluetooth_uuid_resolution">
+  {
+    const SUFFIX = '-0000-1000-8000-00805f9b34fb';
+
+    // The canonical form is the value as eight lowercase hex digits. Verified
+    // against Chrome for every alias from 0x0000 to 0xffff.
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.canonicalUUID(0));
+    testing.expectEqual('0000000f' + SUFFIX, BluetoothUUID.canonicalUUID(0xf));
+    testing.expectEqual('00001234' + SUFFIX, BluetoothUUID.canonicalUUID(0x1234));
+    testing.expectEqual('0000ffff' + SUFFIX, BluetoothUUID.canonicalUUID(0xffff));
+    testing.expectEqual('00010000' + SUFFIX, BluetoothUUID.canonicalUUID(0x10000));
+    testing.expectEqual('ffffffff' + SUFFIX, BluetoothUUID.canonicalUUID(0xffffffff));
+
+    // canonicalUUID enforces the range; the three lookups do not.
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is outside the 'unsigned long' value range.",
+      () => BluetoothUUID.canonicalUUID(-1),
+    );
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is not of type 'unsigned long'.",
+      () => BluetoothUUID.canonicalUUID('x'),
+    );
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        '1 argument required, but only 0 present.',
+      () => BluetoothUUID.canonicalUUID(),
+    );
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is not of type 'unsigned long'.",
+      () => BluetoothUUID.canonicalUUID(NaN),
+    );
+    // An infinity gets its own wording, distinct from a finite out-of-range one.
+    testing.expectError(
+      "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': " +
+        "Value is infinite and not of type 'unsigned long'.",
+      () => BluetoothUUID.canonicalUUID(Infinity),
+    );
+    // A fractional value truncates rather than throwing.
+    testing.expectEqual('00000001' + SUFFIX, BluetoothUUID.canonicalUUID(1.7));
+    testing.expectEqual('00000001' + SUFFIX, BluetoothUUID.getService(1.7));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(-Infinity));
+
+    // getService(-1) wraps to ffffffff where canonicalUUID(-1) throws. The
+    // wrap used to reach an out-of-range @intFromFloat, which crashed the
+    // engine outright -- a page could take the process down with one call.
+    testing.expectEqual('ffffffff' + SUFFIX, BluetoothUUID.getService(-1));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(0));
+    testing.expectEqual('00010000' + SUFFIX, BluetoothUUID.getService(0x10000));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(NaN));
+    testing.expectEqual('00000000' + SUFFIX, BluetoothUUID.getService(Infinity));
+
+    // Standard names resolve off Chrome's own tables.
+    testing.expectEqual('0000180f' + SUFFIX, BluetoothUUID.getService('battery_service'));
+    testing.expectEqual('00001800' + SUFFIX, BluetoothUUID.getService('generic_access'));
+    testing.expectEqual('0000180f' + SUFFIX, BluetoothUUID.getService(0x180f));
+    testing.expectEqual('00002a19' + SUFFIX, BluetoothUUID.getCharacteristic('battery_level'));
+    testing.expectEqual('00002a19' + SUFFIX, BluetoothUUID.getCharacteristic(0x2a19));
+    testing.expectEqual(
+      '00002904' + SUFFIX,
+      BluetoothUUID.getDescriptor('gatt.characteristic_presentation_format'),
+    );
+
+    // A custom UUID passes through, but only in the lowercase canonical form.
+    const custom = '12345678-1234-5678-1234-56789abcdef0';
+    testing.expectEqual(custom, BluetoothUUID.getService(custom));
+    testing.expectEqual(custom, BluetoothUUID.getCharacteristic(custom));
+    testing.expectEqual(custom, BluetoothUUID.getDescriptor(custom));
+
+    const invalid = (kind, plural, example, value) =>
+      "TypeError: Failed to execute 'get" + kind + "' on 'BluetoothUUID': Invalid " + kind +
+      " name: '" + value + "'. It must be a valid UUID alias (e.g. 0x1234), UUID (lowercase " +
+      "hex characters e.g. '00001234" + SUFFIX + "'), or recognized standard name from " +
+      'https://www.bluetooth.com/specifications/gatt/' + plural + " e.g. '" + example + "'.";
+
+    // Uppercase, an 0x-prefixed string and a bare alias string are all refused,
+    // and null becomes the string 'null' rather than the number zero.
+    for (const bad of [
+      '0000180F-0000-1000-8000-00805F9B34FB', '0x180f', '180f', 'bogus',
+    ]) {
+      testing.expectError(
+        invalid('Service', 'services', 'alert_notification', bad),
+        () => BluetoothUUID.getService(bad),
+      );
+    }
+    testing.expectError(
+      invalid('Service', 'services', 'alert_notification', 'null'),
+      () => BluetoothUUID.getService(null),
+    );
+    testing.expectError(
+      invalid('Characteristic', 'characteristics', 'aerobic_heart_rate_lower_limit', 'bogus'),
+      () => BluetoothUUID.getCharacteristic('bogus'),
+    );
+    testing.expectError(
+      invalid('Descriptor', 'descriptors', 'gatt.characteristic_presentation_format', 'bogus'),
+      () => BluetoothUUID.getDescriptor('bogus'),
+    );
+
+    // Names Chrome does not know are absent here too, by construction.
+    for (const bad of ['media_control', 'microphone_control', 'battery']) {
+      testing.expectError(
+        invalid('Service', 'services', 'alert_notification', bad),
+        () => BluetoothUUID.getService(bad),
+      );
+    }
+  }
+</script>
+
+<script id="usb_family_shapes">
+  {
+    const expected = {
+      USBDevice: [0,
+        'usbVersionMajor,usbVersionMinor,usbVersionSubminor,deviceClass,deviceSubclass,' +
+        'deviceProtocol,vendorId,productId,deviceVersionMajor,deviceVersionMinor,' +
+        'deviceVersionSubminor,manufacturerName,productName,serialNumber,configuration,' +
+        'configurations,opened,claimInterface,clearHalt,close,controlTransferIn,' +
+        'controlTransferOut,forget,isochronousTransferIn,isochronousTransferOut,open,' +
+        'releaseInterface,reset,selectAlternateInterface,selectConfiguration,transferIn,' +
+        'transferOut,constructor'],
+      USBConfiguration: [2, 'configurationValue,configurationName,interfaces,constructor'],
+      USBInterface: [2, 'interfaceNumber,alternate,alternates,claimed,constructor'],
+      USBAlternateInterface: [2,
+        'alternateSetting,interfaceClass,interfaceSubclass,interfaceProtocol,interfaceName,' +
+        'endpoints,constructor'],
+      USBEndpoint: [3, 'endpointNumber,direction,type,packetSize,constructor'],
+      USBInTransferResult: [1, 'data,status,constructor'],
+      USBOutTransferResult: [1, 'bytesWritten,status,constructor'],
+      USBIsochronousInTransferPacket: [1, 'status,data,constructor'],
+      USBIsochronousInTransferResult: [1, 'data,packets,constructor'],
+      USBIsochronousOutTransferPacket: [1, 'bytesWritten,status,constructor'],
+      USBIsochronousOutTransferResult: [1, 'packets,constructor'],
+      USBConnectionEvent: [2, 'device,constructor'],
+    };
+    for (const [n, [arity, keys]] of Object.entries(expected)) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(arity, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[n].prototype).join(','));
+    }
+
+    // Only USBConnectionEvent is an Event; USBDevice hangs off Object.prototype.
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(USBConnectionEvent.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(USBDevice.prototype));
+
+    // USBDevice alone has no constructor at all, so it gets Chrome's other
+    // wording; the eleven that do refuse by arity or by parameter type.
+    testing.expectError('TypeError: Illegal constructor', () => USBDevice());
+    testing.expectError(
+      "TypeError: Failed to construct 'USBDevice': Illegal constructor",
+      () => new USBDevice(),
+    );
+    for (const n of Object.keys(expected)) {
+      if (n === 'USBDevice') continue;
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Please use the 'new' operator, " +
+          'this DOM object constructor cannot be called as a function.',
+        () => window[n](),
+      );
+    }
+  }
+</script>
+
+<script id="usb_unreachable_constructors">
+  {
+    // No USBDevice can be obtained, so the five constructors that demand one --
+    // directly or through a chain -- can never succeed. Each names the type it
+    // wanted, and each counts its arguments first.
+    const byParameter = {
+      USBConfiguration: ['USBDevice', 2, [null, 1]],
+      USBInterface: ['USBConfiguration', 2, [null, 0]],
+      USBAlternateInterface: ['USBInterface', 2, [null, 0]],
+      USBEndpoint: ['USBAlternateInterface', 3, [null, 1, 'in']],
+    };
+    for (const [n, [wanted, required, args]] of Object.entries(byParameter)) {
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': " + required +
+          ' arguments required, but only 0 present.',
+        () => new window[n](),
+      );
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': parameter 1 is not of type '" + wanted + "'.",
+        () => new window[n](...args),
+      );
+      // An object that is not the wanted type fails the same way as null.
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': parameter 1 is not of type '" + wanted + "'.",
+        () => new window[n]({}, ...args.slice(1)),
+      );
+    }
+
+    // USBConnectionEvent wants the device in its init dictionary instead.
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': " +
+        '2 arguments required, but only 0 present.',
+      () => new USBConnectionEvent(),
+    );
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': " +
+        '2 arguments required, but only 1 present.',
+      () => new USBConnectionEvent('connect'),
+    );
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': Failed to read the 'device' " +
+        "property from 'USBConnectionEventInit': Required member is undefined.",
+      () => new USBConnectionEvent('connect', {}),
+    );
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': Failed to read the 'device' " +
+        "property from 'USBConnectionEventInit': Failed to convert value to 'USBDevice'.",
+      () => new USBConnectionEvent('connect', { device: null }),
+    );
+  }
+</script>
+
+<script id="usb_transfer_results">
+  {
+    // These six a script builds itself out of plain values, so they behave.
+    testing.expectEqual('ok', new USBInTransferResult('ok').status);
+    testing.expectEqual('stall', new USBInTransferResult('stall').status);
+    testing.expectEqual('babble', new USBOutTransferResult('babble').status);
+    testing.expectEqual(null, new USBInTransferResult('ok').data);
+
+    // A DataView comes back as the very object it went in as.
+    const dv = new DataView(new ArrayBuffer(4));
+    const it = new USBInTransferResult('ok', dv);
+    testing.expectEqual(true, it.data === dv);
+    testing.expectEqual(true, it.data === it.data);
+    // A typed array is not a DataView, and neither is a bare buffer.
+    for (const bad of [new Uint8Array(4), new ArrayBuffer(4), {}]) {
+      testing.expectError(
+        "TypeError: Failed to construct 'USBInTransferResult': " +
+          "parameter 2 is not of type 'DataView'.",
+        () => new USBInTransferResult('ok', bad),
+      );
+    }
+    testing.expectEqual(null, new USBInTransferResult('ok', null).data);
+    testing.expectEqual(null, new USBInTransferResult('ok', undefined).data);
+
+    // bytesWritten defaults to zero and takes ToUint32, so -1 wraps.
+    testing.expectEqual(0, new USBOutTransferResult('ok').bytesWritten);
+    testing.expectEqual(7, new USBOutTransferResult('ok', 7).bytesWritten);
+    testing.expectEqual(7, new USBOutTransferResult('ok', '7').bytesWritten);
+    testing.expectEqual(1, new USBOutTransferResult('ok', 1.9).bytesWritten);
+    testing.expectEqual(4294967295, new USBOutTransferResult('ok', -1).bytesWritten);
+    testing.expectEqual(0, new USBOutTransferResult('ok', null).bytesWritten);
+    testing.expectEqual(3, new USBIsochronousOutTransferPacket('ok', 3).bytesWritten);
+    testing.expectEqual(0, new USBIsochronousOutTransferPacket('ok').bytesWritten);
+    testing.expectEqual('ok', new USBIsochronousInTransferPacket('ok').status);
+    testing.expectEqual(null, new USBIsochronousInTransferPacket('ok').data);
+
+    // The status enum is checked, and the message names the enum.
+    for (const n of [
+      'USBInTransferResult', 'USBOutTransferResult',
+      'USBIsochronousInTransferPacket', 'USBIsochronousOutTransferPacket',
+    ]) {
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': The provided value 'bogus' is not a " +
+          'valid enum value of type USBTransferStatus.',
+        () => new window[n]('bogus'),
+      );
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 1 argument required, but only 0 present.",
+        () => new window[n](),
+      );
+    }
+    // An explicit undefined counts as absent for the enum, as it does on Chrome.
+    testing.expectError(
+      "TypeError: Failed to construct 'USBInTransferResult': " +
+        "The provided value 'undefined' is not a valid enum value of type USBTransferStatus.",
+      () => new USBInTransferResult(undefined),
+    );
+
+    // packets keeps the elements it was given, and a fresh array is built on
+    // every access -- Chrome does the same.
+    const p = new USBIsochronousInTransferPacket('ok');
+    const res = new USBIsochronousInTransferResult([p]);
+    testing.expectEqual(1, res.packets.length);
+    testing.expectEqual(true, res.packets[0] === p);
+    testing.expectEqual(true, Array.isArray(res.packets));
+    testing.expectEqual(false, res.packets === res.packets);
+    testing.expectEqual(0, new USBIsochronousInTransferResult([]).packets.length);
+    testing.expectEqual(null, new USBIsochronousInTransferResult([]).data);
+    testing.expectEqual(
+      0,
+      new USBIsochronousOutTransferResult([]).packets.length,
+    );
+
+    // Chrome refuses a sequence three different ways, and so do we.
+    for (const n of ['USBIsochronousInTransferResult', 'USBIsochronousOutTransferResult']) {
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 1 argument required, but only 0 present.",
+        () => new window[n](),
+      );
+      for (const bad of [123, null, 'ab', '']) {
+        testing.expectError(
+          "TypeError: Failed to construct '" + n + "': " +
+            'The provided value cannot be converted to a sequence.',
+          () => new window[n](bad),
+        );
+      }
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': " +
+          'The object must have a callable @@iterator property.',
+        () => new window[n]({}),
+      );
+    }
+    testing.expectError(
+      "TypeError: Failed to construct 'USBIsochronousInTransferResult': " +
+        "Failed to convert value to 'USBIsochronousInTransferPacket'.",
+      () => new USBIsochronousInTransferResult([1]),
+    );
+  }
+</script>
+
+<script id="hid_serial_shapes">
+  {
+    const expected = {
+      HIDDevice: [0, EventTarget.prototype,
+        'oninputreport,opened,vendorId,productId,productName,collections,close,forget,open,' +
+        'receiveFeatureReport,sendFeatureReport,sendReport,constructor'],
+      HIDConnectionEvent: [2, Event.prototype, 'device,constructor'],
+      HIDInputReportEvent: [0, Event.prototype, 'device,reportId,data,constructor'],
+      SerialPort: [0, EventTarget.prototype,
+        'onconnect,ondisconnect,readable,writable,close,forget,getInfo,getSignals,open,' +
+        'setSignals,connected,constructor'],
+    };
+    for (const [n, [arity, proto, keys]] of Object.entries(expected)) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(arity, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[n].prototype).join(','));
+      testing.expectEqual(proto, Object.getPrototypeOf(window[n].prototype));
+    }
+
+    // Method arities, as Chrome reports them.
+    const arities = {
+      HIDDevice: ['close=0', 'forget=0', 'open=0', 'receiveFeatureReport=1',
+        'sendFeatureReport=2', 'sendReport=2'],
+      SerialPort: ['close=0', 'forget=0', 'getInfo=0', 'getSignals=0', 'open=1', 'setSignals=0'],
+    };
+    for (const [n, pairs] of Object.entries(arities)) {
+      for (const pair of pairs) {
+        const [m, want] = pair.split('=');
+        testing.expectEqual(Number(want), window[n].prototype[m].length);
+      }
+    }
+
+    // Three of the four have no constructor at all; only HIDConnectionEvent does.
+    for (const n of ['HIDDevice', 'HIDInputReportEvent', 'SerialPort']) {
+      testing.expectError('TypeError: Illegal constructor', () => window[n]());
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+    testing.expectError(
+      "TypeError: Failed to construct 'HIDConnectionEvent': Please use the 'new' operator, " +
+        'this DOM object constructor cannot be called as a function.',
+      () => HIDConnectionEvent(),
+    );
+  }
+</script>
+
+<script id="connection_event_init_dictionary">
+  {
+    // Both connection events want a device in their init dictionary, and no
+    // device exists, so neither can be built. The order of the refusals is
+    // Chrome's: count the arguments, then reject a non-dictionary by name, then
+    // name the missing member, then name the type it could not convert to.
+    // An absent second argument and an explicit undefined differ.
+    for (const n of ['HIDConnectionEvent', 'USBConnectionEvent']) {
+      const init = n + 'Init';
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 2 arguments required, but only 0 present.",
+        () => new window[n](),
+      );
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 2 arguments required, but only 1 present.",
+        () => new window[n]('c'),
+      );
+      for (const bad of [1, null, 's', undefined]) {
+        testing.expectError(
+          "TypeError: Failed to construct '" + n + "': The provided value is not of type '" +
+            init + "'.",
+          () => new window[n]('c', bad),
+        );
+      }
+      for (const bad of [{}, { device: undefined }]) {
+        testing.expectError(
+          "TypeError: Failed to construct '" + n + "': Failed to read the 'device' property " +
+            "from '" + init + "': Required member is undefined.",
+          () => new window[n]('c', bad),
+        );
+      }
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Failed to read the 'device' property " +
+          "from '" + init + "': Failed to convert value to '" + n.slice(0, 3) + "Device'.",
+        () => new window[n]('c', { device: 1 }),
+      );
+    }
+  }
+</script>

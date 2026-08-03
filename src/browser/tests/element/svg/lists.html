@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<!--
+  SVGLengthList / SVGAnimatedLengthList on the text positioning attributes,
+  SVGAnimatedRect behind viewBox and SVGAnimatedAngle behind a marker's
+  orient. Every expectation was read off a headed Chrome 150 over
+  http://localhost.
+-->
+<svg id=root width="200" height="100" viewBox="0 0 40 20">
+  <defs>
+    <marker id=marker viewBox="1 2 3 4" orient="45"></marker>
+    <marker id=bareMarker></marker>
+    <pattern id=pattern></pattern>
+    <symbol id=symbol></symbol>
+    <view id=view></view>
+  </defs>
+  <svg id=inner></svg>
+  <text id=text x="1 2 3" y="4" dx="5 6" dy="7" rotate="10 20 30">hi<tspan id=tspan x="9">yo</tspan></text>
+  <text id=bareText>plain</text>
+</svg>
+
+<script id=lengthListShape>
+{
+  testing.expectEqual('SVGAnimatedLengthList', $('#text').x.constructor.name);
+  testing.expectEqual('SVGLengthList', $('#text').x.baseVal.constructor.name);
+  testing.expectEqual('SVGLength', $('#text').x.baseVal.getItem(0).constructor.name);
+  testing.expectEqual('SVGAnimatedNumberList', $('#text').rotate.constructor.name);
+  testing.expectEqual('SVGNumberList', $('#text').rotate.baseVal.constructor.name);
+  testing.expectEqual('SVGAnimatedRect', $('#root').viewBox.constructor.name);
+  testing.expectEqual('SVGRect', $('#root').viewBox.baseVal.constructor.name);
+  testing.expectEqual('SVGAnimatedAngle', $('#marker').orientAngle.constructor.name);
+  testing.expectEqual('SVGAngle', $('#marker').orientAngle.baseVal.constructor.name);
+
+  testing.expectEqual('length,numberOfItems,appendItem,clear,getItem,initialize,' +
+    'insertItemBefore,removeItem,replaceItem,constructor',
+    Object.getOwnPropertyNames(SVGLengthList.prototype).join(','));
+  for (const name of ['SVGAnimatedLengthList', 'SVGAnimatedRect', 'SVGAnimatedAngle']) {
+    testing.expectEqual('baseVal,animVal,constructor',
+      Object.getOwnPropertyNames(window[name].prototype).join(','));
+  }
+  testing.expectEqual('x,y,dx,dy,rotate,constructor',
+    Object.getOwnPropertyNames(SVGTextPositioningElement.prototype).join(','));
+  testing.expectError('TypeError', () => new SVGLengthList());
+  testing.expectError('TypeError', () => new SVGAnimatedRect());
+
+  // Identity is stable, and baseVal is never the same object as animVal.
+  testing.expectEqual(true, $('#text').x === $('#text').x);
+  testing.expectEqual(false, $('#text').x.baseVal === $('#text').x.animVal);
+  testing.expectEqual(true, $('#root').viewBox === $('#root').viewBox);
+  testing.expectEqual(false, $('#root').viewBox.baseVal === $('#root').viewBox.animVal);
+  testing.expectEqual(false, $('#marker').orientAngle.baseVal === $('#marker').orientAngle.animVal);
+  // The lists live on both text and tspan, but not on textPath.
+  testing.expectEqual(1, $('#tspan').x.baseVal.numberOfItems);
+  testing.expectEqual(false, 'x' in document.createElementNS('http://www.w3.org/2000/svg', 'textPath'));
+}
+</script>
+
+<script id=lengthListParse>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const dump = (l) => l.numberOfItems + ':' + [...Array(l.numberOfItems)].map((_, i) => {
+    const it = l.getItem(i);
+    return `${it.valueInSpecifiedUnits}u${it.unitType}`;
+  }).join('|');
+
+  testing.expectEqual('3:1u1|2u1|3u1', dump($('#text').x.baseVal));
+  testing.expectEqual('1:4u1', dump($('#text').y.baseVal));
+  testing.expectEqual('2:5u1|6u1', dump($('#text').dx.baseVal));
+  testing.expectEqual('1:7u1', dump($('#text').dy.baseVal));
+  testing.expectEqual(3, $('#text').rotate.baseVal.numberOfItems);
+  testing.expectEqual(20, $('#text').rotate.baseVal.getItem(1).value);
+  testing.expectEqual('0:', dump($('#bareText').x.baseVal));
+  testing.expectEqual(0, $('#bareText').rotate.baseVal.numberOfItems);
+
+  const cases = [
+    ['1,2', '2:1u1|2u1'],
+    ['1, 2 ,3', '3:1u1|2u1|3u1'],
+    ['1px 2em', '2:1u5|2u3'],
+    ['50%', '1:50u2'],
+    // One malformed token throws the whole attribute away.
+    ['1 2 bogus', '0:'],
+    ['bogus', '0:'],
+    ['', '0:'],
+    ['  ', '0:'],
+    ['1  2', '2:1u1|2u1'],
+    ['-3 +4', '2:-3u1|4u1'],
+    ['1.5e1 2', '2:15u1|2u1'],
+  ];
+  for (const [attr, expected] of cases) {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', attr);
+    $('#root').appendChild(t);
+    testing.expectEqual(expected, dump(t.x.baseVal));
+    t.remove();
+  }
+}
+</script>
+
+<script id=lengthListMutate>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const t = document.createElementNS(ns, 'text');
+  t.setAttribute('x', '1 2 3');
+  $('#root').appendChild(t);
+  const list = t.x.baseVal;
+
+  list.getItem(1).value = 9;
+  testing.expectEqual('1 9 3', t.getAttribute('x'));
+  list.getItem(0).newValueSpecifiedUnits(2, 50);
+  testing.expectEqual('50% 9 3', t.getAttribute('x'));
+
+  // appendItem copies its argument, even a fresh createSVGLength().
+  const spare = $('#root').createSVGLength();
+  spare.value = 7;
+  const appended = list.appendItem(spare);
+  testing.expectEqual('50% 9 3 7', t.getAttribute('x'));
+  testing.expectEqual(false, list.getItem(3) === spare);
+  testing.expectEqual(true, list.getItem(3) === appended);
+  // The copy is live: writing it rewrites the attribute.
+  appended.value = 8;
+  testing.expectEqual('50% 9 3 8', t.getAttribute('x'));
+
+  list.removeItem(0);
+  testing.expectEqual('9 3 8', t.getAttribute('x'));
+  list.initialize($('#root').createSVGLength());
+  testing.expectEqual('0', t.getAttribute('x'));
+  list.clear();
+  testing.expectEqual(null, t.getAttribute('x'));
+  testing.expectEqual(0, list.numberOfItems);
+
+  // An external attribute write is picked up on the next read.
+  t.setAttribute('x', '4 5');
+  testing.expectEqual(2, list.numberOfItems);
+  testing.expectEqual(5, list.getItem(1).value);
+
+  // animVal is read-only.
+  testing.expectError('NoModificationAllowedError', () => t.x.animVal.appendItem($('#root').createSVGLength()));
+  testing.expectError('NoModificationAllowedError', () => t.x.animVal.getItem(0).value = 1);
+  testing.expectError('IndexSizeError', () => t.x.baseVal.getItem(9));
+  t.remove();
+}
+</script>
+
+<script id=viewBoxReflection>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const rect = (r) => `${r.x},${r.y},${r.width},${r.height}`;
+  testing.expectEqual('0,0,40,20', rect($('#root').viewBox.baseVal));
+  testing.expectEqual('0,0,40,20', rect($('#root').viewBox.animVal));
+  testing.expectEqual('1,2,3,4', rect($('#marker').viewBox.baseVal));
+  testing.expectEqual('0,0,0,0', rect($('#inner').viewBox.baseVal));
+  // viewBox rides five elements.
+  for (const id of ['pattern', 'symbol', 'view', 'marker']) {
+    testing.expectEqual('SVGAnimatedRect', $('#' + id).viewBox.constructor.name);
+    testing.expectEqual('SVGAnimatedPreserveAspectRatio', $('#' + id).preserveAspectRatio.constructor.name);
+  }
+
+  // Chrome keeps the attribute only when it holds exactly four numbers.
+  const cases = [
+    ['1 2 3 4', '1,2,3,4'],
+    ['1,2,3,4', '1,2,3,4'],
+    ['0 0 -1 5', '0,0,-1,5'],
+    ['bogus', '0,0,0,0'],
+    ['1 2 3', '0,0,0,0'],
+    ['1 2 3 4 5', '0,0,0,0'],
+    ['', '0,0,0,0'],
+  ];
+  for (const [attr, expected] of cases) {
+    const e = document.createElementNS(ns, 'svg');
+    e.setAttribute('viewBox', attr);
+    $('#root').appendChild(e);
+    testing.expectEqual(expected, rect(e.viewBox.baseVal));
+    e.remove();
+  }
+
+  const e = document.createElementNS(ns, 'svg');
+  e.setAttribute('viewBox', '1 2 3 4');
+  $('#root').appendChild(e);
+  e.viewBox.baseVal.width = 99;
+  testing.expectEqual('1 2 99 4', e.getAttribute('viewBox'));
+  testing.expectError('NoModificationAllowedError', () => e.viewBox.animVal.width = 5);
+  e.remove();
+
+  // Writing one coordinate on an element with no viewBox writes all four.
+  const bare = document.createElementNS(ns, 'svg');
+  $('#root').appendChild(bare);
+  bare.viewBox.baseVal.x = 5;
+  testing.expectEqual('5 0 0 0', bare.getAttribute('viewBox'));
+  bare.remove();
+}
+</script>
+
+<script id=markerOrient>
+{
+  const ns = 'http://www.w3.org/2000/svg';
+  const angle = (m) => `${m.orientAngle.baseVal.value}u${m.orientAngle.baseVal.unitType}` +
+    `s${m.orientAngle.baseVal.valueAsString}t${m.orientType.baseVal}`;
+  const cases = [
+    ['45', '45u1s45t2'],
+    ['45deg', '45u2s45degt2'],
+    ['10grad', '9u4s10gradt2'],
+    // auto and auto-start-reverse leave the angle at zero; Chrome reports
+    // UNKNOWN for the reverse form because the IDL has no value for it.
+    ['auto', '0u1s0t1'],
+    ['auto-start-reverse', '0u1s0t0'],
+    ['bogus', '0u1s0t2'],
+    ['', '0u1s0t2'],
+  ];
+  for (const [attr, expected] of cases) {
+    const m = document.createElementNS(ns, 'marker');
+    m.setAttribute('orient', attr);
+    $('#root').appendChild(m);
+    testing.expectEqual(expected, angle(m));
+    m.remove();
+  }
+
+  const m = document.createElementNS(ns, 'marker');
+  m.setAttribute('orient', '45');
+  $('#root').appendChild(m);
+  m.orientAngle.baseVal.value = 90;
+  testing.expectEqual('90', m.getAttribute('orient'));
+  testing.expectError('NoModificationAllowedError', () => m.orientAngle.animVal.value = 5);
+  m.setOrientToAuto();
+  testing.expectEqual('auto', m.getAttribute('orient'));
+  testing.expectEqual(1, m.orientType.baseVal);
+  m.setOrientToAngle($('#root').createSVGAngle());
+  testing.expectEqual('0', m.getAttribute('orient'));
+  testing.expectEqual(2, m.orientType.baseVal);
+  m.remove();
+
+  testing.expectEqual(0, SVGMarkerElement.SVG_MARKER_ORIENT_UNKNOWN);
+  testing.expectEqual(1, SVGMarkerElement.SVG_MARKER_ORIENT_AUTO);
+  testing.expectEqual(2, SVGMarkerElement.SVG_MARKER_ORIENT_ANGLE);
+  testing.expectEqual(
+    'refX,refY,markerUnits,markerWidth,markerHeight,orientType,orientAngle,viewBox,' +
+    'preserveAspectRatio,SVG_MARKERUNITS_UNKNOWN,SVG_MARKERUNITS_USERSPACEONUSE,' +
+    'SVG_MARKERUNITS_STROKEWIDTH,SVG_MARKER_ORIENT_UNKNOWN,SVG_MARKER_ORIENT_AUTO,' +
+    'SVG_MARKER_ORIENT_ANGLE,setOrientToAngle,setOrientToAuto,constructor',
+    Object.getOwnPropertyNames(SVGMarkerElement.prototype).join(','));
+  testing.expectEqual(
+    'patternUnits,patternContentUnits,patternTransform,x,y,width,height,viewBox,' +
+    'preserveAspectRatio,href,requiredExtensions,systemLanguage,constructor',
+    Object.getOwnPropertyNames(SVGPatternElement.prototype).join(','));
+  testing.expectEqual('viewBox,preserveAspectRatio,constructor',
+    Object.getOwnPropertyNames(SVGSymbolElement.prototype).join(','));
+}
+</script>

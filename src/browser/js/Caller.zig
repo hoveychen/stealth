@@ -137,7 +137,15 @@ pub fn constructor(self: *Caller, comptime T: type, func: anytype, handle: *cons
     const info = FunctionCallbackInfo{ .handle = handle };
 
     if (!info.isConstructCall()) {
-        handleError(T, @TypeOf(func), local, error.InvalidArgument, info);
+        // `Event('x')` rather than `new Event('x')`. Chrome names the
+        // interface and points at the operator (measured on a headed Chrome
+        // 150); the generic argument error we used to throw here said
+        // "invalid argument", which no browser says.
+        const isolate = local.isolate;
+        const message = comptime "Failed to construct '" ++ interfaceName(T) ++
+            "': Please use the 'new' operator, this DOM object constructor cannot be called as a function.";
+        const js_exception = isolate.throwException(isolate.createTypeError(message));
+        info.getReturnValue().setValueHandle(js_exception);
         return;
     }
 
@@ -559,6 +567,14 @@ fn protoNode(comptime T: type, instance: *T) *@import("../webapi/Node.zig") {
     return protoNode(reflect.Proto(T).?, Factory.protoOf(instance));
 }
 
+// The name a WebIDL interface goes by in JS, for messages that carry it.
+fn interfaceName(comptime T: type) []const u8 {
+    if (@hasDecl(T, "JsApi") and @hasDecl(T.JsApi.Meta, "name")) {
+        return T.JsApi.Meta.name;
+    }
+    return @typeName(T);
+}
+
 fn handleError(comptime T: type, comptime F: type, local: *const Local, err: anyerror, info: anytype) void {
     const isolate = local.isolate;
 
@@ -783,6 +799,14 @@ pub const Function = struct {
         ce_reactions: bool = false,
         js_name: ?[:0]const u8 = null,
         unforgeable: bool = false,
+        // Overrides the arity derived from the Zig signature; see
+        // bridge.Constructor.Opts.arity for why a variadic operation needs it.
+        arity: ?usize = null,
+        // Web IDL makes interface members enumerable, but a handful of Blink's
+        // legacy [Global] attributes aren't: window.offscreenBuffering and
+        // window.webkitURL both come back with enumerable: false (measured on a
+        // headed Chrome 150).
+        enumerable: bool = true,
 
         pub const Exposed = enum { both, window, worker };
 

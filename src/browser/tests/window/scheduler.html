@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  window.scheduler, Scheduler, TaskController, TaskSignal and
+  TaskPriorityChangeEvent. Every shape, value and message below was measured on
+  a headed Chrome 150 over http://localhost; the snapshots live in
+  agent-workspace/stealth-detector-probes/win-batch/ (win1-chrome.json for the
+  interface shapes, win7-chrome.json and the win10 probes for the behaviours).
+-->
+
+<script id="scheduler_surface">
+  {
+    for (const n of ['Scheduler', 'TaskController', 'TaskSignal', 'TaskPriorityChangeEvent']) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+    }
+    testing.expectEqual(0, Scheduler.length);
+    testing.expectEqual(0, TaskController.length);
+    testing.expectEqual(0, TaskSignal.length);
+    testing.expectEqual(2, TaskPriorityChangeEvent.length);
+
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(Scheduler.prototype));
+    testing.expectEqual(AbortController.prototype, Object.getPrototypeOf(TaskController.prototype));
+    testing.expectEqual(AbortSignal.prototype, Object.getPrototypeOf(TaskSignal.prototype));
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(AbortSignal.prototype));
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(TaskPriorityChangeEvent.prototype));
+
+    testing.expectEqual(
+      'postTask,yield,constructor',
+      Object.getOwnPropertyNames(Scheduler.prototype).join(','),
+    );
+    testing.expectEqual(
+      'setPriority,constructor',
+      Object.getOwnPropertyNames(TaskController.prototype).join(','),
+    );
+    testing.expectEqual(
+      'priority,onprioritychange,constructor',
+      Object.getOwnPropertyNames(TaskSignal.prototype).join(','),
+    );
+    testing.expectEqual(
+      'previousPriority,constructor',
+      Object.getOwnPropertyNames(TaskPriorityChangeEvent.prototype).join(','),
+    );
+
+    testing.expectEqual(1, Scheduler.prototype.postTask.length);
+    testing.expectEqual(0, Scheduler.prototype.yield.length);
+    testing.expectEqual(1, TaskController.prototype.setPriority.length);
+    testing.expectEqual(1, TaskSignal.any.length);
+    testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(TaskSignal.prototype, 'priority').get);
+    testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(TaskSignal.prototype, 'priority').set);
+    testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(TaskSignal.prototype, 'onprioritychange').get);
+    testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(TaskSignal.prototype, 'onprioritychange').set);
+    testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(TaskPriorityChangeEvent.prototype, 'previousPriority').get);
+
+    // Only TaskController is constructible.
+    testing.expectError(
+      "Failed to construct 'Scheduler': Illegal constructor",
+      () => new Scheduler(),
+    );
+    testing.expectError(
+      "Failed to construct 'TaskSignal': Illegal constructor",
+      () => new TaskSignal(),
+    );
+
+    const d = Object.getOwnPropertyDescriptor(window, 'scheduler');
+    testing.expectEqual('function', typeof d.get);
+    testing.expectEqual('function', typeof d.set);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+    testing.expectEqual('[object Scheduler]', Object.prototype.toString.call(window.scheduler));
+    testing.expectEqual(true, window.scheduler === window.scheduler);
+  }
+</script>
+
+<script id="scheduler_post_task" type=module>
+  {
+    const sched = window.scheduler;
+    const state = await testing.async();
+    const out = {};
+    const err = (e) => e.name + ': ' + e.message;
+    (async () => {
+      out.value = String(await sched.postTask(() => 42));
+      const p = sched.postTask(() => 1);
+      out.brand = Object.prototype.toString.call(p);
+      await p;
+      out.background = String(await sched.postTask(() => 'bg', { priority: 'background' }));
+      out.asyncFn = String(await sched.postTask(async () => 'inner'));
+      out.nullOpts = String(await sched.postTask(() => 'ok', null));
+      out.delay = String(await sched.postTask(() => 'ok', { delay: 5 }));
+      out.undefinedOpts = String(await sched.postTask(() => 'ok', undefined));
+      out.undefinedPriority = String(await sched.postTask(() => 'ok', { priority: undefined }));
+      out.undefinedSignal = String(await sched.postTask(() => 'ok', { signal: undefined }));
+
+      // every argument error is a rejection, never a synchronous throw
+      const rejects = async (label, fn) => {
+        let promise;
+        try {
+          promise = fn();
+        } catch (e) {
+          out[label] = 'SYNC ' + err(e);
+          return;
+        }
+        try {
+          await promise;
+          out[label] = 'resolved';
+        } catch (e) {
+          out[label] = err(e);
+        }
+      };
+      await rejects('noArg', () => sched.postTask());
+      await rejects('undefinedArg', () => sched.postTask(undefined));
+      await rejects('nonFunction', () => sched.postTask(5));
+      await rejects('badPriority', () => sched.postTask(() => 0, { priority: 'bogus' }));
+      await rejects('badSignal', () => sched.postTask(() => 0, { signal: 5 }));
+      await rejects('nullSignal', () => sched.postTask(() => 0, { signal: null }));
+      await rejects('badDelay', () => sched.postTask(() => 0, { delay: -1 }));
+      await rejects('callbackThrows', () => sched.postTask(() => { throw new Error('boom'); }));
+
+      const y = sched.yield();
+      out.yieldBrand = Object.prototype.toString.call(y);
+      out.yieldValue = String(await y);
+      out.yieldWithArg = String(await sched.yield({ priority: 'background' }));
+
+      // a task is a macrotask: microtasks queued alongside it run first
+      const order = [];
+      const t = sched.postTask(() => order.push('task'));
+      Promise.resolve().then(() => order.push('micro'));
+      await t;
+      out.order = order.join(',');
+
+      // higher priority first, whatever the posting order
+      const byPriority = [];
+      await Promise.all([
+        sched.postTask(() => byPriority.push('bg'), { priority: 'background' }),
+        sched.postTask(() => byPriority.push('uv'), { priority: 'user-visible' }),
+        sched.postTask(() => byPriority.push('ub'), { priority: 'user-blocking' }),
+      ]);
+      out.byPriority = byPriority.join(',');
+
+      // a yield continuation outranks a pending task, and both outrank a timer
+      const mixed = [];
+      const mt = sched.postTask(() => mixed.push('task'));
+      const my = sched.yield().then(() => mixed.push('yield'));
+      setTimeout(() => mixed.push('timeout'), 0);
+      await Promise.all([mt, my, new Promise((r) => setTimeout(r, 30))]);
+      out.mixed = mixed.join(',');
+
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      testing.expectEqual('42', out.value);
+      testing.expectEqual('[object Promise]', out.brand);
+      testing.expectEqual('bg', out.background);
+      testing.expectEqual('inner', out.asyncFn);
+      testing.expectEqual('ok', out.nullOpts);
+      testing.expectEqual('ok', out.delay);
+      testing.expectEqual('ok', out.undefinedOpts);
+      testing.expectEqual('ok', out.undefinedPriority);
+      testing.expectEqual('ok', out.undefinedSignal);
+
+      testing.expectEqual(
+        "TypeError: Failed to execute 'postTask' on 'Scheduler': 1 argument required, but only 0 present.",
+        out.noArg,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to execute 'postTask' on 'Scheduler': parameter 1 is not of type 'Function'.",
+        out.undefinedArg,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to execute 'postTask' on 'Scheduler': parameter 1 is not of type 'Function'.",
+        out.nonFunction,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to execute 'postTask' on 'Scheduler': Failed to read the 'priority' property from " +
+          "'SchedulerPostTaskOptions': The provided value 'bogus' is not a valid enum value of type TaskPriority.",
+        out.badPriority,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to execute 'postTask' on 'Scheduler': Failed to read the 'signal' property from " +
+          "'SchedulerPostTaskOptions': Failed to convert value to 'AbortSignal'.",
+        out.badSignal,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to execute 'postTask' on 'Scheduler': Failed to read the 'signal' property from " +
+          "'SchedulerPostTaskOptions': Failed to convert value to 'AbortSignal'.",
+        out.nullSignal,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to execute 'postTask' on 'Scheduler': Failed to read the 'delay' property from " +
+          "'SchedulerPostTaskOptions': Value is outside the 'unsigned long long' value range.",
+        out.badDelay,
+      );
+      testing.expectEqual('Error: boom', out.callbackThrows);
+
+      testing.expectEqual('[object Promise]', out.yieldBrand);
+      testing.expectEqual('undefined', out.yieldValue);
+      testing.expectEqual('undefined', out.yieldWithArg);
+      testing.expectEqual('micro,task', out.order);
+      testing.expectEqual('ub,uv,bg', out.byPriority);
+      testing.expectEqual('yield,task,timeout', out.mixed);
+    });
+  }
+</script>
+
+<script id="scheduler_task_controller" type=module>
+  {
+    const sched = window.scheduler;
+    const state = await testing.async();
+    const out = {};
+    const err = (e) => e.name + ': ' + e.message;
+    (async () => {
+      const tc = new TaskController();
+      out.brand = Object.prototype.toString.call(tc);
+      out.signalBrand = Object.prototype.toString.call(tc.signal);
+      out.signalProto = Object.getPrototypeOf(tc.signal).constructor.name;
+      out.signalStable = String(tc.signal === tc.signal);
+      out.priority = tc.signal.priority;
+      out.aborted = String(tc.signal.aborted);
+      out.onprioritychange = String(tc.signal.onprioritychange);
+      out.isAbortSignal = String(tc.signal instanceof AbortSignal);
+      out.isEventTarget = String(tc.signal instanceof EventTarget);
+      out.isAbortController = String(tc instanceof AbortController);
+      out.reasonBefore = String(tc.signal.reason);
+      tc.abort();
+      out.abortedAfter = String(tc.signal.aborted);
+      out.reasonAfter = err(tc.signal.reason);
+
+      out.ctorNullPriority = new TaskController(null).signal.priority;
+      out.ctorEmptyPriority = new TaskController({}).signal.priority;
+      out.ctorUndefinedPriority = new TaskController({ priority: undefined }).signal.priority;
+      out.ctorBackground = new TaskController({ priority: 'background' }).signal.priority;
+
+      // setPriority dispatches a trusted TaskPriorityChangeEvent on the signal
+      const tc2 = new TaskController({ priority: 'background' });
+      let evInfo = 'none';
+      let targetIsSignal = 'none';
+      const seen = [];
+      tc2.signal.onprioritychange = (e) => { seen.push('handler'); };
+      tc2.signal.addEventListener('prioritychange', (e) => {
+        seen.push('listener');
+        targetIsSignal = String(e.target === tc2.signal);
+        evInfo = [
+          Object.prototype.toString.call(e),
+          e.type,
+          e.previousPriority,
+          e.target.priority,
+          Object.getPrototypeOf(e).constructor.name,
+          String(e.isTrusted),
+          String(e.bubbles),
+          String(e.cancelable),
+          String(e.composed),
+        ].join('|');
+      });
+      tc2.setPriority('user-blocking');
+      out.event = evInfo;
+      out.targetIsSignal = targetIsSignal;
+      out.listenerOrder = seen.join(',');
+      out.priorityAfter = tc2.signal.priority;
+
+      // setting the same priority again is a no-op: no event
+      seen.length = 0;
+      tc2.setPriority('user-blocking');
+      out.sameAgain = seen.join(',') || 'none';
+
+      const tc3 = new TaskController();
+      try { tc3.setPriority(); out.setNoArg = 'no throw'; } catch (e) { out.setNoArg = err(e); }
+      out.priorityAfterNoArg = tc3.signal.priority;
+      try { tc3.setPriority('bogus'); out.setBad = 'no throw'; } catch (e) { out.setBad = err(e); }
+      try { tc3.setPriority(undefined); out.setUndefined = 'no throw'; } catch (e) { out.setUndefined = err(e); }
+      try { new TaskController({ priority: 'bogus' }); out.ctorBad = 'no throw'; } catch (e) { out.ctorBad = err(e); }
+
+      // aborting a controller rejects the task it was posted with
+      const tc4 = new TaskController();
+      const pending = sched.postTask(() => 'never', { signal: tc4.signal });
+      tc4.abort();
+      try { await pending; out.abortPending = 'resolved'; } catch (e) { out.abortPending = err(e); }
+
+      // an already-aborted signal rejects before the callback ever runs
+      const ac = new AbortController();
+      ac.abort();
+      try { await sched.postTask(() => 'never', { signal: ac.signal }); out.preAborted = 'resolved'; } catch (e) { out.preAborted = err(e); }
+      const ac2 = new AbortController();
+      ac2.abort('why');
+      try { await sched.postTask(() => 'never', { signal: ac2.signal }); out.preAbortedReason = 'resolved'; } catch (e) { out.preAbortedReason = String(e); }
+
+      // a plain AbortSignal is a valid signal; a TaskSignal is too
+      out.plainSignal = String(await sched.postTask(() => 'ok', { signal: new AbortController().signal }));
+      out.taskSignal = String(await sched.postTask(() => 'ok', { signal: new TaskController().signal }));
+
+      // aborting after the callback ran changes nothing
+      const tc5 = new TaskController();
+      const done = await sched.postTask(() => 'done', { signal: tc5.signal });
+      tc5.abort();
+      out.abortAfterRun = String(done);
+
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      testing.expectEqual('[object TaskController]', out.brand);
+      testing.expectEqual('[object TaskSignal]', out.signalBrand);
+      testing.expectEqual('TaskSignal', out.signalProto);
+      testing.expectEqual('true', out.signalStable);
+      testing.expectEqual('user-visible', out.priority);
+      testing.expectEqual('false', out.aborted);
+      testing.expectEqual('null', out.onprioritychange);
+      testing.expectEqual('true', out.isAbortSignal);
+      testing.expectEqual('true', out.isEventTarget);
+      testing.expectEqual('true', out.isAbortController);
+      testing.expectEqual('undefined', out.reasonBefore);
+      testing.expectEqual('true', out.abortedAfter);
+      testing.expectEqual('AbortError: signal is aborted without reason', out.reasonAfter);
+
+      testing.expectEqual('user-visible', out.ctorNullPriority);
+      testing.expectEqual('user-visible', out.ctorEmptyPriority);
+      testing.expectEqual('user-visible', out.ctorUndefinedPriority);
+      testing.expectEqual('background', out.ctorBackground);
+
+      testing.expectEqual(
+        '[object TaskPriorityChangeEvent]|prioritychange|background|user-blocking|' +
+          'TaskPriorityChangeEvent|true|false|false|false',
+        out.event,
+      );
+      testing.expectEqual('true', out.targetIsSignal);
+      testing.expectEqual('handler,listener', out.listenerOrder);
+      testing.expectEqual('user-blocking', out.priorityAfter);
+      testing.expectEqual('none', out.sameAgain);
+
+      testing.expectEqual(
+        "TypeError: Failed to execute 'setPriority' on 'TaskController': 1 argument required, but only 0 present.",
+        out.setNoArg,
+      );
+      testing.expectEqual('user-visible', out.priorityAfterNoArg);
+      testing.expectEqual(
+        "TypeError: Failed to execute 'setPriority' on 'TaskController': The provided value 'bogus' is not a " +
+          'valid enum value of type TaskPriority.',
+        out.setBad,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to execute 'setPriority' on 'TaskController': The provided value 'undefined' is not a " +
+          'valid enum value of type TaskPriority.',
+        out.setUndefined,
+      );
+      testing.expectEqual(
+        "TypeError: Failed to construct 'TaskController': Failed to read the 'priority' property from " +
+          "'TaskControllerInit': The provided value 'bogus' is not a valid enum value of type TaskPriority.",
+        out.ctorBad,
+      );
+
+      testing.expectEqual('AbortError: signal is aborted without reason', out.abortPending);
+      testing.expectEqual('AbortError: signal is aborted without reason', out.preAborted);
+      testing.expectEqual('why', out.preAbortedReason);
+      testing.expectEqual('ok', out.plainSignal);
+      testing.expectEqual('ok', out.taskSignal);
+      testing.expectEqual('done', out.abortAfterRun);
+    });
+  }
+</script>
+
+<script id="scheduler_task_signal_any">
+  {
+    const err = (e) => e.name + ': ' + e.message;
+    testing.expectError(
+      "Failed to execute 'any' on 'TaskSignal': 1 argument required, but only 0 present.",
+      () => TaskSignal.any(),
+    );
+
+    const empty = TaskSignal.any([]);
+    testing.expectEqual('[object TaskSignal]', Object.prototype.toString.call(empty));
+    // any() never inherits a priority source, so it is always user-visible
+    testing.expectEqual('user-visible', empty.priority);
+
+    const tc = new TaskController({ priority: 'background' });
+    const one = TaskSignal.any([tc.signal]);
+    testing.expectEqual('user-visible', one.priority);
+    testing.expectEqual(false, one.aborted);
+    tc.abort();
+    testing.expectEqual(true, one.aborted);
+
+    // a plain AbortSignal is a valid source and still yields a TaskSignal
+    testing.expectEqual(
+      '[object TaskSignal]',
+      Object.prototype.toString.call(TaskSignal.any([new AbortController().signal])),
+    );
+
+    // TaskSignal's accessors are branded: a plain AbortSignal is not one
+    testing.expectError(
+      'Illegal invocation',
+      () => Object.getOwnPropertyDescriptor(TaskSignal.prototype, 'priority').get.call(new AbortController().signal),
+    );
+  }
+</script>
+
+<script id="scheduler_priority_change_event">
+  {
+    const ev = new TaskPriorityChangeEvent('prioritychange', { previousPriority: 'background' });
+    testing.expectEqual('[object TaskPriorityChangeEvent]', Object.prototype.toString.call(ev));
+    testing.expectEqual('prioritychange', ev.type);
+    testing.expectEqual('background', ev.previousPriority);
+    testing.expectEqual(false, ev.isTrusted);
+    testing.expectEqual(false, ev.bubbles);
+
+    const bubbling = new TaskPriorityChangeEvent('x', { previousPriority: 'background', bubbles: true });
+    testing.expectEqual(true, bubbling.bubbles);
+
+    testing.expectError(
+      "Failed to construct 'TaskPriorityChangeEvent': 2 arguments required, but only 1 present.",
+      () => new TaskPriorityChangeEvent('prioritychange'),
+    );
+    testing.expectError(
+      "Failed to construct 'TaskPriorityChangeEvent': Failed to read the 'previousPriority' property from " +
+        "'TaskPriorityChangeEventInit': Required member is undefined.",
+      () => new TaskPriorityChangeEvent('x', {}),
+    );
+    testing.expectError(
+      "Failed to construct 'TaskPriorityChangeEvent': Failed to read the 'previousPriority' property from " +
+        "'TaskPriorityChangeEventInit': The provided value 'bogus' is not a valid enum value of type TaskPriority.",
+      () => new TaskPriorityChangeEvent('x', { previousPriority: 'bogus' }),
+    );
+  }
+</script>
+
+<!--
+  Last, and a module so it runs after the module blocks above rather than
+  before them: window.scheduler is [Replaceable], so assigning to it shadows the
+  accessor with a plain data property for the rest of the page's life.
+-->
+<script id="scheduler_replaceable" type=module>
+  {
+    window.scheduler = 7;
+    testing.expectEqual(7, window.scheduler);
+    const d = Object.getOwnPropertyDescriptor(window, 'scheduler');
+    testing.expectEqual(undefined, d.get);
+    testing.expectEqual(7, d.value);
+  }
+</script>

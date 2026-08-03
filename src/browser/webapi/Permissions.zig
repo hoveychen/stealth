@@ -16,10 +16,33 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+//! navigator.permissions.
+//!
+//! query() is a table lookup, not a constant. Answering 'prompt' for any name
+//! at all -- which is what this used to do -- means answering 'prompt' for
+//! names no browser has ever heard of, and Chrome rejects those. The table, the
+//! default states, every message and the odd bits below were measured on a
+//! headed Chrome 150 over http://localhost (agent-workspace/
+//! stealth-detector-probes/win-batch/probe-perm1.js and probe-perm2.js, with
+//! perm1-chrome.json).
+//!
+//! Two things worth knowing before reading the table:
+//!
+//!   * PermissionStatus.name is NOT the name that was queried. It is Blink's
+//!     own PermissionName enum spelling, which is snake_case and sometimes a
+//!     different word entirely: 'camera' answers 'video_capture', all three
+//!     motion sensors answer 'sensors', and 'push' answers 'notifications'.
+//!   * Every failure is a rejection. Not one of them throws synchronously.
+
+const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
 const Page = @import("../Page.zig");
+const URL = @import("../URL.zig");
+const EventTarget = @import("EventTarget.zig");
+const DOMException = @import("DOMException.zig");
+
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -37,31 +60,217 @@ const Permissions = @This();
 // Padding to avoid zero-size struct pointer collisions
 _pad: bool = false,
 
-const QueryDescriptor = struct {
-    name: []const u8,
+const PREFIX = "Failed to execute 'query' on 'Permissions': ";
+const DESCRIPTOR = PREFIX ++ "Failed to read the 'name' property from 'PermissionDescriptor': ";
+
+// What a valid PermissionName answers with. `plain` resolves; `disabled` is a
+// name Chrome knows but whose feature is off, and always rejects with its own
+// wording; `gated` needs a dictionary member set before it will answer.
+const Answer = union(enum) {
+    plain: Resolved,
+    disabled: []const u8,
+    gated: Gated,
 };
 
-// Report the state set via CDP Browser.grantPermissions / setPermission, or
-// 'prompt' (the default safe value — neither granted nor denied) when unset.
-pub fn query(_: *const Permissions, qd: QueryDescriptor, exec: *const Execution) !js.Promise {
-    const arena = try exec.getArena(.tiny, "PermissionStatus");
-    errdefer arena.release();
+const Resolved = struct {
+    // Blink's internal enum spelling, which is what PermissionStatus.name reads.
+    status_name: []const u8,
+    state: State,
+};
 
-    const state = exec.session.browser.permissions.get(qd.name) orelse .prompt;
-    const status = try arena.create(PermissionStatus);
-    status.* = .{
-        ._arena = arena,
-        ._state = state,
-        ._name = try arena.dupe(u8, qd.name),
-    };
-    return exec.js.local.?.resolvePromise(status);
+const Gated = struct {
+    // The dictionary member that has to be there, and what happens without it.
+    member: []const u8,
+    // A URL-valued member (top-level-storage-access) rather than a boolean one.
+    origin: bool = false,
+    // NotSupportedError rather than TypeError; only 'push' does this.
+    not_supported: bool = false,
+    message: []const u8,
+    ok: Resolved,
+};
+
+// Chrome 150's whole PermissionName enum, with the state each one reports on a
+// secure top-level context. Anything not in here is not a valid enum value.
+const TABLE = std.StaticStringMap(Answer).initComptime(.{
+    .{ "geolocation", Answer{ .plain = .{ .status_name = "geolocation", .state = .prompt } } },
+    .{ "notifications", Answer{ .plain = .{ .status_name = "notifications", .state = .prompt } } },
+    .{ "midi", Answer{ .plain = .{ .status_name = "midi", .state = .prompt } } },
+    .{ "camera", Answer{ .plain = .{ .status_name = "video_capture", .state = .prompt } } },
+    .{ "microphone", Answer{ .plain = .{ .status_name = "audio_capture", .state = .prompt } } },
+    .{ "background-fetch", Answer{ .plain = .{ .status_name = "background_fetch", .state = .granted } } },
+    .{ "background-sync", Answer{ .plain = .{ .status_name = "background_sync", .state = .granted } } },
+    .{ "persistent-storage", Answer{ .plain = .{ .status_name = "durable_storage", .state = .prompt } } },
+    .{ "accelerometer", Answer{ .plain = .{ .status_name = "sensors", .state = .granted } } },
+    .{ "gyroscope", Answer{ .plain = .{ .status_name = "sensors", .state = .granted } } },
+    .{ "magnetometer", Answer{ .plain = .{ .status_name = "sensors", .state = .granted } } },
+    .{ "clipboard-read", Answer{ .plain = .{ .status_name = "clipboard_read", .state = .prompt } } },
+    .{ "clipboard-write", Answer{ .plain = .{ .status_name = "clipboard_write", .state = .granted } } },
+    .{ "display-capture", Answer{ .plain = .{ .status_name = "display_capture", .state = .prompt } } },
+    .{ "screen-wake-lock", Answer{ .plain = .{ .status_name = "screen_wake_lock", .state = .granted } } },
+    .{ "payment-handler", Answer{ .plain = .{ .status_name = "payment_handler", .state = .granted } } },
+    .{ "periodic-background-sync", Answer{ .plain = .{ .status_name = "periodic_background_sync", .state = .denied } } },
+    .{ "storage-access", Answer{ .plain = .{ .status_name = "storage-access", .state = .granted } } },
+    .{ "window-management", Answer{ .plain = .{ .status_name = "window-management", .state = .prompt } } },
+    .{ "local-fonts", Answer{ .plain = .{ .status_name = "local_fonts", .state = .prompt } } },
+    .{ "captured-surface-control", Answer{ .plain = .{ .status_name = "captured-surface-control", .state = .prompt } } },
+    .{ "idle-detection", Answer{ .plain = .{ .status_name = "idle_detection", .state = .prompt } } },
+    .{ "pointer-lock", Answer{ .plain = .{ .status_name = "pointer-lock", .state = .granted } } },
+    .{ "keyboard-lock", Answer{ .plain = .{ .status_name = "keyboard-lock", .state = .granted } } },
+
+    // Known to the enum, feature off. Each has its own wording.
+    .{ "ambient-light-sensor", Answer{ .disabled = "GenericSensorExtraClasses flag is not enabled." } },
+    .{ "nfc", Answer{ .disabled = "Web NFC is not enabled." } },
+    .{ "system-wake-lock", Answer{ .disabled = "System Wake Lock is not enabled." } },
+    .{ "speaker-selection", Answer{ .disabled = "The Speaker Selection API is not enabled." } },
+    .{ "web-app-installation", Answer{ .disabled = "The Web App Install API is not enabled." } },
+
+    // Need a member before they answer.
+    .{
+        "push",
+        Answer{
+            .gated = .{
+                .member = "userVisibleOnly",
+                .not_supported = true,
+                .message = "Push Permission without userVisibleOnly:true isn't supported yet.",
+                // Chrome answers a push query with the notifications permission.
+                .ok = .{ .status_name = "notifications", .state = .prompt },
+            },
+        },
+    },
+    .{ "fullscreen", Answer{ .gated = .{
+        .member = "allowWithoutGesture",
+        .message = "Fullscreen Permission only supports allowWithoutGesture:true.",
+        .ok = .{ .status_name = "fullscreen", .state = .denied },
+    } } },
+    .{ "top-level-storage-access", Answer{ .gated = .{
+        .member = "requestedOrigin",
+        .origin = true,
+        .message = "The requested origin is invalid.",
+        .ok = .{ .status_name = "top-level-storage-access", .state = .prompt },
+    } } },
+});
+
+// Every way query() can fail. They are all rejections, so they travel as a
+// value rather than as a Zig error.
+const Failure = union(enum) {
+    type_error: []const u8,
+    not_supported: []const u8,
+};
+
+pub fn query(_: *const Permissions, descriptor_: ?js.Value, exec: *const Execution) !js.Promise {
+    const local = exec.js.local.?;
+
+    const resolved = try resolve(descriptor_, exec);
+    switch (resolved) {
+        .failure => |failure| switch (failure) {
+            .type_error => |message| return local.rejectPromise(.{ .type_error = message }),
+            .not_supported => |message| {
+                // NotSupportedError with Chrome's own message, which
+                // RejectError's dom_exception variant cannot carry. The message
+                // has to be copied off the call arena: a DOMException keeps the
+                // slice it is given, and the rejection is read after this call
+                // is over.
+                const dom = try exec.arena.create(DOMException);
+                dom.* = DOMException.init(try exec.dupeString(message), "NotSupportedError");
+                const resolver = local.createPromiseResolver();
+                resolver.reject("Permissions.query", dom);
+                return resolver.promise();
+            },
+        },
+        .status => |answer| {
+            const arena = try exec.getArena(.tiny, "PermissionStatus");
+            errdefer arena.release();
+
+            // The state a CDP Browser.grantPermissions / setPermission set wins
+            // over the default, and is keyed by the name the script asked for.
+            const state = exec.session.browser.permissions.get(answer.queried) orelse answer.resolved.state;
+            return local.resolvePromise(try exec._factory.eventTargetWithAllocator(
+                arena.allocator(),
+                PermissionStatus{
+                    ._arena = arena,
+                    ._proto = undefined,
+                    ._state = state,
+                    ._name = answer.resolved.status_name,
+                },
+            ));
+        },
+    }
 }
 
-const PermissionStatus = struct {
+const Outcome = union(enum) {
+    failure: Failure,
+    status: struct { queried: []const u8, resolved: Resolved },
+};
+
+fn resolve(descriptor_: ?js.Value, exec: *const Execution) !Outcome {
+    const descriptor = descriptor_ orelse return .{ .failure = .{
+        .type_error = PREFIX ++ "1 argument required, but only 0 present.",
+    } };
+    // null and a primitive are both "not an object"; an array is an object, and
+    // gets as far as the missing member (measured).
+    if (!descriptor.isObject()) {
+        return .{ .failure = .{ .type_error = PREFIX ++ "parameter 1 is not of type 'object'." } };
+    }
+    const object = descriptor.toObject();
+
+    const name_value = try object.get("name");
+    if (name_value.isUndefined()) {
+        return .{ .failure = .{ .type_error = DESCRIPTOR ++ "Required member is undefined." } };
+    }
+    // WebIDL stringifies before the enum check, so `{name: null}` complains
+    // about 'null' and `{name: 1}` about '1'.
+    const name = try name_value.toStringSlice();
+
+    const answer = TABLE.get(name) orelse return .{ .failure = .{
+        .type_error = try enumMessage(name, exec),
+    } };
+
+    switch (answer) {
+        .plain => |resolved| return .{ .status = .{ .queried = name, .resolved = resolved } },
+        .disabled => |message| return .{ .failure = .{ .type_error = try prefixed(message, exec) } },
+        .gated => |gated| {
+            const member = try object.get(gated.member);
+            const satisfied = if (gated.origin)
+                !member.isUndefined() and URL.canParse(try member.toStringSlice(), null)
+            else
+                member.isTrue();
+            if (!satisfied) {
+                const message = try prefixed(gated.message, exec);
+                return .{ .failure = if (gated.not_supported)
+                    .{ .not_supported = message }
+                else
+                    .{ .type_error = message } };
+            }
+            return .{ .status = .{ .queried = name, .resolved = gated.ok } };
+        },
+    }
+}
+
+fn prefixed(message: []const u8, exec: *const Execution) ![]const u8 {
+    return std.fmt.allocPrint(exec.call_arena, PREFIX ++ "{s}", .{message});
+}
+
+fn enumMessage(name: []const u8, exec: *const Execution) ![]const u8 {
+    return std.fmt.allocPrint(
+        exec.call_arena,
+        DESCRIPTOR ++ "The provided value '{s}' is not a valid enum value of type PermissionName.",
+        .{name},
+    );
+}
+
+/// An EventTarget, because a permission's state can change under a page and
+/// `onchange` is where Chrome reports it. Nothing changes it here -- only CDP
+/// can move a permission, and it does so between navigations -- so the handler
+/// is a slot that reads back what was assigned and never fires.
+pub const PermissionStatus = struct {
+    pub const Proto = EventTarget;
+
     _rc: lp.RC = .{},
     _arena: *lp.Arena,
+    _proto: *EventTarget,
     _name: []const u8,
     _state: State,
+    _on_change: ?js.Function.Global = null,
 
     pub fn deinit(self: *PermissionStatus, _: *Page) void {
         self._arena.release();
@@ -83,6 +292,14 @@ const PermissionStatus = struct {
         return @tagName(self._state);
     }
 
+    fn getOnChange(self: *const PermissionStatus) ?js.Function.Global {
+        return self._on_change;
+    }
+
+    fn setOnChange(self: *PermissionStatus, callback: ?js.Function.Global) void {
+        self._on_change = callback;
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PermissionStatus);
         pub const Meta = struct {
@@ -90,8 +307,12 @@ const PermissionStatus = struct {
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
+
+        pub const Prototype = EventTarget;
+
         pub const name = bridge.accessor(getName, null, .{});
         pub const state = bridge.accessor(getState, null, .{});
+        pub const onchange = bridge.accessor(getOnChange, setOnChange, .{});
     };
 };
 
@@ -105,5 +326,5 @@ pub const JsApi = struct {
         pub const empty_with_no_proto = true;
     };
 
-    pub const query = bridge.function(Permissions.query, .{});
+    pub const query = bridge.function(Permissions.query, .{ .arity = 1 });
 };

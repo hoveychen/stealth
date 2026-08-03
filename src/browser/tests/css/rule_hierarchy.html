@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Every expectation here was measured on a headed Chrome 150 over
+  http://localhost (probes probe-css1.js / probe-css2.js / probe-css3.js).
+  Where Chrome disagrees with the CSSOM spec, Chrome wins and the line says so.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test). Must come
+// before any block that uses it: scripts run in document order.
+function sheetFor(text) {
+    const style = document.createElement('style');
+    style.textContent = text;
+    document.head.appendChild(style);
+    return style.sheet;
+}
+function errorName(fn) {
+    try {
+        fn();
+    } catch (e) {
+        return e.name;
+    }
+    return null;
+}
+function protoKeys(ctor) {
+    return Object.getOwnPropertyNames(ctor.prototype).join(' ');
+}
+function chainOf(ctor) {
+    const out = [];
+    let p = Object.getPrototypeOf(ctor.prototype);
+    while (p && p !== Object.prototype) {
+        out.push(p.constructor.name);
+        p = Object.getPrototypeOf(p);
+    }
+    return out.join(' ');
+}
+</script>
+
+<script id="styleSheet_base_interface">
+{
+    // Chrome splits the sheet interface in two: StyleSheet holds everything
+    // that is not rule-related, CSSStyleSheet adds the rules.
+    testing.expectEqual('function', typeof StyleSheet);
+    testing.expectEqual(0, StyleSheet.length);
+    testing.expectEqual(
+        'type href ownerNode parentStyleSheet title media disabled constructor',
+        protoKeys(StyleSheet));
+    testing.expectEqual('StyleSheet', chainOf(CSSStyleSheet));
+    // Illegal constructor.
+    testing.expectEqual('TypeError', errorName(() => new StyleSheet()));
+
+    const sheet = sheetFor('.a { color: red }');
+    testing.expectTrue(sheet instanceof StyleSheet);
+    testing.expectEqual('text/css', sheet.type);
+    testing.expectEqual(null, sheet.href);
+    testing.expectEqual('STYLE', sheet.ownerNode.tagName);
+    testing.expectEqual(null, sheet.parentStyleSheet);
+    testing.expectEqual(null, sheet.title);
+    testing.expectEqual(false, sheet.disabled);
+}
+</script>
+
+<script id="cssStyleSheet_surface">
+{
+    testing.expectEqual(
+        'ownerRule cssRules rules addRule deleteRule insertRule removeRule replace replaceSync constructor',
+        protoKeys(CSSStyleSheet));
+
+    const constructed = new CSSStyleSheet();
+    testing.expectEqual('text/css', constructed.type);
+    testing.expectEqual(null, constructed.href);
+    testing.expectEqual(null, constructed.ownerNode);
+    testing.expectEqual('', constructed.media.mediaText);
+    testing.expectEqual(null, constructed.title);
+    testing.expectEqual(null, constructed.parentStyleSheet);
+    testing.expectEqual(false, constructed.disabled);
+
+    const sheet = sheetFor('.a { color: red }');
+    // `rules` is the same object as `cssRules`, not a copy.
+    testing.expectTrue(sheet.rules === sheet.cssRules);
+    // Legacy IE aliases: addRule appends and answers -1, removeRule answers
+    // undefined. Measured, and contrary to "returns the index".
+    testing.expectEqual(-1, sheet.addRule('.b', 'color: blue', 1));
+    testing.expectEqual(2, sheet.cssRules.length);
+    testing.expectEqual('.b { color: blue; }', sheet.cssRules[1].cssText);
+    testing.expectEqual(undefined, sheet.removeRule(1));
+    testing.expectEqual(1, sheet.cssRules.length);
+    testing.expectEqual('TypeError', errorName(() => sheet.addRule()));
+}
+</script>
+
+<script id="cssRuleList_surface">
+{
+    testing.expectEqual('length item constructor', protoKeys(CSSRuleList));
+    const sheet = sheetFor('.a { color: red } .b { color: blue }');
+    const rules = sheet.cssRules;
+    testing.expectTrue(rules.item(0) === rules[0]);
+    testing.expectEqual(null, rules.item(9));
+    testing.expectEqual(2, [...rules].length);
+    testing.expectEqual('length item constructor', protoKeys(StyleSheetList));
+}
+</script>
+
+<script id="cssRule_member_order">
+{
+    // Chrome's own Object.getOwnPropertyNames order, constants after the
+    // accessors, and only the 13 constants Chrome still ships: no
+    // DOCUMENT_RULE / VIEWPORT_RULE / REGION_STYLE_RULE.
+    testing.expectEqual(
+        'type cssText parentRule parentStyleSheet STYLE_RULE CHARSET_RULE IMPORT_RULE ' +
+        'MEDIA_RULE FONT_FACE_RULE PAGE_RULE MARGIN_RULE NAMESPACE_RULE KEYFRAMES_RULE ' +
+        'KEYFRAME_RULE COUNTER_STYLE_RULE FONT_FEATURE_VALUES_RULE SUPPORTS_RULE constructor',
+        protoKeys(CSSRule));
+    testing.expectEqual(undefined, CSSRule.DOCUMENT_RULE);
+    testing.expectEqual(undefined, CSSRule.VIEWPORT_RULE);
+    testing.expectEqual(undefined, CSSRule.REGION_STYLE_RULE);
+    testing.expectEqual(9, CSSRule.MARGIN_RULE);
+    testing.expectEqual(14, CSSRule.FONT_FEATURE_VALUES_RULE);
+
+    // cssText is a getter/setter pair, but the setter is a silent no-op.
+    const d = Object.getOwnPropertyDescriptor(CSSRule.prototype, 'cssText');
+    testing.expectEqual('function', typeof d.get);
+    testing.expectEqual('function', typeof d.set);
+    const sheet = sheetFor('.a { color: red }');
+    const rule = sheet.cssRules[0];
+    rule.cssText = 'div {}';
+    testing.expectEqual('.a { color: red; }', rule.cssText);
+    testing.expectTrue(rule.parentStyleSheet === sheet);
+    testing.expectEqual(null, rule.parentRule);
+}
+</script>
+
+<script id="grouping_and_condition_shape">
+{
+    testing.expectEqual('cssRules deleteRule insertRule constructor', protoKeys(CSSGroupingRule));
+    testing.expectEqual('CSSRule', chainOf(CSSGroupingRule));
+
+    testing.expectEqual('conditionText constructor', protoKeys(CSSConditionRule));
+    testing.expectEqual('CSSGroupingRule CSSRule', chainOf(CSSConditionRule));
+
+    testing.expectEqual('media constructor', protoKeys(CSSMediaRule));
+    testing.expectEqual('CSSConditionRule CSSGroupingRule CSSRule', chainOf(CSSMediaRule));
+
+    // CSSSupportsRule adds nothing of its own.
+    testing.expectEqual('constructor', protoKeys(CSSSupportsRule));
+    testing.expectEqual('CSSConditionRule CSSGroupingRule CSSRule', chainOf(CSSSupportsRule));
+
+    testing.expectEqual('containerName containerQuery conditions constructor', protoKeys(CSSContainerRule));
+    testing.expectEqual('CSSConditionRule CSSGroupingRule CSSRule', chainOf(CSSContainerRule));
+
+    testing.expectEqual('name constructor', protoKeys(CSSLayerBlockRule));
+    testing.expectEqual('CSSGroupingRule CSSRule', chainOf(CSSLayerBlockRule));
+
+    // A layer *statement* is not a grouping rule: it has no block.
+    testing.expectEqual('nameList constructor', protoKeys(CSSLayerStatementRule));
+    testing.expectEqual('CSSRule', chainOf(CSSLayerStatementRule));
+
+    // CSSPageRule is a grouping rule but not a conditional one.
+    testing.expectEqual('selectorText style constructor', protoKeys(CSSPageRule));
+    testing.expectEqual('CSSGroupingRule CSSRule', chainOf(CSSPageRule));
+}
+</script>
+
+<script id="leaf_rule_shapes">
+{
+    testing.expectEqual('href media styleSheet layerName supportsText constructor', protoKeys(CSSImportRule));
+    testing.expectEqual('CSSRule', chainOf(CSSImportRule));
+
+    testing.expectEqual('namespaceURI prefix constructor', protoKeys(CSSNamespaceRule));
+    testing.expectEqual('style constructor', protoKeys(CSSFontFaceRule));
+    testing.expectEqual('name fontFamily basePalette overrideColors constructor', protoKeys(CSSFontPaletteValuesRule));
+    testing.expectEqual(
+        'name system symbols additiveSymbols negative prefix suffix range pad speakAs fallback constructor',
+        protoKeys(CSSCounterStyleRule));
+    testing.expectEqual('name syntax inherits initialValue constructor', protoKeys(CSSPropertyRule));
+    testing.expectEqual('name cssRules appendRule deleteRule findRule length constructor', protoKeys(CSSKeyframesRule));
+    testing.expectEqual('keyText style constructor', protoKeys(CSSKeyframeRule));
+    for (const c of [CSSImportRule, CSSNamespaceRule, CSSFontFaceRule, CSSFontPaletteValuesRule,
+                     CSSCounterStyleRule, CSSPropertyRule, CSSKeyframesRule, CSSKeyframeRule]) {
+        testing.expectEqual('CSSRule', chainOf(c));
+    }
+}
+</script>
+
+<script id="rule_dispatch_and_types">
+{
+    const sheet = sheetFor(`
+@namespace svg url(http://www.w3.org/2000/svg);
+@layer base, extra;
+@layer wrapped { p { color: red } }
+@media screen and (min-width: 100px) { .m { color: blue } }
+@supports (display: grid) { .s { color: green } }
+@container card (min-width: 10px) { .c { color: teal } }
+@font-face { font-family: Foo; src: url(foo.woff2) }
+@font-palette-values --pal { font-family: Foo; base-palette: 1; override-colors: 0 red }
+@counter-style thumbs { system: cyclic; symbols: "X"; suffix: " " }
+@property --my-len { syntax: "<length>"; inherits: false; initial-value: 0px }
+@keyframes spin { from { opacity: 0 } to { opacity: 1 } }
+@page :first { margin: 1cm }
+.plain { color: black }
+`);
+    const got = [...sheet.cssRules].map(r => r.constructor.name + ':' + r.type);
+    testing.expectEqual([
+        'CSSNamespaceRule:10',
+        'CSSLayerStatementRule:0',
+        'CSSLayerBlockRule:0',
+        'CSSMediaRule:4',
+        'CSSSupportsRule:12',
+        'CSSContainerRule:0',
+        'CSSFontFaceRule:5',
+        'CSSFontPaletteValuesRule:0',
+        'CSSCounterStyleRule:11',
+        'CSSPropertyRule:0',
+        'CSSKeyframesRule:7',
+        'CSSPageRule:6',
+        'CSSStyleRule:1',
+    ].join(','), got.join(','));
+
+    // @charset never surfaces as a rule at all.
+    const cs = sheetFor('@charset "utf-8";\n.a { color: red }');
+    testing.expectEqual(1, cs.cssRules.length);
+    testing.expectEqual('CSSStyleRule', cs.cssRules[0].constructor.name);
+}
+</script>
+
+<script id="rule_values">
+{
+    const sheet = sheetFor(`
+@namespace svg url(http://www.w3.org/2000/svg);
+@layer base, extra;
+@layer wrapped { p { color: red } }
+@media screen and (min-width: 100px) { .m { color: blue } }
+@supports (display: grid) { .s { color: green } }
+@container card (min-width: 10px) { .c { color: teal } }
+@font-palette-values --pal { font-family: Foo; base-palette: 1; override-colors: 0 red }
+@counter-style thumbs { system: cyclic; symbols: "X"; suffix: " " }
+@property --my-len { syntax: "<length>"; inherits: false; initial-value: 0px }
+`);
+    const [ns, layerStmt, layerBlock, media, supports, container, palette, counter, property] = [...sheet.cssRules];
+
+    testing.expectEqual('http://www.w3.org/2000/svg', ns.namespaceURI);
+    testing.expectEqual('svg', ns.prefix);
+    testing.expectEqual('@namespace svg url("http://www.w3.org/2000/svg");', ns.cssText);
+
+    testing.expectEqual('base,extra', [...layerStmt.nameList].join(','));
+    testing.expectEqual('@layer base, extra;', layerStmt.cssText);
+
+    testing.expectEqual('wrapped', layerBlock.name);
+    testing.expectEqual(1, layerBlock.cssRules.length);
+    testing.expectTrue(layerBlock.cssRules[0].parentRule === layerBlock);
+
+    testing.expectEqual('screen and (min-width: 100px)', media.conditionText);
+    testing.expectEqual('screen and (min-width: 100px)', media.media.mediaText);
+    testing.expectEqual(1, media.media.length);
+
+    // Chrome keeps the parentheses in a @supports condition.
+    testing.expectEqual('(display: grid)', supports.conditionText);
+
+    testing.expectEqual('card', container.containerName);
+    testing.expectEqual('(min-width: 10px)', container.containerQuery);
+    testing.expectEqual('card (min-width: 10px)', container.conditionText);
+
+    testing.expectEqual('--pal', palette.name);
+    testing.expectEqual('Foo', palette.fontFamily);
+    testing.expectEqual('1', palette.basePalette);
+    testing.expectEqual('0 red', palette.overrideColors);
+
+    // The counter-style name loses no characters, and descriptors Chrome did
+    // not see read back as the empty string rather than null.
+    testing.expectEqual('thumbs', counter.name);
+    testing.expectEqual('cyclic', counter.system);
+    testing.expectEqual('"X"', counter.symbols);
+    testing.expectEqual('" "', counter.suffix);
+    testing.expectEqual('', counter.prefix);
+    testing.expectEqual('', counter.fallback);
+
+    // @property: syntax comes back unquoted, inherits is a real boolean.
+    testing.expectEqual('--my-len', property.name);
+    testing.expectEqual('<length>', property.syntax);
+    testing.expectEqual(false, property.inherits);
+    testing.expectEqual('0px', property.initialValue);
+}
+</script>
+
+<script id="import_rule_values">
+{
+    const sheet = sheetFor('@import url("nope.css") layer(base) supports(display: grid) screen and (min-width: 100px);\n.after { color: red }');
+    const imp = sheet.cssRules[0];
+    testing.expectEqual('CSSImportRule', imp.constructor.name);
+    testing.expectEqual(3, imp.type);
+    testing.expectEqual('nope.css', imp.href);
+    testing.expectEqual('base', imp.layerName);
+    testing.expectEqual('display: grid', imp.supportsText);
+    testing.expectEqual('screen and (min-width: 100px)', imp.media.mediaText);
+    // We do not fetch imported sheets, and neither had Chrome at probe time.
+    testing.expectEqual(null, imp.styleSheet);
+    testing.expectEqual(
+        '@import url("nope.css") layer(base) supports(display: grid) screen and (min-width: 100px);',
+        imp.cssText);
+
+    const bare = sheetFor('@import url("bare.css");').cssRules[0];
+    testing.expectEqual('bare.css', bare.href);
+    // Absent layer()/supports() read back as null, not "".
+    testing.expectEqual(null, bare.layerName);
+    testing.expectEqual(null, bare.supportsText);
+    testing.expectEqual('', bare.media.mediaText);
+    testing.expectEqual('@import url("bare.css");', bare.cssText);
+}
+</script>
+
+<script id="grouping_mutation">
+{
+    const sheet = sheetFor('@media screen { .a { color: red } }');
+    const media = sheet.cssRules[0];
+    testing.expectEqual(1, media.insertRule('.b { color: blue }', 1));
+    testing.expectEqual(2, media.cssRules.length);
+    testing.expectTrue(media.cssRules[1].parentRule === media);
+    testing.expectTrue(media.cssRules[1].parentStyleSheet === sheet);
+    testing.expectEqual(undefined, media.deleteRule(1));
+    testing.expectEqual(1, media.cssRules.length);
+    // Out of range throws on a grouping rule (the sheet clamps, this does not).
+    testing.expectEqual('IndexSizeError', errorName(() => media.insertRule('.z {}', 9)));
+    testing.expectEqual('IndexSizeError', errorName(() => media.deleteRule(9)));
+
+    // conditionText is read-only: assigning is a silent no-op.
+    media.conditionText = 'print';
+    testing.expectEqual('screen', media.conditionText);
+    // media.mediaText is writable, and it drives conditionText and cssText.
+    media.media.mediaText = 'print';
+    testing.expectEqual('print', media.media.mediaText);
+    testing.expectEqual('print', media.conditionText);
+    testing.expectEqual('@media print {\n  .a { color: red; }\n}', media.cssText);
+}
+</script>
+
+<script id="media_list_surface">
+{
+    testing.expectEqual('length mediaText appendMedium deleteMedium item toString constructor',
+        protoKeys(MediaList));
+    const media = sheetFor('@media screen and (min-width: 100px) { .a { color: red } }').cssRules[0].media;
+    testing.expectEqual('MediaList', media.constructor.name);
+    testing.expectEqual(1, media.length);
+    testing.expectEqual('screen and (min-width: 100px)', media.item(0));
+    testing.expectEqual(null, media.item(9));
+    testing.expectEqual('screen and (min-width: 100px)', [...media].join('|'));
+    media.appendMedium('print');
+    testing.expectEqual('screen and (min-width: 100px), print', media.mediaText);
+    testing.expectEqual(2, media.length);
+    media.deleteMedium('print');
+    testing.expectEqual('screen and (min-width: 100px)', media.mediaText);
+    testing.expectEqual(1, media.length);
+    testing.expectEqual('screen and (min-width: 100px)', media.toString());
+}
+</script>
+
+<script id="keyframes_rule">
+{
+    const sheet = sheetFor('@keyframes spin { from { opacity: 0 } to { opacity: 1 } }');
+    const kf = sheet.cssRules[0];
+    testing.expectEqual('spin', kf.name);
+    testing.expectEqual(2, kf.length);
+    testing.expectEqual(2, kf.cssRules.length);
+    // `from`/`to` are normalised to percentages on the way in.
+    testing.expectEqual('0%,100%', [...kf.cssRules].map(r => r.keyText).join(','));
+    testing.expectEqual('0% { opacity: 0; }', kf.cssRules[0].cssText);
+    testing.expectEqual(8, kf.cssRules[0].type);
+    testing.expectEqual('CSSKeyframeRule', kf[0].constructor.name);
+    testing.expectEqual(2, [...kf].length);
+    testing.expectEqual('0%', kf.findRule('from').keyText);
+    testing.expectEqual('0%', kf.findRule('0%').keyText);
+    testing.expectEqual(null, kf.findRule('50%'));
+    testing.expectEqual('@keyframes spin { \n  0% { opacity: 0; }\n  100% { opacity: 1; }\n}', kf.cssText);
+}
+</script>
+
+<script id="keyframes_mutation">
+{
+    const kf = sheetFor('@keyframes k { from { opacity: 0 } }').cssRules[0];
+    kf.name = 'renamed';
+    testing.expectEqual('renamed', kf.name);
+    testing.expectEqual('@keyframes renamed { \n  0% { opacity: 0; }\n}', kf.cssText);
+
+    kf.appendRule('to { opacity: 1 }');
+    testing.expectEqual(2, kf.length);
+    testing.expectEqual('0%,100%', [...kf.cssRules].map(r => r.keyText).join(','));
+
+    kf.deleteRule('from');
+    testing.expectEqual(1, kf.length);
+    testing.expectEqual('100%', kf.cssRules[0].keyText);
+    // Deleting a key that is not there is not an error.
+    kf.deleteRule('nope');
+    testing.expectEqual(1, kf.length);
+
+    const child = kf.cssRules[0];
+    child.keyText = '50%';
+    testing.expectEqual('50%', child.keyText);
+    testing.expectEqual('50% { opacity: 1; }', child.cssText);
+    testing.expectEqual('SyntaxError', errorName(() => { child.keyText = 'bogus'; }));
+    child.style.setProperty('color', 'red');
+    testing.expectEqual('50% { opacity: 1; color: red; }', child.cssText);
+}
+</script>
+
+<script id="font_face_and_page_rules">
+{
+    const sheet = sheetFor('@font-face { font-family: Foo; src: url(foo.woff2) }\n@page :first { margin: 1cm }');
+    const [face, page] = [...sheet.cssRules];
+    testing.expectEqual(2, face.style.length);
+    testing.expectEqual('Foo', face.style.getPropertyValue('font-family'));
+    // Chrome answers `src: url("foo.woff2")`: it re-quotes every unquoted
+    // url() token when it serialises a declaration, everywhere, not just
+    // here. That normalisation lives in CSSStyleDeclaration and is a separate
+    // engine-wide gap, so this asserts what we actually produce today.
+    testing.expectEqual('@font-face { font-family: Foo; src: url(foo.woff2); }', face.cssText);
+
+    testing.expectEqual(':first', page.selectorText);
+    // Chrome answers 4 here: it expands `margin` into its four longhands on
+    // the way into any declaration block. We store shorthands verbatim
+    // everywhere (see the inline-style cases in stylesheet.html), so this is
+    // an engine-wide CSSStyleDeclaration gap rather than a @page one.
+    testing.expectEqual(1, page.style.length);
+    testing.expectEqual(0, page.cssRules.length);
+    testing.expectEqual('@page :first { margin: 1cm; }', page.cssText);
+}
+</script>
+
+<script id="style_rule_nesting">
+{
+    testing.expectEqual('CSSRule', chainOf(CSSStyleRule));
+    const sheet = sheetFor('.a { color: red }');
+    const rule = sheet.cssRules[0];
+    testing.expectEqual(0, rule.cssRules.length);
+    rule.style = 'color: blue';
+    // The style setter is a no-op on the declaration object itself, but Chrome
+    // routes the string through cssText.
+    testing.expectEqual('.a { color: blue; }', rule.cssText);
+    rule.selectorText = '.z';
+    testing.expectEqual('.z { color: blue; }', rule.cssText);
+    testing.expectEqual(0, rule.insertRule('& span { color: teal }', 0));
+    testing.expectEqual(1, rule.cssRules.length);
+    testing.expectEqual('CSSStyleRule', rule.cssRules[0].constructor.name);
+    testing.expectEqual('.z {\n  color: blue;\n  & span { color: teal; }\n}', rule.cssText);
+}
+</script>
+
+<script id="import_position_window">
+{
+    // Measured: an @import survives only while nothing but @charset, @layer
+    // statements and other @imports has come before it.
+    const ctors = (text) => {
+        const style = document.createElement('style');
+        style.textContent = text;
+        document.head.appendChild(style);
+        return [...style.sheet.cssRules].map(r => r.constructor.name).join(',');
+    };
+    testing.expectEqual('CSSImportRule,CSSStyleRule',
+        ctors('@charset "utf-8";\n@import url(a.css);\n.x{color:red}'));
+    testing.expectEqual('CSSLayerStatementRule,CSSImportRule,CSSStyleRule',
+        ctors('@layer base;\n@import url(a.css);\n.x{color:red}'));
+    testing.expectEqual('CSSImportRule,CSSImportRule,CSSStyleRule',
+        ctors('@import url(a.css);\n@import url(b.css);\n.x{color:red}'));
+    testing.expectEqual('CSSImportRule,CSSNamespaceRule,CSSStyleRule',
+        ctors('@import url(a.css);\n@namespace svg url(http://www.w3.org/2000/svg);\n.x{color:red}'));
+    // ...and is dropped without a trace once the window closes.
+    testing.expectEqual('CSSNamespaceRule,CSSStyleRule',
+        ctors('@namespace svg url(http://www.w3.org/2000/svg);\n@import url(a.css);\n.x{color:red}'));
+    testing.expectEqual('CSSStyleRule,CSSStyleRule',
+        ctors('.y{color:red}\n@import url(a.css);\n.x{color:red}'));
+    testing.expectEqual('CSSLayerBlockRule,CSSStyleRule',
+        ctors('@layer w { p{color:red} }\n@import url(a.css);\n.x{color:red}'));
+}
+</script>
