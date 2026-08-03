@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<head>
+  <title>TextTrack Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+  <video id=v></video>
+</body>
+
+<script id=empty_list>
+  {
+    const v = document.getElementById('v');
+    testing.expectTrue(v.textTracks instanceof TextTrackList);
+    testing.expectEqual(0, v.textTracks.length);
+    // One list per element, kept across reads.
+    testing.expectTrue(v.textTracks === v.textTracks);
+    testing.expectEqual('[object TextTrackList]', Object.prototype.toString.call(v.textTracks));
+    testing.expectEqual(null, v.textTracks.getTrackById('zz'));
+    testing.expectEqual(1, HTMLMediaElement.prototype.addTextTrack.length);
+  }
+</script>
+
+<script id=add_track_defaults>
+  {
+    const t = document.createElement('video').addTextTrack('metadata');
+    testing.expectTrue(t instanceof TextTrack);
+    testing.expectEqual('metadata', t.kind);
+    testing.expectEqual('', t.label);
+    testing.expectEqual('', t.language);
+    testing.expectEqual('', t.id);
+    testing.expectEqual('hidden', t.mode);
+    testing.expectEqual('[object TextTrack]', Object.prototype.toString.call(t));
+    testing.expectTrue(t.cues instanceof TextTrackCueList);
+    testing.expectTrue(t.activeCues instanceof TextTrackCueList);
+    testing.expectEqual(0, t.cues.length);
+  }
+</script>
+
+<script id=add_track_with_label>
+  {
+    const v = document.createElement('video');
+    const a = v.addTextTrack('subtitles', 'A', 'en');
+    const b = v.addTextTrack('captions', 'B');
+    testing.expectEqual('en', a.language);
+    testing.expectEqual('A', a.label);
+    testing.expectEqual(2, v.textTracks.length);
+    testing.expectTrue(v.textTracks[0] === a);
+    testing.expectTrue(v.textTracks[1] === b);
+    testing.expectEqual(undefined, v.textTracks[2]);
+    testing.expectEqual(2, Array.from(v.textTracks).length);
+    // Every script-built track has an empty id, so '' finds the first one.
+    testing.expectTrue(v.textTracks.getTrackById('') === a);
+  }
+</script>
+
+<script id=all_kinds>
+  {
+    for (const kind of ['subtitles', 'captions', 'descriptions', 'chapters', 'metadata']) {
+      testing.expectEqual(kind, document.createElement('video').addTextTrack(kind).kind);
+    }
+    let err;
+    try { document.createElement('video').addTextTrack('nope'); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'addTextTrack' on 'HTMLMediaElement': The provided value 'nope' is not a valid enum value of type TextTrackKind.",
+      err.message);
+  }
+</script>
+
+<script id=mode>
+  {
+    const t = document.createElement('video').addTextTrack('captions');
+    t.mode = 'showing';
+    testing.expectEqual('showing', t.mode);
+    // An IDL enum attribute ignores a value outside the enum.
+    t.mode = 'nope';
+    testing.expectEqual('showing', t.mode);
+    t.mode = 'disabled';
+    testing.expectEqual('disabled', t.mode);
+    testing.expectEqual(null, t.cues);
+    testing.expectEqual(null, t.activeCues);
+    t.mode = 'hidden';
+    testing.expectTrue(t.cues instanceof TextTrackCueList);
+  }
+</script>
+
+<script id=cues>
+  {
+    const t = document.createElement('video').addTextTrack('captions');
+    const cue = new VTTCue(0, 1, 'hi');
+    t.addCue(cue);
+    testing.expectEqual(1, t.cues.length);
+    testing.expectTrue(t.cues[0] === cue);
+    testing.expectTrue(cue.track === t);
+    testing.expectEqual('[object TextTrackCueList]', Object.prototype.toString.call(t.cues));
+    testing.expectEqual(null, t.cues.getCueById('nope'));
+    // The empty string never matches, even though the cue's id is empty.
+    testing.expectEqual(null, t.cues.getCueById(''));
+
+    cue.id = 'c1';
+    testing.expectTrue(t.cues.getCueById('c1') === cue);
+
+    // Adding twice is a no-op.
+    t.addCue(cue);
+    testing.expectEqual(1, t.cues.length);
+
+    t.removeCue(cue);
+    testing.expectEqual(0, t.cues.length);
+    testing.expectEqual(null, cue.track);
+
+    let err;
+    try { t.removeCue(new VTTCue(0, 1, 'x')); } catch (e) { err = e; }
+    testing.expectEqual('NotFoundError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'removeCue' on 'TextTrack': The specified cue is not listed in the TextTrack's list of cues.",
+      err.message);
+
+    err = undefined;
+    try { t.addCue({}); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'addCue' on 'TextTrack': parameter 1 is not of type 'TextTrackCue'.",
+      err.message);
+  }
+</script>
+
+<script id=not_constructible>
+  {
+    for (const ctor of [TextTrack, TextTrackList, TextTrackCueList]) {
+      let err;
+      try { new ctor(); } catch (e) { err = e; }
+      testing.expectEqual('TypeError', err.name);
+    }
+    // TextTrackCueList has no item(): indexed access is all Chrome exposes.
+    testing.expectEqual('undefined', typeof TextTrackCueList.prototype.item);
+  }
+</script>

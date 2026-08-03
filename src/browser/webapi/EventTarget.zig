@@ -100,6 +100,10 @@ pub const Type = union(enum) {
     bluetooth_gatt_characteristic: *@import("navigator/bluetooth.zig").BluetoothRemoteGATTCharacteristic,
     hid_device: *@import("navigator/hid_serial.zig").HIDDevice,
     serial_port: *@import("navigator/hid_serial.zig").SerialPort,
+    text_track: *@import("media/text_tracks.zig").TextTrack,
+    text_track_list: *@import("media/text_tracks.zig").TextTrackList,
+    capture_controller: *@import("media/capture.zig").CaptureController,
+    picture_in_picture_window: *@import("media/PictureInPictureWindow.zig"),
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -320,6 +324,10 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .presentation_availability => writer.writeAll("<PresentationAvailability>"),
         .presentation_connection => writer.writeAll("<PresentationConnection>"),
         .presentation_connection_list => writer.writeAll("<PresentationConnectionList>"),
+        .text_track => writer.writeAll("<TextTrack>"),
+        .text_track_list => writer.writeAll("<TextTrackList>"),
+        .capture_controller => writer.writeAll("<CaptureController>"),
+        .picture_in_picture_window => writer.writeAll("<PictureInPictureWindow>"),
     };
 }
 
@@ -392,6 +400,10 @@ pub fn toString(self: *EventTarget) []const u8 {
         .presentation_availability => return "[object PresentationAvailability]",
         .presentation_connection => return "[object PresentationConnection]",
         .presentation_connection_list => return "[object PresentationConnectionList]",
+        .text_track => return "[object TextTrack]",
+        .text_track_list => return "[object TextTrackList]",
+        .capture_controller => return "[object CaptureController]",
+        .picture_in_picture_window => return "[object PictureInPictureWindow]",
     };
 }
 

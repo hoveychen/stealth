@@ -28,6 +28,7 @@ pub const Audio = @import("Audio.zig");
 pub const Video = @import("Video.zig");
 const MediaError = @import("../../media/MediaError.zig");
 const TimeRanges = @import("../../media/TimeRanges.zig");
+const text_tracks = @import("../../media/text_tracks.zig");
 const mime = @import("../../media/mime.zig");
 
 const Media = @This();
@@ -57,6 +58,7 @@ pub const Type = union(enum) {
 
 _type: Type,
 _proto: *HtmlElement,
+_text_tracks: ?*text_tracks.TextTrackList = null,
 _paused: bool = true,
 _current_time: f64 = 0,
 _volume: f64 = 1.0,
@@ -279,6 +281,48 @@ pub fn getSeekable(_: *const Media, frame: *Frame) !*TimeRanges {
     return frame._factory.create(TimeRanges{});
 }
 
+const Page = @import("../../../Page.zig");
+
+// One list per element, created on first read and kept: `v.textTracks ===
+// v.textTracks` is true in Chrome (measured), so a fresh list per read would be
+// a tell of its own.
+pub fn getTextTracks(self: *Media, page: *Page) !*text_tracks.TextTrackList {
+    if (self._text_tracks) |list| {
+        return list;
+    }
+    const list = try page.factory.eventTarget(text_tracks.TextTrackList{ ._proto = undefined });
+    list._proto._type = .{ .text_track_list = list };
+    self._text_tracks = list;
+    return list;
+}
+
+// Chrome reports arity 1 and validates the kind against TextTrackKind, with the
+// label and language defaulting to the empty string (measured).
+pub fn addTextTrack(
+    self: *Media,
+    kind: []const u8,
+    label_: ?[]const u8,
+    language_: ?[]const u8,
+    exec: *const js.Execution,
+) !*text_tracks.TextTrack {
+    const parsed = std.meta.stringToEnum(text_tracks.TextTrack.Kind, kind) orelse {
+        const isolate = exec.js.isolate;
+        const message = try std.fmt.allocPrint(
+            exec.call_arena,
+            "Failed to execute 'addTextTrack' on 'HTMLMediaElement': The provided value '{s}' is not a valid enum value of type TextTrackKind.",
+            .{kind},
+        );
+        _ = isolate.throwException(isolate.createTypeError(message));
+        return error.JsException;
+    };
+
+    const page = exec.page;
+    const track = try text_tracks.TextTrack.create(parsed, label_ orelse "", language_ orelse "", page);
+    const list = try self.getTextTracks(page);
+    try list._items.append(page.frame_arena, track);
+    return track;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Media);
 
@@ -320,6 +364,9 @@ pub const JsApi = struct {
     pub const networkState = bridge.accessor(Media.getNetworkState, null, .{});
     pub const @"error" = bridge.accessor(Media.getError, null, .{});
 
+    pub const textTracks = bridge.accessor(Media.getTextTracks, null, .{});
+
+    pub const addTextTrack = bridge.function(Media.addTextTrack, .{ .arity = 1 });
     pub const canPlayType = bridge.function(Media.canPlayType, .{});
     pub const play = bridge.function(Media.play, .{});
     pub const pause = bridge.function(Media.pause, .{});

@@ -44,6 +44,7 @@ const js = @import("../../js/js.zig");
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const DOMException = @import("../DOMException.zig");
+const Page = @import("../../Page.zig");
 
 const String = lp.String;
 const Execution = js.Execution;
@@ -52,6 +53,7 @@ pub fn registerTypes() []const type {
     return &.{
         MediaStream,
         MediaStreamTrack,
+        OverconstrainedError,
         MediaStreamTrackAudioStats,
         MediaStreamTrackEvent,
         MediaStreamEvent,
@@ -424,10 +426,14 @@ pub const MediaStreamTrack = struct {
         if (!constrained) {
             return local.resolvePromise({});
         }
+        // A real OverconstrainedError, not a DOMException that merely calls
+        // itself one: now that the interface exists, `err instanceof
+        // OverconstrainedError` has to hold, and it reports which constraint
+        // failed the way Chrome does.
         var resolver = local.createPromiseResolver();
         resolver.reject(
             "MediaStreamTrack.applyConstraints",
-            DOMException.init("Cannot satisfy constraints", "OverconstrainedError"),
+            try OverconstrainedError.create("", "Cannot satisfy constraints", exec.page),
         );
         return resolver.promise();
     }
@@ -716,6 +722,48 @@ pub const MediaStreamEvent = struct {
 
         pub const constructor = bridge.constructor(MediaStreamEvent.constructor, .{ .arity = 1 });
         pub const stream = bridge.accessor(MediaStreamEvent.getStream, null, .{ .null_as_undefined = false });
+    };
+};
+
+/// The error a failed constraint hands back. A DOMException subclass with one
+/// extra member, and the only interface in this file whose constructor a page
+/// can call. Measured: arity 1, name "OverconstrainedError", code 0, message
+/// defaulting to "", and `String(e)` reading "OverconstrainedError: <message>".
+pub const OverconstrainedError = struct {
+    pub const Proto = DOMException;
+
+    _proto: *DOMException,
+    _constraint: []const u8,
+
+    pub fn constructor(constraint: []const u8, message_: ?[]const u8, page: *Page) !*OverconstrainedError {
+        return create(constraint, message_ orelse "", page);
+    }
+
+    pub fn create(constraint: []const u8, message: []const u8, page: *Page) !*OverconstrainedError {
+        return page.factory.domException(
+            DOMException.init(try page.frame_arena.dupe(u8, message), "OverconstrainedError"),
+            OverconstrainedError{
+                ._proto = undefined,
+                ._constraint = try page.frame_arena.dupe(u8, constraint),
+            },
+        );
+    }
+
+    pub fn getConstraint(self: *const OverconstrainedError) []const u8 {
+        return self._constraint;
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(OverconstrainedError);
+
+        pub const Meta = struct {
+            pub const name = "OverconstrainedError";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const constructor = bridge.constructor(OverconstrainedError.constructor, .{ .arity = 1 });
+        pub const constraint = bridge.accessor(OverconstrainedError.getConstraint, null, .{});
     };
 };
 
