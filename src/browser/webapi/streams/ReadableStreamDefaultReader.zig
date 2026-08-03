@@ -101,8 +101,7 @@ pub fn read(self: *ReadableStreamDefaultReader, exec: *const Execution) !js.Prom
     };
 
     if (stream._state == .errored) {
-        //const err = stream._stored_error orelse "Stream errored";
-        return local.rejectPromise(.{ .type_error = "Stream errored" });
+        return local.rejectPromise(.{ .type_error = stream._stored_error orelse "Stream errored" });
     }
 
     if (stream._byte_controller) |byte_controller| {

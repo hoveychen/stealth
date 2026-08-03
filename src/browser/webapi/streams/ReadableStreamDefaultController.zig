@@ -178,7 +178,7 @@ pub fn doError(self: *ReadableStreamDefaultController, err: []const u8) !void {
 
     // Reject all pending reads
     for (self._pending_reads.items) |resolver| {
-        self._execution.js.toLocal(resolver).reject("stream error", err);
+        self._execution.js.toLocal(resolver).rejectError("stream error", .{ .type_error = err });
     }
     self._pending_reads.clearRetainingCapacity();
 }
