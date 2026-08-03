@@ -163,6 +163,8 @@ pub const Constructor = struct {
 
                     caller.constructor(T, func, handle.?, .{
                         .new_target = opts.new_target,
+                        .required_args = comptime opts.arity orelse
+                            Function.getArity(@TypeOf(func), if (opts.new_target) 1 else 0),
                     });
                 }
             }.wrap,
@@ -1255,6 +1257,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/navigator/credentials.zig"),
     @import("../webapi/presentation.zig"),
     @import("../webapi/payment.zig"),
+    @import("../webapi/gamepad.zig"),
+    @import("../webapi/geolocation.zig"),
     @import("../webapi/External.zig"),
     @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),

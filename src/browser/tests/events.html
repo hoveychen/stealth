@@ -953,3 +953,45 @@
     testing.expectEqual('replacement', event.returnValue);
   }
 </script>
+
+<script id=constructorArgumentCount>
+  {
+    // Every event constructor counts its arguments the way Chrome does, naming
+    // the interface and the required count. Measured on a headed Chrome 150:
+    // sixteen of these used to answer "TypeError: invalid argument", which no
+    // browser says and which a detector can read straight off.
+    const one = [
+      'Event', 'CustomEvent', 'MessageEvent', 'ProgressEvent', 'GamepadEvent', 'CloseEvent',
+      'ErrorEvent', 'StorageEvent', 'ToggleEvent', 'SubmitEvent', 'PageTransitionEvent',
+      'HashChangeEvent', 'PopStateEvent', 'TransitionEvent', 'AnimationEvent', 'DeviceMotionEvent',
+      'MIDIMessageEvent', 'PaymentRequestUpdateEvent',
+    ];
+    for (const name of one) {
+      let err = null;
+      try { new window[name](); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(
+        `TypeError: Failed to construct '${name}': 1 argument required, but only 0 present.`,
+        err,
+        { label: name },
+      );
+    }
+
+    // The two-argument ones report the count they need, and count what arrived.
+    for (const name of ['MediaStreamTrackEvent', 'PresentationConnectionCloseEvent', 'PresentationConnectionAvailableEvent']) {
+      let none = null;
+      try { new window[name](); } catch (e) { none = `${e.name}: ${e.message}`; }
+      testing.expectEqual(
+        `TypeError: Failed to construct '${name}': 2 arguments required, but only 0 present.`,
+        none,
+        { label: name },
+      );
+      let one_arg = null;
+      try { new window[name]('x'); } catch (e) { one_arg = `${e.name}: ${e.message}`; }
+      testing.expectEqual(
+        `TypeError: Failed to construct '${name}': 2 arguments required, but only 1 present.`,
+        one_arg,
+        { label: name },
+      );
+    }
+  }
+</script>

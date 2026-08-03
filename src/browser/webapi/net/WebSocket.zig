@@ -1020,7 +1020,10 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(WebSocket.init, .{});
+    // WebIDL says `WebSocket(url, optional protocols)` has length 1; `protocols`
+    // is a sequence, which is the same non-optional slice parameter here, so the
+    // count has to be stated (measured: Chrome reports 1).
+    pub const constructor = bridge.constructor(WebSocket.init, .{ .arity = 1 });
 
     pub const CONNECTING = bridge.property(@intFromEnum(ReadyState.connecting), .{ .template = true });
     pub const OPEN = bridge.property(@intFromEnum(ReadyState.open), .{ .template = true });

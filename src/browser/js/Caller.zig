@@ -125,6 +125,10 @@ pub const CallOpts = struct {
     // FunctionCallbackInfo and passed as the first argument to the Zig
     // function (as a js.Function). See bridge.Constructor.Opts.
     new_target: bool = false,
+    // Constructor-only. The interface's WebIDL `length`: how many arguments the
+    // constructor requires. Set from bridge.Constructor so the count can be
+    // checked before any conversion is attempted.
+    required_args: usize = 0,
 };
 
 pub fn constructor(self: *Caller, comptime T: type, func: anytype, handle: *const v8.FunctionCallbackInfo, comptime opts: CallOpts) void {
@@ -147,6 +151,27 @@ pub fn constructor(self: *Caller, comptime T: type, func: anytype, handle: *cons
         const js_exception = isolate.throwException(isolate.createTypeError(message));
         info.getReturnValue().setValueHandle(js_exception);
         return;
+    }
+
+    // Too few arguments. Chrome counts them before it converts any of them, and
+    // names the interface and the count it wanted (measured on a headed Chrome
+    // 150 across eighteen event constructors); letting the conversion fail
+    // instead produced the generic "invalid argument", which no browser says and
+    // which a detector can read straight off.
+    if (comptime opts.required_args > 0) {
+        const got = info.length();
+        if (got < opts.required_args) {
+            const isolate = local.isolate;
+            const prefix = comptime std.fmt.comptimePrint(
+                "Failed to construct '" ++ interfaceName(T) ++ "': {d} argument{s} required, but only ",
+                .{ opts.required_args, if (opts.required_args == 1) "" else "s" },
+            );
+            var buf: [prefix.len + 32]u8 = undefined;
+            const message = std.fmt.bufPrint(&buf, "{s}{d} present.", .{ prefix, got }) catch prefix;
+            const js_exception = isolate.throwException(isolate.createTypeError(message));
+            info.getReturnValue().setValueHandle(js_exception);
+            return;
+        }
     }
 
     self._constructor(func, info, opts) catch |err| {

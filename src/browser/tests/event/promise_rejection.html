@@ -3,20 +3,33 @@
 
 <script id=project_rejection>
   {
-    let e1 = new PromiseRejectionEvent("rejectionhandled");
-    testing.expectEqual(true, e1 instanceof PromiseRejectionEvent);
-    testing.expectEqual(true, e1 instanceof Event);
+    // `promise` is a required init member and the constructor takes two
+    // arguments: measured on a headed Chrome 150, which refuses both of the
+    // shorter forms this test used to assert (it read promise back as null).
+    let oneArg = null;
+    try { new PromiseRejectionEvent('rejectionhandled'); } catch (e) { oneArg = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to construct 'PromiseRejectionEvent': 2 arguments required, but only 1 present.",
+      oneArg,
+    );
 
-    testing.expectEqual("rejectionhandled", e1.type);
-    testing.expectEqual(null, e1.reason);
-    testing.expectEqual(null, e1.promise);
+    let reasonOnly = null;
+    try { new PromiseRejectionEvent('rejectionhandled', { reason: ['tea'] }); } catch (e) { reasonOnly = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to construct 'PromiseRejectionEvent': Failed to read the 'promise' property from 'PromiseRejectionEventInit': Required member is undefined.",
+      reasonOnly,
+    );
 
-    let e2 = new PromiseRejectionEvent("rejectionhandled", {reason: ['tea']});
-    testing.expectEqual(true, e2 instanceof PromiseRejectionEvent);
-    testing.expectEqual(true, e2 instanceof Event);
+    const promise = Promise.resolve(1);
+    const event = new PromiseRejectionEvent('rejectionhandled', { promise, reason: ['tea'] });
+    testing.expectEqual(true, event instanceof PromiseRejectionEvent);
+    testing.expectEqual(true, event instanceof Event);
+    testing.expectEqual('rejectionhandled', event.type);
+    testing.expectEqual(['tea'], event.reason);
+    testing.expectEqual(true, event.promise === promise);
 
-    testing.expectEqual("rejectionhandled", e2.type);
-    testing.expectEqual(['tea'], e2.reason);
-    testing.expectEqual(null, e2.promise);
+    // An absent reason reads back as undefined, not null (measured).
+    const bare = new PromiseRejectionEvent('rejectionhandled', { promise });
+    testing.expectEqual(undefined, bare.reason);
   }
 </script>

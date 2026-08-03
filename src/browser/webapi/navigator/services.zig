@@ -45,7 +45,6 @@ pub fn registerTypes() []const type {
     return &.{
         Scheduling,
         UserActivation,
-        Geolocation,
         ProtectedAudience,
         NavigatorLogin,
         MediaCapabilities,
@@ -122,56 +121,6 @@ pub const UserActivation = struct {
 
         pub const hasBeenActive = bridge.accessor(UserActivation.getHasBeenActive, null, .{});
         pub const isActive = bridge.accessor(UserActivation.getIsActive, null, .{});
-    };
-};
-
-pub const Geolocation = struct {
-    // Chrome's watch ids are a 1-based counter (measured: two calls in a row
-    // returned 1 then 2).
-    _next_watch_id: u32 = 0,
-
-    const PositionOptions = struct {
-        enableHighAccuracy: bool = false,
-        timeout: ?u32 = null,
-        maximumAge: ?u32 = null,
-    };
-
-    // Neither callback is ever invoked. On the reference Chrome the permission
-    // request stayed pending and no callback had fired after five seconds, so a
-    // pending request is a state a real Chrome is observably in. We have no
-    // position and won't invent either a fix or a denial: a fabricated location
-    // is a worse tell than a permission prompt nobody answered.
-    pub fn getCurrentPosition(
-        _: *Geolocation,
-        _: js.Function,
-        _: ?js.Function,
-        _: ?PositionOptions,
-    ) void {}
-
-    pub fn watchPosition(
-        self: *Geolocation,
-        _: js.Function,
-        _: ?js.Function,
-        _: ?PositionOptions,
-    ) u32 {
-        self._next_watch_id += 1;
-        return self._next_watch_id;
-    }
-
-    pub fn clearWatch(_: *Geolocation, _: u32) void {}
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(Geolocation);
-
-        pub const Meta = struct {
-            pub const name = "Geolocation";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-        };
-
-        pub const clearWatch = bridge.function(Geolocation.clearWatch, .{});
-        pub const getCurrentPosition = bridge.function(Geolocation.getCurrentPosition, .{});
-        pub const watchPosition = bridge.function(Geolocation.watchPosition, .{});
     };
 };
 
