@@ -255,3 +255,214 @@
     }
   }
 </script>
+
+<script id="usb_family_shapes">
+  {
+    const expected = {
+      USBDevice: [0,
+        'usbVersionMajor,usbVersionMinor,usbVersionSubminor,deviceClass,deviceSubclass,' +
+        'deviceProtocol,vendorId,productId,deviceVersionMajor,deviceVersionMinor,' +
+        'deviceVersionSubminor,manufacturerName,productName,serialNumber,configuration,' +
+        'configurations,opened,claimInterface,clearHalt,close,controlTransferIn,' +
+        'controlTransferOut,forget,isochronousTransferIn,isochronousTransferOut,open,' +
+        'releaseInterface,reset,selectAlternateInterface,selectConfiguration,transferIn,' +
+        'transferOut,constructor'],
+      USBConfiguration: [2, 'configurationValue,configurationName,interfaces,constructor'],
+      USBInterface: [2, 'interfaceNumber,alternate,alternates,claimed,constructor'],
+      USBAlternateInterface: [2,
+        'alternateSetting,interfaceClass,interfaceSubclass,interfaceProtocol,interfaceName,' +
+        'endpoints,constructor'],
+      USBEndpoint: [3, 'endpointNumber,direction,type,packetSize,constructor'],
+      USBInTransferResult: [1, 'data,status,constructor'],
+      USBOutTransferResult: [1, 'bytesWritten,status,constructor'],
+      USBIsochronousInTransferPacket: [1, 'status,data,constructor'],
+      USBIsochronousInTransferResult: [1, 'data,packets,constructor'],
+      USBIsochronousOutTransferPacket: [1, 'bytesWritten,status,constructor'],
+      USBIsochronousOutTransferResult: [1, 'packets,constructor'],
+      USBConnectionEvent: [2, 'device,constructor'],
+    };
+    for (const [n, [arity, keys]] of Object.entries(expected)) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(arity, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[n].prototype).join(','));
+    }
+
+    // Only USBConnectionEvent is an Event; USBDevice hangs off Object.prototype.
+    testing.expectEqual(Event.prototype, Object.getPrototypeOf(USBConnectionEvent.prototype));
+    testing.expectEqual(Object.prototype, Object.getPrototypeOf(USBDevice.prototype));
+
+    // USBDevice alone has no constructor at all, so it gets Chrome's other
+    // wording; the eleven that do refuse by arity or by parameter type.
+    testing.expectError('TypeError: Illegal constructor', () => USBDevice());
+    testing.expectError(
+      "TypeError: Failed to construct 'USBDevice': Illegal constructor",
+      () => new USBDevice(),
+    );
+    for (const n of Object.keys(expected)) {
+      if (n === 'USBDevice') continue;
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Please use the 'new' operator, " +
+          'this DOM object constructor cannot be called as a function.',
+        () => window[n](),
+      );
+    }
+  }
+</script>
+
+<script id="usb_unreachable_constructors">
+  {
+    // No USBDevice can be obtained, so the five constructors that demand one --
+    // directly or through a chain -- can never succeed. Each names the type it
+    // wanted, and each counts its arguments first.
+    const byParameter = {
+      USBConfiguration: ['USBDevice', 2, [null, 1]],
+      USBInterface: ['USBConfiguration', 2, [null, 0]],
+      USBAlternateInterface: ['USBInterface', 2, [null, 0]],
+      USBEndpoint: ['USBAlternateInterface', 3, [null, 1, 'in']],
+    };
+    for (const [n, [wanted, required, args]] of Object.entries(byParameter)) {
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': " + required +
+          ' arguments required, but only 0 present.',
+        () => new window[n](),
+      );
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': parameter 1 is not of type '" + wanted + "'.",
+        () => new window[n](...args),
+      );
+      // An object that is not the wanted type fails the same way as null.
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': parameter 1 is not of type '" + wanted + "'.",
+        () => new window[n]({}, ...args.slice(1)),
+      );
+    }
+
+    // USBConnectionEvent wants the device in its init dictionary instead.
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': " +
+        '2 arguments required, but only 0 present.',
+      () => new USBConnectionEvent(),
+    );
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': " +
+        '2 arguments required, but only 1 present.',
+      () => new USBConnectionEvent('connect'),
+    );
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': Failed to read the 'device' " +
+        "property from 'USBConnectionEventInit': Required member is undefined.",
+      () => new USBConnectionEvent('connect', {}),
+    );
+    testing.expectError(
+      "TypeError: Failed to construct 'USBConnectionEvent': Failed to read the 'device' " +
+        "property from 'USBConnectionEventInit': Failed to convert value to 'USBDevice'.",
+      () => new USBConnectionEvent('connect', { device: null }),
+    );
+  }
+</script>
+
+<script id="usb_transfer_results">
+  {
+    // These six a script builds itself out of plain values, so they behave.
+    testing.expectEqual('ok', new USBInTransferResult('ok').status);
+    testing.expectEqual('stall', new USBInTransferResult('stall').status);
+    testing.expectEqual('babble', new USBOutTransferResult('babble').status);
+    testing.expectEqual(null, new USBInTransferResult('ok').data);
+
+    // A DataView comes back as the very object it went in as.
+    const dv = new DataView(new ArrayBuffer(4));
+    const it = new USBInTransferResult('ok', dv);
+    testing.expectEqual(true, it.data === dv);
+    testing.expectEqual(true, it.data === it.data);
+    // A typed array is not a DataView, and neither is a bare buffer.
+    for (const bad of [new Uint8Array(4), new ArrayBuffer(4), {}]) {
+      testing.expectError(
+        "TypeError: Failed to construct 'USBInTransferResult': " +
+          "parameter 2 is not of type 'DataView'.",
+        () => new USBInTransferResult('ok', bad),
+      );
+    }
+    testing.expectEqual(null, new USBInTransferResult('ok', null).data);
+    testing.expectEqual(null, new USBInTransferResult('ok', undefined).data);
+
+    // bytesWritten defaults to zero and takes ToUint32, so -1 wraps.
+    testing.expectEqual(0, new USBOutTransferResult('ok').bytesWritten);
+    testing.expectEqual(7, new USBOutTransferResult('ok', 7).bytesWritten);
+    testing.expectEqual(7, new USBOutTransferResult('ok', '7').bytesWritten);
+    testing.expectEqual(1, new USBOutTransferResult('ok', 1.9).bytesWritten);
+    testing.expectEqual(4294967295, new USBOutTransferResult('ok', -1).bytesWritten);
+    testing.expectEqual(0, new USBOutTransferResult('ok', null).bytesWritten);
+    testing.expectEqual(3, new USBIsochronousOutTransferPacket('ok', 3).bytesWritten);
+    testing.expectEqual(0, new USBIsochronousOutTransferPacket('ok').bytesWritten);
+    testing.expectEqual('ok', new USBIsochronousInTransferPacket('ok').status);
+    testing.expectEqual(null, new USBIsochronousInTransferPacket('ok').data);
+
+    // The status enum is checked, and the message names the enum.
+    for (const n of [
+      'USBInTransferResult', 'USBOutTransferResult',
+      'USBIsochronousInTransferPacket', 'USBIsochronousOutTransferPacket',
+    ]) {
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': The provided value 'bogus' is not a " +
+          'valid enum value of type USBTransferStatus.',
+        () => new window[n]('bogus'),
+      );
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 1 argument required, but only 0 present.",
+        () => new window[n](),
+      );
+    }
+    // An explicit undefined counts as absent for the enum, as it does on Chrome.
+    testing.expectError(
+      "TypeError: Failed to construct 'USBInTransferResult': " +
+        "The provided value 'undefined' is not a valid enum value of type USBTransferStatus.",
+      () => new USBInTransferResult(undefined),
+    );
+
+    // packets keeps the elements it was given, and a fresh array is built on
+    // every access -- Chrome does the same.
+    const p = new USBIsochronousInTransferPacket('ok');
+    const res = new USBIsochronousInTransferResult([p]);
+    testing.expectEqual(1, res.packets.length);
+    testing.expectEqual(true, res.packets[0] === p);
+    testing.expectEqual(true, Array.isArray(res.packets));
+    testing.expectEqual(false, res.packets === res.packets);
+    testing.expectEqual(0, new USBIsochronousInTransferResult([]).packets.length);
+    testing.expectEqual(null, new USBIsochronousInTransferResult([]).data);
+    testing.expectEqual(
+      0,
+      new USBIsochronousOutTransferResult([]).packets.length,
+    );
+
+    // Chrome refuses a sequence three different ways, and so do we.
+    for (const n of ['USBIsochronousInTransferResult', 'USBIsochronousOutTransferResult']) {
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 1 argument required, but only 0 present.",
+        () => new window[n](),
+      );
+      for (const bad of [123, null, 'ab', '']) {
+        testing.expectError(
+          "TypeError: Failed to construct '" + n + "': " +
+            'The provided value cannot be converted to a sequence.',
+          () => new window[n](bad),
+        );
+      }
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': " +
+          'The object must have a callable @@iterator property.',
+        () => new window[n]({}),
+      );
+    }
+    testing.expectError(
+      "TypeError: Failed to construct 'USBIsochronousInTransferResult': " +
+        "Failed to convert value to 'USBIsochronousInTransferPacket'.",
+      () => new USBIsochronousInTransferResult([1]),
+    );
+  }
+</script>

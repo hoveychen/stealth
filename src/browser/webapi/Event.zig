@@ -110,6 +110,7 @@ pub const Type = union(enum) {
     sensor_error_event: *@import("sensor.zig").SensorErrorEvent,
     midi_message_event: *@import("midi.zig").MIDIMessageEvent,
     midi_connection_event: *@import("midi.zig").MIDIConnectionEvent,
+    usb_connection_event: *@import("navigator/usb.zig").USBConnectionEvent,
 };
 
 pub const Options = struct {
@@ -268,6 +269,7 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .sensor_error_event => |e| return if (T == @import("sensor.zig").SensorErrorEvent) e else null,
         .midi_message_event => |e| return if (T == @import("midi.zig").MIDIMessageEvent) e else null,
         .midi_connection_event => |e| return if (T == @import("midi.zig").MIDIConnectionEvent) e else null,
+        .usb_connection_event => |e| return if (T == @import("navigator/usb.zig").USBConnectionEvent) e else null,
     }
     return null;
 }
