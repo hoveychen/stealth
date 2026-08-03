@@ -16,8 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! Web Bluetooth's device side: the six interfaces a granted chooser would
-//! hand back, plus BluetoothUUID.
 //! WebUSB's device side: the twelve interfaces a granted chooser would hand
 //! back.
 //!
@@ -638,14 +636,15 @@ pub const USBConnectionEvent = struct {
         if (type_ == null) return argCount("USBConnectionEvent", 2, 0, exec);
         const options = options_ orelse return argCount("USBConnectionEvent", 2, 1, exec);
 
-        const member = if (options.isObject())
-            try options.toObject().get("device")
-        else
-            return throwTypeError(
-                "Failed to construct 'USBConnectionEvent': Failed to read the 'device' property " ++
-                    "from 'USBConnectionEventInit': Required member is undefined.",
-                exec,
-            );
+        // Anything that is not a dictionary is refused by name, before any member
+        // is looked at -- including an explicit undefined, which is why an absent
+        // second argument (counted above) and `undefined` differ (measured).
+        if (!options.isObject()) return throwTypeError(
+            "Failed to construct 'USBConnectionEvent': The provided value is not of type " ++
+                "'USBConnectionEventInit'.",
+            exec,
+        );
+        const member = try options.toObject().get("device");
         if (member.isUndefined()) return throwTypeError(
             "Failed to construct 'USBConnectionEvent': Failed to read the 'device' property " ++
                 "from 'USBConnectionEventInit': Required member is undefined.",

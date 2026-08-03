@@ -466,3 +466,97 @@
     );
   }
 </script>
+
+<script id="hid_serial_shapes">
+  {
+    const expected = {
+      HIDDevice: [0, EventTarget.prototype,
+        'oninputreport,opened,vendorId,productId,productName,collections,close,forget,open,' +
+        'receiveFeatureReport,sendFeatureReport,sendReport,constructor'],
+      HIDConnectionEvent: [2, Event.prototype, 'device,constructor'],
+      HIDInputReportEvent: [0, Event.prototype, 'device,reportId,data,constructor'],
+      SerialPort: [0, EventTarget.prototype,
+        'onconnect,ondisconnect,readable,writable,close,forget,getInfo,getSignals,open,' +
+        'setSignals,connected,constructor'],
+    };
+    for (const [n, [arity, proto, keys]] of Object.entries(expected)) {
+      testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, n));
+      const d = Object.getOwnPropertyDescriptor(window, n);
+      testing.expectEqual(false, d.enumerable);
+      testing.expectEqual(true, d.configurable);
+      testing.expectEqual(true, d.writable);
+      testing.expectEqual(arity, window[n].length);
+      testing.expectEqual(n, window[n].name);
+      testing.expectEqual(n, window[n].prototype[Symbol.toStringTag]);
+      testing.expectEqual(keys, Object.getOwnPropertyNames(window[n].prototype).join(','));
+      testing.expectEqual(proto, Object.getPrototypeOf(window[n].prototype));
+    }
+
+    // Method arities, as Chrome reports them.
+    const arities = {
+      HIDDevice: ['close=0', 'forget=0', 'open=0', 'receiveFeatureReport=1',
+        'sendFeatureReport=2', 'sendReport=2'],
+      SerialPort: ['close=0', 'forget=0', 'getInfo=0', 'getSignals=0', 'open=1', 'setSignals=0'],
+    };
+    for (const [n, pairs] of Object.entries(arities)) {
+      for (const pair of pairs) {
+        const [m, want] = pair.split('=');
+        testing.expectEqual(Number(want), window[n].prototype[m].length);
+      }
+    }
+
+    // Three of the four have no constructor at all; only HIDConnectionEvent does.
+    for (const n of ['HIDDevice', 'HIDInputReportEvent', 'SerialPort']) {
+      testing.expectError('TypeError: Illegal constructor', () => window[n]());
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Illegal constructor",
+        () => new window[n](),
+      );
+    }
+    testing.expectError(
+      "TypeError: Failed to construct 'HIDConnectionEvent': Please use the 'new' operator, " +
+        'this DOM object constructor cannot be called as a function.',
+      () => HIDConnectionEvent(),
+    );
+  }
+</script>
+
+<script id="connection_event_init_dictionary">
+  {
+    // Both connection events want a device in their init dictionary, and no
+    // device exists, so neither can be built. The order of the refusals is
+    // Chrome's: count the arguments, then reject a non-dictionary by name, then
+    // name the missing member, then name the type it could not convert to.
+    // An absent second argument and an explicit undefined differ.
+    for (const n of ['HIDConnectionEvent', 'USBConnectionEvent']) {
+      const init = n + 'Init';
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 2 arguments required, but only 0 present.",
+        () => new window[n](),
+      );
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': 2 arguments required, but only 1 present.",
+        () => new window[n]('c'),
+      );
+      for (const bad of [1, null, 's', undefined]) {
+        testing.expectError(
+          "TypeError: Failed to construct '" + n + "': The provided value is not of type '" +
+            init + "'.",
+          () => new window[n]('c', bad),
+        );
+      }
+      for (const bad of [{}, { device: undefined }]) {
+        testing.expectError(
+          "TypeError: Failed to construct '" + n + "': Failed to read the 'device' property " +
+            "from '" + init + "': Required member is undefined.",
+          () => new window[n]('c', bad),
+        );
+      }
+      testing.expectError(
+        "TypeError: Failed to construct '" + n + "': Failed to read the 'device' property " +
+          "from '" + init + "': Failed to convert value to '" + n.slice(0, 3) + "Device'.",
+        () => new window[n]('c', { device: 1 }),
+      );
+    }
+  }
+</script>

@@ -111,6 +111,8 @@ pub const Type = union(enum) {
     midi_message_event: *@import("midi.zig").MIDIMessageEvent,
     midi_connection_event: *@import("midi.zig").MIDIConnectionEvent,
     usb_connection_event: *@import("navigator/usb.zig").USBConnectionEvent,
+    hid_connection_event: *@import("navigator/hid_serial.zig").HIDConnectionEvent,
+    hid_input_report_event: *@import("navigator/hid_serial.zig").HIDInputReportEvent,
 };
 
 pub const Options = struct {
@@ -270,6 +272,8 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .midi_message_event => |e| return if (T == @import("midi.zig").MIDIMessageEvent) e else null,
         .midi_connection_event => |e| return if (T == @import("midi.zig").MIDIConnectionEvent) e else null,
         .usb_connection_event => |e| return if (T == @import("navigator/usb.zig").USBConnectionEvent) e else null,
+        .hid_connection_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDConnectionEvent) e else null,
+        .hid_input_report_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDInputReportEvent) e else null,
     }
     return null;
 }

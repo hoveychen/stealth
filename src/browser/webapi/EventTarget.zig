@@ -87,6 +87,8 @@ pub const Type = union(enum) {
     permission_status: *@import("Permissions.zig").PermissionStatus,
     bluetooth_device: *@import("navigator/bluetooth.zig").BluetoothDevice,
     bluetooth_gatt_characteristic: *@import("navigator/bluetooth.zig").BluetoothRemoteGATTCharacteristic,
+    hid_device: *@import("navigator/hid_serial.zig").HIDDevice,
+    serial_port: *@import("navigator/hid_serial.zig").SerialPort,
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -294,6 +296,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .permission_status => writer.writeAll("<PermissionStatus>"),
         .bluetooth_device => writer.writeAll("<BluetoothDevice>"),
         .bluetooth_gatt_characteristic => writer.writeAll("<BluetoothRemoteGATTCharacteristic>"),
+        .hid_device => writer.writeAll("<HIDDevice>"),
+        .serial_port => writer.writeAll("<SerialPort>"),
     };
 }
 
@@ -353,6 +357,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .permission_status => return "[object PermissionStatus]",
         .bluetooth_device => return "[object BluetoothDevice]",
         .bluetooth_gatt_characteristic => return "[object BluetoothRemoteGATTCharacteristic]",
+        .hid_device => return "[object HIDDevice]",
+        .serial_port => return "[object SerialPort]",
     };
 }
 
