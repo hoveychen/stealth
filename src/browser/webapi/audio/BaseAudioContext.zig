@@ -16,20 +16,28 @@
 // real-time and an offline context: the sample rate, the graph clock, the
 // destination node and the listener.
 //
-// Only `createAnalyser` of Chrome's twenty `create*` factories is here. The
-// engine does no DSP by design, so a node that cannot process anything would
-// be a lie in a way a *missing* node is not; the analyser is the exception
-// because detectors read its (silent) values rather than its output. See the
-// AnalyserNode header.
+// All eighteen of Chrome's `create*` factories are here, plus decodeAudioData.
+// An earlier revision carried only createAnalyser, on the theory that a node
+// which cannot process anything is worse than a missing one. Measuring what a
+// detector actually reads settled it the other way: nothing here is asked to
+// render, but every one of these classes is asked to *exist*, and a
+// BaseAudioContext with eight prototype members where Chrome has twenty-seven
+// is the louder signal by far.
+
+const std = @import("std");
 
 const js = @import("../../js/js.zig");
 
+const idl = @import("idl.zig");
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 
+const nodes = @import("nodes.zig");
 const AudioNode = @import("AudioNode.zig");
+const AudioBuffer = @import("AudioBuffer.zig");
 const AnalyserNode = @import("AnalyserNode.zig");
 const AudioListener = @import("AudioListener.zig");
+const PeriodicWave = @import("PeriodicWave.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
 
 const Execution = js.Execution;
@@ -100,12 +108,147 @@ pub fn setOnStateChange(self: *BaseAudioContext, listener: ?js.Function) !void {
     }
 }
 
-// Deliberately no closed-state check: Chrome still hands back a node after
-// close() (measured — createAnalyser on a closed context returns normally).
+// Deliberately no closed-state check on any factory: Chrome still hands back a
+// node after close() (measured — createAnalyser on a closed context returns
+// normally).
+//
+// Each one below is the constructor's argument list flattened into positional
+// parameters, which is how the two forms differ in Chrome: `createDelay(5)`
+// and `new DelayNode(ctx, {maxDelayTime: 5})` build the same node but word
+// their refusals differently, so the shared checks take the caller's prefix.
+
 pub fn createAnalyser(self: *BaseAudioContext, exec: *Execution) !*AnalyserNode {
-    const analyser = try exec._factory.audioNode(AnalyserNode{ ._proto = undefined });
-    analyser._proto._context = self._type.audio_context;
-    return analyser;
+    return AnalyserNode.create(self, exec);
+}
+
+pub fn createBiquadFilter(self: *BaseAudioContext, exec: *Execution) !*nodes.BiquadFilterNode {
+    return nodes.BiquadFilterNode.create(self, exec);
+}
+
+pub fn createBuffer(
+    self: *BaseAudioContext,
+    channels: u32,
+    length: u32,
+    sample_rate: f64,
+    exec: *Execution,
+) !*AudioBuffer {
+    _ = self;
+    return AudioBuffer.create("Failed to execute 'createBuffer' on 'BaseAudioContext'", channels, length, sample_rate, exec);
+}
+
+pub fn createBufferSource(self: *BaseAudioContext, exec: *Execution) !*nodes.AudioBufferSourceNode {
+    return nodes.AudioBufferSourceNode.create(self, exec);
+}
+
+pub fn createChannelMerger(self: *BaseAudioContext, inputs: ?u32, exec: *Execution) !*nodes.ChannelMergerNode {
+    const count = inputs orelse 6;
+    try nodes.checkChannels("Failed to execute 'createChannelMerger' on 'BaseAudioContext'", "inputs", count, exec);
+    return nodes.ChannelMergerNode.create(self, count, null, exec);
+}
+
+pub fn createChannelSplitter(self: *BaseAudioContext, outputs: ?u32, exec: *Execution) !*nodes.ChannelSplitterNode {
+    const count = outputs orelse 6;
+    try nodes.checkChannels("Failed to execute 'createChannelSplitter' on 'BaseAudioContext'", "outputs", count, exec);
+    return nodes.ChannelSplitterNode.create(self, count, null, exec);
+}
+
+pub fn createConstantSource(self: *BaseAudioContext, exec: *Execution) !*nodes.ConstantSourceNode {
+    return nodes.ConstantSourceNode.create(self, exec);
+}
+
+pub fn createConvolver(self: *BaseAudioContext, exec: *Execution) !*nodes.ConvolverNode {
+    return nodes.ConvolverNode.create(self, exec);
+}
+
+pub fn createDelay(self: *BaseAudioContext, max_delay_time: ?f64, exec: *Execution) !*nodes.DelayNode {
+    const max_delay = max_delay_time orelse 1;
+    try nodes.DelayNode.checkMaxDelay("Failed to execute 'createDelay' on 'BaseAudioContext'", max_delay, exec);
+    return nodes.DelayNode.create(self, max_delay, exec);
+}
+
+pub fn createDynamicsCompressor(self: *BaseAudioContext, exec: *Execution) !*nodes.DynamicsCompressorNode {
+    return nodes.DynamicsCompressorNode.create(self, exec);
+}
+
+pub fn createGain(self: *BaseAudioContext, exec: *Execution) !*nodes.GainNode {
+    return nodes.GainNode.create(self, exec);
+}
+
+pub fn createIIRFilter(
+    self: *BaseAudioContext,
+    feedforward: ?js.Value,
+    feedback: ?js.Value,
+    exec: *Execution,
+) !*nodes.IIRFilterNode {
+    const where = "Failed to execute 'createIIRFilter' on 'BaseAudioContext'";
+    const given = [_]?js.Value{ feedforward, feedback };
+    const count = idl.present(&given);
+    if (count < 2) return idl.typeError(try std.fmt.allocPrint(
+        exec.call_arena,
+        where ++ ": 2 arguments required, but only {d} present.",
+        .{count},
+    ), exec);
+    const forward = try idl.floatSequence(feedforward.?, exec);
+    const back = try idl.floatSequence(feedback.?, exec);
+    try nodes.IIRFilterNode.check(where, forward, back, exec);
+    return nodes.IIRFilterNode.create(self, forward, back, exec);
+}
+
+pub fn createOscillator(self: *BaseAudioContext, exec: *Execution) !*nodes.OscillatorNode {
+    return nodes.OscillatorNode.create(self, exec);
+}
+
+pub fn createPanner(self: *BaseAudioContext, exec: *Execution) !*nodes.PannerNode {
+    return nodes.PannerNode.create(self, exec);
+}
+
+pub fn createPeriodicWave(
+    self: *BaseAudioContext,
+    real: ?js.Value,
+    imag: ?js.Value,
+    exec: *Execution,
+) !*PeriodicWave {
+    _ = self;
+    const where = "Failed to execute 'createPeriodicWave' on 'BaseAudioContext'";
+    const given = [_]?js.Value{ real, imag };
+    const count = idl.present(&given);
+    if (count < 2) return idl.typeError(try std.fmt.allocPrint(
+        exec.call_arena,
+        where ++ ": 2 arguments required, but only {d} present.",
+        .{count},
+    ), exec);
+    return PeriodicWave.create(where, try idl.floatSequence(real.?, exec), try idl.floatSequence(imag.?, exec), exec);
+}
+
+pub fn createScriptProcessor(self: *BaseAudioContext, buffer_size: ?u32, exec: *Execution) !*nodes.ScriptProcessorNode {
+    // 0 means "let the implementation choose", and Chrome chooses 1024 here
+    // (measured); anything else must be a power of two in [256, 16384].
+    const requested = buffer_size orelse 0;
+    const size = if (requested == 0) 1024 else requested;
+    if (size < 256 or size > 16384 or !std.math.isPowerOfTwo(size)) {
+        return idl.domError("IndexSizeError", try std.fmt.allocPrint(
+            exec.call_arena,
+            "Failed to execute 'createScriptProcessor' on 'BaseAudioContext': buffer size ({d}) must " ++
+                "be 0 or a power of two between 256 and 16384.",
+            .{requested},
+        ), exec);
+    }
+    return nodes.ScriptProcessorNode.create(self, size, exec);
+}
+
+pub fn createStereoPanner(self: *BaseAudioContext, exec: *Execution) !*nodes.StereoPannerNode {
+    return nodes.StereoPannerNode.create(self, exec);
+}
+
+pub fn createWaveShaper(self: *BaseAudioContext, exec: *Execution) !*nodes.WaveShaperNode {
+    return nodes.WaveShaperNode.create(self, exec);
+}
+
+// A promise that never settles. There is no decoder behind it, and Chrome's
+// own rejection would name a format failure this engine cannot honestly
+// diagnose; a pending promise is what a script sees while a real decode runs.
+pub fn decodeAudioData(_: *BaseAudioContext, _: ?js.Value, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.createPromiseResolver().promise();
 }
 
 // Moves the state and fires statechange. Called by AudioContext's
@@ -133,6 +276,10 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's order exactly: the six attributes, then the factories
+    // alphabetically, then decodeAudioData. (`audioWorklet` sits *after*
+    // `constructor` in Chrome, which V8 cannot reproduce here — the same
+    // limitation the rest of this batch runs into.)
     pub const destination = bridge.accessor(BaseAudioContext.getDestination, null, .{});
     pub const sampleRate = bridge.accessor(BaseAudioContext.getSampleRate, null, .{});
     pub const currentTime = bridge.accessor(BaseAudioContext.getCurrentTime, null, .{});
@@ -140,5 +287,23 @@ pub const JsApi = struct {
     pub const state = bridge.accessor(BaseAudioContext.getState, null, .{});
     pub const onstatechange = bridge.accessor(BaseAudioContext.getOnStateChange, BaseAudioContext.setOnStateChange, .{});
 
-    pub const createAnalyser = bridge.function(BaseAudioContext.createAnalyser, .{});
+    pub const createAnalyser = bridge.function(BaseAudioContext.createAnalyser, .{ .arity = 0 });
+    pub const createBiquadFilter = bridge.function(BaseAudioContext.createBiquadFilter, .{ .arity = 0 });
+    pub const createBuffer = bridge.function(BaseAudioContext.createBuffer, .{ .arity = 3 });
+    pub const createBufferSource = bridge.function(BaseAudioContext.createBufferSource, .{ .arity = 0 });
+    pub const createChannelMerger = bridge.function(BaseAudioContext.createChannelMerger, .{ .arity = 0 });
+    pub const createChannelSplitter = bridge.function(BaseAudioContext.createChannelSplitter, .{ .arity = 0 });
+    pub const createConstantSource = bridge.function(BaseAudioContext.createConstantSource, .{ .arity = 0 });
+    pub const createConvolver = bridge.function(BaseAudioContext.createConvolver, .{ .arity = 0 });
+    pub const createDelay = bridge.function(BaseAudioContext.createDelay, .{ .arity = 0 });
+    pub const createDynamicsCompressor = bridge.function(BaseAudioContext.createDynamicsCompressor, .{ .arity = 0 });
+    pub const createGain = bridge.function(BaseAudioContext.createGain, .{ .arity = 0 });
+    pub const createIIRFilter = bridge.function(BaseAudioContext.createIIRFilter, .{ .arity = 2 });
+    pub const createOscillator = bridge.function(BaseAudioContext.createOscillator, .{ .arity = 0 });
+    pub const createPanner = bridge.function(BaseAudioContext.createPanner, .{ .arity = 0 });
+    pub const createPeriodicWave = bridge.function(BaseAudioContext.createPeriodicWave, .{ .arity = 2 });
+    pub const createScriptProcessor = bridge.function(BaseAudioContext.createScriptProcessor, .{ .arity = 0 });
+    pub const createStereoPanner = bridge.function(BaseAudioContext.createStereoPanner, .{ .arity = 0 });
+    pub const createWaveShaper = bridge.function(BaseAudioContext.createWaveShaper, .{ .arity = 0 });
+    pub const decodeAudioData = bridge.function(BaseAudioContext.decodeAudioData, .{ .arity = 1 });
 };

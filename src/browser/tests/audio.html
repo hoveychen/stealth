@@ -131,9 +131,11 @@
   l.setOrientation(4, 5, 6, 7, 8, 9);
   testing.expectEqual([4, 5, 6, 7, 8, 9], [l.forwardX.value, l.forwardY.value, l.forwardZ.value, l.upX.value, l.upY.value, l.upZ.value]);
 
-  // Automation methods return the param so they chain.
+  // Automation methods return the param so they chain, but they do NOT move
+  // `value`: with currentTime pinned at 0 the render thread never applies the
+  // event, and Chrome reads back the old value (measured — win16-chrome.json).
   testing.expectEqual(l.positionX, l.positionX.setValueAtTime(10, 0));
-  testing.expectEqual(10, l.positionX.value);
+  testing.expectEqual(1, l.positionX.value);
   let threw = null;
   try { l.positionX.setValueAtTime(1, -1); } catch (e) { threw = e.name; }
   testing.expectEqual('RangeError', threw);
@@ -188,19 +190,24 @@
   // Chrome's own prototype member lists, measured. A missing or extra member
   // here is exactly the kind of thing a fingerprint script enumerates.
   //
-  // AudioContext.prototype is the one list that is deliberately short of
-  // Chrome's: `createMediaElementSource`, `createMediaStreamSource`,
-  // `createMediaStreamDestination` and `playbackStats` all need node types the
-  // engine has no use for yet. Asserted as-is so the gap is visible rather than
-  // filtered away.
+  // AudioContext.prototype is the one list that is still short of Chrome's:
+  // `createMediaElementSource`, `createMediaStreamSource`,
+  // `createMediaStreamDestination` and `playbackStats` all need MediaStream,
+  // which this engine does not have yet. Asserted as-is so the gap is visible
+  // rather than filtered away.
   testing.expectEqual(
     ['baseLatency', 'close', 'constructor', 'getOutputTimestamp', 'onerror', 'onsinkchange', 'outputLatency', 'resume', 'setSinkId', 'sinkId', 'suspend'],
     Object.getOwnPropertyNames(AudioContext.prototype).sort(),
   );
-  // Same for BaseAudioContext: nineteen create* factories and `audioWorklet`
-  // and `decodeAudioData` are absent, `createAnalyser` is the one that matters.
+  // BaseAudioContext now carries all eighteen factories and decodeAudioData;
+  // only `audioWorklet` is still missing (it needs Worklet).
   testing.expectEqual(
-    ['constructor', 'createAnalyser', 'currentTime', 'destination', 'listener', 'onstatechange', 'sampleRate', 'state'],
+    ['constructor', 'createAnalyser', 'createBiquadFilter', 'createBuffer', 'createBufferSource',
+     'createChannelMerger', 'createChannelSplitter', 'createConstantSource', 'createConvolver',
+     'createDelay', 'createDynamicsCompressor', 'createGain', 'createIIRFilter', 'createOscillator',
+     'createPanner', 'createPeriodicWave', 'createScriptProcessor', 'createStereoPanner',
+     'createWaveShaper', 'currentTime', 'decodeAudioData', 'destination', 'listener',
+     'onstatechange', 'sampleRate', 'state'],
     Object.getOwnPropertyNames(BaseAudioContext.prototype).sort(),
   );
   testing.expectEqual(
@@ -227,5 +234,264 @@
   testing.expectEqual(3, AudioListener.prototype.setPosition.length);
   testing.expectEqual(6, AudioListener.prototype.setOrientation.length);
   testing.expectEqual(2, AudioParam.prototype.setValueAtTime.length);
+}
+</script>
+
+<script id=audio_node_family>
+{
+  // Every number below was read off a headed Chrome 150 (win15/win16-chrome.json).
+  const ac = new AudioContext();
+
+  const shape = (n) => [n.numberOfInputs, n.numberOfOutputs, n.channelCount, n.channelCountMode, n.channelInterpretation];
+  const range = (p) => [p.value, p.defaultValue, p.minValue, p.maxValue, p.automationRate];
+
+  testing.expectEqual([1, 1, 2, 'max', 'speakers'], shape(ac.createGain()));
+  testing.expectEqual([1, 1, 2, 'clamped-max', 'speakers'], shape(ac.createStereoPanner()));
+  testing.expectEqual([0, 1, 2, 'max', 'speakers'], shape(ac.createOscillator()));
+  testing.expectEqual([6, 1, 1, 'explicit', 'speakers'], shape(ac.createChannelMerger()));
+  testing.expectEqual([1, 6, 6, 'explicit', 'discrete'], shape(ac.createChannelSplitter()));
+  testing.expectEqual([1, 1, 2, 'explicit', 'speakers'], shape(ac.createScriptProcessor()));
+
+  const FLT = 3.4028234663852886e38;
+  testing.expectEqual([1, 1, -FLT, FLT, 'a-rate'], range(ac.createGain().gain));
+  testing.expectEqual([0, 0, 0, 1, 'a-rate'], range(ac.createDelay().delayTime));
+  testing.expectEqual([0, 0, -1, 1, 'a-rate'], range(ac.createStereoPanner().pan));
+  testing.expectEqual([440, 440, -24000, 24000, 'a-rate'], range(ac.createOscillator().frequency));
+  testing.expectEqual([0, 0, -153600, 153600, 'a-rate'], range(ac.createOscillator().detune));
+  testing.expectEqual([350, 350, 0, 24000, 'a-rate'], range(ac.createBiquadFilter().frequency));
+  testing.expectEqual([1, 1, -FLT, FLT, 'a-rate'], range(ac.createBiquadFilter().Q));
+  testing.expectEqual([0, 0, -FLT, 1541.273681640625, 'a-rate'], range(ac.createBiquadFilter().gain));
+  testing.expectEqual([-24, -24, -100, 0, 'k-rate'], range(ac.createDynamicsCompressor().threshold));
+  testing.expectEqual([12, 12, 1, 20, 'k-rate'], range(ac.createDynamicsCompressor().ratio));
+  testing.expectEqual([1, 1, -FLT, FLT, 'k-rate'], range(ac.createBufferSource().playbackRate));
+
+  // Scalars.
+  testing.expectEqual('lowpass', ac.createBiquadFilter().type);
+  testing.expectEqual('sine', ac.createOscillator().type);
+  testing.expectEqual([null, true], [ac.createConvolver().buffer, ac.createConvolver().normalize]);
+  testing.expectEqual([null, 'none'], [ac.createWaveShaper().curve, ac.createWaveShaper().oversample]);
+  testing.expectEqual('equalpower', ac.createPanner().panningModel);
+  testing.expectEqual('inverse', ac.createPanner().distanceModel);
+  testing.expectEqual([1, 10000, 1, 360, 360, 0], (() => { const p = ac.createPanner(); return [p.refDistance, p.maxDistance, p.rolloffFactor, p.coneInnerAngle, p.coneOuterAngle, p.coneOuterGain]; })());
+  testing.expectEqual(1024, ac.createScriptProcessor().bufferSize);
+  testing.expectEqual(0, ac.createDynamicsCompressor().reduction);
+  testing.expectEqual(1, ac.createConstantSource().offset.value);
+
+  // Prototype chains.
+  testing.expectEqual(true, ac.createOscillator() instanceof AudioScheduledSourceNode);
+  testing.expectEqual(true, ac.createOscillator() instanceof AudioNode);
+  testing.expectEqual(false, ac.createGain() instanceof AudioScheduledSourceNode);
+  testing.expectEqual(ac, ac.createGain().context);
+
+  // An enum attribute drops a value outside the enum instead of throwing.
+  const g = ac.createGain();
+  g.channelCountMode = 'nope';
+  testing.expectEqual('max', g.channelCountMode);
+  const osc = ac.createOscillator();
+  osc.type = 'nope';
+  testing.expectEqual('sine', osc.type);
+  osc.type = 'square';
+  testing.expectEqual('square', osc.type);
+
+  // ... but 'custom' is reachable only through setPeriodicWave.
+  let threw = null;
+  try { osc.type = 'custom'; } catch (e) { threw = e.name; }
+  testing.expectEqual('InvalidStateError', threw);
+  osc.setPeriodicWave(ac.createPeriodicWave(new Float32Array(2), new Float32Array(2)));
+  testing.expectEqual('custom', osc.type);
+
+  // The channel pins.
+  const pin = (fn) => { try { fn(); return 'no throw'; } catch (e) { return e.name; } };
+  testing.expectEqual('InvalidStateError', pin(() => { ac.createChannelMerger().channelCount = 2; }));
+  testing.expectEqual('InvalidStateError', pin(() => { ac.createChannelSplitter().channelCountMode = 'max'; }));
+  testing.expectEqual('InvalidStateError', pin(() => { ac.createChannelSplitter().channelInterpretation = 'speakers'; }));
+  testing.expectEqual('no throw', pin(() => { ac.createChannelMerger().channelInterpretation = 'discrete'; }));
+  testing.expectEqual('NotSupportedError', pin(() => { ac.createGain().channelCount = 33; }));
+  testing.expectEqual('IndexSizeError', pin(() => { ac.destination.channelCount = 8; }));
+
+  // AudioParam clamps rather than throwing, and refuses a non-finite float.
+  const p = ac.createStereoPanner().pan;
+  p.value = 5;
+  testing.expectEqual(1, p.value);
+  p.value = -5;
+  testing.expectEqual(-1, p.value);
+  testing.expectEqual('TypeError', pin(() => { p.value = NaN; }));
+  testing.expectEqual('InvalidStateError', pin(() => { ac.createBufferSource().detune.automationRate = 'a-rate'; }));
+
+  // start()/stop() keep the state machine even though nothing renders.
+  const s1 = ac.createOscillator();
+  s1.start();
+  testing.expectEqual('InvalidStateError', pin(() => s1.start()));
+  testing.expectEqual('InvalidStateError', pin(() => ac.createOscillator().stop()));
+  testing.expectEqual('RangeError', pin(() => ac.createOscillator().start(-1)));
+  testing.expectEqual(null, ac.createOscillator().onended);
+
+  // connect()/disconnect().
+  const a = ac.createGain(), b = ac.createGain();
+  testing.expectEqual(b, a.connect(b));
+  testing.expectEqual(undefined, a.connect(b.gain));
+  testing.expectEqual('IndexSizeError', pin(() => a.connect(b, 5)));
+  testing.expectEqual('IndexSizeError', pin(() => a.connect(b, 0, 5)));
+  testing.expectEqual('TypeError', pin(() => a.connect({})));
+  testing.expectEqual('InvalidAccessError', pin(() => ac.createGain().disconnect(b)));
+  testing.expectEqual(undefined, a.disconnect(b));
+}
+</script>
+
+<script id=audio_buffer>
+{
+  const ac = new AudioContext();
+  const b = ac.createBuffer(2, 100, 22050);
+  testing.expectEqual('[object AudioBuffer]', Object.prototype.toString.call(b));
+  testing.expectEqual([100, 22050, 2], [b.length, b.sampleRate, b.numberOfChannels]);
+  testing.expectEqual(0.0045351473922902496, b.duration);
+  testing.expectEqual('Float32Array', b.getChannelData(0).constructor.name);
+  testing.expectEqual(100, b.getChannelData(0).length);
+  // Same object on every read, and silent to start with.
+  testing.expectEqual(true, b.getChannelData(0) === b.getChannelData(0));
+  testing.expectEqual([0], [...new Set(b.getChannelData(0))]);
+
+  b.copyToChannel(new Float32Array([1, 2, 3]), 0, 5);
+  testing.expectEqual([0, 0, 0, 0, 0, 1, 2, 3, 0, 0], [...b.getChannelData(0).slice(0, 10)]);
+  const out = new Float32Array(4);
+  b.copyFromChannel(out, 0, 5);
+  testing.expectEqual([1, 2, 3, 0], [...out]);
+
+  const pin = (fn) => { try { fn(); return 'no throw'; } catch (e) { return e.name; } };
+  testing.expectEqual('IndexSizeError', pin(() => b.getChannelData(2)));
+  testing.expectEqual('TypeError', pin(() => b.getChannelData()));
+  testing.expectEqual('IndexSizeError', pin(() => b.copyFromChannel(out, 3)));
+  testing.expectEqual('NotSupportedError', pin(() => ac.createBuffer(0, 10, 8000)));
+  testing.expectEqual('NotSupportedError', pin(() => ac.createBuffer(1, 0, 8000)));
+  testing.expectEqual('NotSupportedError', pin(() => ac.createBuffer(1, 10, 1)));
+
+  const viaCtor = new AudioBuffer({ length: 10, sampleRate: 8000 });
+  testing.expectEqual([1, 10, 8000, 0.00125], [viaCtor.numberOfChannels, viaCtor.length, viaCtor.sampleRate, viaCtor.duration]);
+  testing.expectEqual('TypeError', pin(() => new AudioBuffer({ length: 10 })));
+  testing.expectEqual('TypeError', pin(() => new AudioBuffer({ sampleRate: 8000 })));
+  testing.expectEqual('NotSupportedError', pin(() => new AudioBuffer({ numberOfChannels: 33, length: 10, sampleRate: 8000 })));
+
+  // A buffer source takes a buffer once.
+  const src = ac.createBufferSource();
+  src.buffer = b;
+  testing.expectEqual(b, src.buffer);
+  testing.expectEqual('InvalidStateError', pin(() => { src.buffer = ac.createBuffer(1, 10, 8000); }));
+}
+</script>
+
+<script id=audio_frequency_response>
+{
+  // Pure arithmetic over the filter coefficients — no audio device needed, and
+  // therefore no excuse for inventing it. Both rows below are Chrome 150's own
+  // getFrequencyResponse output at 48kHz (win16-chrome.json), which is what
+  // pinned down Blink's convention that lowpass/highpass take Q in decibels.
+  const ac = new AudioContext();
+  const f = new Float32Array([100, 350, 1000, 5000, 20000]);
+  const near = (got, want) => [...got].every((v, i) => Math.abs(v - want[i]) <= Math.abs(want[i]) * 1e-5 + 1e-9);
+
+  const lp = ac.createBiquadFilter();
+  let mag = new Float32Array(5), phase = new Float32Array(5);
+  lp.getFrequencyResponse(f, mag, phase);
+  testing.expectEqual(true, near(mag, [1.0492832660675049, 1.1220184564590454, 0.13118529319763184, 0.004568086005747318, 0.00003768948226934299]));
+  testing.expectEqual(true, near(phase, [-0.27043417096138, -1.5707963705062866, -2.8005459308624268, -3.081235885620117, -3.1361210346221924]));
+
+  const hp = ac.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 1000;
+  hp.Q.value = 2;
+  mag = new Float32Array(5); phase = new Float32Array(5);
+  hp.getFrequencyResponse(f, mag, phase);
+  testing.expectEqual(true, near(mag, [0.01004000473767519, 0.13272108137607574, 1.258925437927246, 1.0257896184921265, 1.0002111196517944]));
+  testing.expectEqual(true, near(phase, [3.0616440773010254, 2.835232973098755, 1.570796251296997, 0.15798451006412506, 0.013953644782304764]));
+
+  const iir = ac.createIIRFilter([0.5, 0.5], [1, -0.5]);
+  mag = new Float32Array(5); phase = new Float32Array(5);
+  iir.getFrequencyResponse(f, mag, phase);
+  testing.expectEqual(true, near(mag, [1.9996145963668823, 1.99529230594635, 1.9624227285385132, 1.4012892246246338, 0.17792454361915588]));
+  testing.expectEqual(true, near(phase, [-0.01963271200656891, -0.06862642616033554, -0.19415345788002014, -0.7944957613945007, -1.481716275215149]));
+
+  const pin = (fn) => { try { fn(); return 'no throw'; } catch (e) { return e.name; } };
+  testing.expectEqual('InvalidAccessError', pin(() => lp.getFrequencyResponse(f, new Float32Array(3), phase)));
+  testing.expectEqual('TypeError', pin(() => lp.getFrequencyResponse()));
+  testing.expectEqual('TypeError', pin(() => lp.getFrequencyResponse([], [], [])));
+  testing.expectEqual('NotSupportedError', pin(() => ac.createIIRFilter([], [])));
+  testing.expectEqual('InvalidStateError', pin(() => ac.createIIRFilter([1], [0])));
+}
+</script>
+
+<script id=audio_node_constructors>
+{
+  // The four refusals every node constructor shares, in Chrome's own order.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const ac = new AudioContext();
+
+  testing.expectEqual(1, GainNode.length);
+  testing.expectEqual(2, IIRFilterNode.length);
+  testing.expectEqual(1, AnalyserNode.length);
+  testing.expectEqual(1, AudioBuffer.length);
+  testing.expectEqual(0, AudioScheduledSourceNode.length);
+
+  testing.expectEqual(
+    "TypeError: Failed to construct 'GainNode': 1 argument required, but only 0 present.",
+    msg(() => new GainNode()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'GainNode': parameter 1 is not of type 'BaseAudioContext'.",
+    msg(() => new GainNode({})));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'GainNode': The provided value is not of type 'GainOptions'.",
+    msg(() => new GainNode(ac, 'x')));
+  testing.expectEqual('no throw', msg(() => new GainNode(ac, null)));
+  testing.expectEqual('no throw', msg(() => new GainNode(ac, { nope: 1 })));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'IIRFilterNode': 2 arguments required, but only 1 present.",
+    msg(() => new IIRFilterNode(null)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OscillatorNode': Failed to read the 'type' property from " +
+      "'OscillatorOptions': The provided value 'nope' is not a valid enum value of type OscillatorType.",
+    msg(() => new OscillatorNode(ac, { type: 'nope' })));
+  testing.expectEqual(
+    "InvalidStateError: Failed to construct 'OscillatorNode': A PeriodicWave must be specified if " +
+      "the type is set to \"custom\"",
+    msg(() => new OscillatorNode(ac, { type: 'custom' })));
+  testing.expectEqual(
+    "IndexSizeError: Failed to construct 'ChannelMergerNode': The number of inputs provided (0) is " +
+      "outside the range [1, 32].",
+    msg(() => new ChannelMergerNode(ac, { numberOfInputs: 0 })));
+  testing.expectEqual(
+    "NotSupportedError: Failed to construct 'DelayNode': The max delay time provided (0) is outside " +
+      "the range (0, 180).",
+    msg(() => new DelayNode(ac, { maxDelayTime: 0 })));
+  testing.expectEqual(
+    "InvalidAccessError: Failed to construct 'WaveShaperNode': The curve length provided (1) is " +
+      "less than the minimum bound (2).",
+    msg(() => new WaveShaperNode(ac, { curve: [0] })));
+
+  // The illegal ones stay illegal.
+  testing.expectEqual(
+    "TypeError: Failed to construct 'ScriptProcessorNode': Illegal constructor",
+    msg(() => new ScriptProcessorNode(ac)));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'AudioScheduledSourceNode': Illegal constructor",
+    msg(() => new AudioScheduledSourceNode()));
+
+  // Options that take.
+  testing.expectEqual(0.25, new GainNode(ac, { gain: 0.25 }).gain.value);
+  testing.expectEqual(1, new GainNode(ac, { channelCount: 1 }).channelCount);
+  testing.expectEqual(3, new ChannelMergerNode(ac, { numberOfInputs: 3 }).numberOfInputs);
+  testing.expectEqual(3, new ChannelSplitterNode(ac, { numberOfOutputs: 3 }).numberOfOutputs);
+  testing.expectEqual('square', new OscillatorNode(ac, { type: 'square' }).type);
+  testing.expectEqual(1.5, new DelayNode(ac, { maxDelayTime: 3, delayTime: 1.5 }).delayTime.value);
+  testing.expectEqual(false, new ConvolverNode(ac, { disableNormalization: true }).normalize);
+  testing.expectEqual(2, new WaveShaperNode(ac, { curve: [0, 1] }).curve.length);
+  testing.expectEqual('512/-90/-20/0.5', (() => {
+    const a = new AnalyserNode(ac, { fftSize: 512, minDecibels: -90, maxDecibels: -20, smoothingTimeConstant: 0.5 });
+    return `${a.fftSize}/${a.minDecibels}/${a.maxDecibels}/${a.smoothingTimeConstant}`;
+  })());
+  testing.expectEqual(5, ac.createDelay(5).delayTime.maxValue);
+  testing.expectEqual('256 4096 1024', [256, 4096, 0].map((s) => ac.createScriptProcessor(s).bufferSize).join(' '));
+  testing.expectEqual(
+    "IndexSizeError: Failed to execute 'createScriptProcessor' on 'BaseAudioContext': buffer size " +
+      "(100) must be 0 or a power of two between 256 and 16384.",
+    msg(() => ac.createScriptProcessor(100)));
 }
 </script>

@@ -24,7 +24,12 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+
+const idl = @import("idl.zig");
 const AudioNode = @import("AudioNode.zig");
+const BaseAudioContext = @import("BaseAudioContext.zig");
+
+const Execution = js.Execution;
 
 const AnalyserNode = @This();
 
@@ -38,6 +43,51 @@ _min_decibels: f64 = -100,
 _max_decibels: f64 = -30,
 _smoothing_time_constant: f64 = 0.8,
 
+// Constructible in Chrome, unlike the destination node (measured: `new
+// AnalyserNode()` complains about the missing context, not about being an
+// illegal constructor).
+pub fn constructor(context: ?js.Value, options: ?js.Value, exec: *Execution) !*AnalyserNode {
+    const ctx = try idl.context("AnalyserNode", 1, &.{ context, options }, exec);
+    const dict = try idl.options("AnalyserNode", "AnalyserOptions", options, exec);
+    const node = try create(ctx, exec);
+
+    if (try idl.optionalU32(dict, "fftSize")) |size| {
+        try checkFftSize("Failed to construct 'AnalyserNode'", size, exec);
+        node._fft_size = size;
+    }
+    const min = try idl.optionalF64(dict, "minDecibels") orelse node._min_decibels;
+    const max = try idl.optionalF64(dict, "maxDecibels") orelse node._max_decibels;
+    if (max <= min) return idl.domError("IndexSizeError", try std.fmt.allocPrint(
+        exec.call_arena,
+        "Failed to construct 'AnalyserNode': maxDecibels ({d}) must be greater than or equal to minDecibels ({d}).",
+        .{ max, min },
+    ), exec);
+    node._min_decibels = min;
+    node._max_decibels = max;
+    if (try idl.optionalF64(dict, "smoothingTimeConstant")) |value| {
+        node._smoothing_time_constant = value;
+    }
+    return node;
+}
+
+// Shared with BaseAudioContext.createAnalyser.
+pub fn create(ctx: *BaseAudioContext, exec: *Execution) !*AnalyserNode {
+    const node = try exec._factory.audioNode(AnalyserNode{ ._proto = undefined });
+    node._proto._context = ctx;
+    return node;
+}
+
+fn checkFftSize(comptime where: []const u8, size: u32, exec: *const Execution) !void {
+    // Chrome: a power of two in [32, 32768], anything else is an IndexSizeError
+    // ("The value provided (500) is not a power of two." — measured).
+    if (size >= 32 and size <= 32768 and std.math.isPowerOfTwo(size)) return;
+    return idl.domError("IndexSizeError", try std.fmt.allocPrint(
+        exec.call_arena,
+        where ++ ": The value provided ({d}) is not a power of two.",
+        .{size},
+    ), exec);
+}
+
 pub fn asAudioNode(self: *AnalyserNode) *AudioNode {
     return self._proto;
 }
@@ -46,12 +96,8 @@ pub fn getFftSize(self: *const AnalyserNode) u32 {
     return self._fft_size;
 }
 
-pub fn setFftSize(self: *AnalyserNode, size: u32) !void {
-    // Chrome: a power of two in [32, 32768], anything else is an IndexSizeError
-    // ("The value provided (500) is not a power of two." — measured).
-    if (size < 32 or size > 32768 or !std.math.isPowerOfTwo(size)) {
-        return error.IndexSizeError;
-    }
+pub fn setFftSize(self: *AnalyserNode, size: u32, exec: *const Execution) !void {
+    try checkFftSize("Failed to set the 'fftSize' property on 'AnalyserNode'", size, exec);
     self._fft_size = size;
 }
 
@@ -127,6 +173,8 @@ pub const JsApi = struct {
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
+
+    pub const constructor = bridge.constructor(AnalyserNode.constructor, .{ .arity = 1 });
 
     pub const fftSize = bridge.accessor(AnalyserNode.getFftSize, AnalyserNode.setFftSize, .{});
     pub const frequencyBinCount = bridge.accessor(AnalyserNode.getFrequencyBinCount, null, .{});

@@ -1,0 +1,118 @@
+// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
+//
+// Francis Bouvier <francis@lightpanda.io>
+// Pierre Tachoire <pierre@lightpanda.io>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+// The prototype the three source nodes share (AudioBufferSourceNode,
+// ConstantSourceNode, OscillatorNode). Never instantiated on its own — Chrome
+// answers `new AudioScheduledSourceNode()` with an illegal constructor.
+//
+// start()/stop() do not start anything: there is no rendering thread to start.
+// They do keep the state machine, because that is the part a script can see —
+// calling start twice, or stop before start, is an InvalidStateError in Chrome
+// and the two messages name this interface rather than the leaf (measured on a
+// headed Chrome 150, win15-chrome.json). `onended` never fires for the same
+// reason nothing renders, and Chrome leaves it null on a node that was never
+// started either.
+
+const std = @import("std");
+
+const js = @import("../../js/js.zig");
+
+const idl = @import("idl.zig");
+const AudioNode = @import("AudioNode.zig");
+
+const Execution = js.Execution;
+
+const AudioScheduledSourceNode = @This();
+
+pub const Proto = AudioNode;
+
+_type: Type,
+_proto: *AudioNode,
+
+_started: bool = false,
+_stopped: bool = false,
+_on_ended: ?js.Function.Global = null,
+
+const nodes = @import("nodes.zig");
+
+pub const Type = union(enum) {
+    audio_buffer_source: *nodes.AudioBufferSourceNode,
+    constant_source: *nodes.ConstantSourceNode,
+    oscillator: *nodes.OscillatorNode,
+};
+
+pub fn asAudioNode(self: *AudioScheduledSourceNode) *AudioNode {
+    return self._proto;
+}
+
+pub fn getOnEnded(self: *const AudioScheduledSourceNode) ?js.Function.Global {
+    return self._on_ended;
+}
+
+pub fn setOnEnded(self: *AudioScheduledSourceNode, listener: ?js.Function) !void {
+    if (listener) |listen| {
+        self._on_ended = try listen.persistWithThis(self);
+    } else {
+        self._on_ended = null;
+    }
+}
+
+pub fn start(self: *AudioScheduledSourceNode, when: ?f64, exec: *const Execution) !void {
+    return self.begin(when, exec);
+}
+
+// Shared with AudioBufferSourceNode, whose own start() takes three arguments
+// but validates the first one exactly the same way.
+pub fn begin(self: *AudioScheduledSourceNode, when: ?f64, exec: *const Execution) !void {
+    if (self._started) return idl.domError(
+        "InvalidStateError",
+        "Failed to execute 'start' on 'AudioScheduledSourceNode': cannot call start more than once.",
+        exec,
+    );
+    try validate("start", when orelse 0, exec);
+    self._started = true;
+}
+
+pub fn stop(self: *AudioScheduledSourceNode, when: ?f64, exec: *const Execution) !void {
+    if (!self._started) return idl.domError(
+        "InvalidStateError",
+        "Failed to execute 'stop' on 'AudioScheduledSourceNode': cannot call stop without calling start first.",
+        exec,
+    );
+    try validate("stop", when orelse 0, exec);
+    self._stopped = true;
+}
+
+fn validate(comptime which: []const u8, when: f64, exec: *const Execution) !void {
+    if (when >= 0) return;
+    return idl.rangeError(try std.fmt.allocPrint(
+        exec.call_arena,
+        "Failed to execute '" ++ which ++ "' on 'AudioScheduledSourceNode': The " ++ which ++
+            " time provided ({d}) is less than the minimum bound (0).",
+        .{when},
+    ), exec);
+}
+
+pub const JsApi = struct {
+    pub const bridge = js.Bridge(AudioScheduledSourceNode);
+
+    pub const Meta = struct {
+        pub const name = "AudioScheduledSourceNode";
+        pub const prototype_chain = bridge.prototypeChain();
+        pub var class_id: bridge.ClassId = undefined;
+    };
+
+    pub const onended = bridge.accessor(AudioScheduledSourceNode.getOnEnded, AudioScheduledSourceNode.setOnEnded, .{});
+    pub const start = bridge.function(AudioScheduledSourceNode.start, .{ .arity = 0 });
+    pub const stop = bridge.function(AudioScheduledSourceNode.stop, .{ .arity = 0 });
+};
