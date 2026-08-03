@@ -115,6 +115,8 @@ pub const Type = union(enum) {
     hid_input_report_event: *@import("navigator/hid_serial.zig").HIDInputReportEvent,
     media_stream_track_event: *@import("media/streams.zig").MediaStreamTrackEvent,
     media_stream_event: *@import("media/streams.zig").MediaStreamEvent,
+    offline_audio_completion_event: *@import("audio/events.zig").OfflineAudioCompletionEvent,
+    audio_processing_event: *@import("audio/events.zig").AudioProcessingEvent,
 };
 
 pub const Options = struct {
@@ -278,6 +280,8 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .hid_input_report_event => |e| return if (T == @import("navigator/hid_serial.zig").HIDInputReportEvent) e else null,
         .media_stream_track_event => |e| return if (T == @import("media/streams.zig").MediaStreamTrackEvent) e else null,
         .media_stream_event => |e| return if (T == @import("media/streams.zig").MediaStreamEvent) e else null,
+        .offline_audio_completion_event => |e| return if (T == @import("audio/events.zig").OfflineAudioCompletionEvent) e else null,
+        .audio_processing_event => |e| return if (T == @import("audio/events.zig").AudioProcessingEvent) e else null,
     }
     return null;
 }

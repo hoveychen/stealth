@@ -862,3 +862,81 @@
   });
 }
 </script>
+
+<script id=audio_events>
+{
+  // OfflineAudioCompletionEvent and AudioProcessingEvent. Both take exactly two
+  // arguments and have no optional members, so a missing dictionary is an
+  // argument-count error rather than a defaulted one. Measured on a headed
+  // Chrome 150 (win18-chrome.json).
+  const msg = (fn) => { try { const v = fn(); return `no throw: ${v}`; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+  const ac = new AudioContext();
+  const buf = ac.createBuffer(1, 128, ac.sampleRate);
+
+  testing.expectEqual(2, OfflineAudioCompletionEvent.length);
+  testing.expectEqual(2, AudioProcessingEvent.length);
+  testing.expectEqual('renderedBuffer constructor', proto(OfflineAudioCompletionEvent));
+  testing.expectEqual('playbackTime inputBuffer outputBuffer constructor', proto(AudioProcessingEvent));
+  testing.expectEqual(true, Object.getPrototypeOf(OfflineAudioCompletionEvent.prototype) === Event.prototype);
+  testing.expectEqual(true, Object.getPrototypeOf(AudioProcessingEvent.prototype) === Event.prototype);
+
+  const done = new OfflineAudioCompletionEvent('complete', { renderedBuffer: buf });
+  testing.expectEqual('complete', done.type);
+  testing.expectEqual(true, done.renderedBuffer === buf);
+  testing.expectEqual(false, done.bubbles);
+  testing.expectEqual(false, done.cancelable);
+  testing.expectEqual(false, done.composed);
+  testing.expectEqual(false, done.isTrusted);
+  // EventInit still applies on top of the required member.
+  const bubbling = new OfflineAudioCompletionEvent('c', { renderedBuffer: buf, bubbles: true, cancelable: true });
+  testing.expectEqual('no throw: true/true', msg(() => `${bubbling.bubbles}/${bubbling.cancelable}`));
+
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioCompletionEvent': 2 arguments required, but only 0 present.",
+    msg(() => new OfflineAudioCompletionEvent()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioCompletionEvent': 2 arguments required, but only 1 present.",
+    msg(() => new OfflineAudioCompletionEvent('complete')));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioCompletionEvent': Failed to read the 'renderedBuffer' " +
+    "property from 'OfflineAudioCompletionEventInit': Required member is undefined.",
+    msg(() => new OfflineAudioCompletionEvent('complete', {})));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'OfflineAudioCompletionEvent': Failed to read the 'renderedBuffer' " +
+    "property from 'OfflineAudioCompletionEventInit': Failed to convert value to 'AudioBuffer'.",
+    msg(() => new OfflineAudioCompletionEvent('complete', { renderedBuffer: 7 })));
+
+  const processing = new AudioProcessingEvent('audioprocess', {
+    playbackTime: 1.5, inputBuffer: buf, outputBuffer: buf,
+  });
+  testing.expectEqual('audioprocess', processing.type);
+  testing.expectEqual(1.5, processing.playbackTime);
+  testing.expectEqual(true, processing.inputBuffer === buf);
+  testing.expectEqual(true, processing.outputBuffer === buf);
+  testing.expectEqual(false, processing.bubbles);
+
+  testing.expectEqual(
+    "TypeError: Failed to construct 'AudioProcessingEvent': 2 arguments required, but only 0 present.",
+    msg(() => new AudioProcessingEvent()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'AudioProcessingEvent': 2 arguments required, but only 1 present.",
+    msg(() => new AudioProcessingEvent('audioprocess')));
+  // Read in IDL order: an empty dictionary is blamed on playbackTime.
+  for (const [dict, missing] of [
+    [{}, 'playbackTime'],
+    [{ inputBuffer: buf, outputBuffer: buf }, 'playbackTime'],
+    [{ playbackTime: 1, outputBuffer: buf }, 'inputBuffer'],
+    [{ playbackTime: 1, inputBuffer: buf }, 'outputBuffer'],
+  ]) {
+    testing.expectEqual(
+      "TypeError: Failed to construct 'AudioProcessingEvent': Failed to read the '" + missing +
+      "' property from 'AudioProcessingEventInit': Required member is undefined.",
+      msg(() => new AudioProcessingEvent('audioprocess', dict)));
+  }
+  testing.expectEqual(
+    "TypeError: Failed to construct 'AudioProcessingEvent': Failed to read the 'inputBuffer' " +
+    "property from 'AudioProcessingEventInit': Failed to convert value to 'AudioBuffer'.",
+    msg(() => new AudioProcessingEvent('a', { playbackTime: 1, inputBuffer: 7, outputBuffer: buf })));
+}
+</script>
