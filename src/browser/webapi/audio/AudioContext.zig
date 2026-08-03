@@ -47,6 +47,7 @@ const lp = @import("lightpanda");
 const js = @import("../../js/js.zig");
 
 const BaseAudioContext = @import("BaseAudioContext.zig");
+const worklet = @import("worklet.zig");
 const AudioListener = @import("AudioListener.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
 
@@ -64,6 +65,7 @@ _proto: *BaseAudioContext,
 _sink_id: lp.String = .empty,
 _on_error: ?js.Function.Global = null,
 _on_sink_change: ?js.Function.Global = null,
+_playback_stats: ?*worklet.AudioPlaybackStats = null,
 
 pub fn init(options: ?Options, exec: *Execution) !*AudioContext {
     const self = try exec._factory.audioContext(AudioContext{ ._proto = undefined });
@@ -162,6 +164,18 @@ fn settle(self: *AudioContext, to: BaseAudioContext.State, exec: *const Executio
     return local.resolvePromise({});
 }
 
+// Every counter is zero on a context that never rendered, which is all this
+// engine has (measured — Chrome reports the same six zeros on a fresh
+// suspended context). Built once and kept: Chrome hands back the same object.
+pub fn getPlaybackStats(self: *AudioContext, exec: *Execution) !*worklet.AudioPlaybackStats {
+    if (self._playback_stats) |existing| {
+        return existing;
+    }
+    const created = try exec._factory.create(worklet.AudioPlaybackStats{});
+    self._playback_stats = created;
+    return created;
+}
+
 pub fn getOnError(self: *const AudioContext) ?js.Function.Global {
     return self._on_error;
 }
@@ -197,17 +211,22 @@ pub const JsApi = struct {
 
     pub const constructor = bridge.constructor(AudioContext.init, .{});
 
+    // Chrome's order. `sinkId` / `onsinkchange` / `setSinkId` sit after
+    // `constructor` there, which V8 cannot reproduce, so they land last here.
+    // The three createMedia* factories belong between `close` and
+    // `getOutputTimestamp` and are still missing: each needs a MediaStream.
     pub const baseLatency = bridge.accessor(AudioContext.getBaseLatency, null, .{});
     pub const outputLatency = bridge.accessor(AudioContext.getOutputLatency, null, .{});
-    pub const sinkId = bridge.accessor(AudioContext.getSinkId, null, .{});
     pub const onerror = bridge.accessor(AudioContext.getOnError, AudioContext.setOnError, .{});
-    pub const onsinkchange = bridge.accessor(AudioContext.getOnSinkChange, AudioContext.setOnSinkChange, .{});
+    pub const close = bridge.function(AudioContext.close, .{ .arity = 0 });
+    pub const getOutputTimestamp = bridge.function(AudioContext.getOutputTimestamp, .{ .arity = 0 });
+    pub const @"resume" = bridge.function(AudioContext.@"resume", .{ .arity = 0 });
+    pub const @"suspend" = bridge.function(AudioContext.@"suspend", .{ .arity = 0 });
+    pub const playbackStats = bridge.accessor(AudioContext.getPlaybackStats, null, .{});
 
-    pub const setSinkId = bridge.function(AudioContext.setSinkId, .{});
-    pub const getOutputTimestamp = bridge.function(AudioContext.getOutputTimestamp, .{});
-    pub const @"resume" = bridge.function(AudioContext.@"resume", .{});
-    pub const @"suspend" = bridge.function(AudioContext.@"suspend", .{});
-    pub const close = bridge.function(AudioContext.close, .{});
+    pub const sinkId = bridge.accessor(AudioContext.getSinkId, null, .{});
+    pub const onsinkchange = bridge.accessor(AudioContext.getOnSinkChange, AudioContext.setOnSinkChange, .{});
+    pub const setSinkId = bridge.function(AudioContext.setSinkId, .{ .arity = 1 });
 };
 
 const testing = @import("../../../testing.zig");

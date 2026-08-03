@@ -568,6 +568,13 @@ pub fn audioContext(self: *Factory, child: anytype) !*@TypeOf(child) {
     ).create(self._slab.allocator(), child);
 }
 
+// {Worklet, AudioWorklet}
+pub fn audioWorklet(self: *Factory, child: anytype) !*@TypeOf(child) {
+    return try AutoPrototypeChain(
+        prototypeTypes(@TypeOf(child)),
+    ).create(self._slab.allocator(), child);
+}
+
 pub fn textTrackCue(self: *Factory, child: anytype) !*@TypeOf(child) {
     const allocator = self._slab.allocator();
     const TextTrackCue = @import("webapi/media/TextTrackCue.zig");

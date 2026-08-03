@@ -39,6 +39,7 @@ const AnalyserNode = @import("AnalyserNode.zig");
 const AudioListener = @import("AudioListener.zig");
 const PeriodicWave = @import("PeriodicWave.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
+const worklet = @import("worklet.zig");
 
 const Execution = js.Execution;
 
@@ -56,6 +57,10 @@ _state: State = .suspended,
 _destination: ?*AudioDestinationNode = null,
 _listener: ?*AudioListener = null,
 _on_state_change: ?js.Function.Global = null,
+
+// Built on first read and kept, because Chrome hands back the same object every
+// time (measured: ctx.audioWorklet === ctx.audioWorklet).
+_audio_worklet: ?*worklet.AudioWorklet = null,
 
 pub const Type = union(enum) {
     audio_context: *@import("AudioContext.zig"),
@@ -94,6 +99,15 @@ pub fn getDestination(self: *const BaseAudioContext) *AudioDestinationNode {
 
 pub fn getListener(self: *const BaseAudioContext) *AudioListener {
     return self._listener.?;
+}
+
+pub fn getAudioWorklet(self: *BaseAudioContext, exec: *Execution) !*worklet.AudioWorklet {
+    if (self._audio_worklet) |existing| {
+        return existing;
+    }
+    const created = try exec._factory.audioWorklet(worklet.AudioWorklet{ ._proto = undefined });
+    self._audio_worklet = created;
+    return created;
 }
 
 pub fn getOnStateChange(self: *const BaseAudioContext) ?js.Function.Global {
@@ -306,4 +320,7 @@ pub const JsApi = struct {
     pub const createStereoPanner = bridge.function(BaseAudioContext.createStereoPanner, .{ .arity = 0 });
     pub const createWaveShaper = bridge.function(BaseAudioContext.createWaveShaper, .{ .arity = 0 });
     pub const decodeAudioData = bridge.function(BaseAudioContext.decodeAudioData, .{ .arity = 1 });
+
+    // Chrome puts this after `constructor`, which V8 cannot reproduce here.
+    pub const audioWorklet = bridge.accessor(BaseAudioContext.getAudioWorklet, null, .{});
 };

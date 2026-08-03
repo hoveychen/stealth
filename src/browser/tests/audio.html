@@ -196,7 +196,8 @@
   // which this engine does not have yet. Asserted as-is so the gap is visible
   // rather than filtered away.
   testing.expectEqual(
-    ['baseLatency', 'close', 'constructor', 'getOutputTimestamp', 'onerror', 'onsinkchange', 'outputLatency', 'resume', 'setSinkId', 'sinkId', 'suspend'],
+    ['baseLatency', 'close', 'constructor', 'getOutputTimestamp', 'onerror', 'onsinkchange', 'outputLatency',
+     'playbackStats', 'resume', 'setSinkId', 'sinkId', 'suspend'],
     Object.getOwnPropertyNames(AudioContext.prototype).sort(),
   );
   // BaseAudioContext now carries all eighteen factories and decodeAudioData;
@@ -207,7 +208,7 @@
      'createDelay', 'createDynamicsCompressor', 'createGain', 'createIIRFilter', 'createOscillator',
      'createPanner', 'createPeriodicWave', 'createScriptProcessor', 'createStereoPanner',
      'createWaveShaper', 'currentTime', 'decodeAudioData', 'destination', 'listener',
-     'onstatechange', 'sampleRate', 'state'],
+     'onstatechange', 'sampleRate', 'state', 'audioWorklet'].sort(),
     Object.getOwnPropertyNames(BaseAudioContext.prototype).sort(),
   );
   testing.expectEqual(
@@ -493,5 +494,62 @@
     "IndexSizeError: Failed to execute 'createScriptProcessor' on 'BaseAudioContext': buffer size " +
       "(100) must be 0 or a power of two between 256 and 16384.",
     msg(() => ac.createScriptProcessor(100)));
+}
+</script>
+
+<script id=audio_worklet>
+{
+  // Shape only: there is no AudioWorkletGlobalScope here, so addModule()
+  // rejects and AudioWorkletNode refuses to construct -- both in Chrome's own
+  // words (measured, win17-chrome.json).
+  const ac = new AudioContext();
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  testing.expectEqual('[object AudioWorklet]', Object.prototype.toString.call(ac.audioWorklet));
+  testing.expectEqual(true, ac.audioWorklet === ac.audioWorklet);
+  testing.expectEqual(true, ac.audioWorklet instanceof Worklet);
+  testing.expectEqual(['addModule', 'constructor'], Object.getOwnPropertyNames(Worklet.prototype).sort());
+  testing.expectEqual(['constructor'], Object.getOwnPropertyNames(AudioWorklet.prototype));
+  testing.expectEqual(1, Worklet.prototype.addModule.length);
+  testing.expectEqual("TypeError: Failed to construct 'Worklet': Illegal constructor", msg(() => new Worklet()));
+
+  testing.expectEqual(
+    ['constructor', 'entries', 'forEach', 'get', 'has', 'keys', 'size', 'values'],
+    Object.getOwnPropertyNames(AudioParamMap.prototype).sort());
+  testing.expectEqual(['constructor', 'type'], Object.getOwnPropertyNames(AudioSinkInfo.prototype).sort());
+  testing.expectEqual(
+    ['averageLatency', 'constructor', 'maximumLatency', 'minimumLatency', 'resetLatency', 'toJSON',
+     'totalDuration', 'underrunDuration', 'underrunEvents'],
+    Object.getOwnPropertyNames(AudioPlaybackStats.prototype).sort());
+  testing.expectEqual('[object AudioPlaybackStats]', Object.prototype.toString.call(ac.playbackStats));
+  testing.expectEqual(true, ac.playbackStats === ac.playbackStats);
+  testing.expectEqual(0, ac.playbackStats.totalDuration);
+
+  testing.expectEqual(2, AudioWorkletNode.length);
+  testing.expectEqual(
+    "TypeError: Failed to construct 'AudioWorkletNode': 2 arguments required, but only 1 present.",
+    msg(() => new AudioWorkletNode(ac)));
+  testing.expectEqual(
+    "InvalidStateError: Failed to construct 'AudioWorkletNode': AudioWorkletNode cannot be created: " +
+      "AudioWorklet does not have a valid AudioWorkletGlobalScope. Load a script via " +
+      "audioWorklet.addModule() first.",
+    msg(() => new AudioWorkletNode(ac, 'nope')));
+}
+</script>
+
+<script id=audio_worklet_add_module type=module>
+{
+  const state = await testing.async();
+  const ac = new AudioContext();
+  const settle = (p) => p.then(() => 'resolved', (e) => `rejected:${e.name}:${e.message}`);
+  const noArg = await settle(ac.audioWorklet.addModule());
+  const withUrl = await settle(ac.audioWorklet.addModule('/nope.js'));
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(
+      "rejected:TypeError:Failed to execute 'addModule' on 'Worklet': 1 argument required, but only 0 present.",
+      noArg);
+    testing.expectEqual("rejected:AbortError:Unable to load a worklet's module.", withUrl);
+  });
 }
 </script>

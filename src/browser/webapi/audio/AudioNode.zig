@@ -79,6 +79,7 @@ pub const Pinned = enum {
 };
 
 const nodes = @import("nodes.zig");
+const worklet = @import("worklet.zig");
 
 pub const Type = union(enum) {
     destination: *@import("AudioDestinationNode.zig"),
@@ -96,6 +97,7 @@ pub const Type = union(enum) {
     script_processor: *nodes.ScriptProcessorNode,
     stereo_panner: *nodes.StereoPannerNode,
     wave_shaper: *nodes.WaveShaperNode,
+    audio_worklet_node: *worklet.AudioWorkletNode,
 };
 
 pub const ChannelCountMode = enum {
