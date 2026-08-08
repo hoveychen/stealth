@@ -23,11 +23,17 @@ const Frame = @import("../../Frame.zig");
 
 const Event = @import("../Event.zig");
 const UIEvent = @import("UIEvent.zig");
+const touch = @import("touch.zig");
+
+const Touch = touch.Touch;
+const TouchList = touch.TouchList;
 
 const String = lp.String;
 
 // https://w3c.github.io/touch-events/#touchevent-interface
-// There is no touch input source: the touch lists are always empty.
+// There is no touch input source, so an event the engine fires carries three
+// empty lists -- but they are TouchLists now, not JS Arrays, and a page that
+// passes touches in the dictionary gets them back (measured on Chrome 150).
 const TouchEvent = @This();
 
 pub const Proto = UIEvent;
@@ -37,12 +43,18 @@ _alt_key: bool = false,
 _meta_key: bool = false,
 _ctrl_key: bool = false,
 _shift_key: bool = false,
+_touches: *TouchList,
+_target_touches: *TouchList,
+_changed_touches: *TouchList,
 
 pub const TouchEventOptions = struct {
     altKey: bool = false,
     metaKey: bool = false,
     ctrlKey: bool = false,
     shiftKey: bool = false,
+    touches: ?[]const *Touch = null,
+    targetTouches: ?[]const *Touch = null,
+    changedTouches: ?[]const *Touch = null,
 };
 
 pub const Options = Event.inheritOptions(
@@ -73,6 +85,9 @@ fn initWithTrusted(typ: []const u8, _opts: ?Options, trusted: bool, frame: *Fram
             ._meta_key = opts.metaKey,
             ._ctrl_key = opts.ctrlKey,
             ._shift_key = opts.shiftKey,
+            ._touches = try touchList(opts.touches, frame),
+            ._target_touches = try touchList(opts.targetTouches, frame),
+            ._changed_touches = try touchList(opts.changedTouches, frame),
         },
     );
 
@@ -84,16 +99,23 @@ pub fn asEvent(self: *TouchEvent) *Event {
     return self._proto.asEvent();
 }
 
-pub fn getTouches(_: *const TouchEvent) []const bool {
-    return &.{};
+// The sequence arrives on the call arena, which is gone by the time a script
+// reads the list back, so the touches are copied onto the frame arena first.
+fn touchList(touches_: ?[]const *Touch, frame: *Frame) !*TouchList {
+    const touches = touches_ orelse return frame._factory.create(TouchList{});
+    return frame._factory.create(TouchList{ ._touches = try frame.arena.dupe(*Touch, touches) });
 }
 
-pub fn getTargetTouches(_: *const TouchEvent) []const bool {
-    return &.{};
+pub fn getTouches(self: *const TouchEvent) *TouchList {
+    return self._touches;
 }
 
-pub fn getChangedTouches(_: *const TouchEvent) []const bool {
-    return &.{};
+pub fn getTargetTouches(self: *const TouchEvent) *TouchList {
+    return self._target_touches;
+}
+
+pub fn getChangedTouches(self: *const TouchEvent) *TouchList {
+    return self._changed_touches;
 }
 
 pub fn getAltKey(self: *const TouchEvent) bool {

@@ -34,12 +34,20 @@ _pause_on_exit: bool = false,
 _on_enter: ?js.Function.Global = null,
 _on_exit: ?js.Function.Global = null,
 
+// Set by TextTrack.addCue, cleared by removeCue. Chrome puts `track` first on
+// TextTrackCue.prototype and answers null for a cue no track owns (measured).
+_track: ?*@import("text_tracks.zig").TextTrack = null,
+
 pub const Type = union(enum) {
     vtt: *@import("VTTCue.zig"),
 };
 
 pub fn asEventTarget(self: *TextTrackCue) *EventTarget {
     return self._proto;
+}
+
+pub fn getTrack(self: *const TextTrackCue) ?*@import("text_tracks.zig").TextTrack {
+    return self._track;
 }
 
 pub fn getId(self: *const TextTrackCue) []const u8 {
@@ -102,6 +110,7 @@ pub const JsApi = struct {
 
     pub const Prototype = EventTarget;
 
+    pub const track = bridge.accessor(TextTrackCue.getTrack, null, .{});
     pub const id = bridge.accessor(TextTrackCue.getId, TextTrackCue.setId, .{});
     pub const startTime = bridge.accessor(TextTrackCue.getStartTime, TextTrackCue.setStartTime, .{});
     pub const endTime = bridge.accessor(TextTrackCue.getEndTime, TextTrackCue.setEndTime, .{});

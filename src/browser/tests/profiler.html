@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<head>
+  <title>Profiler Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=profiler_is_disabled_by_document_policy>
+  {
+    testing.expectEqual(1, Profiler.length);
+    testing.expectEqual('sampleInterval,stopped,stop',
+      Object.getOwnPropertyNames(Profiler.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectTrue(Object.getPrototypeOf(Profiler.prototype) === EventTarget.prototype);
+    testing.expectEqual('Profiler', Profiler.prototype[Symbol.toStringTag]);
+
+    // Valid options, and still refused: no page here carries the
+    // Document-Policy header that would enable profiling.
+    let err;
+    try { new Profiler({ sampleInterval: 10, maxBufferSize: 100 }); } catch (e) { err = e; }
+    testing.expectEqual('NotAllowedError', err.name);
+    testing.expectEqual("Failed to construct 'Profiler': JS profiling is disabled by Document Policy.", err.message);
+
+    // Both members are required, and read in this order.
+    err = undefined;
+    try { new Profiler({}); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to construct 'Profiler': Failed to read the 'sampleInterval' property from 'ProfilerInitOptions': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new Profiler({ sampleInterval: 10 }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'Profiler': Failed to read the 'maxBufferSize' property from 'ProfilerInitOptions': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new Profiler(5); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'Profiler': The provided value is not of type 'ProfilerInitOptions'.",
+      err.message);
+
+    err = undefined;
+    try { new Profiler(); } catch (e) { err = e; }
+    testing.expectEqual("Failed to construct 'Profiler': 1 argument required, but only 0 present.", err.message);
+  }
+</script>

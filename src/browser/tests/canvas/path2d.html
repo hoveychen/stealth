@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<head>
+  <title>Path2D Test</title>
+  <script src="../testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<script id=construct>
+  {
+    testing.expectEqual(0, Path2D.length);
+    const p = new Path2D();
+    testing.expectEqual('[object Path2D]', Object.prototype.toString.call(p));
+    // Chrome accepts any string without validating it.
+    testing.expectTrue(new Path2D('M0 0 L10 10') instanceof Path2D);
+    testing.expectTrue(new Path2D('not a path') instanceof Path2D);
+    testing.expectTrue(new Path2D(p) instanceof Path2D);
+  }
+</script>
+
+<script id=methods_accept_their_arguments>
+  {
+    const p = new Path2D();
+    p.moveTo(0, 0);
+    p.lineTo(5, 5);
+    p.rect(0, 0, 2, 2);
+    p.roundRect(0, 0, 2, 2);
+    p.arc(0, 0, 1, 0, 1);
+    p.arcTo(0, 0, 1, 1, 1);
+    p.bezierCurveTo(0, 0, 1, 1, 2, 2);
+    p.quadraticCurveTo(0, 0, 1, 1);
+    p.ellipse(0, 0, 1, 1, 0, 0, 1);
+    p.closePath();
+    p.addPath(new Path2D());
+    testing.expectTrue(p instanceof Path2D);
+  }
+</script>
+
+<script id=arities>
+  {
+    const proto = Path2D.prototype;
+    testing.expectEqual(1, proto.addPath.length);
+    testing.expectEqual(4, proto.roundRect.length);
+    testing.expectEqual(5, proto.arc.length);
+    testing.expectEqual(5, proto.arcTo.length);
+    testing.expectEqual(6, proto.bezierCurveTo.length);
+    testing.expectEqual(0, proto.closePath.length);
+    testing.expectEqual(7, proto.ellipse.length);
+    testing.expectEqual(2, proto.lineTo.length);
+    testing.expectEqual(2, proto.moveTo.length);
+    testing.expectEqual(4, proto.quadraticCurveTo.length);
+    testing.expectEqual(4, proto.rect.length);
+  }
+</script>
+
+<script id=add_path_type_check>
+  {
+    let err;
+    try { new Path2D().addPath({}); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'addPath' on 'Path2D': parameter 1 is not of type 'Path2D'.",
+      err.message);
+  }
+</script>
+
+<script id=member_order>
+  {
+    testing.expectEqual(
+      'addPath,roundRect,arc,arcTo,bezierCurveTo,closePath,ellipse,lineTo,moveTo,quadraticCurveTo,rect',
+      Object.getOwnPropertyNames(Path2D.prototype).filter((k) => k !== 'constructor').join(','));
+  }
+</script>

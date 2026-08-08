@@ -821,3 +821,109 @@ CreepJS after the batch: window missing keys **185 → 163**, window spans
   'WebTransportErrorInit'." because the *string* is what fails the conversion —
   measured, and easy to get backwards from the spec text. `source` always reads
   "stream" and `streamErrorCode` is a clamped octet (4294967295 → 255, -1 → 0).
+
+## G17 batch 15: the misc window globals (P9)
+
+Forty-seven more window globals — every name Chrome 150 has that this engine did
+not, out of the forty-nine "misc" candidates. The two it does *not* add are
+`MutationEvent` and `openDatabase`: Chrome 150 has neither, and the CreepJS
+baseline is Chrome 115, which had both, so they stay missing on purpose.
+
+The batch went in five groups: the twelve leftover `Event` subclasses; the
+geometry and collection types (`Path2D`, `DOMQuad`, `DOMRectList`, `TimeRanges`,
+`Touch`, `TouchList`, the two `DeviceMotionEvent*` payloads); the text-track and
+capture types; the CSS/DOM leftovers (`Highlight`, `HighlightRegistry`,
+`CustomStateSet`, `MathMLElement`, `XSLTProcessor`, `Sanitizer`, `DOMError`); and
+the window-and-navigation leftovers (`URLPattern`, `Option`, `Profiler`,
+`EyeDropper`, `IdleDetector`, `InputDeviceCapabilities`, `ReportingObserver`,
+`ClipboardItem`, `KeyframeEffect`, `NavigationDestination`,
+`NavigationTransition`, `IDBOpenDBRequest`). Nine of them are also in the worker
+scope, which is exactly the nine Chrome's workers carry.
+
+Ground truth is in `stealth-detector-probes/win-batch/`: `win28` for the shapes
+of all forty-seven, `win29` for the behaviour, `win30` for the worker scope, and
+`win31`–`win36` for the pieces that needed a second pass (the Sanitizer config
+algebra, the Highlight iterators, the Option constructor cases, the
+IDBOpenDBRequest split).
+
+CreepJS after the batch: window own keys **982 → 1029**, window spans
+**204 → 150**, total `.unsupport` spans **328 → 274**.
+
+`win28` shape diff after the batch: forty-six of forty-seven interfaces are
+field-for-field identical to Chrome (arity, constructor name, statics, prototype
+members with their kind and flags, prototype chain, `new X()` behaviour, the
+error for calling without `new`). The forty-seventh is `Option` — see below.
+
+### Where this engine now differs from Chrome, on purpose or otherwise
+
+- **`Option` is the same function object as `HTMLOptionElement`.** Chrome has two
+  distinct functions that share one prototype: `Option !== HTMLOptionElement`,
+  `Option.name === 'Option'`, and `Object.getPrototypeOf(Option)` is
+  `Function.prototype`. The bridge's `constructor_alias` installs one function
+  under two global names, so all four of those read the `HTMLOptionElement`
+  answer here (and `new Option()` called without `new` names
+  `HTMLOptionElement` in its message). A faithful legacy factory function needs
+  a second `FunctionTemplate` whose `prototype` is re-pointed at the
+  interface's, which the vendored v8 C bindings do not currently expose
+  (`SetPrototypeProviderTemplate` is not bound). The same four differences
+  already applied to the shipped `Image` and `Audio`. Everything a page can
+  *do* with `Option` matches: `length` is 0, `Option.prototype ===
+  HTMLOptionElement.prototype`, both global names are `value[-cw]`, and all
+  eight measured construction cases produce Chrome's markup.
+- **An empty boolean attribute serialises bare.** `new Option('T','V',true)`
+  gives `<option value="V" selected>T</option>` where Chrome gives
+  `selected=""`. This is `formatAttribute` in `webapi/element/Attribute.zig`
+  special-casing the boolean-attribute table, and it applies to every
+  `outerHTML` / `innerHTML` in the engine, not just to options. Chrome's HTML
+  fragment serialiser always writes `name="value"`.
+- **`HTMLOptionElement` lost its `name` member.** It reflected the `name`
+  content attribute, which Chrome does not do for this interface at all — the
+  prototype now has Chrome's eight members in Chrome's order (`disabled`,
+  `form`, `label`, `defaultSelected`, `selected`, `value`, `text`, `index`).
+- **`ReportingObserver` never produces a record.** Nothing here generates a
+  deprecation, intervention or crash report, so `takeRecords()` is always `[]`.
+  Chrome answered with one during the measurement, but it was Chrome reporting
+  its own `XSLTProcessor` deprecation back at the probe.
+- **`XSLTProcessor` does not transform.** There is no XSLT engine, so
+  `transformToDocument` / `transformToFragment` log `not_implemented` and answer
+  null — which is also Chrome's answer before a stylesheet is imported.
+- **`CustomStateSet` is unreachable from a page.** The only route to an instance
+  is `element.attachInternals().states`, and `ElementInternals` does not exist
+  yet (it is still in `results/creep-features-missing.json`). The global and the
+  prototype shape are what this batch delivers.
+- **`ctx.fill(path)` still paints nothing.** `Path2D` records its segments and
+  `getPathData`-style reads are right, but the canvas path rasteriser is a noop,
+  so a filled path leaves no pixels.
+- **`BeforeInstallPromptEvent.platforms` is not frozen.** Chrome hands back a
+  frozen array; the v8 bridge has no `SetIntegrityLevel`.
+- **A method missing an argument says "invalid argument".** Chrome says
+  "1 argument required, but only 0 present.". The bridge only counts arguments
+  for *constructors*; the classes in this batch that needed the Chrome wording
+  (`XSLTProcessor`, `Highlight`, `HighlightRegistry`, `Sanitizer`,
+  `ClipboardItem.supports`, `URLPattern`) count them by hand with a variadic
+  `[]js.Value`. `TimeRanges.start()` and the rest still say "invalid argument".
+- **A typed dictionary argument says "invalid argument" too.** `new DOMQuad(5)`
+  should say "The provided value is not of type 'DOMPointInit'.". The
+  hand-rolled reader in `webapi/dictionary.zig` produces Chrome's three messages
+  and is what the classes that were measured against them use; the bridge's own
+  typed dictionaries still do not.
+- **`CSS` is missing most of its numeric factories.** Chrome's
+  `Object.getOwnPropertyNames(CSS)` is sixty-odd names (`Hz`, `Q`, `cap`, `ch`,
+  `cm`, every `cq*`/`dv*`/`lv*`/`sv*` unit, `registerProperty`,
+  `paintWorklet`, …); this engine has `highlights`, `escape` and `supports`.
+- **`UIEvent.prototype` is missing `pseudoTarget`.** Chrome 150 carries it after
+  `initUIEvent`; its semantics were not measured.
+- **`HTMLElement` and `SVGElement` prototypes are missing `focusGroup` and
+  `focusGroupStart`.** `MathMLElement` has them because it was built to Chrome's
+  measured prototype in this batch; aligning the other two is separate work.
+- **`HTMLVideoElement`'s own picture-in-picture members are still missing**
+  (`requestPictureInPicture`, `disablePictureInPicture`,
+  `onenterpictureinpicture`, `onleavepictureinpicture`). `PictureInPictureEvent`
+  and `PictureInPictureWindow` are here; the element side needs its own round.
+- **Two `Sanitizer` details are unmeasured.** A newly inserted element entry gets
+  an empty `removeAttributes` (which matches the dictionary default), and
+  whether an explicitly empty `replaceWithChildrenElements: []` is emitted by
+  `get()` was never checked.
+- **`URLPattern` matches a string input only.** A `URLPatternInit` passed to
+  `exec()`/`test()` as the *match target* is legal in Chrome and answers null
+  here; Chrome's behaviour for it was not measured.

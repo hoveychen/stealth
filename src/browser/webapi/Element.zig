@@ -31,9 +31,11 @@ const ShadowRoot = @import("ShadowRoot.zig");
 const EventTarget = @import("EventTarget.zig");
 const collections = @import("collections.zig");
 pub const DOMRect = @import("DOMRect.zig");
+const DOMRectList = @import("collections/DOMRectList.zig");
 
 const Selector = @import("selector/Selector.zig");
 const Animation = @import("animation/Animation.zig");
+const KeyframeEffect = @import("animation/KeyframeEffect.zig");
 const global_event_handlers = @import("global_event_handlers.zig");
 const document_services = @import("document/services.zig");
 const typed_om = @import("css/typed_om.zig");
@@ -41,6 +43,7 @@ const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 
 pub const Svg = @import("element/Svg.zig");
+pub const MathML = @import("element/MathML.zig");
 pub const Html = @import("element/Html.zig");
 const slotting = @import("element/slotting.zig");
 pub const Attribute = @import("element/Attribute.zig");
@@ -123,6 +126,9 @@ _proto_canary: if (IS_DEBUG) *Node else void = undefined,
 pub const Type = union(enum) {
     html: *Html,
     svg: *Svg,
+    // The whole MathML namespace is one interface, so there is nothing under
+    // this the way there is under Html and Svg.
+    mathml: *MathML,
 };
 
 pub fn is(self: *Element, comptime T: type) ?*T {
@@ -142,6 +148,11 @@ pub fn is(self: *Element, comptime T: type) ?*T {
             }
             if (comptime std.mem.startsWith(u8, type_name, "browser.webapi.element.svg.")) {
                 return svg.is(T);
+            }
+        },
+        .mathml => |mathml| {
+            if (T == MathML) {
+                return mathml;
             }
         },
     }
@@ -264,6 +275,8 @@ pub fn getTagNameLower(self: *const Element) []const u8 {
             },
         },
         .svg => |svg| return svg._tag_name.str(),
+        // Case-preserving, like SVG: 'mSpace' stays 'mSpace'.
+        .mathml => |mathml| return mathml._tag_name.str(),
     }
 }
 
@@ -347,6 +360,7 @@ pub fn getTagNameSpec(self: *const Element, buf: []u8) []const u8 {
             },
         },
         .svg => |svg| svg._tag_name.str(),
+        .mathml => |mathml| mathml._tag_name.str(),
     };
 }
 
@@ -354,6 +368,7 @@ pub fn getTagNameDump(self: *const Element) []const u8 {
     switch (self._type) {
         .html => return self.getTagNameLower(),
         .svg => |svg| return svg._tag_name.str(),
+        .mathml => |mathml| return mathml._tag_name.str(),
     }
 }
 
@@ -1404,8 +1419,20 @@ pub fn getAnimations(_: *const Element) []*Animation {
     return &.{};
 }
 
-pub fn animate(_: *Element, _: ?js.Object, _: ?js.Object, frame: *Frame) !*Animation {
-    return Animation.init(frame);
+/// Chrome answers with an Animation whose `effect` is a KeyframeEffect built
+/// from the two arguments; ours used to leave `effect` null, which no browser
+/// does (measured on a headed Chrome 150, probe-win29).
+pub fn animate(self: *Element, keyframes: ?js.Value, options: ?js.Value, exec: *js.Execution) !*Animation {
+    const frame = switch (exec.js.global) {
+        .frame => |f| f,
+        .worker => return error.NotSupportedError,
+    };
+
+    const animation = try Animation.init(frame);
+    const effect = try KeyframeEffect.initForTarget(self, keyframes, options, exec);
+    const value = try exec.js.local.?.zigValueToJs(effect, .{});
+    animation._effect = try value.toObject().persist();
+    return animation;
 }
 
 pub fn closest(self: *Element, input: []const u8, frame: *Frame) !?*Element {
@@ -1543,13 +1570,17 @@ pub fn boundingClientRectValuesForVisible(self: *Element, frame: *Frame) DOMRect
     };
 }
 
-pub fn getClientRects(self: *Element, frame: *Frame) ![]*DOMRect {
+// A DOMRectList, not a JS Array: `getClientRects().constructor.name` is read
+// directly by fingerprinting scripts, and Array is not an answer any browser
+// gives. The list and its rects both come from the frame arena because the
+// wrapper a script keeps outlives this call.
+pub fn getClientRects(self: *Element, frame: *Frame) !*DOMRectList {
     if (!self.checkVisibilityCached(null, frame)) {
-        return &.{};
+        return frame._factory.create(DOMRectList{});
     }
-    const rects = try frame.local_arena.alloc(*DOMRect, 1);
+    const rects = try frame.arena.alloc(*DOMRect, 1);
     rects[0] = try DOMRect.create(self.boundingClientRectValuesForVisible(frame), frame._factory);
-    return rects;
+    return frame._factory.create(DOMRectList{ ._rects = rects });
 }
 
 // Scroll positions live in the map of the element's own frame — not the
@@ -2200,6 +2231,9 @@ pub fn getTag(self: *const Element) Tag {
             .unknown => .unknown,
         },
         .svg => |se| se.getTag(),
+        // No MathML tag is in Element.Tag; tag-name matching falls back to
+        // _tag_name, the way it does for generic SVG elements.
+        .mathml => .unknown,
     };
 }
 

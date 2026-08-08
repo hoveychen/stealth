@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<head>
+  <title>Misc Event Subclasses Test</title>
+  <script src="../testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<script id=animation_playback_event>
+  {
+    testing.expectEqual(1, AnimationPlaybackEvent.length);
+    const bare = new AnimationPlaybackEvent('x');
+    testing.expectEqual(null, bare.currentTime);
+    testing.expectEqual(null, bare.timelineTime);
+    testing.expectEqual(false, bare.bubbles);
+    testing.expectEqual('[object AnimationPlaybackEvent]', Object.prototype.toString.call(bare));
+
+    const filled = new AnimationPlaybackEvent('x', { currentTime: '4', timelineTime: null, bubbles: true });
+    testing.expectEqual(4, filled.currentTime);
+    testing.expectEqual(null, filled.timelineTime);
+    testing.expectEqual(true, filled.bubbles);
+
+    let err;
+    try { new AnimationPlaybackEvent('x', { currentTime: 'abc' }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'AnimationPlaybackEvent': Failed to read the 'currentTime' property from 'AnimationPlaybackEventInit': The provided double value is non-finite.",
+      err.message);
+
+    err = undefined;
+    try { new AnimationPlaybackEvent('x', 3); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'AnimationPlaybackEvent': The provided value is not of type 'AnimationPlaybackEventInit'.",
+      err.message);
+
+    err = undefined;
+    try { new AnimationPlaybackEvent(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'AnimationPlaybackEvent': 1 argument required, but only 0 present.",
+      err.message);
+  }
+</script>
+
+<script id=blob_event>
+  {
+    testing.expectEqual(2, BlobEvent.length);
+    const blob = new Blob(['ab']);
+    const e = new BlobEvent('dataavailable', { data: blob, timecode: 3 });
+    testing.expectTrue(e.data === blob);
+    testing.expectEqual(3, e.timecode);
+    testing.expectEqual(0, new BlobEvent('x', { data: blob }).timecode);
+    testing.expectEqual(2.5, new BlobEvent('x', { data: blob, timecode: '2.5' }).timecode);
+    testing.expectEqual(-1, new BlobEvent('x', { data: blob, timecode: -1 }).timecode);
+
+    let err;
+    try { new BlobEvent('x', {}); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'BlobEvent': Failed to read the 'data' property from 'BlobEventInit': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new BlobEvent('x', { data: null }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'BlobEvent': Failed to read the 'data' property from 'BlobEventInit': Failed to convert value to 'Blob'.",
+      err.message);
+
+    err = undefined;
+    try { new BlobEvent('x', { data: blob, timecode: NaN }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'BlobEvent': Failed to read the 'timecode' property from 'BlobEventInit': The provided double value is non-finite.",
+      err.message);
+
+    err = undefined;
+    try { new BlobEvent('x', 5); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'BlobEvent': The provided value is not of type 'BlobEventInit'.",
+      err.message);
+  }
+</script>
+
+<script id=clipboard_event>
+  {
+    testing.expectEqual(1, ClipboardEvent.length);
+    testing.expectEqual(null, new ClipboardEvent('paste').clipboardData);
+    testing.expectEqual(null, new ClipboardEvent('paste', { clipboardData: null }).clipboardData);
+
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'x');
+    const e = new ClipboardEvent('paste', { clipboardData: dt });
+    testing.expectTrue(e.clipboardData === dt);
+    testing.expectEqual('x', e.clipboardData.getData('text/plain'));
+
+    let err;
+    try { new ClipboardEvent('paste', { clipboardData: 5 }); } catch (x) { err = x; }
+    testing.expectEqual(
+      "Failed to construct 'ClipboardEvent': Failed to read the 'clipboardData' property from 'ClipboardEventInit': Failed to convert value to 'DataTransfer'.",
+      err.message);
+  }
+</script>
+
+<script id=content_visibility_event>
+  {
+    testing.expectEqual(false, new ContentVisibilityAutoStateChangeEvent('x').skipped);
+    testing.expectEqual(true, new ContentVisibilityAutoStateChangeEvent('x', { skipped: true }).skipped);
+    let err;
+    try { new ContentVisibilityAutoStateChangeEvent('x', 1); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'ContentVisibilityAutoStateChangeEvent': The provided value is not of type 'ContentVisibilityAutoStateChangeEventInit'.",
+      err.message);
+  }
+</script>
+
+<script id=security_policy_violation_event>
+  {
+    testing.expectEqual(1, SecurityPolicyViolationEvent.length);
+    const bare = new SecurityPolicyViolationEvent('securitypolicyviolation');
+    testing.expectEqual('', bare.documentURI);
+    testing.expectEqual('', bare.blockedURI);
+    testing.expectEqual('enforce', bare.disposition);
+    testing.expectEqual(0, bare.statusCode);
+    testing.expectEqual(0, bare.lineNumber);
+    // Chrome hard-codes these three, whatever the dictionary says.
+    testing.expectEqual(true, bare.bubbles);
+    testing.expectEqual(true, bare.composed);
+    testing.expectEqual(false, bare.cancelable);
+
+    const forced = new SecurityPolicyViolationEvent('x', { bubbles: false, composed: false, cancelable: true });
+    testing.expectEqual(true, forced.bubbles);
+    testing.expectEqual(true, forced.composed);
+    testing.expectEqual(false, forced.cancelable);
+
+    const e = new SecurityPolicyViolationEvent('x', {
+      documentURI: 'a', blockedURI: 'b', disposition: 'report', statusCode: '12',
+      lineNumber: '3.7', columnNumber: -1, sample: 's', originalPolicy: 'p',
+      violatedDirective: 'v', effectiveDirective: 'ed', sourceFile: 'f', referrer: 'r',
+    });
+    testing.expectEqual('a', e.documentURI);
+    testing.expectEqual('report', e.disposition);
+    testing.expectEqual(12, e.statusCode);
+    testing.expectEqual(3, e.lineNumber);
+    testing.expectEqual(-1, e.columnNumber);
+    testing.expectEqual('ed', e.effectiveDirective);
+
+    let err;
+    try { new SecurityPolicyViolationEvent('x', { disposition: 'nope' }); } catch (x) { err = x; }
+    testing.expectEqual(
+      "Failed to construct 'SecurityPolicyViolationEvent': Failed to read the 'disposition' property from 'SecurityPolicyViolationEventInit': The provided value 'nope' is not a valid enum value of type SecurityPolicyViolationEventDisposition.",
+      err.message);
+  }
+</script>
+
+<script id=track_event>
+  {
+    testing.expectEqual(null, new TrackEvent('addtrack').track);
+    testing.expectEqual(null, new TrackEvent('addtrack', { track: null }).track);
+    testing.expectEqual(null, new TrackEvent('addtrack', { track: undefined }).track);
+
+    const t = document.createElement('video').addTextTrack('subtitles');
+    testing.expectTrue(new TrackEvent('addtrack', { track: t }).track === t);
+
+    let err;
+    try { new TrackEvent('addtrack', { track: 5 }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'TrackEvent': Failed to read the 'track' property from 'TrackEventInit': The provided value is not of type '(AudioTrack or TextTrack or VideoTrack)'.",
+      err.message);
+  }
+</script>
+
+<script id=webgl_context_event>
+  {
+    testing.expectEqual('', new WebGLContextEvent('webglcontextlost').statusMessage);
+    testing.expectEqual('lost', new WebGLContextEvent('x', { statusMessage: 'lost' }).statusMessage);
+    testing.expectEqual('7', new WebGLContextEvent('x', { statusMessage: 7 }).statusMessage);
+    let err;
+    try { new WebGLContextEvent(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'WebGLContextEvent': 1 argument required, but only 0 present.",
+      err.message);
+  }
+</script>
+
+<script id=virtual_keyboard_event>
+  {
+    // Its dictionary is plain EventInit, so a non-object is tolerated -- unlike
+    // every other event here.
+    testing.expectEqual('x', new VirtualKeyboardGeometryChangeEvent('x').type);
+    testing.expectEqual('x', new VirtualKeyboardGeometryChangeEvent('x', 5).type);
+    testing.expectEqual(
+      '',
+      Object.getOwnPropertyNames(VirtualKeyboardGeometryChangeEvent.prototype)
+        .filter((k) => k !== 'constructor').join(','));
+  }
+</script>
+
+<script id=window_controls_overlay_event>
+  {
+    testing.expectEqual(2, WindowControlsOverlayGeometryChangeEvent.length);
+    // The required member is a gate: Chrome reads it and then ignores it.
+    const e = new WindowControlsOverlayGeometryChangeEvent('x', {
+      titlebarAreaRect: new DOMRect(1, 2, 3, 4), visible: true,
+    });
+    testing.expectEqual(null, e.titlebarAreaRect);
+    testing.expectEqual(false, e.visible);
+
+    let err;
+    try { new WindowControlsOverlayGeometryChangeEvent('x', {}); } catch (x) { err = x; }
+    testing.expectEqual(
+      "Failed to construct 'WindowControlsOverlayGeometryChangeEvent': Failed to read the 'titlebarAreaRect' property from 'WindowControlsOverlayGeometryChangeEventInit': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new WindowControlsOverlayGeometryChangeEvent('x'); } catch (x) { err = x; }
+    testing.expectEqual(
+      "Failed to construct 'WindowControlsOverlayGeometryChangeEvent': 2 arguments required, but only 1 present.",
+      err.message);
+  }
+</script>
+
+<script id=unbuildable_events>
+  {
+    // Both require an interface no page can hold, so every construction fails.
+    let err;
+    try { new PictureInPictureEvent('x', {}); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'PictureInPictureEvent': Failed to read the 'pictureInPictureWindow' property from 'PictureInPictureEventInit': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new PictureInPictureEvent('x', { pictureInPictureWindow: null }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'PictureInPictureEvent': Failed to read the 'pictureInPictureWindow' property from 'PictureInPictureEventInit': Failed to convert value to 'PictureInPictureWindow'.",
+      err.message);
+
+    err = undefined;
+    try { new NavigateEvent('navigate', { destination: null }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'NavigateEvent': Failed to read the 'destination' property from 'NavigateEventInit': Failed to convert value to 'NavigationDestination'.",
+      err.message);
+
+    err = undefined;
+    try { new NavigateEvent('navigate', {}); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'NavigateEvent': Failed to read the 'destination' property from 'NavigateEventInit': Required member is undefined.",
+      err.message);
+
+    err = undefined;
+    try { new NavigateEvent('navigate'); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'NavigateEvent': 2 arguments required, but only 1 present.",
+      err.message);
+  }
+</script>
+
+<script type=module id=before_install_prompt_event>
+  const e = new BeforeInstallPromptEvent('beforeinstallprompt');
+  testing.expectTrue(Array.isArray(e.platforms));
+  testing.expectEqual(0, e.platforms.length);
+  // A fresh array and a fresh promise on every read.
+  testing.expectFalse(e.platforms === e.platforms);
+  testing.expectFalse(e.userChoice === e.userChoice);
+  testing.expectEqual('web', new BeforeInstallPromptEvent('x', { platforms: ['web'] }).platforms[0]);
+
+  let err;
+  try { await e.userChoice; } catch (x) { err = x; }
+  testing.expectEqual('InvalidStateError', err.name);
+  testing.expectEqual(
+    "Failed to read the 'userChoice' property from 'BeforeInstallPromptEvent': userChoice cannot be accessed on this event.",
+    err.message);
+
+  err = undefined;
+  try { await e.prompt(); } catch (x) { err = x; }
+  testing.expectEqual('InvalidStateError', err.name);
+  testing.expectEqual(
+    "Failed to execute 'prompt' on 'BeforeInstallPromptEvent': The prompt() method cannot be called.",
+    err.message);
+</script>
+
+<script id=add_text_track_fires_track_event>
+  {
+    // Dispatch is synchronous, so both handlers have run by the time
+    // addTextTrack returns.
+    const v = document.createElement('video');
+    const seen = [];
+    v.textTracks.addEventListener('addtrack', (e) => {
+      seen.push(`addtrack:${Object.prototype.toString.call(e)}:${e.track.label}:${e.isTrusted}`);
+    });
+    v.textTracks.onchange = () => seen.push('change');
+    v.addTextTrack('subtitles', 'L');
+    testing.expectEqual('addtrack:[object TrackEvent]:L:true|change', seen.join('|'));
+  }
+</script>

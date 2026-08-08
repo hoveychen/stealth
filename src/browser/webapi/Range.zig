@@ -23,6 +23,7 @@ const Frame = @import("../Frame.zig");
 
 const Node = @import("Node.zig");
 const DOMRect = @import("DOMRect.zig");
+const DOMRectList = @import("collections/DOMRectList.zig");
 const DocumentFragment = @import("DocumentFragment.zig");
 const AbstractRange = @import("AbstractRange.zig");
 
@@ -822,12 +823,12 @@ pub fn getBoundingClientRect(self: *const Range, frame: *Frame) !*DOMRect {
     return element.getBoundingClientRect(frame);
 }
 
-pub fn getClientRects(self: *const Range, frame: *Frame) ![]*DOMRect {
+pub fn getClientRects(self: *const Range, frame: *Frame) !*DOMRectList {
     if (self._proto.getCollapsed()) {
-        return &.{};
+        return frame._factory.create(DOMRectList{});
     }
     const element = self.getContainerElement() orelse {
-        return &.{};
+        return frame._factory.create(DOMRectList{});
     };
     return element.getClientRects(frame);
 }

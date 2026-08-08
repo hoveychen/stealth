@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<head>
+  <title>DOMError Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=dom_error_basics>
+  {
+    const e = new DOMError('AbortError', 'msg');
+    testing.expectEqual('AbortError', e.name);
+    testing.expectEqual('msg', e.message);
+    testing.expectEqual('[object DOMError]', String(e));
+    testing.expectEqual('[object DOMError]', Object.prototype.toString.call(e));
+    testing.expectEqual('', Object.getOwnPropertyNames(e).join(','));
+
+    // Deliberately not an Error: the interface predates DOMException and never
+    // inherited from Error.
+    testing.expectFalse(e instanceof Error);
+    testing.expectTrue(Object.getPrototypeOf(DOMError.prototype) === Object.prototype);
+    testing.expectEqual(undefined, e.stack);
+  }
+</script>
+
+<script id=dom_error_arity_and_coercion>
+  {
+    testing.expectEqual(1, DOMError.length);
+
+    // The message is optional and defaults to the empty string.
+    testing.expectEqual('', new DOMError('X').message);
+
+    // No [LegacyNullToEmptyString] on either parameter, so null stringifies.
+    testing.expectEqual('null', new DOMError(null).name);
+    testing.expectEqual('', new DOMError(null).message);
+
+    const numbers = new DOMError(5, 6);
+    testing.expectEqual('5', numbers.name);
+    testing.expectEqual('6', numbers.message);
+
+    let err;
+    try { new DOMError(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual("Failed to construct 'DOMError': 1 argument required, but only 0 present.", err.message);
+
+    err = undefined;
+    try { DOMError('X'); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'DOMError': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+      err.message);
+  }
+</script>
+
+<script id=dom_error_members_live_on_the_prototype>
+  {
+    for (const key of ['name', 'message']) {
+      const d = Object.getOwnPropertyDescriptor(DOMError.prototype, key);
+      testing.expectEqual('function', typeof d.get);
+      testing.expectEqual(undefined, d.set);
+      testing.expectTrue(d.enumerable);
+      testing.expectTrue(d.configurable);
+    }
+    testing.expectEqual('DOMError', DOMError.prototype[Symbol.toStringTag]);
+    // A thrown DOMError is still just an object.
+    let caught;
+    try { throw new DOMError('X', 'm'); } catch (e) { caught = e; }
+    testing.expectEqual('[object DOMError]', Object.prototype.toString.call(caught));
+  }
+</script>

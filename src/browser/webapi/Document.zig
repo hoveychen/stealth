@@ -35,6 +35,7 @@ const Selector = @import("selector/Selector.zig");
 const DOMTreeWalker = @import("DOMTreeWalker.zig");
 const DOMNodeIterator = @import("DOMNodeIterator.zig");
 const DOMImplementation = @import("DOMImplementation.zig");
+const DOMException = @import("DOMException.zig");
 const StyleSheetList = @import("css/StyleSheetList.zig");
 const FontFaceSet = @import("css/FontFaceSet.zig");
 const Selection = @import("Selection.zig");
@@ -1329,7 +1330,15 @@ pub fn exitFullscreen(_: *const Document, exec: *const js.Execution) js.Promise 
 }
 
 pub fn exitPictureInPicture(_: *const Document, exec: *const js.Execution) js.Promise {
-    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidStateError } });
+    // Chrome names the operation and says what is missing (measured); the bare
+    // InvalidStateError this used to reject with printed the generic
+    // "The object is in an invalid state".
+    var resolver = exec.js.local.?.createPromiseResolver();
+    resolver.reject("Document.exitPictureInPicture", DOMException.init(
+        "Failed to execute 'exitPictureInPicture' on 'Document': There is no Picture-in-Picture element in this document.",
+        "InvalidStateError",
+    ));
+    return resolver.promise();
 }
 
 // Document-wide animations. Element.getAnimations already reports none; there

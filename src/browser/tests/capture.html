@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<head>
+  <title>CaptureController Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+  <div id=target>x</div>
+</body>
+
+<script id=capture_controller>
+  {
+    const c = new CaptureController();
+    testing.expectTrue(c instanceof EventTarget);
+    testing.expectEqual('[object CaptureController]', Object.prototype.toString.call(c));
+    testing.expectEqual(null, c.zoomLevel);
+    testing.expectEqual(null, c.onzoomlevelchange);
+    testing.expectEqual(undefined, c.setFocusBehavior('focus-captured-surface'));
+  }
+</script>
+
+<script id=focus_behavior_enum>
+  {
+    const c = new CaptureController();
+    let err;
+    try { c.setFocusBehavior('nope'); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'setFocusBehavior' on 'CaptureController': The provided value 'nope' is not a valid enum value of type CaptureStartFocusBehavior.",
+      err.message);
+
+    err = undefined;
+    try { c.setFocusBehavior(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'setFocusBehavior' on 'CaptureController': 1 argument required, but only 0 present.",
+      err.message);
+  }
+</script>
+
+<script id=not_capturing>
+  {
+    const c = new CaptureController();
+    let err;
+    try { c.getSupportedZoomLevels(); } catch (e) { err = e; }
+    testing.expectEqual('InvalidStateError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'getSupportedZoomLevels' on 'CaptureController': Not actively capturing.",
+      err.message);
+
+    // The zoom operations answer a promise even with no capture running.
+    for (const p of [c.increaseZoomLevel(), c.decreaseZoomLevel(), c.resetZoomLevel(), c.forwardWheel(null)]) {
+      testing.expectTrue(p instanceof Promise);
+      p.catch(() => {});
+    }
+  }
+</script>
+
+<script type=module id=zoom_rejects>
+  let err;
+  try { await new CaptureController().increaseZoomLevel(); } catch (e) { err = e; }
+  testing.expectEqual('InvalidStateError', err.name);
+  testing.expectEqual(
+    "Failed to execute 'increaseZoomLevel' on 'CaptureController': Not actively capturing.",
+    err.message);
+</script>
+
+<script type=module id=exit_picture_in_picture>
+  let err;
+  try { await document.exitPictureInPicture(); } catch (e) { err = e; }
+  testing.expectEqual('InvalidStateError', err.name);
+  testing.expectEqual(
+    "Failed to execute 'exitPictureInPicture' on 'Document': There is no Picture-in-Picture element in this document.",
+    err.message);
+</script>
+
+<script type=module id=crop_target>
+  const target = await CropTarget.fromElement(document.getElementById('target'));
+  testing.expectEqual('[object CropTarget]', Object.prototype.toString.call(target));
+  testing.expectTrue(target instanceof CropTarget);
+  // A fresh handle per call.
+  const again = await CropTarget.fromElement(document.getElementById('target'));
+  testing.expectFalse(target === again);
+  testing.expectEqual(1, CropTarget.fromElement.length);
+
+  let err;
+  try { await CropTarget.fromElement({}); } catch (e) { err = e; }
+  testing.expectEqual('TypeError', err.name);
+  testing.expectEqual(
+    "Failed to execute 'fromElement' on 'CropTarget': parameter 1 is not of type 'Element'.",
+    err.message);
+
+  err = undefined;
+  try { await CropTarget.fromElement(); } catch (e) { err = e; }
+  testing.expectEqual(
+    "Failed to execute 'fromElement' on 'CropTarget': 1 argument required, but only 0 present.",
+    err.message);
+</script>
+
+<script id=overconstrained_error>
+  {
+    const e = new OverconstrainedError('width', 'nope');
+    testing.expectEqual('OverconstrainedError', e.name);
+    testing.expectEqual('nope', e.message);
+    testing.expectEqual('width', e.constraint);
+    testing.expectEqual(0, e.code);
+    testing.expectEqual('OverconstrainedError: nope', String(e));
+    testing.expectTrue(e instanceof DOMException);
+    testing.expectTrue(e instanceof Error);
+    testing.expectEqual('', new OverconstrainedError('width').message);
+    testing.expectEqual(1, OverconstrainedError.length);
+
+    let err;
+    try { new OverconstrainedError(); } catch (x) { err = x; }
+    testing.expectEqual(
+      "Failed to construct 'OverconstrainedError': 1 argument required, but only 0 present.",
+      err.message);
+  }
+</script>
+
+<script id=unreachable_interfaces>
+  {
+    // No compositor and no capture, so neither is ever handed out -- but both
+    // are on the window of every Chrome.
+    for (const ctor of [PictureInPictureWindow, BrowserCaptureMediaStreamTrack, CropTarget]) {
+      let err;
+      try { new ctor(); } catch (e) { err = e; }
+      testing.expectEqual('TypeError', err.name);
+    }
+    testing.expectTrue(Object.getPrototypeOf(BrowserCaptureMediaStreamTrack.prototype) === MediaStreamTrack.prototype);
+    testing.expectEqual(1, BrowserCaptureMediaStreamTrack.prototype.cropTo.length);
+    testing.expectEqual(1, BrowserCaptureMediaStreamTrack.prototype.restrictTo.length);
+    testing.expectEqual(true, document.pictureInPictureEnabled);
+    testing.expectEqual(null, document.pictureInPictureElement);
+  }
+</script>

@@ -1189,4 +1189,48 @@
     });
 }
 </script>
+
+<!-- IDBOpenDBRequest: what open() and deleteDatabase() actually return. The two
+     event-handler attributes Chrome puts here and nowhere else, and the parent's
+     own seven members in Chrome's order (measured, probe-win36). -->
+<script id="open_db_request_shape">
+{
+    testing.expectEqual('onblocked,onupgradeneeded',
+        Object.getOwnPropertyNames(IDBOpenDBRequest.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectTrue(Object.getPrototypeOf(IDBOpenDBRequest.prototype) === IDBRequest.prototype);
+    testing.expectTrue(Object.getPrototypeOf(IDBOpenDBRequest) === IDBRequest);
+    testing.expectEqual('IDBOpenDBRequest', IDBOpenDBRequest.prototype[Symbol.toStringTag]);
+    testing.expectEqual(0, IDBOpenDBRequest.length);
+
+    testing.expectEqual('result,error,source,transaction,readyState,onsuccess,onerror',
+        Object.getOwnPropertyNames(IDBRequest.prototype).filter((k) => k !== 'constructor').join(','));
+
+    let err;
+    try { new IDBOpenDBRequest(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual("Failed to construct 'IDBOpenDBRequest': Illegal constructor", err.message);
+
+    const open = indexedDB.open("open-db-request-db", 1);
+    testing.expectTrue(open instanceof IDBOpenDBRequest);
+    testing.expectTrue(open instanceof IDBRequest);
+    testing.expectEqual('[object IDBOpenDBRequest]', String(open));
+    testing.expectEqual('pending', open.readyState);
+    testing.expectEqual(null, open.onblocked);
+    testing.expectEqual(null, open.onupgradeneeded);
+    testing.expectEqual('', Object.getOwnPropertyNames(open).join(','));
+
+    // The handler attributes take a function and ignore anything else.
+    const handler = () => {};
+    open.onblocked = handler;
+    testing.expectEqual(handler, open.onblocked);
+    open.onblocked = 5;
+    testing.expectEqual(null, open.onblocked);
+
+    testing.expectTrue(indexedDB.deleteDatabase("open-db-request-gone") instanceof IDBOpenDBRequest);
+
+    // A request made inside a transaction is a plain IDBRequest, so it has no
+    // onupgradeneeded at all -- that used to leak down from the parent.
+    testing.expectTrue(!('onupgradeneeded' in IDBRequest.prototype));
+}
+</script>
 </body>

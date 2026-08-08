@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<head>
+  <title>MathMLElement Test</title>
+  <script src="../testing.js"></script>
+</head>
+
+<body>
+  <div id=host></div>
+</body>
+
+<script id=mathml_created_by_namespace>
+  {
+    const MATHML = 'http://www.w3.org/1998/Math/MathML';
+    const m = document.createElementNS(MATHML, 'math');
+    testing.expectEqual('[object MathMLElement]', Object.prototype.toString.call(m));
+    testing.expectEqual('MathMLElement', m.constructor.name);
+    testing.expectEqual(MATHML, m.namespaceURI);
+    testing.expectEqual('math', m.tagName);
+    testing.expectEqual('math', m.localName);
+    testing.expectTrue(m instanceof MathMLElement);
+    testing.expectTrue(m instanceof Element);
+    testing.expectTrue(m instanceof Node);
+    testing.expectTrue(m instanceof EventTarget);
+    testing.expectFalse(m instanceof HTMLElement);
+    testing.expectFalse(m instanceof SVGElement);
+
+    // MathMLElement.prototype sits directly on Element.prototype.
+    testing.expectTrue(Object.getPrototypeOf(MathMLElement.prototype) === Element.prototype);
+    testing.expectTrue(Object.getPrototypeOf(MathMLElement) === Element);
+
+    // Case-preserving, like SVG.
+    const spaced = document.createElementNS(MATHML, 'mSpace');
+    testing.expectEqual('mSpace', spaced.tagName);
+    testing.expectEqual('mSpace', spaced.localName);
+    testing.expectEqual('[object MathMLElement]', Object.prototype.toString.call(spaced));
+
+    // The HTML namespace is unaffected: createElement never reaches MathML.
+    testing.expectEqual('[object HTMLUnknownElement]',
+      Object.prototype.toString.call(document.createElement('math')));
+
+    let err;
+    try { new MathMLElement(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+  }
+</script>
+
+<script id=mathml_parsed_from_markup>
+  {
+    const host = document.getElementById('host');
+    host.innerHTML = '<math><mi>x</mi></math>';
+    const m = host.firstElementChild;
+    testing.expectEqual('[object MathMLElement]', Object.prototype.toString.call(m));
+    testing.expectEqual('http://www.w3.org/1998/Math/MathML', m.namespaceURI);
+    testing.expectEqual('math', m.tagName);
+    testing.expectEqual('[object MathMLElement]', Object.prototype.toString.call(m.firstElementChild));
+    testing.expectEqual('mi', m.firstElementChild.tagName);
+
+    // Markup lowercases the tag before the element is made.
+    host.innerHTML = '<MATH><MI>x</MI></MATH>';
+    testing.expectEqual('math', host.firstElementChild.tagName);
+    testing.expectEqual('[object MathMLElement]', Object.prototype.toString.call(host.firstElementChild));
+    testing.expectEqual('mi', host.firstElementChild.firstElementChild.tagName);
+
+    testing.expectTrue(m.matches('math'));
+  }
+</script>
+
+<script id=mathml_serialises_and_reflects>
+  {
+    const m = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'math');
+    m.setAttribute('display', 'block');
+    testing.expectEqual('<math display="block"></math>', m.outerHTML);
+
+    m.style.color = 'red';
+    testing.expectEqual('color: red;', m.getAttribute('style'));
+    testing.expectEqual('red', m.style.color);
+    testing.expectEqual('[object CSSStyleDeclaration]', Object.prototype.toString.call(m.style));
+    testing.expectEqual('[object StylePropertyMap]', Object.prototype.toString.call(m.attributeStyleMap));
+    testing.expectEqual('[object DOMStringMap]', Object.prototype.toString.call(m.dataset));
+
+    testing.expectEqual(-1, m.tabIndex);
+    m.tabIndex = 3;
+    testing.expectEqual('3', m.getAttribute('tabindex'));
+    testing.expectEqual(3, m.tabIndex);
+
+    testing.expectEqual('', m.nonce);
+    testing.expectFalse(m.autofocus);
+    m.autofocus = true;
+    testing.expectEqual('', m.getAttribute('autofocus'));
+    testing.expectTrue(m.autofocus);
+
+    testing.expectEqual('{}', JSON.stringify(m.focusGroup));
+    testing.expectFalse(m.focusGroupStart);
+    testing.expectEqual('function', typeof m.focus);
+    testing.expectEqual('function', typeof m.blur);
+
+    // className comes from Element and is a plain string here, not SVG's
+    // SVGAnimatedString.
+    testing.expectEqual('string', typeof m.className);
+    testing.expectEqual('', m.className);
+  }
+</script>
+
+<script id=mathml_event_handlers>
+  {
+    const m = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'math');
+    let hits = 0;
+    m.onclick = () => { hits++; };
+    testing.expectEqual('function', typeof m.onclick);
+    m.dispatchEvent(new Event('click'));
+    testing.expectEqual(1, hits);
+    m.onclick = null;
+    testing.expectEqual(null, m.onclick);
+    m.dispatchEvent(new Event('click'));
+    testing.expectEqual(1, hits);
+  }
+</script>
+
+<script id=mathml_prototype_members>
+  {
+    const own = Object.getOwnPropertyNames(MathMLElement.prototype).filter((k) => k !== 'constructor');
+    // Chrome's order, spot-checked at both ends and around the non-handler run.
+    testing.expectEqual('onabort', own[0]);
+    testing.expectEqual('onpointerrawupdate', own[own.length - 1]);
+    testing.expectEqual(
+      'dataset,nonce,autofocus,tabIndex,style,attributeStyleMap,blur,focus,onscrollsnapchange,onscrollsnapchanging,focusGroup,focusGroupStart,onpointerrawupdate',
+      own.slice(own.indexOf('dataset')).join(','));
+    testing.expectEqual(112, own.length);
+    testing.expectEqual('MathMLElement', MathMLElement.prototype[Symbol.toStringTag]);
+
+    // dataset and attributeStyleMap are readonly; style is not.
+    testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(MathMLElement.prototype, 'dataset').set);
+    testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(MathMLElement.prototype, 'attributeStyleMap').set);
+    testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(MathMLElement.prototype, 'style').set);
+    testing.expectEqual('function', typeof Object.getOwnPropertyDescriptor(MathMLElement.prototype, 'focusGroup').set);
+
+    const blur = Object.getOwnPropertyDescriptor(MathMLElement.prototype, 'blur');
+    testing.expectEqual(0, blur.value.length);
+    testing.expectTrue(blur.enumerable);
+    testing.expectTrue(blur.writable);
+  }
+</script>

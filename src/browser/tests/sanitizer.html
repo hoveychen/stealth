@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<head>
+  <title>Sanitizer Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=sanitizer_shape>
+  {
+    const s = new Sanitizer();
+    testing.expectEqual('[object Sanitizer]', Object.prototype.toString.call(s));
+    testing.expectEqual('', Object.getOwnPropertyNames(s).join(','));
+    testing.expectEqual(0, Sanitizer.length);
+    testing.expectEqual(
+      'allowAttribute,allowElement,get,removeAttribute,removeElement,removeUnsafe,replaceElementWithChildren,setComments,setDataAttributes,allowProcessingInstruction,removeProcessingInstruction',
+      Object.getOwnPropertyNames(Sanitizer.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual(0, Sanitizer.prototype.get.length);
+    testing.expectEqual(0, Sanitizer.prototype.removeUnsafe.length);
+    testing.expectEqual(1, Sanitizer.prototype.setComments.length);
+    testing.expectEqual(1, Sanitizer.prototype.allowProcessingInstruction.length);
+
+    let err;
+    try { Sanitizer(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'Sanitizer': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+      err.message);
+  }
+</script>
+
+<script id=sanitizer_default_config>
+  {
+    for (const s of [new Sanitizer(), new Sanitizer(undefined), new Sanitizer('default')]) {
+      const cfg = s.get();
+      testing.expectEqual('attributes,comments,dataAttributes,elements', Object.keys(cfg).join(','));
+      testing.expectEqual(121, cfg.elements.length);
+      testing.expectEqual(58, cfg.attributes.length);
+      testing.expectFalse(cfg.comments);
+      testing.expectFalse(cfg.dataAttributes);
+
+      // Sorted by (namespace URI, name), which puts MathML first.
+      testing.expectEqual('math', cfg.elements[0].name);
+      testing.expectEqual('http://www.w3.org/1998/Math/MathML', cfg.elements[0].namespace);
+      testing.expectEqual('name,namespace,attributes', Object.keys(cfg.elements[0]).join(','));
+      testing.expectEqual(0, cfg.elements[0].attributes.length);
+
+      const mo = cfg.elements.find((e) => e.name === 'mo');
+      testing.expectEqual('fence,form,largeop,lspace,maxsize,minsize,movablelimits,rspace,separator,stretchy,symmetric',
+        mo.attributes.map((a) => a.name).join(','));
+      testing.expectEqual(null, mo.attributes[0].namespace);
+
+      const a = cfg.elements.filter((e) => e.name === 'a');
+      testing.expectEqual('http://www.w3.org/1999/xhtml', a[0].namespace);
+      testing.expectEqual('http://www.w3.org/2000/svg', a[1].namespace);
+
+      testing.expectEqual('alignment-baseline', cfg.attributes[0].name);
+      testing.expectEqual('writing-mode', cfg.attributes[57].name);
+      testing.expectEqual('name,namespace', Object.keys(cfg.attributes[0]).join(','));
+    }
+
+    // A fresh object each call.
+    const s = new Sanitizer();
+    testing.expectFalse(s.get() === s.get());
+  }
+</script>
+
+<script id=sanitizer_preset_enum>
+  {
+    for (const bad of [5, 'baseline', '']) {
+      let err;
+      try { new Sanitizer(bad); } catch (e) { err = e; }
+      testing.expectEqual('TypeError', err.name);
+      testing.expectEqual(
+        `Failed to construct 'Sanitizer': The provided value '${bad}' is not a valid enum value of type SanitizerPresets.`,
+        err.message);
+    }
+  }
+</script>
+
+<script id=sanitizer_dictionary_normalisation>
+  {
+    // null is an empty dictionary, not a preset. A dictionary defaults comments
+    // to true and lands in remove mode on both axes.
+    for (const arg of [null, {}, { nope: 1 }]) {
+      const cfg = new Sanitizer(arg).get();
+      testing.expectEqual('comments,removeAttributes,removeElements', Object.keys(cfg).join(','));
+      testing.expectTrue(cfg.comments);
+      testingEmpty(cfg.removeAttributes);
+      testingEmpty(cfg.removeElements);
+    }
+
+    let cfg = new Sanitizer({ elements: ['div'] }).get();
+    testing.expectEqual('comments,elements,removeAttributes', Object.keys(cfg).join(','));
+    testing.expectEqual('div', cfg.elements[0].name);
+    testing.expectEqual('http://www.w3.org/1999/xhtml', cfg.elements[0].namespace);
+    testing.expectEqual('name,namespace,removeAttributes', Object.keys(cfg.elements[0]).join(','));
+
+    cfg = new Sanitizer({ removeElements: ['script'] }).get();
+    testing.expectEqual('comments,removeAttributes,removeElements', Object.keys(cfg).join(','));
+    testing.expectEqual('script', cfg.removeElements[0].name);
+
+    // An attributes allow-list brings dataAttributes: true along with it.
+    cfg = new Sanitizer({ attributes: ['title'] }).get();
+    testing.expectEqual('attributes,comments,dataAttributes,removeElements', Object.keys(cfg).join(','));
+    testing.expectTrue(cfg.dataAttributes);
+    testing.expectEqual('title', cfg.attributes[0].name);
+    testing.expectEqual(null, cfg.attributes[0].namespace);
+
+    cfg = new Sanitizer({ removeAttributes: ['onclick'] }).get();
+    testing.expectEqual('comments,removeAttributes,removeElements', Object.keys(cfg).join(','));
+    testing.expectEqual('onclick', cfg.removeAttributes[0].name);
+
+    cfg = new Sanitizer({ comments: false }).get();
+    testing.expectFalse(cfg.comments);
+
+    cfg = new Sanitizer({ replaceWithChildrenElements: ['b'] }).get();
+    testing.expectEqual('comments,removeAttributes,removeElements,replaceWithChildrenElements', Object.keys(cfg).join(','));
+    testing.expectEqual('b', cfg.replaceWithChildrenElements[0].name);
+    testing.expectEqual('name,namespace', Object.keys(cfg.replaceWithChildrenElements[0]).join(','));
+
+    // Element names are not normalised, and an unknown tag is fine.
+    testing.expectEqual('DIV', new Sanitizer({ elements: ['DIV'] }).get().elements[0].name);
+    testing.expectEqual('not-a-real-tag', new Sanitizer({ elements: ['not-a-real-tag'] }).get().elements[0].name);
+    testing.expectEqual('http://www.w3.org/2000/svg',
+      new Sanitizer({ elements: [{ name: 'circle', namespace: 'http://www.w3.org/2000/svg' }] }).get().elements[0].namespace);
+
+    // Per-element lists keep whichever key was given.
+    cfg = new Sanitizer({ elements: [{ name: 'div', attributes: ['title'] }] }).get();
+    testing.expectEqual('name,namespace,attributes', Object.keys(cfg.elements[0]).join(','));
+    testing.expectEqual('title', cfg.elements[0].attributes[0].name);
+    cfg = new Sanitizer({ elements: [{ name: 'div', removeAttributes: ['title'] }] }).get();
+    testing.expectEqual('name,namespace,removeAttributes', Object.keys(cfg.elements[0]).join(','));
+    testing.expectEqual('title', cfg.elements[0].removeAttributes[0].name);
+  }
+
+  function testingEmpty(array) {
+    testing.expectTrue(Array.isArray(array));
+    testing.expectEqual(0, array.length);
+  }
+</script>
+
+<script id=sanitizer_invalid_configurations>
+  {
+    const bad = [
+      { dataAttributes: false },
+      { elements: ['div'], removeElements: ['script'] },
+      { elements: ['div', 'div'] },
+      { attributes: ['title'], removeAttributes: ['title'] },
+    ];
+    for (const config of bad) {
+      let err;
+      try { new Sanitizer(config); } catch (e) { err = e; }
+      testing.expectEqual('TypeError', err.name);
+      testing.expectEqual("Failed to construct 'Sanitizer': Invalid Sanitizer configuration.", err.message);
+    }
+
+    let err;
+    try { new Sanitizer({ elements: 5 }); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'Sanitizer': Failed to read the 'elements' property from 'SanitizerConfig': The provided value cannot be converted to a sequence.",
+      err.message);
+  }
+</script>
+
+<script id=sanitizer_mutators_sort_and_report>
+  {
+    const s = new Sanitizer({ elements: ['div'] });
+    testing.expectTrue(s.allowElement('span'));
+    testing.expectTrue(s.allowElement('b'));
+    testing.expectEqual('b,div,span', s.get().elements.map((e) => e.name).join(','));
+    testing.expectTrue(s.removeElement('span'));
+    testing.expectEqual('b,div', s.get().elements.map((e) => e.name).join(','));
+
+    // In remove-attribute mode, "allow" means "take off the remove list", so a
+    // name that was never on it reports no change.
+    testing.expectFalse(s.allowAttribute('title'));
+    testing.expectEqual(0, s.get().removeAttributes.length);
+    testing.expectTrue(s.removeAttribute('title'));
+    testing.expectEqual('title', s.get().removeAttributes[0].name);
+
+    testing.expectEqual(undefined, s.setComments(false));
+    testing.expectFalse(s.get().comments);
+    testing.expectEqual(undefined, s.setDataAttributes(false));
+    testing.expectEqual('comments,dataAttributes,elements,removeAttributes', Object.keys(s.get()).join(','));
+    testing.expectFalse(s.get().dataAttributes);
+
+    // Replacing an element with its children takes it off the allow-list.
+    const r = new Sanitizer({ elements: ['div'] });
+    testing.expectTrue(r.replaceElementWithChildren('div'));
+    const cfg = r.get();
+    testing.expectEqual('comments,elements,removeAttributes,replaceWithChildrenElements', Object.keys(cfg).join(','));
+    testing.expectEqual(0, cfg.elements.length);
+    testing.expectEqual('div', cfg.replaceWithChildrenElements[0].name);
+
+    testing.expectFalse(new Sanitizer().allowProcessingInstruction('x'));
+    testing.expectTrue(new Sanitizer().removeProcessingInstruction('x'));
+  }
+</script>
+
+<script id=sanitizer_mutators_on_the_baseline>
+  {
+    const s = new Sanitizer();
+    // div is already allowed, so nothing changes.
+    s.allowElement('div');
+    testing.expectEqual(121, s.get().elements.length);
+    s.removeElement('div');
+    testing.expectEqual(120, s.get().elements.length);
+    testing.expectFalse(s.get().elements.some((e) => e.name === 'div'));
+    testing.expectEqual('attributes,comments,dataAttributes,elements', Object.keys(s.get()).join(','));
+
+    // In allow-attribute mode the two attribute operations edit that list.
+    s.allowAttribute('onclick');
+    testing.expectEqual(59, s.get().attributes.length);
+    testing.expectTrue(s.get().attributes.some((a) => a.name === 'onclick'));
+    s.removeAttribute('color');
+    testing.expectEqual(58, s.get().attributes.length);
+    testing.expectFalse(s.get().attributes.some((a) => a.name === 'color'));
+
+    // Sorted on insert.
+    const t = new Sanitizer();
+    t.allowAttribute('zzz');
+    t.allowAttribute('aaa');
+    const names = t.get().attributes.map((a) => a.name);
+    testing.expectEqual(0, names.indexOf('aaa'));
+    testing.expectEqual(59, names.indexOf('zzz'));
+    testing.expectEqual(60, names.length);
+  }
+</script>
+
+<script id=sanitizer_remove_unsafe>
+  {
+    // The baseline already excludes everything removeUnsafe drops.
+    const base = new Sanitizer();
+    testing.expectEqual(undefined, base.removeUnsafe());
+    testing.expectEqual(121, base.get().elements.length);
+    testing.expectEqual(58, base.get().attributes.length);
+
+    // Allow mode: the unsafe elements come off the list.
+    const allow = new Sanitizer({ elements: ['div', 'script', 'iframe', 'object', 'embed', 'frame', 'style', 'title'] });
+    allow.removeUnsafe();
+    testing.expectEqual('div,style,title', allow.get().elements.map((e) => e.name).join(','));
+    testing.expectEqual(140, allow.get().removeAttributes.length);
+    testing.expectEqual('onabort', allow.get().removeAttributes[0].name);
+    testing.expectEqual('onwheel', allow.get().removeAttributes[139].name);
+
+    // Remove mode: they go onto the remove list instead -- script twice, once
+    // per namespace.
+    const remove = new Sanitizer({ removeElements: ['b'] });
+    remove.removeUnsafe();
+    const cfg = remove.get();
+    testing.expectEqual('comments,removeAttributes,removeElements', Object.keys(cfg).join(','));
+    testing.expectEqual('b,embed,frame,iframe,object,script,script,use', cfg.removeElements.map((e) => e.name).join(','));
+    testing.expectEqual('http://www.w3.org/1999/xhtml', cfg.removeElements[5].namespace);
+    testing.expectEqual('http://www.w3.org/2000/svg', cfg.removeElements[6].namespace);
+    testing.expectEqual(140, cfg.removeAttributes.length);
+  }
+</script>
+
+<script id=sanitizer_argument_checks>
+  {
+    const s = new Sanitizer();
+    for (const member of ['allowAttribute', 'allowElement', 'removeAttribute', 'removeElement', 'replaceElementWithChildren', 'setComments', 'setDataAttributes', 'allowProcessingInstruction', 'removeProcessingInstruction']) {
+      let err;
+      try { s[member](); } catch (e) { err = e; }
+      testing.expectEqual('TypeError', err.name);
+      testing.expectEqual(
+        `Failed to execute '${member}' on 'Sanitizer': 1 argument required, but only 0 present.`,
+        err.message);
+    }
+
+    let err;
+    try { s.allowElement({}); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'allowElement' on 'Sanitizer': Failed to read the 'name' property from 'SanitizerElementNamespace': Required member is undefined.",
+      err.message);
+
+    // A non-string name stringifies.
+    testing.expectTrue(new Sanitizer({ elements: ['div'] }).allowElement(5));
+  }
+</script>

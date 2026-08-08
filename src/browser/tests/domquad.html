@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<head>
+  <title>DOMQuad Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<script id=default_construct>
+  {
+    const q = new DOMQuad();
+    for (const p of [q.p1, q.p2, q.p3, q.p4]) {
+      testing.expectTrue(p instanceof DOMPoint);
+      testing.expectEqual(0, p.x);
+      testing.expectEqual(0, p.y);
+      testing.expectEqual(0, p.z);
+      testing.expectEqual(1, p.w);
+    }
+  }
+</script>
+
+<script id=construct_with_points>
+  {
+    const q = new DOMQuad({ x: 1, y: 1 }, { x: 4, y: 1 }, { x: 4, y: 5 }, { x: 1, y: 5 });
+    testing.expectEqual(4, q.p3.x);
+    testing.expectEqual(5, q.p3.y);
+    const b = q.getBounds();
+    testing.expectTrue(b instanceof DOMRect);
+    testing.expectEqual(1, b.x);
+    testing.expectEqual(1, b.y);
+    testing.expectEqual(3, b.width);
+    testing.expectEqual(4, b.height);
+  }
+</script>
+
+<script id=points_are_mutable_and_stable>
+  {
+    const q = new DOMQuad();
+    q.p1.x = 9;
+    testing.expectEqual(9, q.p1.x);
+  }
+</script>
+
+<script id=from_rect>
+  {
+    const q = DOMQuad.fromRect({ x: 1, y: 2, width: 3, height: 4 });
+    testing.expectEqual(1, q.p1.x);
+    testing.expectEqual(2, q.p1.y);
+    testing.expectEqual(4, q.p2.x);
+    testing.expectEqual(2, q.p2.y);
+    testing.expectEqual(4, q.p3.x);
+    testing.expectEqual(6, q.p3.y);
+    testing.expectEqual(1, q.p4.x);
+    testing.expectEqual(6, q.p4.y);
+  }
+</script>
+
+<script id=from_rect_negative_bounds_normalise>
+  {
+    const b = DOMQuad.fromRect({ x: 5, y: 5, width: -3, height: -4 }).getBounds();
+    testing.expectEqual(2, b.x);
+    testing.expectEqual(1, b.y);
+    testing.expectEqual(3, b.width);
+    testing.expectEqual(4, b.height);
+  }
+</script>
+
+<script id=from_quad_reads_members_independently>
+  {
+    const q = DOMQuad.fromQuad({ p1: { x: 5, y: 6 } });
+    testing.expectEqual(5, q.p1.x);
+    testing.expectEqual(6, q.p1.y);
+    testing.expectEqual(0, q.p2.x);
+    testing.expectEqual(0, q.p2.y);
+  }
+</script>
+
+<script id=from_rect_empty>
+  {
+    const b = DOMQuad.fromRect().getBounds();
+    testing.expectEqual(0, b.x);
+    testing.expectEqual(0, b.width);
+  }
+</script>
+
+<script id=to_json>
+  {
+    const q = DOMQuad.fromRect({ x: 1, y: 2, width: 3, height: 4 });
+    const j = q.toJSON();
+    testing.expectEqual(1, j.p1.x);
+    testing.expectEqual(2, j.p1.y);
+    testing.expectEqual(4, j.p3.x);
+    testing.expectEqual(6, j.p3.y);
+    testing.expectEqual(1, j.p1.w);
+  }
+</script>
+
+<script id=arities_and_names>
+  {
+    testing.expectEqual(0, DOMQuad.length);
+    testing.expectEqual('DOMQuad', DOMQuad.name);
+    testing.expectEqual(0, DOMQuad.fromRect.length);
+    testing.expectEqual(0, DOMQuad.fromQuad.length);
+    testing.expectEqual('[object DOMQuad]', Object.prototype.toString.call(new DOMQuad()));
+  }
+</script>

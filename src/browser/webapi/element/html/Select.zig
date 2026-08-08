@@ -130,6 +130,20 @@ pub fn setValue(self: *Select, value: []const u8, frame: *Frame) !void {
     }
 }
 
+/// The position of `target` among this select's options in tree order, or
+/// null when it is not one of them. Backs HTMLOptionElement.index.
+pub fn indexOfOption(self: *const Select, target: *const Option) ?i32 {
+    var index: i32 = 0;
+    var it = OptionIterator.init(self);
+    while (it.next()) |option| {
+        if (option == target) {
+            return index;
+        }
+        index += 1;
+    }
+    return null;
+}
+
 pub fn getSelectedIndex(self: *Select) i32 {
     var index: i32 = 0;
     var has_options = false;

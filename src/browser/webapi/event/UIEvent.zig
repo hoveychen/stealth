@@ -22,6 +22,7 @@ const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 
 const Event = @import("../Event.zig");
+const InputDeviceCapabilities = @import("../InputDeviceCapabilities.zig");
 const Window = @import("../Window.zig");
 
 const String = lp.String;
@@ -111,7 +112,12 @@ pub fn getDetail(self: *UIEvent) u32 {
     return self._detail;
 }
 
-// sourceCapabilities not implemented
+/// The device behind the event. Null on every event here, which is also what
+/// Chrome answers for a script-constructed one (measured on Chrome 150:
+/// `new UIEvent('click').sourceCapabilities` is null).
+pub fn getSourceCapabilities(_: *const UIEvent) ?*InputDeviceCapabilities {
+    return null;
+}
 
 pub fn getView(self: *UIEvent, frame: *Frame) ?*Window {
     if (self._view) |view| {
@@ -168,8 +174,12 @@ pub const JsApi = struct {
     };
 
     pub const constructor = bridge.constructor(UIEvent.init, .{});
-    pub const detail = bridge.accessor(UIEvent.getDetail, null, .{});
+    // Chrome's own prototype order is view, detail, sourceCapabilities, which,
+    // initUIEvent (measured on Chrome 150, probe-win36). Chrome 150 also has a
+    // `pseudoTarget` after initUIEvent, which is not measured yet.
     pub const view = bridge.accessor(UIEvent.getView, null, .{});
+    pub const detail = bridge.accessor(UIEvent.getDetail, null, .{});
+    pub const sourceCapabilities = bridge.accessor(UIEvent.getSourceCapabilities, null, .{});
     pub const which = bridge.accessor(UIEvent.getWhich, null, .{});
     pub const initUIEvent = bridge.function(UIEvent.initUIEvent, .{});
 };

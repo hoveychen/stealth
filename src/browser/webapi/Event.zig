@@ -120,6 +120,18 @@ pub const Type = union(enum) {
     payment_request_update_event: *@import("payment.zig").PaymentRequestUpdateEvent,
     presentation_connection_available_event: *@import("presentation.zig").PresentationConnectionAvailableEvent,
     presentation_connection_close_event: *@import("presentation.zig").PresentationConnectionCloseEvent,
+    animation_playback_event: *@import("event/misc_events.zig").AnimationPlaybackEvent,
+    before_install_prompt_event: *@import("event/misc_events.zig").BeforeInstallPromptEvent,
+    blob_event: *@import("event/misc_events.zig").BlobEvent,
+    clipboard_event: *@import("event/misc_events.zig").ClipboardEvent,
+    content_visibility_auto_state_change_event: *@import("event/misc_events.zig").ContentVisibilityAutoStateChangeEvent,
+    navigate_event: *@import("event/misc_events.zig").NavigateEvent,
+    picture_in_picture_event: *@import("event/misc_events.zig").PictureInPictureEvent,
+    security_policy_violation_event: *@import("event/misc_events.zig").SecurityPolicyViolationEvent,
+    track_event: *@import("event/misc_events.zig").TrackEvent,
+    virtual_keyboard_geometry_change_event: *@import("event/misc_events.zig").VirtualKeyboardGeometryChangeEvent,
+    webgl_context_event: *@import("event/misc_events.zig").WebGLContextEvent,
+    window_controls_overlay_geometry_change_event: *@import("event/misc_events.zig").WindowControlsOverlayGeometryChangeEvent,
 };
 
 pub const Options = struct {
@@ -288,6 +300,18 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .media_stream_event => |e| return if (T == @import("media/streams.zig").MediaStreamEvent) e else null,
         .offline_audio_completion_event => |e| return if (T == @import("audio/events.zig").OfflineAudioCompletionEvent) e else null,
         .audio_processing_event => |e| return if (T == @import("audio/events.zig").AudioProcessingEvent) e else null,
+        .animation_playback_event => |e| return if (T == @import("event/misc_events.zig").AnimationPlaybackEvent) e else null,
+        .before_install_prompt_event => |e| return if (T == @import("event/misc_events.zig").BeforeInstallPromptEvent) e else null,
+        .blob_event => |e| return if (T == @import("event/misc_events.zig").BlobEvent) e else null,
+        .clipboard_event => |e| return if (T == @import("event/misc_events.zig").ClipboardEvent) e else null,
+        .content_visibility_auto_state_change_event => |e| return if (T == @import("event/misc_events.zig").ContentVisibilityAutoStateChangeEvent) e else null,
+        .navigate_event => |e| return if (T == @import("event/misc_events.zig").NavigateEvent) e else null,
+        .picture_in_picture_event => |e| return if (T == @import("event/misc_events.zig").PictureInPictureEvent) e else null,
+        .security_policy_violation_event => |e| return if (T == @import("event/misc_events.zig").SecurityPolicyViolationEvent) e else null,
+        .track_event => |e| return if (T == @import("event/misc_events.zig").TrackEvent) e else null,
+        .virtual_keyboard_geometry_change_event => |e| return if (T == @import("event/misc_events.zig").VirtualKeyboardGeometryChangeEvent) e else null,
+        .webgl_context_event => |e| return if (T == @import("event/misc_events.zig").WebGLContextEvent) e else null,
+        .window_controls_overlay_geometry_change_event => |e| return if (T == @import("event/misc_events.zig").WindowControlsOverlayGeometryChangeEvent) e else null,
     }
     return null;
 }

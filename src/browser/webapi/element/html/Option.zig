@@ -28,6 +28,9 @@ const HtmlElement = @import("../Html.zig");
 
 const String = lp.String;
 
+const Form = Element.Html.Form;
+const Select = Element.Html.Select;
+
 const Option = @This();
 
 pub const Proto = HtmlElement;
@@ -37,6 +40,54 @@ _value: ?[]const u8 = null,
 _selected: bool = false,
 _default_selected: bool = false,
 _disabled: bool = false,
+
+/// The legacy factory function `Option`, which is a second global name for
+/// this same interface. Every argument is optional, so `Option.length` is 0.
+///
+/// The two boolean arguments are not the same thing: the third sets the
+/// `selected` content attribute (which, on a fresh option, drags selectedness
+/// along with it), while the fourth sets selectedness alone. Chrome therefore
+/// answers `new Option('T', 'V', false, true)` with `<option value="V">T</option>`
+/// whose `.selected` is true and `.defaultSelected` false. An absent -- as
+/// opposed to null -- text or value argument sets nothing at all, which is why
+/// both are read as raw values: `new Option(undefined, 'v')` has no text while
+/// `new Option(null, null)` has the string "null" for both. Measured on a
+/// headed Chrome 150 (probe-win36).
+pub fn constructor(
+    text_: ?js.Value,
+    value_: ?js.Value,
+    default_selected: ?bool,
+    selected: ?bool,
+    frame: *Frame,
+) !*Option {
+    const node = try Frame.node_factory.createElementNS(frame, .html, "option", null);
+    const el = node.as(Element);
+
+    if (text_) |text| {
+        if (!text.isUndefined()) {
+            const str = try text.toStringSliceWithAlloc(frame.call_arena);
+            if (str.len != 0) {
+                try node.setTextContent(str, frame);
+            }
+        }
+    }
+
+    if (value_) |value| {
+        if (!value.isUndefined()) {
+            const str = try value.toStringSliceWithAlloc(frame.call_arena);
+            try el.setAttributeSafe(comptime .wrap("value"), .wrap(str), frame);
+        }
+    }
+
+    const self = el.as(Option);
+    if (default_selected orelse false) {
+        try el.setAttributeSafe(comptime .wrap("selected"), comptime .wrap(""), frame);
+    }
+    if (selected orelse false) {
+        self._selected = true;
+    }
+    return self;
+}
 
 pub fn asElement(self: *Option) *Element {
     return self._proto._proto;
@@ -89,6 +140,44 @@ pub fn getDefaultSelected(self: *const Option) bool {
     return self._default_selected;
 }
 
+/// Reflects the `selected` content attribute. Adding or removing it also moves
+/// selectedness, which is what Build.attributeChange/attributeRemove do.
+pub fn setDefaultSelected(self: *Option, default_selected: bool, frame: *Frame) !void {
+    if (default_selected) {
+        return self.asElement().setAttributeSafe(comptime .wrap("selected"), comptime .wrap(""), frame);
+    }
+    return self.asElement().removeAttribute(comptime .wrap("selected"), frame);
+}
+
+/// The form owner of the select this option belongs to, and null for an option
+/// that is not in one -- an option never has a form owner of its own, not even
+/// inside a <form>.
+pub fn getForm(self: *Option, frame: *Frame) ?*Form {
+    const select = self.owningSelect() orelse return null;
+    return select.getForm(frame);
+}
+
+/// The option's position among its select's options, or 0 when it has no
+/// select (measured: a detached `new Option()` answers 0, not -1).
+pub fn getIndex(self: *Option) i32 {
+    const select = self.owningSelect() orelse return 0;
+    return select.indexOfOption(self) orelse 0;
+}
+
+/// The select this option belongs to: its parent, or its parent's parent when
+/// it sits in an <optgroup>.
+fn owningSelect(self: *Option) ?*Select {
+    const parent = self.asNode()._parent orelse return null;
+    if (parent.is(Select)) |select| {
+        return select;
+    }
+    if (parent.is(Element.Html.OptGroup) == null) {
+        return null;
+    }
+    const grand_parent = parent._parent orelse return null;
+    return grand_parent.is(Select);
+}
+
 pub fn getDisabled(self: *const Option) bool {
     return self._disabled;
 }
@@ -100,14 +189,6 @@ pub fn setDisabled(self: *Option, disabled: bool, frame: *Frame) !void {
     } else {
         try self.asElement().removeAttribute(comptime .wrap("disabled"), frame);
     }
-}
-
-pub fn getName(self: *const Option) []const u8 {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("name")) orelse "";
-}
-
-pub fn setName(self: *Option, name: []const u8, frame: *Frame) !void {
-    try self.asElement().setAttributeSafe(comptime .wrap("name"), .wrap(name), frame);
 }
 
 // https://html.spec.whatwg.org/multipage/form-elements.html#dom-option-label
@@ -130,17 +211,28 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "HTMLOptionElement";
+        pub const constructor_alias = "Option";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    pub const constructor = bridge.constructor(Option.constructor, .{ .arity = 0 });
+
+    // Chrome's own member order (measured, probe-win28). There is no `name`
+    // here: HTMLOptionElement is one of the form-associated interfaces that
+    // does not reflect it, so exposing one was a tell.
+    pub const disabled = bridge.accessor(Option.getDisabled, Option.setDisabled, .{ .ce_reactions = true });
+    pub const form = bridge.accessor(Option.getForm, null, .{});
+    pub const label = bridge.accessor(Option.getLabel, Option.setLabel, .{ .ce_reactions = true });
+    pub const defaultSelected = bridge.accessor(
+        Option.getDefaultSelected,
+        Option.setDefaultSelected,
+        .{ .ce_reactions = true },
+    );
+    pub const selected = bridge.accessor(Option.getSelected, Option.setSelected, .{});
     pub const value = bridge.accessor(Option.getValue, Option.setValue, .{ .ce_reactions = true });
     pub const text = bridge.accessor(Option.getText, Option.setText, .{ .ce_reactions = true });
-    pub const label = bridge.accessor(Option.getLabel, Option.setLabel, .{ .ce_reactions = true });
-    pub const selected = bridge.accessor(Option.getSelected, Option.setSelected, .{});
-    pub const defaultSelected = bridge.accessor(Option.getDefaultSelected, null, .{});
-    pub const disabled = bridge.accessor(Option.getDisabled, Option.setDisabled, .{ .ce_reactions = true });
-    pub const name = bridge.accessor(Option.getName, Option.setName, .{ .ce_reactions = true });
+    pub const index = bridge.accessor(Option.getIndex, null, .{});
 };
 
 pub const Build = struct {

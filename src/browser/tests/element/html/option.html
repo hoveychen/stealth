@@ -107,35 +107,93 @@
 </script>
 
 <option id="named1" name="choice1">Named option</option>
-<option id="named2">Unnamed option</option>
 
-<script id="name_initial">
-  testing.expectEqual('choice1', $('#named1').name)
-  testing.expectEqual('', $('#named2').name)
+<!-- HTMLOptionElement is one of the few form-associated interfaces that does
+     not reflect `name`: Chrome's prototype has no such member at all, so the
+     attribute stays an attribute and nothing else. -->
+<script id="name_is_not_reflected">
+  testing.expectEqual(undefined, $('#named1').name)
+  testing.expectEqual('choice1', $('#named1').getAttribute('name'))
+  testing.expectTrue(!('name' in HTMLOptionElement.prototype))
 </script>
 
-<script id="name_set">
+<!-- The prototype shape, in Chrome's own member order (measured, probe-win28). -->
+<script id="option_prototype_shape">
+  testing.expectEqual('disabled,form,label,defaultSelected,selected,value,text,index',
+    Object.getOwnPropertyNames(HTMLOptionElement.prototype).filter((k) => k !== 'constructor').join(','))
+  testing.expectEqual('HTMLOptionElement', HTMLOptionElement.prototype[Symbol.toStringTag])
+</script>
+
+<!-- The `Option` legacy factory function. -->
+<script id="option_factory_function">
   {
-    const option = document.createElement('option')
-    testing.expectEqual('', option.name)
+    testing.expectEqual(0, Option.length)
+    testing.expectTrue(Option.prototype === HTMLOptionElement.prototype)
+    // Neither global name is enumerable.
+    testing.expectEqual(false, Object.getOwnPropertyDescriptor(window, 'Option').enumerable)
+    testing.expectEqual(false, Object.getOwnPropertyDescriptor(window, 'HTMLOptionElement').enumerable)
 
-    option.name = 'opt-name'
-    testing.expectEqual('opt-name', option.name)
-    testing.expectEqual('opt-name', option.getAttribute('name'))
+    testing.expectEqual('<option></option>', new Option().outerHTML)
+    testing.expectEqual('<option value="v"></option>', new Option(undefined, 'v').outerHTML)
+    testing.expectEqual('<option value="null">null</option>', new Option(null, null).outerHTML)
+    testing.expectEqual('<option>T</option>', new Option('T').outerHTML)
+    testing.expectEqual('<option value="6">5</option>', new Option(5, 6).outerHTML)
+    // Chrome writes `selected=""`; this engine writes a bare `selected` for
+    // empty boolean attributes (see formatAttribute in element/Attribute.zig),
+    // which is a serializer-wide difference, not an Option one.
+    testing.expectEqual('<option value="V" selected>T</option>', new Option('T', 'V', true, true).outerHTML)
+    testing.expectEqual('<option value="V" selected>T</option>', new Option('T', 'V', true).outerHTML)
+    testing.expectEqual(true, new Option('T', 'V', true).defaultSelected)
+    testing.expectEqual(true, new Option('T', 'V', true).selected)
 
-    option.name = 'another-name'
-    testing.expectEqual('another-name', option.name)
-    testing.expectEqual('another-name', option.getAttribute('name'))
+    // The third argument is defaultSelected (the content attribute), the
+    // fourth is selectedness on its own.
+    const live = new Option('T', 'V', false, true)
+    testing.expectEqual('<option value="V">T</option>', live.outerHTML)
+    testing.expectEqual(true, live.selected)
+    testing.expectEqual(false, live.defaultSelected)
+
+    const bare = new Option()
+    testing.expectEqual('[object HTMLOptionElement]', String(bare))
+    testing.expectEqual('OPTION', bare.tagName)
+    testing.expectEqual('', bare.text)
+    testing.expectEqual('', bare.value)
+    testing.expectEqual(null, bare.form)
+    testing.expectEqual(0, bare.index)
+    testing.expectEqual('', bare.label)
   }
 </script>
 
-<script id="name_reflects_to_attribute">
-  {
-    const option = document.createElement('option')
-    testing.expectEqual(null, option.getAttribute('name'))
+<!-- form and index both come from the option's select, not its ancestors. -->
+<form id="opt_form">
+  <select id="opt_select">
+    <option id="opt_i0">zero</option>
+    <optgroup label="g"><option id="opt_i1">one</option></optgroup>
+  </select>
+  <option id="opt_loose">loose</option>
+</form>
 
-    option.name = 'fieldname'
-    testing.expectEqual('fieldname', option.getAttribute('name'))
-    testing.expectTrue(option.outerHTML.includes('name="fieldname"'))
+<script id="option_form_and_index">
+  testing.expectEqual($('#opt_form'), $('#opt_i0').form)
+  testing.expectEqual($('#opt_form'), $('#opt_i1').form)
+  testing.expectEqual(0, $('#opt_i0').index)
+  testing.expectEqual(1, $('#opt_i1').index)
+
+  // An option that is in the form but not in a select has no form owner.
+  testing.expectEqual(null, $('#opt_loose').form)
+  testing.expectEqual(0, $('#opt_loose').index)
+</script>
+
+<!-- defaultSelected is writable, and reflects the `selected` attribute. -->
+<script id="default_selected_set">
+  {
+    const option = new Option('T')
+    option.defaultSelected = true
+    testing.expectEqual('', option.getAttribute('selected'))
+    testing.expectEqual(true, option.defaultSelected)
+
+    option.defaultSelected = false
+    testing.expectEqual(null, option.getAttribute('selected'))
+    testing.expectEqual(false, option.defaultSelected)
   }
 </script>

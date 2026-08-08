@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<head>
+  <title>Highlight Test</title>
+  <script src="../testing.js"></script>
+</head>
+
+<body>
+  <p id=one>hello</p>
+  <p id=two>world</p>
+</body>
+
+<script id=highlight_defaults>
+  {
+    const h = new Highlight();
+    testing.expectEqual('[object Highlight]', Object.prototype.toString.call(h));
+    testing.expectEqual('', Object.getOwnPropertyNames(h).join(','));
+    testing.expectEqual(0, h.size);
+    testing.expectEqual(0, h.priority);
+    testing.expectEqual('highlight', h.type);
+    // Variadic constructor, so length is 0.
+    testing.expectEqual(0, Highlight.length);
+    testing.expectEqual(
+      'priority,type,size,add,clear,delete,entries,forEach,has,keys,values',
+      Object.getOwnPropertyNames(Highlight.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual('function values() { [native code] }', String(h[Symbol.iterator]));
+  }
+</script>
+
+<script id=highlight_type_is_an_enum_attribute>
+  {
+    const h = new Highlight();
+    h.type = 'spelling-error';
+    testing.expectEqual('spelling-error', h.type);
+    h.type = 'grammar-error';
+    testing.expectEqual('grammar-error', h.type);
+    // An unknown value is ignored, not an error.
+    h.type = 'nope';
+    testing.expectEqual('grammar-error', h.type);
+    h.type = 'highlight';
+    testing.expectEqual('highlight', h.type);
+  }
+</script>
+
+<script id=highlight_priority_is_a_long>
+  {
+    const h = new Highlight();
+    h.priority = '3';
+    testing.expectEqual(3, h.priority);
+    h.priority = -2;
+    testing.expectEqual(-2, h.priority);
+    h.priority = 2.7;
+    testing.expectEqual(2, h.priority);
+    h.priority = 2 ** 32 + 5;
+    testing.expectEqual(5, h.priority);
+    h.priority = NaN;
+    testing.expectEqual(0, h.priority);
+  }
+</script>
+
+<script id=highlight_set_operations>
+  {
+    const a = new Range();
+    a.selectNodeContents(document.getElementById('one'));
+    const b = new Range();
+    b.selectNodeContents(document.getElementById('two'));
+
+    const h = new Highlight(a);
+    testing.expectEqual(1, h.size);
+    testing.expectTrue(h.has(a));
+    testing.expectFalse(h.has(b));
+
+    // add answers the Highlight itself, and is a set: adding twice is once.
+    testing.expectTrue(h.add(b) === h);
+    testing.expectEqual(2, h.size);
+    h.add(b);
+    testing.expectEqual(2, h.size);
+
+    testing.expectEqual(2, Array.from(h).length);
+    testing.expectTrue(Array.from(h)[0] === a);
+    testing.expectTrue(Array.from(h.values())[1] === b);
+    testing.expectTrue(Array.from(h.keys())[0] === a);
+
+    const entry = Array.from(h.entries())[0];
+    testing.expectTrue(entry[0] === a);
+    testing.expectTrue(entry[1] === a);
+
+    const seen = [];
+    testing.expectEqual(undefined, h.forEach(function (value, key, set) {
+      seen.push([value === key, set === h]);
+    }));
+    testing.expectEqual('true,true|true,true', seen.map((s) => s.join(',')).join('|'));
+
+    testing.expectTrue(h.delete(a));
+    testing.expectFalse(h.delete(a));
+    testing.expectEqual(1, h.size);
+    testing.expectEqual(undefined, h.clear());
+    testing.expectEqual(0, h.size);
+  }
+</script>
+
+<script id=highlight_accepts_any_abstract_range>
+  {
+    const h = new Highlight();
+    const sr = new StaticRange({
+      startContainer: document.body, startOffset: 0,
+      endContainer: document.body, endOffset: 0,
+    });
+    h.add(sr);
+    testing.expectEqual(1, h.size);
+    testing.expectTrue(h.has(sr));
+  }
+</script>
+
+<script id=highlight_rejects_non_ranges>
+  {
+    let err;
+    try { new Highlight({}); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to construct 'Highlight': parameter 1 is not of type 'AbstractRange'.",
+      err.message);
+
+    const h = new Highlight();
+    for (const member of ['add', 'has', 'delete']) {
+      err = undefined;
+      try { h[member]({}); } catch (e) { err = e; }
+      testing.expectEqual(
+        `Failed to execute '${member}' on 'Highlight': parameter 1 is not of type 'AbstractRange'.`,
+        err.message);
+
+      err = undefined;
+      try { h[member](); } catch (e) { err = e; }
+      testing.expectEqual(
+        `Failed to execute '${member}' on 'Highlight': 1 argument required, but only 0 present.`,
+        err.message);
+    }
+  }
+</script>
+
+<script id=highlight_registry_identity_and_shape>
+  {
+    const reg = CSS.highlights;
+    testing.expectTrue(reg === CSS.highlights);
+    testing.expectEqual('[object HighlightRegistry]', Object.prototype.toString.call(reg));
+    testing.expectEqual(0, reg.size);
+    testing.expectEqual(
+      'size,clear,delete,entries,forEach,get,has,keys,set,values,highlightsFromPoint',
+      Object.getOwnPropertyNames(HighlightRegistry.prototype).filter((k) => k !== 'constructor').join(','));
+    // A maplike defaults to entries, not values.
+    testing.expectEqual('function entries() { [native code] }', String(reg[Symbol.iterator]));
+
+    const d = Object.getOwnPropertyDescriptor(CSS, 'highlights');
+    testing.expectEqual('function', typeof d.get);
+    testing.expectTrue(d.enumerable);
+    testing.expectTrue(d.configurable);
+
+    let err;
+    try { new HighlightRegistry(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+  }
+</script>
+
+<script id=highlight_registry_map_operations>
+  {
+    const reg = CSS.highlights;
+    reg.clear();
+
+    const a = new Highlight();
+    testing.expectTrue(reg.set('a', a) === reg);
+    testing.expectEqual(1, reg.size);
+    testing.expectTrue(reg.get('a') === a);
+    testing.expectTrue(reg.has('a'));
+    testing.expectEqual(undefined, reg.get('nope'));
+    testing.expectFalse(reg.has('nope'));
+    testing.expectFalse(reg.delete('nope'));
+
+    // Replacing a name keeps one entry.
+    const b = new Highlight();
+    reg.set('a', b);
+    testing.expectEqual(1, reg.size);
+    testing.expectTrue(reg.get('a') === b);
+
+    reg.set('c', a);
+    testing.expectEqual('a,c', Array.from(reg.keys()).join(','));
+    const first = Array.from(reg.entries())[0];
+    testing.expectEqual('a', first[0]);
+    testing.expectTrue(first[1] === b);
+    testing.expectTrue(Array.from(reg.values())[1] === a);
+
+    const seen = [];
+    reg.forEach(function (value, key, map) {
+      seen.push(`${key}:${Object.prototype.toString.call(value)}:${map === reg}`);
+    });
+    testing.expectEqual('a:[object Highlight]:true,c:[object Highlight]:true', seen.join(','));
+
+    testing.expectTrue(reg.delete('a'));
+    testing.expectEqual(1, reg.size);
+    testing.expectEqual(undefined, reg.clear());
+    testing.expectEqual(0, reg.size);
+  }
+</script>
+
+<script id=highlight_registry_argument_counts>
+  {
+    const reg = CSS.highlights;
+    let err;
+    try { reg.set(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'set' on 'HighlightRegistry': 2 arguments required, but only 0 present.",
+      err.message);
+
+    err = undefined;
+    try { reg.set('k'); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'set' on 'HighlightRegistry': 2 arguments required, but only 1 present.",
+      err.message);
+
+    err = undefined;
+    try { reg.set('k', {}); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'set' on 'HighlightRegistry': parameter 2 is not of type 'Highlight'.",
+      err.message);
+
+    err = undefined;
+    try { reg.highlightsFromPoint(); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to execute 'highlightsFromPoint' on 'HighlightRegistry': 2 arguments required, but only 0 present.",
+      err.message);
+
+    // Nothing paints, so no highlight covers any point.
+    const at = reg.highlightsFromPoint(1, 1);
+    testing.expectTrue(Array.isArray(at));
+    testing.expectEqual(0, at.length);
+  }
+</script>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<head>
+  <title>ClipboardItem Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=clipboard_item_shape>
+  {
+    const item = new ClipboardItem({ 'text/html': '<b>x</b>', 'text/plain': 'y' });
+    testing.expectEqual('[object ClipboardItem]', Object.prototype.toString.call(item));
+    testing.expectEqual('', Object.getOwnPropertyNames(item).join(','));
+    testing.expectEqual(1, ClipboardItem.length);
+    testing.expectEqual('types,getType',
+      Object.getOwnPropertyNames(ClipboardItem.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual(1, ClipboardItem.prototype.getType.length);
+    testing.expectEqual(1, ClipboardItem.supports.length);
+
+    // Insertion order, and a fresh array each read.
+    testing.expectEqual('text/html,text/plain', item.types.join(','));
+    testing.expectFalse(item.types === item.types);
+
+    // Keys are not normalised.
+    testing.expectEqual('TEXT/Plain', new ClipboardItem({ 'TEXT/Plain': 'y' }).types.join(','));
+    testing.expectEqual('text/plain', new ClipboardItem({ 'text/plain': null }).types.join(','));
+
+    testing.expectTrue(item.getType('text/plain') instanceof Promise);
+    item.getType('text/plain').catch(() => {});
+  }
+</script>
+
+<script id=clipboard_item_supports>
+  {
+    for (const yes of ['text/plain', 'text/html', 'image/png', 'image/svg+xml', 'web text/custom', 'web application/x-nope']) {
+      testing.expectTrue(ClipboardItem.supports(yes));
+    }
+    // No trimming, no case folding, and nothing else is on the list.
+    for (const no of ['text/uri-list', 'text/csv', 'image/jpeg', 'image/gif', 'image/bmp', 'image/webp',
+      'application/json', 'application/xhtml+xml', 'application/x-nope', '', 'TEXT/PLAIN', 'text/plain ']) {
+      testing.expectFalse(ClipboardItem.supports(no));
+    }
+
+    let err;
+    try { ClipboardItem.supports(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to execute 'supports' on 'ClipboardItem': 1 argument required, but only 0 present.",
+      err.message);
+  }
+</script>
+
+<script id=clipboard_item_constructor_errors>
+  {
+    let err;
+    // An array has no own string keys, so it reads as an empty dictionary.
+    for (const empty of [{}, []]) {
+      err = undefined;
+      try { new ClipboardItem(empty); } catch (e) { err = e; }
+      testing.expectEqual('TypeError', err.name);
+      testing.expectEqual("Failed to construct 'ClipboardItem': Empty dictionary argument", err.message);
+    }
+
+    err = undefined;
+    try { new ClipboardItem(5); } catch (e) { err = e; }
+    testing.expectEqual(
+      "Failed to construct 'ClipboardItem': Only objects can be converted to record<K,V> types",
+      err.message);
+
+    err = undefined;
+    try { new ClipboardItem(); } catch (e) { err = e; }
+    testing.expectEqual("Failed to construct 'ClipboardItem': 1 argument required, but only 0 present.", err.message);
+  }
+</script>
+
+<script type=module id=clipboard_item_get_type>
+  const blob = new Blob(['hello'], { type: 'text/plain' });
+  const item = new ClipboardItem({ 'text/plain': blob, 'text/html': '<b>x</b>' });
+
+  // A Blob value comes back as itself.
+  const got = await item.getType('text/plain');
+  testing.expectTrue(got === blob);
+
+  // A string value became a Blob of that type.
+  const made = await item.getType('text/html');
+  testing.expectEqual('[object Blob]', Object.prototype.toString.call(made));
+  testing.expectEqual('text/html', made.type);
+  testing.expectEqual('<b>x</b>', await made.text());
+
+  let err;
+  try { await item.getType('image/png'); } catch (e) { err = e; }
+  testing.expectEqual('NotFoundError', err.name);
+  testing.expectEqual(
+    "Failed to execute 'getType' on 'ClipboardItem': The type was not found",
+    err.message);
+</script>

@@ -366,15 +366,19 @@ fn createSnapshotContext(
 
         if (@hasDecl(JsApi.Meta, "name") and !no_interface_object) {
             if (@hasDecl(JsApi.Meta, "constructor_alias")) {
+                // Both names, and both non-enumerable: an interface object is
+                // never enumerable on the global, and neither is a legacy
+                // factory function (measured on a headed Chrome 150 --
+                // `Option`, `Image` and `Audio` all read back as value[-cw]).
                 const alias = JsApi.Meta.constructor_alias;
                 const v8_class_name = v8.v8__String__NewFromUtf8(isolate, alias.ptr, v8.kNormal, @intCast(alias.len));
                 var maybe_result: v8.MaybeBool = undefined;
-                v8.v8__Object__Set(global_obj, context, v8_class_name, func, &maybe_result);
+                v8.v8__Object__DefineOwnProperty(global_obj, context, v8_class_name, func, v8.DontEnum, &maybe_result);
 
                 const name = JsApi.Meta.name;
                 const illegal_class_name = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
                 var maybe_result2: v8.MaybeBool = undefined;
-                v8.v8__Object__DefineOwnProperty(global_obj, context, illegal_class_name, func, 0, &maybe_result2);
+                v8.v8__Object__DefineOwnProperty(global_obj, context, illegal_class_name, func, v8.DontEnum, &maybe_result2);
             } else {
                 const name = JsApi.Meta.name;
                 const v8_class_name = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
@@ -897,7 +901,7 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     // later in this function.
                     continue;
                 }
-                attachAccessorProperty(name, value, isolate, template, signature, define_on orelse prototype);
+                attachAccessorProperty(name, value, isolate, template, signature, define_on orelse member_template, own_properties);
             },
             bridge.Function => {
                 if (value.wpt_only and wpt_extensions_enabled == false) {
@@ -957,6 +961,12 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
             },
             bridge.Iterator => {
                 const function_template = v8.v8__FunctionTemplate__New__Config(isolate, &.{ .callback = value.func }).?;
+                if (value.js_name) |fn_name| {
+                    v8.v8__FunctionTemplate__SetClassName(
+                        function_template,
+                        v8.v8__String__NewFromUtf8(isolate, fn_name.ptr, v8.kNormal, @intCast(fn_name.len)),
+                    );
+                }
                 const js_name = if (value.async)
                     v8.v8__Symbol__GetAsyncIterator(isolate)
                 else
@@ -990,7 +1000,7 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
             if (comptime bridge.inheritsOrIs(JsApi, u.Owner)) {
                 // unforgeables attributes aren't only applied directly on the
                 // instance, they're also applied directly on every child instance
-                attachAccessorProperty(u.name, u.accessor, isolate, template, signature, instance);
+                attachAccessorProperty(u.name, u.accessor, isolate, template, signature, instance, false);
             }
         }
     }
@@ -1062,7 +1072,11 @@ const unforgeables: []const Unforgeable = blk: {
 // and define_on != null. This is the "flattening" pass, and it defines all of
 // the functions/accessors on directly on the global instance. Thus, globals have
 // it defined on both their prototype (first pass) and their own instance (2nd pass).
-fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, isolate: *v8.Isolate, template: *const v8.FunctionTemplate, signature: anytype, target: anytype) void {
+// `static_on_target` puts a static accessor on `target` instead of on the
+// interface object. A namespace (own_properties) has no prototype of its own and
+// is reached as an instance, so `CSS.highlights` -- a static accessor -- has to
+// land on the instance template the way a static *operation* already does.
+fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, isolate: *v8.Isolate, template: *const v8.FunctionTemplate, signature: anytype, target: anytype, comptime static_on_target: bool) void {
     const js_name = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
     const getter_signature = if (value.static) null else signature;
     const getter_callback = v8.v8__FunctionTemplate__New__Config(isolate, &.{
@@ -1097,7 +1111,7 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
         attribute |= v8.DontEnum;
     }
 
-    if (value.static) {
+    if (value.static and static_on_target == false) {
         v8.v8__Template__SetAccessorProperty(@ptrCast(template), js_name, getter_callback, setter_callback, attribute);
     } else {
         // Web IDL: attributes on the interface prototype object

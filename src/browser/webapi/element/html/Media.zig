@@ -27,6 +27,10 @@ const Event = @import("../../Event.zig");
 pub const Audio = @import("Audio.zig");
 pub const Video = @import("Video.zig");
 const MediaError = @import("../../media/MediaError.zig");
+const TimeRanges = @import("../../media/TimeRanges.zig");
+const text_tracks = @import("../../media/text_tracks.zig");
+const misc_events = @import("../../event/misc_events.zig");
+const String = @import("lightpanda").String;
 const mime = @import("../../media/mime.zig");
 
 const Media = @This();
@@ -56,6 +60,7 @@ pub const Type = union(enum) {
 
 _type: Type,
 _proto: *HtmlElement,
+_text_tracks: ?*text_tracks.TextTrackList = null,
 _paused: bool = true,
 _current_time: f64 = 0,
 _volume: f64 = 1.0,
@@ -261,6 +266,74 @@ pub fn setPreload(self: *Media, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("preload"), .wrap(value), frame);
 }
 
+// No media is ever loaded, so all three ranges are empty -- which is also what
+// a real Chrome answers for an element that was never given a src (measured:
+// `document.createElement('video').buffered.length === 0`). Before this they
+// were undefined, and a media element without them is not a shape any browser
+// has.
+pub fn getBuffered(_: *const Media, frame: *Frame) !*TimeRanges {
+    return frame._factory.create(TimeRanges{});
+}
+
+pub fn getPlayed(_: *const Media, frame: *Frame) !*TimeRanges {
+    return frame._factory.create(TimeRanges{});
+}
+
+pub fn getSeekable(_: *const Media, frame: *Frame) !*TimeRanges {
+    return frame._factory.create(TimeRanges{});
+}
+
+const Page = @import("../../../Page.zig");
+
+// One list per element, created on first read and kept: `v.textTracks ===
+// v.textTracks` is true in Chrome (measured), so a fresh list per read would be
+// a tell of its own.
+pub fn getTextTracks(self: *Media, page: *Page) !*text_tracks.TextTrackList {
+    if (self._text_tracks) |list| {
+        return list;
+    }
+    const list = try page.factory.eventTarget(text_tracks.TextTrackList{ ._proto = undefined });
+    list._proto._type = .{ .text_track_list = list };
+    self._text_tracks = list;
+    return list;
+}
+
+// Chrome reports arity 1 and validates the kind against TextTrackKind, with the
+// label and language defaulting to the empty string (measured).
+pub fn addTextTrack(
+    self: *Media,
+    kind: []const u8,
+    label_: ?[]const u8,
+    language_: ?[]const u8,
+    exec: *const js.Execution,
+) !*text_tracks.TextTrack {
+    const parsed = std.meta.stringToEnum(text_tracks.TextTrack.Kind, kind) orelse {
+        const isolate = exec.js.isolate;
+        const message = try std.fmt.allocPrint(
+            exec.call_arena,
+            "Failed to execute 'addTextTrack' on 'HTMLMediaElement': The provided value '{s}' is not a valid enum value of type TextTrackKind.",
+            .{kind},
+        );
+        _ = isolate.throwException(isolate.createTypeError(message));
+        return error.JsException;
+    };
+
+    const page = exec.page;
+    const track = try text_tracks.TextTrack.create(parsed, label_ orelse "", language_ orelse "", page);
+    const list = try self.getTextTracks(page);
+    try list._items.append(page.frame_arena, track);
+
+    // Chrome fires both, in this order, on the list itself (measured: an
+    // addtrack listener sees a TrackEvent carrying the new track, then onchange
+    // runs).
+    const add_track = try misc_events.TrackEvent.initTrusted("addtrack", track, exec);
+    try exec.dispatch(list.asEventTarget(), add_track.asEvent(), list._on_add_track, .{ .context = "TextTrackList addtrack" });
+
+    const change = try Event.initTrusted(try String.init(page.frame_arena, "change", .{}), null, page);
+    try exec.dispatch(list.asEventTarget(), change, list._on_change, .{ .context = "TextTrackList change" });
+    return track;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Media);
 
@@ -296,9 +369,15 @@ pub const JsApi = struct {
     pub const ended = bridge.accessor(Media.getEnded, null, .{});
     pub const seeking = bridge.accessor(Media.getSeeking, null, .{});
     pub const readyState = bridge.accessor(Media.getReadyState, null, .{});
+    pub const buffered = bridge.accessor(Media.getBuffered, null, .{});
+    pub const played = bridge.accessor(Media.getPlayed, null, .{});
+    pub const seekable = bridge.accessor(Media.getSeekable, null, .{});
     pub const networkState = bridge.accessor(Media.getNetworkState, null, .{});
     pub const @"error" = bridge.accessor(Media.getError, null, .{});
 
+    pub const textTracks = bridge.accessor(Media.getTextTracks, null, .{});
+
+    pub const addTextTrack = bridge.function(Media.addTextTrack, .{ .arity = 1 });
     pub const canPlayType = bridge.function(Media.canPlayType, .{});
     pub const play = bridge.function(Media.play, .{});
     pub const pause = bridge.function(Media.pause, .{});

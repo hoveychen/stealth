@@ -6,52 +6,84 @@
 // Shapes, member order, arities and the "Illegal constructor" behaviour were
 // measured on a headed Chrome 150 (probes probe-css1.js / probe-css11.js).
 
+const std = @import("std");
+
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const Animation = @import("Animation.zig");
+const KeyframeEffect = @import("KeyframeEffect.zig");
 
 pub fn registerTypes() []const type {
     return &.{
         AnimationEffect,
+        KeyframeEffect,
         CSSAnimation,
         CSSTransition,
     };
 }
 
-/// The base of the effect hierarchy. Chrome hands one out from
-/// `animation.effect`, which is always null here, so this is the interface and
-/// its three timing accessors and nothing behind them.
+/// The base of the effect hierarchy, and where the timing lives. Chrome hands
+/// one out from `animation.effect`, which is a KeyframeEffect whenever
+/// `element.animate()` made the animation; the three accessors below read the
+/// timing that effect was built with.
+///
+/// `getTiming` and `getComputedTiming` emit their members alphabetically, which
+/// is Chrome's own order, and the computed set resolves `fill: auto` to `none`
+/// and adds the five read-only members. Measured on a headed Chrome 150
+/// (probe-win29: duration 500 with iterations 2 gives activeDuration 1000 and
+/// endTime 1000).
 pub const AnimationEffect = struct {
-    _pad: bool = false,
+    _delay: f64 = 0,
+    _end_delay: f64 = 0,
+    _fill: []const u8 = "auto",
+    _iteration_start: f64 = 0,
+    _iterations: f64 = 1,
+    _direction: []const u8 = "normal",
+    _easing: []const u8 = "linear",
+    /// `double or "auto"`, and "auto" is the default.
+    _duration: ?f64 = null,
 
-    /// Measured: an effect with no keyframes still answers a full timing
-    /// dictionary. Ours is the WebIDL default set, which is what Chrome
-    /// reports for a KeyframeEffect built with no options.
-    pub fn getTiming(_: *const AnimationEffect, exec: *const js.Execution) !js.Object {
+    pub fn getTiming(self: *const AnimationEffect, exec: *const js.Execution) !js.Object {
         const object = exec.js.local.?.newObject();
-        _ = try object.set("delay", @as(f64, 0), .{});
-        _ = try object.set("endDelay", @as(f64, 0), .{});
-        _ = try object.set("fill", "auto", .{});
-        _ = try object.set("iterationStart", @as(f64, 0), .{});
-        _ = try object.set("iterations", @as(f64, 1), .{});
-        _ = try object.set("direction", "normal", .{});
-        _ = try object.set("easing", "linear", .{});
-        _ = try object.set("duration", "auto", .{});
+        _ = try object.set("delay", self._delay, .{});
+        _ = try object.set("direction", self._direction, .{});
+        if (self._duration) |duration| {
+            _ = try object.set("duration", duration, .{});
+        } else {
+            _ = try object.set("duration", "auto", .{});
+        }
+        _ = try object.set("easing", self._easing, .{});
+        _ = try object.set("endDelay", self._end_delay, .{});
+        _ = try object.set("fill", self._fill, .{});
+        _ = try object.set("iterationStart", self._iteration_start, .{});
+        _ = try object.set("iterations", self._iterations, .{});
         return object;
     }
 
     pub fn getComputedTiming(self: *const AnimationEffect, exec: *const js.Execution) !js.Object {
-        const object = try self.getTiming(exec);
-        _ = try object.set("activeDuration", @as(f64, 0), .{});
-        _ = try object.set("endTime", @as(f64, 0), .{});
+        const object = exec.js.local.?.newObject();
+        _ = try object.set("delay", self._delay, .{});
+        _ = try object.set("direction", self._direction, .{});
+        _ = try object.set("duration", self._duration orelse 0, .{});
+        _ = try object.set("easing", self._easing, .{});
+        _ = try object.set("endDelay", self._end_delay, .{});
+        // The resolved fill: `auto` means `none` for a keyframe effect.
+        const fill = if (std.mem.eql(u8, self._fill, "auto")) "none" else self._fill;
+        _ = try object.set("fill", fill, .{});
+        _ = try object.set("iterationStart", self._iteration_start, .{});
+        _ = try object.set("iterations", self._iterations, .{});
+
+        const active_duration = (self._duration orelse 0) * self._iterations;
+        _ = try object.set("activeDuration", active_duration, .{});
+        _ = try object.set("currentIteration", null, .{});
+        _ = try object.set("endTime", self._delay + active_duration + self._end_delay, .{});
         _ = try object.set("localTime", null, .{});
         _ = try object.set("progress", null, .{});
-        _ = try object.set("currentIteration", null, .{});
         return object;
     }
 
-    /// Nothing to update while there is no effect behind the interface, but the
-    /// method has to exist and accept the dictionary.
+    /// Nothing here drives a timeline, so there is no phase to recompute; the
+    /// method still has to exist and take the dictionary.
     pub fn updateTiming(_: *AnimationEffect, _: ?js.Object) void {}
 
     pub const JsApi = struct {

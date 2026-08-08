@@ -570,16 +570,25 @@ pub const NamedIndexed = struct {
 pub const Iterator = struct {
     func: *const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void,
     async: bool,
+    // What `String(obj[Symbol.iterator])` reports. Chrome names the function
+    // after the default iterator the interface declares -- "values" for a
+    // list, "entries" for a maplike -- and leaving it unset prints an anonymous
+    // `function () { [native code] }`, which no browser does. Null keeps that
+    // older behaviour for the classes whose Chrome name has not been measured
+    // yet.
+    js_name: ?[:0]const u8,
 
     const Opts = struct {
         async: bool = false,
         null_as_undefined: bool = false,
+        js_name: ?[:0]const u8 = null,
     };
 
     fn init(comptime T: type, comptime struct_or_func: anytype, comptime opts: Opts) Iterator {
         if (@typeInfo(@TypeOf(struct_or_func)) == .type) {
             return .{
                 .async = opts.async,
+                .js_name = opts.js_name,
                 .func = struct {
                     fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                         const info = Caller.FunctionCallbackInfo{ .handle = handle.? };
@@ -591,6 +600,7 @@ pub const Iterator = struct {
 
         return .{
             .async = opts.async,
+            .js_name = opts.js_name,
             .func = struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
                     return Caller.Function.call(T, handle.?, struct_or_func, .{
@@ -971,6 +981,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/css/CSSStyleSheet.zig"),
     @import("../webapi/css/FontFace.zig"),
     @import("../webapi/css/FontFaceSet.zig"),
+    @import("../webapi/css/highlights.zig"),
     @import("../webapi/css/MediaQueryList.zig"),
     @import("../webapi/css/StyleSheetList.zig"),
     @import("../webapi/Document.zig"),
@@ -982,6 +993,12 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/DocumentType.zig"),
     @import("../webapi/ShadowRoot.zig"),
     @import("../webapi/DOMException.zig"),
+    @import("../webapi/DOMError.zig"),
+    @import("../webapi/ClipboardItem.zig"),
+    @import("../webapi/EyeDropper.zig"),
+    @import("../webapi/IdleDetector.zig"),
+    @import("../webapi/InputDeviceCapabilities.zig"),
+    @import("../webapi/Profiler.zig"),
     @import("../webapi/DOMImplementation.zig"),
     @import("../webapi/DOMTreeWalker.zig"),
     @import("../webapi/DOMNodeIterator.zig"),
@@ -991,16 +1008,22 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/DOMMatrix.zig"),
     @import("../webapi/DOMPointReadOnly.zig"),
     @import("../webapi/DOMPoint.zig"),
+    @import("../webapi/DOMQuad.zig"),
+    @import("../webapi/collections/DOMRectList.zig"),
     @import("../webapi/DOMParser.zig"),
     @import("../webapi/XMLSerializer.zig"),
+    @import("../webapi/XSLTProcessor.zig"),
+    @import("../webapi/Sanitizer.zig"),
     @import("../webapi/AbstractRange.zig"),
     @import("../webapi/Range.zig"),
     @import("../webapi/StaticRange.zig"),
     @import("../webapi/NodeFilter.zig"),
     @import("../webapi/Element.zig"),
     @import("../webapi/element/DOMStringMap.zig"),
+    @import("../webapi/element/CustomStateSet.zig"),
     @import("../webapi/element/Attribute.zig"),
     @import("../webapi/element/Html.zig"),
+    @import("../webapi/element/MathML.zig"),
     @import("../webapi/element/html/IFrame.zig"),
     @import("../webapi/element/html/Anchor.zig"),
     @import("../webapi/element/html/Area.zig"),
@@ -1159,6 +1182,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/event/GamepadEvent.zig"),
     @import("../webapi/event/DeviceOrientationEvent.zig"),
     @import("../webapi/event/TouchEvent.zig"),
+    @import("../webapi/event/touch.zig"),
+    @import("../webapi/event/misc_events.zig"),
     @import("../webapi/event/UIEvent.zig"),
     @import("../webapi/event/MouseEvent.zig"),
     @import("../webapi/event/PointerEvent.zig"),
@@ -1181,6 +1206,10 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/SharedWorker.zig"),
     @import("../webapi/media/MediaError.zig"),
     @import("../webapi/media/TextTrackCue.zig"),
+    @import("../webapi/media/TimeRanges.zig"),
+    @import("../webapi/media/text_tracks.zig"),
+    @import("../webapi/media/capture.zig"),
+    @import("../webapi/media/PictureInPictureWindow.zig"),
     @import("../webapi/media/VTTCue.zig"),
     @import("../webapi/animation/Animation.zig"),
     @import("../webapi/document/services.zig"),
@@ -1268,15 +1297,20 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/External.zig"),
     @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),
+    @import("../webapi/ReportingObserver.zig"),
+    @import("../webapi/net/URLPattern.zig"),
     @import("../webapi/navigation/Navigation.zig"),
     @import("../webapi/navigation/NavigationHistoryEntry.zig"),
     @import("../webapi/navigation/NavigationActivation.zig"),
+    @import("../webapi/navigation/NavigationDestination.zig"),
+    @import("../webapi/navigation/NavigationTransition.zig"),
     @import("../webapi/canvas/CanvasRenderingContext2D.zig"),
     @import("../webapi/canvas/WebGLRenderingContext.zig"),
     @import("../webapi/canvas/WebGL2RenderingContext.zig"),
     @import("../webapi/canvas/webgl_objects.zig"),
     @import("../webapi/canvas/OffscreenCanvas.zig"),
     @import("../webapi/canvas/OffscreenCanvasRenderingContext2D.zig"),
+    @import("../webapi/canvas/Path2D.zig"),
     @import("../webapi/canvas/TextMetrics.zig"),
     @import("../webapi/canvas/canvas_objects.zig"),
     @import("../webapi/SubtleCrypto.zig"),
@@ -1357,6 +1391,9 @@ const worker_common_apis = [_]type{
     @import("../webapi/DOMMatrix.zig"),
     @import("../webapi/DOMPointReadOnly.zig"),
     @import("../webapi/DOMPoint.zig"),
+    @import("../webapi/DOMQuad.zig"),
+    // Chrome's worker scope carries IdleDetector (measured, probe-win30).
+    @import("../webapi/IdleDetector.zig"),
     @import("../webapi/net/URLSearchParams.zig"),
     @import("../webapi/encoding/TextEncoder.zig"),
     @import("../webapi/encoding/TextDecoder.zig"),
@@ -1394,6 +1431,7 @@ const worker_common_apis = [_]type{
     @import("../webapi/canvas/WebGLRenderingContext.zig"),
     @import("../webapi/canvas/WebGL2RenderingContext.zig"),
     @import("../webapi/canvas/webgl_objects.zig"),
+    @import("../webapi/canvas/Path2D.zig"),
     @import("../webapi/canvas/TextMetrics.zig"),
     @import("../webapi/canvas/canvas_objects.zig"),
     @import("../webapi/net/XMLHttpRequest.zig"),
@@ -1405,12 +1443,21 @@ const worker_common_apis = [_]type{
     @import("../webapi/ImageData.zig"),
     @import("../webapi/Performance.zig"),
     @import("../webapi/PerformanceObserver.zig"),
+    @import("../webapi/ReportingObserver.zig"),
+    @import("../webapi/net/URLPattern.zig"),
     @import("../webapi/storage/CookieStore.zig"),
     @import("../webapi/storage/idb/idb.zig"),
     @import("../webapi/event/CookieChangeEvent.zig"),
     @import("../webapi/BroadcastChannel.zig"),
     @import("../webapi/event/CustomEvent.zig"),
     @import("../webapi/event/ProgressEvent.zig"),
+    // The only two of the misc Event subclasses a Chrome worker carries
+    // (measured, probe-win30 `worker`).
+    @import("../webapi/event/misc_events.zig").SecurityPolicyViolationEvent,
+    @import("../webapi/event/misc_events.zig").WebGLContextEvent,
+    // CropTarget is on a worker too (measured); the rest of the capture family
+    // is window-only.
+    @import("../webapi/media/capture.zig").CropTarget,
     @import("../webapi/Notification.zig"),
     @import("../webapi/FileList.zig"),
     @import("../webapi/MessageChannel.zig"),

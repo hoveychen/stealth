@@ -24,6 +24,7 @@ const js = @import("../../../js/js.zig");
 const Key = @import("Key.zig");
 const Engine = @import("Engine.zig");
 const IDBRequest = @import("IDBRequest.zig");
+const IDBOpenDBRequest = @import("IDBOpenDBRequest.zig");
 const IDBDatabase = @import("IDBDatabase.zig");
 const IDBTransaction = @import("IDBTransaction.zig");
 
@@ -34,7 +35,7 @@ const IDBFactory = @This();
 
 _pad: bool = false,
 
-pub fn open(_: *IDBFactory, name: []const u8, version: ?u64, exec: *Execution) !*IDBRequest {
+pub fn open(_: *IDBFactory, name: []const u8, version: ?u64, exec: *Execution) !*IDBOpenDBRequest {
     if (exec.origin() == null) {
         // unavailable for opaque origins, e.g. about:blank
         return error.SecurityError;
@@ -45,10 +46,10 @@ pub fn open(_: *IDBFactory, name: []const u8, version: ?u64, exec: *Execution) !
         if (v == 0) return error.TypeError;
     }
 
-    const request = try IDBRequest.init(exec);
+    const request = try IDBOpenDBRequest.init(exec);
 
     const ctx = try exec._factory.create(OpenContext{
-        .request = request,
+        .request = request.asRequest(),
         .name = try exec.dupeString(name),
         .version = version,
         .exec = exec,
@@ -287,16 +288,16 @@ const OpenContext = struct {
     }
 };
 
-pub fn deleteDatabase(_: *IDBFactory, name: []const u8, exec: *Execution) !*IDBRequest {
+pub fn deleteDatabase(_: *IDBFactory, name: []const u8, exec: *Execution) !*IDBOpenDBRequest {
     if (exec.origin() == null) {
         // unavailable for opaque origins, e.g. about:blank
         return error.SecurityError;
     }
 
-    const request = try IDBRequest.init(exec);
+    const request = try IDBOpenDBRequest.init(exec);
 
     const ctx = try exec._factory.create(DeleteContext{
-        .request = request,
+        .request = request.asRequest(),
         .name = try exec.dupeString(name),
         .exec = exec,
         ._gate_waiter = .{ .ctx = exec.js, .wake = DeleteContext.wakeUp, .cancel = DeleteContext.cancelParked },

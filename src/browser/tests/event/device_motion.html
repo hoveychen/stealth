@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<head>
+  <title>DeviceMotionEvent Test</title>
+  <script src="../testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<script id=bare_event_has_no_readings>
+  {
+    const e = new DeviceMotionEvent('devicemotion');
+    testing.expectEqual(null, e.acceleration);
+    testing.expectEqual(null, e.accelerationIncludingGravity);
+    testing.expectEqual(null, e.rotationRate);
+    testing.expectEqual(0, e.interval);
+  }
+</script>
+
+<script id=acceleration_from_init>
+  {
+    const e = new DeviceMotionEvent('devicemotion', {
+      acceleration: { x: 1, y: 2, z: 3 },
+      accelerationIncludingGravity: { x: 4 },
+      interval: 16,
+    });
+    testing.expectTrue(e.acceleration instanceof DeviceMotionEventAcceleration);
+    testing.expectEqual('[object DeviceMotionEventAcceleration]',
+      Object.prototype.toString.call(e.acceleration));
+    testing.expectEqual(1, e.acceleration.x);
+    testing.expectEqual(2, e.acceleration.y);
+    testing.expectEqual(3, e.acceleration.z);
+    testing.expectEqual(4, e.accelerationIncludingGravity.x);
+    // Members left out of the dictionary are null, not 0.
+    testing.expectEqual(null, e.accelerationIncludingGravity.y);
+    testing.expectEqual(null, e.rotationRate);
+    testing.expectEqual(16, e.interval);
+  }
+</script>
+
+<script id=rotation_rate_from_init>
+  {
+    const e = new DeviceMotionEvent('devicemotion', { rotationRate: { alpha: 10, gamma: 30 } });
+    testing.expectTrue(e.rotationRate instanceof DeviceMotionEventRotationRate);
+    testing.expectEqual(10, e.rotationRate.alpha);
+    testing.expectEqual(null, e.rotationRate.beta);
+    testing.expectEqual(30, e.rotationRate.gamma);
+  }
+</script>
+
+<script id=readings_are_not_constructible>
+  {
+    let err;
+    try { new DeviceMotionEventAcceleration(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    err = undefined;
+    try { new DeviceMotionEventRotationRate(); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+  }
+</script>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<head>
+  <title>InputDeviceCapabilities Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<script id=input_device_capabilities>
+  {
+    const bare = new InputDeviceCapabilities();
+    testing.expectEqual('[object InputDeviceCapabilities]', Object.prototype.toString.call(bare));
+    testing.expectEqual('', Object.getOwnPropertyNames(bare).join(','));
+    testing.expectFalse(bare.firesTouchEvents);
+    testing.expectEqual(0, InputDeviceCapabilities.length);
+    testing.expectEqual('firesTouchEvents',
+      Object.getOwnPropertyNames(InputDeviceCapabilities.prototype).filter((k) => k !== 'constructor').join(','));
+    testing.expectEqual(undefined,
+      Object.getOwnPropertyDescriptor(InputDeviceCapabilities.prototype, 'firesTouchEvents').set);
+
+    testing.expectTrue(new InputDeviceCapabilities({ firesTouchEvents: true }).firesTouchEvents);
+    testing.expectFalse(new InputDeviceCapabilities({}).firesTouchEvents);
+    testing.expectFalse(new InputDeviceCapabilities(null).firesTouchEvents);
+
+    let err;
+    try { new InputDeviceCapabilities(5); } catch (e) { err = e; }
+    testing.expectEqual('TypeError', err.name);
+    testing.expectEqual(
+      "Failed to construct 'InputDeviceCapabilities': The provided value is not of type 'InputDeviceCapabilitiesInit'.",
+      err.message);
+
+    // No event here carries one, which is Chrome's answer too.
+    testing.expectEqual(null, new UIEvent('click').sourceCapabilities);
+  }
+</script>

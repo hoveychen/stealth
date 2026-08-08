@@ -1462,7 +1462,7 @@ fn collectInnerText(self: *HtmlElement, state: *InnerTextState) std.Io.Writer.Er
     while (it.next()) |child| {
         switch (child._type) {
             .element => |e| switch (e._type) {
-                .svg => {},
+                .svg, .mathml => {},
                 .html => |he| {
                     const tag = e.getTag();
                     switch (child_filter) {

@@ -63,6 +63,7 @@ const idb = @import("storage/idb/idb.zig");
 const CookieStore = @import("storage/CookieStore.zig");
 const Element = @import("Element.zig");
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
+const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
 const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const Selection = @import("Selection.zig");
 const Timers = @import("Timers.zig");
@@ -117,6 +118,9 @@ _connection: *NetworkInformation,
 // pay for them, and getBattery() has to hand back the same object every call.
 _media_devices: ?*MediaDevices = null,
 _battery: ?*BatteryManager = null,
+// CSS.highlights. One registry per window, built on first use, because a page
+// that registers a highlight has to find it again on the next read.
+_css_highlights: ?*HighlightRegistry = null,
 // window.speechSynthesis, and the voice objects getVoices() hands back. Both
 // are built on first use and then reused, because scripts compare voices by
 // identity across calls.
@@ -175,6 +179,16 @@ _closed: bool = false,
 
 // Popup name (owned by page.arena)
 _name: []const u8 = "",
+
+pub fn getHighlights(self: *Window, frame: *Frame) !*HighlightRegistry {
+    if (self._css_highlights) |highlights| {
+        return highlights;
+    }
+    const highlights = try HighlightRegistry.init(frame);
+    highlights.acquireRef();
+    self._css_highlights = highlights;
+    return highlights;
+}
 
 pub fn asEventTarget(self: *Window) *EventTarget {
     return self._proto;
