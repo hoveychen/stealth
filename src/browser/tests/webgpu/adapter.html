@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<head>
+  <title>WebGPU adapter interfaces</title>
+  <script src="../testing.js"></script>
+  <script src="shape.js"></script>
+</head>
+
+<script id=webgpu_shape_helper_selfcheck>
+  {
+    // WGSLLanguageFeatures is the same readonly setlike as GPUSupportedFeatures
+    // and was already measured and implemented, so it pins the helper's output
+    // format before the new interfaces lean on it.
+    //
+    // `@@iterator=fn:` -- an anonymous function -- is a known divergence, and an
+    // engine-wide one rather than anything this family introduced: Chrome hands
+    // out the `values` function itself for @@iterator (measured:
+    // `X.prototype[Symbol.iterator] === X.prototype.values`, name 'values'),
+    // while bridge.iterator installs a separate unnamed one. Every setlike and
+    // maplike here reads the same way.
+    testing.expectEqual(
+      'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=WGSLLanguageFeatures,@@iterator=fn:',
+      gpuShape(WGSLLanguageFeatures.prototype),
+    );
+  }
+</script>
+
+<script id=webgpu_adapter_interface_objects>
+  {
+    for (const name of ['GPUAdapter', 'GPUAdapterInfo', 'GPUDeviceLostInfo', 'GPUSupportedFeatures', 'GPUSupportedLimits']) {
+      gpuExpectInterfaceObject(name);
+    }
+  }
+</script>
+
+<script id=webgpu_adapter_prototypes>
+  {
+    // Chrome 150's `Object.getOwnPropertyNames(X.prototype)` order verbatim --
+    // the order is itself a hashable surface, so it is not alphabetised.
+    testing.expectEqual(
+      'get features[ec-],get limits[ec-],get info[ec-],requestDevice/0[ecw],@@toStringTag=GPUAdapter',
+      gpuShape(GPUAdapter.prototype),
+    );
+    testing.expectEqual(
+      'get vendor[ec-],get architecture[ec-],get device[ec-],get description[ec-],get subgroupMinSize[ec-],get subgroupMaxSize[ec-],get isFallbackAdapter[ec-],@@toStringTag=GPUAdapterInfo',
+      gpuShape(GPUAdapterInfo.prototype),
+    );
+    testing.expectEqual(
+      'get reason[ec-],get message[ec-],@@toStringTag=GPUDeviceLostInfo',
+      gpuShape(GPUDeviceLostInfo.prototype),
+    );
+    testing.expectEqual(
+      'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=GPUSupportedFeatures,@@iterator=fn:',
+      gpuShape(GPUSupportedFeatures.prototype),
+    );
+  }
+</script>
+
+<script id=webgpu_supported_limits_prototype>
+  {
+    // 36 read-only numeric getters, in Chrome's order. maxImmediateSize and the
+    // four *InFragmentStage / *InVertexStage entries are recent additions; they
+    // are here because Chrome 150 has them, not because the spec does.
+    testing.expectEqual(
+      [
+        'get maxTextureDimension1D[ec-]',
+        'get maxTextureDimension2D[ec-]',
+        'get maxTextureDimension3D[ec-]',
+        'get maxTextureArrayLayers[ec-]',
+        'get maxBindGroups[ec-]',
+        'get maxBindGroupsPlusVertexBuffers[ec-]',
+        'get maxBindingsPerBindGroup[ec-]',
+        'get maxDynamicUniformBuffersPerPipelineLayout[ec-]',
+        'get maxDynamicStorageBuffersPerPipelineLayout[ec-]',
+        'get maxSampledTexturesPerShaderStage[ec-]',
+        'get maxSamplersPerShaderStage[ec-]',
+        'get maxStorageBuffersPerShaderStage[ec-]',
+        'get maxStorageTexturesPerShaderStage[ec-]',
+        'get maxUniformBuffersPerShaderStage[ec-]',
+        'get maxUniformBufferBindingSize[ec-]',
+        'get maxStorageBufferBindingSize[ec-]',
+        'get minUniformBufferOffsetAlignment[ec-]',
+        'get minStorageBufferOffsetAlignment[ec-]',
+        'get maxVertexBuffers[ec-]',
+        'get maxBufferSize[ec-]',
+        'get maxVertexAttributes[ec-]',
+        'get maxVertexBufferArrayStride[ec-]',
+        'get maxInterStageShaderVariables[ec-]',
+        'get maxColorAttachments[ec-]',
+        'get maxColorAttachmentBytesPerSample[ec-]',
+        'get maxComputeWorkgroupStorageSize[ec-]',
+        'get maxComputeInvocationsPerWorkgroup[ec-]',
+        'get maxComputeWorkgroupSizeX[ec-]',
+        'get maxComputeWorkgroupSizeY[ec-]',
+        'get maxComputeWorkgroupSizeZ[ec-]',
+        'get maxComputeWorkgroupsPerDimension[ec-]',
+        'get maxImmediateSize[ec-]',
+        'get maxStorageBuffersInFragmentStage[ec-]',
+        'get maxStorageTexturesInFragmentStage[ec-]',
+        'get maxStorageBuffersInVertexStage[ec-]',
+        'get maxStorageTexturesInVertexStage[ec-]',
+        '@@toStringTag=GPUSupportedLimits',
+      ],
+      gpuShape(GPUSupportedLimits.prototype).split(','),
+    );
+  }
+</script>
+
+<script id=webgpu_adapter_unreachable>
+  {
+    // navigator.gpu.requestAdapter still resolves null, so none of the above is
+    // reachable from script -- only the interface objects are observable. The
+    // resolution itself is asserted in navigator/nav-services.html.
+    testing.expectEqual('function', typeof navigator.gpu.requestAdapter);
+    testing.expectEqual(0, navigator.gpu.requestAdapter.length);
+  }
+</script>

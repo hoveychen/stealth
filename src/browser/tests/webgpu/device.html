@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<head>
+  <title>WebGPU device interfaces</title>
+  <script src="../testing.js"></script>
+  <script src="shape.js"></script>
+</head>
+
+<script id=webgpu_device_interface_objects>
+  {
+    // GPUDevice is the only EventTarget in the family: its interface object
+    // inherits from EventTarget and its prototype from EventTarget.prototype
+    // (measured, protoChain "EventTarget>Object").
+    gpuExpectInterfaceObject('GPUDevice', { inherits: EventTarget, protoOf: EventTarget.prototype });
+    gpuExpectInterfaceObject('GPUQueue');
+  }
+</script>
+
+<script id=webgpu_device_prototype>
+  {
+    // Chrome 150's own order: the five getters first (not alphabetical), then
+    // the two read/write accessors, then the methods.
+    testing.expectEqual(
+      [
+        'get features[ec-]',
+        'get limits[ec-]',
+        'get adapterInfo[ec-]',
+        'get lost[ec-]',
+        'get queue[ec-]',
+        'accessor onuncapturederror[ec-]',
+        'accessor label[ec-]',
+        'createBindGroup/1[ecw]',
+        'createBindGroupLayout/1[ecw]',
+        'createBuffer/1[ecw]',
+        'createCommandEncoder/0[ecw]',
+        'createComputePipeline/1[ecw]',
+        'createComputePipelineAsync/1[ecw]',
+        'createPipelineLayout/1[ecw]',
+        'createQuerySet/1[ecw]',
+        'createRenderBundleEncoder/1[ecw]',
+        'createRenderPipeline/1[ecw]',
+        'createRenderPipelineAsync/1[ecw]',
+        'createSampler/0[ecw]',
+        'createShaderModule/1[ecw]',
+        'createTexture/1[ecw]',
+        'destroy/0[ecw]',
+        'importExternalTexture/1[ecw]',
+        'popErrorScope/0[ecw]',
+        'pushErrorScope/1[ecw]',
+        '@@toStringTag=GPUDevice',
+      ],
+      gpuShape(GPUDevice.prototype).split(','),
+    );
+  }
+</script>
+
+<script id=webgpu_queue_prototype>
+  {
+    testing.expectEqual(
+      'accessor label[ec-],copyExternalImageToTexture/3[ecw],onSubmittedWorkDone/0[ecw],submit/1[ecw],writeBuffer/3[ecw],writeTexture/4[ecw],@@toStringTag=GPUQueue',
+      gpuShape(GPUQueue.prototype),
+    );
+  }
+</script>
+
+<script id=webgpu_device_event_target>
+  {
+    // The EventTarget methods are inherited rather than own, so they do not
+    // show up in the prototype dump above.
+    testing.expectTrue(EventTarget.prototype.isPrototypeOf(GPUDevice.prototype));
+    testing.expectEqual('function', typeof GPUDevice.prototype.addEventListener);
+    testing.expectEqual(
+      [],
+      Object.getOwnPropertyNames(GPUDevice.prototype).filter((k) => k.endsWith('EventListener')),
+    );
+
+    // GPUQueue is not an EventTarget, despite sitting next to one.
+    testing.expectFalse(EventTarget.prototype.isPrototypeOf(GPUQueue.prototype));
+  }
+</script>
