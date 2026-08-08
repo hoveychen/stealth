@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<head>
+  <title>WebGPU resource interfaces</title>
+  <script src="../testing.js"></script>
+  <script src="shape.js"></script>
+</head>
+
+<script id=webgpu_resource_interface_objects>
+  {
+    for (const name of [
+      'GPUBindGroup',
+      'GPUBindGroupLayout',
+      'GPUBuffer',
+      'GPUExternalTexture',
+      'GPUPipelineLayout',
+      'GPUQuerySet',
+      'GPUSampler',
+      'GPUTexture',
+      'GPUTextureView',
+    ]) {
+      gpuExpectInterfaceObject(name);
+    }
+  }
+</script>
+
+<script id=webgpu_label_only_prototypes>
+  {
+    // Six handles whose entire prototype is a read/write `label`. They differ
+    // only in brand -- and each brand is its own interface object, not a shared
+    // one (measured: no two of these are the same function).
+    const names = ['GPUBindGroup', 'GPUBindGroupLayout', 'GPUExternalTexture', 'GPUPipelineLayout', 'GPUSampler', 'GPUTextureView'];
+    for (const name of names) {
+      testing.expectEqual(`accessor label[ec-],@@toStringTag=${name}`, gpuShape(window[name].prototype));
+    }
+    testing.expectEqual(names.length, new Set(names.map((n) => window[n])).size);
+  }
+</script>
+
+<script id=webgpu_buffer_prototype>
+  {
+    testing.expectEqual(
+      'get size[ec-],get usage[ec-],get mapState[ec-],accessor label[ec-],destroy/0[ecw],getMappedRange/0[ecw],mapAsync/1[ecw],unmap/0[ecw],@@toStringTag=GPUBuffer',
+      gpuShape(GPUBuffer.prototype),
+    );
+  }
+</script>
+
+<script id=webgpu_texture_prototype>
+  {
+    // Chrome's order, quirk included: `textureBindingViewDimension` is a getter
+    // that lands after the two methods rather than with the other getters.
+    testing.expectEqual(
+      [
+        'get width[ec-]',
+        'get height[ec-]',
+        'get depthOrArrayLayers[ec-]',
+        'get mipLevelCount[ec-]',
+        'get sampleCount[ec-]',
+        'get dimension[ec-]',
+        'get format[ec-]',
+        'get usage[ec-]',
+        'accessor label[ec-]',
+        'createView/0[ecw]',
+        'destroy/0[ecw]',
+        'get textureBindingViewDimension[ec-]',
+        '@@toStringTag=GPUTexture',
+      ],
+      gpuShape(GPUTexture.prototype).split(','),
+    );
+  }
+</script>
+
+<script id=webgpu_query_set_prototype>
+  {
+    testing.expectEqual(
+      'get type[ec-],get count[ec-],accessor label[ec-],destroy/0[ecw],@@toStringTag=GPUQuerySet',
+      gpuShape(GPUQuerySet.prototype),
+    );
+  }
+</script>
+
+<script type=module id=webgpu_create_buffer>
+  // Values and messages measured on a headed Chrome 150 (win39-chrome.json).
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  const buf = dev.createBuffer({ size: 16, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+  testing.expectEqual('[object GPUBuffer]', Object.prototype.toString.call(buf));
+  testing.expectEqual(16, buf.size);
+  testing.expectEqual(12, buf.usage);
+  testing.expectEqual('unmapped', buf.mapState);
+  testing.expectEqual('', buf.label);
+
+  testing.expectEqual('buf', dev.createBuffer({ size: 4, usage: GPUBufferUsage.MAP_READ, label: 'buf' }).label);
+  // mappedAtCreation hands back an already-mapped buffer.
+  testing.expectEqual('mapped', dev.createBuffer({ size: 4, usage: GPUBufferUsage.MAP_WRITE, mappedAtCreation: true }).mapState);
+
+  // label round-trips on a written string.
+  buf.label = 'x';
+  testing.expectEqual('x', buf.label);
+
+  testing.expectError(
+    "Failed to execute 'createBuffer' on 'GPUDevice': Failed to read the 'size' property from 'GPUBufferDescriptor': Required member is undefined.",
+    () => dev.createBuffer({ usage: GPUBufferUsage.COPY_DST }),
+  );
+  testing.expectError(
+    "Failed to execute 'createBuffer' on 'GPUDevice': Failed to read the 'usage' property from 'GPUBufferDescriptor': Required member is undefined.",
+    () => dev.createBuffer({ size: 4 }),
+  );
+  // The argument count is checked before the descriptor is read, so a bare call
+  // and an undefined descriptor fail differently.
+  testing.expectError(
+    "Failed to execute 'createBuffer' on 'GPUDevice': 1 argument required, but only 0 present.",
+    () => dev.createBuffer(),
+  );
+  testing.expectError(
+    "Failed to read the 'size' property from 'GPUBufferDescriptor'",
+    () => dev.createBuffer(undefined),
+  );
+</script>
+
+<script type=module id=webgpu_create_texture>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  // GPUExtent3D as a sequence: the members it leaves out default to 1, not 0.
+  const t1 = dev.createTexture({ size: [8, 4], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING });
+  testing.expectEqual('[object GPUTexture]', Object.prototype.toString.call(t1));
+  testing.expectEqual([8, 4, 1], [t1.width, t1.height, t1.depthOrArrayLayers]);
+  testing.expectEqual([1, 1], [t1.mipLevelCount, t1.sampleCount]);
+  testing.expectEqual('2d', t1.dimension);
+  testing.expectEqual('rgba8unorm', t1.format);
+  testing.expectEqual(4, t1.usage);
+  testing.expectEqual('', t1.label);
+  // The getter exists but reads undefined on a texture created without it.
+  testing.expectEqual(undefined, t1.textureBindingViewDimension);
+
+  const t2 = dev.createTexture({ size: [8], format: 'r8unorm', usage: GPUTextureUsage.COPY_DST });
+  testing.expectEqual([8, 1, 1], [t2.width, t2.height, t2.depthOrArrayLayers]);
+
+  // GPUExtent3D as a dictionary.
+  const t3 = dev.createTexture({
+    size: { width: 8, height: 4, depthOrArrayLayers: 2 },
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING,
+  });
+  testing.expectEqual([8, 4, 2], [t3.width, t3.height, t3.depthOrArrayLayers]);
+
+  const t4 = dev.createTexture({ size: [8, 8, 4], dimension: '3d', format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING });
+  testing.expectEqual('3d', t4.dimension);
+  testing.expectEqual(4, t4.depthOrArrayLayers);
+
+  const t5 = dev.createTexture({ size: [8, 8], mipLevelCount: 3, format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING, label: 'tex' });
+  testing.expectEqual(3, t5.mipLevelCount);
+  testing.expectEqual('tex', t5.label);
+
+  for (const [missing, descriptor] of [
+    ['size', { format: 'rgba8unorm', usage: GPUTextureUsage.COPY_DST }],
+    ['format', { size: [8, 8], usage: GPUTextureUsage.COPY_DST }],
+    ['usage', { size: [8, 8], format: 'rgba8unorm' }],
+  ]) {
+    testing.expectError(
+      `Failed to execute 'createTexture' on 'GPUDevice': Failed to read the '${missing}' property from 'GPUTextureDescriptor': Required member is undefined.`,
+      () => dev.createTexture(descriptor),
+    );
+  }
+
+  // A core device rejects a format it has no feature for as an invalid *enum
+  // value*, not as a validation error -- measured: bc / etc2 / astc and the
+  // 16-bit norm families all fail this way on a core-only device.
+  testing.expectError(
+    "Failed to execute 'createTexture' on 'GPUDevice': Failed to read the 'format' property from 'GPUTextureDescriptor': The provided value 'nope' is not a valid enum value of type GPUTextureFormat.",
+    () => dev.createTexture({ size: [8, 8], format: 'nope', usage: GPUTextureUsage.COPY_DST }),
+  );
+  testing.expectError(
+    "'bc1-rgba-unorm' is not a valid enum value of type GPUTextureFormat",
+    () => dev.createTexture({ size: [8, 8], format: 'bc1-rgba-unorm', usage: GPUTextureUsage.COPY_DST }),
+  );
+  // ...while a core format is accepted.
+  testing.expectEqual('depth24plus-stencil8', dev.createTexture({
+    size: [8, 8],
+    format: 'depth24plus-stencil8',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+  }).format);
+</script>
+
+<script type=module id=webgpu_create_view_sampler_queryset>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+  const texture = dev.createTexture({ size: [8, 8], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING });
+
+  const view = texture.createView();
+  testing.expectEqual('[object GPUTextureView]', Object.prototype.toString.call(view));
+  testing.expectEqual('', view.label);
+  testing.expectEqual('v', texture.createView({ label: 'v' }).label);
+
+  const sampler = dev.createSampler();
+  testing.expectEqual('[object GPUSampler]', Object.prototype.toString.call(sampler));
+  testing.expectEqual('', sampler.label);
+  testing.expectEqual('s', dev.createSampler({ label: 's' }).label);
+
+  const set = dev.createQuerySet({ type: 'occlusion', count: 4 });
+  testing.expectEqual('[object GPUQuerySet]', Object.prototype.toString.call(set));
+  testing.expectEqual('occlusion', set.type);
+  testing.expectEqual(4, set.count);
+  testing.expectEqual('q', dev.createQuerySet({ type: 'occlusion', count: 2, label: 'q' }).label);
+
+  testing.expectError(
+    "Failed to read the 'type' property from 'GPUQuerySetDescriptor': Required member is undefined.",
+    () => dev.createQuerySet({ count: 2 }),
+  );
+  testing.expectError(
+    "Failed to read the 'count' property from 'GPUQuerySetDescriptor': Required member is undefined.",
+    () => dev.createQuerySet({ type: 'occlusion' }),
+  );
+  testing.expectError(
+    "The provided value 'nope' is not a valid enum value of type GPUQueryType.",
+    () => dev.createQuerySet({ type: 'nope', count: 2 }),
+  );
+</script>
+
+<script type=module id=webgpu_create_layouts_and_bind_group>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  const layout = dev.createBindGroupLayout({ entries: [] });
+  testing.expectEqual('[object GPUBindGroupLayout]', Object.prototype.toString.call(layout));
+  testing.expectEqual('[object GPUPipelineLayout]', Object.prototype.toString.call(dev.createPipelineLayout({ bindGroupLayouts: [] })));
+  testing.expectEqual('[object GPUBindGroup]', Object.prototype.toString.call(dev.createBindGroup({ layout, entries: [] })));
+
+  testing.expectError(
+    "Failed to execute 'createBindGroupLayout' on 'GPUDevice': Failed to read the 'entries' property from 'GPUBindGroupLayoutDescriptor': Required member is undefined.",
+    () => dev.createBindGroupLayout({}),
+  );
+  testing.expectError(
+    "Failed to execute 'createPipelineLayout' on 'GPUDevice': Failed to read the 'bindGroupLayouts' property from 'GPUPipelineLayoutDescriptor': Required member is undefined.",
+    () => dev.createPipelineLayout({}),
+  );
+  testing.expectError(
+    "Failed to execute 'createBindGroup' on 'GPUDevice': Failed to read the 'layout' property from 'GPUBindGroupDescriptor': Required member is undefined.",
+    () => dev.createBindGroup({ entries: [] }),
+  );
+
+  // The source member is a union, and Chrome names the whole union when the
+  // conversion fails.
+  testing.expectError(
+    "Failed to execute 'importExternalTexture' on 'GPUDevice': Failed to read the 'source' property from 'GPUExternalTextureDescriptor': Required member is undefined.",
+    () => dev.importExternalTexture({}),
+  );
+  testing.expectError(
+    "Failed to read the 'source' property from 'GPUExternalTextureDescriptor': The provided value is not of type '(HTMLVideoElement or VideoFrame)'.",
+    () => dev.importExternalTexture({ source: 5 }),
+  );
+  testing.expectEqual(
+    '[object GPUExternalTexture]',
+    Object.prototype.toString.call(dev.importExternalTexture({ source: document.createElement('video') })),
+  );
+</script>

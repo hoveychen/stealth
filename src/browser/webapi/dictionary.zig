@@ -88,6 +88,12 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
 
         const Self = @This();
         const CTOR = prefix;
+
+        /// Exposed so a caller can build a message this reader has no shape for
+        /// (see webgpu/resources.zig's requiredEnum) without re-deriving the
+        /// wording.
+        pub const message_prefix = prefix;
+        pub const dict_name = dict;
         const EventOptions = if (with_event) Event.Options else void;
 
         pub fn read(value_: ?js.Value, exec: *const Execution) !Self {
@@ -129,6 +135,18 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
             return throwTypeError(
                 CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
                     "': Failed to convert value to '" ++ idl ++ "'.",
+                exec,
+            );
+        }
+
+        /// A *union*-typed member reads back differently from an interface one:
+        /// Chrome says the value "is not of type" the union rather than that it
+        /// failed to convert. Measured with
+        /// `device.importExternalTexture({source: 5})`.
+        pub fn notOfType(comptime name: []const u8, comptime idl: []const u8, exec: *const Execution) anyerror {
+            return throwTypeError(
+                CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
+                    "': The provided value is not of type '" ++ idl ++ "'.",
                 exec,
             );
         }

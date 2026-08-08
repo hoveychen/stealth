@@ -17,9 +17,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // GPUDevice -- the only EventTarget in the WebGPU family -- and the GPUQueue it
-// owns. Reachable only through GPUAdapter.requestDevice, which is itself only
-// reachable through GPU.requestAdapter, which resolves null: see adapter.zig for
-// what that means for this file.
+// owns. Reached through GPUAdapter.requestDevice, which a page gets to through
+// GPU.requestAdapter; see adapter.zig for why that now hands out a real adapter.
 //
 // Everything measured on a headed Chrome 150 with
 // stealth-detector-probes/win-batch/probe-win38.js: the getter block comes
@@ -30,6 +29,7 @@
 
 const js = @import("../../js/js.zig");
 const adapter = @import("adapter.zig");
+const resources = @import("resources.zig");
 const EventTarget = @import("../EventTarget.zig");
 const Execution = js.Execution;
 
@@ -166,6 +166,43 @@ pub const GPUDevice = struct {
         self._on_uncaptured_error = if (listener) |l| try l.persistWithThis(self) else null;
     }
 
+    // The create* family. Each one reads its descriptor the way Chrome does --
+    // a missing required member is a synchronous TypeError naming the method,
+    // the dictionary and the member -- and hands back the object resources.zig
+    // builds. See resources.zig for what is still missing (the asynchronous,
+    // error-scope half of validation).
+    pub fn createBuffer(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*resources.GPUBuffer {
+        return resources.createBuffer(args, exec);
+    }
+
+    pub fn createTexture(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*resources.GPUTexture {
+        return resources.createTexture(args, exec);
+    }
+
+    pub fn createQuerySet(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*resources.GPUQuerySet {
+        return resources.createQuerySet(args, exec);
+    }
+
+    pub fn createSampler(_: *GPUDevice, descriptor_: ?js.Value, exec: *const Execution) !*resources.GPUSampler {
+        return resources.createSampler(descriptor_, exec);
+    }
+
+    pub fn createBindGroupLayout(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*resources.GPUBindGroupLayout {
+        return resources.createBindGroupLayout(args, exec);
+    }
+
+    pub fn createPipelineLayout(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*resources.GPUPipelineLayout {
+        return resources.createPipelineLayout(args, exec);
+    }
+
+    pub fn createBindGroup(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*resources.GPUBindGroup {
+        return resources.createBindGroup(args, exec);
+    }
+
+    pub fn importExternalTexture(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*resources.GPUExternalTexture {
+        return resources.importExternalTexture(args, exec);
+    }
+
     // The create* family is shape only for now -- the name, the argument count
     // and the position in the prototype are right, the return value is not.
     // Each one owes a GPUBuffer, a GPUTexture or a Promise of a pipeline, which
@@ -194,22 +231,22 @@ pub const GPUDevice = struct {
         pub const queue = bridge.accessor(D.getQueue, null, .{});
         pub const onuncapturederror = bridge.accessor(D.getOnUncapturedError, D.setOnUncapturedError, .{});
         pub const label = bridge.accessor(D.getLabel, D.setLabel, .{});
-        pub const createBindGroup = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createBindGroupLayout = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createBuffer = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const createBindGroup = bridge.function(D.createBindGroup, .{ .arity = 1 });
+        pub const createBindGroupLayout = bridge.function(D.createBindGroupLayout, .{ .arity = 1 });
+        pub const createBuffer = bridge.function(D.createBuffer, .{ .arity = 1 });
         pub const createCommandEncoder = bridge.function(D.shapeOnly, .{});
         pub const createComputePipeline = bridge.function(D.shapeOnly, .{ .arity = 1 });
         pub const createComputePipelineAsync = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createPipelineLayout = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createQuerySet = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const createPipelineLayout = bridge.function(D.createPipelineLayout, .{ .arity = 1 });
+        pub const createQuerySet = bridge.function(D.createQuerySet, .{ .arity = 1 });
         pub const createRenderBundleEncoder = bridge.function(D.shapeOnly, .{ .arity = 1 });
         pub const createRenderPipeline = bridge.function(D.shapeOnly, .{ .arity = 1 });
         pub const createRenderPipelineAsync = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createSampler = bridge.function(D.shapeOnly, .{});
+        pub const createSampler = bridge.function(D.createSampler, .{});
         pub const createShaderModule = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createTexture = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const createTexture = bridge.function(D.createTexture, .{ .arity = 1 });
         pub const destroy = bridge.function(D.destroy, .{});
-        pub const importExternalTexture = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const importExternalTexture = bridge.function(D.importExternalTexture, .{ .arity = 1 });
         pub const popErrorScope = bridge.function(D.shapeOnly, .{});
         pub const pushErrorScope = bridge.function(D.shapeOnly, .{ .arity = 1 });
     };
