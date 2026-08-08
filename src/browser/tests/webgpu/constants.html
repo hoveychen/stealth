@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<head>
+  <title>WebGPU constant namespaces</title>
+  <script src="../testing.js"></script>
+</head>
+
+<script id=webgpu_namespace_object_shape>
+  {
+    // A WebIDL namespace is a plain object, not an interface object: there is
+    // no constructor, no prototype property, and no callable behaviour. All of
+    // this was measured on a headed Chrome 150.
+    for (const name of ['GPUBufferUsage', 'GPUColorWrite', 'GPUMapMode', 'GPUShaderStage', 'GPUTextureUsage']) {
+      const ns = window[name];
+      testing.expectEqual('object', typeof ns);
+      testing.expectEqual(`[object ${name}]`, String(ns));
+      testing.expectEqual(`[object ${name}]`, Object.prototype.toString.call(ns));
+      testing.expectTrue(Object.getPrototypeOf(ns) === Object.prototype);
+      testing.expectEqual(undefined, ns.prototype);
+      testing.expectTrue(ns.constructor === Object);
+
+      // The brand is an own, non-enumerable, non-writable, configurable
+      // Symbol.toStringTag -- and the only symbol on the object.
+      testing.expectEqual('Symbol(Symbol.toStringTag)', Object.getOwnPropertySymbols(ns).map(String).join(','));
+      const tag = Object.getOwnPropertyDescriptor(ns, Symbol.toStringTag);
+      testing.expectEqual(name, tag.value);
+      testing.expectFalse(tag.enumerable);
+      testing.expectFalse(tag.writable);
+      testing.expectTrue(tag.configurable);
+
+      // On the global it is a data property: not enumerable, but configurable
+      // and writable.
+      const wd = Object.getOwnPropertyDescriptor(window, name);
+      testing.expectTrue(wd !== undefined);
+      testing.expectFalse(wd.enumerable);
+      testing.expectTrue(wd.configurable);
+      testing.expectTrue(wd.writable);
+      testing.expectTrue(wd.value === ns);
+    }
+  }
+</script>
+
+<script id=webgpu_namespace_constants>
+  {
+    // Values and enumeration order are Chrome 150's.
+    const expected = {
+      GPUBufferUsage: 'MAP_READ=1,MAP_WRITE=2,COPY_SRC=4,COPY_DST=8,INDEX=16,VERTEX=32,UNIFORM=64,STORAGE=128,INDIRECT=256,QUERY_RESOLVE=512',
+      GPUColorWrite: 'RED=1,GREEN=2,BLUE=4,ALPHA=8,ALL=15',
+      GPUMapMode: 'READ=1,WRITE=2',
+      GPUShaderStage: 'VERTEX=1,FRAGMENT=2,COMPUTE=4',
+      GPUTextureUsage: 'COPY_SRC=1,COPY_DST=2,TEXTURE_BINDING=4,STORAGE_BINDING=8,RENDER_ATTACHMENT=16,TRANSIENT_ATTACHMENT=32',
+    };
+    for (const [name, want] of Object.entries(expected)) {
+      const ns = window[name];
+      const got = Object.getOwnPropertyNames(ns).map((k) => `${k}=${ns[k]}`).join(',');
+      testing.expectEqual(want, got);
+
+      // Constants are own properties of the namespace object -- enumerable, so
+      // Object.entries sees them -- and frozen in place.
+      testing.expectEqual(want, Object.entries(ns).map(([k, v]) => `${k}=${v}`).join(','));
+      for (const k of Object.getOwnPropertyNames(ns)) {
+        const d = Object.getOwnPropertyDescriptor(ns, k);
+        testing.expectTrue(d.enumerable);
+        testing.expectFalse(d.writable);
+        testing.expectFalse(d.configurable);
+      }
+    }
+  }
+</script>
+
+<script id=webgpu_namespace_not_callable>
+  {
+    // Chrome: "TypeError: GPUBufferUsage is not a constructor" / "is not a
+    // function". We only assert that both throw a TypeError, since the message
+    // is V8's own wording for a non-callable value.
+    testing.expectError('TypeError', () => new window.GPUBufferUsage());
+    testing.expectError('TypeError', () => window.GPUBufferUsage());
+
+    // Writing to a constant is a silent no-op in sloppy mode.
+    GPUShaderStage.VERTEX = 99;
+    testing.expectEqual(1, GPUShaderStage.VERTEX);
+
+    // No interface object is exposed under any other name.
+    testing.expectEqual(undefined, window.GPUBufferUsage.prototype);
+  }
+</script>
