@@ -46,6 +46,13 @@ pub const GPUDevice = struct {
     _proto: *EventTarget,
     _label: []const u8 = "",
     _on_uncaptured_error: ?js.Function.Global = null,
+    // What requestDevice settled on: the default single feature, plus whatever
+    // requiredFeatures the adapter accepted.
+    _feature_names: []const []const u8 = &adapter.GPUSupportedFeatures.device_default,
+    // `device.lost` is the same promise on every read (measured), so the resolver
+    // is kept rather than the promise; destroy() settles it.
+    _lost: ?js.PromiseResolver.Global = null,
+    _destroyed: bool = false,
 
     // Allocated on first read, never re-created: Chrome hands back the same
     // objects on every read (measured), and an embedded struct would share its
@@ -64,7 +71,7 @@ pub const GPUDevice = struct {
             return features;
         }
         const created = try exec._factory.create(adapter.GPUSupportedFeatures{
-            ._features = &adapter.GPUSupportedFeatures.device_default,
+            ._features = self._feature_names,
         });
         self._features = created;
         return created;
@@ -92,13 +99,46 @@ pub const GPUDevice = struct {
         return created;
     }
 
-    // A promise that never settles. Chrome settles it when the device is lost or
-    // destroyed and hands back the same promise on every read; we have neither a
-    // device to lose nor a place to keep the resolver, so each read makes a new
-    // pending one. Unobservable while nothing can reach a device.
-    pub fn getLost(_: *GPUDevice, exec: *const Execution) !js.Promise {
-        var resolver = exec.js.local.?.createPromiseResolver();
-        return resolver.promise();
+    /// Pending while the device is alive, and the same promise on every read
+    /// (measured). destroy() is the only thing that settles it here.
+    pub fn getLost(self: *GPUDevice, exec: *const Execution) !js.Promise {
+        const local = exec.js.local.?;
+        if (self._lost) |resolver| {
+            return local.toLocal(resolver).promise();
+        }
+        const resolver = local.createPromiseResolver();
+        self._lost = try resolver.persist();
+        const promise = resolver.promise();
+        // Nothing rejects it, so a page that never reads it is not a leak the
+        // unhandled-rejection tracker should shout about.
+        promise.markAsHandled();
+        if (self._destroyed) {
+            try self.settleLost(exec);
+        }
+        return promise;
+    }
+
+    /// `lost` *resolves* (it does not reject) with reason 'destroyed' and
+    /// Chrome's own message. Measured after `device.destroy()`.
+    fn settleLost(self: *GPUDevice, exec: *const Execution) !void {
+        const resolver = self._lost orelse return;
+        const info = try exec._factory.create(adapter.GPUDeviceLostInfo{
+            ._reason = "destroyed",
+            ._message = "Device was destroyed.",
+        });
+        exec.js.local.?.toLocal(resolver).resolve("GPUDevice.lost", info);
+    }
+
+    /// Chrome keeps the device object usable after destroy() -- the label, the
+    /// queue and the limits all still read back -- and only settles `lost`.
+    pub fn destroy(self: *GPUDevice, exec: *const Execution) !void {
+        if (self._destroyed) {
+            return;
+        }
+        self._destroyed = true;
+        if (self._lost != null) {
+            try self.settleLost(exec);
+        }
     }
 
     pub fn getQueue(self: *GPUDevice, exec: *const Execution) !*GPUQueue {
@@ -126,11 +166,12 @@ pub const GPUDevice = struct {
         self._on_uncaptured_error = if (listener) |l| try l.persistWithThis(self) else null;
     }
 
-    // Everything below is shape only -- the name, the argument count and the
-    // position in the prototype. None of it can be called while requestAdapter
-    // resolves null, and none of it can be honest before then either: each one
-    // owes a GPUBuffer, a GPUTexture or a Promise of a pipeline that we have no
-    // backend to produce.
+    // The create* family is shape only for now -- the name, the argument count
+    // and the position in the prototype are right, the return value is not.
+    // Each one owes a GPUBuffer, a GPUTexture or a Promise of a pipeline, which
+    // are the interfaces P4 and P5 of this batch add; until then calling one
+    // gives undefined where Chrome gives an object. Reachable, unlike before, so
+    // this has to be finished before the batch merges.
     pub fn shapeOnly(_: *GPUDevice) void {}
 
     pub const JsApi = struct {
@@ -167,7 +208,7 @@ pub const GPUDevice = struct {
         pub const createSampler = bridge.function(D.shapeOnly, .{});
         pub const createShaderModule = bridge.function(D.shapeOnly, .{ .arity = 1 });
         pub const createTexture = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const destroy = bridge.function(D.shapeOnly, .{});
+        pub const destroy = bridge.function(D.destroy, .{});
         pub const importExternalTexture = bridge.function(D.shapeOnly, .{ .arity = 1 });
         pub const popErrorScope = bridge.function(D.shapeOnly, .{});
         pub const pushErrorScope = bridge.function(D.shapeOnly, .{ .arity = 1 });

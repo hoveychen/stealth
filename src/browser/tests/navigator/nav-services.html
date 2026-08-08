@@ -228,11 +228,13 @@
     testing.expectEqual(0, GPU.prototype.requestAdapter.length);
     testing.expectEqual('bgra8unorm', navigator.gpu.getPreferredCanvasFormat());
 
-    // No adapter: requestAdapter resolving null is the documented answer when
-    // WebGPU has no device to hand out, and we have none.
+    // requestAdapter hands back a real adapter -- the reference Chrome 150 on
+    // this platform has one, so its values are measured rather than invented.
+    // The adapter itself is covered in webgpu/adapter.html; here we only check
+    // that the entry point resolves to one.
     const adapter = await navigator.gpu.requestAdapter();
     state.resolve();
-    await state.done(() => testing.expectEqual(null, adapter));
+    await state.done(() => testing.expectEqual('[object GPUAdapter]', Object.prototype.toString.call(adapter)));
   }
 </script>
 

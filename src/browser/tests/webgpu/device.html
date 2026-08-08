@@ -77,3 +77,86 @@
     testing.expectFalse(EventTarget.prototype.isPrototypeOf(GPUQueue.prototype));
   }
 </script>
+
+<script type=module id=webgpu_device_reachable>
+  // Everything below was measured on a headed Chrome 150 (win38-chrome.json).
+  const device = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  testing.expectTrue(device instanceof EventTarget);
+  testing.expectEqual('', device.label);
+  device.label = 'zig';
+  testing.expectEqual('zig', device.label);
+  device.label = '';
+
+  testing.expectEqual(null, device.onuncapturederror);
+
+  // The same object on every read.
+  testing.expectTrue(device.queue === device.queue);
+  testing.expectTrue(device.limits === device.limits);
+  testing.expectTrue(device.features === device.features);
+  testing.expectTrue(device.adapterInfo === device.adapterInfo);
+  testing.expectTrue(device.lost === device.lost);
+
+  testing.expectEqual('[object GPUQueue]', Object.prototype.toString.call(device.queue));
+  testing.expectEqual('', device.queue.label);
+  testing.expectEqual('[object GPUAdapterInfo]', Object.prototype.toString.call(device.adapterInfo));
+
+  // A device's adapterInfo is a *different* object from the adapter's, with the
+  // same values.
+  const adapter = await navigator.gpu.requestAdapter();
+  const other = await adapter.requestDevice();
+  testing.expectFalse(other.adapterInfo === adapter.info);
+  testing.expectEqual(adapter.info.vendor, other.adapterInfo.vendor);
+</script>
+
+<script type=module id=webgpu_device_limits_are_the_smaller_set>
+  // A device gets the default limits, which are lower than what the adapter
+  // advertises -- the pair is one of the strongest values in the family.
+  const adapter = await navigator.gpu.requestAdapter();
+  const device = await adapter.requestDevice();
+  testing.expectEqual(8192, device.limits.maxTextureDimension1D);
+  testing.expectEqual(8192, device.limits.maxTextureDimension2D);
+  testing.expectEqual(256, device.limits.maxTextureArrayLayers);
+  testing.expectEqual(16, device.limits.maxSampledTexturesPerShaderStage);
+  testing.expectEqual(134217728, device.limits.maxStorageBufferBindingSize);
+  testing.expectEqual(268435456, device.limits.maxBufferSize);
+  testing.expectEqual(16, device.limits.maxVertexAttributes);
+  testing.expectEqual(16, device.limits.maxInterStageShaderVariables);
+  testing.expectEqual(32, device.limits.maxColorAttachmentBytesPerSample);
+  testing.expectEqual(256, device.limits.maxComputeInvocationsPerWorkgroup);
+  testing.expectEqual(4, device.limits.maxStorageTexturesInVertexStage);
+
+  // Same 36 names on both, different numbers.
+  testing.expectFalse(adapter.limits.maxBufferSize === device.limits.maxBufferSize);
+  testing.expectEqual(2048, device.limits.maxTextureDimension3D);
+  testing.expectEqual(2048, adapter.limits.maxTextureDimension3D);
+</script>
+
+<script type=module id=webgpu_device_lost>
+  // `lost` stays pending while the device is alive, and *resolves* -- it does not
+  // reject -- once destroy() has been called.
+  const device = await (await navigator.gpu.requestAdapter()).requestDevice();
+  const pending = Symbol('pending');
+  testing.expectTrue(
+    (await Promise.race([device.lost.then(() => 'settled'), Promise.resolve(pending)])) === pending,
+  );
+
+  device.destroy();
+  const info = await device.lost;
+  testing.expectEqual('[object GPUDeviceLostInfo]', Object.prototype.toString.call(info));
+  testing.expectEqual('destroyed', info.reason);
+  testing.expectEqual('Device was destroyed.', info.message);
+
+  // destroy() is idempotent, and the device object stays readable afterwards.
+  device.destroy();
+  testing.expectEqual('', device.label);
+  testing.expectEqual(268435456, device.limits.maxBufferSize);
+</script>
+
+<script type=module id=webgpu_device_lost_read_after_destroy>
+  // Reading `lost` for the first time *after* destroy() still gives a promise
+  // that is already settled.
+  const device = await (await navigator.gpu.requestAdapter()).requestDevice();
+  device.destroy();
+  testing.expectEqual('destroyed', (await device.lost).reason);
+</script>

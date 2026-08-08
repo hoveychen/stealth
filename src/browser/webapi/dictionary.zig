@@ -22,11 +22,19 @@
 // 'XInit'."), and those messages are exactly what a detector reads back when it
 // feeds a constructor the wrong thing.
 //
-// Two entry points, differing only in whether the dictionary also inherits
-// EventInit: `Init` for an event dictionary (it fills `.event`), `Reader` for
-// every other one. Reading EventInit is not free -- it touches `bubbles`,
-// `cancelable` and `composed`, all of which a page can define as getters -- so
-// a non-event dictionary must not do it.
+// Three entry points. `Init` and `Reader` differ only in whether the dictionary
+// also inherits EventInit: `Init` for an event dictionary (it fills `.event`),
+// `Reader` for every other one. Reading EventInit is not free -- it touches
+// `bubbles`, `cancelable` and `composed`, all of which a page can define as
+// getters -- so a non-event dictionary must not do it.
+//
+// `MethodReader` is `Reader` for a dictionary passed to an *operation* rather
+// than to a constructor, which Chrome prefixes differently. Measured on a
+// headed Chrome 150:
+//
+//   navigator.gpu.requestAdapter('nope')
+//     -> TypeError: Failed to execute 'requestAdapter' on 'GPU': The provided
+//        value is not of type 'GPURequestAdapterOptions'.
 
 const std = @import("std");
 
@@ -51,16 +59,35 @@ pub fn Reader(comptime interface: []const u8, comptime dict: []const u8) type {
     return Dictionary(interface, dict, false);
 }
 
+/// A plain dictionary handed to an operation, so the messages say
+/// "Failed to execute 'method' on 'Interface'" rather than "Failed to
+/// construct 'Interface'".
+pub fn MethodReader(
+    comptime interface: []const u8,
+    comptime method: []const u8,
+    comptime dict: []const u8,
+) type {
+    return DictionaryWithPrefix(
+        "Failed to execute '" ++ method ++ "' on '" ++ interface ++ "': ",
+        dict,
+        false,
+    );
+}
+
 /// The dictionary reader. One instance per constructor call, parameterised by
 /// the interface and dictionary names so every message it produces is a
 /// comptime string.
 fn Dictionary(comptime interface: []const u8, comptime dict: []const u8, comptime with_event: bool) type {
+    return DictionaryWithPrefix("Failed to construct '" ++ interface ++ "': ", dict, with_event);
+}
+
+fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, comptime with_event: bool) type {
     return struct {
         object: ?js.Object = null,
         event: EventOptions = if (with_event) .{} else {},
 
         const Self = @This();
-        const CTOR = "Failed to construct '" ++ interface ++ "': ";
+        const CTOR = prefix;
         const EventOptions = if (with_event) Event.Options else void;
 
         pub fn read(value_: ?js.Value, exec: *const Execution) !Self {
@@ -114,6 +141,38 @@ fn Dictionary(comptime interface: []const u8, comptime dict: []const u8, comptim
                     "': The provided value cannot be converted to a sequence.",
                 exec,
             );
+        }
+
+        /// A WebIDL enumeration-typed member. Present-and-unrecognised is a
+        /// TypeError naming the offending value and the enum; absent takes the
+        /// default. Measured on a headed Chrome 150:
+        ///
+        ///   navigator.gpu.requestAdapter({powerPreference: 'nope'})
+        ///     -> TypeError: Failed to execute 'requestAdapter' on 'GPU':
+        ///        Failed to read the 'powerPreference' property from
+        ///        'GPURequestAdapterOptions': The provided value 'nope' is not a
+        ///        valid enum value of type GPUPowerPreference.
+        pub fn enumMember(
+            self: Self,
+            comptime name: []const u8,
+            comptime idl: []const u8,
+            comptime allowed: []const []const u8,
+            default: ?[]const u8,
+            exec: *const Execution,
+        ) !?[]const u8 {
+            const member = (try self.present(name)) orelse return default;
+            const text = try member.toStringSlice();
+            for (allowed) |candidate| {
+                if (std.mem.eql(u8, candidate, text)) {
+                    return candidate;
+                }
+            }
+            return throwTypeError(try std.fmt.allocPrint(
+                exec.call_arena,
+                CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
+                    "': The provided value '{s}' is not a valid enum value of type " ++ idl ++ ".",
+                .{text},
+            ), exec);
         }
 
         pub fn boolean(self: Self, comptime name: []const u8, default: bool) !bool {

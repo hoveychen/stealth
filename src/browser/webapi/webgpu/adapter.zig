@@ -38,7 +38,16 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const device = @import("device.zig");
+const dictionary = @import("../dictionary.zig");
+const DOMException = @import("../DOMException.zig");
 const Execution = js.Execution;
+
+/// Rejects with the OperationError Chrome gives, message text and all.
+fn rejectOperationError(message: []const u8, exec: *const Execution) js.Promise {
+    var resolver = exec.js.local.?.createPromiseResolver();
+    resolver.reject("webgpu", DOMException.init(message, "OperationError"));
+    return resolver.promise();
+}
 
 pub fn registerTypes() []const type {
     return &.{
@@ -60,6 +69,15 @@ pub fn registerTypes() []const type {
 pub const GPUSupportedFeatures = struct {
     _features: []const []const u8,
 
+    /// One observed order, and deliberately not treated as more than that.
+    /// Chrome's own iteration order is *not* stable: asking the same page for
+    /// three adapters in a row gives the same 22 names with two clusters
+    /// permuted -- {texture-formats-tier1, bgra8unorm-storage} at indices 2-3
+    /// and {shader-f16, texture-formats-tier2, clip-distances, timestamp-query}
+    /// at 15-18 (measured three times over, Dawn iterates a hash set). So the
+    /// order is not a fingerprint a detector can rely on, and any one of
+    /// Chrome's orders is as authentic as another; the *set* is what has to
+    /// match.
     pub const adapter = [_][]const u8{
         "depth32float-stencil8",
         "rg11b10ufloat-renderable",
@@ -206,6 +224,18 @@ pub const GPUSupportedLimits = struct {
         maxStorageBuffersInVertexStage: u64,
         maxStorageTexturesInVertexStage: u64,
     };
+
+    /// The supported value for a limit the page named, or null when the name is
+    /// not one of ours -- which Chrome reports as a different error from asking
+    /// for too much.
+    pub fn lookup(values: *const Values, name: []const u8) ?u64 {
+        inline for (comptime @typeInfo(Values).@"struct".fields) |field| {
+            if (std.mem.eql(u8, field.name, name)) {
+                return @field(values, field.name);
+            }
+        }
+        return null;
+    }
 
     pub const adapter = Values{
         .maxTextureDimension1D = 16384,
@@ -411,6 +441,39 @@ pub const GPUAdapter = struct {
     _features: ?*GPUSupportedFeatures = null,
     _limits: ?*GPUSupportedLimits = null,
     _info: ?*GPUAdapterInfo = null,
+    // An adapter is single use: once it has produced a device, every later
+    // requestDevice rejects (measured -- this is not in the spec's prose).
+    _consumed: bool = false,
+
+    const AdapterOptions = dictionary.MethodReader("GPU", "requestAdapter", "GPURequestAdapterOptions");
+    const DeviceDescriptor = dictionary.MethodReader("GPUAdapter", "requestDevice", "GPUDeviceDescriptor");
+
+    const CONSUMED =
+        "Failed to execute 'requestDevice' on 'GPUAdapter': adapter is \"consumed\": " ++
+        "it has already been used to create a device\n" ++
+        "    at CreateDeviceInternal (../../third_party/dawn/src/dawn/native/Adapter.cpp:328)\n";
+
+    /// The body of `navigator.gpu.requestAdapter(options)`. A *fresh* adapter
+    /// every call (measured: two calls give two objects), or null when the page
+    /// insists on a fallback adapter -- there isn't one here, and Chrome does not
+    /// substitute the real one for it.
+    pub fn request(options_: ?js.Value, exec: *const Execution) !js.Promise {
+        const options = try AdapterOptions.read(options_, exec);
+        // Read for its side effect only: an unrecognised value is a TypeError,
+        // and which adapter we hand back does not otherwise depend on it.
+        _ = try options.enumMember(
+            "powerPreference",
+            "GPUPowerPreference",
+            &.{ "low-power", "high-performance" },
+            null,
+            exec,
+        );
+        const local = exec.js.local.?;
+        if (try options.boolean("forceFallbackAdapter", false)) {
+            return local.resolvePromise(null);
+        }
+        return local.resolvePromise(try exec._factory.create(GPUAdapter{}));
+    }
 
     pub fn getFeatures(self: *GPUAdapter, exec: *const Execution) !*GPUSupportedFeatures {
         if (self._features) |features| {
@@ -439,13 +502,104 @@ pub const GPUAdapter = struct {
         return created;
     }
 
-    // A fresh device every call, like Chrome. The descriptor is ignored: with no
-    // real backend there is nothing to honour in it, and the one thing it can
-    // change that is observable -- the feature set -- would need a validated
-    // GPUDeviceDescriptor to read.
-    pub fn requestDevice(_: *GPUAdapter, _: ?js.Object, exec: *const Execution) !js.Promise {
-        const created = try exec._factory.eventTarget(device.GPUDevice{ ._proto = undefined });
+    pub fn requestDevice(self: *GPUAdapter, descriptor_: ?js.Value, exec: *const Execution) !js.Promise {
+        if (self._consumed) {
+            return rejectOperationError(CONSUMED, exec);
+        }
+
+        const descriptor = try DeviceDescriptor.read(descriptor_, exec);
+        const label = try descriptor.string("label", "", exec.arena);
+        const features = try readRequiredFeatures(descriptor, exec);
+        if (try checkRequiredLimits(descriptor, exec)) |failure| {
+            return rejectOperationError(failure, exec);
+        }
+
+        self._consumed = true;
+        const created = try exec._factory.eventTarget(device.GPUDevice{
+            ._proto = undefined,
+            ._label = label,
+            ._feature_names = features,
+        });
         return exec.js.local.?.resolvePromise(created);
+    }
+
+    /// requiredFeatures is validated against the adapter's own set, and the
+    /// accepted names are appended *after* the device's default one, in the order
+    /// the page listed them (measured: asking for shader-f16 gives
+    /// 'core-features-and-limits,shader-f16').
+    fn readRequiredFeatures(descriptor: DeviceDescriptor, exec: *const Execution) ![]const []const u8 {
+        const default = &GPUSupportedFeatures.device_default;
+        const member = (try descriptor.present("requiredFeatures")) orelse return default;
+        if (!member.isArray()) {
+            return DeviceDescriptor.notASequence("requiredFeatures", exec);
+        }
+        const array = member.toArray();
+        const len = array.len();
+
+        const names = try exec.arena.alloc([]const u8, default.len + len);
+        @memcpy(names[0..default.len], default);
+        var count: usize = default.len;
+
+        for (0..len) |i| {
+            const entry = try array.get(@intCast(i));
+            const text = try entry.toStringSlice();
+            const known = blk: {
+                for (GPUSupportedFeatures.adapter) |candidate| {
+                    if (std.mem.eql(u8, candidate, text)) break :blk candidate;
+                }
+                return dictionary.throwTypeError(try std.fmt.allocPrint(
+                    exec.call_arena,
+                    "Failed to execute 'requestDevice' on 'GPUAdapter': Failed to read the " ++
+                        "'requiredFeatures' property from 'GPUDeviceDescriptor': The provided value " ++
+                        "'{s}' is not a valid enum value of type GPUFeatureName.",
+                    .{text},
+                ), exec);
+            };
+            if (std.mem.eql(u8, known, default[0])) {
+                continue;
+            }
+            names[count] = known;
+            count += 1;
+        }
+        return names[0..count];
+    }
+
+    /// requiredLimits is checked but never stored: a device that asked for more
+    /// still reports the default set (measured), so the only observable outcomes
+    /// are the two OperationError messages below.
+    fn checkRequiredLimits(descriptor: DeviceDescriptor, exec: *const Execution) !?[]const u8 {
+        const member = (try descriptor.present("requiredLimits")) orelse return null;
+        if (!member.isObject()) {
+            return null;
+        }
+        const object = member.toObject();
+        const names = try object.getOwnPropertyNames();
+        for (0..names.len()) |i| {
+            const key = try (try names.get(@intCast(i))).toStringSlice();
+            const entry = try object.get(key);
+            if (entry.isUndefined()) {
+                continue;
+            }
+            const supported = GPUSupportedLimits.lookup(&GPUSupportedLimits.adapter, key) orelse {
+                return try std.fmt.allocPrint(
+                    exec.call_arena,
+                    "Failed to execute 'requestDevice' on 'GPUAdapter': The limit \"{s}\" with a " ++
+                        "non-undefined value is not recognized.",
+                    .{key},
+                );
+            };
+            const wanted = entry.toF64() catch continue;
+            if (wanted > @as(f64, @floatFromInt(supported))) {
+                return try std.fmt.allocPrint(
+                    exec.call_arena,
+                    "Failed to execute 'requestDevice' on 'GPUAdapter': Required limit ({d}) is " ++
+                        "greater than the supported limit ({d}).\n - While validating {s}\n" ++
+                        " - While validating required limits\n",
+                    .{ @as(u64, @intFromFloat(wanted)), supported, key },
+                );
+            }
+        }
+        return null;
     }
 
     pub const JsApi = struct {

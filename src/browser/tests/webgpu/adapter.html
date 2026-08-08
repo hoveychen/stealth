@@ -105,12 +105,184 @@
   }
 </script>
 
-<script id=webgpu_adapter_unreachable>
+<script id=webgpu_adapter_entry_arity>
   {
-    // navigator.gpu.requestAdapter still resolves null, so none of the above is
-    // reachable from script -- only the interface objects are observable. The
-    // resolution itself is asserted in navigator/nav-services.html.
     testing.expectEqual('function', typeof navigator.gpu.requestAdapter);
     testing.expectEqual(0, navigator.gpu.requestAdapter.length);
+    testing.expectEqual('bgra8unorm', navigator.gpu.getPreferredCanvasFormat());
   }
+</script>
+
+<script type=module id=webgpu_adapter_reachable>
+  // requestAdapter hands back a *different* adapter every call, but each
+  // adapter's features / limits / info are the same object on every read. All
+  // measured on a headed Chrome 150 (win38-chrome.json).
+  const a1 = await navigator.gpu.requestAdapter();
+  const a2 = await navigator.gpu.requestAdapter();
+  testing.expectEqual('[object GPUAdapter]', Object.prototype.toString.call(a1));
+  testing.expectFalse(a1 === a2);
+  testing.expectTrue(a1.features === a1.features);
+  testing.expectTrue(a1.limits === a1.limits);
+  testing.expectTrue(a1.info === a1.info);
+
+  // Chrome 150 dropped requestAdapterInfo(), and isFallbackAdapter moved onto
+  // the info object.
+  testing.expectFalse('requestAdapterInfo' in a1);
+  testing.expectFalse('isFallbackAdapter' in a1);
+
+  testing.expectEqual('apple', a1.info.vendor);
+  testing.expectEqual('metal-3', a1.info.architecture);
+  testing.expectEqual('', a1.info.device);
+  testing.expectEqual('', a1.info.description);
+  testing.expectEqual(32, a1.info.subgroupMinSize);
+  testing.expectEqual(32, a1.info.subgroupMaxSize);
+  testing.expectFalse(a1.info.isFallbackAdapter);
+
+  // A fallback adapter is not satisfied by the real one.
+  testing.expectEqual(null, await navigator.gpu.requestAdapter({ forceFallbackAdapter: true }));
+
+  // Anything that is not a dictionary is refused; unknown members are ignored.
+  testing.expectTrue((await navigator.gpu.requestAdapter(undefined)) !== null);
+  testing.expectTrue((await navigator.gpu.requestAdapter(null)) !== null);
+  testing.expectTrue((await navigator.gpu.requestAdapter({ nope: 1 })) !== null);
+  testing.expectTrue((await navigator.gpu.requestAdapter({ powerPreference: 'low-power' })) !== null);
+  await navigator.gpu.requestAdapter('nope').then(
+    () => testing.expectTrue(false),
+    (e) => testing.expectEqual(
+      "TypeError: Failed to execute 'requestAdapter' on 'GPU': The provided value is not of type 'GPURequestAdapterOptions'.",
+      String(e),
+    ),
+  );
+  await navigator.gpu.requestAdapter({ powerPreference: 'nope' }).then(
+    () => testing.expectTrue(false),
+    (e) => testing.expectEqual(
+      "TypeError: Failed to execute 'requestAdapter' on 'GPU': Failed to read the 'powerPreference' property from 'GPURequestAdapterOptions': The provided value 'nope' is not a valid enum value of type GPUPowerPreference.",
+      String(e),
+    ),
+  );
+</script>
+
+<script type=module id=webgpu_adapter_features_set>
+  // The 22-name *set* is what has to match; Chrome's iteration order is not
+  // stable (two clusters permute between calls, measured three times over), so
+  // the test compares sorted.
+  const adapter = await navigator.gpu.requestAdapter();
+  testing.expectEqual(22, adapter.features.size);
+  testing.expectEqual(
+    [
+      'bgra8unorm-storage', 'clip-distances', 'core-features-and-limits',
+      'depth-clip-control', 'depth32float-stencil8', 'dual-source-blending',
+      'float32-blendable', 'float32-filterable', 'indirect-first-instance',
+      'primitive-index', 'rg11b10ufloat-renderable', 'shader-f16', 'subgroups',
+      'texture-component-swizzle', 'texture-compression-astc',
+      'texture-compression-astc-sliced-3d', 'texture-compression-bc',
+      'texture-compression-bc-sliced-3d', 'texture-compression-etc2',
+      'texture-formats-tier1', 'texture-formats-tier2', 'timestamp-query',
+    ],
+    [...adapter.features].sort(),
+  );
+
+  // A setlike: keys(), values() and the default iterator all yield the entry,
+  // entries() yields it twice, and forEach hands (value, key, set).
+  testing.expectEqual([...adapter.features], [...adapter.features.keys()]);
+  testing.expectEqual([...adapter.features], [...adapter.features.values()]);
+  const first = [...adapter.features.entries()][0];
+  testing.expectEqual(first[0], first[1]);
+  let seen = null;
+  adapter.features.forEach((v, k, s) => { seen ??= [v, k, s === adapter.features]; });
+  testing.expectEqual([seen[0], seen[0], true], seen);
+  testing.expectTrue(adapter.features.has('shader-f16'));
+  testing.expectFalse(adapter.features.has('nope'));
+</script>
+
+<script type=module id=webgpu_adapter_limits_values>
+  // The adapter advertises the hardware's limits; the device it hands out gets a
+  // smaller default set. Both were read off the reference Chrome.
+  const adapter = await navigator.gpu.requestAdapter();
+  testing.expectEqual(16384, adapter.limits.maxTextureDimension1D);
+  testing.expectEqual(16384, adapter.limits.maxTextureDimension2D);
+  testing.expectEqual(2048, adapter.limits.maxTextureArrayLayers);
+  testing.expectEqual(48, adapter.limits.maxSampledTexturesPerShaderStage);
+  testing.expectEqual(4294967292, adapter.limits.maxBufferSize);
+  testing.expectEqual(4294967292, adapter.limits.maxStorageBufferBindingSize);
+  testing.expectEqual(30, adapter.limits.maxVertexAttributes);
+  testing.expectEqual(28, adapter.limits.maxInterStageShaderVariables);
+  testing.expectEqual(128, adapter.limits.maxColorAttachmentBytesPerSample);
+  testing.expectEqual(1024, adapter.limits.maxComputeInvocationsPerWorkgroup);
+  testing.expectEqual(64, adapter.limits.maxImmediateSize);
+  testing.expectEqual(10, adapter.limits.maxStorageBuffersInVertexStage);
+</script>
+
+<script type=module id=webgpu_adapter_single_use>
+  // An adapter is single use: the second requestDevice rejects, and the message
+  // carries Dawn's own source location. Not in the spec's prose -- measured.
+  const adapter = await navigator.gpu.requestAdapter();
+  const device = await adapter.requestDevice();
+  testing.expectEqual('[object GPUDevice]', Object.prototype.toString.call(device));
+  await adapter.requestDevice().then(
+    () => testing.expectTrue(false),
+    (e) => {
+      testing.expectEqual('OperationError', e.name);
+      testing.expectEqual(
+        'Failed to execute \'requestDevice\' on \'GPUAdapter\': adapter is "consumed": ' +
+          'it has already been used to create a device\n' +
+          '    at CreateDeviceInternal (../../third_party/dawn/src/dawn/native/Adapter.cpp:328)\n',
+        e.message,
+      );
+    },
+  );
+</script>
+
+<script type=module id=webgpu_request_device_descriptor>
+  const fresh = () => navigator.gpu.requestAdapter();
+
+  // label is passed straight through.
+  testing.expectEqual('lp', (await (await fresh()).requestDevice({ label: 'lp' })).label);
+
+  // An accepted requiredFeature is appended after the default one.
+  testing.expectEqual(
+    ['core-features-and-limits', 'shader-f16'],
+    [...(await (await fresh()).requestDevice({ requiredFeatures: ['shader-f16'] })).features],
+  );
+  testing.expectEqual(
+    ['core-features-and-limits'],
+    [...(await (await fresh()).requestDevice()).features],
+  );
+
+  // A feature the adapter does not have is a TypeError, not a rejection with a
+  // DOMException.
+  await (await fresh()).requestDevice({ requiredFeatures: ['nope'] }).then(
+    () => testing.expectTrue(false),
+    (e) => testing.expectEqual(
+      "TypeError: Failed to execute 'requestDevice' on 'GPUAdapter': Failed to read the 'requiredFeatures' property from 'GPUDeviceDescriptor': The provided value 'nope' is not a valid enum value of type GPUFeatureName.",
+      String(e),
+    ),
+  );
+
+  // requiredLimits is validated but never honoured: asking for a legal value
+  // still gives the device default set.
+  await (await fresh()).requestDevice({ requiredLimits: { maxBufferSize: 1e12 } }).then(
+    () => testing.expectTrue(false),
+    (e) => {
+      testing.expectEqual('OperationError', e.name);
+      testing.expectEqual(
+        "Failed to execute 'requestDevice' on 'GPUAdapter': Required limit (1000000000000) is " +
+          'greater than the supported limit (4294967292).\n - While validating maxBufferSize\n' +
+          ' - While validating required limits\n',
+        e.message,
+      );
+    },
+  );
+  await (await fresh()).requestDevice({ requiredLimits: { nope: 1 } }).then(
+    () => testing.expectTrue(false),
+    (e) => testing.expectEqual(
+      'Failed to execute \'requestDevice\' on \'GPUAdapter\': The limit "nope" with a ' +
+        'non-undefined value is not recognized.',
+      e.message,
+    ),
+  );
+  testing.expectEqual(
+    268435456,
+    (await (await fresh()).requestDevice({ requiredLimits: { maxBufferSize: 1024 } })).limits.maxBufferSize,
+  );
 </script>
