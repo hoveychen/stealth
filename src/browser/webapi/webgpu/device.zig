@@ -27,8 +27,12 @@
 // `lost` stays pending until destroy() settles it with
 // {reason: 'destroyed', message: 'Device was destroyed.'}.
 
+const std = @import("std");
+
 const js = @import("../../js/js.zig");
 const adapter = @import("adapter.zig");
+const dictionary = @import("../dictionary.zig");
+const DOMException = @import("../DOMException.zig");
 const pipeline = @import("pipeline.zig");
 const resources = @import("resources.zig");
 const EventTarget = @import("../EventTarget.zig");
@@ -54,6 +58,9 @@ pub const GPUDevice = struct {
     // is kept rather than the promise; destroy() settles it.
     _lost: ?js.PromiseResolver.Global = null,
     _destroyed: bool = false,
+    // How many error scopes are open. Nothing ever lands in one, so the depth
+    // is all there is to keep; see pushErrorScope.
+    _error_scopes: u32 = 0,
 
     // Allocated on first read, never re-created: Chrome hands back the same
     // objects on every read (measured), and an embedded struct would share its
@@ -232,11 +239,54 @@ pub const GPUDevice = struct {
         return pipeline.createRenderPipelineAsync(args, exec);
     }
 
-    // What is left of the shape-only family: the error scopes. Both owe the
-    // GPUError hierarchy, which is P6 of this batch, and until then a page that
-    // pushes a scope gets undefined where Chrome gives a promise. Reachable, so
-    // it has to be finished before the batch merges.
-    pub fn shapeOnly(_: *GPUDevice) void {}
+    /// Scopes are counted rather than filled: nothing in this engine raises a
+    /// GPUValidationError, so every scope is an empty one -- which is also what
+    /// Chrome gives for a scope that saw nothing go wrong (measured). What a
+    /// real Chrome would additionally deliver here is the asynchronous half of
+    /// WebGPU validation, the errors the create* calls decline to throw: a zero
+    /// `usage`, a size past a limit, ill-formed WGSL. Reproducing those means
+    /// re-implementing Dawn's validation, not this dispatch, and until someone
+    /// does, a page that pushes a scope around a deliberately bad call sees
+    /// null where Chrome hands it a GPUValidationError.
+    ///
+    /// The filter is checked, though, and its message is an argument's rather
+    /// than a dictionary member's (measured).
+    pub fn pushErrorScope(self: *GPUDevice, filter_: ?js.Value, exec: *const Execution) !void {
+        const filter = filter_ orelse return dictionary.throwTypeError(
+            "Failed to execute 'pushErrorScope' on 'GPUDevice': 1 argument required, but only 0 present.",
+            exec,
+        );
+        const text = try filter.toStringSlice();
+        for (&[_][]const u8{ "validation", "out-of-memory", "internal" }) |candidate| {
+            if (std.mem.eql(u8, candidate, text)) {
+                self._error_scopes += 1;
+                return;
+            }
+        }
+        return dictionary.throwTypeError(try std.fmt.allocPrint(
+            exec.call_arena,
+            "Failed to execute 'pushErrorScope' on 'GPUDevice': The provided value '{s}' " ++
+                "is not a valid enum value of type GPUErrorFilter.",
+            .{text},
+        ), exec);
+    }
+
+    /// One pop too many *rejects* with an OperationError rather than throwing,
+    /// and the message is Dawn's own (measured). A destroyed device still keeps
+    /// its scopes.
+    pub fn popErrorScope(self: *GPUDevice, exec: *const Execution) !js.Promise {
+        const local = exec.js.local.?;
+        if (self._error_scopes == 0) {
+            var resolver = local.createPromiseResolver();
+            resolver.reject("GPUDevice.popErrorScope", DOMException.init(
+                "No error scopes to pop",
+                "OperationError",
+            ));
+            return resolver.promise();
+        }
+        self._error_scopes -= 1;
+        return local.resolvePromise(null);
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(GPUDevice);
@@ -274,8 +324,8 @@ pub const GPUDevice = struct {
         pub const createTexture = bridge.function(D.createTexture, .{ .arity = 1 });
         pub const destroy = bridge.function(D.destroy, .{});
         pub const importExternalTexture = bridge.function(D.importExternalTexture, .{ .arity = 1 });
-        pub const popErrorScope = bridge.function(D.shapeOnly, .{});
-        pub const pushErrorScope = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const popErrorScope = bridge.function(D.popErrorScope, .{});
+        pub const pushErrorScope = bridge.function(D.pushErrorScope, .{ .arity = 1 });
     };
 };
 

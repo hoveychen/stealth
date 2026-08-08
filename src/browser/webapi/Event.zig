@@ -131,6 +131,7 @@ pub const Type = union(enum) {
     track_event: *@import("event/misc_events.zig").TrackEvent,
     virtual_keyboard_geometry_change_event: *@import("event/misc_events.zig").VirtualKeyboardGeometryChangeEvent,
     webgl_context_event: *@import("event/misc_events.zig").WebGLContextEvent,
+    gpu_uncaptured_error_event: *@import("webgpu/errors.zig").GPUUncapturedErrorEvent,
     window_controls_overlay_geometry_change_event: *@import("event/misc_events.zig").WindowControlsOverlayGeometryChangeEvent,
 };
 
@@ -311,6 +312,7 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .track_event => |e| return if (T == @import("event/misc_events.zig").TrackEvent) e else null,
         .virtual_keyboard_geometry_change_event => |e| return if (T == @import("event/misc_events.zig").VirtualKeyboardGeometryChangeEvent) e else null,
         .webgl_context_event => |e| return if (T == @import("event/misc_events.zig").WebGLContextEvent) e else null,
+        .gpu_uncaptured_error_event => |e| return if (T == @import("webgpu/errors.zig").GPUUncapturedErrorEvent) e else null,
         .window_controls_overlay_geometry_change_event => |e| return if (T == @import("event/misc_events.zig").WindowControlsOverlayGeometryChangeEvent) e else null,
     }
     return null;

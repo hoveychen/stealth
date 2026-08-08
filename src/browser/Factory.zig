@@ -38,6 +38,7 @@ const AbstractRange = @import("webapi/AbstractRange.zig");
 const DOMRect = @import("webapi/DOMRect.zig");
 const DOMRectReadOnly = @import("webapi/DOMRectReadOnly.zig");
 const DOMException = @import("webapi/DOMException.zig");
+const GPUError = @import("webapi/webgpu/errors.zig").GPUError;
 
 const log = lp.log;
 const String = lp.String;
@@ -355,6 +356,23 @@ pub fn domException(self: *Factory, base: DOMException, child: anytype) !*@TypeO
     ).allocate(self._slab.allocator());
 
     chain.get(0).* = base;
+    chain.setLeaf(1, child);
+
+    return chain.get(1);
+}
+
+// {GPUError, GPUValidationError | GPUOutOfMemoryError | GPUInternalError}.
+// The base carries the message and, unlike DOMException's, a `_type` union:
+// GPUUncapturedErrorEvent.error hands back the leaf it was given, so the base
+// has to know which one it belongs to.
+pub fn gpuError(self: *Factory, base: GPUError, child: anytype) !*@TypeOf(child) {
+    const chain = try PrototypeChain(
+        &.{ GPUError, @TypeOf(child) },
+    ).allocate(self._slab.allocator());
+
+    const err = chain.get(0);
+    err.* = base;
+    err._type = unionInit(GPUError.Type, chain.get(1));
     chain.setLeaf(1, child);
 
     return chain.get(1);

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<head>
+  <title>WebGPU error family</title>
+  <script src="../testing.js"></script>
+  <script src="shape.js"></script>
+</head>
+
+<script id=webgpu_error_interface_objects>
+  {
+    // GPUError is the only one of the six that cannot be constructed.
+    gpuExpectInterfaceObject('GPUError');
+    testing.expectEqual('get message[ec-],@@toStringTag=GPUError', gpuShape(GPUError.prototype));
+
+    // The three concrete errors: arity 1, on top of GPUError, and nothing of
+    // their own but the brand.
+    for (const name of ['GPUValidationError', 'GPUOutOfMemoryError', 'GPUInternalError']) {
+      const ctor = window[name];
+      testing.expectEqual('function', typeof ctor);
+      testing.expectEqual(name, ctor.name);
+      testing.expectEqual(1, ctor.length);
+      testing.expectEqual('-cw', gpuWindowFlags(name));
+      testing.expectTrue(Object.getPrototypeOf(ctor) === GPUError);
+      testing.expectTrue(Object.getPrototypeOf(ctor.prototype) === GPUError.prototype);
+      testing.expectEqual(`@@toStringTag=${name}`, gpuShape(ctor.prototype));
+      testing.expectEqual(
+        [],
+        Object.getOwnPropertyNames(ctor).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+      );
+      testing.expectError(`Failed to construct '${name}': 1 argument required, but only 0 present.`, () => new ctor());
+    }
+
+    // GPUPipelineError is a DOMException, not a GPUError.
+    testing.expectEqual(1, GPUPipelineError.length);
+    testing.expectEqual('-cw', gpuWindowFlags('GPUPipelineError'));
+    testing.expectTrue(Object.getPrototypeOf(GPUPipelineError) === DOMException);
+    testing.expectTrue(Object.getPrototypeOf(GPUPipelineError.prototype) === DOMException.prototype);
+    testing.expectEqual('get reason[ec-],@@toStringTag=GPUPipelineError', gpuShape(GPUPipelineError.prototype));
+
+    testing.expectEqual(2, GPUUncapturedErrorEvent.length);
+    testing.expectEqual('-cw', gpuWindowFlags('GPUUncapturedErrorEvent'));
+    testing.expectTrue(Object.getPrototypeOf(GPUUncapturedErrorEvent) === Event);
+    testing.expectTrue(Object.getPrototypeOf(GPUUncapturedErrorEvent.prototype) === Event.prototype);
+    testing.expectEqual('get error[ec-],@@toStringTag=GPUUncapturedErrorEvent', gpuShape(GPUUncapturedErrorEvent.prototype));
+  }
+</script>
+
+<script id=webgpu_concrete_errors>
+  {
+    // Measured on a headed Chrome 150 (win38-chrome.json, win41-chrome.json):
+    // these are not Error instances, they stringify by brand, and `message`
+    // lives on GPUError.prototype rather than on the instance.
+    for (const name of ['GPUValidationError', 'GPUOutOfMemoryError', 'GPUInternalError']) {
+      const e = new window[name]('boom');
+      testing.expectEqual('boom', e.message);
+      testing.expectTrue(e instanceof GPUError);
+      testing.expectFalse(e instanceof Error);
+      testing.expectEqual(`[object ${name}]`, String(e));
+      testing.expectEqual(`[object ${name}]`, Object.prototype.toString.call(e));
+      testing.expectEqual(undefined, e.stack);
+      testing.expectEqual([], Object.getOwnPropertyNames(e));
+      testing.expectFalse(Object.prototype.hasOwnProperty.call(e, 'message'));
+    }
+
+    // The argument is a DOMString, so a number stringifies.
+    testing.expectEqual('5', new GPUValidationError(5).message);
+    testing.expectEqual('', new GPUValidationError('').message);
+    // Each brand is its own interface object.
+    testing.expectFalse(GPUValidationError === GPUInternalError);
+    testing.expectFalse(new GPUValidationError('x') instanceof GPUOutOfMemoryError);
+  }
+</script>
+
+<script id=webgpu_pipeline_error>
+  {
+    const e = new GPUPipelineError('boom', { reason: 'validation' });
+    testing.expectEqual('GPUPipelineError', e.name);
+    testing.expectEqual(0, e.code);
+    testing.expectEqual('boom', e.message);
+    testing.expectEqual('validation', e.reason);
+    testing.expectEqual('GPUPipelineError: boom', String(e));
+    testing.expectTrue(e instanceof DOMException);
+    testing.expectTrue(e instanceof Error);
+    testing.expectEqual([], Object.getOwnPropertyNames(e));
+
+    // `options` is the required argument and `message` the optional one, even
+    // though the arity is 1.
+    const bare = new GPUPipelineError(undefined, { reason: 'internal' });
+    testing.expectEqual('', bare.message);
+    testing.expectEqual('internal', bare.reason);
+    testing.expectEqual('GPUPipelineError', String(bare));
+
+    for (const args of [['boom'], [{ reason: 'validation' }], ['boom', null]]) {
+      testing.expectError(
+        "Failed to construct 'GPUPipelineError': The provided value is not of type 'GPUPipelineErrorInit'.",
+        () => new GPUPipelineError(...args),
+      );
+    }
+    testing.expectError(
+      "Failed to construct 'GPUPipelineError': 1 argument required, but only 0 present.",
+      () => new GPUPipelineError(),
+    );
+    testing.expectError(
+      "Failed to construct 'GPUPipelineError': Failed to read the 'reason' property from 'GPUPipelineErrorInit': Required member is undefined.",
+      () => new GPUPipelineError('boom', {}),
+    );
+    testing.expectError(
+      "Failed to construct 'GPUPipelineError': Failed to read the 'reason' property from 'GPUPipelineErrorInit': The provided value 'nope' is not a valid enum value of type GPUPipelineErrorReason.",
+      () => new GPUPipelineError('boom', { reason: 'nope' }),
+    );
+  }
+</script>
+
+<script id=webgpu_uncaptured_error_event>
+  {
+    const err = new GPUValidationError('boom');
+    const event = new GPUUncapturedErrorEvent('uncapturederror', { error: err });
+    testing.expectTrue(event instanceof Event);
+    testing.expectEqual('uncapturederror', event.type);
+    testing.expectTrue(event.error === err);
+    testing.expectEqual(['isTrusted'], Object.getOwnPropertyNames(event));
+    testing.expectFalse(event.isTrusted);
+
+    // cancelable is true and stays true: Chrome ignores what the init says
+    // about all three flags (measured with cancelable:false and bubbles:true).
+    for (const init of [{}, { cancelable: false }, { bubbles: true, composed: true }]) {
+      const e = new GPUUncapturedErrorEvent('x', { error: err, ...init });
+      testing.expectEqual([false, true, false], [e.bubbles, e.cancelable, e.composed]);
+    }
+
+    testing.expectError(
+      "Failed to construct 'GPUUncapturedErrorEvent': 2 arguments required, but only 0 present.",
+      () => new GPUUncapturedErrorEvent(),
+    );
+    testing.expectError(
+      "Failed to construct 'GPUUncapturedErrorEvent': 2 arguments required, but only 1 present.",
+      () => new GPUUncapturedErrorEvent('x'),
+    );
+    testing.expectError(
+      "Failed to construct 'GPUUncapturedErrorEvent': Failed to read the 'error' property from 'GPUUncapturedErrorEventInit': Required member is undefined.",
+      () => new GPUUncapturedErrorEvent('x', {}),
+    );
+    testing.expectError(
+      "Failed to construct 'GPUUncapturedErrorEvent': Failed to read the 'error' property from 'GPUUncapturedErrorEventInit': Failed to convert value to 'GPUError'.",
+      () => new GPUUncapturedErrorEvent('x', { error: 5 }),
+    );
+    // A GPUPipelineError is a DOMException, not a GPUError, so it is refused.
+    testing.expectError(
+      "Failed to read the 'error' property from 'GPUUncapturedErrorEventInit': Failed to convert value to 'GPUError'.",
+      () => new GPUUncapturedErrorEvent('x', { error: new GPUPipelineError('b', { reason: 'validation' }) }),
+    );
+  }
+</script>
+
+<script type=module id=webgpu_error_scopes>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  testing.expectEqual(null, dev.onuncapturederror);
+  testing.expectEqual(undefined, dev.pushErrorScope('validation'));
+
+  const popped = dev.popErrorScope();
+  testing.expectTrue(popped instanceof Promise);
+  // An empty scope pops null.
+  testing.expectEqual(null, await popped);
+
+  for (const filter of ['validation', 'out-of-memory', 'internal']) {
+    dev.pushErrorScope(filter);
+    testing.expectEqual(null, await dev.popErrorScope());
+  }
+
+  // Scopes nest, and one pop too many rejects rather than throwing.
+  dev.pushErrorScope('validation');
+  dev.pushErrorScope('out-of-memory');
+  testing.expectEqual(null, await dev.popErrorScope());
+  testing.expectEqual(null, await dev.popErrorScope());
+  const rejection = await dev.popErrorScope().then(() => 'RESOLVED', (e) => `${e.name}: ${e.message}`);
+  testing.expectEqual('OperationError: No error scopes to pop', rejection);
+
+  // The filter is checked synchronously, and its message is an argument's
+  // rather than a dictionary member's.
+  testing.expectError(
+    "Failed to execute 'pushErrorScope' on 'GPUDevice': 1 argument required, but only 0 present.",
+    () => dev.pushErrorScope(),
+  );
+  testing.expectError(
+    "Failed to execute 'pushErrorScope' on 'GPUDevice': The provided value 'nope' is not a valid enum value of type GPUErrorFilter.",
+    () => dev.pushErrorScope('nope'),
+  );
+
+  // A destroyed device still keeps its scopes.
+  const dead = await (await navigator.gpu.requestAdapter()).requestDevice();
+  dead.destroy();
+  dead.pushErrorScope('validation');
+  testing.expectEqual(null, await dead.popErrorScope());
+</script>
