@@ -28,6 +28,7 @@ const png = @import("../../canvas/png.zig");
 const CanvasRenderingContext2D = @import("../../canvas/CanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("../../canvas/WebGL2RenderingContext.zig");
+const GPUCanvasContext = @import("../../webgpu/pipeline.zig").GPUCanvasContext;
 const OffscreenCanvas = @import("../../canvas/OffscreenCanvas.zig");
 
 const Execution = js.Execution;
@@ -77,7 +78,7 @@ fn resetSurface(self: *Canvas) void {
     const cached = self._cached orelse return;
     switch (cached) {
         .@"2d" => |context| context._surface.reset(),
-        .webgl, .webgl2 => {},
+        .webgl, .webgl2, .webgpu => {},
     }
 }
 
@@ -87,6 +88,7 @@ const DrawingContext = union(enum) {
     @"2d": *CanvasRenderingContext2D,
     webgl: *WebGLRenderingContext,
     webgl2: *WebGL2RenderingContext,
+    webgpu: *GPUCanvasContext,
 };
 
 pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?DrawingContext {
@@ -95,6 +97,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
             .@"2d" => std.mem.eql(u8, context_type, "2d"),
             .webgl => std.mem.eql(u8, context_type, "webgl") or std.mem.eql(u8, context_type, "experimental-webgl"),
             .webgl2 => std.mem.eql(u8, context_type, "webgl2"),
+            .webgpu => std.mem.eql(u8, context_type, "webgpu"),
         };
         return if (matches) cached else null;
     }
@@ -130,6 +133,15 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
             const ctx = try frame._factory.create(WebGL2RenderingContext{ ._canvas = .{ .html = self } });
             break :blk .{ .webgl2 = ctx };
         }
+
+        // Unlike WebGL, a WebGPU context rasterises nothing even in Chrome
+        // until a page configures it and submits work; what it owes is the
+        // handle, its `canvas` back-reference and the texture getCurrentTexture
+        // hands out. See webgpu/pipeline.zig.
+        if (std.mem.eql(u8, context_type, "webgpu")) {
+            const ctx = try frame._factory.create(GPUCanvasContext{ ._canvas = .{ .html = self } });
+            break :blk .{ .webgpu = ctx };
+        }
         return null;
     };
     self._cached = drawing_context;
@@ -143,7 +155,7 @@ fn pixels(self: *const Canvas) ?[]const u8 {
     const cached = self._cached orelse return null;
     return switch (cached) {
         .@"2d" => |context| context._surface.peek(self.getWidth(), self.getHeight()),
-        .webgl, .webgl2 => null,
+        .webgl, .webgl2, .webgpu => null,
     };
 }
 

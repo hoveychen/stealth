@@ -61,20 +61,34 @@ pub const core_texture_formats = [_][]const u8{
 };
 
 /// Chrome checks the argument count before it looks at the descriptor, so
-/// `device.createBuffer()` and `device.createBuffer(undefined)` fail differently
-/// (measured: the first is an arity error, the second complains about `size`).
-fn requireDescriptor(
+/// `device.createBuffer()` and `device.createBuffer(undefined)` fail
+/// differently: the first is an arity error, and the second gets as far as the
+/// conversion and is refused there (measured -- `Reader.readRequired` is the
+/// other half of that pair). The bridge only counts arguments for constructors,
+/// so a method that needs this has to take `args: []js.Value` and say its arity
+/// in its JsApi entry.
+pub fn requireArgument(
+    comptime interface: []const u8,
     comptime method: []const u8,
     args: []js.Value,
     exec: *const Execution,
 ) !js.Value {
     if (args.len == 0) {
         return dictionary.throwTypeError(
-            "Failed to execute '" ++ method ++ "' on 'GPUDevice': 1 argument required, but only 0 present.",
+            "Failed to execute '" ++ method ++ "' on '" ++ interface ++
+                "': 1 argument required, but only 0 present.",
             exec,
         );
     }
     return args[0];
+}
+
+fn requireDescriptor(
+    comptime method: []const u8,
+    args: []js.Value,
+    exec: *const Execution,
+) !js.Value {
+    return requireArgument("GPUDevice", method, args, exec);
 }
 
 /// WebIDL `unsigned long long` / `GPUSize64`, which is what the size-ish members
@@ -97,7 +111,7 @@ fn unsignedMember(
 /// optional case; this one reads the value once -- the way Chrome does, which
 /// matters when the page defines the member as a getter -- and produces either
 /// the "Required member is undefined." message or the invalid-value one.
-fn requiredEnum(
+pub fn requiredEnum(
     comptime Reader: type,
     reader: Reader,
     comptime name: []const u8,
@@ -136,13 +150,13 @@ pub fn registerTypes() []const type {
 
 // `label` is the one member almost every GPU object has, and it is read/write
 // everywhere (measured: `accessor label[ec-]`, and a written string reads back).
-fn labelAccessors(comptime T: type) type {
+pub fn labelAccessors(comptime T: type) type {
     return struct {
-        fn get(self: *const T) []const u8 {
+        pub fn get(self: *const T) []const u8 {
             return self._label;
         }
 
-        fn set(self: *T, value: []const u8, exec: *const Execution) !void {
+        pub fn set(self: *T, value: []const u8, exec: *const Execution) !void {
             self._label = try exec.arena.dupe(u8, value);
         }
     };
@@ -329,7 +343,7 @@ pub const GPUQuerySet = struct {
 
 pub fn createBuffer(args: []js.Value, exec: *const Execution) !*GPUBuffer {
     const Reader = dictionary.MethodReader("GPUDevice", "createBuffer", "GPUBufferDescriptor");
-    const descriptor = try Reader.read(try requireDescriptor("createBuffer", args, exec), exec);
+    const descriptor = try Reader.readRequired(try requireDescriptor("createBuffer", args, exec), exec);
 
     const size = try unsignedMember(Reader, descriptor, "size", exec);
     const usage = try unsignedMember(Reader, descriptor, "usage", exec);
@@ -346,7 +360,7 @@ pub fn createBuffer(args: []js.Value, exec: *const Execution) !*GPUBuffer {
 
 pub fn createTexture(args: []js.Value, exec: *const Execution) !*GPUTexture {
     const Reader = dictionary.MethodReader("GPUDevice", "createTexture", "GPUTextureDescriptor");
-    const descriptor = try Reader.read(try requireDescriptor("createTexture", args, exec), exec);
+    const descriptor = try Reader.readRequired(try requireDescriptor("createTexture", args, exec), exec);
 
     const extent = try readExtent3D(Reader, descriptor, exec);
     const format = try requiredEnum(Reader, descriptor, "format", "GPUTextureFormat", &core_texture_formats, exec);
@@ -411,7 +425,7 @@ fn readExtent3D(
 
 pub fn createQuerySet(args: []js.Value, exec: *const Execution) !*GPUQuerySet {
     const Reader = dictionary.MethodReader("GPUDevice", "createQuerySet", "GPUQuerySetDescriptor");
-    const descriptor = try Reader.read(try requireDescriptor("createQuerySet", args, exec), exec);
+    const descriptor = try Reader.readRequired(try requireDescriptor("createQuerySet", args, exec), exec);
 
     const kind = try requiredEnum(Reader, descriptor, "type", "GPUQueryType", &.{ "occlusion", "timestamp" }, exec);
     const count = try unsignedMember(Reader, descriptor, "count", exec);
@@ -435,7 +449,7 @@ pub fn createSampler(descriptor_: ?js.Value, exec: *const Execution) !*GPUSample
 
 pub fn createBindGroupLayout(args: []js.Value, exec: *const Execution) !*GPUBindGroupLayout {
     const Reader = dictionary.MethodReader("GPUDevice", "createBindGroupLayout", "GPUBindGroupLayoutDescriptor");
-    const descriptor = try Reader.read(try requireDescriptor("createBindGroupLayout", args, exec), exec);
+    const descriptor = try Reader.readRequired(try requireDescriptor("createBindGroupLayout", args, exec), exec);
     const entries = try descriptor.required("entries", exec);
     if (!entries.isArray()) {
         return Reader.notASequence("entries", exec);
@@ -447,7 +461,7 @@ pub fn createBindGroupLayout(args: []js.Value, exec: *const Execution) !*GPUBind
 
 pub fn createPipelineLayout(args: []js.Value, exec: *const Execution) !*GPUPipelineLayout {
     const Reader = dictionary.MethodReader("GPUDevice", "createPipelineLayout", "GPUPipelineLayoutDescriptor");
-    const descriptor = try Reader.read(try requireDescriptor("createPipelineLayout", args, exec), exec);
+    const descriptor = try Reader.readRequired(try requireDescriptor("createPipelineLayout", args, exec), exec);
     const layouts = try descriptor.required("bindGroupLayouts", exec);
     if (!layouts.isArray()) {
         return Reader.notASequence("bindGroupLayouts", exec);
@@ -459,7 +473,7 @@ pub fn createPipelineLayout(args: []js.Value, exec: *const Execution) !*GPUPipel
 
 pub fn createBindGroup(args: []js.Value, exec: *const Execution) !*GPUBindGroup {
     const Reader = dictionary.MethodReader("GPUDevice", "createBindGroup", "GPUBindGroupDescriptor");
-    const descriptor = try Reader.read(try requireDescriptor("createBindGroup", args, exec), exec);
+    const descriptor = try Reader.readRequired(try requireDescriptor("createBindGroup", args, exec), exec);
     _ = try descriptor.interfaceMember("layout", GPUBindGroupLayout, "GPUBindGroupLayout", exec);
     const entries = try descriptor.required("entries", exec);
     if (!entries.isArray()) {
@@ -476,7 +490,7 @@ pub fn createBindGroup(args: []js.Value, exec: *const Execution) !*GPUBindGroup 
 /// converts.
 pub fn importExternalTexture(args: []js.Value, exec: *const Execution) !*GPUExternalTexture {
     const Reader = dictionary.MethodReader("GPUDevice", "importExternalTexture", "GPUExternalTextureDescriptor");
-    const descriptor = try Reader.read(try requireDescriptor("importExternalTexture", args, exec), exec);
+    const descriptor = try Reader.readRequired(try requireDescriptor("importExternalTexture", args, exec), exec);
     const source = try descriptor.required("source", exec);
     _ = source.toZig(*Video) catch {
         return Reader.notOfType("source", "(HTMLVideoElement or VideoFrame)", exec);

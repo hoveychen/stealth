@@ -29,6 +29,7 @@
 
 const js = @import("../../js/js.zig");
 const adapter = @import("adapter.zig");
+const pipeline = @import("pipeline.zig");
 const resources = @import("resources.zig");
 const EventTarget = @import("../EventTarget.zig");
 const Execution = js.Execution;
@@ -203,12 +204,38 @@ pub const GPUDevice = struct {
         return resources.importExternalTexture(args, exec);
     }
 
-    // The create* family is shape only for now -- the name, the argument count
-    // and the position in the prototype are right, the return value is not.
-    // Each one owes a GPUBuffer, a GPUTexture or a Promise of a pipeline, which
-    // are the interfaces P4 and P5 of this batch add; until then calling one
-    // gives undefined where Chrome gives an object. Reachable, unlike before, so
-    // this has to be finished before the batch merges.
+    pub fn createShaderModule(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*pipeline.GPUShaderModule {
+        return pipeline.createShaderModule(args, exec);
+    }
+
+    pub fn createCommandEncoder(_: *GPUDevice, descriptor_: ?js.Value, exec: *const Execution) !*pipeline.GPUCommandEncoder {
+        return pipeline.createCommandEncoder(descriptor_, exec);
+    }
+
+    pub fn createRenderBundleEncoder(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*pipeline.GPURenderBundleEncoder {
+        return pipeline.createRenderBundleEncoder(args, exec);
+    }
+
+    pub fn createComputePipeline(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*pipeline.GPUComputePipeline {
+        return pipeline.createComputePipeline(args, exec);
+    }
+
+    pub fn createRenderPipeline(_: *GPUDevice, args: []js.Value, exec: *const Execution) !*pipeline.GPURenderPipeline {
+        return pipeline.createRenderPipeline(args, exec);
+    }
+
+    pub fn createComputePipelineAsync(_: *GPUDevice, args: []js.Value, exec: *const Execution) !js.Promise {
+        return pipeline.createComputePipelineAsync(args, exec);
+    }
+
+    pub fn createRenderPipelineAsync(_: *GPUDevice, args: []js.Value, exec: *const Execution) !js.Promise {
+        return pipeline.createRenderPipelineAsync(args, exec);
+    }
+
+    // What is left of the shape-only family: the error scopes. Both owe the
+    // GPUError hierarchy, which is P6 of this batch, and until then a page that
+    // pushes a scope gets undefined where Chrome gives a promise. Reachable, so
+    // it has to be finished before the batch merges.
     pub fn shapeOnly(_: *GPUDevice) void {}
 
     pub const JsApi = struct {
@@ -234,16 +261,16 @@ pub const GPUDevice = struct {
         pub const createBindGroup = bridge.function(D.createBindGroup, .{ .arity = 1 });
         pub const createBindGroupLayout = bridge.function(D.createBindGroupLayout, .{ .arity = 1 });
         pub const createBuffer = bridge.function(D.createBuffer, .{ .arity = 1 });
-        pub const createCommandEncoder = bridge.function(D.shapeOnly, .{});
-        pub const createComputePipeline = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createComputePipelineAsync = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const createCommandEncoder = bridge.function(D.createCommandEncoder, .{});
+        pub const createComputePipeline = bridge.function(D.createComputePipeline, .{ .arity = 1 });
+        pub const createComputePipelineAsync = bridge.function(D.createComputePipelineAsync, .{ .arity = 1 });
         pub const createPipelineLayout = bridge.function(D.createPipelineLayout, .{ .arity = 1 });
         pub const createQuerySet = bridge.function(D.createQuerySet, .{ .arity = 1 });
-        pub const createRenderBundleEncoder = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createRenderPipeline = bridge.function(D.shapeOnly, .{ .arity = 1 });
-        pub const createRenderPipelineAsync = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const createRenderBundleEncoder = bridge.function(D.createRenderBundleEncoder, .{ .arity = 1 });
+        pub const createRenderPipeline = bridge.function(D.createRenderPipeline, .{ .arity = 1 });
+        pub const createRenderPipelineAsync = bridge.function(D.createRenderPipelineAsync, .{ .arity = 1 });
         pub const createSampler = bridge.function(D.createSampler, .{});
-        pub const createShaderModule = bridge.function(D.shapeOnly, .{ .arity = 1 });
+        pub const createShaderModule = bridge.function(D.createShaderModule, .{ .arity = 1 });
         pub const createTexture = bridge.function(D.createTexture, .{ .arity = 1 });
         pub const destroy = bridge.function(D.destroy, .{});
         pub const importExternalTexture = bridge.function(D.importExternalTexture, .{ .arity = 1 });

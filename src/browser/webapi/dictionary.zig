@@ -74,6 +74,37 @@ pub fn MethodReader(
     );
 }
 
+/// A dictionary reached *through* a member of another one. Chrome nests the
+/// wording rather than restating the operation. Measured on a headed Chrome
+/// 150:
+///
+///   device.createComputePipeline({layout: 'auto', compute: {}})
+///     -> TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice':
+///        Failed to read the 'compute' property from
+///        'GPUComputePipelineDescriptor': Failed to read the 'module' property
+///        from 'GPUProgrammableStage': Required member is undefined.
+pub fn Nested(
+    comptime Outer: type,
+    comptime member: []const u8,
+    comptime dict: []const u8,
+) type {
+    return DictionaryWithPrefix(
+        Outer.message_prefix ++ "Failed to read the '" ++ member ++ "' property from '" ++
+            Outer.dict_name ++ "': ",
+        dict,
+        false,
+    );
+}
+
+/// The same object read as a *different* dictionary: an inherited member names
+/// the dictionary it is declared on, not the one that was passed in. Measured:
+/// `layout` always says 'GPUPipelineDescriptorBase', and a vertex state's
+/// `module` says 'GPUProgrammableStage' while the state itself is a
+/// 'GPUVertexState'. Build one over the outer reader's own object.
+pub fn Sibling(comptime Outer: type, comptime dict: []const u8) type {
+    return DictionaryWithPrefix(Outer.message_prefix, dict, false);
+}
+
 /// The dictionary reader. One instance per constructor call, parameterised by
 /// the interface and dictionary names so every message it produces is a
 /// comptime string.
@@ -111,6 +142,24 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
                 .object = value.toObject(),
                 .event = if (with_event) try Event.optionsFromJs(value) else {},
             };
+        }
+
+        /// `read` for an argument that is not optional. A required dictionary
+        /// parameter refuses undefined and null outright instead of taking them
+        /// as an empty dictionary, so the page never gets as far as hearing
+        /// about a missing member (measured on a headed Chrome 150: all eleven
+        /// `device.create*` calls with a required descriptor answer "The
+        /// provided value is not of type 'X'." for both, while the two with an
+        /// optional one -- createSampler and createCommandEncoder -- hand back
+        /// an object; see win40d-chrome.json).
+        pub fn readRequired(value: js.Value, exec: *const Execution) !Self {
+            if (value.isNullOrUndefined()) {
+                return throwTypeError(
+                    CTOR ++ "The provided value is not of type '" ++ dict ++ "'.",
+                    exec,
+                );
+            }
+            return read(value, exec);
         }
 
         /// The member if the dictionary has it and it is not undefined.

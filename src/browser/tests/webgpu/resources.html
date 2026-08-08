@@ -107,15 +107,26 @@
     () => dev.createBuffer({ size: 4 }),
   );
   // The argument count is checked before the descriptor is read, so a bare call
-  // and an undefined descriptor fail differently.
+  // and an undefined descriptor fail differently -- and a required descriptor
+  // refuses undefined and null outright rather than reading members off an
+  // empty dictionary (measured across all eleven required-descriptor calls,
+  // win40d-chrome.json).
   testing.expectError(
     "Failed to execute 'createBuffer' on 'GPUDevice': 1 argument required, but only 0 present.",
     () => dev.createBuffer(),
   );
+  for (const value of [undefined, null]) {
+    testing.expectError(
+      "Failed to execute 'createBuffer' on 'GPUDevice': The provided value is not of type 'GPUBufferDescriptor'.",
+      () => dev.createBuffer(value),
+    );
+  }
   testing.expectError(
-    "Failed to read the 'size' property from 'GPUBufferDescriptor'",
-    () => dev.createBuffer(undefined),
+    "Failed to execute 'createTexture' on 'GPUDevice': The provided value is not of type 'GPUTextureDescriptor'.",
+    () => dev.createTexture(undefined),
   );
+  // ...while the two whose descriptor is optional take it.
+  testing.expectEqual('[object GPUSampler]', Object.prototype.toString.call(dev.createSampler(undefined)));
 </script>
 
 <script type=module id=webgpu_create_texture>
