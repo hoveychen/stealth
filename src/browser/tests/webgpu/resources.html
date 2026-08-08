@@ -263,3 +263,41 @@
     Object.prototype.toString.call(dev.importExternalTexture({ source: document.createElement('video') })),
   );
 </script>
+
+<script type=module id=webgpu_buffer_mapping>
+  // What the three mapping calls do, measured on a headed Chrome 150
+  // (win42-chrome.json, win42b-chrome.json). No bytes exist behind the handle,
+  // so what is reproduced is the state machine and the refusals.
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  const buf = dev.createBuffer({ size: 16, usage: GPUBufferUsage.MAP_READ });
+  testing.expectEqual('unmapped', buf.mapState);
+  // getMappedRange on an unmapped buffer is an OperationError, not undefined.
+  testing.expectError(
+    "OperationError: Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange failed",
+    () => buf.getMappedRange(),
+  );
+
+  // mapAsync is promise-returning, so a missing argument rejects rather than
+  // throwing.
+  const rejected = await buf.mapAsync().then(() => 'RESOLVED', (e) => String(e));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'mapAsync' on 'GPUBuffer': 1 argument required, but only 0 present.",
+    rejected,
+  );
+
+  testing.expectEqual(undefined, await buf.mapAsync(GPUMapMode.READ));
+  testing.expectEqual('mapped', buf.mapState);
+  testing.expectEqual(undefined, buf.unmap());
+  testing.expectEqual('unmapped', buf.mapState);
+  testing.expectError(
+    "Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange failed",
+    () => buf.getMappedRange(),
+  );
+
+  // A buffer handed back already mapped is the other way in.
+  const pre = dev.createBuffer({ size: 4, usage: GPUBufferUsage.MAP_WRITE, mappedAtCreation: true });
+  testing.expectEqual('mapped', pre.mapState);
+  pre.unmap();
+  testing.expectEqual('unmapped', pre.mapState);
+</script>

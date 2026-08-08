@@ -350,21 +350,22 @@ pub const GPUCommandEncoder = struct {
         };
 
         const E = GPUCommandEncoder;
+        const stub = resources.Stub(GPUCommandEncoder, "GPUCommandEncoder");
 
         pub const label = bridge.accessor(label_accessors.get, label_accessors.set, .{});
         pub const beginComputePass = bridge.function(E.beginComputePass, .{ .arity = 0 });
         pub const beginRenderPass = bridge.function(E.beginRenderPass, .{ .arity = 1 });
-        pub const copyBufferToTexture = bridge.function(E.shapeOnly, .{ .arity = 3 });
-        pub const copyTextureToBuffer = bridge.function(E.shapeOnly, .{ .arity = 3 });
-        pub const copyTextureToTexture = bridge.function(E.shapeOnly, .{ .arity = 3 });
+        pub const copyBufferToTexture = bridge.function(stub.Arity("copyBufferToTexture", 3).call, .{ .arity = 3 });
+        pub const copyTextureToBuffer = bridge.function(stub.Arity("copyTextureToBuffer", 3).call, .{ .arity = 3 });
+        pub const copyTextureToTexture = bridge.function(stub.Arity("copyTextureToTexture", 3).call, .{ .arity = 3 });
         pub const finish = bridge.function(E.finish, .{ .arity = 0 });
-        pub const insertDebugMarker = bridge.function(E.shapeOnly, .{ .arity = 1 });
-        pub const pushDebugGroup = bridge.function(E.shapeOnly, .{ .arity = 1 });
+        pub const insertDebugMarker = bridge.function(stub.Arity("insertDebugMarker", 1).call, .{ .arity = 1 });
+        pub const pushDebugGroup = bridge.function(stub.Arity("pushDebugGroup", 1).call, .{ .arity = 1 });
         // Chrome's order restarts here rather than carrying on.
-        pub const clearBuffer = bridge.function(E.shapeOnly, .{ .arity = 1 });
-        pub const copyBufferToBuffer = bridge.function(E.shapeOnly, .{ .arity = 2 });
+        pub const clearBuffer = bridge.function(stub.Arity("clearBuffer", 1).call, .{ .arity = 1 });
+        pub const copyBufferToBuffer = bridge.function(stub.Arity("copyBufferToBuffer", 2).call, .{ .arity = 2 });
         pub const popDebugGroup = bridge.function(E.shapeOnly, .{});
-        pub const resolveQuerySet = bridge.function(E.shapeOnly, .{ .arity = 5 });
+        pub const resolveQuerySet = bridge.function(stub.Arity("resolveQuerySet", 5).call, .{ .arity = 5 });
     };
 };
 
@@ -385,18 +386,19 @@ pub const GPUComputePassEncoder = struct {
         };
 
         const P = GPUComputePassEncoder;
+        const stub = resources.Stub(GPUComputePassEncoder, "GPUComputePassEncoder");
 
         pub const label = bridge.accessor(label_accessors.get, label_accessors.set, .{});
-        pub const insertDebugMarker = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const pushDebugGroup = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const dispatchWorkgroups = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const dispatchWorkgroupsIndirect = bridge.function(P.shapeOnly, .{ .arity = 2 });
+        pub const insertDebugMarker = bridge.function(stub.Arity("insertDebugMarker", 1).call, .{ .arity = 1 });
+        pub const pushDebugGroup = bridge.function(stub.Arity("pushDebugGroup", 1).call, .{ .arity = 1 });
+        pub const dispatchWorkgroups = bridge.function(stub.Arity("dispatchWorkgroups", 1).call, .{ .arity = 1 });
+        pub const dispatchWorkgroupsIndirect = bridge.function(stub.Arity("dispatchWorkgroupsIndirect", 2).call, .{ .arity = 2 });
         pub const end = bridge.function(P.shapeOnly, .{});
         pub const popDebugGroup = bridge.function(P.shapeOnly, .{});
-        pub const setBindGroup = bridge.function(P.shapeOnly, .{ .arity = 2 });
-        pub const setPipeline = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const writeTimestamp = bridge.function(P.shapeOnly, .{ .arity = 2 });
-        pub const setImmediates = bridge.function(P.shapeOnly, .{ .arity = 2 });
+        pub const setBindGroup = bridge.function(stub.Arity("setBindGroup", 2).call, .{ .arity = 2 });
+        pub const setPipeline = bridge.function(stub.Arity("setPipeline", 1).call, .{ .arity = 1 });
+        pub const writeTimestamp = bridge.function(stub.Arity("writeTimestamp", 2).call, .{ .arity = 2 });
+        pub const setImmediates = bridge.function(stub.Arity("setImmediates", 2).call, .{ .arity = 2 });
     };
 };
 
@@ -417,29 +419,30 @@ pub const GPURenderPassEncoder = struct {
         };
 
         const P = GPURenderPassEncoder;
+        const stub = resources.Stub(GPURenderPassEncoder, "GPURenderPassEncoder");
 
         pub const label = bridge.accessor(label_accessors.get, label_accessors.set, .{});
-        pub const executeBundles = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const insertDebugMarker = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const pushDebugGroup = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const setBlendConstant = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const setIndexBuffer = bridge.function(P.shapeOnly, .{ .arity = 2 });
-        pub const beginOcclusionQuery = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const draw = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const drawIndexed = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const drawIndexedIndirect = bridge.function(P.shapeOnly, .{ .arity = 2 });
-        pub const drawIndirect = bridge.function(P.shapeOnly, .{ .arity = 2 });
+        pub const executeBundles = bridge.function(stub.Arity("executeBundles", 1).call, .{ .arity = 1 });
+        pub const insertDebugMarker = bridge.function(stub.Arity("insertDebugMarker", 1).call, .{ .arity = 1 });
+        pub const pushDebugGroup = bridge.function(stub.Arity("pushDebugGroup", 1).call, .{ .arity = 1 });
+        pub const setBlendConstant = bridge.function(stub.Arity("setBlendConstant", 1).call, .{ .arity = 1 });
+        pub const setIndexBuffer = bridge.function(stub.Arity("setIndexBuffer", 2).call, .{ .arity = 2 });
+        pub const beginOcclusionQuery = bridge.function(stub.Arity("beginOcclusionQuery", 1).call, .{ .arity = 1 });
+        pub const draw = bridge.function(stub.Arity("draw", 1).call, .{ .arity = 1 });
+        pub const drawIndexed = bridge.function(stub.Arity("drawIndexed", 1).call, .{ .arity = 1 });
+        pub const drawIndexedIndirect = bridge.function(stub.Arity("drawIndexedIndirect", 2).call, .{ .arity = 2 });
+        pub const drawIndirect = bridge.function(stub.Arity("drawIndirect", 2).call, .{ .arity = 2 });
         pub const end = bridge.function(P.shapeOnly, .{});
         pub const endOcclusionQuery = bridge.function(P.shapeOnly, .{});
         pub const popDebugGroup = bridge.function(P.shapeOnly, .{});
-        pub const setBindGroup = bridge.function(P.shapeOnly, .{ .arity = 2 });
-        pub const setPipeline = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const setScissorRect = bridge.function(P.shapeOnly, .{ .arity = 4 });
-        pub const setStencilReference = bridge.function(P.shapeOnly, .{ .arity = 1 });
-        pub const setVertexBuffer = bridge.function(P.shapeOnly, .{ .arity = 2 });
-        pub const setViewport = bridge.function(P.shapeOnly, .{ .arity = 6 });
-        pub const writeTimestamp = bridge.function(P.shapeOnly, .{ .arity = 2 });
-        pub const setImmediates = bridge.function(P.shapeOnly, .{ .arity = 2 });
+        pub const setBindGroup = bridge.function(stub.Arity("setBindGroup", 2).call, .{ .arity = 2 });
+        pub const setPipeline = bridge.function(stub.Arity("setPipeline", 1).call, .{ .arity = 1 });
+        pub const setScissorRect = bridge.function(stub.Arity("setScissorRect", 4).call, .{ .arity = 4 });
+        pub const setStencilReference = bridge.function(stub.Arity("setStencilReference", 1).call, .{ .arity = 1 });
+        pub const setVertexBuffer = bridge.function(stub.Arity("setVertexBuffer", 2).call, .{ .arity = 2 });
+        pub const setViewport = bridge.function(stub.Arity("setViewport", 6).call, .{ .arity = 6 });
+        pub const writeTimestamp = bridge.function(stub.Arity("writeTimestamp", 2).call, .{ .arity = 2 });
+        pub const setImmediates = bridge.function(stub.Arity("setImmediates", 2).call, .{ .arity = 2 });
     };
 };
 
@@ -468,21 +471,22 @@ pub const GPURenderBundleEncoder = struct {
         };
 
         const B = GPURenderBundleEncoder;
+        const stub = resources.Stub(GPURenderBundleEncoder, "GPURenderBundleEncoder");
 
         pub const label = bridge.accessor(label_accessors.get, label_accessors.set, .{});
         pub const finish = bridge.function(B.finish, .{ .arity = 0 });
-        pub const insertDebugMarker = bridge.function(B.shapeOnly, .{ .arity = 1 });
-        pub const pushDebugGroup = bridge.function(B.shapeOnly, .{ .arity = 1 });
-        pub const setIndexBuffer = bridge.function(B.shapeOnly, .{ .arity = 2 });
-        pub const draw = bridge.function(B.shapeOnly, .{ .arity = 1 });
-        pub const drawIndexed = bridge.function(B.shapeOnly, .{ .arity = 1 });
-        pub const drawIndexedIndirect = bridge.function(B.shapeOnly, .{ .arity = 2 });
-        pub const drawIndirect = bridge.function(B.shapeOnly, .{ .arity = 2 });
+        pub const insertDebugMarker = bridge.function(stub.Arity("insertDebugMarker", 1).call, .{ .arity = 1 });
+        pub const pushDebugGroup = bridge.function(stub.Arity("pushDebugGroup", 1).call, .{ .arity = 1 });
+        pub const setIndexBuffer = bridge.function(stub.Arity("setIndexBuffer", 2).call, .{ .arity = 2 });
+        pub const draw = bridge.function(stub.Arity("draw", 1).call, .{ .arity = 1 });
+        pub const drawIndexed = bridge.function(stub.Arity("drawIndexed", 1).call, .{ .arity = 1 });
+        pub const drawIndexedIndirect = bridge.function(stub.Arity("drawIndexedIndirect", 2).call, .{ .arity = 2 });
+        pub const drawIndirect = bridge.function(stub.Arity("drawIndirect", 2).call, .{ .arity = 2 });
         pub const popDebugGroup = bridge.function(B.shapeOnly, .{});
-        pub const setBindGroup = bridge.function(B.shapeOnly, .{ .arity = 2 });
-        pub const setPipeline = bridge.function(B.shapeOnly, .{ .arity = 1 });
-        pub const setVertexBuffer = bridge.function(B.shapeOnly, .{ .arity = 2 });
-        pub const setImmediates = bridge.function(B.shapeOnly, .{ .arity = 2 });
+        pub const setBindGroup = bridge.function(stub.Arity("setBindGroup", 2).call, .{ .arity = 2 });
+        pub const setPipeline = bridge.function(stub.Arity("setPipeline", 1).call, .{ .arity = 1 });
+        pub const setVertexBuffer = bridge.function(stub.Arity("setVertexBuffer", 2).call, .{ .arity = 2 });
+        pub const setImmediates = bridge.function(stub.Arity("setImmediates", 2).call, .{ .arity = 2 });
     };
 };
 

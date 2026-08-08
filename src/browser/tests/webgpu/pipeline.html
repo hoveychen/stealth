@@ -418,13 +418,55 @@
     () => dev.createCommandEncoder().beginRenderPass('nope'),
   );
 
-  // The state calls answer with undefined and do not throw, on either pass.
+  // The state calls that take nothing answer with undefined and do not throw.
   testing.expectEqual(undefined, pass.end());
   testing.expectEqual(undefined, pass.end());
   testing.expectEqual(undefined, pass.popDebugGroup());
   testing.expectEqual(undefined, rpass.endOcclusionQuery());
   testing.expectEqual(undefined, rpass.end());
   testing.expectEqual(undefined, enc.popDebugGroup());
+
+  // ...but every recording call that declares arguments refuses an empty one,
+  // counting what it was actually given (measured across the whole family,
+  // win42-chrome.json). Nothing is recorded either way; the refusal is the
+  // observable part.
+  for (const [target, name, arity] of [
+    [enc, 'insertDebugMarker', 1], [enc, 'copyBufferToBuffer', 2], [enc, 'copyTextureToTexture', 3],
+    [enc, 'resolveQuerySet', 5], [pass, 'setPipeline', 1], [pass, 'setBindGroup', 2],
+    [pass, 'dispatchWorkgroups', 1], [rpass, 'draw', 1], [rpass, 'setScissorRect', 4],
+    [rpass, 'setViewport', 6], [rpass, 'executeBundles', 1],
+  ]) {
+    testing.expectError(
+      `Failed to execute '${name}' on '${target.constructor.name}': ${arity} argument${arity === 1 ? '' : 's'} required, but only 0 present.`,
+      () => target[name](),
+    );
+    // One short of the requirement counts what was passed, not zero.
+    if (arity > 1) {
+      testing.expectError(
+        `${arity} arguments required, but only 1 present.`,
+        () => target[name](0),
+      );
+    }
+    // Enough arguments: no complaint, and no effect either.
+    testing.expectEqual(undefined, target[name](0, 0, 0, 0, 0, 0));
+  }
+
+  const bundleEncoder = dev.createRenderBundleEncoder({ colorFormats: ['bgra8unorm'] });
+  testing.expectError(
+    "Failed to execute 'setVertexBuffer' on 'GPURenderBundleEncoder': 2 arguments required, but only 0 present.",
+    () => bundleEncoder.setVertexBuffer(),
+  );
+  testing.expectError(
+    "Failed to execute 'submit' on 'GPUQueue': 1 argument required, but only 0 present.",
+    () => dev.queue.submit(),
+  );
+  testing.expectError(
+    "Failed to execute 'writeTexture' on 'GPUQueue': 4 arguments required, but only 0 present.",
+    () => dev.queue.writeTexture(),
+  );
+  // The queue's one promise-returning call resolves rather than answering
+  // undefined.
+  testing.expectEqual(undefined, await dev.queue.onSubmittedWorkDone());
 </script>
 
 <script type=module id=webgpu_render_bundle>

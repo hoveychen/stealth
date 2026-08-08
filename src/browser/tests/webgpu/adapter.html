@@ -11,14 +11,13 @@
     // and was already measured and implemented, so it pins the helper's output
     // format before the new interfaces lean on it.
     //
-    // `@@iterator=fn:` -- an anonymous function -- is a known divergence, and an
-    // engine-wide one rather than anything this family introduced: Chrome hands
-    // out the `values` function itself for @@iterator (measured:
-    // `X.prototype[Symbol.iterator] === X.prototype.values`, name 'values'),
-    // while bridge.iterator installs a separate unnamed one. Every setlike and
-    // maplike here reads the same way.
+    // Chrome hands out the `values` function itself for @@iterator (measured:
+    // `X.prototype[Symbol.iterator] === X.prototype.values`, name 'values').
+    // bridge.iterator installs a separate function, so the identity does not
+    // hold here -- but its name does, which is what an enumeration reads, and
+    // it is what the shipped setlikes (Highlight, CustomStateSet) already do.
     testing.expectEqual(
-      'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=WGSLLanguageFeatures,@@iterator=fn:',
+      'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=WGSLLanguageFeatures,@@iterator=fn:values',
       gpuShape(WGSLLanguageFeatures.prototype),
     );
   }
@@ -49,7 +48,7 @@
       gpuShape(GPUDeviceLostInfo.prototype),
     );
     testing.expectEqual(
-      'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=GPUSupportedFeatures,@@iterator=fn:',
+      'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=GPUSupportedFeatures,@@iterator=fn:values',
       gpuShape(GPUSupportedFeatures.prototype),
     );
   }

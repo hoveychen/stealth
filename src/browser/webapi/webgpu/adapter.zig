@@ -19,17 +19,15 @@
 // The adapter half of the WebGPU family: what `navigator.gpu.requestAdapter()`
 // would hand back, and the three read-only descriptions hanging off it.
 //
-// Nothing here is reachable from script today -- GPU.requestAdapter resolves
-// null (see navigator/services.zig, and the comment there for why) -- so what
-// this file buys is the 5 missing interface objects and their prototypes, which
-// a fingerprinter enumerates off `window` whether or not an adapter exists. A
-// Chrome with no usable GPU exposes exactly these names and resolves null too.
+// All of it is reachable: GPU.requestAdapter hands out one of these, the way
+// the reference Chrome does on this hardware (see navigator/services.zig).
 //
 // The values the getters return are not filler: every one was read off a headed
 // Chrome 150 on the reference machine (Apple / metal-3) with
 // stealth-detector-probes/win-batch/probe-win38.js, whose output is recorded in
-// win38-chrome.json. Feature sets keep Chrome's own iteration order -- win37's
-// dump sorted them, win38 does not, and the order is a hashable surface.
+// win38-chrome.json. The feature *set* is Chrome's; its iteration order is not
+// a fingerprint at all, because Chrome's own order is unstable -- see the note
+// on GPUSupportedFeatures.adapter below.
 //
 // Declaration order inside each JsApi is Chrome's
 // `Object.getOwnPropertyNames(X.prototype)` order, not alphabetical.
@@ -177,7 +175,7 @@ pub const GPUSupportedFeatures = struct {
         pub const has = bridge.function(GPUSupportedFeatures.has, .{});
         pub const keys = bridge.function(GPUSupportedFeatures.keys, .{});
         pub const values = bridge.function(GPUSupportedFeatures.values, .{});
-        pub const symbol_iterator = bridge.iterator(GPUSupportedFeatures.values, .{});
+        pub const symbol_iterator = bridge.iterator(GPUSupportedFeatures.values, .{ .js_name = "values" });
     };
 };
 

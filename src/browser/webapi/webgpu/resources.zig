@@ -37,6 +37,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const dictionary = @import("../dictionary.zig");
 const Video = @import("../element/html/Video.zig");
+const DOMException = @import("../DOMException.zig");
 const Execution = js.Execution;
 
 /// The 42 GPUTextureFormat values a *core* device accepts. Chrome gates the enum
@@ -91,6 +92,39 @@ fn requireDescriptor(
     return requireArgument("GPUDevice", method, args, exec);
 }
 
+/// The recording calls: the ones that only exist to be called, because nothing
+/// is executed behind them. They still have to *refuse* the way Chrome does --
+/// every WebGPU method whose length is not zero throws when it is called with
+/// nothing, and answering undefined instead is the kind of difference a
+/// detector can read with a bare `try { pass.setPipeline() }` (measured across
+/// all fifty-odd of them, win42-chrome.json).
+///
+/// Chrome's own message counts what was actually passed, so the count is
+/// runtime and only the rest of the sentence is comptime.
+pub fn Stub(comptime T: type, comptime interface: []const u8) type {
+    return struct {
+        pub fn Arity(comptime method: []const u8, comptime required: usize) type {
+            return struct {
+                const PREFIX = "Failed to execute '" ++ method ++ "' on '" ++ interface ++ "': " ++
+                    std.fmt.comptimePrint("{d}", .{required}) ++
+                    (if (required == 1) " argument required" else " arguments required") ++
+                    ", but only ";
+
+                pub fn call(_: *T, args: []js.Value, exec: *const Execution) !void {
+                    if (args.len >= required) {
+                        return;
+                    }
+                    return dictionary.throwTypeError(try std.fmt.allocPrint(
+                        exec.call_arena,
+                        PREFIX ++ "{d} present.",
+                        .{args.len},
+                    ), exec);
+                }
+            };
+        }
+    };
+}
+
 /// WebIDL `unsigned long long` / `GPUSize64`, which is what the size-ish members
 /// are. Read through a double because that is what a JS number is.
 fn unsignedMember(
@@ -132,6 +166,13 @@ pub fn requiredEnum(
             "': The provided value '{s}' is not a valid enum value of type " ++ idl ++ ".",
         .{text},
     ), exec);
+}
+
+fn throwDom(comptime name: []const u8, message: []const u8, exec: *const Execution) anyerror {
+    const local = exec.js.local.?;
+    const value = local.zigValueToJs(DOMException.init(message, name), .{}) catch return error.JsException;
+    _ = local.isolate.throwException(value.handle);
+    return error.JsException;
 }
 
 pub fn registerTypes() []const type {
@@ -183,9 +224,50 @@ pub const GPUBuffer = struct {
         return self._map_state;
     }
 
-    // Shape only: there is no allocation behind the handle to destroy, map or
-    // hand back an ArrayBuffer for.
+    // Shape only: there is no allocation behind the handle to destroy or hand
+    // back an ArrayBuffer for.
     pub fn shapeOnly(_: *GPUBuffer) void {}
+
+    /// Chrome throws here on a buffer that is not mapped and answers with an
+    /// ArrayBuffer on one that is (measured). Only the refusal is reproduced:
+    /// there are no bytes behind the handle to hand out, so a mapped buffer
+    /// still answers undefined where Chrome gives a buffer of `size` bytes.
+    pub fn getMappedRange(self: *GPUBuffer, exec: *const Execution) !void {
+        if (!std.mem.eql(u8, self._map_state, "mapped")) {
+            return throwDom(
+                "OperationError",
+                "Failed to execute 'getMappedRange' on 'GPUBuffer': getMappedRange failed",
+                exec,
+            );
+        }
+    }
+
+    /// A promise, not a throw, when the argument is missing -- WebIDL turns a
+    /// promise-returning operation's conversion errors into rejections
+    /// (measured). What is not reproduced is the usage check: Chrome rejects a
+    /// buffer whose usage lacks MAP_READ / MAP_WRITE with an OperationError
+    /// naming the usages it does have, and there is no usage bookkeeping here
+    /// to name them from.
+    ///
+    /// Chrome reports 'pending' between the call and the GPU finishing; this
+    /// map completes at once, so 'pending' is never observable.
+    pub fn mapAsync(self: *GPUBuffer, args: []js.Value, exec: *const Execution) !js.Promise {
+        const local = exec.js.local.?;
+        if (args.len == 0) {
+            var resolver = local.createPromiseResolver();
+            resolver.rejectError("GPUBuffer.mapAsync", .{
+                .type_error = "Failed to execute 'mapAsync' on 'GPUBuffer': 1 argument required, but only 0 present.",
+            });
+            return resolver.promise();
+        }
+        self._map_state = "mapped";
+        return local.resolvePromise({});
+    }
+
+    /// Back to 'unmapped' (measured on a mappedAtCreation buffer).
+    pub fn unmap(self: *GPUBuffer) void {
+        self._map_state = "unmapped";
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(GPUBuffer);
@@ -201,9 +283,9 @@ pub const GPUBuffer = struct {
         pub const mapState = bridge.accessor(GPUBuffer.getMapState, null, .{});
         pub const label = bridge.accessor(label_accessors.get, label_accessors.set, .{});
         pub const destroy = bridge.function(GPUBuffer.shapeOnly, .{});
-        pub const getMappedRange = bridge.function(GPUBuffer.shapeOnly, .{});
-        pub const mapAsync = bridge.function(GPUBuffer.shapeOnly, .{ .arity = 1 });
-        pub const unmap = bridge.function(GPUBuffer.shapeOnly, .{});
+        pub const getMappedRange = bridge.function(GPUBuffer.getMappedRange, .{});
+        pub const mapAsync = bridge.function(GPUBuffer.mapAsync, .{ .arity = 1 });
+        pub const unmap = bridge.function(GPUBuffer.unmap, .{});
     };
 };
 

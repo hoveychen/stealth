@@ -519,7 +519,7 @@ pub const WGSLLanguageFeatures = struct {
         pub const has = bridge.function(WGSLLanguageFeatures.has, .{});
         pub const keys = bridge.function(WGSLLanguageFeatures.keys, .{});
         pub const values = bridge.function(WGSLLanguageFeatures.values, .{});
-        pub const symbol_iterator = bridge.iterator(WGSLLanguageFeatures.values, .{});
+        pub const symbol_iterator = bridge.iterator(WGSLLanguageFeatures.values, .{ .js_name = "values" });
     };
 };
 

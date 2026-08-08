@@ -340,8 +340,16 @@ pub const GPUQueue = struct {
         self._label = try exec.arena.dupe(u8, value);
     }
 
-    // Shape only, for the same reason as GPUDevice's methods.
+    // Nothing is ever submitted, so the recording calls have nothing to do --
+    // but they still refuse a call with no arguments the way Chrome does (see
+    // resources.Stub).
     pub fn shapeOnly(_: *GPUQueue) void {}
+
+    /// A resolved promise, not undefined (measured: Chrome hands back a
+    /// Promise that resolves with undefined). There is no queue to drain.
+    pub fn onSubmittedWorkDone(_: *GPUQueue, exec: *const Execution) !js.Promise {
+        return exec.js.local.?.resolvePromise({});
+    }
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(GPUQueue);
@@ -353,13 +361,14 @@ pub const GPUQueue = struct {
         };
 
         const Q = GPUQueue;
+        const stub = resources.Stub(GPUQueue, "GPUQueue");
 
         pub const label = bridge.accessor(Q.getLabel, Q.setLabel, .{});
-        pub const copyExternalImageToTexture = bridge.function(Q.shapeOnly, .{ .arity = 3 });
-        pub const onSubmittedWorkDone = bridge.function(Q.shapeOnly, .{});
-        pub const submit = bridge.function(Q.shapeOnly, .{ .arity = 1 });
-        pub const writeBuffer = bridge.function(Q.shapeOnly, .{ .arity = 3 });
-        pub const writeTexture = bridge.function(Q.shapeOnly, .{ .arity = 4 });
+        pub const copyExternalImageToTexture = bridge.function(stub.Arity("copyExternalImageToTexture", 3).call, .{ .arity = 3 });
+        pub const onSubmittedWorkDone = bridge.function(Q.onSubmittedWorkDone, .{});
+        pub const submit = bridge.function(stub.Arity("submit", 1).call, .{ .arity = 1 });
+        pub const writeBuffer = bridge.function(stub.Arity("writeBuffer", 3).call, .{ .arity = 3 });
+        pub const writeTexture = bridge.function(stub.Arity("writeTexture", 4).call, .{ .arity = 4 });
     };
 };
 
