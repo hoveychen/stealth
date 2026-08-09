@@ -193,7 +193,9 @@
 
   // In the list but not implemented here: null rather than a throw.
   testing.expectEqual(null, new OffscreenCanvas(2, 2).getContext('bitmaprenderer'));
-  testing.expectEqual(null, new OffscreenCanvas(2, 2).getContext('webgpu'));
+  // 'webgpu' does hand one back now -- see webgpu/pipeline.html.
+  testing.expectEqual('[object GPUCanvasContext]',
+    Object.prototype.toString.call(new OffscreenCanvas(2, 2).getContext('webgpu')));
 
   // An HTMLCanvasElement keeps the loose behaviour.
   testing.expectEqual(null, document.createElement('canvas').getContext('bogus'));

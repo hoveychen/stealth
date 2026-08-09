@@ -353,7 +353,12 @@ fn createSnapshotContext(
         // "[object DeprecatedStorageQuota]" while globalThis
         // .DeprecatedStorageQuota is undefined and the prototype carries only
         // queryUsageAndQuota and requestQuota.
-        const no_interface_object = comptime @hasDecl(JsApi.Meta, "no_interface_object");
+        //
+        // A WebIDL *namespace* (GPUBufferUsage and friends) has no interface
+        // object either -- the global gets the namespace object itself, see the
+        // namespace_global block below.
+        const namespace_global = comptime @hasDecl(JsApi.Meta, "namespace_global");
+        const no_interface_object = comptime @hasDecl(JsApi.Meta, "no_interface_object") or namespace_global;
         if (comptime no_interface_object) {
             const func_obj: *const v8.Object = @ptrCast(func);
             if (v8.v8__Object__Get(func_obj, context, prototype_key)) |proto_handle| {
@@ -400,6 +405,38 @@ fn createSnapshotContext(
                     v8.v8__Object__DefineOwnProperty(global_obj, context, alias_name, func, v8.DontEnum, &maybe_alias);
                 }
             }
+        }
+
+        // WebIDL namespaces. Nothing about a namespace looks like an interface:
+        // the global carries the namespace *object*, its members are own
+        // properties of that object (attachClass already put them on the
+        // instance template, see own_properties), and it inherits straight from
+        // %Object.prototype% rather than from an interface prototype object.
+        // Measured on a headed Chrome 150:
+        //
+        //   typeof GPUBufferUsage                          -> 'object'
+        //   Object.getPrototypeOf(GPUBufferUsage) === Object.prototype -> true
+        //   Object.getOwnPropertyDescriptor(window, 'GPUBufferUsage')
+        //     -> { writable: true, enumerable: false, configurable: true }
+        //   Object.getOwnPropertyDescriptor(GPUBufferUsage, 'MAP_READ')
+        //     -> { value: 1, writable: false, enumerable: true, configurable: false }
+        //
+        // CSS, console and WebAssembly read back the same way there; only the
+        // WebGPU flag holders go through this path so far.
+        if (comptime namespace_global) {
+            const object_template = v8.v8__FunctionTemplate__InstanceTemplate(templates[template_index]).?;
+            const namespace_obj = v8.v8__ObjectTemplate__NewInstance(object_template, context).?;
+
+            // NewInstance links the instance to the FunctionTemplate's
+            // prototype object; a namespace has no prototype of its own.
+            const object_prototype = v8.v8__Object__GetPrototype(v8.v8__Object__New(isolate).?).?;
+            var maybe_proto: v8.MaybeBool = undefined;
+            v8.v8__Object__SetPrototype(namespace_obj, context, @ptrCast(object_prototype), &maybe_proto);
+
+            const namespace_name = JsApi.Meta.name;
+            const namespace_key = v8.v8__String__NewFromUtf8(isolate, namespace_name.ptr, v8.kNormal, @intCast(namespace_name.len));
+            var maybe_namespace: v8.MaybeBool = undefined;
+            v8.v8__Object__DefineOwnProperty(global_obj, context, namespace_key, @ptrCast(namespace_obj), v8.DontEnum, &maybe_namespace);
         }
 
         // WebIDL [Exposed=...] gating. Members are installed on the shared
@@ -982,8 +1019,10 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                 const js_name = v8.v8__String__NewFromUtf8(isolate, name.ptr, v8.kNormal, @intCast(name.len));
 
                 {
+                    // A namespace's constants are own properties of the
+                    // namespace object, the same as its operations.
                     const flags = if (value.readonly) v8.ReadOnly + v8.DontDelete else 0;
-                    v8.v8__Template__Set(@ptrCast(prototype), js_name, js_value, flags);
+                    v8.v8__Template__Set(@ptrCast(member_template), js_name, js_value, flags);
                 }
 
                 if (value.template) {

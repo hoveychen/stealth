@@ -38,6 +38,7 @@ const mime = @import("../media/mime.zig");
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
 const Frame = @import("../../Frame.zig");
 const idb = @import("../storage/idb/idb.zig");
+const webgpu_adapter = @import("../webgpu/adapter.zig");
 const cache_storage = @import("../storage/cache_storage.zig");
 const Execution = js.Execution;
 
@@ -402,11 +403,15 @@ pub const GPU = struct {
         return "bgra8unorm";
     }
 
-    // No WebGPU device to hand out. requestAdapter resolving null is the answer
-    // a Chrome with no usable adapter gives, and implementing GPUAdapter would
-    // mean inventing a GPU's limits — a far louder lie than having none.
-    pub fn requestAdapter(_: *const GPU, _: ?js.Object, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise(null);
+    // This used to resolve null, on the grounds that implementing GPUAdapter
+    // would mean inventing a GPU's limits — a far louder lie than having none.
+    // That reasoning no longer applies: the reference Chrome 150 on this platform
+    // has a working adapter, so its features, its 36 limits and its adapterInfo
+    // were all measured rather than invented (win37-chrome.json, win38-chrome.json).
+    // A Chrome that sends a Chrome user-agent and then has no adapter at all is
+    // the contradiction now, not the other way round.
+    pub fn requestAdapter(_: *const GPU, options: ?js.Value, exec: *const Execution) !js.Promise {
+        return webgpu_adapter.GPUAdapter.request(options, exec);
     }
 
     pub const JsApi = struct {
@@ -514,7 +519,7 @@ pub const WGSLLanguageFeatures = struct {
         pub const has = bridge.function(WGSLLanguageFeatures.has, .{});
         pub const keys = bridge.function(WGSLLanguageFeatures.keys, .{});
         pub const values = bridge.function(WGSLLanguageFeatures.values, .{});
-        pub const symbol_iterator = bridge.iterator(WGSLLanguageFeatures.values, .{});
+        pub const symbol_iterator = bridge.iterator(WGSLLanguageFeatures.values, .{ .js_name = "values" });
     };
 };
 

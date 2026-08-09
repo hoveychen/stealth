@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<head>
+  <title>WebGPU pipeline and encoder interfaces</title>
+  <script src="../testing.js"></script>
+  <script src="shape.js"></script>
+</head>
+
+<script id=webgpu_pipeline_interface_objects>
+  {
+    for (const name of [
+      'GPUShaderModule',
+      'GPUCompilationInfo',
+      'GPUCompilationMessage',
+      'GPUComputePipeline',
+      'GPURenderPipeline',
+      'GPUCommandBuffer',
+      'GPUCommandEncoder',
+      'GPUComputePassEncoder',
+      'GPURenderPassEncoder',
+      'GPURenderBundle',
+      'GPURenderBundleEncoder',
+      'GPUCanvasContext',
+    ]) {
+      gpuExpectInterfaceObject(name);
+    }
+  }
+</script>
+
+<script id=webgpu_pipeline_short_prototypes>
+  {
+    // Pasted from probe-win37.js' output (win37-chrome.json), member order
+    // included -- it is not alphabetical anywhere in this family.
+    for (const [name, shape] of [
+      ['GPUShaderModule', 'accessor label[ec-],getCompilationInfo/0[ecw],@@toStringTag=GPUShaderModule'],
+      ['GPUCompilationInfo', 'get messages[ec-],@@toStringTag=GPUCompilationInfo'],
+      ['GPUCompilationMessage', 'get message[ec-],get type[ec-],get lineNum[ec-],get linePos[ec-],get offset[ec-],get length[ec-],@@toStringTag=GPUCompilationMessage'],
+      ['GPUComputePipeline', 'accessor label[ec-],getBindGroupLayout/1[ecw],@@toStringTag=GPUComputePipeline'],
+      ['GPURenderPipeline', 'accessor label[ec-],getBindGroupLayout/1[ecw],@@toStringTag=GPURenderPipeline'],
+      ['GPUCommandBuffer', 'accessor label[ec-],@@toStringTag=GPUCommandBuffer'],
+      ['GPURenderBundle', 'accessor label[ec-],@@toStringTag=GPURenderBundle'],
+      ['GPUCanvasContext', 'get canvas[ec-],configure/1[ecw],getConfiguration/0[ecw],getCurrentTexture/0[ecw],unconfigure/0[ecw],@@toStringTag=GPUCanvasContext'],
+    ]) {
+      testing.expectEqual(shape, gpuShape(window[name].prototype));
+    }
+  }
+</script>
+
+<script id=webgpu_command_encoder_prototype>
+  {
+    // Chrome's order is not just non-alphabetical, it is two runs of it: the
+    // methods restart at `clearBuffer` after `pushDebugGroup`.
+    testing.expectEqual(
+      [
+        'accessor label[ec-]',
+        'beginComputePass/0[ecw]',
+        'beginRenderPass/1[ecw]',
+        'copyBufferToTexture/3[ecw]',
+        'copyTextureToBuffer/3[ecw]',
+        'copyTextureToTexture/3[ecw]',
+        'finish/0[ecw]',
+        'insertDebugMarker/1[ecw]',
+        'pushDebugGroup/1[ecw]',
+        'clearBuffer/1[ecw]',
+        'copyBufferToBuffer/2[ecw]',
+        'popDebugGroup/0[ecw]',
+        'resolveQuerySet/5[ecw]',
+        '@@toStringTag=GPUCommandEncoder',
+      ],
+      gpuShape(GPUCommandEncoder.prototype).split(','),
+    );
+  }
+</script>
+
+<script id=webgpu_pass_encoder_prototypes>
+  {
+    testing.expectEqual(
+      [
+        'accessor label[ec-]',
+        'insertDebugMarker/1[ecw]',
+        'pushDebugGroup/1[ecw]',
+        'dispatchWorkgroups/1[ecw]',
+        'dispatchWorkgroupsIndirect/2[ecw]',
+        'end/0[ecw]',
+        'popDebugGroup/0[ecw]',
+        'setBindGroup/2[ecw]',
+        'setPipeline/1[ecw]',
+        'writeTimestamp/2[ecw]',
+        'setImmediates/2[ecw]',
+        '@@toStringTag=GPUComputePassEncoder',
+      ],
+      gpuShape(GPUComputePassEncoder.prototype).split(','),
+    );
+
+    testing.expectEqual(
+      [
+        'accessor label[ec-]',
+        'executeBundles/1[ecw]',
+        'insertDebugMarker/1[ecw]',
+        'pushDebugGroup/1[ecw]',
+        'setBlendConstant/1[ecw]',
+        'setIndexBuffer/2[ecw]',
+        'beginOcclusionQuery/1[ecw]',
+        'draw/1[ecw]',
+        'drawIndexed/1[ecw]',
+        'drawIndexedIndirect/2[ecw]',
+        'drawIndirect/2[ecw]',
+        'end/0[ecw]',
+        'endOcclusionQuery/0[ecw]',
+        'popDebugGroup/0[ecw]',
+        'setBindGroup/2[ecw]',
+        'setPipeline/1[ecw]',
+        'setScissorRect/4[ecw]',
+        'setStencilReference/1[ecw]',
+        'setVertexBuffer/2[ecw]',
+        'setViewport/6[ecw]',
+        'writeTimestamp/2[ecw]',
+        'setImmediates/2[ecw]',
+        '@@toStringTag=GPURenderPassEncoder',
+      ],
+      gpuShape(GPURenderPassEncoder.prototype).split(','),
+    );
+
+    testing.expectEqual(
+      [
+        'accessor label[ec-]',
+        'finish/0[ecw]',
+        'insertDebugMarker/1[ecw]',
+        'pushDebugGroup/1[ecw]',
+        'setIndexBuffer/2[ecw]',
+        'draw/1[ecw]',
+        'drawIndexed/1[ecw]',
+        'drawIndexedIndirect/2[ecw]',
+        'drawIndirect/2[ecw]',
+        'popDebugGroup/0[ecw]',
+        'setBindGroup/2[ecw]',
+        'setPipeline/1[ecw]',
+        'setVertexBuffer/2[ecw]',
+        'setImmediates/2[ecw]',
+        '@@toStringTag=GPURenderBundleEncoder',
+      ],
+      gpuShape(GPURenderBundleEncoder.prototype).split(','),
+    );
+  }
+</script>
+
+<script type=module id=webgpu_shader_module>
+  // Values and messages measured on a headed Chrome 150 (win40-chrome.json).
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+  const CODE = '@compute @workgroup_size(1) fn main() {}';
+
+  const mod = dev.createShaderModule({ code: CODE });
+  testing.expectEqual('[object GPUShaderModule]', Object.prototype.toString.call(mod));
+  testing.expectEqual('', mod.label);
+  testing.expectEqual('sm', dev.createShaderModule({ code: CODE, label: 'sm' }).label);
+  mod.label = 'x';
+  testing.expectEqual('x', mod.label);
+
+  // A shader module is handed back for anything that stringifies -- ill-formed
+  // WGSL is an *asynchronous* validation error, not a throw.
+  testing.expectEqual('[object GPUShaderModule]', Object.prototype.toString.call(dev.createShaderModule({ code: 5 })));
+  testing.expectEqual('[object GPUShaderModule]', Object.prototype.toString.call(dev.createShaderModule({ code: '' })));
+
+  testing.expectError(
+    "Failed to execute 'createShaderModule' on 'GPUDevice': 1 argument required, but only 0 present.",
+    () => dev.createShaderModule(),
+  );
+  testing.expectError(
+    "Failed to execute 'createShaderModule' on 'GPUDevice': Failed to read the 'code' property from 'GPUShaderModuleDescriptor': Required member is undefined.",
+    () => dev.createShaderModule({}),
+  );
+  // An undefined descriptor is not the same as no descriptor: the count is
+  // checked first, and only then is the value converted.
+  testing.expectError(
+    "Failed to execute 'createShaderModule' on 'GPUDevice': The provided value is not of type 'GPUShaderModuleDescriptor'.",
+    () => dev.createShaderModule(undefined),
+  );
+  testing.expectError(
+    "The provided value is not of type 'GPUShaderModuleDescriptor'.",
+    () => dev.createShaderModule('nope'),
+  );
+
+  const info = await mod.getCompilationInfo();
+  testing.expectEqual('[object GPUCompilationInfo]', Object.prototype.toString.call(info));
+  testing.expectTrue(Array.isArray(info.messages));
+  testing.expectEqual(0, info.messages.length);
+  // A fresh array on every read, and a fresh GPUCompilationInfo per call.
+  testing.expectFalse(info.messages === info.messages);
+  testing.expectFalse(info === await mod.getCompilationInfo());
+</script>
+
+<script type=module id=webgpu_pipelines>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+  const mod = dev.createShaderModule({ code: '@compute @workgroup_size(1) fn main() {}' });
+
+  const cp = dev.createComputePipeline({ layout: 'auto', compute: { module: mod } });
+  testing.expectEqual('[object GPUComputePipeline]', Object.prototype.toString.call(cp));
+  testing.expectEqual('', cp.label);
+  testing.expectEqual('cp', dev.createComputePipeline({ layout: 'auto', compute: { module: mod, entryPoint: 'main' }, label: 'cp' }).label);
+  // An explicit GPUPipelineLayout is accepted where 'auto' is.
+  testing.expectEqual('[object GPUComputePipeline]', Object.prototype.toString.call(
+    dev.createComputePipeline({ layout: dev.createPipelineLayout({ bindGroupLayouts: [] }), compute: { module: mod } }),
+  ));
+
+  const rp = dev.createRenderPipeline({ layout: 'auto', vertex: { module: mod }, fragment: { module: mod, targets: [{ format: 'bgra8unorm' }] } });
+  testing.expectEqual('[object GPURenderPipeline]', Object.prototype.toString.call(rp));
+  testing.expectEqual('rp', dev.createRenderPipeline({ layout: 'auto', vertex: { module: mod }, label: 'rp' }).label);
+
+  // getBindGroupLayout hands back a *new* layout object every call.
+  for (const p of [cp, rp]) {
+    testing.expectEqual('[object GPUBindGroupLayout]', Object.prototype.toString.call(p.getBindGroupLayout(0)));
+    testing.expectFalse(p.getBindGroupLayout(0) === p.getBindGroupLayout(0));
+  }
+  testing.expectError(
+    "Failed to execute 'getBindGroupLayout' on 'GPUComputePipeline': 1 argument required, but only 0 present.",
+    () => cp.getBindGroupLayout(),
+  );
+  testing.expectError(
+    "Failed to execute 'getBindGroupLayout' on 'GPURenderPipeline': 1 argument required, but only 0 present.",
+    () => rp.getBindGroupLayout(),
+  );
+  testing.expectError(
+    "Failed to execute 'getBindGroupLayout' on 'GPUComputePipeline': Value is not of type 'unsigned long'.",
+    () => cp.getBindGroupLayout('nope'),
+  );
+
+  // `layout` is declared on GPUPipelineDescriptorBase, and the message names
+  // that dictionary rather than the one that was passed in. It is read before
+  // every own member of either pipeline descriptor.
+  for (const [method, descriptor] of [
+    ['createComputePipeline', {}],
+    ['createComputePipeline', { compute: {} }],
+    ['createRenderPipeline', {}],
+    ['createRenderPipeline', { vertex: {} }],
+  ]) {
+    testing.expectError(
+      `Failed to execute '${method}' on 'GPUDevice': Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': Required member is undefined.`,
+      () => dev[method](descriptor),
+    );
+  }
+  testing.expectError(
+    "Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': The provided value 'nope' is not a valid enum value of type GPUAutoLayoutMode.",
+    () => dev.createComputePipeline({ layout: 'nope', compute: { module: mod } }),
+  );
+  testing.expectError(
+    "The provided value '5' is not a valid enum value of type GPUAutoLayoutMode.",
+    () => dev.createComputePipeline({ layout: 5, compute: { module: mod } }),
+  );
+
+  testing.expectError(
+    "Failed to execute 'createComputePipeline' on 'GPUDevice': 1 argument required, but only 0 present.",
+    () => dev.createComputePipeline(),
+  );
+  testing.expectError(
+    "Failed to execute 'createRenderPipeline' on 'GPUDevice': 1 argument required, but only 0 present.",
+    () => dev.createRenderPipeline(),
+  );
+  testing.expectError(
+    "Failed to execute 'createComputePipeline' on 'GPUDevice': The provided value is not of type 'GPUComputePipelineDescriptor'.",
+    () => dev.createComputePipeline('nope'),
+  );
+
+  // The nested stage dictionaries name themselves, and `module` names the base
+  // dictionary it is declared on.
+  testing.expectError(
+    "Failed to execute 'createComputePipeline' on 'GPUDevice': Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': Required member is undefined.",
+    () => dev.createComputePipeline({ layout: 'auto' }),
+  );
+  testing.expectError(
+    "Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': Failed to read the 'module' property from 'GPUProgrammableStage': Required member is undefined.",
+    () => dev.createComputePipeline({ layout: 'auto', compute: {} }),
+  );
+  testing.expectError(
+    "Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': Failed to read the 'module' property from 'GPUProgrammableStage': Failed to convert value to 'GPUShaderModule'.",
+    () => dev.createComputePipeline({ layout: 'auto', compute: { module: 5 } }),
+  );
+  testing.expectError(
+    "Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': The provided value is not of type 'GPUProgrammableStage'.",
+    () => dev.createComputePipeline({ layout: 'auto', compute: 'nope' }),
+  );
+
+  testing.expectError(
+    "Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': Required member is undefined.",
+    () => dev.createRenderPipeline({ layout: 'auto' }),
+  );
+  testing.expectError(
+    "Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': Failed to read the 'module' property from 'GPUProgrammableStage': Required member is undefined.",
+    () => dev.createRenderPipeline({ layout: 'auto', vertex: {} }),
+  );
+  testing.expectError(
+    "Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': The provided value is not of type 'GPUVertexState'.",
+    () => dev.createRenderPipeline({ layout: 'auto', vertex: 'nope' }),
+  );
+  // fragment is read *before* vertex, and its own members name GPUFragmentState.
+  testing.expectError(
+    "Failed to read the 'fragment' property from 'GPURenderPipelineDescriptor': Failed to read the 'module' property from 'GPUProgrammableStage': Required member is undefined.",
+    () => dev.createRenderPipeline({ layout: 'auto', fragment: {}, vertex: {} }),
+  );
+  testing.expectError(
+    "Failed to read the 'fragment' property from 'GPURenderPipelineDescriptor': Failed to read the 'targets' property from 'GPUFragmentState': Required member is undefined.",
+    () => dev.createRenderPipeline({ layout: 'auto', vertex: { module: mod }, fragment: { module: mod } }),
+  );
+  testing.expectError(
+    "Failed to read the 'targets' property from 'GPUFragmentState': The provided value cannot be converted to a sequence.",
+    () => dev.createRenderPipeline({ layout: 'auto', vertex: { module: mod }, fragment: { module: mod, targets: 5 } }),
+  );
+  testing.expectError(
+    "Failed to read the 'fragment' property from 'GPURenderPipelineDescriptor': The provided value is not of type 'GPUFragmentState'.",
+    () => dev.createRenderPipeline({ layout: 'auto', vertex: { module: mod }, fragment: 'nope' }),
+  );
+</script>
+
+<script type=module id=webgpu_pipelines_async>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+  const mod = dev.createShaderModule({ code: '@compute @workgroup_size(1) fn main() {}' });
+
+  // The *Async pair does not throw: the same TypeError comes back as a
+  // rejection (measured -- win40b-chrome.json).
+  const settled = (p) => p.then((v) => Object.prototype.toString.call(v), (e) => String(e));
+  const rejectsWith = async (expected, p) => {
+    const got = await settled(p);
+    testing.expectEqual(expected, got.includes(expected) ? expected : got);
+  };
+
+  const promise = dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod } });
+  testing.expectTrue(promise instanceof Promise);
+  testing.expectEqual('[object GPUComputePipeline]', await settled(promise));
+  testing.expectEqual('[object GPURenderPipeline]', await settled(dev.createRenderPipelineAsync({ layout: 'auto', vertex: { module: mod } })));
+  testing.expectEqual('cpa', (await dev.createComputePipelineAsync({ layout: 'auto', compute: { module: mod }, label: 'cpa' })).label);
+
+  await rejectsWith(
+    "TypeError: Failed to execute 'createComputePipelineAsync' on 'GPUDevice': 1 argument required, but only 0 present.",
+    dev.createComputePipelineAsync(),
+  );
+  await rejectsWith(
+    "TypeError: Failed to execute 'createComputePipelineAsync' on 'GPUDevice': Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': Required member is undefined.",
+    dev.createComputePipelineAsync({}),
+  );
+  await rejectsWith(
+    "TypeError: Failed to execute 'createComputePipelineAsync' on 'GPUDevice': Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': Required member is undefined.",
+    dev.createComputePipelineAsync({ layout: 'auto' }),
+  );
+  await rejectsWith(
+    "The provided value 'nope' is not a valid enum value of type GPUAutoLayoutMode.",
+    dev.createComputePipelineAsync({ layout: 'nope', compute: { module: mod } }),
+  );
+  await rejectsWith(
+    "TypeError: Failed to execute 'createRenderPipelineAsync' on 'GPUDevice': Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': Required member is undefined.",
+    dev.createRenderPipelineAsync({ layout: 'auto' }),
+  );
+</script>
+
+<script type=module id=webgpu_command_encoder>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  const enc = dev.createCommandEncoder();
+  testing.expectEqual('[object GPUCommandEncoder]', Object.prototype.toString.call(enc));
+  testing.expectEqual('', enc.label);
+  testing.expectEqual('ce', dev.createCommandEncoder({ label: 'ce' }).label);
+  // The descriptor is optional, so an undefined one is fine here.
+  testing.expectEqual('[object GPUCommandEncoder]', Object.prototype.toString.call(dev.createCommandEncoder(undefined)));
+  testing.expectError(
+    "Failed to execute 'createCommandEncoder' on 'GPUDevice': The provided value is not of type 'GPUCommandEncoderDescriptor'.",
+    () => dev.createCommandEncoder('nope'),
+  );
+
+  const buffer = enc.finish();
+  testing.expectEqual('[object GPUCommandBuffer]', Object.prototype.toString.call(buffer));
+  testing.expectEqual('', buffer.label);
+  testing.expectEqual('cb', dev.createCommandEncoder().finish({ label: 'cb' }).label);
+  // A second finish() is an asynchronous validation error, not a throw.
+  testing.expectEqual('[object GPUCommandBuffer]', Object.prototype.toString.call(enc.finish()));
+  testing.expectError(
+    "Failed to execute 'finish' on 'GPUCommandEncoder': The provided value is not of type 'GPUCommandBufferDescriptor'.",
+    () => dev.createCommandEncoder().finish('nope'),
+  );
+
+  const pass = dev.createCommandEncoder().beginComputePass();
+  testing.expectEqual('[object GPUComputePassEncoder]', Object.prototype.toString.call(pass));
+  testing.expectEqual('', pass.label);
+  testing.expectEqual('pass', dev.createCommandEncoder().beginComputePass({ label: 'pass' }).label);
+  testing.expectError(
+    "Failed to execute 'beginComputePass' on 'GPUCommandEncoder': The provided value is not of type 'GPUComputePassDescriptor'.",
+    () => dev.createCommandEncoder().beginComputePass('nope'),
+  );
+
+  const view = dev.createTexture({ size: [8, 8], format: 'bgra8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT }).createView();
+  const rpass = dev.createCommandEncoder().beginRenderPass({ colorAttachments: [{ view, loadOp: 'clear', storeOp: 'store' }] });
+  testing.expectEqual('[object GPURenderPassEncoder]', Object.prototype.toString.call(rpass));
+  testing.expectEqual('', rpass.label);
+  testing.expectEqual('rpass', dev.createCommandEncoder().beginRenderPass({
+    label: 'rpass',
+    colorAttachments: [{ view, loadOp: 'clear', storeOp: 'store' }],
+  }).label);
+
+  testing.expectError(
+    "Failed to execute 'beginRenderPass' on 'GPUCommandEncoder': 1 argument required, but only 0 present.",
+    () => dev.createCommandEncoder().beginRenderPass(),
+  );
+  testing.expectError(
+    "Failed to execute 'beginRenderPass' on 'GPUCommandEncoder': Failed to read the 'colorAttachments' property from 'GPURenderPassDescriptor': Required member is undefined.",
+    () => dev.createCommandEncoder().beginRenderPass({}),
+  );
+  testing.expectError(
+    "Failed to read the 'colorAttachments' property from 'GPURenderPassDescriptor': The provided value cannot be converted to a sequence.",
+    () => dev.createCommandEncoder().beginRenderPass({ colorAttachments: 5 }),
+  );
+  // An attachment's own members are read in their own order: loadOp before view.
+  testing.expectError(
+    "Failed to read the 'colorAttachments' property from 'GPURenderPassDescriptor': Failed to read the 'loadOp' property from 'GPURenderPassColorAttachment': Required member is undefined.",
+    () => dev.createCommandEncoder().beginRenderPass({ colorAttachments: [{ view: 5 }] }),
+  );
+  testing.expectError(
+    "Failed to read the 'colorAttachments' property from 'GPURenderPassDescriptor': Failed to read the 'view' property from 'GPURenderPassColorAttachment': Required member is undefined.",
+    () => dev.createCommandEncoder().beginRenderPass({ colorAttachments: [{ loadOp: 'clear', storeOp: 'store' }] }),
+  );
+  testing.expectError(
+    "The provided value is not of type 'GPURenderPassDescriptor'.",
+    () => dev.createCommandEncoder().beginRenderPass('nope'),
+  );
+
+  // The state calls that take nothing answer with undefined and do not throw.
+  testing.expectEqual(undefined, pass.end());
+  testing.expectEqual(undefined, pass.end());
+  testing.expectEqual(undefined, pass.popDebugGroup());
+  testing.expectEqual(undefined, rpass.endOcclusionQuery());
+  testing.expectEqual(undefined, rpass.end());
+  testing.expectEqual(undefined, enc.popDebugGroup());
+
+  // ...but every recording call that declares arguments refuses an empty one,
+  // counting what it was actually given (measured across the whole family,
+  // win42-chrome.json). Nothing is recorded either way; the refusal is the
+  // observable part.
+  for (const [target, name, arity] of [
+    [enc, 'insertDebugMarker', 1], [enc, 'copyBufferToBuffer', 2], [enc, 'copyTextureToTexture', 3],
+    [enc, 'resolveQuerySet', 5], [pass, 'setPipeline', 1], [pass, 'setBindGroup', 2],
+    [pass, 'dispatchWorkgroups', 1], [rpass, 'draw', 1], [rpass, 'setScissorRect', 4],
+    [rpass, 'setViewport', 6], [rpass, 'executeBundles', 1],
+  ]) {
+    testing.expectError(
+      `Failed to execute '${name}' on '${target.constructor.name}': ${arity} argument${arity === 1 ? '' : 's'} required, but only 0 present.`,
+      () => target[name](),
+    );
+    // One short of the requirement counts what was passed, not zero.
+    if (arity > 1) {
+      testing.expectError(
+        `${arity} arguments required, but only 1 present.`,
+        () => target[name](0),
+      );
+    }
+    // Enough arguments: no complaint, and no effect either.
+    testing.expectEqual(undefined, target[name](0, 0, 0, 0, 0, 0));
+  }
+
+  const bundleEncoder = dev.createRenderBundleEncoder({ colorFormats: ['bgra8unorm'] });
+  testing.expectError(
+    "Failed to execute 'setVertexBuffer' on 'GPURenderBundleEncoder': 2 arguments required, but only 0 present.",
+    () => bundleEncoder.setVertexBuffer(),
+  );
+  testing.expectError(
+    "Failed to execute 'submit' on 'GPUQueue': 1 argument required, but only 0 present.",
+    () => dev.queue.submit(),
+  );
+  testing.expectError(
+    "Failed to execute 'writeTexture' on 'GPUQueue': 4 arguments required, but only 0 present.",
+    () => dev.queue.writeTexture(),
+  );
+  // The queue's one promise-returning call resolves rather than answering
+  // undefined.
+  testing.expectEqual(undefined, await dev.queue.onSubmittedWorkDone());
+</script>
+
+<script type=module id=webgpu_render_bundle>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+
+  const be = dev.createRenderBundleEncoder({ colorFormats: ['bgra8unorm'] });
+  testing.expectEqual('[object GPURenderBundleEncoder]', Object.prototype.toString.call(be));
+  testing.expectEqual('', be.label);
+  testing.expectEqual('rbe', dev.createRenderBundleEncoder({ colorFormats: ['bgra8unorm'], label: 'rbe' }).label);
+  // A null entry in colorFormats is legal: the member is a nullable sequence.
+  testing.expectEqual('[object GPURenderBundleEncoder]', Object.prototype.toString.call(dev.createRenderBundleEncoder({ colorFormats: [null] })));
+
+  const bundle = be.finish();
+  testing.expectEqual('[object GPURenderBundle]', Object.prototype.toString.call(bundle));
+  testing.expectEqual('', bundle.label);
+  testing.expectEqual('rb', be.finish({ label: 'rb' }).label);
+
+  testing.expectError(
+    "Failed to execute 'createRenderBundleEncoder' on 'GPUDevice': 1 argument required, but only 0 present.",
+    () => dev.createRenderBundleEncoder(),
+  );
+  testing.expectError(
+    "Failed to execute 'createRenderBundleEncoder' on 'GPUDevice': Failed to read the 'colorFormats' property from 'GPURenderPassLayout': Required member is undefined.",
+    () => dev.createRenderBundleEncoder({}),
+  );
+  testing.expectError(
+    "Failed to read the 'colorFormats' property from 'GPURenderPassLayout': The provided value cannot be converted to a sequence.",
+    () => dev.createRenderBundleEncoder({ colorFormats: 5 }),
+  );
+  testing.expectError(
+    "Failed to read the 'colorFormats' property from 'GPURenderPassLayout': The provided value 'nope' is not a valid enum value of type GPUTextureFormat.",
+    () => dev.createRenderBundleEncoder({ colorFormats: ['nope'] }),
+  );
+  testing.expectError(
+    "Failed to execute 'finish' on 'GPURenderBundleEncoder': The provided value is not of type 'GPURenderBundleDescriptor'.",
+    () => be.finish('nope'),
+  );
+</script>
+
+<script type=module id=webgpu_canvas_context>
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('webgpu');
+
+  testing.expectEqual('[object GPUCanvasContext]', Object.prototype.toString.call(ctx));
+  testing.expectTrue(ctx === canvas.getContext('webgpu'));
+  testing.expectTrue(ctx.canvas === canvas);
+  // A canvas answers null for every other context type once it has this one.
+  testing.expectEqual(null, canvas.getContext('2d'));
+  testing.expectEqual(null, canvas.getContext('webgl'));
+  // ...and the other way round.
+  const twoD = document.createElement('canvas');
+  twoD.getContext('2d');
+  testing.expectEqual(null, twoD.getContext('webgpu'));
+
+  // Unconfigured: no configuration, and getCurrentTexture is a DOMException.
+  testing.expectEqual(null, ctx.getConfiguration());
+  testing.expectError(
+    "InvalidStateError: Failed to execute 'getCurrentTexture' on 'GPUCanvasContext': context is not configured",
+    () => ctx.getCurrentTexture(),
+  );
+
+  testing.expectError(
+    "Failed to execute 'configure' on 'GPUCanvasContext': 1 argument required, but only 0 present.",
+    () => ctx.configure(),
+  );
+  testing.expectError(
+    "Failed to execute 'configure' on 'GPUCanvasContext': Failed to read the 'device' property from 'GPUCanvasConfiguration': Required member is undefined.",
+    () => ctx.configure({}),
+  );
+  testing.expectError(
+    "Failed to read the 'device' property from 'GPUCanvasConfiguration': Required member is undefined.",
+    () => ctx.configure({ format: 'bgra8unorm' }),
+  );
+  testing.expectError(
+    "Failed to read the 'device' property from 'GPUCanvasConfiguration': Failed to convert value to 'GPUDevice'.",
+    () => ctx.configure({ device: 5, format: 'bgra8unorm' }),
+  );
+  testing.expectError(
+    "Failed to read the 'format' property from 'GPUCanvasConfiguration': Required member is undefined.",
+    () => ctx.configure({ device: dev }),
+  );
+  testing.expectError(
+    "Failed to read the 'format' property from 'GPUCanvasConfiguration': The provided value 'nope' is not a valid enum value of type GPUTextureFormat.",
+    () => ctx.configure({ device: dev, format: 'nope' }),
+  );
+  testing.expectError(
+    "Failed to read the 'alphaMode' property from 'GPUCanvasConfiguration': The provided value 'nope' is not a valid enum value of type GPUCanvasAlphaMode.",
+    () => ctx.configure({ device: dev, format: 'bgra8unorm', alphaMode: 'nope' }),
+  );
+  testing.expectError(
+    "Failed to read the 'viewFormats' property from 'GPUCanvasConfiguration': The provided value cannot be converted to a sequence.",
+    () => ctx.configure({ device: dev, format: 'bgra8unorm', viewFormats: 5 }),
+  );
+  testing.expectError(
+    "Failed to read the 'viewFormats' property from 'GPUCanvasConfiguration': The provided value 'nope' is not a valid enum value of type GPUTextureFormat.",
+    () => ctx.configure({ device: dev, format: 'bgra8unorm', viewFormats: ['nope'] }),
+  );
+  testing.expectError(
+    "Failed to read the 'toneMapping' property from 'GPUCanvasConfiguration': Failed to read the 'mode' property from 'CanvasToneMapping': The provided value 'nope' is not a valid enum value of type CanvasToneMappingMode.",
+    () => ctx.configure({ device: dev, format: 'bgra8unorm', toneMapping: { mode: 'nope' } }),
+  );
+  testing.expectError(
+    "Failed to execute 'configure' on 'GPUCanvasContext': The provided value is not of type 'GPUCanvasConfiguration'.",
+    () => ctx.configure('nope'),
+  );
+
+  testing.expectEqual('bgra8unorm', navigator.gpu.getPreferredCanvasFormat());
+  testing.expectEqual(undefined, ctx.configure({ device: dev, format: 'bgra8unorm' }));
+
+  // getConfiguration is a plain object, freshly built on every read, with the
+  // defaults filled in and the keys in Chrome's order.
+  const config = ctx.getConfiguration();
+  testing.expectEqual('[object Object]', Object.prototype.toString.call(config));
+  testing.expectTrue(Object.getPrototypeOf(config) === Object.prototype);
+  testing.expectFalse(config === ctx.getConfiguration());
+  testing.expectEqual(
+    ['alphaMode', 'colorSpace', 'device', 'format', 'toneMapping', 'usage', 'viewFormats'],
+    Object.getOwnPropertyNames(config),
+  );
+  testing.expectTrue(config.device === dev);
+  testing.expectEqual('opaque', config.alphaMode);
+  testing.expectEqual('srgb', config.colorSpace);
+  testing.expectEqual('bgra8unorm', config.format);
+  testing.expectEqual('standard', config.toneMapping.mode);
+  testing.expectEqual(GPUTextureUsage.RENDER_ATTACHMENT, config.usage);
+  testing.expectEqual([], config.viewFormats);
+
+  // The texture is the canvas' bitmap: same object until something invalidates
+  // it, and it carries the configured format and usage.
+  const texture = ctx.getCurrentTexture();
+  testing.expectEqual('[object GPUTexture]', Object.prototype.toString.call(texture));
+  testing.expectTrue(texture === ctx.getCurrentTexture());
+  testing.expectEqual([300, 150, 1], [texture.width, texture.height, texture.depthOrArrayLayers]);
+  testing.expectEqual([1, 1], [texture.mipLevelCount, texture.sampleCount]);
+  testing.expectEqual('2d', texture.dimension);
+  testing.expectEqual('bgra8unorm', texture.format);
+  testing.expectEqual(GPUTextureUsage.RENDER_ATTACHMENT, texture.usage);
+  testing.expectEqual('', texture.label);
+
+  // Re-configuring replaces it.
+  ctx.configure({ device: dev, format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC, alphaMode: 'premultiplied', viewFormats: ['rgba8unorm-srgb'] });
+  testing.expectFalse(texture === ctx.getCurrentTexture());
+  testing.expectEqual('rgba8unorm', ctx.getCurrentTexture().format);
+  testing.expectEqual(17, ctx.getCurrentTexture().usage);
+  testing.expectEqual('premultiplied', ctx.getConfiguration().alphaMode);
+  testing.expectEqual(['rgba8unorm-srgb'], ctx.getConfiguration().viewFormats);
+
+  // Resizing the canvas does too, and the texture follows the new bitmap size.
+  canvas.width = 64;
+  testing.expectEqual([64, 150], [ctx.getCurrentTexture().width, ctx.getCurrentTexture().height]);
+
+  testing.expectEqual(undefined, ctx.unconfigure());
+  testing.expectEqual(null, ctx.getConfiguration());
+  testing.expectError(
+    "InvalidStateError: Failed to execute 'getCurrentTexture' on 'GPUCanvasContext': context is not configured",
+    () => ctx.getCurrentTexture(),
+  );
+
+  // An OffscreenCanvas hands one out too, and `canvas` is then the offscreen one.
+  const off = new OffscreenCanvas(16, 8);
+  const offCtx = off.getContext('webgpu');
+  testing.expectEqual('[object GPUCanvasContext]', Object.prototype.toString.call(offCtx));
+  testing.expectTrue(offCtx.canvas === off);
+  testing.expectTrue(offCtx === off.getContext('webgpu'));
+  testing.expectEqual(null, off.getContext('2d'));
+  offCtx.configure({ device: dev, format: 'bgra8unorm' });
+  testing.expectEqual([16, 8], [offCtx.getCurrentTexture().width, offCtx.getCurrentTexture().height]);
+</script>

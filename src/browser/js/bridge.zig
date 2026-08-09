@@ -1363,6 +1363,13 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/webrtc/events.zig"),
     @import("../webapi/webrtc/encoded_frames.zig"),
     @import("../webapi/webrtc/RTCRtpScriptTransform.zig"),
+
+    @import("../webapi/webgpu/constants.zig"),
+    @import("../webapi/webgpu/adapter.zig"),
+    @import("../webapi/webgpu/device.zig"),
+    @import("../webapi/webgpu/resources.zig"),
+    @import("../webapi/webgpu/pipeline.zig"),
+    @import("../webapi/webgpu/errors.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,

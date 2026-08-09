@@ -105,6 +105,7 @@ pub const Type = union(enum) {
     capture_controller: *@import("media/capture.zig").CaptureController,
     picture_in_picture_window: *@import("media/PictureInPictureWindow.zig"),
     idle_detector: *@import("IdleDetector.zig"),
+    gpu_device: *@import("webgpu/device.zig").GPUDevice,
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -330,6 +331,7 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .capture_controller => writer.writeAll("<CaptureController>"),
         .picture_in_picture_window => writer.writeAll("<PictureInPictureWindow>"),
         .idle_detector => writer.writeAll("<IdleDetector>"),
+        .gpu_device => writer.writeAll("<GPUDevice>"),
     };
 }
 
@@ -407,6 +409,7 @@ pub fn toString(self: *EventTarget) []const u8 {
         .capture_controller => return "[object CaptureController]",
         .picture_in_picture_window => return "[object PictureInPictureWindow]",
         .idle_detector => return "[object IdleDetector]",
+        .gpu_device => return "[object GPUDevice]",
     };
 }
 

@@ -864,8 +864,12 @@ error for calling without `new`). The forty-seventh is `Option` — see below.
   answer here (and `new Option()` called without `new` names
   `HTMLOptionElement` in its message). A faithful legacy factory function needs
   a second `FunctionTemplate` whose `prototype` is re-pointed at the
-  interface's, which the vendored v8 C bindings do not currently expose
-  (`SetPrototypeProviderTemplate` is not bound). The same four differences
+  interface's. That needs `SetPrototypeProviderTemplate`, which the vendored
+  bindings *do* export — it is declared at `src/binding.h:942` and
+  `nm -gU v8/libc_v8.a` shows `_v8__FunctionTemplate__SetPrototypeProviderTemplate`
+  as a `T` symbol. (An earlier revision of this file said the symbol was
+  missing, which was wrong.) Whether wiring it up actually reproduces Chrome's
+  shape is unverified; nobody has tried. The same four differences
   already applied to the shipped `Image` and `Audio`. Everything a page can
   *do* with `Option` matches: `length` is 0, `Option.prototype ===
   HTMLOptionElement.prototype`, both global names are `value[-cw]`, and all
@@ -927,3 +931,106 @@ error for calling without `new`). The forty-seventh is `Option` — see below.
 - **`URLPattern` matches a string input only.** A `URLPatternInit` passed to
   `exec()`/`test()` as the *match target* is legal in Chrome and answers null
   here; Chrome's behaviour for it was not measured.
+
+## G17 batch 16: WebGPU (P10)
+
+The whole `GPU*` family — forty-one interfaces, thirty-nine of them new globals
+(`GPU` and `WGSLLanguageFeatures` were already here from the navigator work).
+Not a shape-only batch: `navigator.gpu.requestAdapter()` now hands back a real
+`GPUAdapter`, so an adapter, a device, its queue, every `create*` and the canvas
+context are all reachable from script.
+
+The reason it could be built for real rather than stubbed is that the reference
+machine has a working WebGPU: every number, every default and every error string
+below was read off a headed Chrome 150 on it (Apple GPU, `metal-3`), not off the
+spec. The probes are `stealth-detector-probes/win-batch/probe-win37.js` (shapes
+of all forty-one), `-win38` (adapter and device behaviour), `-win39` (the
+resource `create*` defaults and refusals), `-win40`/`-win40b`/`-win40c` (the
+pipeline and encoder half), `-win41` (the error family), `-win42`/`-win42b`
+(every method called with no arguments). `win38-findings.md` is the readable
+summary.
+
+It went in six groups: the five flag namespaces (`GPUBufferUsage`,
+`GPUColorWrite`, `GPUMapMode`, `GPUShaderStage`, `GPUTextureUsage`); the entry
+and device types (`GPU`, `GPUAdapter`, `GPUAdapterInfo`, `GPUDevice`,
+`GPUQueue`, `GPUSupportedFeatures`, `GPUSupportedLimits`, `GPUDeviceLostInfo`,
+`WGSLLanguageFeatures`); the nine resources (`GPUBuffer`, `GPUTexture`,
+`GPUTextureView`, `GPUSampler`, `GPUExternalTexture`, `GPUBindGroup`,
+`GPUBindGroupLayout`, `GPUPipelineLayout`, `GPUQuerySet`); the twelve pipeline
+and encoder types; and the six-strong error family.
+
+CreepJS after the batch: window own keys **1029 → 1068**, window spans
+**150 → 111**, total `.unsupport` spans **274 → 235**.
+
+`win37` shape diff after the batch: **all forty-one interfaces are
+field-for-field identical to Chrome** — arity, constructor name, statics,
+prototype members with their kind and flags, prototype chain, `new X()`
+behaviour, and the error for calling without `new`. The behaviour diffs
+(`win40`–`win42b`) come back clean except for the asynchronous-validation gap
+below.
+
+Three findings from the measurement are worth keeping, because each one
+contradicts something that looked obvious:
+
+- **`GPUSupportedFeatures`' iteration order is not stable in Chrome.** The
+  twenty-two-name set is fixed; the order is not. Three `requestAdapter()` calls
+  in a row give three different orders, with two clusters permuting (indices 2–3
+  and 15–18), verified across two separate browser launches. So the order is
+  *not* a hashable surface for this set and any one of Chrome's orders is as
+  authentic as another — only the set has to match. (Prototype member order, by
+  contrast, is stable and is transcribed verbatim everywhere in this family.)
+- **A required dictionary argument refuses `undefined` and `null` outright.**
+  `device.createBuffer(undefined)` is *not* "Required member is undefined." for
+  `size`; it is "The provided value is not of type 'GPUBufferDescriptor'.", and
+  the same holds for all eleven `create*` calls whose descriptor is required.
+  The two whose descriptor is optional (`createSampler`, `createCommandEncoder`)
+  take it. An earlier revision of this batch had inferred the opposite for
+  `createBuffer` and shipped a test asserting it; `win40d` measured it.
+- **Chrome's WebGPU differs from the spec in three places this batch touched.**
+  `GPUTextureUsage.TRANSIENT_ATTACHMENT` (0x20) exists in Chrome 150 and not in
+  the spec; `GPUPipelineError`'s required argument is `options`, not `message`;
+  and a core device rejects a feature-gated `GPUTextureFormat` as an *invalid
+  enum value* rather than as a validation error, which is why only 42 of the
+  spec's 101 formats are listed in `webgpu/resources.zig`.
+
+### Where this engine now differs from Chrome, on purpose or otherwise
+
+- **Nothing produces a `GPUValidationError`.** This is the batch's one real gap
+  and it has a single cause: WebGPU splits validation in half, and only the
+  synchronous half is here. A missing or ill-typed descriptor member throws the
+  TypeError Chrome throws, down to the wording; a value that is well-formed but
+  wrong — `usage: 0`, a size past a limit, ill-formed WGSL, a pipeline whose
+  entry point does not exist, a second `finish()` on a spent encoder — is an
+  *asynchronous* `GPUValidationError` in Chrome, delivered through an error
+  scope or `onuncapturederror`. Here every one of those succeeds. The scope
+  machinery itself is faithful (`pushErrorScope` checks its filter, scopes nest,
+  one pop too many rejects with `OperationError: No error scopes to pop`), but a
+  scope always pops `null`. Reproducing the other half means re-implementing
+  Dawn's validation rules, which is a project of its own.
+- **`getCompilationInfo()` always reports zero messages.** Nothing compiles
+  WGSL, so a module with a syntax error reports as clean where Chrome lists the
+  message, its type, and its line, column, offset and length.
+- **`GPUCompilationInfo.messages` is not frozen.** Chrome hands back a frozen
+  array; the v8 bridge has no `SetIntegrityLevel`, the same reason
+  `BeforeInstallPromptEvent.platforms` is not frozen.
+- **`buffer.getMappedRange()` answers undefined on a mapped buffer.** There are
+  no bytes behind the handle to hand out. The *refusal* on an unmapped buffer is
+  Chrome's (`OperationError: … getMappedRange failed`), and `mapState` walks the
+  measured `unmapped → mapped → unmapped` path; what is missing is the usage
+  check, so `mapAsync` on a buffer without `MAP_READ` resolves here and rejects
+  in Chrome. Chrome's intermediate `'pending'` state is never observable here
+  either: the map completes at once.
+- **The canvas context presents nothing.** `getCurrentTexture()` hands back a
+  `GPUTexture` of the canvas' live size with the configured format and usage,
+  and re-configuring or a resize replaces it, which is what a page reads back —
+  but no pixels are ever produced, exactly as for the WebGL contexts.
+- **`canvas.getContext()` with no arguments still says "invalid argument".**
+  Chrome says "1 argument required, but only 0 present.". This is the
+  engine-wide bridge limitation recorded under batch 15; every method *inside*
+  the WebGPU family counts its own arguments and produces Chrome's wording
+  (measured for all fifty-odd of them in `win42`).
+- **A setlike's `@@iterator` is not the same function object as its `values`.**
+  Chrome's `GPUSupportedFeatures.prototype[Symbol.iterator] === …values`; here
+  it is a separate function with the same name. The name is what an enumeration
+  reads, and it now matches — it did not before this batch, which is the one
+  field the shape diff caught.
