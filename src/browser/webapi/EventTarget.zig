@@ -106,6 +106,10 @@ pub const Type = union(enum) {
     picture_in_picture_window: *@import("media/PictureInPictureWindow.zig"),
     idle_detector: *@import("IdleDetector.zig"),
     gpu_device: *@import("webgpu/device.zig").GPUDevice,
+    video_decoder: *@import("webcodecs/codecs.zig").VideoDecoder,
+    video_encoder: *@import("webcodecs/codecs.zig").VideoEncoder,
+    audio_decoder: *@import("webcodecs/codecs.zig").AudioDecoder,
+    audio_encoder: *@import("webcodecs/codecs.zig").AudioEncoder,
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -332,6 +336,10 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .picture_in_picture_window => writer.writeAll("<PictureInPictureWindow>"),
         .idle_detector => writer.writeAll("<IdleDetector>"),
         .gpu_device => writer.writeAll("<GPUDevice>"),
+        .video_decoder => writer.writeAll("<VideoDecoder>"),
+        .video_encoder => writer.writeAll("<VideoEncoder>"),
+        .audio_decoder => writer.writeAll("<AudioDecoder>"),
+        .audio_encoder => writer.writeAll("<AudioEncoder>"),
     };
 }
 
@@ -410,6 +418,10 @@ pub fn toString(self: *EventTarget) []const u8 {
         .picture_in_picture_window => return "[object PictureInPictureWindow]",
         .idle_detector => return "[object IdleDetector]",
         .gpu_device => return "[object GPUDevice]",
+        .video_decoder => return "[object VideoDecoder]",
+        .video_encoder => return "[object VideoEncoder]",
+        .audio_decoder => return "[object AudioDecoder]",
+        .audio_encoder => return "[object AudioEncoder]",
     };
 }
 

@@ -208,7 +208,9 @@
     );
     testing.expectError(
       "InvalidStateError: Failed to construct 'VideoFrame': The image argument is a canvas element with a width or height of 0.",
-      () => new VideoFrame(document.createElement('canvas'), { timestamp: 0 }),
+      // A default canvas is 300x150 and builds a frame just fine; it takes an
+      // explicitly zeroed one to reach this refusal.
+      () => new VideoFrame(Object.assign(document.createElement('canvas'), { width: 0, height: 0 }), { timestamp: 0 }),
     );
     testing.expectError(
       "InvalidStateError: Failed to construct 'VideoFrame': The image argument is an OffscreenCanvas element with a width or height of 0.",

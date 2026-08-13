@@ -60,7 +60,10 @@
       return;
     }
 
-    console.error(`expected error but no error received\n`);
+    // Without this the suite stays green when an expectError does not fire:
+    // the throw below aborts the script, and nothing else records a failure.
+    failed = true;
+    console.error(`expected error but no error received\n  script_id: ${_currentScriptId()}`);
     throw new Error('no error');
   }
 
