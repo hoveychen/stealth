@@ -241,8 +241,14 @@ pub const ImageDecoder = struct {
             ._data = try exec.arena.dupe(u8, data),
             ._tracks = try exec._factory.create(ImageTrackList{}),
         });
-        // Chrome settles both promises on a later task, so a page that reads
-        // the track list straight after the constructor sees it empty.
+        // `completed` means "all the input is in", and every byte already is,
+        // so it resolves right here -- before the track metadata, which Chrome
+        // settles later still: a page that awaits `completed` and then reads
+        // `decoder.tracks` sees 0 / -1 (measured, win43-chrome.json). A type
+        // nothing supports never settles it at all.
+        if (images.Kind.fromType(self._type) != null) {
+            (try self.completedResolver(exec.js.local.?)).resolve("ImageDecoder", {});
+        }
         try exec._scheduler.add(self, readMetadata, 0, .{ .name = "ImageDecoder.metadata" });
         return self;
     }
@@ -391,8 +397,6 @@ pub const ImageDecoder = struct {
                 try self.unsupportedTypeMessage(),
                 "NotSupportedError",
             ));
-            // `completed` is deliberately left pending: Chrome never settles
-            // it for a type it does not support (measured).
             return null;
         };
 
@@ -402,7 +406,6 @@ pub const ImageDecoder = struct {
                 "Failed to retrieve track metadata.",
                 "InvalidStateError",
             ));
-            (try self.completedResolver(&ls.local)).resolve("ImageDecoder", {});
             return null;
         };
 
@@ -415,7 +418,6 @@ pub const ImageDecoder = struct {
             ._repetition_count = image.repetition_count,
         });
         ready.resolve("ImageDecoder", {});
-        (try self.completedResolver(&ls.local)).resolve("ImageDecoder", {});
         return null;
     }
 
@@ -441,7 +443,12 @@ pub const ImageDecoder = struct {
             // Both a closed decoder and one whose bytes could not be read
             // answer the same way -- and this one has no "Failed to execute"
             // prefix (measured).
-            .closed, .metadata_failed, .pending => {
+            // `.pending` cannot be reached: the constructor queues the
+            // metadata task first, and the scheduler keeps insertion order for
+            // tasks due at the same time, so a decode() issued before `ready`
+            // still finds the status settled -- which is what Chrome does too
+            // (measured, win51-chrome.json).
+            .pending, .closed, .metadata_failed => {
                 resolver.reject("ImageDecoder", DOMException.init(
                     "The decoder has been closed.",
                     "InvalidStateError",
@@ -477,12 +484,18 @@ pub const ImageDecoder = struct {
         return null;
     }
 
-    /// Static, and it never throws: no argument at all answers a promise of
-    /// false rather than a TypeError (measured).
+    /// Static, and it never throws *synchronously*: no argument at all comes
+    /// back as a rejected promise (measured -- win43 awaited it and saw the
+    /// TypeError, win47 only saw that a Promise came back).
     pub fn isTypeSupported(args: []js.Value, exec: *const Execution) !js.Promise {
         const local = exec.js.local.?;
         if (args.len == 0) {
-            return local.resolvePromise(false);
+            var resolver = local.createPromiseResolver();
+            resolver.rejectError("ImageDecoder", .{
+                .type_error = "Failed to execute 'isTypeSupported' on 'ImageDecoder': " ++
+                    "1 argument required, but only 0 present.",
+            });
+            return resolver.promise();
         }
         const mime = try args[0].toStringSliceWithAlloc(exec.call_arena);
         return local.resolvePromise(images.Kind.fromType(mime) != null);

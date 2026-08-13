@@ -69,9 +69,17 @@
 </script>
 
 <script type=module id=webcodecs_image_decoder_type_supported>
+  // No argument at all is a *rejection*, not a false: the call still hands back
+  // a Promise, which is why an earlier probe only saw the brand.
   const t = ImageDecoder.isTypeSupported();
   testing.expectEqual('[object Promise]', Object.prototype.toString.call(t));
-  testing.expectEqual(false, await t);
+  await t.then(
+    (v) => testing.expectEqual('rejected', `resolved ${v}`),
+    (e) => testing.expectEqual(
+      "Failed to execute 'isTypeSupported' on 'ImageDecoder': 1 argument required, but only 0 present.",
+      e.message,
+    ),
+  );
 
   for (const type of ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']) {
     testing.expectEqual(`${type}=true`, `${type}=${await ImageDecoder.isTypeSupported(type)}`);
@@ -112,8 +120,13 @@
   testing.expectTrue(decoder.completed === decoder.completed);
   testing.expectTrue(decoder.tracks === decoder.tracks);
 
-  testing.expectEqual(undefined, await tracks.ready);
+  // `completed` means "all the input is in" and settles *before* the track
+  // metadata: awaiting it still leaves the list empty (measured,
+  // win43-chrome.json).
   testing.expectEqual(undefined, await decoder.completed);
+  testing.expectEqual([0, -1, null], [tracks.length, tracks.selectedIndex, tracks.selectedTrack]);
+
+  testing.expectEqual(undefined, await tracks.ready);
   testing.expectEqual([1, 0], [tracks.length, tracks.selectedIndex]);
 
   const track = tracks[0];

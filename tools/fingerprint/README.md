@@ -1034,3 +1034,121 @@ contradicts something that looked obvious:
   it is a separate function with the same name. The name is what an enumeration
   reads, and it now matches — it did not before this batch, which is the one
   field the shape diff caught.
+
+## G17 batch 17: WebCodecs (P11)
+
+The whole WebCodecs family — twelve globals, all new: `VideoFrame`,
+`VideoColorSpace`, `EncodedVideoChunk`, `EncodedAudioChunk`, `AudioData`,
+`VideoDecoder`, `VideoEncoder`, `AudioDecoder`, `AudioEncoder`, `ImageDecoder`,
+`ImageTrack`, `ImageTrackList`.
+
+Like batch 16 it is not shape-only, and for the same reason: the reference
+machine has a real implementation to read. Every default, every refusal string
+and the whole codec matrix below came off a headed Chrome 150 on it, not off the
+spec. The probes are `stealth-detector-probes/win-batch/probe-win43.js` (shapes
+and entry points for all twelve), `-win45` (the sample containers), `-win46`,
+`-win46b`, `-win46c`, `-win48`, `-win49`, `-win50` (the four codec classes), and
+`-win47`, `-win51` (the image half). `win46-findings.md`, `win48-findings.md`,
+`win47-findings.md` and `win51-findings.md` are the readable summaries.
+
+Two things about the harness are worth recording, because both cost a session:
+
+- **The four codec classes are `[SecureContext]`.** On `about:blank` a probe
+  reports `VideoDecoder is not defined`; it needs an https page. That, not
+  headed-vs-headless, is why the earlier findings said "headed Chrome" —
+  `run-probe.mjs` now takes a url for exactly this.
+- **`JSON.stringify` flattens `Infinity` to `null`.** An earlier probe recorded
+  `ImageTrack.repetitionCount` as null for a looping GIF; reading it directly
+  (`probe-win51.js`) shows **Infinity**. Any probe field that can be a
+  non-finite number has to be stringified by hand.
+
+It went in four groups: the frames and colour space; the three sample
+containers; the four codec classes; and the three image-decoding types.
+`run-page-probe.mjs` was added alongside `run-probe.mjs` because this engine
+does not run scheduled tasks while a CDP `Runtime.evaluate` with `awaitPromise`
+is outstanding, so any probe that awaits a `setTimeout` hangs there — loaded as
+a page, the same probe runs fine.
+
+CreepJS after the batch: window own keys **1068 → 1080**, window spans
+**111 → 87**, total `.unsupport` spans **235 → 211**.
+
+Shape and behaviour diff after the batch: across the nine probes replayed
+against this build, **970 fields, 2 diffs** — and both of those are the same
+timing artefact, `probe-win48`'s 60ms window catching Chrome's real encoder
+before it had dispatched `dequeue`, which `probe-win49`'s 600ms window shows
+matching exactly. All twelve interfaces are field-for-field identical to
+Chrome: arity, constructor name, statics, prototype members with their kind and
+flags, prototype chain, `new X()` behaviour, and the error for calling without
+`new`.
+
+Three findings are worth keeping, because a detector can read each one and none
+is guessable from the spec:
+
+- **The codec matrix is machine-specific, and its case sensitivity is mixed.**
+  `VideoDecoder.isConfigSupported` answers true for exactly `vp8` and anything
+  starting `vp09.`, `avc1.`, `av01.`, `hev1.` or `hvc1.`, and it is
+  case-sensitive throughout: `VP8`, `Vp8` and `AVC1.42E01E` are all false. Audio
+  is *mixed*: `Opus`, `PCM-S16` and `ALAW` are true while `MP3` and `Mp4a.40.2`
+  are false, so the opus / alaw / ulaw / pcm-\* names fold case and the mp3 /
+  mp4a.40.\* / vorbis / flac ones do not. `hardwareAcceleration:
+  'prefer-hardware'` turns every video codec unsupported on this box — a second
+  axis to enumerate on top of the codec list. All of it is reproduced literally.
+- **`configure()` has two refusal paths and they look nothing alike.** A
+  malformed config throws synchronously and leaves the state alone; a
+  well-formed one naming a codec nothing supports returns undefined, leaves
+  `state` at `'configured'`, and only on a later task fires the error callback
+  with a real DOMException and turns `state` to `'closed'`. The four messages
+  differ, and AudioEncoder's reports a channel count it never parsed
+  ("received 0" for a config that passed 2). Transcribed as measured.
+- **`close()` means opposite things on the two halves of the family.** A second
+  `close()` on any of the four codec classes is an InvalidStateError; on
+  `VideoFrame`, `AudioData` and `ImageDecoder` it is a no-op. And `configure()`
+  after `close()` names `'decode'` on both decoders and `'configure'` on both
+  encoders — a Blink slip, transcribed rather than tidied.
+
+Two engine-wide gaps this batch had to close to get there, both outside
+WebCodecs:
+
+- **`EventManagerBase.dispatchDirect` never set `eventPhase`.** A listener on
+  any internally-dispatched event — `dequeue`, `abort`, `message` — read back 0
+  where Chrome reads 2 (`AT_TARGET`). It now sets it for the duration of the
+  dispatch.
+- **`testing.js`'s `withError` threw without recording a failure.** An
+  `expectError` that did not fire left the suite green while silently skipping
+  the rest of its script. It now records it, which immediately surfaced one such
+  case in this batch's own `frames.html`.
+
+### What is still missing
+
+- **Nothing is encoded or decoded.** The four codec classes hold a state
+  machine, a queue and a `dequeue` event; their `output` callback never fires,
+  because there is no codec behind them. Every observable a detector reads
+  without real media — state, queue size, refusal wording, the support matrix —
+  matches; what does not exist is a page handing in an `.mp4` fragment and
+  getting frames back.
+- **`VideoDecoder.decode()` can never succeed.** That is Chrome's behaviour for
+  a synthesised chunk too (it refuses one for not being a key frame), so the
+  two agree — but they agree for different reasons, and a page with a real key
+  frame would part company here.
+- **Only PNG is decoded to pixels.** `ImageDecoder.decode()` hands back a
+  `VideoFrame` whose samples a page can read with `copyTo`, and for PNG those
+  are real: inflate, unfilter, the 8-bit colour types including palette with
+  `tRNS`. JPEG, GIF, WebP, AVIF and BMP report the right geometry and frame
+  timing — the GIF frame delays are parsed, so an animation's timestamps and
+  durations are Chrome's — but their frames come back transparent black. Each
+  would need its own entropy decoder.
+- **A `ReadableStream` `data` is not accepted by `ImageDecoder`.** The union is
+  named correctly in the refusal; only the two buffer arms work.
+- **`AudioData.copyTo` across formats fills zeroes.** The byte count is right
+  and the plane layout is right; converting samples between formats is not
+  done, which is deliberate — see the note in `chunks.zig`.
+- **`VideoFrame` from an `<img>` or `<video>` is always an InvalidStateError.**
+  Neither element ever has decoded data in this engine, which is the state
+  Chrome refuses an unloaded one in, so the refusal matches — but a loaded one
+  would not.
+- **`ctx.fillStyle = 'rgb(255,0,0)'` is silently ignored.** `RGBA.parse` in
+  `src/browser/color.zig` reads hex and named colours only, so the commonest
+  spelling in a canvas fingerprint keeps the previous fill. Not a WebCodecs
+  problem — it belongs with the G3/G4 rasteriser work — but it is what
+  `frames.html` had to route around, and it is worth fixing before any canvas
+  claim is made.
