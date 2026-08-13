@@ -50,6 +50,15 @@ pub fn throwTypeError(message: []const u8, exec: *const Execution) anyerror {
     return error.JsException;
 }
 
+/// `throwTypeError` for the refusals that are a bare RangeError: AudioData's
+/// plane and frame bounds are all of them (measured -- `allocationSize({
+/// planeIndex: 1 })` on interleaved data is a RangeError, not a TypeError).
+pub fn throwRangeError(message: []const u8, exec: *const Execution) anyerror {
+    const isolate = exec.js.isolate;
+    _ = isolate.throwException(isolate.createRangeError(message));
+    return error.JsException;
+}
+
 /// `throwTypeError` for the refusals that are DOMExceptions rather than
 /// TypeErrors -- the InvalidStateError a closed VideoFrame answers with, the
 /// OperationError an unmapped GPUBuffer does.
