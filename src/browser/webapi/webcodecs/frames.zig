@@ -537,6 +537,37 @@ pub const VideoFrame = struct {
         });
     }
 
+    /// The frame an ImageDecoder hands back: BGRA, upright, unflipped, sRGB,
+    /// and visible in full. Chrome's `ImageDecoder.decode()` answers a BGRA
+    /// frame whose coded size is the image's own -- `desiredWidth` does not
+    /// resize it (measured, win51-chrome.json) -- and a fresh frame on every
+    /// call. `pixels` is null for a format image_decoder.zig read the geometry
+    /// of but did not decode the samples of.
+    pub fn decoded(
+        width: u32,
+        height: u32,
+        timestamp: i64,
+        duration: ?u64,
+        pixels: ?[]const u8,
+        exec: *const Execution,
+    ) !*VideoFrame {
+        const format = formatByName("BGRA");
+        const rect = Rect{ .x = 0, .y = 0, .width = width, .height = height };
+        return create(.{
+            .format = format,
+            .timestamp = timestamp,
+            .duration = duration,
+            .coded_width = width,
+            .coded_height = height,
+            .visible = rect,
+            .display = rect,
+            .rotation = 0,
+            .flip = false,
+            .color_space = defaultColorSpace(format),
+            .pixels = pixels,
+        }, exec);
+    }
+
     fn defaultColorSpace(format: *const PixelFormat) VideoColorSpace {
         return if (isPlanar(format)) VideoColorSpace.rec709 else VideoColorSpace.srgb;
     }
