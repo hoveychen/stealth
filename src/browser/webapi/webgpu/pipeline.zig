@@ -41,7 +41,6 @@ const js = @import("../../js/js.zig");
 const dictionary = @import("../dictionary.zig");
 const resources = @import("resources.zig");
 const device = @import("device.zig");
-const DOMException = @import("../DOMException.zig");
 const WebGLRenderingContext = @import("../canvas/WebGLRenderingContext.zig");
 const Execution = js.Execution;
 
@@ -62,12 +61,7 @@ pub fn registerTypes() []const type {
     };
 }
 
-fn throwDom(comptime name: []const u8, message: []const u8, exec: *const Execution) anyerror {
-    const local = exec.js.local.?;
-    const value = local.zigValueToJs(DOMException.init(message, name), .{}) catch return error.JsException;
-    _ = local.isolate.throwException(value.handle);
-    return error.JsException;
-}
+const throwDom = dictionary.throwDom;
 
 /// WebIDL `[EnforceRange] unsigned long`, which both the bind-group index and
 /// `GPUCanvasConfiguration.usage` are: a value that is not a number in range is

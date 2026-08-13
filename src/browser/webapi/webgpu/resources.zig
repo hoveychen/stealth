@@ -37,7 +37,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const dictionary = @import("../dictionary.zig");
 const Video = @import("../element/html/Video.zig");
-const DOMException = @import("../DOMException.zig");
+const VideoFrame = @import("../webcodecs/frames.zig").VideoFrame;
 const Execution = js.Execution;
 
 /// The 42 GPUTextureFormat values a *core* device accepts. Chrome gates the enum
@@ -168,12 +168,7 @@ pub fn requiredEnum(
     ), exec);
 }
 
-fn throwDom(comptime name: []const u8, message: []const u8, exec: *const Execution) anyerror {
-    const local = exec.js.local.?;
-    const value = local.zigValueToJs(DOMException.init(message, name), .{}) catch return error.JsException;
-    _ = local.isolate.throwException(value.handle);
-    return error.JsException;
-}
+const throwDom = dictionary.throwDom;
 
 pub fn registerTypes() []const type {
     return &.{
@@ -568,15 +563,18 @@ pub fn createBindGroup(args: []js.Value, exec: *const Execution) !*GPUBindGroup 
 
 /// The `source` member is a `(HTMLVideoElement or VideoFrame)` union, and Chrome
 /// names the whole union when the conversion fails (measured with `{source: 5}`).
-/// VideoFrame does not exist here, so a video element is the only thing that
-/// converts.
+/// Both arms convert; a closed VideoFrame is refused further down in Chrome
+/// ("video frame that doesn't have back resource"), which is a validation step
+/// this engine has no back resource to make.
 pub fn importExternalTexture(args: []js.Value, exec: *const Execution) !*GPUExternalTexture {
     const Reader = dictionary.MethodReader("GPUDevice", "importExternalTexture", "GPUExternalTextureDescriptor");
     const descriptor = try Reader.readRequired(try requireDescriptor("importExternalTexture", args, exec), exec);
     const source = try descriptor.required("source", exec);
-    _ = source.toZig(*Video) catch {
-        return Reader.notOfType("source", "(HTMLVideoElement or VideoFrame)", exec);
-    };
+    if (source.toZig(*Video)) |_| {} else |_| {
+        _ = source.toZig(*VideoFrame) catch {
+            return Reader.notOfType("source", "(HTMLVideoElement or VideoFrame)", exec);
+        };
+    }
     return exec._factory.create(GPUExternalTexture{
         ._label = try descriptor.string("label", "", exec.arena),
     });

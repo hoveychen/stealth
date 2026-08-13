@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<head>
+  <title>WebCodecs: VideoFrame and VideoColorSpace</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webcodecs_frame_interface_objects>
+  {
+    // Both are constructible, unlike the whole GPU* family, so the only refusal
+    // an interface object still owes is the missing `new`.
+    expectInterfaceObject('VideoColorSpace', { arity: 0, illegal: false });
+    expectInterfaceObject('VideoFrame', { arity: 1, illegal: false });
+  }
+</script>
+
+<script id=webcodecs_frame_prototypes>
+  {
+    testing.expectEqual(
+      'get primaries[ec-],get transfer[ec-],get matrix[ec-],get fullRange[ec-],toJSON/0[ecw],@@toStringTag=VideoColorSpace',
+      shapeOf(VideoColorSpace.prototype),
+    );
+
+    // Chrome's order: twelve getters, then five methods.
+    testing.expectEqual(
+      [
+        'get format[ec-]',
+        'get timestamp[ec-]',
+        'get duration[ec-]',
+        'get codedWidth[ec-]',
+        'get codedHeight[ec-]',
+        'get codedRect[ec-]',
+        'get visibleRect[ec-]',
+        'get rotation[ec-]',
+        'get flip[ec-]',
+        'get displayWidth[ec-]',
+        'get displayHeight[ec-]',
+        'get colorSpace[ec-]',
+        'allocationSize/0[ecw]',
+        'clone/0[ecw]',
+        'close/0[ecw]',
+        'copyTo/1[ecw]',
+        'metadata/0[ecw]',
+        '@@toStringTag=VideoFrame',
+      ].join(','),
+      shapeOf(VideoFrame.prototype),
+    );
+  }
+</script>
+
+<script id=webcodecs_color_space>
+  {
+    const empty = new VideoColorSpace();
+    testing.expectEqual('[object VideoColorSpace]', Object.prototype.toString.call(empty));
+    testing.expectEqual([null, null, null, null], [empty.primaries, empty.transfer, empty.matrix, empty.fullRange]);
+
+    // Every member is nullable: absent, undefined and an explicit null all read
+    // back as null, and a non-null fullRange is ToBoolean.
+    const nulls = new VideoColorSpace({ primaries: null, transfer: null, matrix: null, fullRange: null });
+    testing.expectEqual([null, null, null, null], [nulls.primaries, nulls.transfer, nulls.matrix, nulls.fullRange]);
+    testing.expectEqual(null, new VideoColorSpace({ primaries: undefined }).primaries);
+    testing.expectEqual(true, new VideoColorSpace({ fullRange: 'x' }).fullRange);
+    testing.expectEqual(false, new VideoColorSpace({ fullRange: 0 }).fullRange);
+
+    const full = new VideoColorSpace({ primaries: 'bt709', transfer: 'iec61966-2-1', matrix: 'smpte170m', fullRange: true });
+    testing.expectEqual(['bt709', 'iec61966-2-1', 'smpte170m', true], [full.primaries, full.transfer, full.matrix, full.fullRange]);
+
+    // toJSON's keys are alphabetical, not the prototype's order.
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(full.toJSON()));
+    testing.expectEqual(['fullRange', 'matrix', 'primaries', 'transfer'], Object.keys(full.toJSON()));
+    testing.expectEqual(
+      '{"fullRange":true,"matrix":"smpte170m","primaries":"bt709","transfer":"iec61966-2-1"}',
+      JSON.stringify(full.toJSON()),
+    );
+
+    // null and undefined are an empty dictionary; a non-object is not one at
+    // all. An array or a function is an object, so both are accepted.
+    testing.expectEqual('[object VideoColorSpace]', Object.prototype.toString.call(new VideoColorSpace(null)));
+    testing.expectEqual('[object VideoColorSpace]', Object.prototype.toString.call(new VideoColorSpace(undefined)));
+    testing.expectEqual('[object VideoColorSpace]', Object.prototype.toString.call(new VideoColorSpace([])));
+    testing.expectError(
+      "Failed to construct 'VideoColorSpace': The provided value is not of type 'VideoColorSpaceInit'.",
+      () => new VideoColorSpace(5),
+    );
+  }
+</script>
+
+<script id=webcodecs_color_space_enums>
+  {
+    // Chrome accepts exactly these; the spec's wider candidates (smpte240m,
+    // film, srgb, identity, ycgco) are all invalid enum values.
+    for (const v of ['bt709', 'bt470bg', 'smpte170m', 'bt2020', 'smpte432']) {
+      testing.expectEqual(v, new VideoColorSpace({ primaries: v }).primaries);
+    }
+    for (const v of ['bt709', 'smpte170m', 'iec61966-2-1', 'linear', 'pq', 'hlg']) {
+      testing.expectEqual(v, new VideoColorSpace({ transfer: v }).transfer);
+    }
+    for (const v of ['rgb', 'bt709', 'bt470bg', 'smpte170m', 'bt2020-ncl']) {
+      testing.expectEqual(v, new VideoColorSpace({ matrix: v }).matrix);
+    }
+    testing.expectError(
+      "Failed to construct 'VideoColorSpace': Failed to read the 'primaries' property from 'VideoColorSpaceInit': The provided value 'nope' is not a valid enum value of type VideoColorPrimaries.",
+      () => new VideoColorSpace({ primaries: 'nope' }),
+    );
+    testing.expectError(
+      "Failed to construct 'VideoColorSpace': Failed to read the 'transfer' property from 'VideoColorSpaceInit': The provided value 'srgb' is not a valid enum value of type VideoTransferCharacteristics.",
+      () => new VideoColorSpace({ transfer: 'srgb' }),
+    );
+    testing.expectError(
+      "Failed to construct 'VideoColorSpace': Failed to read the 'matrix' property from 'VideoColorSpaceInit': The provided value 'identity' is not a valid enum value of type VideoMatrixCoefficients.",
+      () => new VideoColorSpace({ matrix: 'identity' }),
+    );
+  }
+</script>
+
+<script id=webcodecs_frame_from_canvas>
+  {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 16 });
+    canvas.getContext('2d').fillRect(0, 0, 8, 8);
+
+    const frame = new VideoFrame(canvas, { timestamp: 1234 });
+    testing.expectEqual('[object VideoFrame]', Object.prototype.toString.call(frame));
+    // A GPU-backed canvas bitmap is BGRA in Chrome.
+    testing.expectEqual('BGRA', frame.format);
+    testing.expectEqual(1234, frame.timestamp);
+    testing.expectEqual(null, frame.duration);
+    testing.expectEqual([32, 16, 32, 16], [frame.codedWidth, frame.codedHeight, frame.displayWidth, frame.displayHeight]);
+    testing.expectEqual(0, frame.rotation);
+    testing.expectEqual(false, frame.flip);
+    testing.expectEqual('[object DOMRectReadOnly]', Object.prototype.toString.call(frame.codedRect));
+    testing.expectEqual(
+      '{"x":0,"y":0,"width":32,"height":16,"top":0,"right":32,"bottom":16,"left":0}',
+      JSON.stringify(frame.visibleRect.toJSON()),
+    );
+    testing.expectEqual(
+      '{"fullRange":true,"matrix":"rgb","primaries":"bt709","transfer":"iec61966-2-1"}',
+      JSON.stringify(frame.colorSpace.toJSON()),
+    );
+    // The accessors hand back the same objects on every read.
+    testing.expectTrue(frame.colorSpace === frame.colorSpace);
+    testing.expectTrue(frame.codedRect === frame.codedRect);
+    testing.expectTrue(frame.visibleRect === frame.visibleRect);
+    // metadata() is a *different* empty object every call.
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(frame.metadata()));
+    testing.expectEqual([], Object.keys(frame.metadata()));
+    testing.expectFalse(frame.metadata() === frame.metadata());
+
+    testing.expectEqual(2048, frame.allocationSize());
+    testing.expectEqual(2048, frame.allocationSize({}));
+    testing.expectEqual(512, frame.allocationSize({ rect: { x: 0, y: 0, width: 16, height: 8 } }));
+
+    const clone = frame.clone();
+    testing.expectEqual('[object VideoFrame]', Object.prototype.toString.call(clone));
+    testing.expectEqual([clone.format, clone.timestamp, clone.codedWidth], ['BGRA', 1234, 32]);
+
+    // An OffscreenCanvas is software-backed, and therefore RGBA.
+    const offscreen = new OffscreenCanvas(24, 12);
+    offscreen.getContext('2d').fillRect(0, 0, 4, 4);
+    const soft = new VideoFrame(offscreen, { timestamp: 7 });
+    testing.expectEqual(['RGBA', 24, 12], [soft.format, soft.codedWidth, soft.codedHeight]);
+  }
+</script>
+
+<script id=webcodecs_frame_source_overload>
+  {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 16 });
+
+    // One argument never reaches the buffer overload, so an ArrayBufferView is
+    // reported against the *image* union rather than as a failed overload.
+    const IMAGE_SOURCE = '(CSSImageValue or HTMLCanvasElement or HTMLImageElement or HTMLVideoElement or ImageBitmap or OffscreenCanvas or SVGImageElement or VideoFrame)';
+    testing.expectError(
+      `Failed to construct 'VideoFrame': The provided value is not of type '${IMAGE_SOURCE}'.`,
+      () => new VideoFrame(new Uint8Array(1024)),
+    );
+    // Two arguments, and a source that is neither an image nor a buffer.
+    for (const bad of [5, null, undefined, 'x', {}, new ImageData(4, 4)]) {
+      testing.expectError(
+        "Failed to construct 'VideoFrame': Overload resolution failed.",
+        () => new VideoFrame(bad, { timestamp: 0 }),
+      );
+    }
+    testing.expectError(
+      "Failed to construct 'VideoFrame': 1 argument required, but only 0 present.",
+      () => new VideoFrame(),
+    );
+
+    // An init is optional for an image source but its timestamp is not, and a
+    // missing one is bare prose rather than the dictionary wording.
+    for (const init of [undefined, null]) {
+      testing.expectError(
+        "Failed to construct 'VideoFrame': VideoFrameInit must provide timestamp",
+        () => new VideoFrame(canvas, init),
+      );
+    }
+    testing.expectError(
+      "Failed to construct 'VideoFrame': The provided value is not of type 'VideoFrameInit'.",
+      () => new VideoFrame(canvas, 'x'),
+    );
+
+    // Sources that exist but have nothing decoded behind them.
+    testing.expectError(
+      "InvalidStateError: Failed to construct 'VideoFrame': Invalid source state",
+      () => new VideoFrame(new Image(), { timestamp: 0 }),
+    );
+    testing.expectError(
+      "InvalidStateError: Failed to construct 'VideoFrame': Invalid source state",
+      () => new VideoFrame(document.createElement('video'), { timestamp: 0 }),
+    );
+    testing.expectError(
+      "InvalidStateError: Failed to construct 'VideoFrame': The image argument is a canvas element with a width or height of 0.",
+      () => new VideoFrame(document.createElement('canvas'), { timestamp: 0 }),
+    );
+    testing.expectError(
+      "InvalidStateError: Failed to construct 'VideoFrame': The image argument is an OffscreenCanvas element with a width or height of 0.",
+      () => new VideoFrame(new OffscreenCanvas(0, 0), { timestamp: 0 }),
+    );
+
+    // A frame source carries its own timestamp, so `{}` is enough.
+    const source = new VideoFrame(canvas, { timestamp: 99, duration: 5 });
+    const copy = new VideoFrame(source, {});
+    testing.expectEqual([99, 5, 'BGRA', 32], [copy.timestamp, copy.duration, copy.format, copy.codedWidth]);
+    testing.expectEqual('[object VideoFrame]', Object.prototype.toString.call(new VideoFrame(source)));
+
+    const closed = new VideoFrame(canvas, { timestamp: 0 });
+    closed.close();
+    testing.expectError(
+      "InvalidStateError: Failed to construct 'VideoFrame': The VideoFrame has been closed",
+      () => new VideoFrame(closed, {}),
+    );
+  }
+</script>
+
+<script id=webcodecs_frame_init>
+  {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 16 });
+    const at = (init) => new VideoFrame(canvas, Object.assign({ timestamp: 0 }, init));
+
+    testing.expectEqual(33333, at({ duration: 33333 }).duration);
+    // An explicit null duration is 0, not null: the member is not nullable.
+    testing.expectEqual(0, at({ duration: null }).duration);
+    testing.expectEqual(9, at({ duration: '9' }).duration);
+    testing.expectEqual(true, at({ flip: true }).flip);
+    // `discard` renames only the RGB formats with an alpha channel.
+    testing.expectEqual('BGRX', at({ alpha: 'discard' }).format);
+    testing.expectEqual('BGRA', at({ alpha: 'keep' }).format);
+
+    const visible = at({ visibleRect: { x: 2, y: 4, width: 16, height: 8 } });
+    testing.expectEqual([2, 4, 16, 8], [visible.visibleRect.x, visible.visibleRect.y, visible.visibleRect.width, visible.visibleRect.height]);
+    // The display size follows the visible rect when it is not given.
+    testing.expectEqual([16, 8], [visible.displayWidth, visible.displayHeight]);
+    // The coded rect stays the whole picture.
+    testing.expectEqual([32, 16], [visible.codedRect.width, visible.codedRect.height]);
+    // x and y default to 0, and the components truncate toward zero.
+    const partial = at({ visibleRect: { width: 16, height: 8 } });
+    testing.expectEqual([0, 0, 16, 8], [partial.visibleRect.x, partial.visibleRect.y, partial.visibleRect.width, partial.visibleRect.height]);
+    const fractional = at({ visibleRect: { x: 0.5, y: 0, width: 16.7, height: 8 } });
+    testing.expectEqual([0, 16], [fractional.visibleRect.x, fractional.visibleRect.width]);
+
+    const display = at({ displayWidth: 64, displayHeight: 32 });
+    testing.expectEqual([64, 32, 32, 16], [display.displayWidth, display.displayHeight, display.codedWidth, display.codedHeight]);
+
+    // Rounded to a quarter turn with ties going *up*, not away from zero.
+    const turn = (r) => { const f = at({ rotation: r }); return [f.rotation, f.displayWidth, f.displayHeight].join('/'); };
+    testing.expectEqual('0/32/16', turn(0));
+    testing.expectEqual('0/32/16', turn(44));
+    testing.expectEqual('90/16/32', turn(45));
+    testing.expectEqual('90/16/32', turn(46));
+    testing.expectEqual('180/32/16', turn(135));
+    testing.expectEqual('270/16/32', turn(225));
+    testing.expectEqual('0/32/16', turn(-45));
+    testing.expectEqual('270/16/32', turn(-90));
+    testing.expectEqual('0/32/16', turn(359));
+    testing.expectEqual('90/16/32', turn(450));
+    testing.expectEqual('180/32/16', turn(180));
+    // A quarter turn swaps whichever display size is in force, given or not.
+    testing.expectEqual('8/16', (() => { const f = at({ rotation: 90, visibleRect: { x: 0, y: 0, width: 16, height: 8 } }); return `${f.displayWidth}/${f.displayHeight}`; })());
+    testing.expectEqual('20/10', (() => { const f = at({ rotation: 90, displayWidth: 10, displayHeight: 20 }); return `${f.displayWidth}/${f.displayHeight}`; })());
+
+    // The timestamp conversions.
+    testing.expectEqual(42, at({ timestamp: '42' }).timestamp);
+    testing.expectEqual(1, at({ timestamp: 1.9 }).timestamp);
+    testing.expectEqual(1, at({ timestamp: true }).timestamp);
+    testing.expectEqual(-5, at({ timestamp: -5 }).timestamp);
+    testing.expectEqual(0, at({ timestamp: null }).timestamp);
+    // metadata is read but never reported back.
+    testing.expectEqual([], Object.keys(at({ metadata: { a: 1 } }).metadata()));
+  }
+</script>
+
+<script id=webcodecs_frame_init_refusals>
+  {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 16 });
+    const at = (init) => () => new VideoFrame(canvas, Object.assign({ timestamp: 0 }, init));
+    const P = "Failed to construct 'VideoFrame': ";
+
+    testing.expectError(P + 'Invalid visibleRect. x cannot be negative.', at({ visibleRect: { x: -1, y: 0, width: 16, height: 8 } }));
+    testing.expectError(P + 'Invalid visibleRect. y cannot be negative.', at({ visibleRect: { x: 0, y: -1, width: 16, height: 8 } }));
+    testing.expectError(P + 'Invalid visibleRect. width must be nonzero.', at({ visibleRect: {} }));
+    testing.expectError(P + 'Invalid visibleRect. width must be nonzero.', at({ visibleRect: { x: 0, y: 0, width: 0, height: 0 } }));
+    testing.expectError(P + 'Invalid visibleRect. height must be nonzero.', at({ visibleRect: { x: 0, y: 0, width: 16, height: 0 } }));
+    testing.expectError(P + 'Invalid visibleRect. right 999 exceeds codedWidth 32.', at({ visibleRect: { x: 0, y: 0, width: 999, height: 999 } }));
+    testing.expectError(P + 'Invalid visibleRect. bottom 99 exceeds codedHeight 16.', at({ visibleRect: { x: 0, y: 0, width: 16, height: 99 } }));
+    testing.expectError(
+      P + "Failed to read the 'visibleRect' property from 'VideoFrameInit': The provided value is not of type 'DOMRectInit'.",
+      at({ visibleRect: 'x' }),
+    );
+
+    testing.expectError(P + 'displayWidth specified without displayHeight.', at({ displayWidth: 64 }));
+    testing.expectError(P + 'displayHeight specified without displayWidth.', at({ displayHeight: 32 }));
+    testing.expectError(P + 'displayWidth must be nonzero.', at({ displayWidth: 0, displayHeight: 0 }));
+    testing.expectError(P + 'displayHeight must be nonzero.', at({ displayWidth: 32, displayHeight: 0 }));
+    testing.expectError(
+      P + "Failed to read the 'displayWidth' property from 'VideoFrameInit': Value is outside the 'unsigned long' value range.",
+      at({ displayWidth: -1, displayHeight: 1 }),
+    );
+
+    testing.expectError(
+      P + "Failed to read the 'alpha' property from 'VideoFrameInit': The provided value 'nope' is not a valid enum value of type AlphaOption.",
+      at({ alpha: 'nope' }),
+    );
+    testing.expectError(
+      P + "Failed to read the 'rotation' property from 'VideoFrameInit': The provided double value is non-finite.",
+      at({ rotation: NaN }),
+    );
+    testing.expectError(
+      P + "Failed to read the 'timestamp' property from 'VideoFrameInit': Value is not of type 'long long'.",
+      at({ timestamp: {} }),
+    );
+    testing.expectError(
+      P + "Failed to read the 'timestamp' property from 'VideoFrameInit': Value is outside the 'long long' value range.",
+      at({ timestamp: 2 ** 63 }),
+    );
+    testing.expectError(
+      P + "Failed to read the 'duration' property from 'VideoFrameInit': Value is outside the 'unsigned long long' value range.",
+      at({ duration: -1 }),
+    );
+  }
+</script>
+
+<script id=webcodecs_frame_from_buffer>
+  {
+    const P = "Failed to construct 'VideoFrame': ";
+    const bytes = () => new Uint8Array(4096);
+
+    const frame = new VideoFrame(bytes(), { format: 'RGBA', codedWidth: 32, codedHeight: 16, timestamp: 9 });
+    testing.expectEqual(['RGBA', 9, 32, 16, 32, 16], [frame.format, frame.timestamp, frame.codedWidth, frame.codedHeight, frame.displayWidth, frame.displayHeight]);
+    testing.expectEqual(
+      '{"fullRange":true,"matrix":"rgb","primaries":"bt709","transfer":"iec61966-2-1"}',
+      JSON.stringify(frame.colorSpace.toJSON()),
+    );
+    // A planar frame reports a limited-range Rec.709 space instead.
+    const planar = new VideoFrame(bytes(), { format: 'I420', codedWidth: 8, codedHeight: 8, timestamp: 0 });
+    testing.expectEqual(
+      '{"fullRange":false,"matrix":"bt709","primaries":"bt709","transfer":"bt709"}',
+      JSON.stringify(planar.colorSpace.toJSON()),
+    );
+
+    // An ArrayBuffer and a DataView are BufferSources too.
+    for (const data of [new ArrayBuffer(64), new DataView(new ArrayBuffer(64)), new Uint32Array(16)]) {
+      testing.expectEqual(
+        '[object VideoFrame]',
+        Object.prototype.toString.call(new VideoFrame(data, { format: 'RGBA', codedWidth: 4, codedHeight: 4, timestamp: 0 })),
+      );
+    }
+
+    // The twenty accepted formats, and the bytes each occupies at 8x8. Note
+    // the three holes: the P12 siblings of the alpha formats are not valid.
+    const sizes = {
+      I420: 96, I420P10: 192, I420P12: 192, I420A: 160, I420AP10: 320,
+      I422: 128, I422P10: 256, I422P12: 256, I422A: 192, I422AP10: 384,
+      I444: 192, I444P10: 384, I444P12: 384, I444A: 256, I444AP10: 512,
+      NV12: 96, RGBA: 256, RGBX: 256, BGRA: 256, BGRX: 256,
+    };
+    for (const [format, size] of Object.entries(sizes)) {
+      const f = new VideoFrame(bytes(), { format, codedWidth: 8, codedHeight: 8, timestamp: 0 });
+      testing.expectEqual([format, size], [f.format, f.allocationSize()]);
+    }
+    for (const format of ['I420AP12', 'I422AP12', 'I444AP12', 'ARGB', 'XRGB', 'nope']) {
+      testing.expectError(
+        P + `Failed to read the 'format' property from 'VideoFrameBufferInit': The provided value '${format}' is not a valid enum value of type VideoPixelFormat.`,
+        () => new VideoFrame(bytes(), { format, codedWidth: 8, codedHeight: 8, timestamp: 0 }),
+      );
+    }
+
+    // The init is required, and its members are read alphabetically -- so `{}`
+    // complains about codedHeight before codedWidth, and about both before
+    // format.
+    for (const init of [null, undefined]) {
+      testing.expectError(
+        P + "The provided value is not of type 'VideoFrameBufferInit'.",
+        () => new VideoFrame(bytes(), init),
+      );
+    }
+    const missing = (init, member) => testing.expectError(
+      P + `Failed to read the '${member}' property from 'VideoFrameBufferInit': Required member is undefined.`,
+      () => new VideoFrame(bytes(), init),
+    );
+    missing({}, 'codedHeight');
+    missing({ format: 'RGBA', codedHeight: 4, timestamp: 0 }, 'codedWidth');
+    missing({ format: 'RGBA', codedWidth: 4, timestamp: 0 }, 'codedHeight');
+    missing({ codedWidth: 4, codedHeight: 4, timestamp: 0 }, 'format');
+    missing({ format: 'RGBA', codedWidth: 4, codedHeight: 4 }, 'timestamp');
+
+    testing.expectError(P + 'codedWidth must be nonzero.', () => new VideoFrame(bytes(), { format: 'RGBA', codedWidth: 0, codedHeight: 4, timestamp: 0 }));
+    testing.expectError(P + 'data is not large enough.', () => new VideoFrame(new Uint8Array(4), { format: 'RGBA', codedWidth: 32, codedHeight: 16, timestamp: 0 }));
+
+    // The colour space nests its wording rather than restating the constructor.
+    const spaced = new VideoFrame(bytes(), { format: 'RGBA', codedWidth: 4, codedHeight: 4, timestamp: 0, colorSpace: { matrix: 'bt709', fullRange: false } });
+    testing.expectEqual(
+      '{"fullRange":false,"matrix":"bt709","primaries":null,"transfer":null}',
+      JSON.stringify(spaced.colorSpace.toJSON()),
+    );
+    testing.expectError(
+      P + "Failed to read the 'colorSpace' property from 'VideoFrameBufferInit': Failed to read the 'matrix' property from 'VideoColorSpaceInit': The provided value 'nope' is not a valid enum value of type VideoMatrixCoefficients.",
+      () => new VideoFrame(bytes(), { format: 'RGBA', codedWidth: 4, codedHeight: 4, timestamp: 0, colorSpace: { matrix: 'nope' } }),
+    );
+
+    // A visible rect narrows what allocationSize counts.
+    const cropped = new VideoFrame(bytes(), { format: 'RGBA', codedWidth: 8, codedHeight: 8, timestamp: 0, visibleRect: { x: 0, y: 0, width: 4, height: 4 } });
+    testing.expectEqual([4, 4, 4, 4, 64], [cropped.visibleRect.width, cropped.visibleRect.height, cropped.displayWidth, cropped.displayHeight, cropped.allocationSize()]);
+  }
+</script>
+
+<script id=webcodecs_frame_closed>
+  {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 16 });
+    const frame = new VideoFrame(canvas, { timestamp: 1234 });
+    const space = frame.colorSpace;
+
+    testing.expectEqual(undefined, frame.close());
+    // Idempotent.
+    testing.expectEqual(undefined, frame.close());
+
+    testing.expectEqual(null, frame.format);
+    // The one field a closed frame keeps.
+    testing.expectEqual(1234, frame.timestamp);
+    testing.expectEqual([0, 0, 0, 0], [frame.codedWidth, frame.codedHeight, frame.displayWidth, frame.displayHeight]);
+    testing.expectEqual([null, null], [frame.codedRect, frame.visibleRect]);
+    testing.expectEqual([0, false, null], [frame.rotation, frame.flip, frame.duration]);
+    testing.expectEqual('[object VideoFrame]', String(frame));
+
+    // A *new* all-null colour space, not the one it had -- and that new one is
+    // stable across reads.
+    testing.expectFalse(frame.colorSpace === space);
+    testing.expectTrue(frame.colorSpace === frame.colorSpace);
+    testing.expectEqual(
+      '{"fullRange":null,"matrix":null,"primaries":null,"transfer":null}',
+      JSON.stringify(frame.colorSpace.toJSON()),
+    );
+    // The one it handed out before close still reads.
+    testing.expectEqual(
+      '{"fullRange":true,"matrix":"rgb","primaries":"bt709","transfer":"iec61966-2-1"}',
+      JSON.stringify(space.toJSON()),
+    );
+
+    testing.expectError("InvalidStateError: Failed to execute 'clone' on 'VideoFrame': Cannot clone closed VideoFrame.", () => frame.clone());
+    testing.expectError("InvalidStateError: Failed to execute 'allocationSize' on 'VideoFrame': VideoFrame is closed.", () => frame.allocationSize());
+    testing.expectError("InvalidStateError: Failed to execute 'metadata' on 'VideoFrame': VideoFrame is closed.", () => frame.metadata());
+  }
+</script>
+
+<script type=module id=webcodecs_frame_copy_to>
+  const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 16 });
+  const ctx = canvas.getContext('2d');
+  // Hex rather than `rgb(255,0,0)`: this engine's colour parser takes hex and
+  // named colours only, and a functional notation silently leaves the previous
+  // fill in place. That gap is the rasteriser's, not VideoFrame's.
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 1, 1);
+  const frame = new VideoFrame(canvas, { timestamp: 1 });
+
+  testing.expectEqual([{ offset: 0, stride: 128 }], await frame.copyTo(new Uint8Array(2048)));
+  testing.expectEqual([{ offset: 0, stride: 64 }], await frame.copyTo(new Uint8Array(2048), { rect: { x: 0, y: 0, width: 16, height: 8 } }));
+
+  // The bytes really are the canvas', reordered into the format's BGRA.
+  const out = new Uint8Array(frame.allocationSize());
+  await frame.copyTo(out);
+  testing.expectEqual([0, 0, 255, 255], Array.from(out.slice(0, 4)));
+  testing.expectEqual([255, 0, 0, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // A buffer-built frame hands its own bytes straight back.
+  const source = new Uint8Array(64);
+  for (let i = 0; i < 64; i++) source[i] = i;
+  const built = new VideoFrame(source, { format: 'RGBA', codedWidth: 4, codedHeight: 4, timestamp: 0 });
+  const copied = new Uint8Array(64);
+  await built.copyTo(copied);
+  testing.expectEqual([0, 1, 2, 3, 4, 5, 6, 7], Array.from(copied.slice(0, 8)));
+
+  // The planar layouts, at 8x8.
+  const planes = async (format) => {
+    const f = new VideoFrame(new Uint8Array(4096), { format, codedWidth: 8, codedHeight: 8, timestamp: 0 });
+    return JSON.stringify(await f.copyTo(new Uint8Array(f.allocationSize())));
+  };
+  testing.expectEqual('[{"offset":0,"stride":8},{"offset":64,"stride":4},{"offset":80,"stride":4}]', await planes('I420'));
+  testing.expectEqual('[{"offset":0,"stride":8},{"offset":64,"stride":8}]', await planes('NV12'));
+  testing.expectEqual('[{"offset":0,"stride":8},{"offset":64,"stride":8},{"offset":128,"stride":8}]', await planes('I444'));
+  testing.expectEqual('[{"offset":0,"stride":8},{"offset":64,"stride":4},{"offset":80,"stride":4},{"offset":96,"stride":8}]', await planes('I420A'));
+</script>
+
+<script type=module id=webcodecs_frame_copy_to_refusals>
+  const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 16 });
+  const frame = new VideoFrame(canvas, { timestamp: 1 });
+  const E = "Failed to execute 'copyTo' on 'VideoFrame': ";
+  const rejects = (promise) => promise.then(() => 'RESOLVED', (e) => String(e));
+
+  // Every one of these is a rejection rather than a throw -- unlike
+  // allocationSize, which shares the options reader but throws (measured).
+  testing.expectEqual(`TypeError: ${E}1 argument required, but only 0 present.`, await rejects(frame.copyTo()));
+  testing.expectEqual(
+    `TypeError: ${E}The provided value is not of type '([AllowShared] ArrayBuffer or [AllowShared] ArrayBufferView)'.`,
+    await rejects(frame.copyTo({})),
+  );
+  testing.expectEqual(`TypeError: ${E}destination is not large enough.`, await rejects(frame.copyTo(new Uint8Array(4))));
+  testing.expectEqual(
+    `TypeError: ${E}Invalid rect. right 999 exceeds codedWidth 32.`,
+    await rejects(frame.copyTo(new Uint8Array(2048), { rect: { x: 0, y: 0, width: 999, height: 1 } })),
+  );
+  testing.expectEqual(
+    `TypeError: ${E}The provided value is not of type 'VideoFrameCopyToOptions'.`,
+    await rejects(frame.copyTo(new Uint8Array(2048), 'x')),
+  );
+
+  frame.close();
+  testing.expectEqual(`InvalidStateError: ${E}Cannot copy closed VideoFrame.`, await rejects(frame.copyTo(new Uint8Array(2048))));
+
+  // allocationSize' own options reader reports under its own name.
+  const other = new VideoFrame(canvas, { timestamp: 1 });
+  testing.expectError(
+    "Failed to execute 'allocationSize' on 'VideoFrame': Failed to read the 'format' property from 'VideoFrameCopyToOptions': The provided value 'nope' is not a valid enum value of type VideoPixelFormat.",
+    () => other.allocationSize({ format: 'nope' }),
+  );
+</script>
+
+<script type=module id=webcodecs_frame_external_texture>
+  // The `source` member of a GPUExternalTextureDescriptor is an
+  // `(HTMLVideoElement or VideoFrame)` union, and now that VideoFrame exists
+  // the second arm converts.
+  const canvas = Object.assign(document.createElement('canvas'), { width: 8, height: 8 });
+  const frame = new VideoFrame(canvas, { timestamp: 0 });
+  const dev = await (await navigator.gpu.requestAdapter()).requestDevice();
+  testing.expectEqual(
+    '[object GPUExternalTexture]',
+    Object.prototype.toString.call(dev.importExternalTexture({ source: frame })),
+  );
+  testing.expectError(
+    "Failed to execute 'importExternalTexture' on 'GPUDevice': Failed to read the 'source' property from 'GPUExternalTextureDescriptor': The provided value is not of type '(HTMLVideoElement or VideoFrame)'.",
+    () => dev.importExternalTexture({ source: 5 }),
+  );
+</script>

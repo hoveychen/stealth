@@ -151,7 +151,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
 /// The painted pixels, when a 2D context exists and has drawn something.
 /// Null means "every pixel is transparent black", which is also what a WebGL
 /// canvas reports here: that context does not rasterise.
-fn pixels(self: *const Canvas) ?[]const u8 {
+pub fn pixels(self: *const Canvas) ?[]const u8 {
     const cached = self._cached orelse return null;
     return switch (cached) {
         .@"2d" => |context| context._surface.peek(self.getWidth(), self.getHeight()),

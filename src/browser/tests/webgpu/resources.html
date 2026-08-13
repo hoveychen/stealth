@@ -2,7 +2,7 @@
 <head>
   <title>WebGPU resource interfaces</title>
   <script src="../testing.js"></script>
-  <script src="shape.js"></script>
+  <script src="../shape.js"></script>
 </head>
 
 <script id=webgpu_resource_interface_objects>
@@ -18,7 +18,7 @@
       'GPUTexture',
       'GPUTextureView',
     ]) {
-      gpuExpectInterfaceObject(name);
+      expectInterfaceObject(name);
     }
   }
 </script>
@@ -30,7 +30,7 @@
     // one (measured: no two of these are the same function).
     const names = ['GPUBindGroup', 'GPUBindGroupLayout', 'GPUExternalTexture', 'GPUPipelineLayout', 'GPUSampler', 'GPUTextureView'];
     for (const name of names) {
-      testing.expectEqual(`accessor label[ec-],@@toStringTag=${name}`, gpuShape(window[name].prototype));
+      testing.expectEqual(`accessor label[ec-],@@toStringTag=${name}`, shapeOf(window[name].prototype));
     }
     testing.expectEqual(names.length, new Set(names.map((n) => window[n])).size);
   }
@@ -40,7 +40,7 @@
   {
     testing.expectEqual(
       'get size[ec-],get usage[ec-],get mapState[ec-],accessor label[ec-],destroy/0[ecw],getMappedRange/0[ecw],mapAsync/1[ecw],unmap/0[ecw],@@toStringTag=GPUBuffer',
-      gpuShape(GPUBuffer.prototype),
+      shapeOf(GPUBuffer.prototype),
     );
   }
 </script>
@@ -65,7 +65,7 @@
         'get textureBindingViewDimension[ec-]',
         '@@toStringTag=GPUTexture',
       ],
-      gpuShape(GPUTexture.prototype).split(','),
+      shapeOf(GPUTexture.prototype).split(','),
     );
   }
 </script>
@@ -74,7 +74,7 @@
   {
     testing.expectEqual(
       'get type[ec-],get count[ec-],accessor label[ec-],destroy/0[ecw],@@toStringTag=GPUQuerySet',
-      gpuShape(GPUQuerySet.prototype),
+      shapeOf(GPUQuerySet.prototype),
     );
   }
 </script>

@@ -2,7 +2,7 @@
 <head>
   <title>WebGPU adapter interfaces</title>
   <script src="../testing.js"></script>
-  <script src="shape.js"></script>
+  <script src="../shape.js"></script>
 </head>
 
 <script id=webgpu_shape_helper_selfcheck>
@@ -18,7 +18,7 @@
     // it is what the shipped setlikes (Highlight, CustomStateSet) already do.
     testing.expectEqual(
       'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=WGSLLanguageFeatures,@@iterator=fn:values',
-      gpuShape(WGSLLanguageFeatures.prototype),
+      shapeOf(WGSLLanguageFeatures.prototype),
     );
   }
 </script>
@@ -26,7 +26,7 @@
 <script id=webgpu_adapter_interface_objects>
   {
     for (const name of ['GPUAdapter', 'GPUAdapterInfo', 'GPUDeviceLostInfo', 'GPUSupportedFeatures', 'GPUSupportedLimits']) {
-      gpuExpectInterfaceObject(name);
+      expectInterfaceObject(name);
     }
   }
 </script>
@@ -37,19 +37,19 @@
     // the order is itself a hashable surface, so it is not alphabetised.
     testing.expectEqual(
       'get features[ec-],get limits[ec-],get info[ec-],requestDevice/0[ecw],@@toStringTag=GPUAdapter',
-      gpuShape(GPUAdapter.prototype),
+      shapeOf(GPUAdapter.prototype),
     );
     testing.expectEqual(
       'get vendor[ec-],get architecture[ec-],get device[ec-],get description[ec-],get subgroupMinSize[ec-],get subgroupMaxSize[ec-],get isFallbackAdapter[ec-],@@toStringTag=GPUAdapterInfo',
-      gpuShape(GPUAdapterInfo.prototype),
+      shapeOf(GPUAdapterInfo.prototype),
     );
     testing.expectEqual(
       'get reason[ec-],get message[ec-],@@toStringTag=GPUDeviceLostInfo',
-      gpuShape(GPUDeviceLostInfo.prototype),
+      shapeOf(GPUDeviceLostInfo.prototype),
     );
     testing.expectEqual(
       'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],@@toStringTag=GPUSupportedFeatures,@@iterator=fn:values',
-      gpuShape(GPUSupportedFeatures.prototype),
+      shapeOf(GPUSupportedFeatures.prototype),
     );
   }
 </script>
@@ -99,7 +99,7 @@
         'get maxStorageTexturesInVertexStage[ec-]',
         '@@toStringTag=GPUSupportedLimits',
       ],
-      gpuShape(GPUSupportedLimits.prototype).split(','),
+      shapeOf(GPUSupportedLimits.prototype).split(','),
     );
   }
 </script>

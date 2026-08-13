@@ -128,6 +128,17 @@ pub fn getContext(self: *OffscreenCanvas, context_type: []const u8, exec: *Execu
     return self._cached;
 }
 
+/// The painted pixels, when a 2D context exists and has drawn something. Null
+/// means "every pixel is transparent black", which is also what a WebGL or
+/// WebGPU canvas reports: neither rasterises.
+pub fn pixels(self: *const OffscreenCanvas) ?[]const u8 {
+    const cached = self._cached orelse return null;
+    return switch (cached) {
+        .@"2d" => |context| context._surface.peek(self._width, self._height),
+        .webgl, .webgl2, .webgpu => null,
+    };
+}
+
 /// Returns a Promise that resolves to a PNG Blob of the canvas' pixels.
 /// The requested type is ignored; see `HTMLCanvasElement.toDataURL`.
 pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js.Promise {
@@ -135,14 +146,7 @@ pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js
         return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.IndexSizeError } });
     }
 
-    const pixels: ?[]const u8 = if (self._cached) |cached| switch (cached) {
-        .@"2d" => |context| context._surface.peek(self._width, self._height),
-        // A WebGL or WebGPU canvas reports transparent black here: nothing
-        // rasterises.
-        .webgl, .webgl2, .webgpu => null,
-    } else null;
-
-    const bytes = try png.encode(exec.call_arena, self._width, self._height, pixels);
+    const bytes = try png.encode(exec.call_arena, self._width, self._height, self.pixels());
     const blob = try Blob.initFromBytes(bytes, "image/png", exec.page);
     return exec.js.local.?.resolvePromise(blob);
 }

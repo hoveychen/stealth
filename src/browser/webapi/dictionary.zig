@@ -40,12 +40,23 @@ const std = @import("std");
 
 const js = @import("../js/js.zig");
 const Event = @import("Event.zig");
+const DOMException = @import("DOMException.zig");
 
 const Execution = js.Execution;
 
 pub fn throwTypeError(message: []const u8, exec: *const Execution) anyerror {
     const isolate = exec.js.isolate;
     _ = isolate.throwException(isolate.createTypeError(message));
+    return error.JsException;
+}
+
+/// `throwTypeError` for the refusals that are DOMExceptions rather than
+/// TypeErrors -- the InvalidStateError a closed VideoFrame answers with, the
+/// OperationError an unmapped GPUBuffer does.
+pub fn throwDom(comptime name: []const u8, message: []const u8, exec: *const Execution) anyerror {
+    const local = exec.js.local.?;
+    const value = local.zigValueToJs(DOMException.init(message, name), .{}) catch return error.JsException;
+    _ = local.isolate.throwException(value.handle);
     return error.JsException;
 }
 
@@ -173,7 +184,13 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
         }
 
         pub fn required(self: Self, comptime name: []const u8, exec: *const Execution) !js.Value {
-            return (try self.present(name)) orelse throwTypeError(
+            return (try self.present(name)) orelse missingMember(name, exec);
+        }
+
+        /// `required`'s refusal on its own, for a caller that reads the member
+        /// through a typed helper and only needs the message when it is absent.
+        pub fn missingMember(comptime name: []const u8, exec: *const Execution) anyerror {
+            return throwTypeError(
                 CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
                     "': Required member is undefined.",
                 exec,
@@ -228,6 +245,35 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
             exec: *const Execution,
         ) !?[]const u8 {
             const member = (try self.present(name)) orelse return default;
+            return matchEnum(name, idl, allowed, member, exec);
+        }
+
+        /// A *nullable* enumeration member (`VideoColorPrimaries?`): an explicit
+        /// `null` stays null instead of being stringified into an
+        /// invalid-enum error. Measured on a headed Chrome 150:
+        /// `new VideoColorSpace({primaries: null}).primaries` is null, while
+        /// `{primaries: 'nope'}` is the usual TypeError.
+        pub fn nullableEnum(
+            self: Self,
+            comptime name: []const u8,
+            comptime idl: []const u8,
+            comptime allowed: []const []const u8,
+            exec: *const Execution,
+        ) !?[]const u8 {
+            const member = (try self.present(name)) orelse return null;
+            if (member.isNull()) {
+                return null;
+            }
+            return matchEnum(name, idl, allowed, member, exec);
+        }
+
+        fn matchEnum(
+            comptime name: []const u8,
+            comptime idl: []const u8,
+            comptime allowed: []const []const u8,
+            member: js.Value,
+            exec: *const Execution,
+        ) !?[]const u8 {
             const text = try member.toStringSlice();
             for (allowed) |candidate| {
                 if (std.mem.eql(u8, candidate, text)) {
@@ -245,6 +291,60 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
         pub fn boolean(self: Self, comptime name: []const u8, default: bool) !bool {
             const member = (try self.present(name)) orelse return default;
             return member.toBool();
+        }
+
+        /// WebIDL `boolean?`: null stays null, everything else is ToBoolean
+        /// (measured: `{fullRange: 'x'}` reads back true, `{fullRange: 0}`
+        /// false, `{fullRange: null}` null).
+        pub fn nullableBoolean(self: Self, comptime name: []const u8) !?bool {
+            const member = (try self.present(name)) orelse return null;
+            if (member.isNull()) {
+                return null;
+            }
+            return member.toBool();
+        }
+
+        /// An `[EnforceRange]` integer member. A fractional value truncates,
+        /// but a non-finite one and an out-of-range one each get their own
+        /// message, and the message names the IDL type rather than deriving it
+        /// -- `unsigned long` and `unsigned long long` are both unsigned.
+        /// Measured with VideoFrameInit: `{timestamp: {}}` is "Value is not of
+        /// type 'long long'.", `{timestamp: 2**63}` and `{displayWidth: -1}`
+        /// are "Value is outside the '...' value range.".
+        pub fn enforcedInt(
+            self: Self,
+            comptime name: []const u8,
+            comptime T: type,
+            comptime idl: []const u8,
+            exec: *const Execution,
+        ) !?T {
+            const member = (try self.present(name)) orelse return null;
+            const number = member.toF64() catch return convertFailed(name, idl, exec);
+            if (std.math.isFinite(number) == false) {
+                return throwTypeError(
+                    CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
+                        "': Value is not of type '" ++ idl ++ "'.",
+                    exec,
+                );
+            }
+            const truncated = @trunc(number);
+            // Whether the upper bound itself is representable decides which
+            // comparison is right: 2^63-1 rounds *up* to 2^63 in a double, so
+            // an i64 has to reject anything that reaches the rounded bound,
+            // while a u32's bound is exact and has to be accepted.
+            const bits = @typeInfo(T).int.bits;
+            const lower: f64 = @floatFromInt(@as(T, std.math.minInt(T)));
+            const upper: f64 = @floatFromInt(@as(T, std.math.maxInt(T)));
+            const out_of_range = truncated < lower or
+                (if (bits <= 53) truncated > upper else truncated >= upper);
+            if (out_of_range) {
+                return throwTypeError(
+                    CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
+                        "': Value is outside the '" ++ idl ++ "' value range.",
+                    exec,
+                );
+            }
+            return @intFromFloat(truncated);
         }
 
         /// WebIDL `double`: restricted, so a non-finite value is a TypeError
