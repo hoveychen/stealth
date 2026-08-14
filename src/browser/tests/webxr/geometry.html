@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<head>
+  <title>WebXR: the geometry primitives</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webxr_geometry_interface_objects>
+  {
+    // XRRigidTransform and XRRay are the only two constructible types in the
+    // whole family; the poses, the view and the viewport are handed out by a
+    // session and refuse `new` (headed Chrome 150, probe-win52.js).
+    expectInterfaceObject('XRRigidTransform', { illegal: false });
+    expectInterfaceObject('XRRay', { illegal: false });
+    expectInterfaceObject('XRViewport');
+    expectInterfaceObject('XRView');
+    expectInterfaceObject('XRCamera');
+    expectInterfaceObject('XRPose');
+    expectInterfaceObject('XRViewerPose', { inherits: XRPose, protoOf: XRPose.prototype });
+    expectInterfaceObject('XRJointPose', { inherits: XRPose, protoOf: XRPose.prototype });
+  }
+</script>
+
+<script id=webxr_geometry_prototypes>
+  {
+    testing.expectEqual(
+      'get position[ec-],get orientation[ec-],get matrix[ec-],get inverse[ec-],@@toStringTag=XRRigidTransform',
+      shapeOf(XRRigidTransform.prototype),
+    );
+    testing.expectEqual(
+      'get origin[ec-],get direction[ec-],get matrix[ec-],@@toStringTag=XRRay',
+      shapeOf(XRRay.prototype),
+    );
+    testing.expectEqual(
+      'get x[ec-],get y[ec-],get width[ec-],get height[ec-],@@toStringTag=XRViewport',
+      shapeOf(XRViewport.prototype),
+    );
+    // The order is Chrome's, not the spec's: `index`, `projectionMatrix` and
+    // `transform` land after `requestViewportScale`.
+    testing.expectEqual(
+      [
+        'get eye[ec-]',
+        'get recommendedViewportScale[ec-]',
+        'get isFirstPersonObserver[ec-]',
+        'get camera[ec-]',
+        'requestViewportScale/1[ecw]',
+        'get index[ec-]',
+        'get projectionMatrix[ec-]',
+        'get transform[ec-]',
+        '@@toStringTag=XRView',
+      ].join(','),
+      shapeOf(XRView.prototype),
+    );
+    // XRCamera is the size of the camera image an `camera-access` session
+    // would hand out; nothing here ever produces one, but the interface object
+    // is part of the window surface.
+    testing.expectEqual(
+      'get width[ec-],get height[ec-],@@toStringTag=XRCamera',
+      shapeOf(XRCamera.prototype),
+    );
+    testing.expectEqual(
+      'get transform[ec-],get emulatedPosition[ec-],@@toStringTag=XRPose',
+      shapeOf(XRPose.prototype),
+    );
+    testing.expectEqual('get views[ec-],@@toStringTag=XRViewerPose', shapeOf(XRViewerPose.prototype));
+    testing.expectEqual('get radius[ec-],@@toStringTag=XRJointPose', shapeOf(XRJointPose.prototype));
+  }
+</script>
+
+<script id=webxr_rigid_transform_defaults>
+  {
+    const t = new XRRigidTransform();
+    testing.expectEqual('[object XRRigidTransform]', String(t));
+    testing.expectEqual('[object DOMPointReadOnly]', Object.prototype.toString.call(t.position));
+    testing.expectEqual('0,0,0,1', `${t.position.x},${t.position.y},${t.position.z},${t.position.w}`);
+    testing.expectEqual('0,0,0,1', `${t.orientation.x},${t.orientation.y},${t.orientation.z},${t.orientation.w}`);
+    testing.expectEqual('[object Float32Array]', Object.prototype.toString.call(t.matrix));
+    testing.expectEqual('1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1', Array.from(t.matrix).join(','));
+
+    // Every accessor hands back the same object each time (measured).
+    testing.expectTrue(t.position === t.position);
+    testing.expectTrue(t.orientation === t.orientation);
+    testing.expectTrue(t.matrix === t.matrix);
+    testing.expectTrue(t.inverse === t.inverse);
+    // And the inverse's inverse is the original object, not a rebuilt equal one.
+    testing.expectTrue(t.inverse.inverse === t);
+  }
+</script>
+
+<script id=webxr_rigid_transform_values>
+  {
+    const translated = new XRRigidTransform({ x: 1, y: 2, z: 3 });
+    testing.expectEqual('1,2,3,1', `${translated.position.x},${translated.position.y},${translated.position.z},${translated.position.w}`);
+    // Column-major: the translation is the last column.
+    testing.expectEqual('1,0,0,0,0,1,0,0,0,0,1,0,1,2,3,1', Array.from(translated.matrix).join(','));
+    testing.expectEqual('-1,-2,-3', `${translated.inverse.position.x},${translated.inverse.position.y},${translated.inverse.position.z}`);
+
+    // The orientation is normalised, in *double* precision -- {3,0,0,4} lands
+    // exactly on 0.6/0.8 rather than on a float32 neighbour. XRRay's direction
+    // is normalised in float32; the difference is real and measured.
+    const q = new XRRigidTransform({}, { x: 3, y: 0, z: 0, w: 4 });
+    testing.expectEqual('0.6,0,0,0.8', `${q.orientation.x},${q.orientation.y},${q.orientation.z},${q.orientation.w}`);
+    const half = new XRRigidTransform({}, { x: 0, y: 0, z: 1, w: 1 });
+    testing.expectEqual(
+      '0,0,0.7071067811865475,0.7071067811865475',
+      `${half.orientation.x},${half.orientation.y},${half.orientation.z},${half.orientation.w}`,
+    );
+
+    // A half turn about z.
+    const spun = new XRRigidTransform({}, { x: 0, y: 0, z: 1, w: 0 });
+    testing.expectEqual(
+      '-1,0,0,0,0,-1,0,0,0,0,1,0,0,0,0,1',
+      Array.from(spun.matrix).map((n) => Math.round(n * 1e6) / 1e6).join(','),
+    );
+  }
+</script>
+
+<script id=webxr_rigid_transform_refusals>
+  {
+    testing.expectError(
+      "Failed to construct 'XRRigidTransform': The provided value is not of type 'DOMPointInit'.",
+      () => new XRRigidTransform('x'),
+    );
+    testing.expectError(
+      "Failed to construct 'XRRigidTransform': Position and Orientation must consist of only finite values",
+      () => new XRRigidTransform({ x: Infinity }),
+    );
+    testing.expectError(
+      "Failed to construct 'XRRigidTransform': W component of position must be 1.0",
+      () => new XRRigidTransform({ x: 0, y: 0, z: 0, w: 0 }),
+    );
+    testing.expectError(
+      "Failed to construct 'XRRigidTransform': W component of position must be 1.0",
+      () => new XRRigidTransform({ x: 1, y: 2, z: 3, w: 2 }),
+    );
+    // A zero-length orientation is the one refusal that is a DOMException
+    // rather than a TypeError.
+    testing.expectError(
+      "Failed to construct 'XRRigidTransform': Orientation's length cannot be 0",
+      () => new XRRigidTransform({}, { x: 0, y: 0, z: 0, w: 0 }),
+    );
+    testing.expectEqual(
+      'InvalidStateError',
+      (() => { try { new XRRigidTransform({}, { x: 0, y: 0, z: 0, w: 0 }); } catch (e) { return e.name; } })(),
+    );
+  }
+</script>
+
+<script id=webxr_ray_defaults>
+  {
+    const r = new XRRay();
+    testing.expectEqual('[object XRRay]', String(r));
+    testing.expectEqual('[object DOMPointReadOnly]', Object.prototype.toString.call(r.origin));
+    testing.expectEqual('0,0,0,1', `${r.origin.x},${r.origin.y},${r.origin.z},${r.origin.w}`);
+    testing.expectEqual('0,0,-1,0', `${r.direction.x},${r.direction.y},${r.direction.z},${r.direction.w}`);
+    testing.expectEqual('[object Float32Array]', Object.prototype.toString.call(r.matrix));
+    testing.expectEqual('1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1', Array.from(r.matrix).join(','));
+    testing.expectTrue(r.origin === r.origin);
+    testing.expectTrue(r.direction === r.direction);
+    testing.expectTrue(r.matrix === r.matrix);
+  }
+</script>
+
+<script id=webxr_ray_values>
+  {
+    const placed = new XRRay({ x: 1, y: 2, z: 3 });
+    testing.expectEqual('1,2,3,1', `${placed.origin.x},${placed.origin.y},${placed.origin.z},${placed.origin.w}`);
+    testing.expectEqual('0,0,-1,0', `${placed.direction.x},${placed.direction.y},${placed.direction.z},${placed.direction.w}`);
+
+    // float32 normalisation, unlike XRRigidTransform's double.
+    const skew = new XRRay({}, { x: 0, y: 3, z: 4 });
+    testing.expectEqual(
+      '0,0.6000000238418579,0.800000011920929',
+      `${skew.direction.x},${skew.direction.y},${skew.direction.z}`,
+    );
+    testing.expectEqual(0, skew.direction.w);
+
+    // The matrix rotates -Z onto the direction.
+    testing.expectEqual(
+      '0,0,1,0,0,1,0,0,-1,0,0,0,0,0,0,1',
+      Array.from(new XRRay({}, { x: 1, y: 0, z: 0 }).matrix).map((n) => Math.round(n * 1e6) / 1e6).join(','),
+    );
+
+    // Built from a transform: origin and direction both come off it, and a
+    // second argument is then ignored rather than refused.
+    const fromT = new XRRay(new XRRigidTransform({ x: 1, y: 2, z: 3 }));
+    testing.expectEqual('1,2,3', `${fromT.origin.x},${fromT.origin.y},${fromT.origin.z}`);
+    testing.expectEqual('0,0,-1', `${fromT.direction.x},${fromT.direction.y},${fromT.direction.z}`);
+    testing.expectEqual(
+      '[object XRRay]',
+      String(new XRRay(new XRRigidTransform(), { x: 0, y: 1, z: 0 })),
+    );
+  }
+</script>
+
+<script id=webxr_ray_refusals>
+  {
+    testing.expectError(
+      "Failed to construct 'XRRay': Unable to normalize vector of length 0.",
+      () => new XRRay({}, { x: 0, y: 0, z: 0 }),
+    );
+    testing.expectError(
+      "Failed to construct 'XRRay': Origin's `w` component must be set to 1.0f!",
+      () => new XRRay({ x: 0, y: 0, z: 0, w: 0 }),
+    );
+    testing.expectError(
+      "Failed to construct 'XRRay': Direction's `w` component must be set to 0.0f!",
+      () => new XRRay({}, { x: 0, y: 0, z: -1, w: 1 }),
+    );
+  }
+</script>
