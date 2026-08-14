@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<head>
+  <title>WebCodecs: the encoded chunks and AudioData</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webcodecs_chunk_interface_objects>
+  {
+    expectInterfaceObject('EncodedVideoChunk', { arity: 1, illegal: false });
+    expectInterfaceObject('EncodedAudioChunk', { arity: 1, illegal: false });
+    expectInterfaceObject('AudioData', { arity: 1, illegal: false });
+  }
+</script>
+
+<script id=webcodecs_chunk_prototypes>
+  {
+    // The two chunks carry the same four getters in *different* orders:
+    // byteLength lands before duration on the audio one.
+    testing.expectEqual(
+      'get type[ec-],get timestamp[ec-],get duration[ec-],get byteLength[ec-],copyTo/1[ecw],@@toStringTag=EncodedVideoChunk',
+      shapeOf(EncodedVideoChunk.prototype),
+    );
+    testing.expectEqual(
+      'get type[ec-],get timestamp[ec-],get byteLength[ec-],get duration[ec-],copyTo/1[ecw],@@toStringTag=EncodedAudioChunk',
+      shapeOf(EncodedAudioChunk.prototype),
+    );
+    testing.expectEqual(
+      [
+        'get format[ec-]',
+        'get sampleRate[ec-]',
+        'get numberOfFrames[ec-]',
+        'get numberOfChannels[ec-]',
+        'get duration[ec-]',
+        'get timestamp[ec-]',
+        'allocationSize/1[ecw]',
+        'clone/0[ecw]',
+        'close/0[ecw]',
+        'copyTo/2[ecw]',
+        '@@toStringTag=AudioData',
+      ].join(','),
+      shapeOf(AudioData.prototype),
+    );
+  }
+</script>
+
+<script id=webcodecs_chunks>
+  {
+    const bytes = (n) => { const a = new Uint8Array(n); for (let i = 0; i < n; i++) a[i] = i + 1; return a; };
+
+    for (const name of ['EncodedVideoChunk', 'EncodedAudioChunk']) {
+      const C = window[name];
+      const P = `Failed to construct '${name}': `;
+      const mk = (init) => new C(init);
+
+      const chunk = mk({ data: bytes(3), type: 'key', timestamp: 7 });
+      testing.expectEqual(`[object ${name}]`, Object.prototype.toString.call(chunk));
+      testing.expectEqual(['key', 7, null, 3], [chunk.type, chunk.timestamp, chunk.duration, chunk.byteLength]);
+      // A microsecond stamp is a Number, not a BigInt.
+      testing.expectEqual(['number', 'object'], [typeof chunk.timestamp, typeof chunk.duration]);
+
+      const delta = mk({ data: bytes(1), type: 'delta', timestamp: 1, duration: 5 });
+      testing.expectEqual(['delta', 1, 5, 1], [delta.type, delta.timestamp, delta.duration, delta.byteLength]);
+      // An explicit null duration is 0: the member is not nullable, only unset.
+      testing.expectEqual(0, mk({ data: bytes(1), type: 'key', timestamp: 0, duration: null }).duration);
+
+      // The whole data union, and the byte length each reports.
+      testing.expectEqual(4, mk({ data: new ArrayBuffer(4), type: 'key', timestamp: 0 }).byteLength);
+      testing.expectEqual(4, mk({ data: new Uint8Array(new ArrayBuffer(8), 2, 4), type: 'key', timestamp: 0 }).byteLength);
+      testing.expectEqual(0, mk({ data: new Uint8Array(0), type: 'key', timestamp: 0 }).byteLength);
+
+      // The init is required, and its members are read alphabetically: data,
+      // duration, timestamp, type.
+      for (const arg of [null, undefined, 5]) {
+        testing.expectError(P + `The provided value is not of type '${name}Init'.`, () => mk(arg));
+      }
+      // Not `mk()`: that forwards an explicit undefined, which *is* one
+      // argument and gets as far as the conversion.
+      testing.expectError(P + '1 argument required, but only 0 present.', () => new C());
+      const missing = (init, member) => testing.expectError(
+        P + `Failed to read the '${member}' property from '${name}Init': Required member is undefined.`,
+        () => mk(init),
+      );
+      missing({}, 'data');
+      missing({ data: bytes(1) }, 'timestamp');
+      missing({ data: bytes(1), timestamp: 0 }, 'type');
+      missing({ data: bytes(1), type: 'key' }, 'timestamp');
+
+      testing.expectError(
+        P + `Failed to read the 'duration' property from '${name}Init': Value is not of type 'unsigned long long'.`,
+        () => mk({ data: bytes(1), duration: 'x' }),
+      );
+      testing.expectError(
+        P + `Failed to read the 'duration' property from '${name}Init': Value is outside the 'unsigned long long' value range.`,
+        () => mk({ data: bytes(1), type: 'key', timestamp: 0, duration: -1 }),
+      );
+      testing.expectError(
+        P + `Failed to read the 'data' property from '${name}Init': The provided value is not of type '([AllowShared] ArrayBuffer or [AllowShared] ArrayBufferView)'.`,
+        () => mk({ data: {}, type: 'key', timestamp: 0 }),
+      );
+      testing.expectError(
+        P + `Failed to read the 'type' property from '${name}Init': The provided value 'Key' is not a valid enum value of type ${name}Type.`,
+        () => mk({ data: bytes(1), type: 'Key', timestamp: 0 }),
+      );
+
+      // copyTo writes the bytes and returns undefined; it leaves the rest of a
+      // larger destination alone, and it honours the view's own offset.
+      const dst = new Uint8Array(8).fill(9);
+      testing.expectEqual(undefined, chunk.copyTo(dst));
+      testing.expectEqual('1,2,3,9,9,9,9,9', Array.from(dst).join(','));
+      const buf = new ArrayBuffer(8);
+      chunk.copyTo(new Uint8Array(buf, 2, 4));
+      testing.expectEqual('0,0,1,2,3,0,0,0', Array.from(new Uint8Array(buf)).join(','));
+
+      const E = `Failed to execute 'copyTo' on '${name}': `;
+      testing.expectError(E + '1 argument required, but only 0 present.', () => chunk.copyTo());
+      testing.expectError(E + 'destination is not large enough.', () => chunk.copyTo(new Uint8Array(1)));
+      testing.expectError(
+        E + "The provided value is not of type '([AllowShared] ArrayBuffer or [AllowShared] ArrayBufferView)'.",
+        () => chunk.copyTo({}),
+      );
+    }
+  }
+</script>
+
+<script id=webcodecs_audio_data>
+  {
+    const samples = () => { const a = new Float32Array(200); for (let i = 0; i < 200; i++) a[i] = i / 200; return a; };
+    const mk = (over) => new AudioData(Object.assign({
+      format: 'f32', sampleRate: 48000, numberOfFrames: 100, numberOfChannels: 2, timestamp: 0, data: samples(),
+    }, over));
+
+    const data = mk();
+    testing.expectEqual('[object AudioData]', Object.prototype.toString.call(data));
+    testing.expectEqual(
+      ['f32', 48000, 100, 2, 2083, 0],
+      [data.format, data.sampleRate, data.numberOfFrames, data.numberOfChannels, data.duration, data.timestamp],
+    );
+    // Numbers, not BigInts.
+    testing.expectEqual(['number', 'number'], [typeof data.duration, typeof data.timestamp]);
+    testing.expectEqual(-7, mk({ timestamp: -7 }).timestamp);
+
+    // duration is frames/sampleRate in microseconds, truncated.
+    const durationOf = (rate, frames) => mk({ sampleRate: rate, numberOfFrames: frames, data: new Float32Array(frames * 2) }).duration;
+    testing.expectEqual(2083, durationOf(48000, 100));
+    testing.expectEqual(22, durationOf(44100, 1));
+    testing.expectEqual(375, durationOf(8000, 3));
+    testing.expectEqual(1000000, durationOf(48000, 48000));
+    testing.expectEqual(10000, durationOf(44100, 441));
+
+    // The eight AudioSampleFormat values, and what one plane of an 8-frame
+    // stereo buffer costs in each.
+    const sizes = { u8: 16, s16: 32, s32: 64, f32: 64, 'u8-planar': 8, 's16-planar': 16, 's32-planar': 32, 'f32-planar': 32 };
+    for (const [format, size] of Object.entries(sizes)) {
+      const d = new AudioData({ format, sampleRate: 48000, numberOfFrames: 8, numberOfChannels: 2, timestamp: 0, data: new Uint8Array(4096) });
+      testing.expectEqual([format, size], [d.format, d.allocationSize({ planeIndex: 0 })]);
+    }
+    testing.expectError(
+      "Failed to construct 'AudioData': Failed to read the 'format' property from 'AudioDataInit': The provided value 'f64' is not a valid enum value of type AudioSampleFormat.",
+      () => mk({ format: 'f64' }),
+    );
+
+    // An interleaved layout has one plane; a planar one has a plane per channel.
+    testing.expectEqual(800, data.allocationSize({ planeIndex: 0 }));
+    testing.expectEqual(400, mk({ format: 'f32-planar' }).allocationSize({ planeIndex: 1 }));
+    testing.expectEqual(80, data.allocationSize({ planeIndex: 0, frameCount: 10 }));
+    testing.expectEqual(80, data.allocationSize({ planeIndex: 0, frameOffset: 90 }));
+    // `format` converts what the size is measured in.
+    testing.expectEqual(200, data.allocationSize({ planeIndex: 0, format: 'u8' }));
+    testing.expectEqual(400, data.allocationSize({ planeIndex: 0, format: 'f32-planar' }));
+    // planeIndex is ToUint32 like any other unsigned long.
+    testing.expectEqual(800, data.allocationSize({ planeIndex: '0' }));
+
+    const A = "Failed to execute 'allocationSize' on 'AudioData': ";
+    testing.expectError(A + '1 argument required, but only 0 present.', () => data.allocationSize());
+    testing.expectError(
+      A + "Failed to read the 'planeIndex' property from 'AudioDataCopyToOptions': Required member is undefined.",
+      () => data.allocationSize({}),
+    );
+    // Out of range is a RangeError, not a TypeError.
+    testing.expectError('RangeError: ' + A + 'Invalid planeIndex.', () => data.allocationSize({ planeIndex: 1 }));
+    testing.expectError('RangeError: ' + A + 'Invalid planeIndex.', () => mk({ format: 'f32-planar' }).allocationSize({ planeIndex: 2 }));
+    testing.expectError(
+      'RangeError: ' + A + 'Frame offset exceeds total frames (200 >= 100).',
+      () => data.allocationSize({ planeIndex: 0, frameOffset: 200 }),
+    );
+    testing.expectError(
+      'RangeError: ' + A + 'Frame count exceeds available_frames frames (200 > 100).',
+      () => data.allocationSize({ planeIndex: 0, frameCount: 200 }),
+    );
+    testing.expectError(
+      A + "Failed to read the 'planeIndex' property from 'AudioDataCopyToOptions': Value is outside the 'unsigned long' value range.",
+      () => data.allocationSize({ planeIndex: -1 }),
+    );
+    testing.expectError(
+      A + "Failed to read the 'format' property from 'AudioDataCopyToOptions': The provided value 'nope' is not a valid enum value of type AudioSampleFormat.",
+      () => data.allocationSize({ planeIndex: 0, format: 'nope' }),
+    );
+  }
+</script>
+
+<script id=webcodecs_audio_data_refusals>
+  {
+    const samples = () => new Float32Array(200);
+    const mk = (over) => new AudioData(Object.assign({
+      format: 'f32', sampleRate: 48000, numberOfFrames: 100, numberOfChannels: 2, timestamp: 0, data: samples(),
+    }, over));
+    const P = "Failed to construct 'AudioData': ";
+
+    for (const arg of [null, undefined, 5]) {
+      testing.expectError(P + "The provided value is not of type 'AudioDataInit'.", () => new AudioData(arg));
+    }
+    testing.expectError(P + '1 argument required, but only 0 present.', () => new AudioData());
+
+    // Alphabetical: data, format, numberOfChannels, numberOfFrames, sampleRate,
+    // timestamp.
+    const missing = (init, member) => testing.expectError(
+      P + `Failed to read the '${member}' property from 'AudioDataInit': Required member is undefined.`,
+      () => new AudioData(init),
+    );
+    missing({}, 'data');
+    missing({ data: samples() }, 'format');
+    missing({ data: samples(), format: 'f32' }, 'numberOfChannels');
+    missing({ data: samples(), format: 'f32', numberOfChannels: 2 }, 'numberOfFrames');
+    missing({ data: samples(), format: 'f32', numberOfChannels: 2, numberOfFrames: 8 }, 'sampleRate');
+    missing({ data: samples(), format: 'f32', numberOfChannels: 2, numberOfFrames: 8, sampleRate: 48000 }, 'timestamp');
+
+    testing.expectError(P + 'numberOfFrames must be greater than 0.', () => mk({ numberOfFrames: 0 }));
+    testing.expectError(P + 'numberOfChannels must be greater than 0.', () => mk({ numberOfChannels: 0 }));
+    // The rate limits are a NotSupportedError that names what it got.
+    testing.expectError(
+      'NotSupportedError: ' + P + 'sampleRate is outside of supported implementation limits: need between 3000 and 768000, received 0.',
+      () => mk({ sampleRate: 0 }),
+    );
+    testing.expectError(
+      'NotSupportedError: ' + P + 'sampleRate is outside of supported implementation limits: need between 3000 and 768000, received -1.',
+      () => mk({ sampleRate: -1 }),
+    );
+    testing.expectError(P + 'data is too small: needs 800 bytes, received 16.', () => mk({ data: new Float32Array(4) }));
+  }
+</script>
+
+<script id=webcodecs_audio_data_copy_and_close>
+  {
+    const samples = () => { const a = new Float32Array(200); for (let i = 0; i < 200; i++) a[i] = i / 200; return a; };
+    const mk = (over) => new AudioData(Object.assign({
+      format: 'f32', sampleRate: 48000, numberOfFrames: 100, numberOfChannels: 2, timestamp: 0, data: samples(),
+    }, over));
+
+    const data = mk();
+    const out = new Float32Array(200);
+    testing.expectEqual(undefined, data.copyTo(out, { planeIndex: 0 }));
+    testing.expectEqual([0, 0.004999999888241291, 0.009999999776482582], Array.from(out.slice(0, 3)));
+
+    const C = "Failed to execute 'copyTo' on 'AudioData': ";
+    testing.expectError(C + '2 arguments required, but only 0 present.', () => data.copyTo());
+    testing.expectError(C + '2 arguments required, but only 1 present.', () => data.copyTo(new Float32Array(200)));
+    testing.expectError('RangeError: ' + C + 'destination is not large enough.', () => data.copyTo(new Float32Array(1), { planeIndex: 0 }));
+    testing.expectError('RangeError: ' + C + 'Invalid planeIndex.', () => data.copyTo(new Float32Array(200), { planeIndex: 5 }));
+    testing.expectError(
+      C + "The provided value is not of type 'AudioDataCopyToOptions'.",
+      () => data.copyTo(new Float32Array(200), 'x'),
+    );
+
+    // clone is independent: closing the original leaves it alone.
+    const clone = data.clone();
+    testing.expectEqual(undefined, data.close());
+    // Idempotent.
+    testing.expectEqual(undefined, data.close());
+    testing.expectEqual('f32', clone.format);
+
+    testing.expectEqual(null, data.format);
+    testing.expectEqual([0, 0, 0, 0], [data.sampleRate, data.numberOfFrames, data.numberOfChannels, data.duration]);
+    // The timestamp survives, as it does on a closed VideoFrame.
+    testing.expectEqual(0, data.timestamp);
+    testing.expectEqual(-7, (() => { const d = mk({ timestamp: -7 }); d.close(); return d.timestamp; })());
+    testing.expectEqual('[object AudioData]', String(data));
+
+    testing.expectError("InvalidStateError: Failed to execute 'clone' on 'AudioData': Cannot clone closed AudioData.", () => data.clone());
+    testing.expectError("InvalidStateError: " + "Failed to execute 'allocationSize' on 'AudioData': AudioData is closed.", () => data.allocationSize({ planeIndex: 0 }));
+    testing.expectError('InvalidStateError: ' + C + 'Cannot copy closed AudioData.', () => data.copyTo(new Float32Array(200), { planeIndex: 0 }));
+  }
+</script>

@@ -2,7 +2,7 @@
 <head>
   <title>WebGPU device interfaces</title>
   <script src="../testing.js"></script>
-  <script src="shape.js"></script>
+  <script src="../shape.js"></script>
 </head>
 
 <script id=webgpu_device_interface_objects>
@@ -10,8 +10,8 @@
     // GPUDevice is the only EventTarget in the family: its interface object
     // inherits from EventTarget and its prototype from EventTarget.prototype
     // (measured, protoChain "EventTarget>Object").
-    gpuExpectInterfaceObject('GPUDevice', { inherits: EventTarget, protoOf: EventTarget.prototype });
-    gpuExpectInterfaceObject('GPUQueue');
+    expectInterfaceObject('GPUDevice', { inherits: EventTarget, protoOf: EventTarget.prototype });
+    expectInterfaceObject('GPUQueue');
   }
 </script>
 
@@ -48,7 +48,7 @@
         'pushErrorScope/1[ecw]',
         '@@toStringTag=GPUDevice',
       ],
-      gpuShape(GPUDevice.prototype).split(','),
+      shapeOf(GPUDevice.prototype).split(','),
     );
   }
 </script>
@@ -57,7 +57,7 @@
   {
     testing.expectEqual(
       'accessor label[ec-],copyExternalImageToTexture/3[ecw],onSubmittedWorkDone/0[ecw],submit/1[ecw],writeBuffer/3[ecw],writeTexture/4[ecw],@@toStringTag=GPUQueue',
-      gpuShape(GPUQueue.prototype),
+      shapeOf(GPUQueue.prototype),
     );
   }
 </script>

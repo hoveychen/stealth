@@ -2,14 +2,14 @@
 <head>
   <title>WebGPU error family</title>
   <script src="../testing.js"></script>
-  <script src="shape.js"></script>
+  <script src="../shape.js"></script>
 </head>
 
 <script id=webgpu_error_interface_objects>
   {
     // GPUError is the only one of the six that cannot be constructed.
-    gpuExpectInterfaceObject('GPUError');
-    testing.expectEqual('get message[ec-],@@toStringTag=GPUError', gpuShape(GPUError.prototype));
+    expectInterfaceObject('GPUError');
+    testing.expectEqual('get message[ec-],@@toStringTag=GPUError', shapeOf(GPUError.prototype));
 
     // The three concrete errors: arity 1, on top of GPUError, and nothing of
     // their own but the brand.
@@ -18,10 +18,10 @@
       testing.expectEqual('function', typeof ctor);
       testing.expectEqual(name, ctor.name);
       testing.expectEqual(1, ctor.length);
-      testing.expectEqual('-cw', gpuWindowFlags(name));
+      testing.expectEqual('-cw', windowFlags(name));
       testing.expectTrue(Object.getPrototypeOf(ctor) === GPUError);
       testing.expectTrue(Object.getPrototypeOf(ctor.prototype) === GPUError.prototype);
-      testing.expectEqual(`@@toStringTag=${name}`, gpuShape(ctor.prototype));
+      testing.expectEqual(`@@toStringTag=${name}`, shapeOf(ctor.prototype));
       testing.expectEqual(
         [],
         Object.getOwnPropertyNames(ctor).filter((k) => !['length', 'name', 'prototype'].includes(k)),
@@ -31,16 +31,16 @@
 
     // GPUPipelineError is a DOMException, not a GPUError.
     testing.expectEqual(1, GPUPipelineError.length);
-    testing.expectEqual('-cw', gpuWindowFlags('GPUPipelineError'));
+    testing.expectEqual('-cw', windowFlags('GPUPipelineError'));
     testing.expectTrue(Object.getPrototypeOf(GPUPipelineError) === DOMException);
     testing.expectTrue(Object.getPrototypeOf(GPUPipelineError.prototype) === DOMException.prototype);
-    testing.expectEqual('get reason[ec-],@@toStringTag=GPUPipelineError', gpuShape(GPUPipelineError.prototype));
+    testing.expectEqual('get reason[ec-],@@toStringTag=GPUPipelineError', shapeOf(GPUPipelineError.prototype));
 
     testing.expectEqual(2, GPUUncapturedErrorEvent.length);
-    testing.expectEqual('-cw', gpuWindowFlags('GPUUncapturedErrorEvent'));
+    testing.expectEqual('-cw', windowFlags('GPUUncapturedErrorEvent'));
     testing.expectTrue(Object.getPrototypeOf(GPUUncapturedErrorEvent) === Event);
     testing.expectTrue(Object.getPrototypeOf(GPUUncapturedErrorEvent.prototype) === Event.prototype);
-    testing.expectEqual('get error[ec-],@@toStringTag=GPUUncapturedErrorEvent', gpuShape(GPUUncapturedErrorEvent.prototype));
+    testing.expectEqual('get error[ec-],@@toStringTag=GPUUncapturedErrorEvent', shapeOf(GPUUncapturedErrorEvent.prototype));
   }
 </script>
 

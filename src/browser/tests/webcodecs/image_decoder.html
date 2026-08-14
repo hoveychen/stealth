@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<head>
+  <title>WebCodecs: ImageDecoder, ImageTrack and ImageTrackList</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webcodecs_image_decoder_interface_objects>
+  {
+    expectInterfaceObject('ImageDecoder', { arity: 1, statics: ['isTypeSupported'], illegal: false });
+    testing.expectEqual(1, ImageDecoder.isTypeSupported.length);
+    // The two the page only ever receives.
+    expectInterfaceObject('ImageTrack', {});
+    expectInterfaceObject('ImageTrackList', {});
+  }
+</script>
+
+<script id=webcodecs_image_decoder_prototypes>
+  {
+    testing.expectEqual(
+      'get type[ec-],get complete[ec-],get completed[ec-],get tracks[ec-],close/0[ecw],decode/0[ecw],reset/0[ecw],@@toStringTag=ImageDecoder',
+      shapeOf(ImageDecoder.prototype),
+    );
+    testing.expectEqual(
+      'get frameCount[ec-],get animated[ec-],get repetitionCount[ec-],accessor selected[ec-],@@toStringTag=ImageTrack',
+      shapeOf(ImageTrack.prototype),
+    );
+    // The @@iterator *is* the values function, not an anonymous copy of it.
+    testing.expectEqual(
+      'get length[ec-],get selectedIndex[ec-],get selectedTrack[ec-],get ready[ec-],@@toStringTag=ImageTrackList,@@iterator=fn:values',
+      shapeOf(ImageTrackList.prototype),
+    );
+    testing.expectEqual(
+      'Symbol(Symbol.toStringTag),Symbol(Symbol.iterator)',
+      Object.getOwnPropertySymbols(ImageTrackList.prototype).map(String).join(','),
+    );
+  }
+</script>
+
+<script id=webcodecs_image_decoder_constructor_refusals>
+  {
+    const P = "Failed to construct 'ImageDecoder': ";
+    const R = (m) => `${P}Failed to read the '${m}' property from 'ImageDecoderInit': Required member is undefined.`;
+    const data = new Uint8Array([1, 2, 3, 4]);
+
+    testing.expectError(`${P}1 argument required, but only 0 present.`, () => new ImageDecoder());
+    testing.expectError(`${P}The provided value is not of type 'ImageDecoderInit'.`, () => new ImageDecoder(null));
+    testing.expectError(`${P}The provided value is not of type 'ImageDecoderInit'.`, () => new ImageDecoder(7));
+    // data is read before type.
+    testing.expectError(R('data'), () => new ImageDecoder({}));
+    testing.expectError(R('data'), () => new ImageDecoder({ type: 'image/png' }));
+    testing.expectError(R('type'), () => new ImageDecoder({ data }));
+    testing.expectError(
+      `${P}Failed to read the 'data' property from 'ImageDecoderInit': The provided value is not of type ` +
+        "'(ReadableStream or [AllowShared] ArrayBuffer or [AllowShared] ArrayBufferView)'.",
+      () => new ImageDecoder({ data: 'x', type: 'image/png' }),
+    );
+
+    // Every optional member is accepted, and -- unusually -- a bogus enum value
+    // among them is *not* rejected at construction.
+    testing.expectEqual('[object ImageDecoder]', Object.prototype.toString.call(new ImageDecoder({
+      data, type: 'image/png', premultiplyAlpha: 'none', colorSpaceConversion: 'none',
+      desiredWidth: 2, desiredHeight: 2, preferAnimation: true,
+    })));
+    testing.expectEqual('[object ImageDecoder]', Object.prototype.toString.call(
+      new ImageDecoder({ data, type: 'image/png', premultiplyAlpha: 'nope' }),
+    ));
+  }
+</script>
+
+<script type=module id=webcodecs_image_decoder_type_supported>
+  // No argument at all is a *rejection*, not a false: the call still hands back
+  // a Promise, which is why an earlier probe only saw the brand.
+  const t = ImageDecoder.isTypeSupported();
+  testing.expectEqual('[object Promise]', Object.prototype.toString.call(t));
+  await t.then(
+    (v) => testing.expectEqual('rejected', `resolved ${v}`),
+    (e) => testing.expectEqual(
+      "Failed to execute 'isTypeSupported' on 'ImageDecoder': 1 argument required, but only 0 present.",
+      e.message,
+    ),
+  );
+
+  for (const type of ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp']) {
+    testing.expectEqual(`${type}=true`, `${type}=${await ImageDecoder.isTypeSupported(type)}`);
+  }
+  for (const type of ['image/x-icon', 'image/svg+xml', 'image/tiff', 'nope', '']) {
+    testing.expectEqual(`${type}=false`, `${type}=${await ImageDecoder.isTypeSupported(type)}`);
+  }
+  // The type is matched case-insensitively.
+  testing.expectEqual(true, await ImageDecoder.isTypeSupported('IMAGE/PNG'));
+</script>
+
+<script type=module id=webcodecs_image_decoder_still>
+  // A 4x2 PNG, encoded by this engine's own canvas so the test needs nothing
+  // from the network -- and so the decoder is read back against the encoder.
+  const canvas = Object.assign(document.createElement('canvas'), { width: 4, height: 2 });
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 2, 2);
+  // Straight off the data URL rather than through fetch(), which this engine
+  // does not serve data: from.
+  const bytes = (url) => Uint8Array.from(atob(url.split(',')[1]), (c) => c.charCodeAt(0));
+  const png = bytes(canvas.toDataURL());
+  window.__png = png;
+  window.__bytes = bytes;
+
+  const decoder = new ImageDecoder({ data: png, type: 'image/png' });
+  testing.expectEqual('[object ImageDecoder]', Object.prototype.toString.call(decoder));
+  testing.expectEqual('image/png', decoder.type);
+  testing.expectEqual(true, decoder.complete);
+  testing.expectEqual('[object Promise]', Object.prototype.toString.call(decoder.completed));
+  testing.expectEqual('[object ImageTrackList]', Object.prototype.toString.call(decoder.tracks));
+
+  // Nothing is known until `ready` settles.
+  const tracks = decoder.tracks;
+  testing.expectEqual([0, -1, null], [tracks.length, tracks.selectedIndex, tracks.selectedTrack]);
+  testing.expectEqual('[object Promise]', Object.prototype.toString.call(tracks.ready));
+  testing.expectTrue(tracks.ready === tracks.ready);
+  testing.expectTrue(decoder.completed === decoder.completed);
+  testing.expectTrue(decoder.tracks === decoder.tracks);
+
+  // `completed` means "all the input is in" and settles *before* the track
+  // metadata: awaiting it still leaves the list empty (measured,
+  // win43-chrome.json).
+  testing.expectEqual(undefined, await decoder.completed);
+  testing.expectEqual([0, -1, null], [tracks.length, tracks.selectedIndex, tracks.selectedTrack]);
+
+  testing.expectEqual(undefined, await tracks.ready);
+  testing.expectEqual([1, 0], [tracks.length, tracks.selectedIndex]);
+
+  const track = tracks[0];
+  testing.expectEqual('[object ImageTrack]', Object.prototype.toString.call(track));
+  testing.expectTrue(track === tracks.selectedTrack);
+  testing.expectTrue(track === tracks[0]);
+  testing.expectEqual(['0'], Object.getOwnPropertyNames(tracks));
+  testing.expectEqual('', Object.getOwnPropertyNames(track).join(','));
+  testing.expectEqual(undefined, tracks[1]);
+  // A still image: one frame, and a repetitionCount of 0 rather than null.
+  testing.expectEqual([false, 1, 0, true], [track.animated, track.frameCount, track.repetitionCount, track.selected]);
+
+  // Iteration goes through `values`, which is also the @@iterator.
+  const seen = [];
+  for (const t of tracks) seen.push(Object.prototype.toString.call(t));
+  testing.expectEqual(['[object ImageTrack]'], seen);
+  testing.expectEqual(1, Array.from(tracks).length);
+  testing.expectEqual(1, [...tracks].length);
+
+  // Deselecting empties the list's idea of a selection without removing it.
+  track.selected = false;
+  testing.expectEqual([false, -1, null], [track.selected, tracks.selectedIndex, tracks.selectedTrack]);
+  testing.expectEqual(1, tracks.length);
+  track.selected = true;
+  testing.expectEqual([true, 0], [track.selected, tracks.selectedIndex]);
+</script>
+
+<script type=module id=webcodecs_image_decoder_decode>
+  const decoder = new ImageDecoder({ data: window.__png, type: 'image/png' });
+  await decoder.tracks.ready;
+
+  const result = await decoder.decode();
+  testing.expectEqual('[object Object]', Object.prototype.toString.call(result));
+  testing.expectTrue(Object.getPrototypeOf(result) === Object.prototype);
+  testing.expectEqual(['complete', 'image'], Object.keys(result));
+  testing.expectEqual(true, result.complete);
+  testing.expectEqual('[object VideoFrame]', Object.prototype.toString.call(result.image));
+  testing.expectEqual(
+    ['BGRA', 4, 2, 0, null],
+    [result.image.format, result.image.codedWidth, result.image.codedHeight, result.image.timestamp, result.image.duration],
+  );
+
+  testing.expectEqual(
+    '[object VideoFrame]',
+    Object.prototype.toString.call((await decoder.decode({ frameIndex: 0, completeFramesOnly: true })).image),
+  );
+
+  const rejects = async (promise, message) => {
+    let caught = null;
+    await promise.then(() => { caught = 'resolved'; }, (e) => { caught = `${e.name}: ${e.message}`; });
+    testing.expectEqual(message, caught);
+  };
+  // The upper bound is the frame count, so a still image reads [0, 1).
+  await rejects(decoder.decode({ frameIndex: 99 }), 'RangeError: The frame index provided (99) is outside the range [0, 1).');
+  await rejects(
+    decoder.decode('x'),
+    "TypeError: Failed to execute 'decode' on 'ImageDecoder': The provided value is not of type 'ImageDecodeOptions'.",
+  );
+</script>
+
+<script type=module id=webcodecs_image_decoder_animated>
+  // A hand-assembled 2-frame 1x1 GIF that loops forever, the same bytes the
+  // probe measured Chrome with.
+  const GIF = 'R0lGODlhAQABAIAAAP///wAAACH/C05FVFNDQVBFMi4wAwEAAAAh+QQFCgAAACwAAAAAAQABAAACAkQBACH5BAUKAAEALAAAAAABAAEAAAICVAEAOw==';
+  const gif = Uint8Array.from(atob(GIF), (c) => c.charCodeAt(0));
+
+  const decoder = new ImageDecoder({ data: gif, type: 'image/gif' });
+  await decoder.tracks.ready;
+  const tracks = decoder.tracks;
+  testing.expectEqual([1, 0], [tracks.length, tracks.selectedIndex]);
+  // An endlessly looping GIF answers repetitionCount **Infinity**, where a
+  // still image answers 0. (An earlier probe recorded null here, which was
+  // JSON.stringify flattening Infinity; win51-chrome.json reads it directly.)
+  testing.expectEqual(
+    [true, 2, Infinity, true],
+    [tracks[0].animated, tracks[0].frameCount, tracks[0].repetitionCount, tracks[0].selected],
+  );
+
+  const frames = [];
+  for (const frameIndex of [0, 1]) {
+    const { complete, image } = await decoder.decode({ frameIndex });
+    frames.push(`${complete}/${image.timestamp}/${image.duration}/${image.codedWidth}x${image.codedHeight}`);
+  }
+  // Microseconds, so a 0.1s frame delay is 100000.
+  testing.expectEqual(['true/0/100000/1x1', 'true/100000/100000/1x1'], frames);
+
+  let caught = null;
+  await decoder.decode({ frameIndex: 2 }).then(() => { caught = 'resolved'; }, (e) => { caught = `${e.name}: ${e.message}`; });
+  testing.expectEqual('RangeError: The frame index provided (2) is outside the range [0, 2).', caught);
+
+  // `animated` follows the *format*, not the frame count: a one-frame GIF is
+  // still animated, and it too reports Infinity.
+  const STILL_GIF = 'R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=';
+  const one = new ImageDecoder({
+    data: Uint8Array.from(atob(STILL_GIF), (c) => c.charCodeAt(0)),
+    type: 'image/gif',
+  });
+  await one.tracks.ready;
+  testing.expectEqual(
+    [true, 1, Infinity],
+    [one.tracks[0].animated, one.tracks[0].frameCount, one.tracks[0].repetitionCount],
+  );
+</script>
+
+<script type=module id=webcodecs_image_decoder_frame_details>
+  // decode() works before `ready` has settled -- it waits -- and settles the
+  // track list on the way (measured, win51-chrome.json).
+  {
+    const decoder = new ImageDecoder({ data: window.__png, type: 'image/png' });
+    const { complete, image } = await decoder.decode();
+    testing.expectEqual([true, 4, 2], [complete, image.codedWidth, image.codedHeight]);
+    testing.expectEqual([1, 0], [decoder.tracks.length, decoder.tracks.selectedIndex]);
+  }
+
+  // Every decode() hands back a *different* VideoFrame.
+  {
+    const decoder = new ImageDecoder({ data: window.__png, type: 'image/png' });
+    const [a, b] = await Promise.all([decoder.decode(), decoder.decode()]);
+    testing.expectFalse(a.image === b.image);
+  }
+
+  // desiredWidth / desiredHeight are accepted and resize nothing.
+  {
+    const decoder = new ImageDecoder({ data: window.__png, type: 'image/png', desiredWidth: 8, desiredHeight: 4 });
+    const { image } = await decoder.decode();
+    testing.expectEqual([4, 2, 4, 2], [image.codedWidth, image.codedHeight, image.displayWidth, image.displayHeight]);
+  }
+
+  // A negative frameIndex is an [EnforceRange] refusal, not a range error.
+  {
+    const decoder = new ImageDecoder({ data: window.__png, type: 'image/png' });
+    let caught = null;
+    await decoder.decode({ frameIndex: -1 }).then(() => { caught = 'resolved'; }, (e) => { caught = `${e.name}: ${e.message}`; });
+    testing.expectEqual(
+      "TypeError: Failed to execute 'decode' on 'ImageDecoder': Failed to read the 'frameIndex' property " +
+        "from 'ImageDecodeOptions': Value is outside the 'unsigned long' value range.",
+      caught,
+    );
+  }
+
+  // The decoded frame carries real pixels, not just geometry: a 4x2 canvas
+  // with its left half filled black reads back 32 BGRA bytes.
+  {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 4, height: 2 });
+    canvas.getContext('2d').fillRect(0, 0, 2, 2);
+    const drawn = window.__bytes(canvas.toDataURL());
+    const { image } = await new ImageDecoder({ data: drawn, type: 'image/png' }).decode();
+    const buf = new Uint8Array(image.allocationSize());
+    await image.copyTo(buf);
+    testing.expectEqual(32, buf.length);
+    testing.expectEqual(
+      [0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0],
+      Array.from(buf),
+    );
+  }
+</script>
+
+<script type=module id=webcodecs_image_decoder_reset_close>
+  const decoder = new ImageDecoder({ data: window.__png, type: 'image/png' });
+  await decoder.tracks.ready;
+
+  // reset() changes nothing observable once the metadata is in.
+  testing.expectEqual(undefined, decoder.reset());
+  testing.expectEqual([true, 1], [decoder.complete, decoder.tracks.length]);
+
+  // close() is idempotent -- unlike the four codec classes, where a second one
+  // is an InvalidStateError.
+  testing.expectEqual(undefined, decoder.close());
+  testing.expectEqual(undefined, decoder.close());
+  testing.expectEqual(true, decoder.complete);
+  testing.expectEqual('', decoder.type);
+  testing.expectEqual([0, -1], [decoder.tracks.length, decoder.tracks.selectedIndex]);
+  testing.expectEqual(undefined, decoder.reset());
+  // Both promises were already settled and stay settled.
+  testing.expectEqual(undefined, await decoder.completed);
+  testing.expectEqual(undefined, await decoder.tracks.ready);
+
+  let caught = null;
+  await decoder.decode().then(() => { caught = 'resolved'; }, (e) => { caught = `${e.name}: ${e.message}`; });
+  // No "Failed to execute" prefix on this one.
+  testing.expectEqual('InvalidStateError: The decoder has been closed.', caught);
+</script>
+
+<script type=module id=webcodecs_image_decoder_failures>
+  const rejects = async (promise, message) => {
+    let caught = null;
+    await promise.then(() => { caught = 'resolved'; }, (e) => { caught = `${e.name}: ${e.message}`; });
+    testing.expectEqual(message, caught);
+  };
+  const settled = (promise) => Promise.race([
+    promise.then(() => 'resolved', (e) => `${e.name}: ${e.message}`),
+    new Promise((r) => setTimeout(() => r('PENDING'), 0)),
+  ]);
+
+  // A type nothing supports: the constructor accepts it and `type` echoes it,
+  // but the metadata never arrives -- and `completed` never settles at all.
+  {
+    const decoder = new ImageDecoder({ data: window.__png, type: 'nope' });
+    testing.expectEqual('[object ImageDecoder]', Object.prototype.toString.call(decoder));
+    testing.expectEqual('nope', decoder.type);
+    const message = 'NotSupportedError: The provided image type (nope) is not supported';
+    await rejects(decoder.tracks.ready, message);
+    await rejects(decoder.decode(), message);
+    testing.expectEqual([0, -1], [decoder.tracks.length, decoder.tracks.selectedIndex]);
+    testing.expectEqual('PENDING', await settled(decoder.completed));
+  }
+
+  // Junk bytes behind a type that is supported: `completed` resolves, but the
+  // track metadata never does, and decode reports a closed decoder.
+  {
+    const decoder = new ImageDecoder({ data: new Uint8Array([1, 2, 3, 4]), type: 'image/png' });
+    await rejects(decoder.tracks.ready, 'InvalidStateError: Failed to retrieve track metadata.');
+    testing.expectEqual(undefined, await decoder.completed);
+    await rejects(decoder.decode(), 'InvalidStateError: The decoder has been closed.');
+  }
+</script>

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<head>
+  <title>WebCodecs: the four codec classes</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webcodecs_codec_interface_objects>
+  {
+    // All four are EventTarget subclasses a page really can `new`, and all four
+    // carry exactly one static.
+    for (const name of ['VideoDecoder', 'VideoEncoder', 'AudioDecoder', 'AudioEncoder']) {
+      expectInterfaceObject(name, {
+        arity: 1,
+        statics: ['isConfigSupported'],
+        inherits: EventTarget,
+        protoOf: EventTarget.prototype,
+        illegal: false,
+      });
+      testing.expectEqual(1, window[name].isConfigSupported.length);
+    }
+  }
+</script>
+
+<script id=webcodecs_codec_prototypes>
+  {
+    // decoder and encoder differ in exactly two names.
+    testing.expectEqual(
+      'get decodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],decode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=VideoDecoder',
+      shapeOf(VideoDecoder.prototype),
+    );
+    testing.expectEqual(
+      'get encodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],encode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=VideoEncoder',
+      shapeOf(VideoEncoder.prototype),
+    );
+    testing.expectEqual(
+      'get decodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],decode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=AudioDecoder',
+      shapeOf(AudioDecoder.prototype),
+    );
+    testing.expectEqual(
+      'get encodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],encode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=AudioEncoder',
+      shapeOf(AudioEncoder.prototype),
+    );
+  }
+</script>
+
+<script id=webcodecs_codec_constructor>
+  {
+    const noop = () => {};
+    // `error` is read before `output`: alphabetical, so `{}` and `{output}`
+    // both complain about error (measured, win48-chrome.json).
+    for (const name of ['VideoDecoder', 'VideoEncoder', 'AudioDecoder', 'AudioEncoder']) {
+      const C = window[name];
+      const P = `Failed to construct '${name}': `;
+      const D = `${name}Init`;
+      const R = (m) => `${P}Failed to read the '${m}' property from '${D}': Required member is undefined.`;
+
+      testing.expectError(`${P}1 argument required, but only 0 present.`, () => new C());
+      testing.expectError(`${P}The provided value is not of type '${D}'.`, () => new C('x'));
+      testing.expectError(`${P}The provided value is not of type '${D}'.`, () => new C(null));
+      testing.expectError(R('error'), () => new C({}));
+      testing.expectError(R('error'), () => new C({ output: noop }));
+      testing.expectError(R('output'), () => new C({ error: noop }));
+      testing.expectError(
+        `${P}Failed to read the 'output' property from '${D}': The given value is not a function.`,
+        () => new C({ output: 7, error: noop }),
+      );
+      testing.expectError(
+        `${P}Failed to read the 'error' property from '${D}': The given value is not a function.`,
+        () => new C({ output: noop, error: 7 }),
+      );
+
+      const codec = new C({ output: noop, error: noop, nope: 1 });
+      testing.expectEqual(`[object ${name}]`, Object.prototype.toString.call(codec));
+      testing.expectTrue(codec instanceof EventTarget);
+      testing.expectEqual('unconfigured', codec.state);
+
+      // A non-callable clears the attribute rather than throwing.
+      testing.expectEqual(null, codec.ondequeue);
+      codec.ondequeue = 7;
+      testing.expectEqual(null, codec.ondequeue);
+      codec.ondequeue = noop;
+      testing.expectTrue(codec.ondequeue === noop);
+      codec.ondequeue = null;
+      testing.expectEqual(null, codec.ondequeue);
+    }
+  }
+</script>
+
+<script id=webcodecs_codec_state_machine>
+  {
+    const noop = () => {};
+    const configs = {
+      VideoDecoder: { codec: 'vp8' },
+      VideoEncoder: { codec: 'vp8', width: 320, height: 240 },
+      AudioDecoder: { codec: 'opus', sampleRate: 48000, numberOfChannels: 2 },
+      AudioEncoder: { codec: 'opus', sampleRate: 48000, numberOfChannels: 2 },
+    };
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    // The conversion runs before the state check, so every state assertion
+    // below has to hand over an input the codec really accepts.
+    const inputs = {
+      VideoDecoder: ['EncodedVideoChunk', () => new EncodedVideoChunk({ data: new Uint8Array([1]), type: 'key', timestamp: 0 })],
+      VideoEncoder: ['VideoFrame', () => new VideoFrame(canvas, { timestamp: 0 })],
+      AudioDecoder: ['EncodedAudioChunk', () => new EncodedAudioChunk({ data: new Uint8Array([1]), type: 'key', timestamp: 0 })],
+      AudioEncoder: ['AudioData', () => new AudioData({
+        format: 's16', sampleRate: 48000, numberOfFrames: 480, numberOfChannels: 2,
+        timestamp: 0, data: new Int16Array(960),
+      })],
+    };
+
+    for (const [name, config] of Object.entries(configs)) {
+      const C = window[name];
+      const decoder = name.endsWith('Decoder');
+      const verb = decoder ? 'decode' : 'encode';
+      const queue = decoder ? 'decodeQueueSize' : 'encodeQueueSize';
+      const E = (m) => `Failed to execute '${m}' on '${name}': `;
+      const mk = () => new C({ output: noop, error: noop });
+      const [inputName, input] = inputs[name];
+
+      // -- unconfigured
+      let c = mk();
+      testing.expectEqual(0, c[queue]);
+      testing.expectError(`${E(verb)}1 argument required, but only 0 present.`, () => c[verb]());
+      testing.expectError(`${E(verb)}parameter 1 is not of type '${inputName}'.`, () => c[verb]({}));
+      testing.expectError(`${E(verb)}parameter 1 is not of type '${inputName}'.`, () => c[verb](null));
+      testing.expectError(`${E(verb)}Cannot call '${verb}' on an unconfigured codec.`, () => c[verb](input()));
+      testing.expectError(`${E('configure')}1 argument required, but only 0 present.`, () => c.configure());
+      testing.expectError(`${E('configure')}The provided value is not of type '${name}Config'.`, () => c.configure('x'));
+      testing.expectEqual(undefined, c.reset());
+      testing.expectEqual('unconfigured', c.state);
+
+      // -- configured
+      testing.expectEqual(undefined, c.configure(config));
+      testing.expectEqual('configured', c.state);
+      testing.expectEqual(undefined, c.configure(config));
+      testing.expectEqual('configured', c.state);
+      testing.expectEqual(undefined, c.reset());
+      testing.expectEqual('unconfigured', c.state);
+      testing.expectEqual(0, c[queue]);
+
+      // -- closed
+      c.configure(config);
+      testing.expectEqual(undefined, c.close());
+      testing.expectEqual('closed', c.state);
+      testing.expectEqual(0, c[queue]);
+      testing.expectError(`${E('close')}Cannot call 'close' on a closed codec.`, () => c.close());
+      testing.expectError(`${E('reset')}Cannot call 'reset' on a closed codec.`, () => c.reset());
+      testing.expectError(`${E(verb)}Cannot call '${verb}' on a closed codec.`, () => c[verb](input()));
+      // The role quirk: configure() after close() names 'decode' on a decoder
+      // and 'configure' on an encoder. A Blink slip, transcribed.
+      testing.expectError(
+        `${E('configure')}Cannot call '${decoder ? 'decode' : 'configure'}' on a closed codec.`,
+        () => c.configure(config),
+      );
+    }
+  }
+</script>
+
+<script id=webcodecs_codec_configure_validation>
+  {
+    const noop = () => {};
+    const mk = (C) => new C({ output: noop, error: noop });
+    const bad = (C, config, message) => {
+      const c = mk(C);
+      testing.expectError(`Failed to execute 'configure' on '${C.name}': ${message}`, () => c.configure(config));
+      // A refused config leaves the codec exactly where it was.
+      testing.expectEqual('unconfigured', c.state);
+    };
+
+    // Video: the codec is checked before the sizes.
+    bad(VideoDecoder, {}, "Failed to read the 'codec' property from 'VideoDecoderConfig': Required member is undefined.");
+    bad(VideoDecoder, { codec: '' }, 'Invalid codec; codec is required.');
+    bad(VideoDecoder, { codec: '', codedWidth: 0, codedHeight: 240 }, 'Invalid codec; codec is required.');
+    bad(VideoDecoder, { codec: 'vp8', codedWidth: 320 }, 'Invalid config, codedWidth specified without codedHeight.');
+    bad(VideoDecoder, { codec: 'vp8', codedHeight: 240 }, 'Invalid config, codedHeight specified without codedWidth.');
+    bad(VideoDecoder, { codec: 'vp8', codedWidth: 0, codedHeight: 240 }, 'Invalid coded size (0, 240).');
+    bad(VideoDecoder, { codec: 'vp8', codedWidth: 320, codedHeight: 0 }, 'Invalid coded size (320, 0).');
+    bad(VideoDecoder, { codec: 'vp8', codedWidth: 0, codedHeight: 0 }, 'Invalid coded size (0, 0).');
+    bad(
+      VideoDecoder,
+      { codec: 'vp8', hardwareAcceleration: 'nope' },
+      "Failed to read the 'hardwareAcceleration' property from 'VideoDecoderConfig': " +
+        "The provided value 'nope' is not a valid enum value of type HardwarePreference.",
+    );
+
+    bad(VideoEncoder, { codec: 'vp8', width: 320 }, "Failed to read the 'height' property from 'VideoEncoderConfig': Required member is undefined.");
+    bad(VideoEncoder, { codec: 'vp8', height: 240 }, "Failed to read the 'width' property from 'VideoEncoderConfig': Required member is undefined.");
+    bad(VideoEncoder, { codec: '', width: 320, height: 240 }, 'Invalid codec; codec is required.');
+    bad(VideoEncoder, { codec: 'vp8', width: 0, height: 240 }, 'Invalid size; height and width must be greater than zero.');
+    bad(VideoEncoder, { codec: 'vp8', width: 320, height: 0 }, 'Invalid size; height and width must be greater than zero.');
+
+    // Audio: numberOfChannels first, then sampleRate, and only then the codec.
+    for (const C of [AudioDecoder, AudioEncoder]) {
+      const D = `${C.name}Config`;
+      bad(C, { codec: 'opus' }, `Failed to read the 'numberOfChannels' property from '${D}': Required member is undefined.`);
+      bad(C, { codec: 'opus', numberOfChannels: 2 }, `Failed to read the 'sampleRate' property from '${D}': Required member is undefined.`);
+      bad(C, { codec: 'opus', sampleRate: 48000, numberOfChannels: 0 }, 'Invalid channel count; channel count must be non-zero, received 0.');
+      bad(C, { codec: 'opus', sampleRate: 0, numberOfChannels: 0 }, 'Invalid channel count; channel count must be non-zero, received 0.');
+      bad(C, { codec: 'opus', sampleRate: 0, numberOfChannels: 2 }, 'Invalid sample rate; sample rate must be non-zero, received 0.');
+      bad(C, { codec: '', sampleRate: 48000, numberOfChannels: 2 }, 'Invalid codec; codec is required.');
+    }
+
+    // vorbis and flac need a description, and get one specific message for it.
+    bad(AudioDecoder, { codec: 'vorbis', sampleRate: 48000, numberOfChannels: 2 }, 'Invalid config; description is required.');
+    bad(AudioDecoder, { codec: 'flac', sampleRate: 48000, numberOfChannels: 2 }, 'Invalid config; description is required.');
+  }
+</script>
+
+<script type=module id=webcodecs_codec_is_config_supported>
+  // isConfigSupported never throws synchronously: every failure comes back as a
+  // rejection, including the argument count (measured, win46b-chrome.json).
+  const rejects = async (promise, message) => {
+    let caught = null;
+    await promise.then((v) => { caught = `resolved ${JSON.stringify(v)}`; }, (e) => { caught = `${e.name}: ${e.message}`; });
+    testing.expectEqual(message, caught);
+  };
+  const echo = async (promise, supported, config) => {
+    const r = await promise;
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(r));
+    testing.expectEqual(['config', 'supported'], Object.keys(r));
+    testing.expectEqual(supported, r.supported);
+    testing.expectEqual(config, JSON.stringify(r.config));
+  };
+
+  for (const C of [VideoDecoder, VideoEncoder, AudioDecoder, AudioEncoder]) {
+    const call = C.isConfigSupported();
+    testing.expectEqual('[object Promise]', Object.prototype.toString.call(call));
+    await rejects(call, `TypeError: Failed to execute 'isConfigSupported' on '${C.name}': 1 argument required, but only 0 present.`);
+    await rejects(
+      C.isConfigSupported('x'),
+      `TypeError: Failed to execute 'isConfigSupported' on '${C.name}': The provided value is not of type '${C.name}Config'.`,
+    );
+  }
+
+  await rejects(
+    VideoDecoder.isConfigSupported({ codec: 'vp8', codedWidth: 320, codedHeight: 0 }),
+    "TypeError: Failed to execute 'isConfigSupported' on 'VideoDecoder': Invalid coded size (320, 0).",
+  );
+  await rejects(
+    AudioDecoder.isConfigSupported({ codec: 'vorbis', sampleRate: 48000, numberOfChannels: 2 }),
+    "TypeError: Failed to execute 'isConfigSupported' on 'AudioDecoder': Invalid config; description is required.",
+  );
+
+  // The echo is the input with every default filled in, alphabetically. An
+  // unrecognised member is not echoed.
+  await echo(
+    VideoDecoder.isConfigSupported({ codec: 'vp8', nope: 1 }),
+    true,
+    '{"codec":"vp8","flip":false,"hardwareAcceleration":"no-preference","rotation":0}',
+  );
+  await echo(
+    VideoDecoder.isConfigSupported({
+      codec: 'vp8', codedWidth: 320, codedHeight: 240, flip: true,
+      hardwareAcceleration: 'prefer-software', optimizeForLatency: false, rotation: 45,
+    }),
+    true,
+    '{"codec":"vp8","codedHeight":240,"codedWidth":320,"flip":true,' +
+      '"hardwareAcceleration":"prefer-software","optimizeForLatency":false,"rotation":45}',
+  );
+  await echo(
+    VideoEncoder.isConfigSupported({ codec: 'vp8', width: 320, height: 240 }),
+    true,
+    '{"alpha":"discard","bitrateMode":"variable","codec":"vp8","contentHint":"",' +
+      '"hardwareAcceleration":"no-preference","height":240,"latencyMode":"quality","width":320}',
+  );
+  await echo(
+    VideoEncoder.isConfigSupported({
+      codec: 'vp8', width: 320, height: 240, alpha: 'keep', bitrate: 1000000,
+      bitrateMode: 'constant', contentHint: 'motion', displayWidth: 640,
+      displayHeight: 480, framerate: 30, latencyMode: 'realtime', scalabilityMode: 'L1T2',
+    }),
+    true,
+    '{"alpha":"keep","bitrate":1000000,"bitrateMode":"constant","codec":"vp8",' +
+      '"contentHint":"motion","displayHeight":480,"displayWidth":640,"framerate":30,' +
+      '"hardwareAcceleration":"no-preference","height":240,"latencyMode":"realtime",' +
+      '"scalabilityMode":"L1T2","width":320}',
+  );
+  await echo(
+    AudioDecoder.isConfigSupported({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2 }),
+    true,
+    '{"codec":"opus","numberOfChannels":2,"sampleRate":48000}',
+  );
+  await echo(
+    AudioEncoder.isConfigSupported({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, bitrate: 128000, bitrateMode: 'constant' }),
+    true,
+    '{"bitrate":128000,"bitrateMode":"constant","codec":"opus","numberOfChannels":2,"sampleRate":48000}',
+  );
+
+  // `hardwareAcceleration` is not a member of AudioDecoderConfig, so it is
+  // dropped rather than echoed.
+  await echo(
+    AudioDecoder.isConfigSupported({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2, hardwareAcceleration: 'prefer-hardware' }),
+    true,
+    '{"codec":"opus","numberOfChannels":2,"sampleRate":48000}',
+  );
+</script>
+
+<script type=module id=webcodecs_codec_support_matrix>
+  // What this Chrome 150 on macOS answers, which is the part a detector can
+  // enumerate (win46-chrome.json, win46c-chrome.json).
+  const supported = async (C, codec, extra) => (await C.isConfigSupported({ codec, ...extra })).supported;
+  const video = { codedWidth: 320, codedHeight: 240 };
+  const encode = { width: 320, height: 240 };
+  const audio = { sampleRate: 48000, numberOfChannels: 2 };
+
+  for (const [C, extra] of [[VideoDecoder, video], [VideoEncoder, encode]]) {
+    for (const codec of ['vp8', 'vp09.00.10.08', 'avc1.42E01E', 'avc1.640028', 'av01.0.04M.08', 'hev1.1.6.L93.B0', 'hvc1.1.6.L93.B0']) {
+      testing.expectEqual(`${codec}=true`, `${codec}=${await supported(C, codec, extra)}`);
+    }
+    // Case-sensitive, and a bare family name is not a codec string.
+    for (const codec of ['vp9', 'h264', 'theora', 'mp4v.20.8', 'VP8', 'Vp8', 'AVC1.42E01E', 'VP09.00.10.08']) {
+      testing.expectEqual(`${codec}=false`, `${codec}=${await supported(C, codec, extra)}`);
+    }
+    // prefer-hardware finds nothing on this box.
+    testing.expectFalse(await supported(C, 'vp8', { ...extra, hardwareAcceleration: 'prefer-hardware' }));
+    testing.expectTrue(await supported(C, 'vp8', { ...extra, hardwareAcceleration: 'prefer-software' }));
+  }
+
+  for (const codec of ['opus', 'mp3', 'mp4a.40.2', 'mp4a.40.5', 'alaw', 'ulaw', 'pcm-u8', 'pcm-s16', 'pcm-s24', 'pcm-s32', 'pcm-f32']) {
+    testing.expectEqual(`${codec}=true`, `${codec}=${await supported(AudioDecoder, codec, audio)}`);
+  }
+  testing.expectFalse(await supported(AudioDecoder, 'aac', audio));
+
+  for (const codec of ['opus', 'mp4a.40.2', 'mp4a.40.5']) {
+    testing.expectEqual(`${codec}=true`, `${codec}=${await supported(AudioEncoder, codec, audio)}`);
+  }
+  for (const codec of ['mp3', 'vorbis', 'flac', 'alaw', 'ulaw', 'pcm-s16', 'aac']) {
+    testing.expectEqual(`${codec}=false`, `${codec}=${await supported(AudioEncoder, codec, audio)}`);
+  }
+
+  // Audio case sensitivity is mixed: the opus / alaw / ulaw / pcm-* names match
+  // case-insensitively and the mp3 / mp4a.40.* ones do not.
+  testing.expectTrue(await supported(AudioDecoder, 'Opus', audio));
+  testing.expectTrue(await supported(AudioDecoder, 'PCM-S16', audio));
+  testing.expectTrue(await supported(AudioDecoder, 'ALAW', audio));
+  testing.expectFalse(await supported(AudioDecoder, 'MP3', audio));
+  testing.expectFalse(await supported(AudioDecoder, 'Mp4a.40.2', audio));
+  testing.expectTrue(await supported(AudioEncoder, 'Opus', audio));
+
+  // vorbis and flac answer supported once a description is there, and they are
+  // among the case-sensitive names -- `Vorbis` is false either way, and without
+  // a description it is plainly unsupported rather than refused.
+  const description = new Uint8Array([1, 2, 3]);
+  testing.expectTrue(await supported(AudioDecoder, 'vorbis', { ...audio, description }));
+  testing.expectTrue(await supported(AudioDecoder, 'flac', { ...audio, description }));
+  testing.expectFalse(await supported(AudioDecoder, 'Vorbis', { ...audio, description }));
+  testing.expectFalse(await supported(AudioDecoder, 'FLAC', { ...audio, description }));
+  testing.expectFalse(await supported(AudioDecoder, 'Vorbis', audio));
+  testing.expectFalse(await supported(AudioEncoder, 'vorbis', { ...audio, description }));
+</script>
+
+<script type=module id=webcodecs_codec_description_echo>
+  // A `description` never comes back the way it went in: Chrome answers with a
+  // fresh ArrayBuffer holding a copy of exactly the bytes the view covered
+  // (win50-chrome.json).
+  const big = new Uint8Array([9, 8, 7, 6, 5, 4, 3, 2]);
+  const view = new Uint8Array(big.buffer, 2, 3);
+  const first = (await AudioDecoder.isConfigSupported({
+    codec: 'opus', sampleRate: 48000, numberOfChannels: 2, description: view,
+  })).config.description;
+
+  testing.expectEqual('[object ArrayBuffer]', Object.prototype.toString.call(first));
+  testing.expectTrue(first instanceof ArrayBuffer);
+  testing.expectEqual(3, first.byteLength);
+  testing.expectEqual([7, 6, 5], Array.from(new Uint8Array(first)));
+  testing.expectFalse(first === big.buffer);
+  // JSON sees an ArrayBuffer as an empty object, which is how the echo reads
+  // in a stringified probe.
+  testing.expectEqual('{}', JSON.stringify(first));
+
+  // A whole ArrayBuffer is copied too, and a second call is a second object.
+  const whole = (await AudioDecoder.isConfigSupported({
+    codec: 'opus', sampleRate: 48000, numberOfChannels: 2, description: big.buffer,
+  })).config.description;
+  testing.expectEqual(8, whole.byteLength);
+  testing.expectFalse(whole === big.buffer);
+  const again = (await AudioDecoder.isConfigSupported({
+    codec: 'opus', sampleRate: 48000, numberOfChannels: 2, description: big.buffer,
+  })).config.description;
+  testing.expectFalse(again === whole);
+
+  // VideoDecoderConfig carries one as well, and neither takes a string.
+  testing.expectEqual(
+    '[object ArrayBuffer]',
+    Object.prototype.toString.call(
+      (await VideoDecoder.isConfigSupported({ codec: 'vp8', description: new Uint8Array([1]) })).config.description,
+    ),
+  );
+  await VideoDecoder.isConfigSupported({ codec: 'vp8', description: 'x' }).then(
+    () => testing.expectEqual('rejected', 'resolved'),
+    (e) => testing.expectEqual(
+      "Failed to execute 'isConfigSupported' on 'VideoDecoder': Failed to read the 'description' property " +
+        "from 'VideoDecoderConfig': The provided value is not of type " +
+        "'([AllowShared] ArrayBuffer or [AllowShared] ArrayBufferView)'.",
+      e.message,
+    ),
+  );
+</script>
+
+<script type=module id=webcodecs_codec_async_error>
+  // A codec string that passes validation but that nothing supports is not a
+  // synchronous refusal: configure() returns undefined, the state stays
+  // 'configured', and only on a later task does the error callback fire with a
+  // real DOMException and the state become 'closed'.
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  const cases = [
+    [VideoDecoder, { codec: 'theora' }, 'NotSupportedError: Unknown or ambiguous codec name.'],
+    [AudioDecoder, { codec: 'aac', sampleRate: 48000, numberOfChannels: 2 }, 'NotSupportedError: Unknown or ambiguous codec name.'],
+    [VideoEncoder, { codec: 'theora', width: 320, height: 240 }, 'NotSupportedError: Unsupported codec type.'],
+    // Chrome reports a channel count it never parsed here -- "received 0" even
+    // though the config passed 2. Transcribed as measured.
+    [AudioEncoder, { codec: 'mp3', sampleRate: 48000, numberOfChannels: 2 }, 'NotSupportedError: Unsupported channel count; expected range from 1 to 32, received 0.'],
+  ];
+
+  for (const [C, config, message] of cases) {
+    const seen = [];
+    const c = new C({ output: () => {}, error: (e) => seen.push(`${e instanceof DOMException}/${e.name}: ${e.message}`) });
+    testing.expectEqual(undefined, c.configure(config));
+    testing.expectEqual('configured', c.state);
+    testing.expectEqual([], seen);
+    // Configuring twice with the same bad codec still produces exactly one.
+    c.configure(config);
+    await settle();
+    testing.expectEqual([`true/${message}`], seen);
+    testing.expectEqual('closed', c.state);
+  }
+
+  // A supported codec fires nothing and stays configured.
+  {
+    const seen = [];
+    const c = new VideoDecoder({ output: () => {}, error: (e) => seen.push(e.message) });
+    c.configure({ codec: 'vp8' });
+    await settle();
+    testing.expectEqual([], seen);
+    testing.expectEqual('configured', c.state);
+    testing.expectEqual(0, c.decodeQueueSize);
+  }
+</script>
+
+<script type=module id=webcodecs_codec_work>
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 240;
+
+  const chunk = (Cls, type) => new Cls({ data: new Uint8Array([1, 2, 3, 4]), type, timestamp: 0 });
+  const samples = () => new AudioData({
+    format: 's16', sampleRate: 48000, numberOfFrames: 480, numberOfChannels: 2,
+    timestamp: 0, data: new Int16Array(960),
+  });
+
+  // A VideoDecoder never accepts a synthesised chunk: a `key` one is told it is
+  // not really a key frame, a `delta` one gets the shorter refusal.
+  {
+    const c = new VideoDecoder({ output: () => {}, error: () => {} });
+    c.configure({ codec: 'vp8' });
+    testing.expectError(
+      "Failed to execute 'decode' on 'VideoDecoder': An EncodedVideoChunk was marked as type `key` " +
+        'but wasn\'t a key frame. A key frame is required after configure() or flush().',
+      () => c.decode(chunk(EncodedVideoChunk, 'key')),
+    );
+    testing.expectError(
+      "Failed to execute 'decode' on 'VideoDecoder': A key frame is required after configure() or flush().",
+      () => c.decode(chunk(EncodedVideoChunk, 'delta')),
+    );
+    testing.expectEqual(0, c.decodeQueueSize);
+  }
+
+  // An AudioDecoder takes a `key` chunk, and its `delta` refusal carries no
+  // message text at all after the prefix.
+  {
+    const c = new AudioDecoder({ output: () => {}, error: () => {} });
+    c.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2 });
+    testing.expectError(
+      "Failed to execute 'decode' on 'AudioDecoder'",
+      () => c.decode(chunk(EncodedAudioChunk, 'delta')),
+    );
+    testing.expectEqual(undefined, c.decode(chunk(EncodedAudioChunk, 'key')));
+    testing.expectEqual(1, c.decodeQueueSize);
+    await settle();
+    testing.expectEqual(0, c.decodeQueueSize);
+  }
+
+  // An encoder refuses a closed input.
+  {
+    const c = new VideoEncoder({ output: () => {}, error: () => {} });
+    c.configure({ codec: 'vp8', width: 320, height: 240 });
+    const frame = new VideoFrame(canvas, { timestamp: 0 });
+    frame.close();
+    testing.expectError(
+      "Failed to execute 'encode' on 'VideoEncoder': Cannot encode closed input.",
+      () => c.encode(frame),
+    );
+    const a = samples();
+    a.close();
+    const ae = new AudioEncoder({ output: () => {}, error: () => {} });
+    ae.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2 });
+    testing.expectError(
+      "Failed to execute 'encode' on 'AudioEncoder': Cannot encode closed input.",
+      () => ae.encode(a),
+    );
+  }
+
+  // A successful submission raises the queue, and a later task dispatches a
+  // `dequeue` Event on the codec and drops it back to zero.
+  {
+    const c = new AudioEncoder({ output: () => {}, error: () => {} });
+    c.configure({ codec: 'opus', sampleRate: 48000, numberOfChannels: 2 });
+    const seen = [];
+    c.ondequeue = (e) => seen.push(
+      `attr:${e.type}/${e.bubbles}/${e.cancelable}/${e.composed}/${e.isTrusted}/${e.target === c}/${e.eventPhase}`,
+    );
+    c.addEventListener('dequeue', (e) => seen.push(`listener:${e.type}`));
+    testing.expectEqual(undefined, c.encode(samples()));
+    testing.expectEqual(1, c.encodeQueueSize);
+    testing.expectEqual([], seen);
+    await settle();
+    testing.expectEqual(['attr:dequeue/false/false/false/true/true/2', 'listener:dequeue'], seen);
+    testing.expectEqual(0, c.encodeQueueSize);
+    testing.expectEqual('configured', c.state);
+  }
+</script>
+
+<script type=module id=webcodecs_codec_flush>
+  const rejects = async (promise, message) => {
+    let caught = null;
+    await promise.then(() => { caught = 'resolved'; }, (e) => { caught = `${e.name}: ${e.message}`; });
+    testing.expectEqual(message, caught);
+  };
+
+  for (const [C, config] of [
+    [VideoDecoder, { codec: 'vp8' }],
+    [VideoEncoder, { codec: 'vp8', width: 320, height: 240 }],
+    [AudioDecoder, { codec: 'opus', sampleRate: 48000, numberOfChannels: 2 }],
+    [AudioEncoder, { codec: 'opus', sampleRate: 48000, numberOfChannels: 2 }],
+  ]) {
+    const c = new C({ output: () => {}, error: () => {} });
+    // flush() *rejects* on an unconfigured codec rather than throwing.
+    const pending = c.flush();
+    testing.expectEqual('[object Promise]', Object.prototype.toString.call(pending));
+    await rejects(pending, `InvalidStateError: Failed to execute 'flush' on '${C.name}': Cannot call 'flush' on an unconfigured codec.`);
+
+    c.configure(config);
+    testing.expectEqual(undefined, await c.flush());
+    testing.expectEqual('configured', c.state);
+
+    c.close();
+    await rejects(c.flush(), `InvalidStateError: Failed to execute 'flush' on '${C.name}': Cannot call 'flush' on a closed codec.`);
+  }
+</script>

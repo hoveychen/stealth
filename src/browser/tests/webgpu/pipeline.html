@@ -2,7 +2,7 @@
 <head>
   <title>WebGPU pipeline and encoder interfaces</title>
   <script src="../testing.js"></script>
-  <script src="shape.js"></script>
+  <script src="../shape.js"></script>
 </head>
 
 <script id=webgpu_pipeline_interface_objects>
@@ -21,7 +21,7 @@
       'GPURenderBundleEncoder',
       'GPUCanvasContext',
     ]) {
-      gpuExpectInterfaceObject(name);
+      expectInterfaceObject(name);
     }
   }
 </script>
@@ -40,7 +40,7 @@
       ['GPURenderBundle', 'accessor label[ec-],@@toStringTag=GPURenderBundle'],
       ['GPUCanvasContext', 'get canvas[ec-],configure/1[ecw],getConfiguration/0[ecw],getCurrentTexture/0[ecw],unconfigure/0[ecw],@@toStringTag=GPUCanvasContext'],
     ]) {
-      testing.expectEqual(shape, gpuShape(window[name].prototype));
+      testing.expectEqual(shape, shapeOf(window[name].prototype));
     }
   }
 </script>
@@ -66,7 +66,7 @@
         'resolveQuerySet/5[ecw]',
         '@@toStringTag=GPUCommandEncoder',
       ],
-      gpuShape(GPUCommandEncoder.prototype).split(','),
+      shapeOf(GPUCommandEncoder.prototype).split(','),
     );
   }
 </script>
@@ -88,7 +88,7 @@
         'setImmediates/2[ecw]',
         '@@toStringTag=GPUComputePassEncoder',
       ],
-      gpuShape(GPUComputePassEncoder.prototype).split(','),
+      shapeOf(GPUComputePassEncoder.prototype).split(','),
     );
 
     testing.expectEqual(
@@ -117,7 +117,7 @@
         'setImmediates/2[ecw]',
         '@@toStringTag=GPURenderPassEncoder',
       ],
-      gpuShape(GPURenderPassEncoder.prototype).split(','),
+      shapeOf(GPURenderPassEncoder.prototype).split(','),
     );
 
     testing.expectEqual(
@@ -138,7 +138,7 @@
         'setImmediates/2[ecw]',
         '@@toStringTag=GPURenderBundleEncoder',
       ],
-      gpuShape(GPURenderBundleEncoder.prototype).split(','),
+      shapeOf(GPURenderBundleEncoder.prototype).split(','),
     );
   }
 </script>
