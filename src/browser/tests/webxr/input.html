@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<head>
+  <title>WebXR: input sources and hands</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webxr_input_interface_objects>
+  {
+    // None of the three is constructible, and none has an instance without a
+    // device: an inline session's inputSources is empty and hand tracking is
+    // not a feature it enables (headed Chrome 150, probe-win52/53.js).
+    expectInterfaceObject('XRInputSource');
+    expectInterfaceObject('XRInputSourceArray');
+    expectInterfaceObject('XRHand');
+  }
+</script>
+
+<script id=webxr_input_prototypes>
+  {
+    testing.expectEqual(
+      [
+        'get handedness[ec-]',
+        'get targetRayMode[ec-]',
+        'get targetRaySpace[ec-]',
+        'get gripSpace[ec-]',
+        'get gamepad[ec-]',
+        'get hand[ec-]',
+        'get profiles[ec-]',
+        '@@toStringTag=XRInputSource',
+      ].join(','),
+      shapeOf(XRInputSource.prototype),
+    );
+
+    // Array-like rather than set-like: `length`, and the four iteration
+    // methods come *before* it. @@iterator is the values function itself.
+    testing.expectEqual(
+      'entries/0[ecw],keys/0[ecw],values/0[ecw],forEach/1[ecw],get length[ec-],' +
+        '@@toStringTag=XRInputSourceArray,@@iterator=fn:values',
+      shapeOf(XRInputSourceArray.prototype),
+    );
+    // Chrome hands out the `values` function itself for @@iterator (measured:
+    // `X.prototype[Symbol.iterator] === X.prototype.values`). bridge.iterator
+    // installs a separate function, so the identity does not hold here -- only
+    // the name does, exactly as already recorded for the WebGPU setlikes.
+    testing.expectEqual('values', XRInputSourceArray.prototype[Symbol.iterator].name);
+
+    // Map-like, and the one collection in this family whose @@iterator is
+    // `entries` rather than `values`.
+    testing.expectEqual(
+      'get size[ec-],get/1[ecw],entries/0[ecw],forEach/1[ecw],keys/0[ecw],values/0[ecw],' +
+        '@@toStringTag=XRHand,@@iterator=fn:entries',
+      shapeOf(XRHand.prototype),
+    );
+    testing.expectEqual('entries', XRHand.prototype[Symbol.iterator].name);
+  }
+</script>
