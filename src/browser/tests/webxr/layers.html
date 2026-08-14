@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<head>
+  <title>WebXR: the layer family</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webxr_layer_interface_objects>
+  {
+    // Only two of the fifteen are constructible, and only XRWebGLLayer can
+    // actually be built: XRWebGLBinding refuses an inline session outright
+    // (headed Chrome 150, probe-win52/53.js). The rest come from an
+    // XRWebGLBinding, which means nothing here ever produces one.
+    expectInterfaceObject('XRLayer', { inherits: EventTarget, protoOf: EventTarget.prototype });
+    expectInterfaceObject('XRCompositionLayer', { inherits: XRLayer, protoOf: XRLayer.prototype });
+    for (const name of ['XRCubeLayer', 'XRCylinderLayer', 'XREquirectLayer', 'XRProjectionLayer', 'XRQuadLayer']) {
+      expectInterfaceObject(name, {
+        inherits: XRCompositionLayer,
+        protoOf: XRCompositionLayer.prototype,
+      });
+    }
+    expectInterfaceObject('XRWebGLLayer', {
+      arity: 2,
+      illegal: false,
+      inherits: XRLayer,
+      protoOf: XRLayer.prototype,
+      statics: ['getNativeFramebufferScaleFactor'],
+    });
+    expectInterfaceObject('XRWebGLBinding', { arity: 2, illegal: false });
+    expectInterfaceObject('XRSubImage');
+    expectInterfaceObject('XRWebGLSubImage', { inherits: XRSubImage, protoOf: XRSubImage.prototype });
+    expectInterfaceObject('XRDOMOverlayState');
+    expectInterfaceObject('XRLayerEvent', { arity: 2, illegal: false, inherits: Event, protoOf: Event.prototype });
+    expectInterfaceObject('XRVisibilityMaskChangeEvent', {
+      arity: 2,
+      illegal: false,
+      inherits: Event,
+      protoOf: Event.prototype,
+    });
+  }
+</script>
+
+<script id=webxr_layer_prototypes>
+  {
+    // XRLayer adds nothing of its own -- EventTarget plus a brand.
+    testing.expectEqual('@@toStringTag=XRLayer', shapeOf(XRLayer.prototype));
+    testing.expectEqual(
+      'get layout[ec-],accessor blendTextureSourceAlpha[ec-],accessor forceMonoPresentation[ec-],' +
+        'accessor opacity[ec-],get mipLevels[ec-],get needsRedraw[ec-],destroy/0[ecw],' +
+        '@@toStringTag=XRCompositionLayer',
+      shapeOf(XRCompositionLayer.prototype),
+    );
+    testing.expectEqual(
+      'accessor space[ec-],accessor orientation[ec-],accessor onredraw[ec-],@@toStringTag=XRCubeLayer',
+      shapeOf(XRCubeLayer.prototype),
+    );
+    testing.expectEqual(
+      'accessor space[ec-],accessor transform[ec-],accessor radius[ec-],accessor centralAngle[ec-],' +
+        'accessor aspectRatio[ec-],accessor onredraw[ec-],@@toStringTag=XRCylinderLayer',
+      shapeOf(XRCylinderLayer.prototype),
+    );
+    testing.expectEqual(
+      'accessor space[ec-],accessor transform[ec-],accessor radius[ec-],' +
+        'accessor centralHorizontalAngle[ec-],accessor upperVerticalAngle[ec-],' +
+        'accessor lowerVerticalAngle[ec-],accessor onredraw[ec-],@@toStringTag=XREquirectLayer',
+      shapeOf(XREquirectLayer.prototype),
+    );
+    testing.expectEqual(
+      'get textureWidth[ec-],get textureHeight[ec-],get textureArrayLength[ec-],' +
+        'get ignoreDepthValues[ec-],accessor fixedFoveation[ec-],accessor deltaPose[ec-],' +
+        '@@toStringTag=XRProjectionLayer',
+      shapeOf(XRProjectionLayer.prototype),
+    );
+    testing.expectEqual(
+      'accessor space[ec-],accessor transform[ec-],accessor width[ec-],accessor height[ec-],' +
+        'accessor onredraw[ec-],@@toStringTag=XRQuadLayer',
+      shapeOf(XRQuadLayer.prototype),
+    );
+    testing.expectEqual(
+      'get antialias[ec-],get ignoreDepthValues[ec-],get framebufferWidth[ec-],' +
+        'get framebufferHeight[ec-],get framebuffer[ec-],getViewport/1[ecw],@@toStringTag=XRWebGLLayer',
+      shapeOf(XRWebGLLayer.prototype),
+    );
+    testing.expectEqual(
+      'get nativeProjectionScaleFactor[ec-],get usesDepthValues[ec-],createCubeLayer/1[ecw],' +
+        'createCylinderLayer/1[ecw],createEquirectLayer/1[ecw],createProjectionLayer/0[ecw],' +
+        'createQuadLayer/1[ecw],getSubImage/2[ecw],getViewSubImage/2[ecw],getCameraImage/1[ecw],' +
+        'getDepthInformation/1[ecw],getReflectionCubeMap/1[ecw],@@toStringTag=XRWebGLBinding',
+      shapeOf(XRWebGLBinding.prototype),
+    );
+    testing.expectEqual('get viewport[ec-],@@toStringTag=XRSubImage', shapeOf(XRSubImage.prototype));
+    testing.expectEqual(
+      'get colorTexture[ec-],get depthStencilTexture[ec-],get motionVectorTexture[ec-],' +
+        'get imageIndex[ec-],get colorTextureWidth[ec-],get colorTextureHeight[ec-],' +
+        'get depthStencilTextureWidth[ec-],get depthStencilTextureHeight[ec-],' +
+        'get motionVectorTextureWidth[ec-],get motionVectorTextureHeight[ec-],' +
+        '@@toStringTag=XRWebGLSubImage',
+      shapeOf(XRWebGLSubImage.prototype),
+    );
+    testing.expectEqual('get type[ec-],@@toStringTag=XRDOMOverlayState', shapeOf(XRDOMOverlayState.prototype));
+    testing.expectEqual('get layer[ec-],@@toStringTag=XRLayerEvent', shapeOf(XRLayerEvent.prototype));
+    testing.expectEqual(
+      'get session[ec-],get eye[ec-],get index[ec-],get vertices[ec-],get indices[ec-],' +
+        '@@toStringTag=XRVisibilityMaskChangeEvent',
+      shapeOf(XRVisibilityMaskChangeEvent.prototype),
+    );
+  }
+</script>
+
+<script id=webxr_layer_statics_and_refusals>
+  {
+    testing.expectEqual(1, XRWebGLLayer.getNativeFramebufferScaleFactor.length);
+    testing.expectError(
+      "Failed to execute 'getNativeFramebufferScaleFactor' on 'XRWebGLLayer': " +
+        '1 argument required, but only 0 present.',
+      () => XRWebGLLayer.getNativeFramebufferScaleFactor(),
+    );
+    testing.expectError(
+      "Failed to execute 'getNativeFramebufferScaleFactor' on 'XRWebGLLayer': " +
+        "parameter 1 is not of type 'XRSession'.",
+      () => XRWebGLLayer.getNativeFramebufferScaleFactor(null),
+    );
+    testing.expectError(
+      "Failed to construct 'XRWebGLBinding': 2 arguments required, but only 0 present.",
+      () => new XRWebGLBinding(),
+    );
+    testing.expectError(
+      "Failed to construct 'XRWebGLBinding': parameter 1 is not of type 'XRSession'.",
+      () => new XRWebGLBinding(null, null),
+    );
+    testing.expectError(
+      "Failed to construct 'XRWebGLLayer': 2 arguments required, but only 0 present.",
+      () => new XRWebGLLayer(),
+    );
+    testing.expectError(
+      "Failed to construct 'XRWebGLLayer': 2 arguments required, but only 1 present.",
+      () => new XRWebGLLayer(null),
+    );
+    testing.expectError(
+      "Failed to construct 'XRWebGLLayer': parameter 1 is not of type 'XRSession'.",
+      () => new XRWebGLLayer(null, null),
+    );
+  }
+</script>
+
+<script id=webxr_webgl_xr_compatibility>
+  {
+    // The two hooks WebXR adds to a WebGL context. Both exist on a plain
+    // Chrome, and makeXRCompatible on a context with no XR device rejects
+    // with a bare InvalidStateError (measured).
+    testing.expectEqual('function', typeof WebGLRenderingContext.prototype.makeXRCompatible);
+    testing.expectEqual('function', typeof WebGL2RenderingContext.prototype.makeXRCompatible);
+    testing.expectEqual(0, WebGLRenderingContext.prototype.makeXRCompatible.length);
+    testing.expectEqual(
+      false,
+      document.createElement('canvas').getContext('webgl').getContextAttributes().xrCompatible,
+    );
+  }
+</script>
+
+<script id=webxr_make_xr_compatible type=module>
+  const state = await testing.async();
+  const gl = document.createElement('canvas').getContext('webgl');
+  const outcome = await gl.makeXRCompatible().then(() => 'resolved', (e) => `${e.name}: ${e.message}`);
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(
+      'InvalidStateError: An attempt was made to use an object that is not, or is no longer, usable.',
+      outcome,
+    );
+  });
+</script>

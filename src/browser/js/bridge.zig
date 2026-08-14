@@ -1380,6 +1380,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/webxr/spaces.zig"),
     @import("../webapi/webxr/input.zig"),
     @import("../webapi/webxr/features.zig"),
+    @import("../webapi/webxr/layers.zig"),
+    @import("../webapi/webxr/session.zig"),
 });
 
 // APIs available on every Worker context global (constructors like URL,

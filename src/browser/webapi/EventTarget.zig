@@ -111,6 +111,8 @@ pub const Type = union(enum) {
     audio_decoder: *@import("webcodecs/codecs.zig").AudioDecoder,
     audio_encoder: *@import("webcodecs/codecs.zig").AudioEncoder,
     xr_space: *@import("webxr/spaces.zig").XRSpace,
+    xr_session: *@import("webxr/session.zig").XRSession,
+    xr_layer: *@import("webxr/layers.zig").XRLayer,
 };
 
 pub fn init(page: *Page) !*EventTarget {
@@ -295,6 +297,8 @@ pub fn format(self: *EventTarget, writer: *std.Io.Writer) !void {
         .notification => writer.writeAll("<Notification>"),
         .navigation_history_entry => writer.writeAll("<NavigationHistoryEntry>"),
         .xr_space => writer.writeAll("<XRSpace>"),
+        .xr_session => writer.writeAll("<XRSession>"),
+        .xr_layer => writer.writeAll("<XRLayer>"),
         .audio_node => writer.writeAll("<AudioNode>"),
         .base_audio_context => writer.writeAll("<BaseAudioContext>"),
         .speech_synthesis => writer.writeAll("<SpeechSynthesis>"),
@@ -378,6 +382,8 @@ pub fn toString(self: *EventTarget) []const u8 {
         .notification => return "[object Notification]",
         .navigation_history_entry => return "[object NavigationHistoryEntry]",
         .xr_space => return "[object XRSpace]",
+        .xr_session => return "[object XRSession]",
+        .xr_layer => return "[object XRLayer]",
         .audio_node => return "[object AudioNode]",
         .base_audio_context => return "[object BaseAudioContext]",
         .speech_synthesis => return "[object SpeechSynthesis]",

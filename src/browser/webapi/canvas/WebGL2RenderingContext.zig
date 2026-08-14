@@ -30,6 +30,7 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const objects = @import("webgl_objects.zig");
+const DOMException = @import("../DOMException.zig");
 const WebGL1 = @import("WebGLRenderingContext.zig");
 
 const Execution = js.Execution;
@@ -1188,6 +1189,20 @@ const ContextAttributes = struct {
     xrCompatible: bool = false,
 };
 
+/// WebXR's hook into a WebGL context. Chrome rejects with a bare
+/// InvalidStateError -- "An attempt was made to use an object that is not, or
+/// is no longer, usable." -- when there is no XR device to make the context
+/// compatible *with*, which is every machine this engine runs on (measured on
+/// a headed Chrome 150). The `xrCompatible` context attribute stays false.
+pub fn makeXRCompatible(_: *const WebGL2RenderingContext, exec: *const js.Execution) !js.Promise {
+    var resolver = exec.js.local.?.createPromiseResolver();
+    resolver.reject("webgl", DOMException.init(
+        "An attempt was made to use an object that is not, or is no longer, usable.",
+        "InvalidStateError",
+    ));
+    return resolver.promise();
+}
+
 pub fn getContextAttributes(_: *const WebGL2RenderingContext) ContextAttributes {
     return .{};
 }
@@ -1398,6 +1413,7 @@ pub const JsApi = struct {
     pub const getAttribLocation = bridge.function(WebGL2RenderingContext.getAttribLocation, .{});
     pub const getBufferParameter = bridge.function(WebGL2RenderingContext.getBufferParameter, .{});
     pub const getContextAttributes = bridge.function(WebGL2RenderingContext.getContextAttributes, .{});
+    pub const makeXRCompatible = bridge.function(WebGL2RenderingContext.makeXRCompatible, .{});
     pub const getError = bridge.function(WebGL2RenderingContext.getError, .{});
     pub const getExtension = bridge.function(WebGL2RenderingContext.getExtension, .{});
     pub const getFragDataLocation = bridge.function(WebGL2RenderingContext.getFragDataLocation, .{});
