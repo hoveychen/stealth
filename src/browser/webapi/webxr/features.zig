@@ -125,8 +125,15 @@ fn PointerSet(comptime type_name: []const u8, comptime Item: type) type {
             return .init(.{ .set = self }, exec);
         }
 
-        pub fn forEach(self: *Self, cb_: js.Function, js_this_: ?js.Object) !void {
-            const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
+        /// WebIDL-checked, unlike XRInputSourceArray's, whose no-argument call
+        /// is a plain "undefined is not a function" (both measured).
+        pub fn forEach(self: *Self, cb_: ?js.Function, js_this_: ?js.Object, exec: *const Execution) !void {
+            const given = cb_ orelse return @import("../dictionary.zig").throwTypeError(
+                "Failed to execute 'forEach' on '" ++ type_name ++
+                    "': 1 argument required, but only 0 present.",
+                exec,
+            );
+            const cb = if (js_this_) |js_this| try given.withThis(js_this) else given;
             for (self._items) |item| {
                 var caught: js.TryCatch.Caught = undefined;
                 cb.tryCall(void, .{ item, item, self }, &caught) catch {};
@@ -165,7 +172,7 @@ fn PointerSet(comptime type_name: []const u8, comptime Item: type) type {
 
             pub const size = bridge.accessor(Self.getSize, null, .{});
             pub const entries = bridge.function(Self.entries, .{});
-            pub const forEach = bridge.function(Self.forEach, .{});
+            pub const forEach = bridge.function(Self.forEach, .{ .arity = 1 });
             pub const has = bridge.function(Self.has, .{ .arity = 1 });
             pub const keys = bridge.function(Self.keys, .{});
             pub const values = bridge.function(Self.values, .{});

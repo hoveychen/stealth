@@ -1152,3 +1152,130 @@ WebCodecs:
   problem — it belongs with the G3/G4 rasteriser work — but it is what
   `frames.html` had to route around, and it is worth fixing before any canvas
   claim is made.
+
+## G17 batch 18: WebXR (P12)
+
+Forty-nine new window globals, which is the largest single block in G17 and is
+larger than the sixty-five-key gap it was scoped from. `creep-features-missing`
+named 34 `XR*` keys, because CreepJS's key table is frozen at Chrome 115.
+`Object.getOwnPropertyNames(window)` on the reference Chrome 150 carries **50**;
+this engine had exactly one, `XRSystem`. The batch closes all 49.
+
+The probes are `stealth-detector-probes/win-batch/probe-win52.js` (the whole
+family's shapes, the entry point, and the two constructible types), `-win53`
+(the fifteen globals CreepJS's table predates, plus a live session end to end),
+`-win54` (the frame loop), `-win55` (the collections and `end`), and `-win56`
+(a short-window replay of the last two, for diffing this engine against
+Chrome). `win52-findings.md` is the readable summary. Everything ran at
+`http://localhost:8731/` — WebXR is `[SecureContext]` and localhost counts, so
+no https server was needed.
+
+One measurement decided the shape of the whole batch:
+**`navigator.xr.requestSession('inline')` RESOLVES on a plain desktop Chrome
+with no headset.** `isSessionSupported('inline')` is true, the two immersive
+modes are false, and the inline session hands out a reference space, a render
+state and a running frame loop. So the session surface is reachable from
+ordinary script on an ordinary machine and could not be stubbed as "no device,
+everything rejects" — that is itself a fingerprint. This engine used to answer
+`false` to `isSessionSupported('inline')` and throw `SecurityError: The
+operation is insecure` from every `requestSession`.
+
+Three behaviours behind that are measured, are not in the spec, and are the
+kind a detector can read directly:
+
+- **An inline session's `requestAnimationFrame` does not fire until a
+  `baseLayer` is set.** With no layer the callback never arrives — five seconds,
+  while `window.requestAnimationFrame` keeps ticking in the same page. Set one
+  through `updateRenderState` and the callback lands on the next frame. That
+  timeout is what made `probe-win53` come back empty, and the frame loop here is
+  gated on the render state for exactly that reason.
+- **`updateRenderState` is not visible synchronously.** Right after the call
+  `session.renderState.baseLayer` is still `null` and `depthNear` is still its
+  old value; inside the next frame callback both have landed. So a pending state
+  is held and applied at the top of a frame.
+- **`session.end()` never completes.** It flips the session to ended right away
+  — a second `end()` hands back a promise rejecting with "XRSession has already
+  ended." — but the promise it returns stays pending and no `end` event is ever
+  dispatched. Confirmed with a ten-second window and a 100 ms ticker running
+  alongside (105 ticks observed, so the task queue was healthy), and
+  `visibilityState` stays `"visible"` afterwards.
+
+The inline defaults are all on the record in `win52-findings.md`:
+`environmentBlendMode` "opaque", `interactionMode` "screen-space",
+`preferredReflectionFormat` "rgba16f", `maxRenderLayers` 1, `enabledFeatures`
+`["viewer"]`, `depthNear` 0.1, `depthFar` 1000, `inlineVerticalFieldOfView`
+pi/2, one view with `eye` "none", a projection matrix derived from the render
+state rather than fixed, and a `getViewport` of `0,0,0,0` even though the layer
+reports the canvas' 300x150.
+
+Two smaller measured details worth keeping: `XRRigidTransform` normalises its
+orientation in **double** precision while `XRRay` normalises its direction in
+**float32** (`{3,0,0,4}` gives exactly 0.6 on the transform, `{0,3,4}` gives
+0.6000000238418579 on the ray), and every object-returning accessor hands back
+the same object each time, with `t.inverse.inverse === t` being the original
+object rather than a rebuilt equal one.
+
+CreepJS after the batch: window own keys **1080 → 1129**, window spans
+**87 → 37**, total `.unsupport` spans **211 → 161**. The window key gap went
+from 65 to 31, and every one of the 34 `XR*` entries is closed.
+
+Shape and behaviour diff after the batch, replaying the probes against this
+build: **789 fields, 7 diffs** — `probe-win52` 538 fields / 1 diff,
+`probe-win53` 185 / 4, `probe-win56` 66 / 2. Every one of the seven is a
+pre-existing engine-wide gap rather than anything WebXR-specific; they are
+listed below.
+
+### Where this engine now differs from Chrome, on purpose or otherwise
+
+- **FrozenArray is not reachable from Zig (4 of the 7 diffs).** `enabledFeatures`,
+  `renderState.layers` and `XRInputSourcesChangeEvent.added` are frozen arrays
+  in Chrome with a stable identity; here they are ordinary arrays rebuilt on
+  each read. The contents match. There is no `SetIntegrityLevel` binding in the
+  vendored v8 C API, so this cannot be closed without touching that shim —
+  the same gap `navigator/usb.zig` already records for `packets`.
+- **`X.prototype[Symbol.iterator] === X.prototype.values` does not hold (2 of
+  the 7).** `bridge.iterator` installs a separate function with the right name;
+  Chrome hands out the method itself. Already recorded for the WebGPU setlikes,
+  and it now covers `XRAnchorSet`, `XRPlaneSet` and `XRInputSourceArray` too.
+  The names are right, which is what an enumeration reads.
+- **`HTMLElement.prototype.onbeforexrselect` is still missing (1 of the 7).**
+  `window.onbeforexrselect` exists here; the element one is one of G20's
+  twenty-four `HTMLElement.prototype` members and belongs to that batch.
+- **The set-like iterators are unbranded.** Chrome's `trackedAnchors.values()`
+  is `[object XRAnchorSet Iterator]` and `inputSources.entries()` is `[object
+  Array Iterator]`; the generic iterator here carries no `Symbol.toStringTag`
+  and no window global, matching what the WebGPU setlikes already do. Both
+  collections are empty on any machine without a device, so an enumeration sees
+  the same thing either way.
+- **`XRInputSourceArray.forEach()` with no argument** is a plain
+  "invalid argument" here against Chrome's "undefined is not a function". The
+  set-likes' `forEach` *is* WebIDL-checked in both, and that message is
+  reproduced exactly — the difference between the two is itself measured.
+- **`pauseDepthSensing` / `resumeDepthSensing` pick their refusal from whether a
+  frame has ever run.** Chrome answers InvalidStateError ("Not called from
+  inside an active animation frame.") before any frame and NotSupportedError
+  ("Depth sensing feature is not supported by the session.") after one. Both
+  readings are measured — `probe-win53` before a baseLayer existed, `probe-win56`
+  after a frame — and this reproduces both, but the exact Blink predicate was
+  not isolated.
+
+### What is still missing
+
+- **No device, so nothing moves.** Every pose is the identity and the single
+  view sits at the origin. That is what Chrome reports on the same machine, so
+  the numbers agree; a headset would part company immediately.
+- **`XRWebGLBinding` can never be constructed.** Every session this engine hands
+  out is inline, and Chrome refuses a binding for an inline session outright, so
+  the constructor always ends in the same InvalidStateError. That means
+  `XRCompositionLayer` and its five subclasses, `XRSubImage` and
+  `XRWebGLSubImage` have no instance — only their interface objects, which is
+  what the window surface is about.
+- **Eleven of the thirteen feature interfaces have no instance.** Anchors, plane
+  detection, hit-test, light estimation and depth sensing are all refused by
+  name, so `XRAnchor`, `XRPlane`, the four hit-test types, the two light types
+  and the three depth types exist as interface objects only. `XRAnchorSet` and
+  `XRPlaneSet` do have instances: any frame hands back an empty one, and a new
+  one on each read, the way Chrome does.
+- **`XRWebGLLayer.framebuffer` is null and its viewport is all zeroes.** Both
+  match Chrome for an inline session, and both would be real numbers for an
+  immersive one this engine cannot enter.

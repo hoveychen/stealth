@@ -523,7 +523,11 @@
   ]);
 
   const after = {
-    endAgain: err(() => session.end()),
+    // A second end() does not throw: it hands back a rejected promise.
+    endAgainBrand: Object.prototype.toString.call(session.end()),
+    endAgain: await Promise.resolve()
+      .then(() => session.end())
+      .then(() => 'resolved', (e) => `${e.name}: ${e.message}`),
     raf: err(() => session.requestAnimationFrame(() => {})),
     updateRenderState: err(() => session.updateRenderState({ depthNear: 1 })),
     newLayer: err(() => new XRWebGLLayer(session, gl)),
@@ -543,6 +547,7 @@
     testing.expectEqual([], events);
     testing.expectEqual('visible', session.visibilityState);
 
+    testing.expectEqual('[object Promise]', after.endAgainBrand);
     testing.expectEqual(
       "InvalidStateError: Failed to execute 'end' on 'XRSession': XRSession has already ended.",
       after.endAgain,

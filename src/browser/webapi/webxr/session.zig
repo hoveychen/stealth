@@ -213,6 +213,7 @@ pub const XRSession = struct {
     _mode: Mode,
     _ended: bool = false,
     _in_frame: bool = false,
+    _frame_seen: bool = false,
     _scheduled: bool = false,
     _next_handle: u32 = 1,
     _render_state: *XRRenderState,
@@ -472,6 +473,7 @@ pub const XRSession = struct {
         self._callbacks = .empty;
 
         self._in_frame = true;
+        self._frame_seen = true;
         defer self._in_frame = false;
         for (due.items) |entry| {
             if (entry.cancelled) continue;
@@ -487,8 +489,19 @@ pub const XRSession = struct {
 
     /// Flips to ended right away, and hands back a promise that never settles.
     /// Both halves are measured; so is the absence of an `end` event.
+    ///
+    /// A second call does not throw -- it hands back a *rejected* promise
+    /// (measured: `session.end()` on an ended session is [object Promise] that
+    /// rejects with InvalidStateError, not a synchronous TypeError).
     pub fn end(self: *XRSession, exec: *const Execution) !js.Promise {
-        if (self._ended) return ended("end", exec);
+        if (self._ended) {
+            var resolver = exec.js.local.?.createPromiseResolver();
+            resolver.reject("webxr", @import("../DOMException.zig").init(
+                "Failed to execute 'end' on 'XRSession': XRSession has already ended.",
+                "InvalidStateError",
+            ));
+            return resolver.promise();
+        }
         self._ended = true;
         self._callbacks.clearRetainingCapacity();
         const resolver = exec.js.local.?.createPromiseResolver();
@@ -536,10 +549,12 @@ pub const XRSession = struct {
         return featureRefusal("requestLightProbe", "light-estimation", exec);
     }
 
-    /// Outside a frame Chrome complains about the frame, not about the
-    /// feature; inside one it complains about the feature (measured both ways).
+    /// Before any frame has run Chrome complains about the frame; once one has,
+    /// it complains about the feature instead. Both readings are measured
+    /// (probe-win53 before a baseLayer existed, probe-win56 after a frame), and
+    /// the exact Blink predicate was not isolated -- this reproduces both.
     fn depthSensing(self: *XRSession, comptime method: []const u8, exec: *const Execution) anyerror {
-        if (!self._in_frame) {
+        if (!self._frame_seen) {
             return dictionary.throwDom(
                 "InvalidStateError",
                 "Failed to execute '" ++ method ++ "' on 'XRSession': " ++
