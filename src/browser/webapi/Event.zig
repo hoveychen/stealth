@@ -97,6 +97,8 @@ pub const Type = union(enum) {
     idb_version_change_event: *@import("storage/idb/IDBVersionChangeEvent.zig"),
     toggle_event: *@import("event/ToggleEvent.zig"),
     speech_synthesis_event: *@import("speech/SpeechSynthesisEvent.zig"),
+    speech_recognition_event: *@import("speech/recognition.zig").SpeechRecognitionEvent,
+    speech_recognition_error_event: *@import("speech/recognition.zig").SpeechRecognitionErrorEvent,
     rtc_peer_connection_ice_event: *@import("webrtc/RTCPeerConnectionIceEvent.zig"),
     rtc_peer_connection_ice_error_event: *@import("webrtc/events.zig").RTCPeerConnectionIceErrorEvent,
     rtc_error_event: *@import("webrtc/events.zig").RTCErrorEvent,
@@ -286,6 +288,8 @@ pub fn is(self: *Event, comptime T: type) ?*T {
             }
             return e.is(T);
         },
+        .speech_recognition_event => |e| return if (T == @import("speech/recognition.zig").SpeechRecognitionEvent) e else null,
+        .speech_recognition_error_event => |e| return if (T == @import("speech/recognition.zig").SpeechRecognitionErrorEvent) e else null,
         .rtc_peer_connection_ice_event => |e| return if (T == @import("webrtc/RTCPeerConnectionIceEvent.zig")) e else null,
         .rtc_peer_connection_ice_error_event => |e| return if (T == @import("webrtc/events.zig").RTCPeerConnectionIceErrorEvent) e else null,
         .rtc_error_event => |e| return if (T == @import("webrtc/events.zig").RTCErrorEvent) e else null,

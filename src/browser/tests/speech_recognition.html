@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+<script src="./shape.js"></script>
+
+<script id=speech_recognition_interfaces>
+{
+  // Every shape and every message below is measured off a headed Chrome 150 over
+  // http://localhost:8731 -- win63-chrome.json, win64-chrome.json,
+  // win65-chrome.json. See speech/recognition.zig.
+
+  // The five names CreepJS counts are the webkit-prefixed spellings, and each
+  // one is the *same object* as its unprefixed twin. Note the fifth: the
+  // prefixed name aliases an interface with a different name.
+  testing.expectEqual(true, webkitSpeechRecognition === SpeechRecognition);
+  testing.expectEqual(true, webkitSpeechGrammar === SpeechGrammar);
+  testing.expectEqual(true, webkitSpeechGrammarList === SpeechGrammarList);
+  testing.expectEqual(true, webkitSpeechRecognitionEvent === SpeechRecognitionEvent);
+  testing.expectEqual(true, webkitSpeechRecognitionError === SpeechRecognitionErrorEvent);
+
+  // ...so the alias reports the *unprefixed* name, and the alias slot on the
+  // global carries the same non-enumerable descriptor.
+  testing.expectEqual('SpeechRecognition', webkitSpeechRecognition.name);
+  testing.expectEqual('SpeechRecognitionErrorEvent', webkitSpeechRecognitionError.name);
+  testing.expectEqual('-cw', windowFlags('webkitSpeechRecognition'));
+  testing.expectEqual('-cw', windowFlags('webkitSpeechRecognitionError'));
+
+  // expectInterfaceObject() is not usable here: it reads
+  // Object.getOwnPropertyDescriptor(ctor, 'prototype'), which throws "Illegal
+  // invocation" on this engine for any interface whose instances carry an
+  // indexed or named interceptor -- pre-existing and engine-wide (FileList,
+  // MediaSource and SpeechSynthesis all throw the same before this batch). So
+  // the parts it would have checked are spelled out.
+  for (const [name, arity] of [['SpeechRecognition', 0], ['SpeechGrammar', 0],
+    ['SpeechGrammarList', 0], ['SpeechRecognitionPhrase', 1],
+    ['SpeechRecognitionEvent', 1], ['SpeechRecognitionErrorEvent', 1]]) {
+    testing.expectEqual('function', typeof window[name]);
+    testing.expectEqual(name, window[name].name);
+    testing.expectEqual(arity, window[name].length);
+    testing.expectEqual('-cw', windowFlags(name));
+    testing.expectError(
+      `Failed to construct '${name}': Please use the 'new' operator, this DOM object constructor cannot be called as a function.`,
+      () => window[name](),
+    );
+  }
+
+  // Only SpeechRecognition inherits; the rest sit straight on Object.prototype.
+  testing.expectTrue(Object.getPrototypeOf(SpeechRecognition) === EventTarget);
+  testing.expectTrue(Object.getPrototypeOf(SpeechRecognition.prototype) === EventTarget.prototype);
+  testing.expectTrue(Object.getPrototypeOf(SpeechGrammar.prototype) === Object.prototype);
+  testing.expectTrue(Object.getPrototypeOf(SpeechGrammarList.prototype) === Object.prototype);
+  testing.expectTrue(Object.getPrototypeOf(SpeechRecognitionPhrase.prototype) === Object.prototype);
+  testing.expectTrue(Object.getPrototypeOf(SpeechRecognitionEvent.prototype) === Event.prototype);
+  testing.expectTrue(Object.getPrototypeOf(SpeechRecognitionErrorEvent.prototype) === Event.prototype);
+
+  // Two statics, and only on SpeechRecognition.
+  testing.expectEqual(
+    ['available', 'install'],
+    Object.getOwnPropertyNames(SpeechRecognition).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+  );
+  for (const name of ['SpeechGrammar', 'SpeechGrammarList', 'SpeechRecognitionPhrase',
+    'SpeechRecognitionEvent', 'SpeechRecognitionErrorEvent']) {
+    testing.expectEqual(
+      [],
+      Object.getOwnPropertyNames(window[name]).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+    );
+  }
+
+}
+</script>
+
+<script id=speech_recognition_absent>
+{
+  // The three result interfaces are NOT globals on Chrome 150 (measured), so
+  // shipping them would be as loud as missing one.
+  testing.expectEqual('undefined', typeof SpeechRecognitionAlternative);
+  testing.expectEqual('undefined', typeof SpeechRecognitionResult);
+  testing.expectEqual('undefined', typeof SpeechRecognitionResultList);
+
+}
+</script>
+
+<script id=speech_recognition_proto_order>
+{
+  // Prototype member order is the fingerprint, so it is pinned unsorted.
+  testing.expectEqual(
+    ['grammars', 'lang', 'continuous', 'interimResults', 'maxAlternatives',
+      'onaudiostart', 'onsoundstart', 'onspeechstart', 'onspeechend', 'onsoundend',
+      'onaudioend', 'onresult', 'onnomatch', 'onerror', 'onstart', 'onend',
+      'abort', 'start', 'stop', 'quality', 'processLocally', 'phrases', 'constructor'],
+    Object.getOwnPropertyNames(SpeechRecognition.prototype),
+  );
+  testing.expectEqual(
+    ['src', 'weight', 'constructor'],
+    Object.getOwnPropertyNames(SpeechGrammar.prototype),
+  );
+  testing.expectEqual(
+    ['length', 'addFromString', 'addFromUri', 'item', 'constructor'],
+    Object.getOwnPropertyNames(SpeechGrammarList.prototype),
+  );
+  testing.expectEqual(
+    ['resultIndex', 'results', 'constructor'],
+    Object.getOwnPropertyNames(SpeechRecognitionEvent.prototype),
+  );
+  testing.expectEqual(
+    ['error', 'message', 'constructor'],
+    Object.getOwnPropertyNames(SpeechRecognitionErrorEvent.prototype),
+  );
+  testing.expectEqual(
+    ['phrase', 'boost', 'constructor'],
+    Object.getOwnPropertyNames(SpeechRecognitionPhrase.prototype),
+  );
+
+}
+</script>
+
+<script id=speech_recognition_proto_shape>
+{
+  testing.expectEqual(
+    'accessor grammars[ec-],accessor lang[ec-],accessor continuous[ec-],' +
+    'accessor interimResults[ec-],accessor maxAlternatives[ec-],' +
+    'accessor onaudiostart[ec-],accessor onsoundstart[ec-],accessor onspeechstart[ec-],' +
+    'accessor onspeechend[ec-],accessor onsoundend[ec-],accessor onaudioend[ec-],' +
+    'accessor onresult[ec-],accessor onnomatch[ec-],accessor onerror[ec-],' +
+    'accessor onstart[ec-],accessor onend[ec-],abort/0[ecw],start/0[ecw],stop/0[ecw],' +
+    'accessor quality[ec-],accessor processLocally[ec-],accessor phrases[ec-],' +
+    '@@toStringTag=SpeechRecognition',
+    shapeOf(SpeechRecognition.prototype),
+  );
+  testing.expectEqual(
+    'accessor src[ec-],accessor weight[ec-],@@toStringTag=SpeechGrammar',
+    shapeOf(SpeechGrammar.prototype),
+  );
+  // `results` and `error` are read-only, unlike everything on SpeechRecognition.
+  testing.expectEqual(
+    'get resultIndex[ec-],get results[ec-],@@toStringTag=SpeechRecognitionEvent',
+    shapeOf(SpeechRecognitionEvent.prototype),
+  );
+  testing.expectEqual(
+    'get error[ec-],get message[ec-],@@toStringTag=SpeechRecognitionErrorEvent',
+    shapeOf(SpeechRecognitionErrorEvent.prototype),
+  );
+  testing.expectEqual(
+    'get phrase[ec-],get boost[ec-],@@toStringTag=SpeechRecognitionPhrase',
+    shapeOf(SpeechRecognitionPhrase.prototype),
+  );
+}
+</script>
+
+<script id=speech_recognition_defaults>
+{
+  const rec = new webkitSpeechRecognition();
+  testing.expectEqual('[object SpeechRecognition]', Object.prototype.toString.call(rec));
+  testing.expectEqual(true, rec instanceof EventTarget);
+
+  testing.expectEqual('[object SpeechGrammarList]', Object.prototype.toString.call(rec.grammars));
+  testing.expectEqual('', rec.lang);
+  testing.expectEqual(false, rec.continuous);
+  testing.expectEqual(false, rec.interimResults);
+  testing.expectEqual(1, rec.maxAlternatives);
+  // Chrome 150 additions, both measured.
+  testing.expectEqual('command', rec.quality);
+  testing.expectEqual(false, rec.processLocally);
+  testing.expectEqual(true, Array.isArray(rec.phrases));
+  testing.expectEqual(0, rec.phrases.length);
+
+  for (const h of ['onaudiostart', 'onsoundstart', 'onspeechstart', 'onspeechend',
+    'onsoundend', 'onaudioend', 'onresult', 'onnomatch', 'onerror', 'onstart', 'onend']) {
+    testing.expectEqual(null, rec[h]);
+  }
+
+  // The four settable properties round-trip.
+  rec.lang = 'en-GB';
+  rec.continuous = true;
+  rec.maxAlternatives = 5;
+  rec.interimResults = true;
+  testing.expectEqual('en-GB', rec.lang);
+  testing.expectEqual(true, rec.continuous);
+  testing.expectEqual(5, rec.maxAlternatives);
+  testing.expectEqual(true, rec.interimResults);
+
+  // `quality` has a setter that does not take: assigning any value leaves
+  // 'command' (measured -- 'accurate' and 'nope' both bounce off).
+  rec.quality = 'accurate';
+  testing.expectEqual('command', rec.quality);
+  rec.quality = 'nope';
+  testing.expectEqual('command', rec.quality);
+  rec.processLocally = true;
+  testing.expectEqual(true, rec.processLocally);
+
+  // `grammars` is settable and keeps identity.
+  const list = new SpeechGrammarList();
+  rec.grammars = list;
+  testing.expectEqual(true, rec.grammars === list);
+
+  // Assigning a non-function to a handler reads back null.
+  rec.onend = 5;
+  testing.expectEqual(null, rec.onend);
+}
+</script>
+
+<script id=speech_grammar_list>
+{
+  const list = new SpeechGrammarList();
+  testing.expectEqual('[object SpeechGrammarList]', Object.prototype.toString.call(list));
+  testing.expectEqual(0, list.length);
+  testing.expectEqual(undefined, list[0]);
+  testing.expectEqual(null, list.item(99));
+
+  // addFromString wraps the source in a data: URI. The escaping is Chrome's --
+  // '#' becomes %23, the spaces %20, ';' %3B.
+  list.addFromString('#JSGF V1.0; grammar t; public <t> = a | b ;', 1);
+  testing.expectEqual(1, list.length);
+  testing.expectEqual('[object SpeechGrammar]', Object.prototype.toString.call(list[0]));
+  testing.expectEqual(
+    'data:application/xml,%23JSGF%20V1.0%3B%20grammar%20t%3B%20public%20%3Ct%3E%20%3D%20a%20%7C%20b%20%3B',
+    list[0].src,
+  );
+  testing.expectEqual(1, list[0].weight);
+
+  // addFromUri stores the URI verbatim. It DOES exist on Chrome 150 -- the
+  // batch-20 P1 probe called it `addFromURI` and read the casing miss as an
+  // absence.
+  list.addFromUri('http://x/y.gram', 0.5);
+  testing.expectEqual(2, list.length);
+  testing.expectEqual('http://x/y.gram', list[1].src);
+  testing.expectEqual(0.5, list[1].weight);
+  list.addFromUri('http://x/z.gram');
+  testing.expectEqual(1, list[2].weight);
+
+  testing.expectEqual(true, list.item(0) === list[0]);
+  testing.expectEqual(
+    ['data:application/xml,%23JSGF%20V1.0%3B%20grammar%20t%3B%20public%20%3Ct%3E%20%3D%20a%20%7C%20b%20%3B',
+      'http://x/y.gram', 'http://x/z.gram'],
+    [...list].map((g) => g.src),
+  );
+
+  // The indexed slot is an own property. Chrome renders it
+  // enumerable/non-writable and this engine renders it non-enumerable/writable
+  // -- an engine-wide property of bridge.indexed (FileList reads back the same
+  // way, before this batch), tracked separately rather than worked around here.
+  testing.expectEqual(true, Object.getOwnPropertyDescriptor(list, '0') !== undefined);
+  testing.expectEqual(true, Object.getOwnPropertyDescriptor(list, '0').configurable);
+
+  // Chrome carries Symbol.iterator but no `values` on the prototype (measured),
+  // so the two are not the same function -- there is nothing to be the same as.
+  testing.expectEqual('undefined', typeof SpeechGrammarList.prototype.values);
+  testing.expectEqual('function', typeof SpeechGrammarList.prototype[Symbol.iterator]);
+
+  const g = list[1];
+  g.src = 'http://q/';
+  g.weight = 0.25;
+  testing.expectEqual('http://q/', g.src);
+  testing.expectEqual(0.25, g.weight);
+
+  const fresh = new SpeechGrammar();
+  testing.expectEqual('', fresh.src);
+  testing.expectEqual(1, fresh.weight);
+
+  testing.expectError(
+    "Failed to execute 'addFromString' on 'SpeechGrammarList': 1 argument required, but only 0 present.",
+    () => list.addFromString(),
+  );
+  testing.expectError(
+    "Failed to execute 'addFromUri' on 'SpeechGrammarList': 1 argument required, but only 0 present.",
+    () => list.addFromUri(),
+  );
+  testing.expectError(
+    "Failed to execute 'item' on 'SpeechGrammarList': 1 argument required, but only 0 present.",
+    () => list.item(),
+  );
+}
+</script>
+
+<script id=speech_recognition_events>
+{
+  // Both event interfaces are constructible from a page and both require a type.
+  const e = new SpeechRecognitionEvent('result');
+  testing.expectEqual('[object SpeechRecognitionEvent]', Object.prototype.toString.call(e));
+  testing.expectEqual(true, e instanceof Event);
+  testing.expectEqual('result', e.type);
+  testing.expectEqual(0, e.resultIndex);
+  // `results` has no default and there is no SpeechRecognitionResultList to make
+  // one out of, so Chrome answers null (measured).
+  testing.expectEqual(null, e.results);
+
+  const err = new SpeechRecognitionErrorEvent('error');
+  testing.expectEqual('[object SpeechRecognitionErrorEvent]', Object.prototype.toString.call(err));
+  testing.expectEqual(true, err instanceof Event);
+  testing.expectEqual('', err.error);
+  testing.expectEqual('', err.message);
+
+  const err2 = new SpeechRecognitionErrorEvent('error', { error: 'aborted', message: 'm' });
+  testing.expectEqual('aborted', err2.error);
+  testing.expectEqual('m', err2.message);
+
+  testing.expectError(
+    "Failed to construct 'SpeechRecognitionEvent': 1 argument required, but only 0 present.",
+    () => new SpeechRecognitionEvent(),
+  );
+  testing.expectError(
+    "Failed to construct 'SpeechRecognitionErrorEvent': 1 argument required, but only 0 present.",
+    () => new SpeechRecognitionErrorEvent(),
+  );
+
+  const p = new SpeechRecognitionPhrase('hi', 2);
+  testing.expectEqual('hi', p.phrase);
+  testing.expectEqual(2, p.boost);
+  testing.expectEqual(1, new SpeechRecognitionPhrase('hi').boost);
+  testing.expectError(
+    "Failed to construct 'SpeechRecognitionPhrase': 1 argument required, but only 0 present.",
+    () => new SpeechRecognitionPhrase(),
+  );
+}
+</script>
+
+<script id=speech_recognition_statics type=module>
+{
+  const state = await testing.async();
+  const available = await SpeechRecognition.available({ langs: ['en-US'] });
+  const local = await SpeechRecognition.available({ langs: ['en-US'], processLocally: true });
+  let noArgs = null;
+  try { await SpeechRecognition.available(); } catch (e) { noArgs = e.message; }
+  let installNoArgs = null;
+  try { await SpeechRecognition.install(); } catch (e) { installNoArgs = e.message; }
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(1, SpeechRecognition.available.length);
+    testing.expectEqual(1, SpeechRecognition.install.length);
+    // Measured on a Chrome 150 with no on-device model installed: the cloud
+    // service is available, the local one is only downloadable.
+    testing.expectEqual('available', available);
+    testing.expectEqual('downloadable', local);
+    testing.expectEqual(
+      "Failed to execute 'available' on 'SpeechRecognition': 1 argument required, but only 0 present.",
+      noArgs,
+    );
+    testing.expectEqual(
+      "Failed to execute 'install' on 'SpeechRecognition': 1 argument required, but only 0 present.",
+      installNoArgs,
+    );
+  });
+}
+</script>
+
+<script id=speech_recognition_lifecycle type=module>
+{
+  const state = await testing.async();
+
+  // There is no microphone here and there is none in a headless Chrome either:
+  // start() resolves into `error` (not-allowed) followed by `end`, measured as
+  // one pair ~50ms after the call. Reproducing the failure rather than the
+  // absence is the point -- a page that waits for onend must not hang.
+  const rec = new webkitSpeechRecognition();
+  const log = [];
+  for (const t of ['audiostart', 'soundstart', 'speechstart', 'speechend', 'soundend',
+    'audioend', 'result', 'nomatch', 'error', 'start', 'end']) {
+    rec.addEventListener(t, (ev) => log.push(t === 'error' ? `error(${ev.error})` : t));
+  }
+  const startReturn = rec.start();
+  let twice = null;
+  try { rec.start(); } catch (e) { twice = `${e.name}: ${e.message}`; }
+  await new Promise((r) => setTimeout(r, 150));
+
+  // Once the failure has settled it can be started again, and the same pair
+  // arrives a second time.
+  rec.start();
+  await new Promise((r) => setTimeout(r, 150));
+
+  // stop() while the permission check is still outstanding cuts it short: `end`
+  // arrives on its own, with no error (measured). abort() behaves identically.
+  const stopped = new webkitSpeechRecognition();
+  const stopLog = [];
+  stopped.addEventListener('error', () => stopLog.push('error'));
+  stopped.addEventListener('end', () => stopLog.push('end'));
+  stopped.start();
+  const stopReturn = stopped.stop();
+  await new Promise((r) => setTimeout(r, 150));
+
+  const aborted = new webkitSpeechRecognition();
+  const abortLog = [];
+  aborted.addEventListener('error', () => abortLog.push('error'));
+  aborted.addEventListener('end', () => abortLog.push('end'));
+  aborted.start();
+  const abortReturn = aborted.abort();
+  await new Promise((r) => setTimeout(r, 150));
+
+  // stop()/abort() on an idle object emit nothing at all.
+  const idle = new webkitSpeechRecognition();
+  const idleLog = [];
+  idle.addEventListener('end', () => idleLog.push('end'));
+  idle.stop();
+  idle.abort();
+  await new Promise((r) => setTimeout(r, 150));
+
+  // The handler properties see the same events as the listeners, and the error
+  // event carries the brand the family is named for.
+  const handler = new webkitSpeechRecognition();
+  const seen = [];
+  let errorBrand = null;
+  let errorMessage = null;
+  handler.onerror = (ev) => {
+    seen.push('onerror');
+    errorBrand = Object.prototype.toString.call(ev);
+    errorMessage = ev.message;
+  };
+  handler.onend = () => seen.push('onend');
+  handler.start();
+  await new Promise((r) => setTimeout(r, 150));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(undefined, startReturn);
+    testing.expectEqual(
+      "InvalidStateError: Failed to execute 'start' on 'SpeechRecognition': recognition has already started.",
+      twice,
+    );
+    testing.expectEqual(
+      ['error(not-allowed)', 'end', 'error(not-allowed)', 'end'],
+      log,
+    );
+    testing.expectEqual(undefined, stopReturn);
+    testing.expectEqual(['end'], stopLog);
+    testing.expectEqual(undefined, abortReturn);
+    testing.expectEqual(['end'], abortLog);
+    testing.expectEqual([], idleLog);
+    testing.expectEqual(['onerror', 'onend'], seen);
+    testing.expectEqual('[object SpeechRecognitionErrorEvent]', errorBrand);
+    testing.expectEqual('', errorMessage);
+  });
+}
+</script>

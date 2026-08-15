@@ -680,33 +680,7 @@ fn fileFromDiskPath(path: []const u8, page: *Page) !*File {
 }
 
 fn mimeFromExtension(name: []const u8) []const u8 {
-    const dot = std.mem.lastIndexOfScalar(u8, name, '.') orelse return "application/octet-stream";
-    if (dot + 1 >= name.len) return "application/octet-stream";
-    var buf: [16]u8 = undefined;
-    const ext_raw = name[dot + 1 ..];
-    if (ext_raw.len > buf.len) return "application/octet-stream";
-    const ext = std.ascii.lowerString(buf[0..ext_raw.len], ext_raw);
-
-    const Map = std.StaticStringMap([]const u8);
-    const map = Map.initComptime(.{
-        .{ "txt", "text/plain" },
-        .{ "html", "text/html" },
-        .{ "htm", "text/html" },
-        .{ "css", "text/css" },
-        .{ "js", "text/javascript" },
-        .{ "json", "application/json" },
-        .{ "xml", "application/xml" },
-        .{ "pdf", "application/pdf" },
-        .{ "png", "image/png" },
-        .{ "jpg", "image/jpeg" },
-        .{ "jpeg", "image/jpeg" },
-        .{ "gif", "image/gif" },
-        .{ "webp", "image/webp" },
-        .{ "svg", "image/svg+xml" },
-        .{ "csv", "text/csv" },
-        .{ "zip", "application/zip" },
-    });
-    return map.get(ext) orelse "application/octet-stream";
+    return @import("../../browser/mime.zig").fromExtension(name);
 }
 
 const testing = @import("../testing.zig");

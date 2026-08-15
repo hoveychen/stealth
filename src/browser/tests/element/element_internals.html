@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+<script src="../shape.js"></script>
+
+<script id=element_internals_shape>
+{
+  // Measured on a headed Chrome 150 -- win63-chrome.json (shapes.ElementInternals)
+  // and win64-chrome.json (the `internals` section), through a form-associated
+  // custom element inside a <form>.
+  testing.expectEqual('function', typeof ElementInternals);
+  testing.expectEqual('ElementInternals', ElementInternals.name);
+  testing.expectEqual(0, ElementInternals.length);
+  testing.expectEqual('-cw', windowFlags('ElementInternals'));
+  testing.expectTrue(Object.getPrototypeOf(ElementInternals) === Function.prototype);
+  testing.expectTrue(Object.getPrototypeOf(ElementInternals.prototype) === Object.prototype);
+  testing.expectEqual('ElementInternals', ElementInternals.prototype[Symbol.toStringTag]);
+  testing.expectError("Failed to construct 'ElementInternals': Illegal constructor", () => new ElementInternals());
+  testing.expectEqual(
+    [],
+    Object.getOwnPropertyNames(ElementInternals).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+  );
+
+  // The 62 prototype members, in Chrome's own order.
+  const getterOnly = ['form', 'willValidate', 'validity', 'validationMessage', 'labels', 'states', 'shadowRoot'];
+  const accessors = ['role',
+    'ariaAtomic', 'ariaAutoComplete', 'ariaBusy', 'ariaBrailleLabel', 'ariaBrailleRoleDescription',
+    'ariaChecked', 'ariaColCount', 'ariaColIndex', 'ariaColSpan', 'ariaCurrent', 'ariaDescription',
+    'ariaDisabled', 'ariaExpanded', 'ariaHasPopup', 'ariaHidden', 'ariaInvalid', 'ariaKeyShortcuts',
+    'ariaLabel', 'ariaLevel', 'ariaLive', 'ariaModal', 'ariaMultiLine', 'ariaMultiSelectable',
+    'ariaOrientation', 'ariaPlaceholder', 'ariaPosInSet', 'ariaPressed', 'ariaReadOnly', 'ariaRelevant',
+    'ariaRequired', 'ariaRoleDescription', 'ariaRowCount', 'ariaRowIndex', 'ariaRowSpan', 'ariaSelected',
+    'ariaSetSize', 'ariaSort', 'ariaValueMax', 'ariaValueMin', 'ariaValueNow', 'ariaValueText'];
+  const methods = [['checkValidity', 0], ['reportValidity', 0], ['setFormValue', 1], ['setValidity', 1]];
+  const tail = ['ariaColIndexText', 'ariaRowIndexText', 'ariaActiveDescendantElement',
+    'ariaControlsElements', 'ariaDescribedByElements', 'ariaDetailsElements',
+    'ariaErrorMessageElements', 'ariaFlowToElements', 'ariaLabelledByElements'];
+
+  const expected = getterOnly
+    .concat(accessors)
+    .concat(methods.map((m) => m[0]))
+    .concat(tail)
+    .concat(['constructor']);
+  testing.expectEqual(expected, Object.getOwnPropertyNames(ElementInternals.prototype));
+  testing.expectEqual(62, expected.length - 1);
+
+  for (const name of getterOnly) {
+    const d = Object.getOwnPropertyDescriptor(ElementInternals.prototype, name);
+    testing.expectEqual('function', typeof d.get, { desc: name + ' has a getter' });
+    testing.expectEqual(undefined, d.set, { desc: name + ' has no setter' });
+    testing.expectTrue(d.enumerable);
+    testing.expectTrue(d.configurable);
+  }
+  for (const name of accessors.concat(tail)) {
+    const d = Object.getOwnPropertyDescriptor(ElementInternals.prototype, name);
+    testing.expectEqual('function', typeof d.get, { desc: name + ' has a getter' });
+    testing.expectEqual('function', typeof d.set, { desc: name + ' has a setter' });
+    testing.expectTrue(d.enumerable);
+    testing.expectTrue(d.configurable);
+  }
+  for (const [name, arity] of methods) {
+    const d = Object.getOwnPropertyDescriptor(ElementInternals.prototype, name);
+    testing.expectEqual(arity, d.value.length, { desc: name + ' arity' });
+    testing.expectTrue(d.enumerable);
+    testing.expectTrue(d.writable);
+    testing.expectTrue(d.configurable);
+  }
+}
+</script>
+
+<script id=element_internals_attach>
+{
+  // attachInternals lives on HTMLElement.prototype and refuses anything that is
+  // not a custom element, or a second attach on the same one (both measured).
+  testing.expectEqual('function', typeof HTMLElement.prototype.attachInternals);
+  testing.expectEqual(0, HTMLElement.prototype.attachInternals.length);
+  testing.expectError(
+    "Failed to execute 'attachInternals' on 'HTMLElement': Unable to attach ElementInternals to non-custom elements.",
+    () => document.createElement('div').attachInternals(),
+  );
+
+  class Plain extends HTMLElement {}
+  customElements.define('internals-plain', Plain);
+  const plain = document.createElement('internals-plain');
+  const pi = plain.attachInternals();
+  testing.expectEqual('[object ElementInternals]', Object.prototype.toString.call(pi));
+  testing.expectTrue(pi instanceof ElementInternals);
+  testing.expectError(
+    "Failed to execute 'attachInternals' on 'HTMLElement': ElementInternals for the specified element was already attached.",
+    () => plain.attachInternals(),
+  );
+
+  // Without `static formAssociated`, reading `form` is the one member that
+  // refuses; everything else answers.
+  testing.expectError(
+    "Failed to read the 'form' property from 'ElementInternals': The target element is not a form-associated custom element.",
+    () => pi.form,
+  );
+}
+</script>
+
+<script id=element_internals_form>
+{
+  class FormAssociated extends HTMLElement {
+    static formAssociated = true;
+  }
+  customElements.define('internals-fa', FormAssociated);
+
+  const form = document.createElement('form');
+  const el = document.createElement('internals-fa');
+  form.appendChild(el);
+  document.body.appendChild(form);
+  const i = el.attachInternals();
+
+  testing.expectTrue(i.form === form);
+  testing.expectEqual(true, i.willValidate);
+  testing.expectEqual('[object ValidityState]', Object.prototype.toString.call(i.validity));
+  testing.expectEqual(true, i.validity.valid);
+  testing.expectEqual('', i.validationMessage);
+  testing.expectEqual(0, i.labels.length);
+  testing.expectEqual('[object CustomStateSet]', Object.prototype.toString.call(i.states));
+  testing.expectEqual(0, i.states.size);
+  testing.expectEqual(null, i.shadowRoot);
+  testing.expectEqual(true, i.checkValidity());
+  testing.expectEqual(true, i.reportValidity());
+
+  // setFormValue reaches the form's entry list.
+  testing.expectEqual(undefined, i.setFormValue('v'));
+  testing.expectError(
+    "Failed to execute 'setFormValue' on 'ElementInternals': 1 argument required, but only 0 present.",
+    () => i.setFormValue(),
+  );
+  el.setAttribute('name', 'x');
+  i.setFormValue('v2');
+  testing.expectEqual('x=v2', [...new FormData(form)].map(([k, v]) => `${k}=${v}`).join(','));
+
+  // setValidity: a flag with no message is the only refusal.
+  testing.expectError(
+    "Failed to execute 'setValidity' on 'ElementInternals': 1 argument required, but only 0 present.",
+    () => i.setValidity(),
+  );
+  i.setValidity({});
+  testing.expectEqual(true, i.validity.valid);
+  testing.expectEqual('', i.validationMessage);
+  testing.expectEqual(true, i.willValidate);
+
+  i.setValidity({ customError: true }, 'bad');
+  testing.expectEqual(false, i.validity.valid);
+  testing.expectEqual(true, i.validity.customError);
+  testing.expectEqual('bad', i.validationMessage);
+  testing.expectEqual(false, i.checkValidity());
+
+  testing.expectError(
+    "Failed to execute 'setValidity' on 'ElementInternals': The second argument should not be empty if one or more flags in the first argument are true.",
+    () => i.setValidity({ customError: true }),
+  );
+
+  i.setValidity({});
+  testing.expectEqual(true, i.validity.valid);
+  testing.expectEqual('', i.validationMessage);
+
+  // A form-associated element outside any form still validates; it just has no
+  // owner.
+  const loose = document.createElement('internals-fa');
+  const li = loose.attachInternals();
+  testing.expectEqual(null, li.form);
+  testing.expectEqual(true, li.willValidate);
+  testing.expectEqual(0, li.labels.length);
+}
+</script>
+
+<script id=element_internals_aria>
+{
+  class AriaHost extends HTMLElement {
+    static formAssociated = true;
+  }
+  customElements.define('internals-aria', AriaHost);
+  const el = document.createElement('internals-aria');
+  document.body.appendChild(el);
+  const i = el.attachInternals();
+
+  // ARIA on internals is separate storage: it never reaches the attribute, and
+  // the element's own reflection keeps reading the attribute.
+  testing.expectEqual(null, i.ariaLabel);
+  i.ariaLabel = 'hello';
+  testing.expectEqual('hello', i.ariaLabel);
+  testing.expectEqual(null, el.getAttribute('aria-label'));
+  testing.expectEqual(null, el.ariaLabel);
+  el.setAttribute('aria-label', 'attr');
+  testing.expectEqual('hello', i.ariaLabel);
+  testing.expectEqual('attr', el.ariaLabel);
+  i.ariaLabel = null;
+  testing.expectEqual(null, i.ariaLabel);
+
+  // No member parses its value: a number reads back as a string.
+  i.ariaLevel = 3;
+  testing.expectEqual('3', i.ariaLevel);
+  testing.expectEqual('string', typeof i.ariaLevel);
+
+  // `role` behaves like the aria members, not like a reflection.
+  testing.expectEqual(null, i.role);
+  i.role = 'button';
+  testing.expectEqual('button', i.role);
+  testing.expectEqual(null, el.getAttribute('role'));
+
+  // The element-valued members answer null until assigned, then an Array.
+  testing.expectEqual(null, i.ariaLabelledByElements);
+  testing.expectEqual(null, i.ariaActiveDescendantElement);
+  const target = document.createElement('div');
+  document.body.appendChild(target);
+  i.ariaLabelledByElements = [target];
+  testing.expectEqual(1, i.ariaLabelledByElements.length);
+  testing.expectTrue(i.ariaLabelledByElements[0] === target);
+  testing.expectEqual(null, el.getAttribute('aria-labelledby'));
+  i.ariaActiveDescendantElement = target;
+  testing.expectTrue(i.ariaActiveDescendantElement === target);
+}
+</script>
+
+<script id=element_internals_states>
+{
+  class StateHost extends HTMLElement {
+    static formAssociated = true;
+  }
+  customElements.define('internals-states', StateHost);
+  const el = document.createElement('internals-states');
+  document.body.appendChild(el);
+  const states = el.attachInternals().states;
+
+  testing.expectEqual(0, states.size);
+  testing.expectEqual(undefined, states.add('--on'));
+  testing.expectEqual(1, states.size);
+  testing.expectEqual(true, states.has('--on'));
+  testing.expectEqual(false, states.has('--off'));
+
+  // Chrome does not validate the dashed-ident form (measured, probe-win29).
+  states.add('nope');
+  testing.expectEqual(2, states.size);
+  states.add('--on');
+  testing.expectEqual(2, states.size);
+
+  testing.expectEqual(['--on', 'nope'], [...states]);
+  testing.expectEqual(['--on', 'nope'], [...states.values()]);
+  testing.expectEqual(['--on', 'nope'], [...states.keys()]);
+  testing.expectEqual([['--on', '--on'], ['nope', 'nope']], [...states.entries()]);
+
+  const seen = [];
+  states.forEach((v, k, s) => {
+    seen.push(v + '|' + k + '|' + (s === states));
+  });
+  testing.expectEqual(['--on|--on|true', 'nope|nope|true'], seen);
+
+  testing.expectEqual(true, states.delete('nope'));
+  testing.expectEqual(false, states.delete('nope'));
+  testing.expectEqual(1, states.size);
+  testing.expectEqual(undefined, states.clear());
+  testing.expectEqual(0, states.size);
+
+  testing.expectError(
+    "Failed to execute 'add' on 'CustomStateSet': 1 argument required, but only 0 present.",
+    () => states.add(),
+  );
+
+  // :state() reads the set. Chrome does not fold the dashed-ident form, so the
+  // ident has to match the stored string exactly (measured: after add('--on'),
+  // ':state(on)' is false).
+  states.add('--on');
+  testing.expectEqual(false, el.matches(':state(on)'));
+  testing.expectEqual(true, el.matches(':state(--on)'));
+  testing.expectTrue(document.querySelector(':state(--on)') === el);
+  testing.expectEqual(false, document.createElement('div').matches(':state(--on)'));
+}
+</script>
+</body>

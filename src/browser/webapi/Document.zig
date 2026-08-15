@@ -554,10 +554,28 @@ pub fn createRange(self: *Document, frame: *Frame) !*Range {
     return Range.initIn(self.asNode(), frame);
 }
 
+/// Chrome names the offending type in the refusal rather than answering the
+/// bare "operation is not supported" a plain error.NotSupported produces
+/// (measured on a headed Chrome 150 with `createEvent('MutationEvent')`,
+/// win63-chrome.json). The original casing is echoed, not the normalised one.
+fn invalidEventType(event_type: []const u8, frame: *Frame) anyerror {
+    const local = frame.js.local orelse return error.NotSupported;
+    const message = std.fmt.allocPrint(
+        frame.local_arena,
+        "Failed to execute 'createEvent' on 'Document': The provided event type ('{s}') is invalid.",
+        .{event_type},
+    ) catch return error.NotSupported;
+    const value = local.zigValueToJs(DOMException.init(message, "NotSupportedError"), .{}) catch {
+        return error.JsException;
+    };
+    _ = local.isolate.throwException(value.handle);
+    return error.JsException;
+}
+
 pub fn createEvent(_: *const Document, event_type: []const u8, frame: *Frame) !*@import("Event.zig") {
     const Event = @import("Event.zig");
     if (event_type.len > 100) {
-        return error.NotSupported;
+        return invalidEventType(event_type, frame);
     }
     const normalized = std.ascii.lowerString(&frame.buf, event_type);
 
@@ -646,7 +664,7 @@ pub fn createEvent(_: *const Document, event_type: []const u8, frame: *Frame) !*
             break :blk (try TouchEvent.init("", null, frame)).asEvent();
         }
 
-        return error.NotSupported;
+        return invalidEventType(event_type, frame);
     };
 
     // createEvent returns an uninitialized event: dispatching it before one

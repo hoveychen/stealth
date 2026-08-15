@@ -585,6 +585,25 @@ fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
             return .{ .has = selectors.items };
         }
 
+        // :state(<ident>) matches when the element's internals hold exactly that
+        // string. Chrome does not fold the dashed-ident form, so `add('--on')`
+        // is not found by `:state(on)` (measured, probe-win64).
+        if (std.mem.eql(u8, name, "state")) {
+            _ = self.skipSpaces();
+            const state_start = self.input;
+            var state_i: usize = 0;
+            while (state_i < state_start.len and state_start[state_i] != ')') : (state_i += 1) {}
+            if (state_i == 0 or self.peek() == 0) return error.InvalidPseudoClass;
+
+            const state = try arena.dupe(u8, std.mem.trim(u8, state_start[0..state_i], &std.ascii.whitespace));
+            self.input = state_start[state_i..];
+
+            if (self.peek() != ')') return error.InvalidPseudoClass;
+            self.input = self.input[1..];
+
+            return .{ .state = state };
+        }
+
         if (std.mem.eql(u8, name, "lang")) {
             _ = self.skipSpaces();
             const lang_start = self.input;

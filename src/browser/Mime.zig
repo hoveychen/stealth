@@ -1162,3 +1162,36 @@ test "Mime: prescanCharset" {
     @memcpy(long_html[1050 .. 1050 + suffix.len], suffix);
     try testing.expectEqual(null, Mime.prescanCharset(&long_html));
 }
+
+/// The extension-to-content-type table the CDP file inputs already used, and
+/// the one FileEntry.file() needs: Chrome reports `text/plain` for a `.txt`
+/// entry of the sandboxed filesystem rather than an empty type (measured).
+pub fn fromExtension(name: []const u8) []const u8 {
+    const dot = std.mem.lastIndexOfScalar(u8, name, '.') orelse return "application/octet-stream";
+    if (dot + 1 >= name.len) return "application/octet-stream";
+    var buf: [16]u8 = undefined;
+    const ext_raw = name[dot + 1 ..];
+    if (ext_raw.len > buf.len) return "application/octet-stream";
+    const ext = std.ascii.lowerString(buf[0..ext_raw.len], ext_raw);
+
+    const Map = std.StaticStringMap([]const u8);
+    const map = Map.initComptime(.{
+        .{ "txt", "text/plain" },
+        .{ "html", "text/html" },
+        .{ "htm", "text/html" },
+        .{ "css", "text/css" },
+        .{ "js", "text/javascript" },
+        .{ "json", "application/json" },
+        .{ "xml", "application/xml" },
+        .{ "pdf", "application/pdf" },
+        .{ "png", "image/png" },
+        .{ "jpg", "image/jpeg" },
+        .{ "jpeg", "image/jpeg" },
+        .{ "gif", "image/gif" },
+        .{ "webp", "image/webp" },
+        .{ "svg", "image/svg+xml" },
+        .{ "csv", "text/csv" },
+        .{ "zip", "application/zip" },
+    });
+    return map.get(ext) orelse "application/octet-stream";
+}

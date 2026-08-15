@@ -676,6 +676,11 @@ fn matchesPseudoClass(el: *Node.Element, pseudo: Selector.PseudoClass, scope: *N
             return registry.get(tag_name) != null;
         },
 
+        .state => |expected| {
+            const internals = frame._element_internals.get(el) orelse return false;
+            return internals.hasState(expected);
+        },
+
         // Functional
         .lang => |expected| {
             if (expected.len == 0) return false;

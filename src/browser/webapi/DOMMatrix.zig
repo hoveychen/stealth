@@ -249,13 +249,18 @@ pub const JsApi = struct {
         pub const name = "DOMMatrix";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // WebKitCSSMatrix is the same constructor object, not a copy (measured:
+        // `===` holds, `.name` reports DOMMatrix, and `new WebKitCSSMatrix('nope')`
+        // reports a failure to construct 'DOMMatrix'). One of G17's window keys.
+        pub const constructor_aliases = [_][]const u8{"WebKitCSSMatrix"};
     };
 
     pub const constructor = bridge.constructor(DOMMatrix.init, .{});
 
-    pub const fromMatrix = bridge.function(DOMMatrix.fromMatrix, .{ .static = true });
+    // Chrome's own static order is alphabetical (measured, win63-chrome.json).
     pub const fromFloat32Array = bridge.function(DOMMatrix.fromFloat32Array, .{ .static = true });
     pub const fromFloat64Array = bridge.function(DOMMatrix.fromFloat64Array, .{ .static = true });
+    pub const fromMatrix = bridge.function(DOMMatrix.fromMatrix, .{ .static = true });
 
     // Make the components writable (the read-only getters are reused from the
     // base; the setters are ours).
@@ -283,18 +288,24 @@ pub const JsApi = struct {
     pub const m43 = bridge.accessor(getM(14), setM(14), .{});
     pub const m44 = bridge.accessor(getM(15), setM(15), .{});
 
-    pub const translateSelf = bridge.function(DOMMatrix.translateSelf, .{});
-    pub const scaleSelf = bridge.function(DOMMatrix.scaleSelf, .{});
-    pub const scale3dSelf = bridge.function(DOMMatrix.scale3dSelf, .{});
-    pub const rotateSelf = bridge.function(DOMMatrix.rotateSelf, .{});
-    pub const rotateFromVectorSelf = bridge.function(DOMMatrix.rotateFromVectorSelf, .{});
-    pub const rotateAxisAngleSelf = bridge.function(DOMMatrix.rotateAxisAngleSelf, .{});
-    pub const skewXSelf = bridge.function(DOMMatrix.skewXSelf, .{});
-    pub const skewYSelf = bridge.function(DOMMatrix.skewYSelf, .{});
+    // Chrome declares the mutating operations alphabetically, not in the order
+    // the spec lists them (measured, win63-chrome.json -> shapes.DOMMatrix).
+    pub const invertSelf = bridge.function(DOMMatrix.invertSelf, .{});
     pub const multiplySelf = bridge.function(DOMMatrix.multiplySelf, .{});
     pub const preMultiplySelf = bridge.function(DOMMatrix.preMultiplySelf, .{});
-    pub const invertSelf = bridge.function(DOMMatrix.invertSelf, .{});
-    // setMatrixValue parses a CSS transform string; Window-only.
+    pub const rotateAxisAngleSelf = bridge.function(DOMMatrix.rotateAxisAngleSelf, .{});
+    pub const rotateFromVectorSelf = bridge.function(DOMMatrix.rotateFromVectorSelf, .{});
+    pub const rotateSelf = bridge.function(DOMMatrix.rotateSelf, .{});
+    pub const scale3dSelf = bridge.function(DOMMatrix.scale3dSelf, .{});
+    pub const scaleSelf = bridge.function(DOMMatrix.scaleSelf, .{});
+    pub const skewXSelf = bridge.function(DOMMatrix.skewXSelf, .{});
+    pub const skewYSelf = bridge.function(DOMMatrix.skewYSelf, .{});
+    pub const translateSelf = bridge.function(DOMMatrix.translateSelf, .{});
+    // setMatrixValue parses a CSS transform string; Window-only. It comes from
+    // the legacy WebKitCSSMatrix partial interface, which is why Chrome lists it
+    // *after* `constructor` -- the bridge always appends `constructor` last, so
+    // that one slot stays out of order here (recorded in
+    // tools/fingerprint/README.md).
     pub const setMatrixValue = bridge.function(DOMMatrix.setMatrixValue, .{ .exposed = .window });
 
     fn getM(comptime idx: usize) fn (*const DOMMatrix) f64 {

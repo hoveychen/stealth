@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+<script src="./shape.js"></script>
+
+<script id=legacy_frame_element>
+{
+  // Measured on a headed Chrome 150 -- win63-chrome.json, win64-chrome.json.
+  const f = document.createElement('frame');
+  testing.expectEqual('[object HTMLFrameElement]', Object.prototype.toString.call(f));
+  testing.expectEqual(true, f instanceof HTMLFrameElement);
+  testing.expectEqual(true, f instanceof HTMLElement);
+  testing.expectEqual('-cw', windowFlags('HTMLFrameElement'));
+  testing.expectTrue(Object.getPrototypeOf(HTMLFrameElement) === HTMLElement);
+  // Chrome words this "Failed to construct 'HTMLFrameElement': Illegal
+  // constructor"; this engine throws a TypeError with an empty message for
+  // every element interface (HTMLDivElement reads the same, before this batch),
+  // so only the refusal itself is pinned here.
+  testing.expectError('', () => new HTMLFrameElement());
+
+  testing.expectEqual(
+    ['name', 'scrolling', 'src', 'frameBorder', 'longDesc', 'noResize',
+      'contentDocument', 'contentWindow', 'marginHeight', 'marginWidth', 'constructor'],
+    Object.getOwnPropertyNames(HTMLFrameElement.prototype),
+  );
+  testing.expectEqual(
+    'accessor name[ec-],accessor scrolling[ec-],accessor src[ec-],' +
+    'accessor frameBorder[ec-],accessor longDesc[ec-],accessor noResize[ec-],' +
+    'get contentDocument[ec-],get contentWindow[ec-],accessor marginHeight[ec-],' +
+    'accessor marginWidth[ec-],@@toStringTag=HTMLFrameElement',
+    shapeOf(HTMLFrameElement.prototype),
+  );
+
+  // Every string member defaults to "" and noResize to false; the two content
+  // members are null on a detached frame.
+  testing.expectEqual('', f.name);
+  testing.expectEqual('', f.scrolling);
+  testing.expectEqual('', f.src);
+  testing.expectEqual('', f.frameBorder);
+  testing.expectEqual('', f.longDesc);
+  testing.expectEqual(false, f.noResize);
+  testing.expectEqual('', f.marginHeight);
+  testing.expectEqual('', f.marginWidth);
+  testing.expectEqual(null, f.contentDocument);
+  testing.expectEqual(null, f.contentWindow);
+
+  // Plain attribute reflection, with `noresize` a boolean attribute.
+  f.name = 'n';
+  f.noResize = true;
+  f.marginWidth = '4';
+  testing.expectEqual('n', f.getAttribute('name'));
+  testing.expectEqual('', f.getAttribute('noresize'));
+  testing.expectEqual('4', f.getAttribute('marginwidth'));
+  f.noResize = false;
+  testing.expectEqual(null, f.getAttribute('noresize'));
+
+  // `src` resolves against the document base, unlike the rest.
+  f.setAttribute('src', '/a.html');
+  testing.expectEqual(`${location.origin}/a.html`, f.src);
+}
+</script>
+
+<script id=legacy_menu_element>
+{
+  const m = document.createElement('menu');
+  testing.expectEqual('[object HTMLMenuElement]', Object.prototype.toString.call(m));
+  testing.expectEqual(true, m instanceof HTMLMenuElement);
+  testing.expectEqual('-cw', windowFlags('HTMLMenuElement'));
+  testing.expectError('', () => new HTMLMenuElement());
+  testing.expectEqual(
+    ['compact', 'constructor'],
+    Object.getOwnPropertyNames(HTMLMenuElement.prototype),
+  );
+  testing.expectEqual(
+    'accessor compact[ec-],@@toStringTag=HTMLMenuElement',
+    shapeOf(HTMLMenuElement.prototype),
+  );
+  testing.expectEqual(false, m.compact);
+  m.compact = true;
+  testing.expectEqual(true, m.compact);
+  testing.expectEqual('', m.getAttribute('compact'));
+
+  // `<dir>` still maps to HTMLDirectoryElement, which this engine already had;
+  // it is the neighbour that made the pair worth checking together.
+  testing.expectEqual(
+    '[object HTMLDirectoryElement]',
+    Object.prototype.toString.call(document.createElement('dir')),
+  );
+}
+</script>
+
+<script id=legacy_bitmap_renderer type=module>
+{
+  const state = await testing.async();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 4;
+  const ctx = canvas.getContext('bitmaprenderer');
+  const sameTwice = canvas.getContext('bitmaprenderer') === ctx;
+  const otherAfter = canvas.getContext('2d');
+
+  const source = document.createElement('canvas');
+  source.width = 8;
+  source.height = 8;
+  const bitmap = await createImageBitmap(source);
+  const transferReturn = ctx.transferFromImageBitmap(bitmap);
+  const afterTransfer = `${canvas.width}x${canvas.height}|${bitmap.width}x${bitmap.height}`;
+  const nullReturn = ctx.transferFromImageBitmap(null);
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object ImageBitmapRenderingContext]', Object.prototype.toString.call(ctx));
+    testing.expectEqual(true, ctx.canvas === canvas);
+    testing.expectEqual(true, sameTwice);
+    // A canvas keeps the first context type it was asked for.
+    testing.expectEqual(null, otherAfter);
+    testing.expectEqual('-cw', windowFlags('ImageBitmapRenderingContext'));
+    testing.expectError('', () => new ImageBitmapRenderingContext());
+    testing.expectEqual(
+      ['canvas', 'transferFromImageBitmap', 'constructor'],
+      Object.getOwnPropertyNames(ImageBitmapRenderingContext.prototype),
+    );
+    testing.expectEqual(
+      'get canvas[ec-],transferFromImageBitmap/1[ecw],@@toStringTag=ImageBitmapRenderingContext',
+      shapeOf(ImageBitmapRenderingContext.prototype),
+    );
+
+    // transferFromImageBitmap returns undefined, consumes the bitmap (it reads
+    // back 0x0 afterwards, the same as a closed one), and does NOT resize the
+    // canvas -- a 4x4 canvas fed an 8x8 bitmap stays 4x4. All measured.
+    testing.expectEqual(undefined, transferReturn);
+    testing.expectEqual('4x4|0x0', afterTransfer);
+    // null is accepted and clears, rather than throwing.
+    testing.expectEqual(undefined, nullReturn);
+    testing.expectEqual(4, canvas.width);
+
+    testing.expectError(
+      "Failed to execute 'transferFromImageBitmap' on 'ImageBitmapRenderingContext': 1 argument required, but only 0 present.",
+      () => ctx.transferFromImageBitmap(),
+    );
+    testing.expectError(
+      "Failed to execute 'transferFromImageBitmap' on 'ImageBitmapRenderingContext': parameter 1 is not of type 'ImageBitmap'.",
+      () => ctx.transferFromImageBitmap(5),
+    );
+  });
+}
+</script>
+
+<script id=legacy_webkit_aliases>
+{
+  // Both are the same constructor object as their unprefixed twin (measured
+  // `===`), so they report the unprefixed name and construct the unprefixed
+  // brand -- including in the error message, which names DOMMatrix rather than
+  // WebKitCSSMatrix. That last part is exactly what an alias should do and is
+  // the cheapest way to tell an alias from a copy.
+  testing.expectEqual(true, WebKitCSSMatrix === DOMMatrix);
+  testing.expectEqual(true, WebKitMutationObserver === MutationObserver);
+  testing.expectEqual('DOMMatrix', WebKitCSSMatrix.name);
+  testing.expectEqual('MutationObserver', WebKitMutationObserver.name);
+  testing.expectEqual('-cw', windowFlags('WebKitCSSMatrix'));
+  testing.expectEqual('-cw', windowFlags('WebKitMutationObserver'));
+  testing.expectEqual(0, WebKitCSSMatrix.length);
+  testing.expectEqual(1, WebKitMutationObserver.length);
+
+  const m = new WebKitCSSMatrix();
+  testing.expectEqual('[object DOMMatrix]', Object.prototype.toString.call(m));
+  testing.expectEqual(1, m.a);
+  testing.expectEqual(true, m.is2D);
+
+  const t = new WebKitCSSMatrix('matrix(1, 0, 0, 1, 10, 20)');
+  testing.expectEqual(10, t.e);
+  testing.expectEqual(20, t.f);
+  testing.expectEqual(true, t.is2D);
+
+  // Chrome words this "Failed to construct 'DOMMatrix': Failed to parse
+  // 'nope'." -- note it names DOMMatrix, not WebKitCSSMatrix, which is what an
+  // alias should do. This engine's DOMMatrix says "The string did not match the
+  // expected pattern" instead; that is a DOMMatrix gap, not an alias one, so
+  // only the error name is pinned.
+  testing.expectError('SyntaxError', () => new WebKitCSSMatrix('nope'));
+
+  const observer = new WebKitMutationObserver(() => {});
+  testing.expectEqual('[object MutationObserver]', Object.prototype.toString.call(observer));
+  testing.expectError(
+    "Failed to construct 'MutationObserver': 1 argument required, but only 0 present.",
+    () => new WebKitMutationObserver(),
+  );
+
+  // Chrome's order, which this engine had reversed.
+  testing.expectEqual(
+    ['disconnect', 'observe', 'takeRecords', 'constructor'],
+    Object.getOwnPropertyNames(MutationObserver.prototype),
+  );
+
+  // `options` is optional in the IDL, so Chrome reports arity 1.
+  testing.expectEqual(1, MutationObserver.prototype.observe.length);
+}
+</script>
+
+<script id=legacy_mutation_record_order>
+{
+  // MutationRecord lists the node members before the attribute ones. Its own
+  // block: expectEqual throws, so a failure here would otherwise hide the
+  // DOMMatrix order below.
+  testing.expectEqual(
+    ['type', 'target', 'addedNodes', 'removedNodes', 'previousSibling', 'nextSibling',
+      'attributeName', 'attributeNamespace', 'oldValue', 'constructor'],
+    Object.getOwnPropertyNames(MutationRecord.prototype),
+  );
+}
+</script>
+
+<script id=legacy_matrix_order>
+{
+  // The mutating DOMMatrix operations are declared alphabetically, and the
+  // statics are too. `setMatrixValue` comes from the legacy WebKitCSSMatrix
+  // partial interface, so Chrome lists it *after* `constructor`; the bridge
+  // always appends `constructor` last, so that one slot still differs and the
+  // assertion stops before it.
+  testing.expectEqual(
+    ['a', 'b', 'c', 'd', 'e', 'f',
+      'm11', 'm12', 'm13', 'm14', 'm21', 'm22', 'm23', 'm24',
+      'm31', 'm32', 'm33', 'm34', 'm41', 'm42', 'm43', 'm44',
+      'invertSelf', 'multiplySelf', 'preMultiplySelf', 'rotateAxisAngleSelf',
+      'rotateFromVectorSelf', 'rotateSelf', 'scale3dSelf', 'scaleSelf',
+      'skewXSelf', 'skewYSelf', 'translateSelf'],
+    Object.getOwnPropertyNames(DOMMatrix.prototype).slice(0, 33),
+  );
+  testing.expectEqual(
+    ['fromFloat32Array', 'fromFloat64Array', 'fromMatrix'],
+    Object.getOwnPropertyNames(DOMMatrix).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+  );
+}
+</script>
+
+<script id=legacy_create_event>
+{
+  // createEvent names the type it refused rather than answering the bare
+  // "operation is not supported" (measured on Chrome 150 with MutationEvent,
+  // which Chrome 150 no longer has at all). The original casing is echoed.
+  testing.expectError(
+    "Failed to execute 'createEvent' on 'Document': The provided event type ('MutationEvent') is invalid.",
+    () => document.createEvent('MutationEvent'),
+  );
+  testing.expectError(
+    "Failed to execute 'createEvent' on 'Document': The provided event type ('NoSuchEvent') is invalid.",
+    () => document.createEvent('NoSuchEvent'),
+  );
+  let err;
+  try { document.createEvent('MutationEvent'); } catch (e) { err = e; }
+  testing.expectEqual('NotSupportedError', err.name);
+}
+</script>

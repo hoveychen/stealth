@@ -44,6 +44,7 @@ const VisualViewport = @import("VisualViewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
+const filesystem = @import("filesystem.zig");
 const SpeechSynthesis = @import("speech/SpeechSynthesis.zig");
 const SpeechSynthesisVoice = @import("speech/SpeechSynthesisVoice.zig");
 const Performance = @import("Performance.zig");
@@ -130,6 +131,10 @@ _css_highlights: ?*HighlightRegistry = null,
 // identity across calls.
 _speech_synthesis: ?*SpeechSynthesis = null,
 _voices: ?[]*SpeechSynthesisVoice = null,
+// The two sandboxed filesystems webkitRequestFileSystem hands out, indexed by
+// window.TEMPORARY / window.PERSISTENT. Built on first request and then reused:
+// a second request for the same quota type returns the same object (measured).
+_filesystems: [2]?*@import("filesystem.zig").DOMFileSystem = .{ null, null },
 _performance: Performance,
 // Epoch milliseconds at which the load event fired, or 0 before that. Only
 // chrome.csi() / chrome.loadTimes() read it — both report the load timestamp,
@@ -1775,6 +1780,18 @@ pub const JsApi = struct {
     // while webkitURL === URL).
     pub const webkitRequestAnimationFrame = bridge.function(Window.requestAnimationFrame, .{});
     pub const webkitCancelAnimationFrame = bridge.function(Window.cancelAnimationFrame, .{});
+
+    // The sandboxed filesystem entry points. Unlike an interface object these
+    // read back enumerable on the global ("ecw"), which is what a plain Window
+    // operation looks like -- see filesystem.zig for why they are here at all.
+    pub const webkitRequestFileSystem = bridge.function(filesystem.requestFileSystem, .{ .arity = 3 });
+    pub const webkitResolveLocalFileSystemURL = bridge.function(filesystem.resolveLocalFileSystemURL, .{ .arity = 2 });
+    // Chrome carries the two quota constants on Window.prototype, where they are
+    // the only members besides `constructor` (measured). This engine's Window
+    // members are own properties of the global instead -- an engine-wide
+    // difference, not one introduced here -- so they land there with it.
+    pub const TEMPORARY = bridge.property(0, .{ .template = true });
+    pub const PERSISTENT = bridge.property(1, .{ .template = true });
 
     pub const createImageBitmap = bridge.function(struct {
         fn createImageBitmap(

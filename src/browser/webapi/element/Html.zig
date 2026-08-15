@@ -28,6 +28,9 @@ const Frame = @import("../../Frame.zig");
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const popover = @import("popover.zig");
+const dictionary = @import("../dictionary.zig");
+const ElementInternals = @import("ElementInternals.zig");
+const CustomElementDefinition = @import("../CustomElementDefinition.zig");
 
 pub const Anchor = @import("html/Anchor.zig");
 pub const Area = @import("html/Area.zig");
@@ -42,6 +45,8 @@ pub const DataList = @import("html/DataList.zig");
 pub const Details = @import("html/Details.zig");
 pub const Dialog = @import("html/Dialog.zig");
 pub const Directory = @import("html/Directory.zig");
+pub const Menu = @import("html/Menu.zig");
+pub const FrameElement = @import("html/FrameElement.zig");
 pub const Div = @import("html/Div.zig");
 pub const DList = @import("html/DList.zig");
 pub const Embed = @import("html/Embed.zig");
@@ -144,6 +149,8 @@ pub const Type = union(enum) {
     details: *Details,
     dialog: *Dialog,
     directory: *Directory,
+    menu: *Menu,
+    frame_element: *FrameElement,
     div: *Div,
     dl: *DList,
     embed: *Embed,
@@ -300,6 +307,50 @@ pub fn insertAdjacentHTML(
     while (iter.next()) |child_node| {
         _ = try target_node.insertBefore(child_node, prev_node, frame);
     }
+}
+
+/// `element.attachInternals()`. Only a custom element has internals to hand out,
+/// and only once: both refusals are NotSupportedErrors whose wording is measured
+/// on a headed Chrome 150 (win63-chrome.json, win64-chrome.json).
+pub fn attachInternals(self: *HtmlElement, exec: *const js.Execution) !*ElementInternals {
+    const frame = switch (exec.js.global) {
+        .frame => |f| f,
+        .worker => unreachable,
+    };
+
+    const element = self._proto;
+    const definition = definitionOf(element, frame) orelse return dictionary.throwDom(
+        "NotSupportedError",
+        "Failed to execute 'attachInternals' on 'HTMLElement': " ++
+            "Unable to attach ElementInternals to non-custom elements.",
+        exec,
+    );
+
+    if (frame._element_internals.get(element) != null) {
+        return dictionary.throwDom(
+            "NotSupportedError",
+            "Failed to execute 'attachInternals' on 'HTMLElement': " ++
+                "ElementInternals for the specified element was already attached.",
+            exec,
+        );
+    }
+
+    const internals = try ElementInternals.init(element, definition.form_associated, frame);
+    try frame._element_internals.put(frame.arena, element, internals);
+    return internals;
+}
+
+/// The definition behind a custom element, autonomous or customized built-in.
+/// Autonomous elements look theirs up by tag name the same way attachShadow
+/// does, so an element created before its `define()` still finds it.
+fn definitionOf(element: *Element, frame: *Frame) ?*CustomElementDefinition {
+    if (element.is(Custom)) |custom| {
+        if (custom._definition) |definition| {
+            return definition;
+        }
+        return frame.window._custom_elements._definitions.get(custom._tag_name.str());
+    }
+    return frame._customized_builtin_definitions.get(element);
 }
 
 pub fn click(self: *HtmlElement, frame: *Frame) !void {
@@ -1715,6 +1766,11 @@ pub const JsApi = struct {
     }
     pub const insertAdjacentHTML = bridge.function(HtmlElement.insertAdjacentHTML, .{ .ce_reactions = true });
 
+    /// Where this sits in HTMLElement.prototype's own-property order is not
+    /// measured; Chrome declares it next to the innerText group in
+    /// html_element.idl, so it goes here.
+    pub const attachInternals = bridge.function(HtmlElement.attachInternals, .{});
+
     // Declared here rather than on Element because Chrome declares them here:
     // an SVG or MathML element has no style, no dataset, no offset geometry and
     // cannot be focused. The behaviour stays on Element; only the name moves.
@@ -1914,4 +1970,7 @@ test "WebApi: HTMLElement.props" {
 }
 test "WebApi: HTMLElement.contenteditable" {
     try testing.htmlRunner("element/html/contenteditable.html", .{});
+}
+test "WebApi: ElementInternals" {
+    try testing.htmlRunner("element/element_internals.html", .{});
 }

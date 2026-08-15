@@ -1378,3 +1378,136 @@ still short and belongs to G20.
   engine-wide gaps older than this batch; `SourceBufferList` is the sharpest
   case, because Chrome's `@@iterator` there *is* `Array.prototype[@@iterator]`
   itself, an identity this engine has no way to reproduce.
+
+## G17 batch 20: the legacy leftovers, and the floor (P14)
+
+The last fifteen names in `creep-features-missing`'s window list. Scope came
+from the live browser, not the table: **two of the fifteen do not exist on the
+reference Chrome 150 at all.** `openDatabase` (WebSQL) and `MutationEvent` are
+both `ReferenceError` there, and `document.createEvent('MutationEvent')` is a
+`NotSupportedError`. Adding them would ship globals a real Chrome does not have.
+
+So **CreepJS will count those two as missing forever. G17's window-key gap has a
+floor of 2, not 0, and this batch reached it.** That is a scoring artefact of a
+Chrome-115-era table, not a defect.
+
+Of the thirteen that do exist, seven are pure aliases — the same constructor
+object as an unprefixed name, `===` and all:
+
+| prefixed | is |
+|---|---|
+| `webkitSpeechRecognition` | `SpeechRecognition` |
+| `webkitSpeechGrammar` | `SpeechGrammar` |
+| `webkitSpeechGrammarList` | `SpeechGrammarList` |
+| `webkitSpeechRecognitionEvent` | `SpeechRecognitionEvent` |
+| `webkitSpeechRecognitionError` | **`SpeechRecognitionErrorEvent`** |
+| `WebKitCSSMatrix` | `DOMMatrix` |
+| `WebKitMutationObserver` | `MutationObserver` |
+
+Note the fifth row: the prefixed name aliases an interface with a *different*
+name. `SpeechRecognitionPhrase` is a global on Chrome 150 and not in CreepJS's
+table, so it was added on the same measured-not-tabulated grounds.
+
+Probes are `stealth-detector-probes/win-batch/probe-win63.js` (every target's
+shape), `-win64` (the ElementInternals and misc behaviour), `-win65`
+(recognition lifecycle), `-win66` (coercion and the filesystem), `-win67`
+(data-URI encoding and the Entry family). `win63-findings.md` is the readable
+summary. Everything ran at `http://localhost:8731/`.
+
+### Behaviours only a measurement gets right
+
+- **`SpeechRecognition.start()` fails asynchronously.** It returns undefined and
+  ~50ms later fires `error` (`not-allowed`) then `end`. A second `start()` while
+  running is an `InvalidStateError`; a `stop()` or `abort()` in the same task
+  pre-empts the failure and emits a lone `end`; on an idle object they emit
+  nothing at all.
+- **`addFromString` percent-encodes with a keep-set that is neither
+  `encodeURI`'s nor `encodeURIComponent`'s.** Measured character by character
+  over printable ASCII: unreserved plus `!`, `(`, `)`, `*`, `/`. `'` is escaped
+  where encodeURIComponent keeps it; `/` is kept where it escapes it.
+- **`window.TEMPORARY` and `PERSISTENT` live on `Window.prototype`,** whose own
+  keys on Chrome are exactly `TEMPORARY PERSISTENT constructor`.
+  `getOwnPropertyDescriptor(window, 'TEMPORARY')` is `undefined`.
+- **None of the filesystem interfaces is a global.** `DOMFileSystem`, `Entry`,
+  `DirectoryEntry`, `FileEntry`, `DirectoryReader`, `Metadata` and `FileWriter`
+  are reachable only through the callbacks, and their brands are not the WebIDL
+  names.
+- **ARIA on `ElementInternals` is separate storage, not a reflection.** After
+  `i.ariaLabel = 'hello'` the element's `aria-label` attribute is still absent
+  and `el.ariaLabel` keeps reading the attribute independently. Nothing parses
+  its value either: `i.ariaLevel = 3` reads back the string `"3"`.
+- **`states.add()` does not validate the dashed-ident form, and `:state()` does
+  not fold it.** `add('nope')` is accepted, and after `add('--on')`,
+  `el.matches(':state(on)')` is false — the ident has to match the stored string
+  exactly.
+- **`ImageBitmapRenderingContext.transferFromImageBitmap` consumes the bitmap
+  without resizing the canvas.** The source reads 0x0 afterwards and the canvas
+  keeps its own dimensions.
+
+### What the diff closed in passing
+
+Diffing `probe-win63` field by field against the Chrome snapshot left fourteen
+differing paths of 548. Four were fixable and are gone: DOMMatrix declares its
+mutating operations and its statics alphabetically (WebKitCSSMatrix inherits
+both, being the same object); MutationRecord lists the node members before the
+attribute ones; `MutationObserver.prototype.observe` reports arity 1, not 2; and
+`createEvent` names the type it refused instead of answering a bare "operation
+is not supported". Wiring `WebKitMutationObserver` had already exposed two more
+in P4 — the prototype order was `observe disconnect takeRecords` where Chrome
+has `disconnect observe takeRecords`, and the constructor reported arity 0.
+
+`:state()` was not a selector this engine knew: it threw a `SyntaxError` where
+Chrome answers a boolean. It now reads the element's `CustomStateSet`, which
+stopped being a shape-only interface in the same commit.
+
+The form-owner walk had been copied out four times across `Input`, `Button`,
+`Select` and `TextArea`; ElementInternals needed a fifth, so it moved to
+`Form.ownerOf`.
+
+### Result
+
+`window own keys 1146 -> 1165`, `window spans 18 -> 5`, `total spans 142 -> 129`.
+Window missing keys **15 -> 2**, and those two are the floor described above.
+The js and css blocks are unchanged (`js 4 spans`, `css 120 spans`).
+
+Seven probe paths still differ. Two are the harness's own origin — Chrome ran on
+`localhost:8731` while lightpanda serves the probe page from an ephemeral port,
+which shows up in `origin` and in the filesystem name derived from it. The other
+five are the engine-wide gaps below.
+
+### What is still missing
+
+- **The bridge produces WebIDL's "N argument(s) required, but only M present."
+  only for constructors.** An operation gets `TypeError: invalid argument`
+  unless the module reads the argument as `?js.Value` and throws by hand, which
+  is what `recognition.zig`, `filesystem.zig`, `CustomStateSet.zig` and
+  `ElementInternals.zig` do.
+- **`new HTMLDivElement()` — and every other element interface — throws a
+  TypeError with an empty message** where Chrome says `Failed to construct
+  'HTMLDivElement': Illegal constructor`. `HTMLFrameElement` and
+  `HTMLMenuElement` read the same way, which is two of the seven remaining probe
+  differences.
+- **`new DOMMatrix('nope')` says "The string did not match the expected
+  pattern"** where Chrome says `Failed to construct 'DOMMatrix': Failed to parse
+  'nope'.`
+- **`constructor` always lands last on a prototype.** Chrome puts a partial
+  interface's members *after* it: `DOMMatrix.prototype` ends
+  `… translateSelf constructor setMatrixValue`, because `setMatrixValue` comes
+  from the legacy WebKitCSSMatrix partial. This engine can only produce
+  `… translateSelf setMatrixValue constructor`. Same limitation as G14's.
+- **`getOwnPropertyDescriptor(SomeInterface, 'prototype')` throws `TypeError:
+  Illegal invocation`** for any interface whose instances carry an indexed or
+  named interceptor — `FileList`, `MediaSource` and `SpeechSynthesis` all did
+  before this batch. It is why `expectInterfaceObject()` is unusable in
+  `speech_recognition.html`.
+- **`bridge.indexed` renders an indexed slot `writable:true, enumerable:false`**
+  where Chrome renders `writable:false, enumerable:true`. `FileList` read the
+  same way before this batch.
+- **The bespoke `?js.Function` handler accessors on `SpeechSynthesis` and
+  `SpeechSynthesisUtterance` throw on a non-callable** where Chrome (and
+  `window.onload`, `el.onclick`, `xhr.onload`, `signal.onabort` here) store null.
+  The modules added in this batch use the `Window.FunctionSetter`-shaped union
+  to get it right.
+- **`internals.labels` is an Array, not a NodeList.** `input.labels` reads the
+  same way; the brand is an engine-wide property of how label lists are built,
+  not something this batch introduced.

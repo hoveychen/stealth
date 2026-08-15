@@ -1021,6 +1021,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/Element.zig"),
     @import("../webapi/element/DOMStringMap.zig"),
     @import("../webapi/element/CustomStateSet.zig"),
+    @import("../webapi/element/ElementInternals.zig"),
     @import("../webapi/element/Attribute.zig"),
     @import("../webapi/element/Html.zig"),
     @import("../webapi/element/MathML.zig"),
@@ -1039,6 +1040,8 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/element/html/Details.zig"),
     @import("../webapi/element/html/Dialog.zig"),
     @import("../webapi/element/html/Directory.zig"),
+    @import("../webapi/element/html/Menu.zig"),
+    @import("../webapi/element/html/FrameElement.zig"),
     @import("../webapi/element/html/DList.zig"),
     @import("../webapi/element/html/Div.zig"),
     @import("../webapi/element/html/Embed.zig"),
@@ -1285,6 +1288,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/FontData.zig"),
     @import("../webapi/launch_queue.zig"),
     @import("../webapi/canvas/ImageBitmap.zig"),
+    @import("../webapi/canvas/ImageBitmapRenderingContext.zig"),
     @import("../webapi/storage/cache_storage.zig"),
     @import("../webapi/scheduler.zig"),
     @import("../webapi/sensor.zig"),
@@ -1349,6 +1353,12 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/speech/SpeechSynthesisVoice.zig"),
     @import("../webapi/speech/SpeechSynthesisEvent.zig"),
     @import("../webapi/speech/SpeechSynthesisErrorEvent.zig"),
+    // Web Speech recognition: window-only for the same reason, and the five
+    // webkit-prefixed spellings are the names CreepJS counts.
+    @import("../webapi/speech/recognition.zig"),
+    // The sandboxed filesystem: window-only, and none of its interfaces is a
+    // global (see filesystem.zig).
+    @import("../webapi/filesystem.zig"),
     // WebRTC: window-only in Chrome. A worker global carries RTCDataChannel and
     // the encoded-frame types but no RTCPeerConnection (measured: the RTC* keys
     // on a DedicatedWorkerGlobalScope are RTCTransformEvent,

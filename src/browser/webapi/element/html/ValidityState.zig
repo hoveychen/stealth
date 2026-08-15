@@ -34,7 +34,36 @@ const ValidityState = @This();
 // because the flag definitions are per-type in the HTML spec.
 _owner: *Element,
 
+// A form-associated custom element has no per-type flag definitions at all: its
+// page sets the whole set at once through ElementInternals.setValidity, and this
+// object is a live view of that set. When it is non-null every getter reads it
+// instead of dispatching on the element type.
+_flags: ?*const Flags = null,
+
+/// The flag set ElementInternals.setValidity writes. Named after the
+/// ValidityStateFlags dictionary members, minus `valid`, which is derived.
+pub const Flags = struct {
+    value_missing: bool = false,
+    type_mismatch: bool = false,
+    pattern_mismatch: bool = false,
+    too_long: bool = false,
+    too_short: bool = false,
+    range_underflow: bool = false,
+    range_overflow: bool = false,
+    step_mismatch: bool = false,
+    bad_input: bool = false,
+    custom_error: bool = false,
+
+    pub fn isValid(self: *const Flags) bool {
+        return !self.value_missing and !self.type_mismatch and !self.pattern_mismatch and
+            !self.too_long and !self.too_short and !self.range_underflow and
+            !self.range_overflow and !self.step_mismatch and !self.bad_input and
+            !self.custom_error;
+    }
+};
+
 pub fn getValueMissing(self: *const ValidityState, frame: *Frame) bool {
+    if (self._flags) |flags| return flags.value_missing;
     if (self._owner.is(Input)) |input| return input.suffersValueMissing(frame);
     if (self._owner.is(Select)) |select| return select.suffersValueMissing();
     if (self._owner.is(TextArea)) |textarea| return textarea.suffersValueMissing();
@@ -42,46 +71,52 @@ pub fn getValueMissing(self: *const ValidityState, frame: *Frame) bool {
 }
 
 pub fn getTypeMismatch(self: *const ValidityState) bool {
+    if (self._flags) |flags| return flags.type_mismatch;
     if (self._owner.is(Input)) |input| return input.suffersTypeMismatch();
     return false;
 }
 
 pub fn getPatternMismatch(self: *const ValidityState, frame: *Frame) bool {
+    if (self._flags) |flags| return flags.pattern_mismatch;
     if (self._owner.is(Input)) |input| return input.suffersPatternMismatch(frame);
     return false;
 }
 
 pub fn getTooLong(self: *const ValidityState) bool {
+    if (self._flags) |flags| return flags.too_long;
     if (self._owner.is(Input)) |input| return input.suffersTooLong();
     if (self._owner.is(TextArea)) |textarea| return textarea.suffersTooLong();
     return false;
 }
 
 pub fn getTooShort(self: *const ValidityState) bool {
+    if (self._flags) |flags| return flags.too_short;
     if (self._owner.is(Input)) |input| return input.suffersTooShort();
     if (self._owner.is(TextArea)) |textarea| return textarea.suffersTooShort();
     return false;
 }
 
 pub fn getRangeUnderflow(self: *const ValidityState) bool {
+    if (self._flags) |flags| return flags.range_underflow;
     if (self._owner.is(Input)) |input| return input.suffersRangeUnderflow();
     return false;
 }
 
 pub fn getRangeOverflow(self: *const ValidityState) bool {
+    if (self._flags) |flags| return flags.range_overflow;
     if (self._owner.is(Input)) |input| return input.suffersRangeOverflow();
     return false;
 }
 
 pub fn getStepMismatch(self: *const ValidityState) bool {
-    _ = self;
+    if (self._flags) |flags| return flags.step_mismatch;
     // Step matching is not implemented yet (PR #2280 begins step rounding for
     // <input type=range>). Returning false keeps well-formed values valid.
     return false;
 }
 
 pub fn getBadInput(self: *const ValidityState) bool {
-    _ = self;
+    if (self._flags) |flags| return flags.bad_input;
     // badInput flips when the UA cannot convert a user-typed string (e.g. the
     // user typed "abc" into <input type=number>). Headless Lightpanda receives
     // values via attributes or JS assignment, never raw keystrokes — there is
@@ -90,6 +125,7 @@ pub fn getBadInput(self: *const ValidityState) bool {
 }
 
 pub fn getCustomError(self: *const ValidityState) bool {
+    if (self._flags) |flags| return flags.custom_error;
     if (self._owner.is(Input)) |input| return input.hasCustomValidity();
     if (self._owner.is(Select)) |select| return select.hasCustomValidity();
     if (self._owner.is(TextArea)) |textarea| return textarea.hasCustomValidity();
@@ -98,6 +134,7 @@ pub fn getCustomError(self: *const ValidityState) bool {
 }
 
 pub fn getValid(self: *const ValidityState, frame: *Frame) bool {
+    if (self._flags) |flags| return flags.isValid();
     return !self.getValueMissing(frame) and
         !self.getTypeMismatch() and
         !self.getPatternMismatch(frame) and
