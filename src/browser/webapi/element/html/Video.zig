@@ -22,6 +22,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const Media = @import("Media.zig");
+const playback = @import("../../media/playback.zig");
 
 const Video = @This();
 
@@ -66,6 +67,13 @@ pub fn setPoster(self: *Video, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("poster"), .wrap(value), frame);
 }
 
+/// A snapshot of how playback is going. Nothing decodes here, so every counter
+/// is zero -- but the object is real and freshly stamped on each call, which is
+/// what a real Chrome hands back for a <video> that never got a source.
+pub fn getVideoPlaybackQuality(_: *Video, exec: *js.Execution) !*playback.VideoPlaybackQuality {
+    return playback.VideoPlaybackQuality.create(exec);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Video);
 
@@ -78,4 +86,7 @@ pub const JsApi = struct {
     pub const poster = bridge.accessor(Video.getPoster, Video.setPoster, .{ .ce_reactions = true });
     pub const videoWidth = bridge.accessor(Video.getVideoWidth, null, .{});
     pub const videoHeight = bridge.accessor(Video.getVideoHeight, null, .{});
+    // This is on HTMLVideoElement, not on the media base class, so an <audio>
+    // element does not have it (measured).
+    pub const getVideoPlaybackQuality = bridge.function(Video.getVideoPlaybackQuality, .{});
 };

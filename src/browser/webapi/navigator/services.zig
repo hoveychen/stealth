@@ -35,6 +35,7 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const mime = @import("../media/mime.zig");
+const MediaMetadata = @import("../media/MediaMetadata.zig").MediaMetadata;
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
 const Frame = @import("../../Frame.zig");
 const idb = @import("../storage/idb/idb.zig");
@@ -330,18 +331,34 @@ pub const MediaCapabilities = struct {
 
 pub const MediaSession = struct {
     _playback_state: PlaybackState = .none,
+    _metadata: ?*MediaMetadata = null,
 
     const PlaybackState = enum { none, paused, playing };
 
-    // MediaMetadata has no constructor here, so no page can hand us a valid
-    // value and the getter stays at Chrome's own default of null. The setter
-    // drops what it's given rather than throwing, which is what a WebIDL
-    // attribute of a type we can't represent would do anyway.
-    pub fn getMetadata(_: *const MediaSession) ?bool {
-        return null;
+    // Null until a page sets one, and it keeps the very object it was handed:
+    // `navigator.mediaSession.metadata === m` is true afterwards (measured).
+    pub fn getMetadata(self: *const MediaSession) ?*MediaMetadata {
+        return self._metadata;
     }
 
-    pub fn setMetadata(_: *MediaSession, _: ?js.Value) void {}
+    pub fn setMetadata(self: *MediaSession, value_: ?js.Value, exec: *const js.Execution) !void {
+        const value = value_ orelse {
+            self._metadata = null;
+            return;
+        };
+        if (value.isNullOrUndefined()) {
+            self._metadata = null;
+            return;
+        }
+        self._metadata = value.toZig(*MediaMetadata) catch {
+            const isolate = exec.js.isolate;
+            _ = isolate.throwException(isolate.createTypeError(
+                "Failed to set the 'metadata' property on 'MediaSession': " ++
+                    "Failed to convert value to 'MediaMetadata'.",
+            ));
+            return error.JsException;
+        };
+    }
 
     pub fn getPlaybackState(self: *const MediaSession) []const u8 {
         return @tagName(self._playback_state);

@@ -1,0 +1,160 @@
+<!--
+  Media Source Extensions: the buffer objects a MediaSource hands out, and the
+  refusals a MediaSource that was never attached to an element gives.
+
+  Nothing here ever opens. A SourceBuffer needs a media pipeline to append into
+  and there is none, so `readyState` stays "closed" and every mutator answers
+  InvalidStateError -- which is also exactly what Chrome answers for a
+  MediaSource that was never attached (measured). The interfaces are the point:
+  SourceBuffer, SourceBufferList and MediaSourceHandle are three of the window
+  keys, and their shapes have to be right whether or not one is ever populated.
+
+  Chrome 150, headed, over http://localhost (win57-chrome.json, p62).
+-->
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<script src="../shape.js"></script>
+
+<script id=interface_objects>
+{
+  expectInterfaceObject('MediaSource', {
+    statics: ['canConstructInDedicatedWorker', 'isTypeSupported'],
+    illegal: false,
+    inherits: EventTarget,
+    protoOf: EventTarget.prototype,
+  });
+  expectInterfaceObject('SourceBuffer', { inherits: EventTarget, protoOf: EventTarget.prototype });
+  expectInterfaceObject('SourceBufferList', { inherits: EventTarget, protoOf: EventTarget.prototype });
+  expectInterfaceObject('MediaSourceHandle');
+}
+</script>
+
+<script id=prototype_order>
+{
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+
+  testing.expectEqual(
+    'sourceBuffers activeSourceBuffers duration onsourceopen onsourceended ' +
+    'onsourceclose readyState addSourceBuffer clearLiveSeekableRange endOfStream ' +
+    'removeSourceBuffer setLiveSeekableRange constructor',
+    proto(MediaSource));
+  testing.expectEqual(
+    'mode updating buffered timestampOffset appendWindowStart appendWindowEnd ' +
+    'onupdatestart onupdate onupdateend onerror onabort abort appendBuffer ' +
+    'changeType remove constructor',
+    proto(SourceBuffer));
+  testing.expectEqual('length onaddsourcebuffer onremovesourcebuffer constructor', proto(SourceBufferList));
+  // An opaque handle: nothing on it but the brand.
+  testing.expectEqual('constructor', proto(MediaSourceHandle));
+
+  testing.expectEqual(1, MediaSource.prototype.addSourceBuffer.length);
+  testing.expectEqual(1, MediaSource.prototype.removeSourceBuffer.length);
+  testing.expectEqual(0, MediaSource.prototype.endOfStream.length);
+  testing.expectEqual(2, MediaSource.prototype.setLiveSeekableRange.length);
+  testing.expectEqual(0, MediaSource.prototype.clearLiveSeekableRange.length);
+  testing.expectEqual(1, MediaSource.isTypeSupported.length);
+  testing.expectEqual(0, SourceBuffer.prototype.abort.length);
+  testing.expectEqual(1, SourceBuffer.prototype.appendBuffer.length);
+  testing.expectEqual(1, SourceBuffer.prototype.changeType.length);
+  testing.expectEqual(2, SourceBuffer.prototype.remove.length);
+
+  testing.expectEqual('[object MediaSource]', String(MediaSource.prototype));
+  testing.expectEqual('[object SourceBuffer]', String(SourceBuffer.prototype));
+  testing.expectEqual('[object SourceBufferList]', String(SourceBufferList.prototype));
+  testing.expectEqual('[object MediaSourceHandle]', String(MediaSourceHandle.prototype));
+
+  // The list is array-like, so it carries @@iterator alongside the brand.
+  testing.expectEqual(
+    ['Symbol(Symbol.toStringTag)', 'Symbol(Symbol.iterator)'].sort().join(),
+    Object.getOwnPropertySymbols(SourceBufferList.prototype).map(String).sort().join());
+
+  // `MediaSource.canConstructInDedicatedWorker` is a data property on the
+  // constructor, not a method.
+  testing.expectEqual(true, MediaSource.canConstructInDedicatedWorker);
+  const d = Object.getOwnPropertyDescriptor(MediaSource, 'canConstructInDedicatedWorker');
+  testing.expectTrue(d.enumerable);
+  testing.expectTrue(d.configurable);
+}
+</script>
+
+<script id=detached_source>
+{
+  const ms = new MediaSource();
+  testing.expectEqual('[object MediaSource]', Object.prototype.toString.call(ms));
+  testing.expectEqual('closed', ms.readyState);
+  testing.expectTrue(Number.isNaN(ms.duration));
+
+  // Both lists are stable and distinct from each other.
+  testing.expectEqual('[object SourceBufferList]', Object.prototype.toString.call(ms.sourceBuffers));
+  testing.expectTrue(ms.sourceBuffers === ms.sourceBuffers);
+  testing.expectTrue(ms.activeSourceBuffers === ms.activeSourceBuffers);
+  testing.expectTrue(ms.sourceBuffers !== ms.activeSourceBuffers);
+  testing.expectEqual(0, ms.sourceBuffers.length);
+  testing.expectEqual(undefined, ms.sourceBuffers[0]);
+  testing.expectEqual([], Object.getOwnPropertyNames(ms.sourceBuffers));
+  testing.expectEqual(0, [...ms.sourceBuffers].length);
+
+  testing.expectEqual(null, ms.onsourceopen);
+  testing.expectEqual(null, ms.onsourceended);
+  testing.expectEqual(null, ms.onsourceclose);
+  testing.expectEqual(null, ms.sourceBuffers.onaddsourcebuffer);
+  testing.expectEqual(null, ms.sourceBuffers.onremovesourcebuffer);
+
+  // `handle` is worker-only, so it is not on this prototype at all -- the
+  // interface object exists on window while the attribute does not.
+  testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(MediaSource.prototype, 'handle'));
+  testing.expectEqual(undefined, ms.handle);
+
+  // Every mutator needs an open source, and this one never opens.
+  const S = "InvalidStateError: Failed to execute '";
+  const E = "' on 'MediaSource': The MediaSource's readyState is not 'open'.";
+  const call = (fn) => { try { fn(); return 'OK'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  testing.expectEqual(S + 'addSourceBuffer' + E, call(() => ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E"')));
+  testing.expectEqual(S + 'endOfStream' + E, call(() => ms.endOfStream()));
+  testing.expectEqual(S + 'setLiveSeekableRange' + E, call(() => ms.setLiveSeekableRange(0, 1)));
+  testing.expectEqual(S + 'clearLiveSeekableRange' + E, call(() => ms.clearLiveSeekableRange()));
+  testing.expectEqual(
+    "InvalidStateError: Failed to set the 'duration' property on 'MediaSource': " +
+    "The MediaSource's readyState is not 'open'.",
+    call(() => { ms.duration = 5; }));
+
+  // The argument checks come first, and they are TypeErrors.
+  testing.expectEqual(
+    "TypeError: Failed to execute 'addSourceBuffer' on 'MediaSource': 1 argument required, but only 0 present.",
+    call(() => ms.addSourceBuffer()));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'removeSourceBuffer' on 'MediaSource': 1 argument required, but only 0 present.",
+    call(() => ms.removeSourceBuffer()));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'removeSourceBuffer' on 'MediaSource': parameter 1 is not of type 'SourceBuffer'.",
+    call(() => ms.removeSourceBuffer({})));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'endOfStream' on 'MediaSource': The provided value 'nope' " +
+    'is not a valid enum value of type EndOfStreamError.',
+    call(() => ms.endOfStream('nope')));
+
+  // The type is checked before the readyState, so only a *supported* type
+  // reaches the InvalidStateError above. An empty type is a TypeError with no
+  // trailing full stop, which is Chrome's own wording, not a typo here.
+  testing.expectEqual(
+    "NotSupportedError: Failed to execute 'addSourceBuffer' on 'MediaSource': " +
+    "The type provided ('video/nope') is unsupported.",
+    call(() => ms.addSourceBuffer('video/nope')));
+  testing.expectEqual(
+    "NotSupportedError: Failed to execute 'addSourceBuffer' on 'MediaSource': " +
+    "The type provided ('video/mp4') is unsupported.",
+    call(() => ms.addSourceBuffer('video/mp4')));
+  testing.expectEqual(
+    "NotSupportedError: Failed to execute 'addSourceBuffer' on 'MediaSource': " +
+    "The type provided ('5') is unsupported.",
+    call(() => ms.addSourceBuffer(5)));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'addSourceBuffer' on 'MediaSource': The type provided is empty",
+    call(() => ms.addSourceBuffer('')));
+
+  // The same shared table the three isTypeSupported APIs read.
+  testing.expectTrue(MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"'));
+  testing.expectFalse(MediaSource.isTypeSupported('video/nope'));
+}
+</script>

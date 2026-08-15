@@ -1,0 +1,359 @@
+<!--
+  canvas.captureStream(), the track it hands out, and the ImageCapture that
+  reads photos off one.
+
+  This is the one capture path a page can walk with no permission and no
+  hardware: a canvas is a video source Chrome is always willing to open. So
+  unlike getUserMedia, which still refuses here, every value below is a value a
+  real page can reach.
+
+  Three of them a spec reading would get wrong, so they are pinned:
+
+    * The track's dimensions are frozen when captureStream() is called.
+      Resizing the canvas afterwards does not move a live track's settings --
+      not width, not height, not aspectRatio, not the capability ranges.
+    * A zero-area canvas still yields a stream, but its settings drop
+      width/height/aspectRatio entirely rather than reporting 0, while the
+      capabilities clamp to 1.
+    * `label` is the deviceId, an 88-character base64 blob, and a clone keeps
+      both while taking a fresh `id`. The WebAudio track next door does the
+      opposite (its clone gets a new deviceId), so this is per-source.
+
+  Chrome 150, headed, over http://localhost
+  (win60-chrome.json, win61-chrome.json, win62-chrome.json).
+-->
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<script src="../shape.js"></script>
+
+<script id=interface_objects>
+{
+  expectInterfaceObject('ImageCapture', { arity: 1, illegal: false });
+  expectInterfaceObject('CanvasCaptureMediaStreamTrack', {
+    arity: 0,
+    inherits: MediaStreamTrack,
+    protoOf: MediaStreamTrack.prototype,
+  });
+
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+  testing.expectEqual(
+    'track getPhotoCapabilities getPhotoSettings grabFrame takePhoto constructor',
+    proto(ImageCapture));
+  testing.expectEqual('canvas requestFrame constructor', proto(CanvasCaptureMediaStreamTrack));
+  testing.expectEqual('[object ImageCapture]', String(ImageCapture.prototype));
+  testing.expectEqual(
+    '[object CanvasCaptureMediaStreamTrack]',
+    String(CanvasCaptureMediaStreamTrack.prototype));
+
+  // captureStream sits between `height` and `getContext`, and Chrome lists
+  // toBlob before toDataURL.
+  testing.expectEqual(
+    'width height captureStream getContext toBlob toDataURL transferControlToOffscreen constructor',
+    proto(HTMLCanvasElement));
+  testing.expectEqual('function/0[ecw]', (() => {
+    const d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'captureStream');
+    return `${typeof d.value}/${d.value.length}[${d.enumerable ? 'e' : '-'}${d.configurable ? 'c' : '-'}${d.writable ? 'w' : '-'}]`;
+  })());
+}
+</script>
+
+<script id=capture_stream>
+{
+  const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+  const stream = canvas.captureStream();
+
+  testing.expectEqual('[object MediaStream]', Object.prototype.toString.call(stream));
+  testing.expectEqual(true, stream.active);
+  testing.expectEqual(36, stream.id.length);
+  testing.expectEqual(1, stream.getTracks().length);
+  testing.expectEqual(1, stream.getVideoTracks().length);
+  testing.expectEqual(0, stream.getAudioTracks().length);
+
+  const track = stream.getVideoTracks()[0];
+  testing.expectEqual('[object CanvasCaptureMediaStreamTrack]', Object.prototype.toString.call(track));
+  testing.expectTrue(track instanceof CanvasCaptureMediaStreamTrack);
+  testing.expectTrue(track instanceof MediaStreamTrack);
+  testing.expectTrue(track instanceof EventTarget);
+  testing.expectEqual('video', track.kind);
+  testing.expectEqual(36, track.id.length);
+  testing.expectEqual(true, track.enabled);
+  testing.expectEqual(false, track.muted);
+  testing.expectEqual('live', track.readyState);
+  testing.expectEqual('', track.contentHint);
+
+  // `canvas` points back at the element, and the same one every read.
+  testing.expectTrue(track.canvas === canvas);
+  testing.expectTrue(track.canvas === track.canvas);
+  testing.expectEqual(undefined, track.requestFrame());
+
+  // The label *is* the deviceId: 88 characters of base64, not a UUID.
+  const settings = track.getSettings();
+  testing.expectEqual(88, track.label.length);
+  testing.expectTrue(/^[A-Za-z0-9+/]+=*$/.test(track.label));
+  testing.expectEqual(settings.deviceId, track.label);
+  testing.expectFalse(track.id === track.label);
+
+  testing.expectEqual(
+    '{"aspectRatio":1,"deviceId":"' + track.label + '","frameRate":60,"height":32,"resizeMode":"none","width":32}',
+    JSON.stringify(settings));
+  testing.expectEqual(
+    '{"aspectRatio":{"max":32,"min":0.03125},"deviceId":"' + track.label +
+    '","facingMode":[],"frameRate":{"max":60,"min":0},"height":{"max":32,"min":1},' +
+    '"resizeMode":["none","crop-and-scale"],"width":{"max":32,"min":1}}',
+    JSON.stringify(track.getCapabilities()));
+  testing.expectEqual('{}', JSON.stringify(track.getConstraints()));
+
+  // Video tracks carry no audio stats at all -- `stats` is null, where the
+  // WebAudio track next door hands out a MediaStreamTrackAudioStats.
+  testing.expectEqual(null, track.stats);
+  testing.expectEqual(null, track.getCaptureHandle());
+
+  // A clone keeps the canvas, the label and the deviceId, and takes a new id.
+  const clone = track.clone();
+  testing.expectEqual('[object CanvasCaptureMediaStreamTrack]', Object.prototype.toString.call(clone));
+  testing.expectTrue(clone.canvas === canvas);
+  testing.expectEqual(track.label, clone.label);
+  testing.expectEqual(track.getSettings().deviceId, clone.getSettings().deviceId);
+  testing.expectFalse(clone.id === track.id);
+
+  // Every call is a fresh stream over a fresh track.
+  const again = canvas.captureStream();
+  testing.expectFalse(again === stream);
+  testing.expectFalse(again.id === stream.id);
+  testing.expectFalse(again.getVideoTracks()[0] === track);
+  testing.expectFalse(again.getVideoTracks()[0].label === track.label);
+}
+</script>
+
+<script id=capture_stream_frame_rate>
+{
+  const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+  const rate = (arg) => canvas.captureStream(arg).getVideoTracks()[0].getSettings().frameRate;
+
+  // The default, and the two ends a page can ask for.
+  testing.expectEqual(60, rate(undefined));
+  testing.expectEqual(30, rate(30));
+  testing.expectEqual(0, rate(0));
+  // Not clamped: a silly-but-finite rate is taken at face value.
+  testing.expectEqual(1e9, rate(1e9));
+  // A zero rate still advertises the full range in capabilities.
+  testing.expectEqual(
+    '{"max":60,"min":0}',
+    JSON.stringify(canvas.captureStream(0).getVideoTracks()[0].getCapabilities().frameRate));
+
+  const P = "Failed to execute 'captureStream' on 'HTMLCanvasElement': ";
+  testing.expectError('NotSupportedError: ' + P + 'Given frame rate is not supported.',
+    () => canvas.captureStream(-1));
+  // Non-finite is caught by the double conversion, before the range check, so
+  // it is a TypeError rather than a NotSupportedError.
+  testing.expectError('TypeError: ' + P + 'The provided double value is non-finite.',
+    () => canvas.captureStream(NaN));
+  testing.expectError('TypeError: ' + P + 'The provided double value is non-finite.',
+    () => canvas.captureStream('abc'));
+  testing.expectError('TypeError: ' + P + 'The provided double value is non-finite.',
+    () => canvas.captureStream(Infinity));
+}
+</script>
+
+<script id=capture_stream_dimensions>
+{
+  // A default canvas is 300x150, and the aspect ratio follows.
+  const blank = document.createElement('canvas');
+  const b = blank.captureStream().getVideoTracks()[0].getSettings();
+  testing.expectEqual(300, b.width);
+  testing.expectEqual(150, b.height);
+  testing.expectEqual(2, b.aspectRatio);
+
+  // Frozen at capture: resizing the canvas leaves a live track where it was.
+  const canvas = Object.assign(document.createElement('canvas'), { width: 20, height: 10 });
+  const track = canvas.captureStream().getVideoTracks()[0];
+  const before = JSON.stringify(track.getSettings());
+  canvas.width = 40;
+  canvas.height = 80;
+  testing.expectEqual(before, JSON.stringify(track.getSettings()));
+  testing.expectEqual(
+    '{"max":20,"min":1}', JSON.stringify(track.getCapabilities().width));
+  testing.expectEqual(
+    '{"max":10,"min":1}', JSON.stringify(track.getCapabilities().height));
+  // A track opened after the resize does see the new size.
+  testing.expectEqual(40, canvas.captureStream().getVideoTracks()[0].getSettings().width);
+
+  // Zero area: still a stream, but the three size members vanish from
+  // settings rather than reporting zero, and the ranges clamp to 1.
+  const zero = Object.assign(document.createElement('canvas'), { width: 0, height: 0 });
+  const zt = zero.captureStream().getVideoTracks()[0];
+  testing.expectEqual('[object MediaStream]', Object.prototype.toString.call(zero.captureStream()));
+  testing.expectEqual(
+    '{"deviceId":"' + zt.label + '","frameRate":60,"resizeMode":"none"}',
+    JSON.stringify(zt.getSettings()));
+  testing.expectEqual(
+    '{"aspectRatio":{"max":1,"min":1},"deviceId":"' + zt.label +
+    '","facingMode":[],"frameRate":{"max":60,"min":0},"height":{"max":1,"min":1},' +
+    '"resizeMode":["none","crop-and-scale"],"width":{"max":1,"min":1}}',
+    JSON.stringify(zt.getCapabilities()));
+
+  // One zero dimension is enough to drop all three.
+  const half = Object.assign(document.createElement('canvas'), { width: 0, height: 10 });
+  const ht = half.captureStream().getVideoTracks()[0];
+  testing.expectEqual(
+    '{"deviceId":"' + ht.label + '","frameRate":60,"resizeMode":"none"}',
+    JSON.stringify(ht.getSettings()));
+}
+</script>
+
+<script id=capture_track_behaviour>
+{
+  const canvas = Object.assign(document.createElement('canvas'), { width: 8, height: 8 });
+  const stream = canvas.captureStream();
+  const track = stream.getVideoTracks()[0];
+
+  // A video track takes the video content hints, not the audio ones: "speech"
+  // and "music" are dropped here, where a WebAudio track keeps them.
+  const hint = (value) => { track.contentHint = value; return track.contentHint; };
+  testing.expectEqual('motion', hint('motion'));
+  testing.expectEqual('detail', hint('detail'));
+  testing.expectEqual('text', hint('text'));
+  testing.expectEqual('text', hint('speech'));
+  testing.expectEqual('text', hint('music'));
+  testing.expectEqual('text', hint('nope'));
+  testing.expectEqual('', hint(''));
+
+  // stop() ends the track without firing `ended`, and leaves `canvas` and
+  // requestFrame() reachable afterwards.
+  let ended = false;
+  track.onended = () => { ended = true; };
+  testing.expectEqual(undefined, track.stop());
+  testing.expectEqual('ended', track.readyState);
+  testing.expectEqual(false, ended);
+  testing.expectEqual(undefined, track.requestFrame());
+  testing.expectTrue(track.canvas === canvas);
+  // Stopping the only track makes that stream inactive -- but only that one; a
+  // stream opened afterwards has a live track of its own.
+  testing.expectEqual(false, stream.active);
+  testing.expectEqual(true, canvas.captureStream().active);
+}
+</script>
+
+<script id=capture_track_constraints type=module>
+  const state = await testing.async();
+
+  const canvas = Object.assign(document.createElement('canvas'), { width: 8, height: 8 });
+  const track = canvas.captureStream().getVideoTracks()[0];
+  const settle = (p) => p.then((v) => `OK ${String(v)}`, (e) => `${e.name}: ${e.message}`);
+
+  // A canvas track is resizable, so unlike the WebAudio track -- which
+  // overconstrains on anything at all -- constraints here are accepted.
+  const empty = await settle(track.applyConstraints());
+  const width = await settle(track.applyConstraints({ width: 10 }));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('OK undefined', empty);
+    testing.expectEqual('OK undefined', width);
+  });
+</script>
+
+<script id=image_capture_construction>
+{
+  const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+  const track = canvas.captureStream().getVideoTracks()[0];
+
+  const P = "Failed to construct 'ImageCapture': ";
+  testing.expectError('TypeError: ' + P + '1 argument required, but only 0 present.',
+    () => new ImageCapture());
+  testing.expectError('TypeError: ' + P + "parameter 1 is not of type 'MediaStreamTrack'.",
+    () => new ImageCapture({}));
+  testing.expectError('TypeError: ' + P + "parameter 1 is not of type 'MediaStreamTrack'.",
+    () => new ImageCapture(null));
+  testing.expectError('TypeError: ' + P + "parameter 1 is not of type 'MediaStreamTrack'.",
+    () => new ImageCapture(undefined));
+  // A real track of the wrong kind gets past the type check and is refused on
+  // its own terms -- a DOMException, not a TypeError.
+  testing.expectError(
+    'NotSupportedError: ' + P + 'Cannot create an ImageCapturer from a non-video Track.',
+    () => new ImageCapture(new MediaStreamTrackGenerator({ kind: 'audio' })));
+
+  const capture = new ImageCapture(track);
+  testing.expectEqual('[object ImageCapture]', Object.prototype.toString.call(capture));
+  testing.expectTrue(capture.track === track);
+  testing.expectTrue(capture.track === capture.track);
+  // An ended track is still accepted by the constructor; the refusal comes
+  // later, from each method.
+  const dead = canvas.captureStream().getVideoTracks()[0];
+  dead.stop();
+  testing.expectEqual('[object ImageCapture]',
+    Object.prototype.toString.call(new ImageCapture(dead)));
+}
+</script>
+
+<script id=image_capture_methods type=module>
+  const state = await testing.async();
+
+  const canvas = Object.assign(document.createElement('canvas'), { width: 32, height: 32 });
+  const capture = new ImageCapture(canvas.captureStream().getVideoTracks()[0]);
+  // A rejection is not always an Error here: grabFrame on a track with no
+  // frames rejects with `undefined`, which is what Chrome does and what a
+  // naive `e.name` reader trips over.
+  const settle = (p) => p.then(
+    (v) => `OK ${Object.prototype.toString.call(v)}`,
+    (e) => (e && e.name ? `${e.name}: ${e.message}` : `REJECTED-WITH ${String(e)}`));
+
+  const capabilities = await capture.getPhotoCapabilities();
+  const settings = await capture.getPhotoSettings();
+  const frame = await capture.grabFrame();
+  const photo = await settle(capture.takePhoto());
+  const photoWithSettings = await settle(capture.takePhoto({ imageWidth: 16 }));
+  // Note this is not wrapped: the bad-argument failure arrives as a rejection,
+  // not as a synchronous throw, even though it is an argument-conversion
+  // TypeError (measured).
+  const photoBadSettings = await settle(capture.takePhoto('nope'));
+
+  // A video track that is not a canvas -- no frames behind it at all.
+  const generator = new ImageCapture(new MediaStreamTrackGenerator({ kind: 'video' }));
+  const generatorFrame = await settle(generator.grabFrame());
+  const generatorCapabilities = await generator.getPhotoCapabilities();
+
+  const dead = canvas.captureStream().getVideoTracks()[0];
+  dead.stop();
+  const stopped = new ImageCapture(dead);
+  const deadResults = [
+    await settle(stopped.grabFrame()),
+    await settle(stopped.takePhoto()),
+    await settle(stopped.getPhotoCapabilities()),
+    await settle(stopped.getPhotoSettings()),
+  ];
+
+  state.resolve();
+  await state.done(() => {
+    // Both dictionaries are plain objects, not branded interfaces: Chrome 150
+    // has no PhotoCapabilities or PhotoSettings global at all.
+    testing.expectEqual('undefined', typeof window.PhotoCapabilities);
+    testing.expectEqual('undefined', typeof window.PhotoSettings);
+    testing.expectTrue(Object.getPrototypeOf(capabilities) === Object.prototype);
+    testing.expectEqual('{"redEyeReduction":"never"}', JSON.stringify(capabilities));
+    testing.expectEqual('{"imageHeight":0,"imageWidth":0}', JSON.stringify(settings));
+
+    // grabFrame is the one method that really produces something: a bitmap
+    // the size of the canvas.
+    testing.expectEqual('[object ImageBitmap]', Object.prototype.toString.call(frame));
+    testing.expectEqual(32, frame.width);
+    testing.expectEqual(32, frame.height);
+
+    // takePhoto never succeeds -- there is no still-image pipeline behind a
+    // canvas track, and Chrome fails it the same way.
+    testing.expectEqual('UnknownError: setPhotoOptions failed', photo);
+    testing.expectEqual('UnknownError: setPhotoOptions failed', photoWithSettings);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'takePhoto' on 'ImageCapture': " +
+      "The provided value is not of type 'PhotoSettings'.",
+      photoBadSettings);
+
+    // No canvas behind it, so no frame -- and the rejection carries nothing.
+    testing.expectEqual('REJECTED-WITH undefined', generatorFrame);
+    testing.expectEqual('{"redEyeReduction":"never"}', JSON.stringify(generatorCapabilities));
+
+    // Once the track has ended, all four refuse identically.
+    const invalid = 'InvalidStateError: The associated Track is in an invalid state';
+    testing.expectEqual([invalid, invalid, invalid, invalid], deadResults);
+  });
+</script>

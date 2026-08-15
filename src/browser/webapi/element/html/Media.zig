@@ -32,6 +32,9 @@ const text_tracks = @import("../../media/text_tracks.zig");
 const misc_events = @import("../../event/misc_events.zig");
 const String = @import("lightpanda").String;
 const mime = @import("../../media/mime.zig");
+const eme = @import("../../media/eme.zig");
+const global_event_handlers = @import("../../global_event_handlers.zig");
+const playback = @import("../../media/playback.zig");
 
 const Media = @This();
 
@@ -74,6 +77,15 @@ _ready_state: ReadyState = .HAVE_NOTHING,
 _audio_source_connected: bool = false,
 _network_state: NetworkState = .NETWORK_EMPTY,
 _error: ?*MediaError = null,
+
+// The MediaKeys last handed to setMediaKeys(). Null until a page attaches one,
+// and settable back to null (measured).
+_media_keys: ?*eme.MediaKeys = null,
+
+// video.remote. Built on first read and then kept, because
+// `video.remote === video.remote` has to hold -- and each element gets its own,
+// so an <audio> next to a <video> does not share one (both measured).
+_remote: ?*playback.RemotePlayback = null,
 
 pub fn asElement(self: *Media) *Element {
     return self._proto._proto;
@@ -334,8 +346,75 @@ pub fn addTextTrack(
     return track;
 }
 
+// == Encrypted Media Extensions ==
+
+pub fn getMediaKeys(self: *const Media) ?*eme.MediaKeys {
+    return self._media_keys;
+}
+
+// Chrome accepts the same keys twice, accepts a different set, and accepts
+// null to detach -- all of them resolve (measured on an element with no
+// source). A non-MediaKeys argument is a rejection, not a synchronous throw.
+pub fn setMediaKeys(self: *Media, keys_: ?js.Value, exec: *const js.Execution) js.Promise {
+    const local = exec.js.local.?;
+    const keys = keys_ orelse return local.rejectPromise(.{
+        .type_error = "Failed to execute 'setMediaKeys' on 'HTMLMediaElement': " ++
+            "1 argument required, but only 0 present.",
+    });
+    if (keys.isNull()) {
+        self._media_keys = null;
+        return local.resolvePromise(null) catch local.rejectPromise(.{
+            .type_error = "Failed to execute 'setMediaKeys' on 'HTMLMediaElement'.",
+        });
+    }
+    const attached = keys.toZig(*eme.MediaKeys) catch return local.rejectPromise(.{
+        .type_error = "Failed to execute 'setMediaKeys' on 'HTMLMediaElement': " ++
+            "parameter 1 is not of type 'MediaKeys'.",
+    });
+    self._media_keys = attached;
+    return local.resolvePromise(null) catch local.rejectPromise(.{
+        .type_error = "Failed to execute 'setMediaKeys' on 'HTMLMediaElement'.",
+    });
+}
+
+/// video.remote, created on first read.
+pub fn getRemote(self: *Media, exec: *js.Execution) !*playback.RemotePlayback {
+    if (self._remote) |existing| return existing;
+    const created = try playback.RemotePlayback.create(self, exec);
+    self._remote = created;
+    return created;
+}
+
+/// Reflects the `disableremoteplayback` content attribute: setting it true
+/// writes an empty attribute, false removes it (measured).
+pub fn getDisableRemotePlayback(self: *const Media) bool {
+    return self.asConstElement().getAttributeSafe(.wrap("disableremoteplayback")) != null;
+}
+
+pub fn setDisableRemotePlayback(self: *Media, value: bool, frame: *Frame) !void {
+    if (value) {
+        try self.asElement().setAttributeSafe(.wrap("disableremoteplayback"), .wrap(""), frame);
+    } else {
+        try self.asElement().removeAttribute(.wrap("disableremoteplayback"), frame);
+    }
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Media);
+
+    // Getter/setter pair for an event handler property, through the element
+    // the media element is.
+    fn handlerAccessor(comptime handler: global_event_handlers.Handler) type {
+        return struct {
+            pub fn get(self: *Media, frame: *Frame) !?js.Function.Global {
+                return self.asElement().getAttributeFunction(handler, frame);
+            }
+
+            pub fn set(self: *Media, callback: ?js.Function.Global, frame: *Frame) !void {
+                return self.asElement().setAttributeListener(handler, callback, frame);
+            }
+        };
+    }
 
     pub const Meta = struct {
         pub const name = "HTMLMediaElement";
@@ -377,11 +456,26 @@ pub const JsApi = struct {
 
     pub const textTracks = bridge.accessor(Media.getTextTracks, null, .{});
 
+    // Chrome puts these two right after `textTracks` (measured; the rest of
+    // this prototype's ordering is a separate matter).
+    pub const onencrypted = bridge.accessor(handlerAccessor(.onencrypted).get, handlerAccessor(.onencrypted).set, .{});
+    pub const onwaitingforkey = bridge.accessor(handlerAccessor(.onwaitingforkey).get, handlerAccessor(.onwaitingforkey).set, .{});
+
     pub const addTextTrack = bridge.function(Media.addTextTrack, .{ .arity = 1 });
     pub const canPlayType = bridge.function(Media.canPlayType, .{});
-    pub const play = bridge.function(Media.play, .{});
-    pub const pause = bridge.function(Media.pause, .{});
     pub const load = bridge.function(Media.load, .{});
+    pub const pause = bridge.function(Media.pause, .{});
+    pub const play = bridge.function(Media.play, .{});
+
+    // Chrome lists these two after the three playback verbs (measured).
+    pub const remote = bridge.accessor(Media.getRemote, null, .{});
+    pub const disableRemotePlayback = bridge.accessor(Media.getDisableRemotePlayback, Media.setDisableRemotePlayback, .{ .ce_reactions = true });
+
+    // EME arrives on a partial interface, so Chrome lists these two *after*
+    // `constructor`. V8 can only put `constructor` last, so last-but-one is as
+    // close as this gets.
+    pub const mediaKeys = bridge.accessor(Media.getMediaKeys, null, .{});
+    pub const setMediaKeys = bridge.function(Media.setMediaKeys, .{ .arity = 1 });
 };
 
 const testing = @import("../../../../testing.zig");

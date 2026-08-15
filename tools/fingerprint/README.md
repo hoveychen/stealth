@@ -1279,3 +1279,102 @@ listed below.
 - **`XRWebGLLayer.framebuffer` is null and its viewport is all zeroes.** Both
   match Chrome for an inline session, and both would be real numbers for an
   immersive one this engine cannot enter.
+
+## G17 batch 19: EME, Media Source and media capture (P13)
+
+Seventeen new window globals. `creep-features-missing` named sixteen; the
+seventeenth, `ChapterInformation`, exists on the reference Chrome 150 and not in
+CreepJS's Chrome-115-era table. Scope was set from the live browser rather than
+from that table in both directions: `ManagedMediaSource`, `ManagedSourceBuffer`,
+`PhotoCapabilities` and `MediaKeysPolicy` are **absent** from the reference
+Chrome 150 too, so they are not added. Shipping a global a real Chrome does not
+have is as loud as missing one.
+
+The probes are `stealth-detector-probes/win-batch/probe-win57.js` (the whole
+family's shapes, the entry points, MSE end to end and a full EME chain),
+`-win60` (canvas capture, ImageCapture, VideoPlaybackQuality and RemotePlayback
+behaviour), `-win61` (the branches this engine can reach that -win60 did not
+cover), and `-win62` (id/label identity). `win57-findings.md` is the readable
+summary. Everything ran at `http://localhost:8731/`.
+
+Two measurements decided the shape of the batch, and both cut the same way:
+these families are not refusable.
+
+**`navigator.requestMediaKeySystemAccess` resolves.** On a plain desktop Chrome
+with no special CDM, both `org.w3.clearkey` and `com.widevine.alpha` come back
+with a real `MediaKeySystemAccess`; only the other three key systems are
+refused, and the match on the key system string is exact — no case folding, no
+trimming, no prefix match. So EME here is a real negotiation with two supported
+key systems, producing real `MediaKeys` and `MediaKeySession` objects, rather
+than the unconditional `NotSupportedError` this engine used to give.
+
+**`canvas.captureStream()` is the one capture path that needs no permission and
+no device.** getUserMedia still refuses and no camera exists, but a canvas is a
+video source a browser is always willing to open, so a page reaches a live
+`CanvasCaptureMediaStreamTrack` and a working `ImageCapture` in two calls. That
+makes `grabFrame()` produce a real `ImageBitmap` rather than a refusal.
+
+### Five behaviours only a measurement gets right
+
+- **A capture track's size is frozen at `captureStream()` time.** Resizing the
+  canvas afterwards moves neither the live track's settings nor its capability
+  ranges. Only a track opened after the resize sees the new size.
+- **A zero-area canvas still captures**, but its settings then *omit*
+  `width`, `height` and `aspectRatio` rather than reporting 0, while every
+  capability range clamps to 1.
+- **`grabFrame()` on a video track with no frames rejects with `undefined`.**
+  Not a DOMException — nothing at all. A reader that reaches for `e.name` on
+  that rejection throws, which is exactly how this was found: the first probe
+  run died there and lost the whole ImageCapture section.
+- **`takePhoto('nope')` rejects rather than throwing.** The failure is an
+  argument-conversion TypeError, which normally throws synchronously, and here
+  it does not.
+- **`watchAvailability()` ids come from a counter shared by every
+  `RemotePlayback` in the window** — a second media element continues the
+  sequence instead of starting at 1 — while the bookkeeping
+  `cancelWatchAvailability()` checks is per-object, so cancelling another
+  object's id is a `NotFoundError`. The counter and the ledger live in different
+  places.
+
+### What the track rework closed
+
+`MediaStreamTrack` now carries which source produced it (WebAudio destination
+node, breakout-box generator, or canvas capture). Chrome's settings and
+capabilities dictionaries are per-source and barely overlap — only `deviceId` is
+common to all three — so they branch on it. That also closed the gap batch 19's
+own P5 had recorded: a generator used to answer the WebAudio track's values.
+Three more per-source differences came out of the same measurement: `stats` is
+`null` on a video track rather than a zeroed object, the `contentHint`
+vocabulary splits by kind (`speech`/`music` for audio, `motion`/`detail`/`text`
+for video, and a hint from the wrong list is dropped rather than refused), and
+`clone()` keeps the deviceId on a capture track while minting a fresh one on a
+WebAudio track.
+
+Two prototype orders were corrected in passing.
+`HTMLCanvasElement.prototype` now matches Chrome's own-property order exactly —
+`captureStream` sits after the two dimensions, and `toBlob` before `toDataURL`.
+`HTMLMediaElement.prototype` takes Chrome's `load`/`pause`/`play` order with
+`remote` and `disableRemotePlayback` after them; the rest of that prototype is
+still short and belongs to G20.
+
+### What is still missing
+
+- **`getConstraints()` does not echo.** A capture track accepts constraints and
+  resolves, the way Chrome does, but Chrome then remembers what it recognised
+  and reports it back: after `applyConstraints({width: 10})` its
+  `getConstraints()` is `{"width":10}` where this engine's stays `{}`. This is
+  the only field-level difference left across the four probes once the
+  per-instance random deviceIds are normalised.
+- **`URL.createObjectURL` still only accepts a Blob**, so a MediaSource cannot
+  be attached to an element. Adding the URL would not help: there is no media
+  pipeline behind it, so `sourceopen` would never fire, and the trade is a
+  visible refusal for an invisible hang.
+- **`takePhoto()` never succeeds.** There is no still-image pipeline behind a
+  canvas track — and Chrome fails it the same way, with
+  `UnknownError: setPhotoOptions failed`, rather than falling back on the frame
+  `grabFrame()` would have handed over.
+- **FrozenArray cannot be frozen** (`MediaMetadata.artwork`), and
+  `X.prototype[Symbol.iterator] === X.prototype.values` does not hold. Both are
+  engine-wide gaps older than this batch; `SourceBufferList` is the sharpest
+  case, because Chrome's `@@iterator` there *is* `Array.prototype[@@iterator]`
+  itself, an identity this engine has no way to reproduce.
