@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<body>
+
+<script id=body_prototype_roster>
+  {
+    // Measured on a headed Chrome 150 (probe-g20a): six presentational
+    // attributes, then the six window-reflecting handlers HTMLElement does not
+    // declare, then eighteen more of them, then constructor.
+    const expected = [
+      'text', 'link', 'vLink', 'aLink', 'bgColor', 'background',
+      'onblur', 'onerror', 'onfocus', 'onload', 'onresize', 'onscroll',
+      'onafterprint', 'onbeforeprint', 'onbeforeunload', 'onhashchange',
+      'onlanguagechange', 'onmessage', 'onmessageerror', 'onoffline', 'ononline',
+      'onpagehide', 'onpageshow', 'onpopstate', 'onrejectionhandled', 'onstorage',
+      'onunhandledrejection', 'onunload', 'ongamepadconnected',
+      'ongamepaddisconnected', 'constructor',
+    ];
+    testing.expectEqual(expected, Object.getOwnPropertyNames(HTMLBodyElement.prototype));
+    testing.expectEqual('HTMLBodyElement', HTMLBodyElement.prototype[Symbol.toStringTag]);
+  }
+</script>
+
+<script id=body_presentational_attributes>
+  {
+    // Plain string reflections with no normalisation whatsoever: no colour
+    // parsing on the five colour ones, and no URL resolution on background --
+    // measured on a headed Chrome 150, `body.background` hands back the raw
+    // "x.png" rather than an absolute URL.
+    const props = [['text', 'text'], ['link', 'link'], ['vLink', 'vlink'],
+                   ['aLink', 'alink'], ['bgColor', 'bgcolor'], ['background', 'background']];
+    for (const [prop, attr] of props) {
+      const el = document.createElement('body');
+      testing.expectEqual('', el[prop], { desc: prop + ' unset' });
+      for (const v of ['red', 'RED', '#f00', 'ff0000', 'rgb(1,2,3)', 'garbage', '  red  ', 'x.png', '0']) {
+        el.setAttribute(attr, v);
+        testing.expectEqual(v, el[prop], { desc: prop + '="' + v + '"' });
+      }
+      el.setAttribute(attr, '');
+      testing.expectEqual('', el[prop], { desc: prop + ' empty' });
+
+      el[prop] = 'red';
+      testing.expectEqual('red', el.getAttribute(attr), { desc: prop + ' setter' });
+      el[prop] = 0;
+      testing.expectEqual('0', el.getAttribute(attr), { desc: prop + ' stringifies' });
+      el[prop] = undefined;
+      testing.expectEqual('undefined', el.getAttribute(attr), { desc: prop + ' undefined' });
+    }
+
+    // The five colour ones are [LegacyNullToEmptyString]; background is not.
+    for (const [prop, attr] of props) {
+      const el = document.createElement('body');
+      el[prop] = null;
+      testing.expectEqual(prop === 'background' ? 'null' : '', el.getAttribute(attr),
+        { desc: prop + ' = null' });
+    }
+
+    // Still no resolution once the body is in the document.
+    document.body.setAttribute('background', 'x.png');
+    testing.expectEqual('x.png', document.body.background);
+    document.body.removeAttribute('background');
+  }
+</script>
+
+<script id=body_window_reflecting_handlers>
+  {
+    // Sixteen of the eighteen are aliases for the Window's own handler slot:
+    // assigning to body.onX is assigning to window.onX, and clearing one
+    // clears the other. Measured on a headed Chrome 150.
+    const forwarding = ['onafterprint', 'onbeforeprint', 'onbeforeunload',
+      'onhashchange', 'onlanguagechange', 'onmessage', 'onmessageerror',
+      'onoffline', 'ononline', 'onpagehide', 'onpageshow', 'onpopstate',
+      'onrejectionhandled', 'onstorage', 'onunhandledrejection', 'onunload'];
+    for (const name of forwarding) {
+      const fn = () => {};
+      testing.expectEqual(null, document.body[name], { desc: name + ' starts null' });
+      document.body[name] = fn;
+      testing.expectEqual(true, document.body[name] === fn, { desc: name + ' reads back' });
+      testing.expectEqual(true, window[name] === fn, { desc: name + ' is the window slot' });
+      window[name] = null;
+      testing.expectEqual(null, document.body[name], { desc: name + ' clears from the window' });
+    }
+
+    // The six HTMLElement already declares forward the same way.
+    for (const name of ['onblur', 'onerror', 'onfocus', 'onload', 'onresize', 'onscroll']) {
+      const fn = () => {};
+      document.body[name] = fn;
+      testing.expectEqual(true, window[name] === fn, { desc: name + ' is the window slot' });
+      document.body[name] = null;
+      window[name] = null;
+    }
+
+    // The two gamepad handlers are the exception: they are element-local, and
+    // setting one leaves the window's alone.
+    for (const name of ['ongamepadconnected', 'ongamepaddisconnected']) {
+      const fn = () => {};
+      const el = document.createElement('body');
+      testing.expectEqual(null, el[name], { desc: name + ' starts null' });
+      el[name] = fn;
+      testing.expectEqual(true, el[name] === fn, { desc: name + ' reads back' });
+      testing.expectEqual(null, window[name], { desc: name + ' does not reach the window' });
+      el[name] = null;
+      testing.expectEqual(null, el[name], { desc: name + ' clears' });
+    }
+  }
+</script>
+
+<script id=body_window_reflecting_dispatch>
+  {
+    // Because the handler lives on the window, the event has to be dispatched
+    // there: dispatching at the body does not reach it.
+    const hits = [];
+    document.body.onafterprint = (e) => hits.push(e.currentTarget === window ? 'window' : 'body');
+    window.dispatchEvent(new Event('afterprint'));
+    testing.expectEqual(['window'], hits);
+    document.body.dispatchEvent(new Event('afterprint'));
+    testing.expectEqual(['window'], hits);
+    document.body.onafterprint = null;
+    window.dispatchEvent(new Event('afterprint'));
+    testing.expectEqual(['window'], hits);
+
+    // The element-local ones fire where they are set.
+    const el = document.createElement('body');
+    let fired = 0;
+    el.ongamepadconnected = () => { fired++; };
+    window.dispatchEvent(new Event('gamepadconnected'));
+    testing.expectEqual(0, fired);
+    el.dispatchEvent(new Event('gamepadconnected'));
+    testing.expectEqual(1, fired);
+  }
+</script>
+
+<script id=body_window_reflecting_inline_attribute>
+  {
+    // The content attribute form registers the handler on the window too.
+    document.body.setAttribute('onafterprint', 'window.__g20_inline = (window.__g20_inline || 0) + 1');
+    testing.expectEqual('function', typeof document.body.onafterprint);
+    testing.expectEqual('function', typeof window.onafterprint);
+    window.dispatchEvent(new Event('afterprint'));
+    testing.expectEqual(1, window.__g20_inline);
+    document.body.removeAttribute('onafterprint');
+    testing.expectEqual(null, document.body.onafterprint);
+    testing.expectEqual(null, window.onafterprint);
+  }
+</script>
+
+</body>
+</html>
