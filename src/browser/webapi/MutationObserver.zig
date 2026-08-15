@@ -456,12 +456,21 @@ pub const JsApi = struct {
         pub const name = "MutationObserver";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // The legacy prefixed spelling Chrome still ships, pointing at this very
+        // constructor (measured: WebKitMutationObserver === MutationObserver).
+        // One of G17's window keys.
+        pub const constructor_aliases = [_][]const u8{"WebKitMutationObserver"};
     };
 
-    pub const constructor = bridge.constructor(MutationObserver.init, .{});
+    // The callback is required, so Chrome reports arity 1 and refuses the bare
+    // call with "1 argument required, but only 0 present." (measured). Deriving
+    // it from the Zig signature gave 0.
+    pub const constructor = bridge.constructor(MutationObserver.init, .{ .arity = 1 });
 
-    pub const observe = bridge.function(MutationObserver.observe, .{});
+    // Chrome's order, which is not the obvious one: disconnect comes first
+    // (measured), and declaration order here is what a page reads back.
     pub const disconnect = bridge.function(MutationObserver.disconnect, .{});
+    pub const observe = bridge.function(MutationObserver.observe, .{});
     pub const takeRecords = bridge.function(MutationObserver.takeRecords, .{});
 };
 

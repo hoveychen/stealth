@@ -28,6 +28,7 @@ const png = @import("../../canvas/png.zig");
 const CanvasRenderingContext2D = @import("../../canvas/CanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("../../canvas/WebGL2RenderingContext.zig");
+const ImageBitmapRenderingContext = @import("../../canvas/ImageBitmapRenderingContext.zig");
 const GPUCanvasContext = @import("../../webgpu/pipeline.zig").GPUCanvasContext;
 const OffscreenCanvas = @import("../../canvas/OffscreenCanvas.zig");
 const image_capture = @import("../../media/image_capture.zig");
@@ -80,7 +81,7 @@ fn resetSurface(self: *Canvas) void {
     const cached = self._cached orelse return;
     switch (cached) {
         .@"2d" => |context| context._surface.reset(),
-        .webgl, .webgl2, .webgpu => {},
+        .webgl, .webgl2, .webgpu, .bitmaprenderer => {},
     }
 }
 
@@ -91,6 +92,7 @@ const DrawingContext = union(enum) {
     webgl: *WebGLRenderingContext,
     webgl2: *WebGL2RenderingContext,
     webgpu: *GPUCanvasContext,
+    bitmaprenderer: *ImageBitmapRenderingContext,
 };
 
 pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?DrawingContext {
@@ -100,6 +102,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
             .webgl => std.mem.eql(u8, context_type, "webgl") or std.mem.eql(u8, context_type, "experimental-webgl"),
             .webgl2 => std.mem.eql(u8, context_type, "webgl2"),
             .webgpu => std.mem.eql(u8, context_type, "webgpu"),
+            .bitmaprenderer => std.mem.eql(u8, context_type, "bitmaprenderer"),
         };
         return if (matches) cached else null;
     }
@@ -131,6 +134,14 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
             break :blk .{ .webgl = ctx };
         }
 
+        // An ImageBitmap sink: it rasterises nothing here either, but returning
+        // null for it was the loud answer -- no real Chrome refuses this
+        // context type. See canvas/ImageBitmapRenderingContext.zig.
+        if (std.mem.eql(u8, context_type, "bitmaprenderer")) {
+            const ctx = try frame._factory.create(ImageBitmapRenderingContext{ ._canvas = self });
+            break :blk .{ .bitmaprenderer = ctx };
+        }
+
         if (std.mem.eql(u8, context_type, "webgl2")) {
             const ctx = try frame._factory.create(WebGL2RenderingContext{ ._canvas = .{ .html = self } });
             break :blk .{ .webgl2 = ctx };
@@ -157,7 +168,7 @@ pub fn pixels(self: *const Canvas) ?[]const u8 {
     const cached = self._cached orelse return null;
     return switch (cached) {
         .@"2d" => |context| context._surface.peek(self.getWidth(), self.getHeight()),
-        .webgl, .webgl2, .webgpu => null,
+        .webgl, .webgl2, .webgpu, .bitmaprenderer => null,
     };
 }
 

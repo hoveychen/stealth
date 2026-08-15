@@ -249,6 +249,10 @@ pub const JsApi = struct {
         pub const name = "DOMMatrix";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
+        // WebKitCSSMatrix is the same constructor object, not a copy (measured:
+        // `===` holds, `.name` reports DOMMatrix, and `new WebKitCSSMatrix('nope')`
+        // reports a failure to construct 'DOMMatrix'). One of G17's window keys.
+        pub const constructor_aliases = [_][]const u8{"WebKitCSSMatrix"};
     };
 
     pub const constructor = bridge.constructor(DOMMatrix.init, .{});

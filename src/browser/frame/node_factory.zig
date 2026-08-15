@@ -419,10 +419,10 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     },
                     asUint("menu") => return createHtmlElementT(
                         frame,
-                        Element.Html.Generic,
+                        Element.Html.Menu,
                         namespace,
                         attribute_iterator,
-                        .{ ._proto = undefined, ._tag_name = comptime .wrap("menu"), ._tag = .menu },
+                        .{ ._proto = undefined },
                     ),
                     asUint("area") => return createHtmlElementT(
                         frame,
@@ -519,6 +519,13 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     asUint("param") => return createHtmlElementT(
                         frame,
                         Element.Html.Param,
+                        namespace,
+                        attribute_iterator,
+                        .{ ._proto = undefined },
+                    ),
+                    asUint("frame") => return createHtmlElementT(
+                        frame,
+                        Element.Html.FrameElement,
                         namespace,
                         attribute_iterator,
                         .{ ._proto = undefined },
