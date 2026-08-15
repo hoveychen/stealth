@@ -33,6 +33,7 @@ const ModelContext = @import("ModelContext.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const DOMException = @import("DOMException.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
+const eme = @import("media/eme.zig");
 const BatteryManager = @import("BatteryManager.zig");
 const services = @import("navigator/services.zig");
 const credential = @import("navigator/credentials.zig");
@@ -520,16 +521,16 @@ pub fn requestMIDIAccess(_: *const Navigator, options_: ?js.Value, exec: *const 
     return promise;
 }
 
-// No CDM here. NotSupportedError is what Chrome answers for a key system it
-// can't provide, and implementing MediaKeySystemAccess would mean inventing a
-// CDM's capabilities.
+// A plain desktop Chrome answers for two key systems, Clear Key and Widevine,
+// so refusing every one of them was itself the signal. The negotiation lives in
+// media/eme.zig next to the objects it hands out.
 pub fn requestMediaKeySystemAccess(
     _: *const Navigator,
-    _: []const u8,
-    _: js.Value,
+    key_system_: ?js.Value,
+    configurations_: ?js.Value,
     exec: *const Execution,
 ) js.Promise {
-    return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
+    return eme.requestMediaKeySystemAccess(key_system_, configurations_, exec);
 }
 
 // Nothing is installed alongside this browser.
@@ -769,7 +770,7 @@ pub const JsApi = struct {
     pub const getBattery = bridge.function(Navigator.getBattery, .{ .exposed = .window });
     pub const getUserMedia = bridge.function(Navigator.getUserMedia, .{ .exposed = .window });
     pub const requestMIDIAccess = bridge.function(Navigator.requestMIDIAccess, .{ .exposed = .window });
-    pub const requestMediaKeySystemAccess = bridge.function(Navigator.requestMediaKeySystemAccess, .{ .exposed = .window });
+    pub const requestMediaKeySystemAccess = bridge.function(Navigator.requestMediaKeySystemAccess, .{ .arity = 2, .exposed = .window });
     pub const setAppBadge = bridge.function(Navigator.setAppBadge, .{ .exposed = .window });
     pub const webkitGetUserMedia = bridge.function(Navigator.getUserMedia, .{ .exposed = .window, .js_name = "webkitGetUserMedia" });
     pub const clearOriginJoinedAdInterestGroups = bridge.function(Navigator.clearOriginJoinedAdInterestGroups, .{ .exposed = .window });

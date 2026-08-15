@@ -1,0 +1,501 @@
+<!--
+  Encrypted Media Extensions: the six interfaces plus the Navigator entry point
+  that hands them out.
+
+  Every expectation here is Chrome 150's, measured on a headed window over
+  http://localhost (win57-chrome.json / win58-chrome.json). The interesting part
+  is not the shapes but the acceptance rules: a page reads back
+  `access.getConfiguration()` and the dictionary Chrome echoes -- alphabetically
+  ordered, with `label: ""`, `robustness: ""`, `encryptionScheme: null`,
+  `sessionTypes: ["temporary"]` and both requirements answered "not-allowed" --
+  is a fingerprint of the CDM policy, not of the request.
+-->
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<script src="../shape.js"></script>
+
+<script id=interface_objects>
+{
+  expectInterfaceObject('MediaKeys');
+  expectInterfaceObject('MediaKeySystemAccess');
+  expectInterfaceObject('MediaKeyStatusMap');
+  expectInterfaceObject('MediaKeySession', { inherits: EventTarget, protoOf: EventTarget.prototype });
+  expectInterfaceObject('MediaKeyMessageEvent', { arity: 2, illegal: false, inherits: Event, protoOf: Event.prototype });
+  expectInterfaceObject('MediaEncryptedEvent', { arity: 1, illegal: false, inherits: Event, protoOf: Event.prototype });
+}
+</script>
+
+<script id=prototype_order>
+{
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+
+  // Chrome's own order, verbatim. `getStatusForPolicy` really does sit after
+  // `constructor` on MediaKeys -- it comes from a separate partial interface --
+  // and V8 can only put `constructor` last, so ours differs there by design.
+  testing.expectEqual('createSession setServerCertificate getStatusForPolicy constructor', proto(MediaKeys));
+  testing.expectEqual('keySystem createMediaKeys getConfiguration constructor', proto(MediaKeySystemAccess));
+  testing.expectEqual('size get has entries forEach keys values constructor', proto(MediaKeyStatusMap));
+  testing.expectEqual(
+    'sessionId expiration closed keyStatuses onkeystatuseschange onmessage ' +
+    'close generateRequest load remove update constructor',
+    proto(MediaKeySession));
+  testing.expectEqual('messageType message constructor', proto(MediaKeyMessageEvent));
+  testing.expectEqual('initDataType initData constructor', proto(MediaEncryptedEvent));
+
+  // Arities: every optional argument is excluded, so the two policy/status
+  // readers are 0 and only the buffer-taking ones count.
+  testing.expectEqual(0, MediaKeys.prototype.createSession.length);
+  testing.expectEqual(1, MediaKeys.prototype.setServerCertificate.length);
+  testing.expectEqual(0, MediaKeys.prototype.getStatusForPolicy.length);
+  testing.expectEqual(0, MediaKeySystemAccess.prototype.createMediaKeys.length);
+  testing.expectEqual(0, MediaKeySystemAccess.prototype.getConfiguration.length);
+  testing.expectEqual(1, MediaKeyStatusMap.prototype.get.length);
+  testing.expectEqual(1, MediaKeyStatusMap.prototype.has.length);
+  testing.expectEqual(1, MediaKeyStatusMap.prototype.forEach.length);
+  testing.expectEqual(2, MediaKeySession.prototype.generateRequest.length);
+  testing.expectEqual(1, MediaKeySession.prototype.load.length);
+  testing.expectEqual(1, MediaKeySession.prototype.update.length);
+  testing.expectEqual(0, MediaKeySession.prototype.close.length);
+  testing.expectEqual(0, MediaKeySession.prototype.remove.length);
+  testing.expectEqual(2, Navigator.prototype.requestMediaKeySystemAccess.length);
+
+  testing.expectEqual('[object MediaKeys]', String(MediaKeys.prototype));
+  testing.expectEqual('[object MediaKeySession]', String(MediaKeySession.prototype));
+  testing.expectEqual('[object MediaKeyStatusMap]', String(MediaKeyStatusMap.prototype));
+  testing.expectEqual('[object MediaKeySystemAccess]', String(MediaKeySystemAccess.prototype));
+
+  // MediaKeyStatusMap is a readonly maplike, so it carries @@iterator too.
+  testing.expectEqual(
+    ['Symbol(Symbol.toStringTag)', 'Symbol(Symbol.iterator)'].sort().join(),
+    Object.getOwnPropertySymbols(MediaKeyStatusMap.prototype).map(String).sort().join());
+}
+</script>
+
+<script id=events>
+{
+  const e = new MediaKeyMessageEvent('message', {
+    messageType: 'license-request',
+    message: new Uint8Array([1, 2]).buffer,
+  });
+  testing.expectEqual('message', e.type);
+  testing.expectEqual('license-request', e.messageType);
+  testing.expectEqual(2, e.message.byteLength);
+  testing.expectEqual(false, e.bubbles);
+  testing.expectEqual(false, e.cancelable);
+  testing.expectTrue(e instanceof Event);
+
+  // Both dictionary members are required, so the init argument is too.
+  testing.expectError(
+    "Failed to construct 'MediaKeyMessageEvent': 2 arguments required, but only 1 present.",
+    () => new MediaKeyMessageEvent('message'));
+  testing.expectError(
+    "Failed to construct 'MediaKeyMessageEvent': Failed to read the 'message' property from " +
+    "'MediaKeyMessageEventInit': Required member is undefined.",
+    () => new MediaKeyMessageEvent('message', { messageType: 'license-request' }));
+  testing.expectError(
+    "Failed to construct 'MediaKeyMessageEvent': Failed to read the 'messageType' property from " +
+    "'MediaKeyMessageEventInit': The provided value 'nope' is not a valid enum value of type MediaKeyMessageType.",
+    () => new MediaKeyMessageEvent('message', { messageType: 'nope', message: new ArrayBuffer(1) }));
+  // An explicit null or undefined init is refused as "not of type", not
+  // counted as a missing argument.
+  testing.expectError(
+    "Failed to construct 'MediaKeyMessageEvent': The provided value is not of type 'MediaKeyMessageEventInit'.",
+    () => new MediaKeyMessageEvent('message', null));
+  testing.expectError(
+    "Failed to construct 'MediaKeyMessageEvent': The provided value is not of type 'MediaKeyMessageEventInit'.",
+    () => new MediaKeyMessageEvent('message', undefined));
+  // `message` is a plain ArrayBuffer: a view over one is refused.
+  testing.expectError(
+    "Failed to construct 'MediaKeyMessageEvent': Failed to read the 'message' property from " +
+    "'MediaKeyMessageEventInit': Failed to convert value to 'ArrayBuffer'.",
+    () => new MediaKeyMessageEvent('message', { messageType: 'license-request', message: new Uint8Array([1]) }));
+
+  const enc = new MediaEncryptedEvent('encrypted', {
+    initDataType: 'cenc',
+    initData: new Uint8Array([1]).buffer,
+  });
+  testing.expectEqual('encrypted', enc.type);
+  testing.expectEqual('cenc', enc.initDataType);
+  testing.expectEqual(1, enc.initData.byteLength);
+
+  // Unlike the message event, both of these members have defaults.
+  const bare = new MediaEncryptedEvent('encrypted');
+  testing.expectEqual('', bare.initDataType);
+  testing.expectEqual(null, bare.initData);
+  testing.expectError(
+    "Failed to construct 'MediaEncryptedEvent': 1 argument required, but only 0 present.",
+    () => new MediaEncryptedEvent());
+  testing.expectError(
+    "Failed to construct 'MediaEncryptedEvent': Failed to read the 'initData' property from " +
+    "'MediaEncryptedEventInit': Failed to convert value to 'ArrayBuffer'.",
+    () => new MediaEncryptedEvent('encrypted', { initData: {} }));
+  // `initDataType` is a plain DOMString, so an explicit null stringifies.
+  testing.expectEqual('null', new MediaEncryptedEvent('encrypted', { initDataType: null }).initDataType);
+}
+</script>
+
+<script id=key_systems type=module>
+  const state = await testing.async();
+
+  const VIDEO = { contentType: 'video/mp4; codecs="avc1.42E01E"' };
+  const ask = (ks, cfg) => navigator.requestMediaKeySystemAccess(ks, cfg).then(
+    (a) => `OK ${a.keySystem}`, (e) => `${e.name}: ${e.message}`);
+
+  const one = [{ initDataTypes: ['cenc'], videoCapabilities: [VIDEO] }];
+  const results = {};
+  for (const ks of [
+    'org.w3.clearkey', 'com.widevine.alpha', 'com.microsoft.playready',
+    'com.apple.fps', 'com.adobe.primetime', 'ORG.W3.CLEARKEY',
+    'org.w3.clearkey ', '', 'org.w3', 'org.w3.clearkey.foo',
+  ]) results[ks || '<empty>'] = await ask(ks, one);
+
+  state.resolve();
+  await state.done(() => {
+    const unsupported = 'NotSupportedError: Unsupported keySystem or supportedConfigurations.';
+    testing.expectEqual('OK org.w3.clearkey', results['org.w3.clearkey']);
+    testing.expectEqual('OK com.widevine.alpha', results['com.widevine.alpha']);
+    // Only those two on a plain desktop Chrome; the rest need a CDM it lacks.
+    testing.expectEqual(unsupported, results['com.microsoft.playready']);
+    testing.expectEqual(unsupported, results['com.apple.fps']);
+    testing.expectEqual(unsupported, results['com.adobe.primetime']);
+    // The match is exact: no case folding, no trimming, no prefix match.
+    testing.expectEqual(unsupported, results['ORG.W3.CLEARKEY']);
+    testing.expectEqual(unsupported, results['org.w3.clearkey ']);
+    testing.expectEqual(unsupported, results['org.w3']);
+    testing.expectEqual(unsupported, results['org.w3.clearkey.foo']);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'requestMediaKeySystemAccess' on 'Navigator': " +
+      'The keySystem parameter is empty.',
+      results['<empty>']);
+  });
+</script>
+
+<script id=argument_errors type=module>
+  const state = await testing.async();
+
+  const VIDEO = { contentType: 'video/mp4; codecs="avc1.42E01E"' };
+  const ask = (ks, cfg) => Promise.resolve()
+    .then(() => navigator.requestMediaKeySystemAccess(ks, cfg))
+    .then(() => 'OK', (e) => `${e.name}: ${e.message}`);
+
+  // A missing argument rejects rather than throwing: the method still returns
+  // a promise (measured -- `requestMediaKeySystemAccess()` is a Promise).
+  const returnsPromise = navigator.requestMediaKeySystemAccess() instanceof Promise;
+  const noArgs = await Promise.resolve().then(() => navigator.requestMediaKeySystemAccess())
+    .then(() => 'OK', (e) => `${e.name}: ${e.message}`);
+  const oneArg = await Promise.resolve().then(() => navigator.requestMediaKeySystemAccess('org.w3.clearkey'))
+    .then(() => 'OK', (e) => `${e.name}: ${e.message}`);
+
+  const empty = await ask('org.w3.clearkey', []);
+  const notArray = await ask('org.w3.clearkey', {});
+  const nullConfigs = await ask('org.w3.clearkey', null);
+  const numberConfigs = await ask('org.w3.clearkey', 5);
+  const memberNotObject = await ask('org.w3.clearkey', [5]);
+  const nullMember = await ask('org.w3.clearkey', [null]);
+  const badEnum = await ask('org.w3.clearkey', [{ distinctiveIdentifier: 'nope', videoCapabilities: [VIDEO] }]);
+
+  state.resolve();
+  await state.done(() => {
+    const P = "TypeError: Failed to execute 'requestMediaKeySystemAccess' on 'Navigator': ";
+    testing.expectTrue(returnsPromise);
+    testing.expectEqual(P + '2 arguments required, but only 0 present.', noArgs);
+    testing.expectEqual(P + '2 arguments required, but only 1 present.', oneArg);
+    testing.expectEqual(P + 'The supportedConfigurations parameter is empty.', empty);
+    testing.expectEqual(P + 'The object must have a callable @@iterator property.', notArray);
+    testing.expectEqual(P + 'The provided value cannot be converted to a sequence.', nullConfigs);
+    testing.expectEqual(P + 'The provided value cannot be converted to a sequence.', numberConfigs);
+    testing.expectEqual(P + "The provided value is not of type 'MediaKeySystemConfiguration'.", memberNotObject);
+    // A null member reads as an empty dictionary, which has no capability to
+    // support, so it fails the way an empty candidate does.
+    testing.expectEqual('NotSupportedError: Unsupported keySystem or supportedConfigurations.', nullMember);
+    testing.expectEqual(
+      P + "Failed to read the 'distinctiveIdentifier' property from 'MediaKeySystemConfiguration': " +
+      "The provided value 'nope' is not a valid enum value of type MediaKeysRequirement.",
+      badEnum);
+  });
+</script>
+
+<script id=configuration type=module>
+  const state = await testing.async();
+
+  const VIDEO = { contentType: 'video/mp4; codecs="avc1.42E01E"' };
+  const AUDIO = { contentType: 'audio/mp4; codecs="mp4a.40.2"' };
+  const ask = (cand) => navigator.requestMediaKeySystemAccess('org.w3.clearkey', [cand]).then(
+    (a) => JSON.stringify(a.getConfiguration()), (e) => `${e.name}: ${e.message}`);
+
+  const results = {
+    plain: await ask({ videoCapabilities: [VIDEO] }),
+    label: await ask({ label: 'hello', videoCapabilities: [VIDEO] }),
+    initDataTypes: await ask({ initDataTypes: ['cenc', 'keyids', 'webm', 'nope'], videoCapabilities: [VIDEO] }),
+    audioOnly: await ask({ audioCapabilities: [AUDIO] }),
+    encScheme: await ask({ videoCapabilities: [{ ...VIDEO, encryptionScheme: 'cbcs' }] }),
+    sessionEmpty: await ask({ sessionTypes: [], videoCapabilities: [VIDEO] }),
+    // Every one of these is a refusal, not a normalisation.
+    emptyCandidate: await ask({}),
+    videoEmptyArray: await ask({ videoCapabilities: [] }),
+    robustness: await ask({ videoCapabilities: [{ ...VIDEO, robustness: 'SW_SECURE_CRYPTO' }] }),
+    encSchemeBogus: await ask({ videoCapabilities: [{ ...VIDEO, encryptionScheme: 'nope' }] }),
+    distinctiveRequired: await ask({ distinctiveIdentifier: 'required', videoCapabilities: [VIDEO] }),
+    persistentRequired: await ask({ persistentState: 'required', videoCapabilities: [VIDEO] }),
+    sessionPersistent: await ask({ sessionTypes: ['persistent-license'], videoCapabilities: [VIDEO] }),
+    initDataTypesBogusOnly: await ask({ initDataTypes: ['nope'], videoCapabilities: [VIDEO] }),
+    badContentType: await ask({ videoCapabilities: [{ contentType: 'video/nope' }] }),
+    videoAsAudio: await ask({ audioCapabilities: [VIDEO] }),
+    capNoContentType: await ask({ videoCapabilities: [{}] }),
+  };
+
+  // The first candidate that is supported wins, and its label comes back.
+  const second = await navigator.requestMediaKeySystemAccess('org.w3.clearkey', [
+    { videoCapabilities: [{ contentType: 'video/nope' }] },
+    { label: 'second', videoCapabilities: [VIDEO] },
+  ]).then((a) => a.getConfiguration().label, (e) => `${e.name}: ${e.message}`);
+
+  const access = await navigator.requestMediaKeySystemAccess('org.w3.clearkey', [{ videoCapabilities: [VIDEO] }]);
+  const freshEachCall = access.getConfiguration() !== access.getConfiguration();
+
+  state.resolve();
+  await state.done(() => {
+    const unsupported = 'NotSupportedError: Unsupported keySystem or supportedConfigurations.';
+    const V = '"videoCapabilities":[{"contentType":"video/mp4; codecs=\\"avc1.42E01E\\"",' +
+      '"encryptionScheme":null,"robustness":""}]';
+
+    // Blink serialises the echoed dictionary alphabetically, and fills in
+    // every member the page left out.
+    testing.expectEqual(
+      '{"audioCapabilities":[],"distinctiveIdentifier":"not-allowed","initDataTypes":[],' +
+      `"label":"","persistentState":"not-allowed","sessionTypes":["temporary"],${V}}`,
+      results.plain);
+    testing.expectEqual(
+      '{"audioCapabilities":[],"distinctiveIdentifier":"not-allowed","initDataTypes":[],' +
+      `"label":"hello","persistentState":"not-allowed","sessionTypes":["temporary"],${V}}`,
+      results.label);
+    // Unrecognised init data types are filtered out rather than refused --
+    // but a candidate whose types are *all* unrecognised is refused.
+    testing.expectEqual(
+      '{"audioCapabilities":[],"distinctiveIdentifier":"not-allowed",' +
+      '"initDataTypes":["cenc","keyids","webm"],' +
+      `"label":"","persistentState":"not-allowed","sessionTypes":["temporary"],${V}}`,
+      results.initDataTypes);
+    testing.expectEqual(
+      '{"audioCapabilities":[{"contentType":"audio/mp4; codecs=\\"mp4a.40.2\\"",' +
+      '"encryptionScheme":null,"robustness":""}],"distinctiveIdentifier":"not-allowed",' +
+      '"initDataTypes":[],"label":"","persistentState":"not-allowed",' +
+      '"sessionTypes":["temporary"],"videoCapabilities":[]}',
+      results.audioOnly);
+    testing.expectEqual(
+      '{"audioCapabilities":[],"distinctiveIdentifier":"not-allowed","initDataTypes":[],' +
+      '"label":"","persistentState":"not-allowed","sessionTypes":["temporary"],' +
+      '"videoCapabilities":[{"contentType":"video/mp4; codecs=\\"avc1.42E01E\\"",' +
+      '"encryptionScheme":"cbcs","robustness":""}]}',
+      results.encScheme);
+    // An explicitly empty sessionTypes is honoured, not defaulted.
+    testing.expectEqual(
+      '{"audioCapabilities":[],"distinctiveIdentifier":"not-allowed","initDataTypes":[],' +
+      `"label":"","persistentState":"not-allowed","sessionTypes":[],${V}}`,
+      results.sessionEmpty);
+
+    testing.expectEqual(unsupported, results.emptyCandidate);
+    testing.expectEqual(unsupported, results.videoEmptyArray);
+    // Clear Key offers no robustness level, so any non-empty one is refused.
+    testing.expectEqual(unsupported, results.robustness);
+    testing.expectEqual(unsupported, results.encSchemeBogus);
+    // Neither a distinctive identifier nor persistent state is on offer.
+    testing.expectEqual(unsupported, results.distinctiveRequired);
+    testing.expectEqual(unsupported, results.persistentRequired);
+    testing.expectEqual(unsupported, results.sessionPersistent);
+    testing.expectEqual(unsupported, results.initDataTypesBogusOnly);
+    testing.expectEqual(unsupported, results.badContentType);
+    // A video content type in audioCapabilities is not a match.
+    testing.expectEqual(unsupported, results.videoAsAudio);
+    testing.expectEqual(unsupported, results.capNoContentType);
+
+    testing.expectEqual('second', second);
+    testing.expectTrue(freshEachCall);
+  });
+</script>
+
+<script id=keys_and_session type=module>
+  const state = await testing.async();
+
+  const VIDEO = { contentType: 'video/mp4; codecs="avc1.42E01E"' };
+  const access = await navigator.requestMediaKeySystemAccess(
+    'org.w3.clearkey', [{ initDataTypes: ['cenc'], videoCapabilities: [VIDEO] }]);
+
+  const keys = await access.createMediaKeys();
+  const keys2 = await access.createMediaKeys();
+  const settle = (p) => p.then((v) => `OK ${String(v)}`, (e) => `${e.name}: ${e.message}`);
+  const call = (fn) => Promise.resolve().then(fn).then((v) => `OK ${String(v)}`, (e) => `${e.name}: ${e.message}`);
+
+  const status = await settle(keys.getStatusForPolicy({ minHdcpVersion: '1.0' }));
+  const statusNoArgs = await settle(keys.getStatusForPolicy());
+  const cert = await settle(keys.setServerCertificate(new Uint8Array([1, 2, 3])));
+  const certEmpty = await call(() => keys.setServerCertificate(new Uint8Array([])));
+  const certNoArgs = await call(() => keys.setServerCertificate());
+
+  const sess = keys.createSession();
+  const sessTemporary = keys.createSession('temporary');
+  const persistent = (() => {
+    try { keys.createSession('persistent-license'); return 'OK'; } catch (e) { return `${e.name}: ${e.message}`; }
+  })();
+  const badType = (() => {
+    try { keys.createSession('nope'); return 'OK'; } catch (e) { return `${e.name}: ${e.message}`; }
+  })();
+
+  const getNoArgs = (() => {
+    try { return String(sess.keyStatuses.get()); } catch (e) { return `${e.name}: ${e.message}`; }
+  })();
+
+  const closedPending = await Promise.race([
+    sess.closed.then(() => 'resolved'),
+    new Promise((r) => setTimeout(() => r('pending'), 50)),
+  ]);
+
+  const closeBefore = await call(() => sess.close());
+  const updateBefore = await call(() => sess.update(new Uint8Array([1])));
+  const removeBefore = await call(() => sess.remove());
+  const updateNoArgs = await call(() => sess.update());
+  const loadNoArgs = await call(() => sess.load());
+  const loadEmpty = await call(() => sess.load(''));
+  // Every BufferSource parameter names the union rather than 'BufferSource',
+  // and a view over a buffer counts while a plain object does not.
+  const certObject = await call(() => keys.setServerCertificate({}));
+  const certView = await settle(keys.setServerCertificate(new Uint8Array([1, 2, 3]).subarray(1)));
+  const certDataView = await settle(keys.setServerCertificate(new DataView(new ArrayBuffer(4))));
+  const updateObject = await call(() => keys.createSession().update({}));
+  const generateObject = await call(() => keys.createSession().generateRequest('cenc', {}));
+  const generateEmptyType = await call(() => keys.createSession().generateRequest('', new Uint8Array([1])));
+  const generateEmptyData = await call(() => keys.createSession().generateRequest('cenc', new Uint8Array([])));
+
+  const generateNoArgs = await call(() => sess.generateRequest());
+  // Step order: the session is marked initialised *before* the init data type
+  // is checked, so the refusal after a bad type is the initialised one.
+  const generateBadType = await call(() => sess.generateRequest('nope', new Uint8Array([1])));
+  const generateAfter = await call(() => sess.generateRequest('cenc', new Uint8Array([1, 2, 3, 4])));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object MediaKeySystemAccess]', Object.prototype.toString.call(access));
+    testing.expectEqual('org.w3.clearkey', access.keySystem);
+    testing.expectEqual('[object MediaKeys]', Object.prototype.toString.call(keys));
+    testing.expectTrue(keys !== keys2);
+
+    testing.expectEqual('OK usable', status);
+    testing.expectEqual('OK usable', statusNoArgs);
+    // A certificate this CDM has no use for: it resolves, and resolves false.
+    testing.expectEqual('OK false', cert);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'setServerCertificate' on 'MediaKeys': " +
+      'The serverCertificate parameter is empty.', certEmpty);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'setServerCertificate' on 'MediaKeys': " +
+      '1 argument required, but only 0 present.', certNoArgs);
+
+    testing.expectEqual('[object MediaKeySession]', Object.prototype.toString.call(sess));
+    testing.expectEqual('[object MediaKeySession]', Object.prototype.toString.call(sessTemporary));
+    testing.expectTrue(sess !== sessTemporary);
+    testing.expectEqual(
+      "NotSupportedError: Failed to execute 'createSession' on 'MediaKeys': Unsupported session type.",
+      persistent);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'createSession' on 'MediaKeys': The provided value 'nope' " +
+      'is not a valid enum value of type MediaKeySessionType.', badType);
+
+    testing.expectEqual('', sess.sessionId);
+    testing.expectTrue(Number.isNaN(sess.expiration));
+    testing.expectEqual('[object MediaKeyStatusMap]', Object.prototype.toString.call(sess.keyStatuses));
+    testing.expectEqual(0, sess.keyStatuses.size);
+    testing.expectEqual(undefined, sess.keyStatuses.get(new Uint8Array([1])));
+    testing.expectEqual(false, sess.keyStatuses.has(new Uint8Array([1])));
+    testing.expectEqual(0, [...sess.keyStatuses].length);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'get' on 'MediaKeyStatusMap': 1 argument required, but only 0 present.",
+      getNoArgs);
+
+    testing.expectTrue(sess.closed instanceof Promise);
+    testing.expectEqual('pending', closedPending);
+    testing.expectEqual(null, sess.onmessage);
+    testing.expectEqual(null, sess.onkeystatuseschange);
+
+    const S = "InvalidStateError: Failed to execute '";
+    testing.expectEqual(S + "close' on 'MediaKeySession': The session is not callable.", closeBefore);
+    testing.expectEqual(S + "update' on 'MediaKeySession': The session is not callable.", updateBefore);
+    testing.expectEqual(S + "remove' on 'MediaKeySession': The session is not callable.", removeBefore);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'update' on 'MediaKeySession': 1 argument required, but only 0 present.",
+      updateNoArgs);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'load' on 'MediaKeySession': 1 argument required, but only 0 present.",
+      loadNoArgs);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'load' on 'MediaKeySession': The sessionId parameter is empty.",
+      loadEmpty);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'generateRequest' on 'MediaKeySession': 2 arguments required, " +
+      'but only 0 present.', generateNoArgs);
+    testing.expectEqual(
+      "NotSupportedError: Failed to execute 'generateRequest' on 'MediaKeySession': " +
+      "The initialization data type 'nope' is not supported.", generateBadType);
+    testing.expectEqual(
+      S + "generateRequest' on 'MediaKeySession': The session is already initialized.", generateAfter);
+
+    const B = "': The provided value is not of type '(ArrayBuffer or ArrayBufferView)'.";
+    testing.expectEqual("TypeError: Failed to execute 'setServerCertificate' on 'MediaKeys" + B, certObject);
+    testing.expectEqual('OK false', certView);
+    testing.expectEqual('OK false', certDataView);
+    testing.expectEqual("TypeError: Failed to execute 'update' on 'MediaKeySession" + B, updateObject);
+    testing.expectEqual("TypeError: Failed to execute 'generateRequest' on 'MediaKeySession" + B, generateObject);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'generateRequest' on 'MediaKeySession': The initDataType parameter is empty.",
+      generateEmptyType);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'generateRequest' on 'MediaKeySession': The initData parameter is empty.",
+      generateEmptyData);
+  });
+</script>
+
+<script id=media_element type=module>
+  const state = await testing.async();
+
+  const VIDEO = { contentType: 'video/mp4; codecs="avc1.42E01E"' };
+  const video = document.createElement('video');
+  const call = (fn) => Promise.resolve().then(fn).then(() => 'OK', (e) => `${e.name}: ${e.message}`);
+
+  const before = video.mediaKeys;
+  const toNull = await call(() => video.setMediaKeys(null));
+  const noArgs = await call(() => video.setMediaKeys());
+  const bad = await call(() => video.setMediaKeys({}));
+
+  const keys = await (await navigator.requestMediaKeySystemAccess(
+    'org.w3.clearkey', [{ videoCapabilities: [VIDEO] }])).createMediaKeys();
+  const set = await call(() => video.setMediaKeys(keys));
+  const attached = video.mediaKeys;
+  const again = await call(() => video.setMediaKeys(keys));
+  const cleared = await call(() => video.setMediaKeys(null));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(null, before);
+    testing.expectEqual('OK', toNull);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'setMediaKeys' on 'HTMLMediaElement': " +
+      '1 argument required, but only 0 present.', noArgs);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'setMediaKeys' on 'HTMLMediaElement': " +
+      "parameter 1 is not of type 'MediaKeys'.", bad);
+    testing.expectEqual('OK', set);
+    testing.expectTrue(attached === keys);
+    testing.expectEqual('OK', again);
+    testing.expectEqual('OK', cleared);
+    testing.expectEqual(null, video.mediaKeys);
+
+    testing.expectEqual(1, HTMLMediaElement.prototype.setMediaKeys.length);
+    testing.expectEqual(null, video.onencrypted);
+    testing.expectEqual(null, video.onwaitingforkey);
+    // Unlike almost every other member, `mediaKeys` is enumerable on Chrome.
+    const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'mediaKeys');
+    testing.expectTrue(!!d.get);
+    testing.expectFalse(!!d.set);
+    testing.expectTrue(d.enumerable);
+    testing.expectTrue(d.configurable);
+  });
+</script>
