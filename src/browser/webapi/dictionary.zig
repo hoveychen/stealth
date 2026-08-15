@@ -94,6 +94,26 @@ pub fn MethodReader(
     );
 }
 
+/// A dictionary read from an attribute *setter* rather than from a constructor
+/// or an operation. Chrome's prefix names the property being set, and there is
+/// no enclosing init dictionary to mention. Measured on a headed Chrome 150:
+///
+///   metadata.artwork = [{}]
+///     -> TypeError: Failed to set the 'artwork' property on 'MediaMetadata':
+///        Failed to read the 'src' property from 'MediaImage': Required member
+///        is undefined.
+pub fn SetterReader(
+    comptime interface: []const u8,
+    comptime property: []const u8,
+    comptime dict: []const u8,
+) type {
+    return DictionaryWithPrefix(
+        "Failed to set the '" ++ property ++ "' property on '" ++ interface ++ "': ",
+        dict,
+        false,
+    );
+}
+
 /// A dictionary reached *through* a member of another one. Chrome nests the
 /// wording rather than restating the operation. Measured on a headed Chrome
 /// 150:

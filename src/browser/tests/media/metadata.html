@@ -1,0 +1,172 @@
+<!--
+  MediaMetadata, the ChapterInformation it can carry, and the MediaSession
+  attribute that takes it.
+
+  This is one of the few objects in the batch a page really builds and reads
+  back, so almost all of it behaves: the artwork is normalised into
+  {sizes, src, type} with empty-string defaults, `src` is resolved against the
+  document base, a fresh array comes back on every read, and a missing `src`
+  names the whole MediaImage/MediaMetadataInit chain in its refusal.
+
+  `ChapterInformation` is not on CreepJS's Chrome 115 key list but it is on
+  Chrome 150's window, so it is here too.
+
+  Chrome 150, headed, over http://localhost (p64/p65).
+-->
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<script src="../shape.js"></script>
+
+<script id=interface_objects>
+{
+  expectInterfaceObject('MediaMetadata', { illegal: false });
+  expectInterfaceObject('ChapterInformation');
+
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+  testing.expectEqual('title artist album artwork chapterInfo constructor', proto(MediaMetadata));
+  testing.expectEqual('title startTime artwork constructor', proto(ChapterInformation));
+  testing.expectEqual('[object MediaMetadata]', String(MediaMetadata.prototype));
+  testing.expectEqual('[object ChapterInformation]', String(ChapterInformation.prototype));
+
+  // The first four are read-write; chapterInfo is read-only, and on both
+  // interfaces every member is enumerable and configurable.
+  const d = (C, k) => {
+    const x = Object.getOwnPropertyDescriptor(C.prototype, k);
+    return `g=${!!x.get} s=${!!x.set} e=${x.enumerable} c=${x.configurable}`;
+  };
+  testing.expectEqual('g=true s=true e=true c=true', d(MediaMetadata, 'title'));
+  testing.expectEqual('g=true s=true e=true c=true', d(MediaMetadata, 'artwork'));
+  testing.expectEqual('g=true s=false e=true c=true', d(MediaMetadata, 'chapterInfo'));
+  testing.expectEqual('g=true s=false e=true c=true', d(ChapterInformation, 'title'));
+  testing.expectEqual('g=true s=false e=true c=true', d(ChapterInformation, 'startTime'));
+  testing.expectEqual('g=true s=false e=true c=true', d(ChapterInformation, 'artwork'));
+}
+</script>
+
+<script id=construction>
+{
+  const empty = new MediaMetadata();
+  testing.expectEqual('[object MediaMetadata]', Object.prototype.toString.call(empty));
+  testing.expectEqual('', empty.title);
+  testing.expectEqual('', empty.artist);
+  testing.expectEqual('', empty.album);
+  testing.expectEqual('[]', JSON.stringify(empty.artwork));
+  testing.expectEqual('[]', JSON.stringify(empty.chapterInfo));
+
+  // Null reads as an empty dictionary; a primitive does not.
+  testing.expectEqual('', new MediaMetadata(null).title);
+  testing.expectError(
+    "Failed to construct 'MediaMetadata': The provided value is not of type 'MediaMetadataInit'.",
+    () => new MediaMetadata(5));
+
+  const m = new MediaMetadata({
+    title: 't',
+    artist: 'a',
+    album: 'b',
+    artwork: [{ src: 'http://x/y.png', sizes: '96x96', type: 'image/png' }],
+  });
+  testing.expectEqual('t', m.title);
+  testing.expectEqual('a', m.artist);
+  testing.expectEqual('b', m.album);
+  // Alphabetical, and every member filled in.
+  testing.expectEqual(
+    '[{"sizes":"96x96","src":"http://x/y.png","type":"image/png"}]',
+    JSON.stringify(m.artwork));
+
+  // Defaults are the empty string, and non-strings are stringified.
+  testing.expectEqual(
+    '[{"sizes":"5","src":"http://x/y.png","type":""}]',
+    JSON.stringify(new MediaMetadata({ artwork: [{ src: 'http://x/y.png', sizes: 5 }] }).artwork));
+
+  // A fresh array on every read, on both list attributes.
+  testing.expectTrue(m.artwork !== m.artwork);
+  testing.expectTrue(m.chapterInfo !== m.chapterInfo);
+
+  // `src` is required, and its refusal names the whole dictionary chain.
+  testing.expectError(
+    "Failed to construct 'MediaMetadata': Failed to read the 'artwork' property from " +
+    "'MediaMetadataInit': Failed to read the 'src' property from 'MediaImage': " +
+    'Required member is undefined.',
+    () => new MediaMetadata({ artwork: [{}] }));
+  testing.expectError(
+    "Failed to construct 'MediaMetadata': Failed to read the 'artwork' property from " +
+    "'MediaMetadataInit': The object must have a callable @@iterator property.",
+    () => new MediaMetadata({ artwork: {} }));
+  testing.expectError(
+    "Failed to construct 'MediaMetadata': Failed to read the 'artwork' property from " +
+    "'MediaMetadataInit': The provided value cannot be converted to a sequence.",
+    () => new MediaMetadata({ artwork: 5 }));
+}
+</script>
+
+<script id=relative_artwork>
+{
+  // `src` is resolved against the document base, not kept verbatim.
+  const m = new MediaMetadata({ artwork: [{ src: 'pic.png' }] });
+  testing.expectEqual(new URL('pic.png', document.baseURI).href, m.artwork[0].src);
+}
+</script>
+
+<script id=setters>
+{
+  const m = new MediaMetadata({ title: 't' });
+  m.title = 'x';
+  testing.expectEqual('x', m.title);
+  m.title = 5;
+  testing.expectEqual('5', m.title);
+  m.artist = 'q';
+  testing.expectEqual('q', m.artist);
+  m.album = 'r';
+  testing.expectEqual('r', m.album);
+
+  m.artwork = [{ src: 'http://x/a.png', sizes: '1x1', type: 'image/png' }];
+  testing.expectEqual('[{"sizes":"1x1","src":"http://x/a.png","type":"image/png"}]', JSON.stringify(m.artwork));
+
+  // The setter's refusal says "Failed to set the 'artwork' property" and drops
+  // the MediaMetadataInit level, because there is no init dictionary here.
+  testing.expectError(
+    "Failed to set the 'artwork' property on 'MediaMetadata': Failed to read the 'src' property " +
+    "from 'MediaImage': Required member is undefined.",
+    () => { m.artwork = [{}]; });
+
+  // chapterInfo has no setter, so assigning to it is silently dropped.
+  m.chapterInfo = [{ title: 'nope' }];
+  testing.expectEqual('[]', JSON.stringify(m.chapterInfo));
+}
+</script>
+
+<script id=chapters>
+{
+  const m = new MediaMetadata({
+    chapterInfo: [{ title: 'c', startTime: 2.5, artwork: [{ src: 'http://x/z.png' }] }],
+  });
+  testing.expectEqual(1, m.chapterInfo.length);
+  const c = m.chapterInfo[0];
+  testing.expectEqual('[object ChapterInformation]', Object.prototype.toString.call(c));
+  testing.expectEqual('c', c.title);
+  testing.expectEqual(2.5, c.startTime);
+  testing.expectEqual('[{"sizes":"","src":"http://x/z.png","type":""}]', JSON.stringify(c.artwork));
+
+  const bare = new MediaMetadata({ chapterInfo: [{}] }).chapterInfo[0];
+  testing.expectEqual('', bare.title);
+  testing.expectEqual(0, bare.startTime);
+  testing.expectEqual('[]', JSON.stringify(bare.artwork));
+
+  // A ChapterInformation is not JSON: it has no own properties.
+  testing.expectEqual('[{}]', JSON.stringify(m.chapterInfo));
+}
+</script>
+
+<script id=media_session>
+{
+  const m = new MediaMetadata({ title: 't' });
+  testing.expectEqual(null, navigator.mediaSession.metadata);
+  navigator.mediaSession.metadata = m;
+  testing.expectTrue(navigator.mediaSession.metadata === m);
+  navigator.mediaSession.metadata = null;
+  testing.expectEqual(null, navigator.mediaSession.metadata);
+  testing.expectError(
+    "Failed to set the 'metadata' property on 'MediaSession': Failed to convert value to 'MediaMetadata'.",
+    () => { navigator.mediaSession.metadata = {}; });
+}
+</script>
