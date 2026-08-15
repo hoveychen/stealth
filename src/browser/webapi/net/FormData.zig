@@ -828,7 +828,37 @@ fn collectForm(arena: Allocator, form_: ?*Form, submitter_: ?*Element, frame: *F
         };
         try appendString(&list, arena, name, value);
     }
+
+    try collectInternals(&list, arena, form, frame);
     return list;
+}
+
+/// Form-associated custom elements do not appear in the form's controls
+/// collection, so their `internals.setFormValue()` entries are gathered in a
+/// second tree-order pass over the form's subtree. Measured on Chrome 150: an
+/// element named `x` whose internals were handed 'v2' reads back as `x=v2` from
+/// `new FormData(form)` (win64-chrome.json). Chrome interleaves the two kinds in
+/// tree order; with only one entry measured, the relative order of a custom
+/// entry and a native one is not pinned, and these land after the natives.
+fn collectInternals(list: *std.ArrayList(Entry), arena: Allocator, form: *Form, frame: *Frame) !void {
+    if (frame._element_internals.count() == 0) {
+        return;
+    }
+
+    const TreeWalker = @import("../TreeWalker.zig");
+    var walker = TreeWalker.Full.Elements.init(form.asNode(), .{});
+    while (walker.next()) |element| {
+        const internals = frame._element_internals.get(element) orelse continue;
+        const value = internals._form_value orelse continue;
+        if (!internals._form_associated) {
+            continue;
+        }
+        if (Form.ownerOf(element, frame) != form) {
+            continue;
+        }
+        const name = element.getAttributeSafe(comptime .wrap("name")) orelse continue;
+        try appendString(list, arena, name, value);
+    }
 }
 
 fn appendString(list: *std.ArrayList(Entry), arena: Allocator, name: []const u8, value: []const u8) !void {

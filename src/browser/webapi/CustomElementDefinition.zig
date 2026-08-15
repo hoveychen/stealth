@@ -39,6 +39,10 @@ extends: ?Element.Tag = null,
 // when disabledFeatures = ["shadow"], we'll throw if attachShadow is called
 disable_shadow: bool = false,
 
+// when `static formAssociated = true`, the internals attachInternals() hands out
+// participate in form submission and constraint validation
+form_associated: bool = false,
+
 pub fn isAttributeObserved(self: *const CustomElementDefinition, name: String) bool {
     return self.observed_attributes.contains(name.str());
 }

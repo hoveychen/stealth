@@ -56,6 +56,29 @@ pub fn asNode(self: *Form) *Node {
     return self.asElement().asNode();
 }
 
+/// The form owner of a listed form-associated element, per WHATWG HTML: a
+/// `form` content attribute wins outright (even when it names nothing, in which
+/// case there is no owner), otherwise the nearest <form> ancestor. Shared by the
+/// four native controls and by ElementInternals, which resolves the owner of a
+/// form-associated custom element the same way.
+pub fn ownerOf(element: *Element, frame: *Frame) ?*Form {
+    // form= resolves in the control's own tree (shadow root or document), not
+    // the calling realm's. getElementByIdFromNode walks to that root.
+    if (element.getAttributeSafe(comptime .wrap("form"))) |form_id| {
+        const form_element = frame.getElementByIdFromNode(element.asNode(), form_id) orelse return null;
+        return form_element.is(Form);
+    }
+
+    var node = element.asNode()._parent;
+    while (node) |n| {
+        if (n.is(Form)) |form| {
+            return form;
+        }
+        node = n._parent;
+    }
+    return null;
+}
+
 pub fn getName(self: *const Form) []const u8 {
     return self.asConstElement().getAttributeSafe(comptime .wrap("name")) orelse "";
 }

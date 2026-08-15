@@ -98,6 +98,13 @@ pub fn define(self: *CustomElementRegistry, name: []const u8, constructor: js.Fu
         }
     }
 
+    // Read formAssociated: `static formAssociated = true` is what makes
+    // attachInternals() hand back internals with a live form, validity and
+    // setFormValue.
+    if (constructor.getPropertyValue("formAssociated") catch null) |form_associated| {
+        definition.form_associated = form_associated.toBool();
+    }
+
     const gop = try self._definitions.getOrPut(frame.arena, owned_name);
     if (gop.found_existing) {
         return error.NotSupported;

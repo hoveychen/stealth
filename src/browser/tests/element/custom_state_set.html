@@ -6,9 +6,8 @@
 
 <script id=custom_state_set_shape>
   {
-    // No instance is reachable: the only source is
-    // element.attachInternals().states, and ElementInternals is not here yet.
-    // So this pins the shape, which is all a page can read.
+    // The shape on its own; the behaviour is exercised through
+    // element.attachInternals().states in element/element_internals.html.
     testing.expectEqual('function', typeof CustomStateSet);
     testing.expectEqual('CustomStateSet', CustomStateSet.name);
     testing.expectEqual(0, CustomStateSet.length);
@@ -33,8 +32,8 @@
     try { new CustomStateSet(); } catch (e) { err = e; }
     testing.expectEqual('TypeError', err.name);
 
-    // attachInternals is the missing link; recorded so this test fails loudly
-    // once it arrives and the set needs its real implementation.
-    testing.expectEqual('undefined', typeof document.createElement('div').attachInternals);
+    // attachInternals is the only source of an instance, and it refuses a
+    // non-custom element.
+    testing.expectEqual('function', typeof document.createElement('div').attachInternals);
   }
 </script>

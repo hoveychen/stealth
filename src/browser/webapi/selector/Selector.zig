@@ -285,6 +285,7 @@ pub const PseudoClass = union(enum) {
 
     // Custom elements
     defined,
+    state: []const u8, // :state() - a member of the element's CustomStateSet
 
     // Functional
     lang: []const u8,

@@ -43,6 +43,7 @@ const Event = @import("webapi/Event.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
 const Element = @import("webapi/Element.zig");
 const HtmlElement = @import("webapi/element/Html.zig");
+const ElementInternals = @import("webapi/element/ElementInternals.zig");
 const Window = @import("webapi/Window.zig");
 const Location = @import("webapi/Location.zig");
 const Document = @import("webapi/Document.zig");
@@ -155,6 +156,10 @@ _element_class_lists: Element.ClassListLookup = .empty,
 _element_rel_lists: Element.RelListLookup = .empty,
 _element_token_lists: Element.TokenListLookup = .empty,
 _element_shadow_roots: Element.ShadowRootLookup = .empty,
+// The handle attachInternals() hands out, one per custom element. Also the
+// "already attached" flag: a second attachInternals() on the same element is a
+// NotSupportedError.
+_element_internals: ElementInternals.Lookup = .empty,
 _node_owner_documents: Node.OwnerDocumentLookup = .empty,
 _element_scroll_positions: Element.ScrollPositionLookup = .empty,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,

@@ -1021,6 +1021,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/Element.zig"),
     @import("../webapi/element/DOMStringMap.zig"),
     @import("../webapi/element/CustomStateSet.zig"),
+    @import("../webapi/element/ElementInternals.zig"),
     @import("../webapi/element/Attribute.zig"),
     @import("../webapi/element/Html.zig"),
     @import("../webapi/element/MathML.zig"),
