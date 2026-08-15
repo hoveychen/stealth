@@ -82,3 +82,341 @@
     testing.expectEqual(-1, d3.tabIndex);
   }
 </script>
+
+<script id="inert">
+  {
+    // Boolean content attribute: present is true whatever the value, and the
+    // setter writes "" or removes. Measured on a headed Chrome 150, and unlike
+    // the inertness *state* the IDL attribute does not walk ancestors.
+    const el = document.createElement('div');
+    testing.expectEqual(false, el.inert);
+
+    for (const v of ['', 'false', 'FALSE', 'garbage', '0']) {
+      el.setAttribute('inert', v);
+      testing.expectEqual(true, el.inert, { desc: 'inert="' + v + '"' });
+    }
+
+    el.inert = false;
+    testing.expectEqual(null, el.getAttribute('inert'));
+    el.inert = true;
+    testing.expectEqual('', el.getAttribute('inert'));
+
+    // Setting true over a value rewrites it to the empty string.
+    el.setAttribute('inert', 'keepme');
+    el.inert = true;
+    testing.expectEqual('', el.getAttribute('inert'));
+
+    const child = document.createElement('span');
+    el.appendChild(child);
+    testing.expectEqual(false, child.inert);
+  }
+</script>
+
+<script id="focusGroupStart">
+  {
+    // Same boolean shape as inert, over the focusgroupstart attribute.
+    const el = document.createElement('div');
+    testing.expectEqual(false, el.focusGroupStart);
+
+    el.setAttribute('focusgroupstart', 'false');
+    testing.expectEqual(true, el.focusGroupStart);
+
+    el.focusGroupStart = false;
+    testing.expectEqual(null, el.getAttribute('focusgroupstart'));
+    el.focusGroupStart = true;
+    testing.expectEqual('', el.getAttribute('focusgroupstart'));
+  }
+</script>
+
+<script id="draggable">
+  {
+    // Enumerated, not boolean: only an ASCII case-insensitive "true" enables
+    // it. The default with no attribute is per-element -- img and an anchor
+    // (or area) carrying href are draggable, everything else is not.
+    const el = document.createElement('div');
+    testing.expectEqual(false, el.draggable);
+    for (const [v, want] of [['true', true], ['TRUE', true], ['false', false],
+                             ['', false], ['garbage', false], ['1', false]]) {
+      el.setAttribute('draggable', v);
+      testing.expectEqual(want, el.draggable, { desc: 'draggable="' + v + '"' });
+    }
+    el.removeAttribute('draggable');
+
+    // The setter is a boolean coercion and always writes a keyword.
+    el.draggable = true;
+    testing.expectEqual('true', el.getAttribute('draggable'));
+    el.draggable = false;
+    testing.expectEqual('false', el.getAttribute('draggable'));
+    el.draggable = 'false';
+    testing.expectEqual('true', el.getAttribute('draggable'), { desc: 'non-empty string is truthy' });
+
+    testing.expectEqual(true, document.createElement('img').draggable);
+    testing.expectEqual(false, document.createElement('a').draggable);
+    testing.expectEqual(false, document.createElement('area').draggable);
+    for (const tag of ['a', 'area']) {
+      const link = document.createElement(tag);
+      link.setAttribute('href', '');
+      testing.expectEqual(true, link.draggable, { desc: tag + '[href]' });
+    }
+    // Only those two: an href on anything else changes nothing.
+    const link = document.createElement('link');
+    link.setAttribute('href', '/x');
+    testing.expectEqual(false, link.draggable);
+    testing.expectEqual(false, document.createElement('input').draggable);
+    testing.expectEqual(false, document.createElement('video').draggable);
+
+    // An explicit attribute beats the per-element default.
+    const img = document.createElement('img');
+    img.draggable = false;
+    testing.expectEqual(false, img.draggable);
+  }
+</script>
+
+<script id="spellcheck">
+  {
+    // Enumerated and *inherited*: the getter walks self and ancestors and
+    // answers off the first element carrying a valid "true"/"false" keyword.
+    // Anything else, including no attribute anywhere, is true.
+    const el = document.createElement('div');
+    testing.expectEqual(true, el.spellcheck);
+
+    el.setAttribute('spellcheck', 'false');
+    testing.expectEqual(false, el.spellcheck);
+    el.setAttribute('spellcheck', 'FALSE');
+    testing.expectEqual(false, el.spellcheck);
+    el.setAttribute('spellcheck', 'garbage');
+    testing.expectEqual(true, el.spellcheck);
+    el.setAttribute('spellcheck', '');
+    testing.expectEqual(true, el.spellcheck);
+    el.removeAttribute('spellcheck');
+
+    el.spellcheck = false;
+    testing.expectEqual('false', el.getAttribute('spellcheck'));
+    el.spellcheck = true;
+    testing.expectEqual('true', el.getAttribute('spellcheck'));
+
+    // The walk: an invalid value on an intermediate element does not stop it,
+    // a valid one does.
+    const outer = document.createElement('div');
+    const mid = document.createElement('div');
+    const leaf = document.createElement('span');
+    outer.appendChild(mid);
+    mid.appendChild(leaf);
+    outer.setAttribute('spellcheck', 'false');
+    testing.expectEqual(false, leaf.spellcheck, { desc: 'inherited from outer' });
+    mid.setAttribute('spellcheck', 'garbage');
+    testing.expectEqual(false, leaf.spellcheck, { desc: 'invalid value keeps walking' });
+    mid.setAttribute('spellcheck', '');
+    testing.expectEqual(true, leaf.spellcheck, { desc: 'empty is not the false keyword' });
+    mid.setAttribute('spellcheck', 'true');
+    testing.expectEqual(true, leaf.spellcheck, { desc: 'nearest valid keyword wins' });
+  }
+</script>
+
+<script id="writingSuggestions">
+  {
+    // Same inherited walk as spellcheck, but the IDL value is a string.
+    const el = document.createElement('div');
+    testing.expectEqual('true', el.writingSuggestions);
+
+    el.setAttribute('writingsuggestions', 'false');
+    testing.expectEqual('false', el.writingSuggestions);
+    el.setAttribute('writingsuggestions', 'FALSE');
+    testing.expectEqual('false', el.writingSuggestions);
+    el.setAttribute('writingsuggestions', 'garbage');
+    testing.expectEqual('true', el.writingSuggestions);
+
+    // The setter is a plain string reflection -- whatever you give it lands in
+    // the attribute verbatim, even though the getter only reads two keywords.
+    el.writingSuggestions = 'garbage';
+    testing.expectEqual('garbage', el.getAttribute('writingsuggestions'));
+    testing.expectEqual('true', el.writingSuggestions);
+    el.writingSuggestions = false;
+    testing.expectEqual('false', el.getAttribute('writingsuggestions'));
+
+    // The walk differs from spellcheck's: writingsuggestions' invalid-value
+    // default is "true", not "inherit", so any value that is not the "false"
+    // keyword stops the walk. Only an absent attribute keeps walking.
+    const outer = document.createElement('div');
+    const mid = document.createElement('div');
+    const leaf = document.createElement('span');
+    outer.appendChild(mid);
+    mid.appendChild(leaf);
+    outer.setAttribute('writingsuggestions', 'false');
+    testing.expectEqual('false', leaf.writingSuggestions, { desc: 'inherited from outer' });
+    mid.setAttribute('writingsuggestions', 'garbage');
+    testing.expectEqual('true', leaf.writingSuggestions, { desc: 'invalid value stops the walk' });
+    mid.setAttribute('writingsuggestions', '');
+    testing.expectEqual('true', leaf.writingSuggestions, { desc: 'empty stops the walk' });
+    mid.setAttribute('writingsuggestions', 'false');
+    testing.expectEqual('false', leaf.writingSuggestions);
+  }
+</script>
+
+<script id="autocapitalize">
+  {
+    // Enumerated with two legacy aliases: "off" is "none" and "on" is
+    // "sentences". No attribute (or an empty one) is the empty string; any
+    // other value is "sentences".
+    const el = document.createElement('div');
+    testing.expectEqual('', el.autocapitalize);
+
+    for (const [v, want] of [['', ''], ['none', 'none'], ['off', 'none'],
+                             ['OFF', 'none'], ['on', 'sentences'],
+                             ['sentences', 'sentences'], ['Sentences', 'sentences'],
+                             ['words', 'words'], ['WORDS', 'words'],
+                             ['characters', 'characters'], ['garbage', 'sentences'],
+                             ['true', 'sentences'], ['0', 'sentences']]) {
+      el.setAttribute('autocapitalize', v);
+      testing.expectEqual(want, el.autocapitalize, { desc: 'autocapitalize="' + v + '"' });
+    }
+
+    el.autocapitalize = 'garbage';
+    testing.expectEqual('garbage', el.getAttribute('autocapitalize'));
+    testing.expectEqual('sentences', el.autocapitalize);
+
+    // Not inherited, unlike spellcheck.
+    const outer = document.createElement('div');
+    const leaf = document.createElement('span');
+    outer.appendChild(leaf);
+    outer.setAttribute('autocapitalize', 'words');
+    testing.expectEqual('', leaf.autocapitalize);
+  }
+</script>
+
+<script id="enterKeyHint_inputMode_virtualKeyboardPolicy">
+  {
+    // Three plain enumerated reflections: a known keyword lowercased, the empty
+    // string for everything else. The setter writes the raw string.
+    const cases = [
+      ['enterKeyHint', 'enterkeyhint',
+       ['enter', 'done', 'go', 'next', 'previous', 'search', 'send']],
+      ['inputMode', 'inputmode',
+       ['none', 'text', 'tel', 'url', 'email', 'numeric', 'decimal', 'search']],
+      ['virtualKeyboardPolicy', 'virtualkeyboardpolicy', ['auto', 'manual']],
+    ];
+    for (const [prop, attr, keywords] of cases) {
+      const el = document.createElement('div');
+      testing.expectEqual('', el[prop], { desc: prop + ' unset' });
+      for (const kw of keywords) {
+        el.setAttribute(attr, kw);
+        testing.expectEqual(kw, el[prop], { desc: prop + '="' + kw + '"' });
+        el.setAttribute(attr, kw.toUpperCase());
+        testing.expectEqual(kw, el[prop], { desc: prop + '="' + kw.toUpperCase() + '"' });
+      }
+      for (const bad of ['', 'garbage', 'true', '0']) {
+        el.setAttribute(attr, bad);
+        testing.expectEqual('', el[prop], { desc: prop + '="' + bad + '"' });
+      }
+      el[prop] = 'garbage';
+      testing.expectEqual('garbage', el.getAttribute(attr), { desc: prop + ' setter is raw' });
+      testing.expectEqual('', el[prop]);
+    }
+    // The keyword sets do not overlap: "text" is an inputMode, not a hint.
+    const el = document.createElement('div');
+    el.setAttribute('enterkeyhint', 'text');
+    testing.expectEqual('', el.enterKeyHint);
+    el.setAttribute('inputmode', 'go');
+    testing.expectEqual('', el.inputMode);
+    el.setAttribute('virtualkeyboardpolicy', 'none');
+    testing.expectEqual('', el.virtualKeyboardPolicy);
+  }
+</script>
+
+<script id="contentEditable">
+  {
+    // Enumerated with a fourth "inherit" state that means "no attribute". The
+    // setter validates and throws a SyntaxError naming the offending value.
+    const el = document.createElement('div');
+    testing.expectEqual('inherit', el.contentEditable);
+
+    for (const [v, want] of [['', 'true'], ['true', 'true'], ['TRUE', 'true'],
+                             ['false', 'false'], ['FALSE', 'false'],
+                             ['plaintext-only', 'plaintext-only'],
+                             ['PLAINTEXT-ONLY', 'plaintext-only'],
+                             ['inherit', 'inherit'], ['garbage', 'inherit']]) {
+      el.setAttribute('contenteditable', v);
+      testing.expectEqual(want, el.contentEditable, { desc: 'contenteditable="' + v + '"' });
+    }
+
+    // The setter normalises to lowercase, and "inherit" removes the attribute.
+    el.contentEditable = 'PLAINTEXT-ONLY';
+    testing.expectEqual('plaintext-only', el.getAttribute('contenteditable'));
+    el.contentEditable = 'TRUE';
+    testing.expectEqual('true', el.getAttribute('contenteditable'));
+    el.contentEditable = 'inherit';
+    testing.expectEqual(false, el.hasAttribute('contenteditable'));
+    el.contentEditable = false;
+    testing.expectEqual('false', el.getAttribute('contenteditable'));
+
+    let caught = null;
+    try { el.contentEditable = 'garbage'; } catch (e) { caught = e; }
+    testing.expectEqual('SyntaxError', caught && caught.name);
+    testing.expectEqual(
+      "Failed to set the 'contentEditable' property on 'HTMLElement': The value provided ('garbage') is not one of 'true', 'false', 'plaintext-only', or 'inherit'.",
+      caught && caught.message);
+    // A rejected assignment leaves the attribute alone.
+    testing.expectEqual('false', el.getAttribute('contenteditable'));
+
+    // The empty string is not a valid *setter* input even though it reads back
+    // as "true" from the content attribute.
+    caught = null;
+    try { el.contentEditable = ''; } catch (e) { caught = e; }
+    testing.expectEqual('SyntaxError', caught && caught.name);
+
+    // Not inherited: this is the plain reflection, isContentEditable is the
+    // one that walks.
+    const outer = document.createElement('div');
+    const leaf = document.createElement('span');
+    outer.appendChild(leaf);
+    outer.contentEditable = 'true';
+    testing.expectEqual('inherit', leaf.contentEditable);
+  }
+</script>
+
+<script id="focusGroup">
+  {
+    // A DOMTokenList over the focusgroup attribute, with PutForwards=value on
+    // the setter. Unlike classList it declares supported tokens, so supports()
+    // answers instead of throwing.
+    const el = document.createElement('div');
+    testing.expectEqual('[object DOMTokenList]', Object.prototype.toString.call(el.focusGroup));
+    testing.expectEqual(true, el.focusGroup === el.focusGroup, { desc: 'stable identity' });
+    testing.expectEqual(false, el.focusGroup === el.classList);
+    testing.expectEqual(0, el.focusGroup.length);
+    testing.expectEqual('', el.focusGroup.value);
+
+    el.setAttribute('focusgroup', ' inline  wrap ');
+    testing.expectEqual(2, el.focusGroup.length);
+    testing.expectEqual('inline', el.focusGroup[0]);
+    testing.expectEqual('wrap', el.focusGroup[1]);
+    testing.expectEqual(' inline  wrap ', el.focusGroup.value, { desc: 'value is the raw attribute' });
+    testing.expectEqual(true, el.focusGroup.contains('inline'));
+
+    el.focusGroup.add('none');
+    testing.expectEqual('inline wrap none', el.getAttribute('focusgroup'));
+
+    // PutForwards: assigning to the property assigns to .value.
+    el.focusGroup = 'block';
+    testing.expectEqual('block', el.getAttribute('focusgroup'));
+    testing.expectEqual('[object DOMTokenList]', Object.prototype.toString.call(el.focusGroup));
+
+    // The supported token set, measured on a headed Chrome 150. supports() is
+    // ASCII case-insensitive and does not gate add().
+    for (const t of ['inline', 'block', 'wrap', 'none', 'nomemory', 'toolbar',
+                     'INLINE', 'Inline']) {
+      testing.expectEqual(true, el.focusGroup.supports(t), { desc: 'supports ' + t });
+    }
+    for (const t of ['grid', 'extend', 'flow', 'no-memory', 'row-wrap', 'bogus']) {
+      testing.expectEqual(false, el.focusGroup.supports(t), { desc: 'does not support ' + t });
+    }
+    const other = document.createElement('div');
+    other.focusGroup.add('bogus');
+    testing.expectEqual('bogus', other.getAttribute('focusgroup'));
+
+    // classList still has no supported tokens and still throws.
+    let caught = null;
+    try { el.classList.supports('x'); } catch (e) { caught = e; }
+    testing.expectEqual('TypeError', caught && caught.name);
+  }
+</script>

@@ -1025,7 +1025,7 @@ pub fn getRelList(self: *Element, frame: *Frame) !*collections.DOMTokenList {
 
 // The other DOMTokenList-reflected attributes (class and rel have dedicated
 // lookups above).
-pub const TokenListAttribute = enum { sizes, sandbox, @"for", part };
+pub const TokenListAttribute = enum { sizes, sandbox, @"for", part, focusgroup };
 pub const TokenListKey = struct { element: *Element, attribute: TokenListAttribute };
 pub const TokenListLookup = std.AutoHashMapUnmanaged(TokenListKey, *collections.DOMTokenList);
 

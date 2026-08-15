@@ -104,6 +104,7 @@ pub const UL = @import("html/UL.zig");
 pub const Unknown = @import("html/Unknown.zig");
 
 const log = lp.log;
+const String = lp.String;
 const IS_DEBUG = @import("builtin").mode == .Debug;
 
 const HtmlElement = @This();
@@ -556,6 +557,189 @@ pub fn getIsContentEditable(self: *HtmlElement) bool {
         break;
     }
     return false;
+}
+
+// `inert` and `focusgroupstart` are boolean content attributes: present is
+// true whatever the value, and the setter writes "" or removes. Measured on a
+// headed Chrome 150 -- unlike the inertness *state*, which a subtree inherits,
+// the IDL attribute is attribute-local.
+pub fn getInert(self: *HtmlElement) bool {
+    return self.asElement().getAttributeSafe(comptime .wrap("inert")) != null;
+}
+
+pub fn setInert(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    return self.setBooleanAttribute(comptime .wrap("inert"), value, frame);
+}
+
+pub fn getFocusGroupStart(self: *HtmlElement) bool {
+    return self.asElement().getAttributeSafe(.wrap("focusgroupstart")) != null;
+}
+
+pub fn setFocusGroupStart(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    return self.setBooleanAttribute(.wrap("focusgroupstart"), value, frame);
+}
+
+fn setBooleanAttribute(self: *HtmlElement, name: String, value: bool, frame: *Frame) !void {
+    const el = self.asElement();
+    if (value) {
+        return el.setAttributeSafe(name, .wrap(""), frame);
+    }
+    return el.removeAttribute(name, frame);
+}
+
+// draggable is enumerated, not boolean: only an ASCII case-insensitive "true"
+// enables it. With no attribute the default is per-element -- measured on a
+// headed Chrome 150, `img` and an `a`/`area` carrying href are draggable and
+// nothing else is (an href on `link`, `base` or `object` changes nothing).
+pub fn getDraggable(self: *HtmlElement) bool {
+    const el = self.asElement();
+    if (el.getAttributeSafe(comptime .wrap("draggable"))) |value| {
+        return std.ascii.eqlIgnoreCase(value, "true");
+    }
+    return switch (self._type) {
+        .img => true,
+        .anchor, .area => el.hasAttributeSafe(comptime .wrap("href")),
+        else => false,
+    };
+}
+
+pub fn setDraggable(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("draggable"), .wrap(if (value) "true" else "false"), frame);
+}
+
+// spellcheck and writingSuggestions are the two inherited enumerated
+// attributes: the getter walks self and ancestors and answers off the first
+// element whose value maps to a state. They differ in what an unrecognised
+// value does, which is visible in the walk -- measured on a headed Chrome 150
+// with `<div spellcheck=false><div spellcheck=garbage><span>`:
+//
+//   * spellcheck's invalid-value default is "inherit", so "garbage" keeps
+//     walking and the span answers false. Its empty-string state is "true",
+//     so an empty attribute stops the walk and answers true.
+//   * writingsuggestions' invalid-value default is "true", so any value that
+//     is not "false" stops the walk. Only an absent attribute keeps walking.
+pub fn getSpellcheck(self: *HtmlElement) bool {
+    var current: ?*Element = self.asElement();
+    while (current) |el| : (current = el.parentElement()) {
+        const value = el.getAttributeSafe(comptime .wrap("spellcheck")) orelse continue;
+        if (value.len == 0 or std.ascii.eqlIgnoreCase(value, "true")) return true;
+        if (std.ascii.eqlIgnoreCase(value, "false")) return false;
+    }
+    return true;
+}
+
+pub fn setSpellcheck(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("spellcheck"), .wrap(if (value) "true" else "false"), frame);
+}
+
+pub fn getWritingSuggestions(self: *HtmlElement) []const u8 {
+    var current: ?*Element = self.asElement();
+    while (current) |el| : (current = el.parentElement()) {
+        const value = el.getAttributeSafe(.wrap("writingsuggestions")) orelse continue;
+        return if (std.ascii.eqlIgnoreCase(value, "false")) "false" else "true";
+    }
+    return "true";
+}
+
+// The setter is a plain string reflection: whatever it is given lands in the
+// attribute verbatim, even though the getter only reads the two keywords.
+pub fn setWritingSuggestions(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(.wrap("writingsuggestions"), .wrap(value), frame);
+}
+
+// autocapitalize carries two legacy aliases -- "off" is "none" and "on" is
+// "sentences" -- and an empty (or absent) attribute is the empty string while
+// any other value is "sentences".
+pub fn getAutocapitalize(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(.wrap("autocapitalize")) orelse return "";
+    if (value.len == 0) return "";
+    if (std.ascii.eqlIgnoreCase(value, "off")) return "none";
+    if (std.ascii.eqlIgnoreCase(value, "on")) return "sentences";
+    return reflectEnumerated(value, &.{ "none", "sentences", "words", "characters" }, "", "sentences").?;
+}
+
+pub fn setAutocapitalize(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(.wrap("autocapitalize"), .wrap(value), frame);
+}
+
+pub fn getEnterKeyHint(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(comptime .wrap("enterkeyhint"));
+    return reflectEnumerated(value, &.{ "enter", "done", "go", "next", "previous", "search", "send" }, "", "").?;
+}
+
+pub fn setEnterKeyHint(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("enterkeyhint"), .wrap(value), frame);
+}
+
+pub fn getInputMode(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(comptime .wrap("inputmode"));
+    return reflectEnumerated(value, &.{ "none", "text", "tel", "url", "email", "numeric", "decimal", "search" }, "", "").?;
+}
+
+pub fn setInputMode(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("inputmode"), .wrap(value), frame);
+}
+
+pub fn getVirtualKeyboardPolicy(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(.wrap("virtualkeyboardpolicy"));
+    return reflectEnumerated(value, &.{ "auto", "manual" }, "", "").?;
+}
+
+pub fn setVirtualKeyboardPolicy(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(.wrap("virtualkeyboardpolicy"), .wrap(value), frame);
+}
+
+// contentEditable has a fourth state, "inherit", which means "no attribute" --
+// so unlike every other enumerated reflection here its missing and invalid
+// values are the same keyword rather than the empty string. An empty attribute
+// reads as "true".
+const CONTENT_EDITABLE = "contenteditable";
+
+pub fn getContentEditable(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(.wrap(CONTENT_EDITABLE)) orelse return "inherit";
+    if (value.len == 0) return "true";
+    return reflectEnumerated(value, &.{ "true", "false", "plaintext-only" }, "inherit", "inherit").?;
+}
+
+// The setter validates: "inherit" removes the attribute, the three keywords
+// are normalised to lowercase, and anything else throws a SyntaxError naming
+// the offending value (message measured on a headed Chrome 150).
+pub fn setContentEditable(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    for ([_][]const u8{ "true", "false", "plaintext-only" }) |keyword| {
+        if (std.ascii.eqlIgnoreCase(value, keyword)) {
+            return self.asElement().setAttributeSafe(.wrap(CONTENT_EDITABLE), .wrap(keyword), frame);
+        }
+    }
+    if (std.ascii.eqlIgnoreCase(value, "inherit")) {
+        return self.asElement().removeAttribute(.wrap(CONTENT_EDITABLE), frame);
+    }
+
+    const local = frame.js.local orelse return error.SyntaxError;
+    // DOMException.init() keeps the slice rather than copying it -- every other
+    // caller hands it a literal -- so the message has to outlive this call. The
+    // frame arena is the shortest-lived one that does.
+    const message = std.fmt.allocPrint(
+        frame.arena,
+        "Failed to set the 'contentEditable' property on 'HTMLElement': The value provided ('{s}') is not one of 'true', 'false', 'plaintext-only', or 'inherit'.",
+        .{value},
+    ) catch return error.SyntaxError;
+    const exception = local.zigValueToJs(
+        @import("../DOMException.zig").init(message, "SyntaxError"),
+        .{},
+    ) catch return error.JsException;
+    _ = local.isolate.throwException(exception.handle);
+    return error.JsException;
+}
+
+// focusGroup is a DOMTokenList over the focusgroup attribute, with
+// `[PutForwards=value]` on the setter. Unlike classList it declares supported
+// tokens, so `supports()` answers rather than throwing -- see DOMTokenList.
+pub fn getFocusGroup(self: *HtmlElement, frame: *Frame) !*@import("../collections.zig").DOMTokenList {
+    return self.asElement().getTokenList(.focusgroup, frame);
+}
+
+pub fn setFocusGroup(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("focusgroup"), .wrap(value), frame);
 }
 
 // The attribute-listener plumbing lives on Element: fullscreen handlers are
@@ -1839,6 +2023,18 @@ pub const JsApi = struct {
     pub const attributeStyleMap = bridge.accessor(_attributeStyleMap, null, .{});
     pub const blur = bridge.function(_blur, .{});
     pub const title = bridge.accessor(HtmlElement.getTitle, HtmlElement.setTitle, .{ .ce_reactions = true });
+
+    pub const inert = bridge.accessor(HtmlElement.getInert, HtmlElement.setInert, .{ .ce_reactions = true });
+    pub const draggable = bridge.accessor(HtmlElement.getDraggable, HtmlElement.setDraggable, .{ .ce_reactions = true });
+    pub const spellcheck = bridge.accessor(HtmlElement.getSpellcheck, HtmlElement.setSpellcheck, .{ .ce_reactions = true });
+    pub const autocapitalize = bridge.accessor(HtmlElement.getAutocapitalize, HtmlElement.setAutocapitalize, .{ .ce_reactions = true });
+    pub const contentEditable = bridge.accessor(HtmlElement.getContentEditable, HtmlElement.setContentEditable, .{ .ce_reactions = true });
+    pub const enterKeyHint = bridge.accessor(HtmlElement.getEnterKeyHint, HtmlElement.setEnterKeyHint, .{ .ce_reactions = true });
+    pub const inputMode = bridge.accessor(HtmlElement.getInputMode, HtmlElement.setInputMode, .{ .ce_reactions = true });
+    pub const virtualKeyboardPolicy = bridge.accessor(HtmlElement.getVirtualKeyboardPolicy, HtmlElement.setVirtualKeyboardPolicy, .{ .ce_reactions = true });
+    pub const writingSuggestions = bridge.accessor(HtmlElement.getWritingSuggestions, HtmlElement.setWritingSuggestions, .{ .ce_reactions = true });
+    pub const focusGroup = bridge.accessor(HtmlElement.getFocusGroup, HtmlElement.setFocusGroup, .{ .ce_reactions = true });
+    pub const focusGroupStart = bridge.accessor(HtmlElement.getFocusGroupStart, HtmlElement.setFocusGroupStart, .{ .ce_reactions = true });
 
     pub const onabort = bridge.accessor(HtmlElement.getOnAbort, HtmlElement.setOnAbort, .{});
     pub const onanimationcancel = bridge.accessor(HtmlElement.getOnAnimationCancel, HtmlElement.setOnAnimationCancel, .{});
