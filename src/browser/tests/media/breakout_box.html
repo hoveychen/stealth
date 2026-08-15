@@ -1,0 +1,125 @@
+<!--
+  MediaStreamTrackGenerator and MediaStreamTrackProcessor -- the "breakout box"
+  pair that turns a media track into a stream of frames and back.
+
+  Both are constructible, and both take their argument two ways: an init
+  dictionary, or the bare value the dictionary's one required member would have
+  held. Which overload runs is decided by whether the argument is an object,
+  and the three refusals below are the three ways that resolution can fail
+  (measured, and they are not the same message).
+
+  There are no frames here -- nothing produces them -- so the streams are real
+  but empty and the two counters stay at zero, which is what Chrome reports for
+  a processor nobody has read from yet.
+
+  Chrome 150, headed, over http://localhost (win57-chrome.json, p66).
+-->
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<script src="../shape.js"></script>
+
+<script id=interface_objects>
+{
+  expectInterfaceObject('MediaStreamTrackGenerator', {
+    arity: 1,
+    illegal: false,
+    inherits: MediaStreamTrack,
+    protoOf: MediaStreamTrack.prototype,
+  });
+  expectInterfaceObject('MediaStreamTrackProcessor', { arity: 1, illegal: false });
+
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+  testing.expectEqual('writable constructor', proto(MediaStreamTrackGenerator));
+  testing.expectEqual('readable totalFrames discardedFrames constructor', proto(MediaStreamTrackProcessor));
+  testing.expectEqual('[object MediaStreamTrackGenerator]', String(MediaStreamTrackGenerator.prototype));
+  testing.expectEqual('[object MediaStreamTrackProcessor]', String(MediaStreamTrackProcessor.prototype));
+}
+</script>
+
+<script id=generator>
+{
+  const g = new MediaStreamTrackGenerator({ kind: 'video' });
+  testing.expectEqual('[object MediaStreamTrackGenerator]', Object.prototype.toString.call(g));
+  testing.expectTrue(g instanceof MediaStreamTrack);
+  testing.expectTrue(g instanceof EventTarget);
+  testing.expectEqual('video', g.kind);
+  testing.expectEqual('live', g.readyState);
+  testing.expectEqual(true, g.enabled);
+  testing.expectEqual(false, g.muted);
+  testing.expectEqual('audio', new MediaStreamTrackGenerator({ kind: 'audio' }).kind);
+
+  // The sink is a real WritableStream, and the same one on every read.
+  testing.expectEqual('[object WritableStream]', Object.prototype.toString.call(g.writable));
+  testing.expectEqual(false, g.writable.locked);
+  testing.expectTrue(g.writable === g.writable);
+
+  // Stopping it ends the track and leaves the sink in place.
+  g.stop();
+  testing.expectEqual('ended', g.readyState);
+  testing.expectEqual('[object WritableStream]', Object.prototype.toString.call(g.writable));
+
+  // The bare-kind overload: anything that is not an object is read as the kind
+  // string itself, so a number becomes the kind "5" and fails as one.
+  testing.expectEqual('video', new MediaStreamTrackGenerator('video').kind);
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackGenerator': Invalid track generator kind",
+    () => new MediaStreamTrackGenerator(5));
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackGenerator': Invalid track generator kind",
+    () => new MediaStreamTrackGenerator({ kind: 'nope' }));
+  // An object goes down the dictionary path, where `kind` is required...
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackGenerator': Failed to read the 'kind' property from " +
+    "'MediaStreamTrackGeneratorInit': Required member is undefined.",
+    () => new MediaStreamTrackGenerator({}));
+  // ...and null goes down it too, without ever getting as far as a member.
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackGenerator': The provided value is not of type " +
+    "'MediaStreamTrackGeneratorInit'.",
+    () => new MediaStreamTrackGenerator(null));
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackGenerator': 1 argument required, but only 0 present.",
+    () => new MediaStreamTrackGenerator());
+}
+</script>
+
+<script id=processor>
+{
+  const track = new MediaStreamTrackGenerator({ kind: 'video' });
+  const p = new MediaStreamTrackProcessor({ track });
+  testing.expectEqual('[object MediaStreamTrackProcessor]', Object.prototype.toString.call(p));
+  testing.expectEqual(0, p.totalFrames);
+  testing.expectEqual(0, p.discardedFrames);
+  testing.expectEqual('[object ReadableStream]', Object.prototype.toString.call(p.readable));
+  testing.expectEqual(false, p.readable.locked);
+  testing.expectTrue(p.readable === p.readable);
+
+  // The same two-overload shape, with its own three refusals.
+  testing.expectEqual(
+    '[object MediaStreamTrackProcessor]',
+    Object.prototype.toString.call(new MediaStreamTrackProcessor(track)));
+  testing.expectEqual(
+    '[object MediaStreamTrackProcessor]',
+    Object.prototype.toString.call(new MediaStreamTrackProcessor({ track, maxBufferSize: 2 })));
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackProcessor': Failed to read the 'track' property from " +
+    "'MediaStreamTrackProcessorInit': Required member is undefined.",
+    () => new MediaStreamTrackProcessor({}));
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackProcessor': Failed to read the 'track' property from " +
+    "'MediaStreamTrackProcessorInit': Failed to convert value to 'MediaStreamTrack'.",
+    () => new MediaStreamTrackProcessor({ track: 5 }));
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackProcessor': The provided value is not of type " +
+    "'MediaStreamTrackProcessorInit'.",
+    () => new MediaStreamTrackProcessor(null));
+  // A non-object that is not a track cannot satisfy either overload, and that
+  // one has its own wording.
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackProcessor': Overload resolution failed.",
+    () => new MediaStreamTrackProcessor(5));
+  testing.expectError(
+    "Failed to construct 'MediaStreamTrackProcessor': 1 argument required, but only 0 present.",
+    () => new MediaStreamTrackProcessor());
+}
+</script>
