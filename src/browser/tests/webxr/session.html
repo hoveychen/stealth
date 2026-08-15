@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<head>
+  <title>WebXR: the session, its render state and its frames</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webxr_session_interface_objects>
+  {
+    expectInterfaceObject('XRSession', { inherits: EventTarget, protoOf: EventTarget.prototype });
+    expectInterfaceObject('XRRenderState');
+    expectInterfaceObject('XRFrame');
+    expectInterfaceObject('XRSystem', { inherits: EventTarget, protoOf: EventTarget.prototype });
+    for (const name of ['XRSessionEvent', 'XRInputSourceEvent', 'XRInputSourcesChangeEvent']) {
+      expectInterfaceObject(name, { arity: 2, illegal: false, inherits: Event, protoOf: Event.prototype });
+    }
+  }
+</script>
+
+<script id=webxr_session_prototypes>
+  {
+    // Chrome's order, which is not the spec's: the four depth getters land
+    // between the handlers and the methods, and enabledFeatures /
+    // maxRenderLayers / onvisibilitymaskchange / initiateRoomCapture were
+    // appended after the rest.
+    testing.expectEqual(
+      [
+        'get environmentBlendMode[ec-]', 'get interactionMode[ec-]', 'get visibilityState[ec-]',
+        'get renderState[ec-]', 'get inputSources[ec-]', 'get domOverlayState[ec-]',
+        'get preferredReflectionFormat[ec-]', 'accessor onend[ec-]', 'accessor onselect[ec-]',
+        'accessor oninputsourceschange[ec-]', 'accessor onselectstart[ec-]',
+        'accessor onselectend[ec-]', 'accessor onvisibilitychange[ec-]', 'accessor onsqueeze[ec-]',
+        'accessor onsqueezestart[ec-]', 'accessor onsqueezeend[ec-]', 'get depthUsage[ec-]',
+        'get depthDataFormat[ec-]', 'get depthType[ec-]', 'get depthActive[ec-]',
+        'cancelAnimationFrame/1[ecw]', 'end/0[ecw]', 'pauseDepthSensing/0[ecw]',
+        'requestAnimationFrame/1[ecw]', 'requestHitTestSource/1[ecw]',
+        'requestHitTestSourceForTransientInput/1[ecw]', 'requestLightProbe/0[ecw]',
+        'requestReferenceSpace/1[ecw]', 'resumeDepthSensing/0[ecw]', 'updateRenderState/0[ecw]',
+        'get enabledFeatures[ec-]', 'get maxRenderLayers[ec-]',
+        'accessor onvisibilitymaskchange[ec-]', 'initiateRoomCapture/0[ecw]',
+        '@@toStringTag=XRSession',
+      ].join(','),
+      shapeOf(XRSession.prototype),
+    );
+    testing.expectEqual(
+      'get depthNear[ec-],get depthFar[ec-],get inlineVerticalFieldOfView[ec-],get baseLayer[ec-],' +
+        'get layers[ec-],@@toStringTag=XRRenderState',
+      shapeOf(XRRenderState.prototype),
+    );
+    testing.expectEqual(
+      [
+        'get session[ec-]', 'getPose/2[ecw]', 'getViewerPose/1[ecw]', 'get trackedAnchors[ec-]',
+        'createAnchor/2[ecw]', 'fillJointRadii/2[ecw]', 'fillPoses/3[ecw]',
+        'getDepthInformation/1[ecw]', 'getHitTestResults/1[ecw]',
+        'getHitTestResultsForTransientInput/1[ecw]', 'getJointPose/2[ecw]',
+        'getLightEstimate/1[ecw]', 'get detectedPlanes[ec-]', '@@toStringTag=XRFrame',
+      ].join(','),
+      shapeOf(XRFrame.prototype),
+    );
+    testing.expectEqual(
+      'accessor ondevicechange[ec-],isSessionSupported/1[ecw],requestSession/1[ecw],@@toStringTag=XRSystem',
+      shapeOf(XRSystem.prototype),
+    );
+    testing.expectEqual('get session[ec-],@@toStringTag=XRSessionEvent', shapeOf(XRSessionEvent.prototype));
+    testing.expectEqual(
+      'get frame[ec-],get inputSource[ec-],@@toStringTag=XRInputSourceEvent',
+      shapeOf(XRInputSourceEvent.prototype),
+    );
+    testing.expectEqual(
+      'get session[ec-],get added[ec-],get removed[ec-],@@toStringTag=XRInputSourcesChangeEvent',
+      shapeOf(XRInputSourcesChangeEvent.prototype),
+    );
+  }
+</script>
+
+<script id=webxr_window_surface>
+  {
+    // The whole family, as Chrome 150 carries it. CreepJS's key table stops at
+    // Chrome 115 and only names 34 of these; a detector reading window's own
+    // keys sees all 50.
+    testing.expectEqual(
+      [
+        'XRAnchor', 'XRAnchorSet', 'XRBoundedReferenceSpace', 'XRCPUDepthInformation', 'XRCamera',
+        'XRCompositionLayer', 'XRCubeLayer', 'XRCylinderLayer', 'XRDOMOverlayState',
+        'XRDepthInformation', 'XREquirectLayer', 'XRFrame', 'XRHand', 'XRHitTestResult',
+        'XRHitTestSource', 'XRInputSource', 'XRInputSourceArray', 'XRInputSourceEvent',
+        'XRInputSourcesChangeEvent', 'XRJointPose', 'XRJointSpace', 'XRLayer', 'XRLayerEvent',
+        'XRLightEstimate', 'XRLightProbe', 'XRPlane', 'XRPlaneSet', 'XRPose', 'XRProjectionLayer',
+        'XRQuadLayer', 'XRRay', 'XRReferenceSpace', 'XRReferenceSpaceEvent', 'XRRenderState',
+        'XRRigidTransform', 'XRSession', 'XRSessionEvent', 'XRSpace', 'XRSubImage', 'XRSystem',
+        'XRTransientInputHitTestResult', 'XRTransientInputHitTestSource', 'XRView', 'XRViewerPose',
+        'XRViewport', 'XRVisibilityMaskChangeEvent', 'XRWebGLBinding', 'XRWebGLDepthInformation',
+        'XRWebGLLayer', 'XRWebGLSubImage',
+      ],
+      Object.getOwnPropertyNames(window).filter((k) => k.startsWith('XR')).sort(),
+    );
+  }
+</script>
+
+<script id=webxr_system_entry type=module>
+  const state = await testing.async();
+  const xr = navigator.xr;
+  const answer = (p) => p.then((v) => `resolved ${String(v)}`, (e) => `${e.name}: ${e.message}`);
+
+  const supported = {};
+  for (const mode of ['inline', 'immersive-vr', 'immersive-ar', 'nope', '']) {
+    supported[mode] = await answer(Promise.resolve().then(() => xr.isSessionSupported(mode)));
+  }
+  const noArg = await answer(Promise.resolve().then(() => xr.isSessionSupported()));
+
+  const requested = {};
+  for (const mode of ['immersive-vr', 'immersive-ar', 'nope']) {
+    requested[mode] = await answer(Promise.resolve().then(() => xr.requestSession(mode)));
+  }
+  const requestNoArg = await answer(Promise.resolve().then(() => xr.requestSession()));
+  const inline = await xr.requestSession('inline');
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('resolved true', supported['inline']);
+    testing.expectEqual('resolved false', supported['immersive-vr']);
+    testing.expectEqual('resolved false', supported['immersive-ar']);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'isSessionSupported' on 'XRSystem': " +
+        "The provided value 'nope' is not a valid enum value of type XRSessionMode.",
+      supported['nope'],
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'isSessionSupported' on 'XRSystem': " +
+        "The provided value '' is not a valid enum value of type XRSessionMode.",
+      supported[''],
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'isSessionSupported' on 'XRSystem': " +
+        '1 argument required, but only 0 present.',
+      noArg,
+    );
+
+    // A headset session needs a user activation and never gets one.
+    for (const mode of ['immersive-vr', 'immersive-ar']) {
+      testing.expectEqual(
+        "SecurityError: Failed to execute 'requestSession' on 'XRSystem': " +
+          'The requested session requires user activation.',
+        requested[mode],
+        { label: mode },
+      );
+    }
+    testing.expectEqual(
+      "TypeError: Failed to execute 'requestSession' on 'XRSystem': " +
+        "The provided value 'nope' is not a valid enum value of type XRSessionMode.",
+      requested['nope'],
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'requestSession' on 'XRSystem': " +
+        '1 argument required, but only 0 present.',
+      requestNoArg,
+    );
+
+    // The headline: an inline session really is handed out.
+    testing.expectEqual('[object XRSession]', String(inline));
+    testing.expectTrue(inline instanceof EventTarget);
+    testing.expectEqual(null, navigator.xr.ondevicechange);
+  });
+</script>
+
+<script id=webxr_session_defaults type=module>
+  const state = await testing.async();
+  const session = await navigator.xr.requestSession('inline');
+  const rs = session.renderState;
+  const err = (f) => { try { f(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const depth = {
+    usage: err(() => session.depthUsage),
+    format: err(() => session.depthDataFormat),
+    type: err(() => session.depthType),
+    active: err(() => session.depthActive),
+  };
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('opaque', session.environmentBlendMode);
+    testing.expectEqual('screen-space', session.interactionMode);
+    testing.expectEqual('visible', session.visibilityState);
+    testing.expectEqual('rgba16f', session.preferredReflectionFormat);
+    testing.expectEqual(1, session.maxRenderLayers);
+    testing.expectEqual(null, session.domOverlayState);
+    // Chrome's is a frozen FrozenArray with a stable identity; this engine
+    // builds a fresh ordinary array on each read and has no way to freeze one,
+    // the same gap navigator/usb.zig already records. The contents match.
+    testing.expectEqual(['viewer'], session.enabledFeatures);
+
+    testing.expectEqual('[object XRInputSourceArray]', String(session.inputSources));
+    testing.expectEqual(0, session.inputSources.length);
+    testing.expectTrue(session.inputSources === session.inputSources);
+    testing.expectFalse(Array.isArray(session.inputSources));
+    testing.expectEqual(undefined, session.inputSources[0]);
+
+    testing.expectEqual('[object XRRenderState]', String(rs));
+    testing.expectTrue(session.renderState === session.renderState);
+    testing.expectEqual(0.1, rs.depthNear);
+    testing.expectEqual(1000, rs.depthFar);
+    testing.expectEqual(Math.PI / 2, rs.inlineVerticalFieldOfView);
+    testing.expectEqual(null, rs.baseLayer);
+    testing.expectEqual([], rs.layers);
+
+    // Every depth getter is an InvalidStateError, not a null.
+    const message = 'InvalidStateError: Failed to read the ';
+    testing.expectEqual(
+      message + "'depthUsage' property from 'XRSession': " +
+        'Depth sensing feature is not supported by the session.',
+      depth.usage,
+    );
+    testing.expectEqual(
+      message + "'depthDataFormat' property from 'XRSession': " +
+        'Depth sensing feature is not supported by the session.',
+      depth.format,
+    );
+    testing.expectEqual(
+      message + "'depthType' property from 'XRSession': " +
+        'Depth sensing feature is not supported by the session.',
+      depth.type,
+    );
+    testing.expectEqual(
+      message + "'depthActive' property from 'XRSession': " +
+        'Depth sensing feature is not supported by the session.',
+      depth.active,
+    );
+  });
+</script>
+
+<script id=webxr_reference_spaces type=module>
+  const state = await testing.async();
+  const session = await navigator.xr.requestSession('inline');
+  const answer = (p) => p.then((v) => String(v), (e) => `${e.name}: ${e.message}`);
+
+  const results = {};
+  for (const type of ['viewer', 'local', 'local-floor', 'bounded-floor', 'unbounded', 'nope']) {
+    results[type] = await answer(Promise.resolve().then(() => session.requestReferenceSpace(type)));
+  }
+  const noArg = await answer(Promise.resolve().then(() => session.requestReferenceSpace()));
+  const viewer = await session.requestReferenceSpace('viewer');
+  const offset = viewer.getOffsetReferenceSpace(new XRRigidTransform({ x: 1 }));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object XRReferenceSpace]', results['viewer']);
+    for (const type of ['local', 'local-floor', 'bounded-floor', 'unbounded']) {
+      testing.expectEqual(
+        "NotSupportedError: Failed to execute 'requestReferenceSpace' on 'XRSession': " +
+          'This device does not support the requested reference space type.',
+        results[type],
+        { label: type },
+      );
+    }
+    testing.expectEqual(
+      "TypeError: Failed to execute 'requestReferenceSpace' on 'XRSession': " +
+        "The provided value 'nope' is not a valid enum value of type XRReferenceSpaceType.",
+      results['nope'],
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'requestReferenceSpace' on 'XRSession': " +
+        '1 argument required, but only 0 present.',
+      noArg,
+    );
+
+    testing.expectEqual(null, viewer.onreset);
+    testing.expectEqual(undefined, viewer.boundsGeometry);
+    // A *new* space every time, even for an identity offset.
+    testing.expectEqual('[object XRReferenceSpace]', String(offset));
+    testing.expectFalse(offset === viewer);
+    testing.expectFalse(viewer.getOffsetReferenceSpace(new XRRigidTransform()) === viewer);
+    testing.expectError(
+      "Failed to execute 'getOffsetReferenceSpace' on 'XRReferenceSpace': " +
+        '1 argument required, but only 0 present.',
+      () => viewer.getOffsetReferenceSpace(),
+    );
+  });
+</script>
+
+<script id=webxr_feature_refusals type=module>
+  const state = await testing.async();
+  const session = await navigator.xr.requestSession('inline');
+  const viewer = await session.requestReferenceSpace('viewer');
+  const answer = (p) => p.then(() => 'resolved', (e) => `${e.name}: ${e.message}`);
+  const err = (f) => { try { f(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  const hitTest = await answer(Promise.resolve().then(() => session.requestHitTestSource({ space: viewer })));
+  const hitTestNoArg = await answer(Promise.resolve().then(() => session.requestHitTestSource()));
+  const transient = await answer(
+    Promise.resolve().then(() => session.requestHitTestSourceForTransientInput({ profile: 'x' })),
+  );
+  const lightProbe = await answer(Promise.resolve().then(() => session.requestLightProbe()));
+  const pause = err(() => session.pauseDepthSensing());
+  const resume = err(() => session.resumeDepthSensing());
+  const roomCapture = Object.prototype.toString.call(session.initiateRoomCapture());
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(
+      "NotSupportedError: Failed to execute 'requestHitTestSource' on 'XRSession': " +
+        'Session does not support feature hit-test',
+      hitTest,
+    );
+    testing.expectEqual(
+      "TypeError: Failed to execute 'requestHitTestSource' on 'XRSession': " +
+        '1 argument required, but only 0 present.',
+      hitTestNoArg,
+    );
+    testing.expectEqual(
+      "NotSupportedError: Failed to execute 'requestHitTestSourceForTransientInput' on 'XRSession': " +
+        'Session does not support feature hit-test',
+      transient,
+    );
+    testing.expectEqual(
+      "NotSupportedError: Failed to execute 'requestLightProbe' on 'XRSession': " +
+        'Session does not support feature light-estimation',
+      lightProbe,
+    );
+    // Outside a frame the complaint is about the frame, not about the feature.
+    testing.expectEqual(
+      "InvalidStateError: Failed to execute 'pauseDepthSensing' on 'XRSession': " +
+        'Not called from inside an active animation frame.',
+      pause,
+    );
+    testing.expectEqual(
+      "InvalidStateError: Failed to execute 'resumeDepthSensing' on 'XRSession': " +
+        'Not called from inside an active animation frame.',
+      resume,
+    );
+    testing.expectEqual('[object Promise]', roomCapture);
+  });
+</script>
+
+<script id=webxr_layers_on_a_session type=module>
+  const state = await testing.async();
+  const session = await navigator.xr.requestSession('inline');
+  const gl = Object.assign(document.createElement('canvas'), { width: 300, height: 150 }).getContext('webgl');
+  const layer = new XRWebGLLayer(session, gl);
+  const err = (f) => { try { return String(f()); } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  const binding = err(() => new XRWebGLBinding(session, gl));
+  const badBaseLayer = err(() => session.updateRenderState({ baseLayer: {} }));
+  // Neither of these throws on an inline session, and neither takes effect
+  // before the next frame (measured).
+  const layersOnInline = err(() => session.updateRenderState({ layers: [] }));
+  const bigFov = err(() => session.updateRenderState({ inlineVerticalFieldOfView: 4 }));
+  const beforeFrame = String(session.renderState.baseLayer);
+  session.updateRenderState({ depthNear: 0.5 });
+  const depthNearNow = session.renderState.depthNear;
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object XRWebGLLayer]', String(layer));
+    testing.expectTrue(layer instanceof XRLayer);
+    testing.expectTrue(layer instanceof EventTarget);
+    testing.expectEqual(true, layer.antialias);
+    testing.expectEqual(true, layer.ignoreDepthValues);
+    testing.expectEqual(null, layer.framebuffer);
+    testing.expectEqual(300, layer.framebufferWidth);
+    testing.expectEqual(150, layer.framebufferHeight);
+    testing.expectEqual(1, XRWebGLLayer.getNativeFramebufferScaleFactor(session));
+    testing.expectError(
+      "Failed to execute 'getViewport' on 'XRWebGLLayer': 1 argument required, but only 0 present.",
+      () => layer.getViewport(),
+    );
+
+    // An inline session cannot have a binding at all.
+    testing.expectEqual(
+      "InvalidStateError: Failed to construct 'XRWebGLBinding': " +
+        'Cannot create an XRWebGLBinding for an inline XRSession.',
+      binding,
+    );
+
+    testing.expectEqual(
+      "TypeError: Failed to execute 'updateRenderState' on 'XRSession': " +
+        "Failed to read the 'baseLayer' property from 'XRRenderStateInit': " +
+        "Failed to convert value to 'XRWebGLLayer'.",
+      badBaseLayer,
+    );
+    testing.expectEqual('undefined', layersOnInline);
+    testing.expectEqual('undefined', bigFov);
+    // updateRenderState is not visible synchronously.
+    testing.expectEqual('null', beforeFrame);
+    testing.expectEqual(0.1, depthNearNow);
+  });
+</script>
+
+<script id=webxr_frame_loop type=module>
+  const state = await testing.async();
+  const session = await navigator.xr.requestSession('inline');
+  const viewer = await session.requestReferenceSpace('viewer');
+  const gl = Object.assign(document.createElement('canvas'), { width: 300, height: 150 }).getContext('webgl');
+
+  const rafNoArg = (() => {
+    try { session.requestAnimationFrame(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; }
+  })();
+
+  // With no baseLayer the loop does not run at all -- measured on Chrome, and
+  // the reason probe-win53 timed out.
+  const idle = await new Promise((r) => {
+    const t = setTimeout(() => r('never fired'), 200);
+    session.requestAnimationFrame(() => { clearTimeout(t); r('fired'); });
+  });
+
+  session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl), depthNear: 0.5 });
+  const seen = await new Promise((r) => {
+    const t = setTimeout(() => r(null), 2000);
+    session.requestAnimationFrame((time, frame) => { clearTimeout(t); r({ time, frame }); });
+  });
+
+  const second = await new Promise((r) => {
+    const t = setTimeout(() => r(null), 2000);
+    session.requestAnimationFrame((time, frame) => { clearTimeout(t); r({ time, frame }); });
+  });
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(
+      "TypeError: Failed to execute 'requestAnimationFrame' on 'XRSession': " +
+        '1 argument required, but only 0 present.',
+      rafNoArg,
+    );
+    testing.expectEqual('never fired', idle);
+    testing.expectTrue(seen !== null);
+
+    const { time, frame } = seen;
+    testing.expectEqual('number', typeof time);
+    testing.expectTrue(Number.isFinite(time));
+    testing.expectEqual('[object XRFrame]', String(frame));
+    testing.expectTrue(frame.session === session);
+    // Not on Chrome 150's XRFrame prototype at all.
+    testing.expectEqual(undefined, frame.predictedDisplayTime);
+    // The pending render state landed at the top of this frame.
+    testing.expectEqual('[object XRWebGLLayer]', String(session.renderState.baseLayer));
+    testing.expectEqual(0.5, session.renderState.depthNear);
+
+    const pose = frame.getViewerPose(viewer);
+    testing.expectEqual('[object XRViewerPose]', String(pose));
+    testing.expectEqual(false, pose.emulatedPosition);
+    testing.expectEqual(1, pose.views.length);
+    testing.expectTrue(Array.isArray(pose.views));
+    testing.expectEqual('1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1', Array.from(pose.transform.matrix).join(','));
+
+    const view = pose.views[0];
+    testing.expectEqual('[object XRView]', String(view));
+    testing.expectEqual('none', view.eye);
+    testing.expectEqual(0, view.index);
+    testing.expectEqual(false, view.isFirstPersonObserver);
+    testing.expectEqual(null, view.camera);
+    testing.expectEqual(null, view.recommendedViewportScale);
+    testing.expectEqual('1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1', Array.from(view.transform.matrix).join(','));
+    // The perspective matrix for fovy = pi/2, aspect 1, near 0.5, far 1000.
+    testing.expectEqual(
+      '1,0,0,0,0,1,0,0,0,0,-1.001,-1,0,0,-1.0005,0',
+      Array.from(view.projectionMatrix).map((n) => Math.round(n * 1e5) / 1e5).join(','),
+    );
+
+    const viewport = session.renderState.baseLayer.getViewport(view);
+    testing.expectEqual('[object XRViewport]', String(viewport));
+    testing.expectEqual('0,0,0,0', `${viewport.x},${viewport.y},${viewport.width},${viewport.height}`);
+
+    const selfPose = frame.getPose(viewer, viewer);
+    testing.expectEqual('[object XRPose]', String(selfPose));
+    testing.expectEqual(false, selfPose.emulatedPosition);
+
+    testing.expectEqual('[object XRAnchorSet]', String(frame.trackedAnchors));
+    testing.expectEqual(0, frame.trackedAnchors.size);
+    // A new set on every read (measured).
+    testing.expectFalse(frame.trackedAnchors === frame.trackedAnchors);
+    testing.expectEqual('[object XRPlaneSet]', String(frame.detectedPlanes));
+
+    testing.expectError(
+      "Failed to execute 'getViewerPose' on 'XRFrame': 1 argument required, but only 0 present.",
+      () => frame.getViewerPose(),
+    );
+    testing.expectError(
+      "Failed to execute 'getPose' on 'XRFrame': 2 arguments required, but only 1 present.",
+      () => frame.getPose(viewer),
+    );
+    testing.expectError(
+      "Failed to execute 'getLightEstimate' on 'XRFrame': parameter 1 is not of type 'XRLightProbe'.",
+      () => frame.getLightEstimate({}),
+    );
+    testing.expectError(
+      "Failed to execute 'getHitTestResults' on 'XRFrame': parameter 1 is not of type 'XRHitTestSource'.",
+      () => frame.getHitTestResults({}),
+    );
+    testing.expectError(
+      "Failed to execute 'getJointPose' on 'XRFrame': parameter 1 is not of type 'XRJointSpace'.",
+      () => frame.getJointPose({}, viewer),
+    );
+    testing.expectError(
+      "Failed to execute 'getDepthInformation' on 'XRFrame': " +
+        'Depth sensing feature is not supported by the session.',
+      () => frame.getDepthInformation(view),
+    );
+    testing.expectEqual(true, frame.fillPoses([], viewer, new Float32Array(16)));
+    testing.expectError(
+      "Failed to execute 'fillJointRadii' on 'XRFrame': Buffer sizes must be equal",
+      () => frame.fillJointRadii([], new Float32Array(1)),
+    );
+
+    // A second frame is a new XRFrame, and the clock moved.
+    testing.expectTrue(second !== null);
+    testing.expectFalse(second.frame === frame);
+    testing.expectTrue(second.time >= time);
+    testing.expectTrue(second.frame.session === session);
+  });
+</script>
+
+<script id=webxr_session_end type=module>
+  const state = await testing.async();
+  const session = await navigator.xr.requestSession('inline');
+  const gl = document.createElement('canvas').getContext('webgl');
+  const err = (f) => { try { return String(f()); } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  const events = [];
+  session.onend = () => events.push('onend');
+  session.addEventListener('end', () => events.push('listener'));
+  const returned = session.end();
+  const settled = await Promise.race([
+    Promise.resolve(returned).then(() => 'settled', () => 'rejected'),
+    new Promise((r) => setTimeout(() => r('pending'), 300)),
+  ]);
+
+  const after = {
+    // A second end() does not throw: it hands back a rejected promise.
+    endAgainBrand: Object.prototype.toString.call(session.end()),
+    endAgain: await Promise.resolve()
+      .then(() => session.end())
+      .then(() => 'resolved', (e) => `${e.name}: ${e.message}`),
+    raf: err(() => session.requestAnimationFrame(() => {})),
+    updateRenderState: err(() => session.updateRenderState({ depthNear: 1 })),
+    newLayer: err(() => new XRWebGLLayer(session, gl)),
+    referenceSpace: await Promise.resolve()
+      .then(() => session.requestReferenceSpace('viewer'))
+      .then(() => 'resolved', (e) => `${e.name}: ${e.message}`),
+  };
+
+  state.resolve();
+  await state.done(() => {
+    // The oddest measured behaviour in the whole family: end() flips the
+    // session to ended right away, but its promise never settles and no `end`
+    // event is ever dispatched. Ten seconds and a 100ms ticker confirmed it on
+    // Chrome (probe-win55.js); 300ms is enough to pin it here.
+    testing.expectEqual('[object Promise]', Object.prototype.toString.call(returned));
+    testing.expectEqual('pending', settled);
+    testing.expectEqual([], events);
+    testing.expectEqual('visible', session.visibilityState);
+
+    testing.expectEqual('[object Promise]', after.endAgainBrand);
+    testing.expectEqual(
+      "InvalidStateError: Failed to execute 'end' on 'XRSession': XRSession has already ended.",
+      after.endAgain,
+    );
+    testing.expectEqual('0', after.raf);
+    testing.expectEqual(
+      "InvalidStateError: Failed to execute 'updateRenderState' on 'XRSession': " +
+        'XRSession has already ended.',
+      after.updateRenderState,
+    );
+    testing.expectEqual(
+      "InvalidStateError: Failed to construct 'XRWebGLLayer': " +
+        'Cannot create an XRWebGLLayer for an XRSession which has already ended.',
+      after.newLayer,
+    );
+    testing.expectEqual(
+      "InvalidStateError: Failed to execute 'requestReferenceSpace' on 'XRSession': " +
+        'XRSession has already ended.',
+      after.referenceSpace,
+    );
+  });
+</script>
+
+<script id=webxr_session_events type=module>
+  const state = await testing.async();
+  const session = await navigator.xr.requestSession('inline');
+  const viewer = await session.requestReferenceSpace('viewer');
+
+  state.resolve();
+  await state.done(() => {
+    const e = new XRSessionEvent('end', { session });
+    testing.expectEqual('end', e.type);
+    testing.expectTrue(e.session === session);
+    testing.expectFalse(e.bubbles);
+    testing.expectFalse(e.cancelable);
+    testing.expectFalse(e.isTrusted);
+
+    const r = new XRReferenceSpaceEvent('reset', { referenceSpace: viewer });
+    testing.expectTrue(r.referenceSpace === viewer);
+    testing.expectEqual(null, r.transform);
+
+    const c = new XRInputSourcesChangeEvent('inputsourceschange', { session, added: [], removed: [] });
+    testing.expectTrue(c.session === session);
+    testing.expectEqual([], c.added);
+    testing.expectEqual([], c.removed);
+
+    for (const [name, ctor] of [
+      ['XRSessionEvent', XRSessionEvent],
+      ['XRInputSourceEvent', XRInputSourceEvent],
+      ['XRInputSourcesChangeEvent', XRInputSourcesChangeEvent],
+    ]) {
+      testing.expectError(
+        `Failed to construct '${name}': 2 arguments required, but only 0 present.`,
+        () => new ctor(),
+      );
+      testing.expectError(
+        `Failed to construct '${name}': 2 arguments required, but only 1 present.`,
+        () => new ctor('x'),
+      );
+    }
+    testing.expectError(
+      "Failed to construct 'XRSessionEvent': Failed to read the 'session' property " +
+        "from 'XRSessionEventInit': Required member is undefined.",
+      () => new XRSessionEvent('x', {}),
+    );
+    testing.expectError(
+      "Failed to construct 'XRSessionEvent': Failed to read the 'session' property " +
+        "from 'XRSessionEventInit': Failed to convert value to 'XRSession'.",
+      () => new XRSessionEvent('x', { session: null }),
+    );
+    testing.expectError(
+      "Failed to construct 'XRInputSourceEvent': Failed to read the 'frame' property " +
+        "from 'XRInputSourceEventInit': Required member is undefined.",
+      () => new XRInputSourceEvent('x', {}),
+    );
+    // The added/removed pair is read before session, so an empty dictionary
+    // complains about `added` rather than about `session` (measured).
+    testing.expectError(
+      "Failed to construct 'XRInputSourcesChangeEvent': Failed to read the 'added' property " +
+        "from 'XRInputSourcesChangeEventInit': Required member is undefined.",
+      () => new XRInputSourcesChangeEvent('x', {}),
+    );
+    testing.expectError(
+      "Failed to construct 'XRInputSourcesChangeEvent': Failed to read the 'session' property " +
+        "from 'XRInputSourcesChangeEventInit': Failed to convert value to 'XRSession'.",
+      () => new XRInputSourcesChangeEvent('x', { session: null, added: [], removed: [] }),
+    );
+  });
+</script>

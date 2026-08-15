@@ -528,15 +528,18 @@ pub const XRSystem = struct {
         return self._proto;
     }
 
-    // No headset attached, which is what the reference Chrome reported.
-    pub fn isSessionSupported(_: *const XRSystem, _: []const u8, exec: *const Execution) !js.Promise {
-        return exec.js.local.?.resolvePromise(false);
+    // `inline` is supported on any machine, headset or not: a headed Chrome
+    // 150 with nothing attached answers true for it and false for the two
+    // immersive modes. See webxr/session.zig for the whole entry point.
+    pub fn isSessionSupported(_: *const XRSystem, mode: ?[]const u8, exec: *const Execution) !js.Promise {
+        return @import("../webxr/session.zig").isSessionSupported(mode, exec);
     }
 
-    // Chrome needs a user activation for this and never gets one here
-    // (measured: "The requested session requires user activation.").
-    pub fn requestSession(_: *const XRSystem, _: []const u8, _: ?js.Object) !void {
-        return error.SecurityError;
+    // And an inline session really is handed out -- the measurement that
+    // decided the shape of the WebXR batch. The immersive modes still need a
+    // user activation Chrome never grants here.
+    pub fn requestSession(_: *const XRSystem, mode: ?[]const u8, options: ?js.Object, exec: *Execution) !js.Promise {
+        return @import("../webxr/session.zig").requestSession(mode, options, exec);
     }
 
     const handlers = handlerAccessors(XRSystem, "_on_device_change");
@@ -551,8 +554,8 @@ pub const XRSystem = struct {
         };
 
         pub const ondevicechange = bridge.accessor(handlers.get, handlers.set, .{});
-        pub const isSessionSupported = bridge.function(XRSystem.isSessionSupported, .{});
-        pub const requestSession = bridge.function(XRSystem.requestSession, .{});
+        pub const isSessionSupported = bridge.function(XRSystem.isSessionSupported, .{ .arity = 1 });
+        pub const requestSession = bridge.function(XRSystem.requestSession, .{ .arity = 1 });
     };
 };
 

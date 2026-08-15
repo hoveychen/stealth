@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<head>
+  <title>WebXR: spaces and reference spaces</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webxr_space_interface_objects>
+  {
+    // Everything in this half is handed out by a session; only the event is
+    // constructible (headed Chrome 150, probe-win52.js).
+    expectInterfaceObject('XRSpace', { inherits: EventTarget, protoOf: EventTarget.prototype });
+    expectInterfaceObject('XRReferenceSpace', { inherits: XRSpace, protoOf: XRSpace.prototype });
+    expectInterfaceObject('XRBoundedReferenceSpace', {
+      inherits: XRReferenceSpace,
+      protoOf: XRReferenceSpace.prototype,
+    });
+    expectInterfaceObject('XRJointSpace', { inherits: XRSpace, protoOf: XRSpace.prototype });
+    expectInterfaceObject('XRReferenceSpaceEvent', {
+      arity: 2,
+      illegal: false,
+      inherits: Event,
+      protoOf: Event.prototype,
+    });
+  }
+</script>
+
+<script id=webxr_space_prototypes>
+  {
+    // XRSpace adds nothing of its own -- it is EventTarget plus a brand.
+    testing.expectEqual('@@toStringTag=XRSpace', shapeOf(XRSpace.prototype));
+    testing.expectEqual(
+      'accessor onreset[ec-],getOffsetReferenceSpace/1[ecw],@@toStringTag=XRReferenceSpace',
+      shapeOf(XRReferenceSpace.prototype),
+    );
+    testing.expectEqual(
+      'get boundsGeometry[ec-],@@toStringTag=XRBoundedReferenceSpace',
+      shapeOf(XRBoundedReferenceSpace.prototype),
+    );
+    testing.expectEqual('get jointName[ec-],@@toStringTag=XRJointSpace', shapeOf(XRJointSpace.prototype));
+    testing.expectEqual(
+      'get referenceSpace[ec-],get transform[ec-],@@toStringTag=XRReferenceSpaceEvent',
+      shapeOf(XRReferenceSpaceEvent.prototype),
+    );
+  }
+</script>
+
+<script id=webxr_reference_space_event_refusals>
+  {
+    // Both arguments are required, and `referenceSpace` inside the dictionary
+    // is too -- null counts as a failed conversion rather than as absent.
+    testing.expectError(
+      "Failed to construct 'XRReferenceSpaceEvent': 2 arguments required, but only 0 present.",
+      () => new XRReferenceSpaceEvent(),
+    );
+    testing.expectError(
+      "Failed to construct 'XRReferenceSpaceEvent': 2 arguments required, but only 1 present.",
+      () => new XRReferenceSpaceEvent('reset'),
+    );
+    testing.expectError(
+      "Failed to construct 'XRReferenceSpaceEvent': Failed to read the 'referenceSpace' property " +
+        "from 'XRReferenceSpaceEventInit': Required member is undefined.",
+      () => new XRReferenceSpaceEvent('reset', {}),
+    );
+    testing.expectError(
+      "Failed to construct 'XRReferenceSpaceEvent': Failed to read the 'referenceSpace' property " +
+        "from 'XRReferenceSpaceEventInit': Failed to convert value to 'XRReferenceSpace'.",
+      () => new XRReferenceSpaceEvent('reset', { referenceSpace: null }),
+    );
+    testing.expectError(
+      "Failed to construct 'XRReferenceSpaceEvent': Failed to read the 'referenceSpace' property " +
+        "from 'XRReferenceSpaceEventInit': Failed to convert value to 'XRReferenceSpace'.",
+      () => new XRReferenceSpaceEvent('reset', { referenceSpace: {} }),
+    );
+  }
+</script>

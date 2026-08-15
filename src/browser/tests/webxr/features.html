@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<head>
+  <title>WebXR: anchors, planes, hit tests, light estimation and depth</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<script id=webxr_feature_interface_objects>
+  {
+    // Thirteen interfaces behind five session features -- anchors, plane
+    // detection, hit-test, light-estimation and depth-sensing -- none of which
+    // an inline session on a device-less desktop enables. Chrome refuses each
+    // by name (NotSupportedError "Session does not support feature hit-test",
+    // and so on), so none of these ever has an instance; they are on window
+    // because Chrome puts them there.
+    expectInterfaceObject('XRAnchor');
+    expectInterfaceObject('XRAnchorSet');
+    expectInterfaceObject('XRPlane');
+    expectInterfaceObject('XRPlaneSet');
+    expectInterfaceObject('XRHitTestResult');
+    expectInterfaceObject('XRHitTestSource');
+    expectInterfaceObject('XRTransientInputHitTestResult');
+    expectInterfaceObject('XRTransientInputHitTestSource');
+    expectInterfaceObject('XRLightEstimate');
+    expectInterfaceObject('XRLightProbe', { inherits: EventTarget, protoOf: EventTarget.prototype });
+    expectInterfaceObject('XRDepthInformation');
+    expectInterfaceObject('XRCPUDepthInformation', {
+      inherits: XRDepthInformation,
+      protoOf: XRDepthInformation.prototype,
+    });
+    expectInterfaceObject('XRWebGLDepthInformation', {
+      inherits: XRDepthInformation,
+      protoOf: XRDepthInformation.prototype,
+    });
+  }
+</script>
+
+<script id=webxr_anchor_prototypes>
+  {
+    testing.expectEqual(
+      'get anchorSpace[ec-],delete/0[ecw],@@toStringTag=XRAnchor',
+      shapeOf(XRAnchor.prototype),
+    );
+    testing.expectEqual(
+      'get planeSpace[ec-],get polygon[ec-],get orientation[ec-],get lastChangedTime[ec-],' +
+        'get semanticLabel[ec-],@@toStringTag=XRPlane',
+      shapeOf(XRPlane.prototype),
+    );
+
+    // The two set-likes are identical but for the brand, and both take their
+    // default iterator from `values`.
+    for (const [name, proto] of [['XRAnchorSet', XRAnchorSet.prototype], ['XRPlaneSet', XRPlaneSet.prototype]]) {
+      testing.expectEqual(
+        'get size[ec-],entries/0[ecw],forEach/1[ecw],has/1[ecw],keys/0[ecw],values/0[ecw],' +
+          `@@toStringTag=${name},@@iterator=fn:values`,
+        shapeOf(proto),
+        { label: name },
+      );
+      testing.expectEqual('values', proto[Symbol.iterator].name, { label: name });
+    }
+  }
+</script>
+
+<script id=webxr_hit_test_prototypes>
+  {
+    testing.expectEqual(
+      'getPose/1[ecw],createAnchor/0[ecw],@@toStringTag=XRHitTestResult',
+      shapeOf(XRHitTestResult.prototype),
+    );
+    testing.expectEqual('cancel/0[ecw],@@toStringTag=XRHitTestSource', shapeOf(XRHitTestSource.prototype));
+    testing.expectEqual(
+      'get inputSource[ec-],get results[ec-],@@toStringTag=XRTransientInputHitTestResult',
+      shapeOf(XRTransientInputHitTestResult.prototype),
+    );
+    testing.expectEqual(
+      'cancel/0[ecw],@@toStringTag=XRTransientInputHitTestSource',
+      shapeOf(XRTransientInputHitTestSource.prototype),
+    );
+  }
+</script>
+
+<script id=webxr_light_and_depth_prototypes>
+  {
+    testing.expectEqual(
+      'get sphericalHarmonicsCoefficients[ec-],get primaryLightDirection[ec-],' +
+        'get primaryLightIntensity[ec-],@@toStringTag=XRLightEstimate',
+      shapeOf(XRLightEstimate.prototype),
+    );
+    testing.expectEqual(
+      'get probeSpace[ec-],accessor onreflectionchange[ec-],@@toStringTag=XRLightProbe',
+      shapeOf(XRLightProbe.prototype),
+    );
+    testing.expectEqual(
+      'get width[ec-],get height[ec-],get normDepthBufferFromNormView[ec-],get rawValueToMeters[ec-],' +
+        'get projectionMatrix[ec-],get transform[ec-],@@toStringTag=XRDepthInformation',
+      shapeOf(XRDepthInformation.prototype),
+    );
+    testing.expectEqual(
+      'get data[ec-],getDepthInMeters/2[ecw],@@toStringTag=XRCPUDepthInformation',
+      shapeOf(XRCPUDepthInformation.prototype),
+    );
+    testing.expectEqual(
+      'get texture[ec-],@@toStringTag=XRWebGLDepthInformation',
+      shapeOf(XRWebGLDepthInformation.prototype),
+    );
+  }
+</script>

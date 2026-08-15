@@ -22,6 +22,7 @@ const js = @import("../../js/js.zig");
 const Canvas = @import("../element/html/Canvas.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
 const objects = @import("webgl_objects.zig");
+const DOMException = @import("../DOMException.zig");
 
 const Execution = js.Execution;
 
@@ -886,6 +887,20 @@ const ContextAttributes = struct {
     xrCompatible: bool = false,
 };
 
+/// WebXR's hook into a WebGL context. Chrome rejects with a bare
+/// InvalidStateError -- "An attempt was made to use an object that is not, or
+/// is no longer, usable." -- when there is no XR device to make the context
+/// compatible *with*, which is every machine this engine runs on (measured on
+/// a headed Chrome 150). The `xrCompatible` context attribute stays false.
+pub fn makeXRCompatible(_: *const WebGLRenderingContext, exec: *const js.Execution) !js.Promise {
+    var resolver = exec.js.local.?.createPromiseResolver();
+    resolver.reject("webgl", DOMException.init(
+        "An attempt was made to use an object that is not, or is no longer, usable.",
+        "InvalidStateError",
+    ));
+    return resolver.promise();
+}
+
 pub fn getContextAttributes(_: *const WebGLRenderingContext) ContextAttributes {
     return .{};
 }
@@ -1051,6 +1066,7 @@ pub const JsApi = struct {
     pub const getUniform = bridge.function(WebGLRenderingContext.getUniform, .{});
     pub const getFramebufferAttachmentParameter = bridge.function(WebGLRenderingContext.getFramebufferAttachmentParameter, .{});
     pub const getContextAttributes = bridge.function(WebGLRenderingContext.getContextAttributes, .{});
+    pub const makeXRCompatible = bridge.function(WebGLRenderingContext.makeXRCompatible, .{});
 
     pub const activeTexture = bridge.function(WebGLRenderingContext.activeTexture, .{ .noop = true });
     pub const attachShader = bridge.function(WebGLRenderingContext.attachShader, .{ .noop = true });
