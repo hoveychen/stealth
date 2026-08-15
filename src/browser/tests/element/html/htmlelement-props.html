@@ -420,3 +420,76 @@
     testing.expectEqual('TypeError', caught && caught.name);
   }
 </script>
+
+<script id="late_global_event_handlers">
+  {
+    // The ten GlobalEventHandlers Chrome 150 declares on HTMLElement.prototype
+    // that we did not. Each is a plain handler attribute: assign a function,
+    // read it back, and dispatching the matching event fires it.
+    const handlers = {
+      onmouseenter: 'mouseenter',
+      onmouseleave: 'mouseleave',
+      onmousewheel: 'mousewheel',
+      onbeforexrselect: 'beforexrselect',
+      onscrollsnapchange: 'scrollsnapchange',
+      onscrollsnapchanging: 'scrollsnapchanging',
+      // The four webkit-prefixed ones listen for the *camel case* legacy event
+      // name, not the lowercased one the property spells -- measured on a
+      // headed Chrome 150, `new Event('webkitanimationend')` does not fire
+      // onwebkitanimationend but `new Event('webkitAnimationEnd')` does.
+      onwebkitanimationend: 'webkitAnimationEnd',
+      onwebkitanimationiteration: 'webkitAnimationIteration',
+      onwebkitanimationstart: 'webkitAnimationStart',
+      onwebkittransitionend: 'webkitTransitionEnd',
+    };
+
+    const own = Object.getOwnPropertyNames(HTMLElement.prototype);
+    for (const name of Object.keys(handlers)) {
+      testing.expectEqual(true, own.includes(name), { desc: 'HTMLElement owns ' + name });
+      const d = Object.getOwnPropertyDescriptor(HTMLElement.prototype, name);
+      testing.expectEqual('function', typeof d.get, { desc: name + ' getter' });
+      testing.expectEqual('function', typeof d.set, { desc: name + ' setter' });
+      testing.expectEqual(true, d.enumerable && d.configurable, { desc: name + ' flags' });
+    }
+
+    for (const [name, type] of Object.entries(handlers)) {
+      const el = document.createElement('div');
+      testing.expectEqual(null, el[name], { desc: name + ' starts null' });
+      let fired = 0;
+      el[name] = () => { fired++; };
+      testing.expectEqual('function', typeof el[name], { desc: name + ' reads back' });
+      el.dispatchEvent(new Event(type));
+      testing.expectEqual(1, fired, { desc: name + ' fires on ' + type });
+      // Assigning a handler writes no content attribute.
+      testing.expectEqual(null, el.getAttribute(name), { desc: name + ' is not an attribute' });
+      el[name] = null;
+      testing.expectEqual(null, el[name], { desc: name + ' clears' });
+      el.dispatchEvent(new Event(type));
+      testing.expectEqual(1, fired, { desc: name + ' stays cleared' });
+    }
+
+    // The lowercased spellings are not event names Chrome routes.
+    for (const [name, type] of [['onwebkitanimationend', 'webkitanimationend'],
+                                ['onwebkitanimationiteration', 'webkitanimationiteration'],
+                                ['onwebkitanimationstart', 'webkitanimationstart'],
+                                ['onwebkittransitionend', 'webkittransitionend']]) {
+      const el = document.createElement('div');
+      let fired = 0;
+      el[name] = () => { fired++; };
+      el.dispatchEvent(new Event(type));
+      testing.expectEqual(0, fired, { desc: name + ' ignores ' + type });
+    }
+
+    // mouseenter/mouseleave do not bubble, so a handler on the parent must not
+    // see a child's event -- the handler is still just addEventListener.
+    const parent = document.createElement('div');
+    const child = document.createElement('span');
+    parent.appendChild(child);
+    let seen = 0;
+    parent.onmouseenter = () => { seen++; };
+    child.dispatchEvent(new Event('mouseenter'));
+    testing.expectEqual(0, seen);
+    parent.dispatchEvent(new Event('mouseenter'));
+    testing.expectEqual(1, seen);
+  }
+</script>

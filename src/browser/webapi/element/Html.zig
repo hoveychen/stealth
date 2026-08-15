@@ -1608,6 +1608,86 @@ pub fn getOnWheel(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
     return self.getAttributeFunction(.onwheel, frame);
 }
 
+pub fn setOnMouseEnter(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onmouseenter, callback, frame);
+}
+
+pub fn getOnMouseEnter(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onmouseenter, frame);
+}
+
+pub fn setOnMouseLeave(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onmouseleave, callback, frame);
+}
+
+pub fn getOnMouseLeave(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onmouseleave, frame);
+}
+
+pub fn setOnMouseWheel(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onmousewheel, callback, frame);
+}
+
+pub fn getOnMouseWheel(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onmousewheel, frame);
+}
+
+pub fn setOnBeforeXrSelect(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onbeforexrselect, callback, frame);
+}
+
+pub fn getOnBeforeXrSelect(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onbeforexrselect, frame);
+}
+
+pub fn setOnScrollSnapChange(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onscrollsnapchange, callback, frame);
+}
+
+pub fn getOnScrollSnapChange(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onscrollsnapchange, frame);
+}
+
+pub fn setOnScrollSnapChanging(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onscrollsnapchanging, callback, frame);
+}
+
+pub fn getOnScrollSnapChanging(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onscrollsnapchanging, frame);
+}
+
+pub fn setOnWebkitAnimationEnd(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkitanimationend, callback, frame);
+}
+
+pub fn getOnWebkitAnimationEnd(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkitanimationend, frame);
+}
+
+pub fn setOnWebkitAnimationIteration(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkitanimationiteration, callback, frame);
+}
+
+pub fn getOnWebkitAnimationIteration(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkitanimationiteration, frame);
+}
+
+pub fn setOnWebkitAnimationStart(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkitanimationstart, callback, frame);
+}
+
+pub fn getOnWebkitAnimationStart(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkitanimationstart, frame);
+}
+
+pub fn setOnWebkitTransitionEnd(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkittransitionend, callback, frame);
+}
+
+pub fn getOnWebkitTransitionEnd(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkittransitionend, frame);
+}
+
 // HTML integer parsing is lax
 pub fn parseInteger(input: []const u8) ?i32 {
     var normalized = std.mem.trimStart(u8, input, "\t\n\r\x0c ");
@@ -2175,6 +2255,16 @@ pub const JsApi = struct {
     pub const onvolumechange = bridge.accessor(HtmlElement.getOnVolumeChange, HtmlElement.setOnVolumeChange, .{});
     pub const onwaiting = bridge.accessor(HtmlElement.getOnWaiting, HtmlElement.setOnWaiting, .{});
     pub const onwheel = bridge.accessor(HtmlElement.getOnWheel, HtmlElement.setOnWheel, .{});
+    pub const onmouseenter = bridge.accessor(HtmlElement.getOnMouseEnter, HtmlElement.setOnMouseEnter, .{});
+    pub const onmouseleave = bridge.accessor(HtmlElement.getOnMouseLeave, HtmlElement.setOnMouseLeave, .{});
+    pub const onmousewheel = bridge.accessor(HtmlElement.getOnMouseWheel, HtmlElement.setOnMouseWheel, .{});
+    pub const onbeforexrselect = bridge.accessor(HtmlElement.getOnBeforeXrSelect, HtmlElement.setOnBeforeXrSelect, .{});
+    pub const onscrollsnapchange = bridge.accessor(HtmlElement.getOnScrollSnapChange, HtmlElement.setOnScrollSnapChange, .{});
+    pub const onscrollsnapchanging = bridge.accessor(HtmlElement.getOnScrollSnapChanging, HtmlElement.setOnScrollSnapChanging, .{});
+    pub const onwebkitanimationend = bridge.accessor(HtmlElement.getOnWebkitAnimationEnd, HtmlElement.setOnWebkitAnimationEnd, .{});
+    pub const onwebkitanimationiteration = bridge.accessor(HtmlElement.getOnWebkitAnimationIteration, HtmlElement.setOnWebkitAnimationIteration, .{});
+    pub const onwebkitanimationstart = bridge.accessor(HtmlElement.getOnWebkitAnimationStart, HtmlElement.setOnWebkitAnimationStart, .{});
+    pub const onwebkittransitionend = bridge.accessor(HtmlElement.getOnWebkitTransitionEnd, HtmlElement.setOnWebkitTransitionEnd, .{});
 };
 
 pub const Build = struct {
