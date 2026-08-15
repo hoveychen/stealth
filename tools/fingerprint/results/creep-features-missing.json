@@ -6,12 +6,12 @@
    "location": "http://localhost:8731/",
    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
    "cssInterfaceName": "CSSStyleDeclaration",
-   "totalUnsupportSpans": 129,
+   "totalUnsupportSpans": 128,
    "report": {
     "window": {
      "chromeBaselineKeys": 1100,
-     "engineKeys": 1165,
-     "unsupportSpans": 5,
+     "engineKeys": 1164,
+     "unsupportSpans": 4,
      "diffRemoved": [
       "MutationEvent",
       "openDatabase"
@@ -82,12 +82,10 @@
       "SuppressedError",
       "DisposableStack",
       "AsyncDisposableStack",
-      "Float16Array",
-      "SharedArrayBuffer"
+      "Float16Array"
      ],
      "modalUnsupported": [
       "BarcodeDetector",
-      "!SharedArrayBuffer",
       "CanvasFilter"
      ]
     },

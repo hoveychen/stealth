@@ -74,6 +74,27 @@
   }
 </script>
 
+<script id="shared_array_buffer_gate">
+  {
+    // SharedArrayBuffer is behind cross-origin isolation, and nothing here
+    // negotiates COOP+COEP, so crossOriginIsolated is false and the constructor
+    // is not exposed at all. Measured on a headed Chrome 150 at
+    // http://localhost:8731/ with crossOriginIsolated false: `typeof
+    // SharedArrayBuffer` is "undefined" and it is not a window own property.
+    testing.expectEqual(false, window.crossOriginIsolated);
+    testing.expectEqual('undefined', typeof SharedArrayBuffer);
+    testing.expectEqual(false, Object.getOwnPropertyNames(window).includes('SharedArrayBuffer'));
+    testing.expectEqual(false, 'SharedArrayBuffer' in window);
+
+    // Atomics is *not* gated with it -- Chrome keeps the whole namespace,
+    // waitAsync included -- and neither is WebAssembly.Memory (all measured).
+    testing.expectEqual('object', typeof Atomics);
+    testing.expectEqual(true, Object.getOwnPropertyNames(window).includes('Atomics'));
+    testing.expectEqual('function', typeof Atomics.waitAsync);
+    testing.expectEqual('function', typeof WebAssembly.Memory);
+  }
+</script>
+
 <script id="offscreen_buffering">
   {
     // The one window attribute Chrome marks non-enumerable.

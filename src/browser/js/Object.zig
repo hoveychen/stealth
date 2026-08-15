@@ -62,6 +62,21 @@ pub fn set(self: Object, key: anytype, value: anytype, comptime opts: js.Caller.
     return out.has_value;
 }
 
+/// Removes an own property. Answers whether the delete took, the way the JS
+/// `delete` operator does -- a non-configurable property survives it.
+pub fn delete(self: Object, key: anytype) ?bool {
+    const ctx = self.local.ctx;
+    const key_handle = if (@TypeOf(key) == *const v8.String) key else ctx.isolate.initStringHandle(key);
+
+    var out: v8.MaybeBool = undefined;
+    v8.v8__Object__Delete(self.handle, self.local.handle, @ptrCast(key_handle), &out);
+
+    if (out.has_value) {
+        return out.value;
+    }
+    return null;
+}
+
 pub fn defineOwnProperty(self: Object, name: []const u8, value: js.Value, attr: v8.PropertyAttribute) ?bool {
     const ctx = self.local.ctx;
     const name_handle = ctx.isolate.initStringHandle(name);
