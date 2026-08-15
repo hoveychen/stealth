@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<script src="./testing.js"></script>
+<script src="./shape.js"></script>
+
+<script id=filesystem_entry_points>
+{
+  // Measured on a headed Chrome 150 over http://localhost:8731 --
+  // win63-chrome.json, win66-chrome.json, win67-chrome.json. See filesystem.zig.
+
+  // Unlike an interface object, these two are *enumerable* own properties of the
+  // global (measured: "ecw", where every interface object reads "-cw").
+  testing.expectEqual('function', typeof webkitRequestFileSystem);
+  testing.expectEqual('function', typeof webkitResolveLocalFileSystemURL);
+  testing.expectEqual(3, webkitRequestFileSystem.length);
+  testing.expectEqual(2, webkitResolveLocalFileSystemURL.length);
+  testing.expectEqual('ecw', windowFlags('webkitRequestFileSystem'));
+  testing.expectEqual('ecw', windowFlags('webkitResolveLocalFileSystemURL'));
+
+  testing.expectEqual(0, window.TEMPORARY);
+  testing.expectEqual(1, window.PERSISTENT);
+
+  // Not one of the interfaces this API hands out is a global on Chrome 150 --
+  // they are all [LegacyNoInterfaceObject], branded through Symbol.toStringTag
+  // with no constructor to reach. Shipping any of them would be as loud as
+  // missing a key.
+  for (const n of ['DOMFileSystem', 'Entry', 'DirectoryEntry', 'FileEntry',
+    'DirectoryReader', 'Metadata', 'FileWriter', 'FileSystem', 'FileSystemEntry',
+    'FileSystemFileEntry', 'FileSystemDirectoryEntry', 'FileSystemDirectoryReader']) {
+    testing.expectEqual('undefined', typeof window[n]);
+  }
+
+  testing.expectError(
+    "Failed to execute 'webkitRequestFileSystem' on 'Window': 3 arguments required, but only 0 present.",
+    () => webkitRequestFileSystem(),
+  );
+  testing.expectError(
+    "Failed to execute 'webkitRequestFileSystem' on 'Window': 3 arguments required, but only 2 present.",
+    () => webkitRequestFileSystem(window.TEMPORARY, 1024),
+  );
+  testing.expectError(
+    "Failed to execute 'webkitResolveLocalFileSystemURL' on 'Window': 2 arguments required, but only 0 present.",
+    () => webkitResolveLocalFileSystemURL(),
+  );
+}
+</script>
+
+<script id=filesystem_request type=module>
+{
+  const state = await testing.async();
+
+  const request = (type, size) => new Promise((res) => {
+    webkitRequestFileSystem(type, size, (fs) => res({ fs }), (e) => res({ err: `${e.name}: ${e.message}` }));
+  });
+
+  const temporary = await request(window.TEMPORARY, 1024 * 1024);
+  const persistent = await request(window.PERSISTENT, 1024);
+  const zero = await request(window.TEMPORARY, 0);
+  const bad = await request(99, 1024);
+  const again = await request(window.TEMPORARY, 1024 * 1024);
+
+  state.resolve();
+  await state.done(() => {
+    // The name is derived from the origin, so it leaks it in a shape a detector
+    // can predict: scheme and host punctuation collapse to underscores and the
+    // quota type is appended after a colon.
+    const prefix = location.origin.replace(/[:/.]+/g, '_');
+    testing.expectEqual('[object DOMFileSystem]', Object.prototype.toString.call(temporary.fs));
+    testing.expectEqual(`${prefix}:Temporary`, temporary.fs.name);
+    testing.expectEqual(`${prefix}:Persistent`, persistent.fs.name);
+    testing.expectEqual(`${prefix}:Temporary`, zero.fs.name);
+    // A quota type outside {TEMPORARY, PERSISTENT} is refused, and it is the
+    // *error callback* that gets it, not a throw.
+    testing.expectEqual(
+      'InvalidModificationError: The object can not be modified in this way.',
+      bad.err,
+    );
+
+    // The filesystem itself is per-origin and stable; the entries handed out of
+    // it are not (below).
+    testing.expectEqual(true, again.fs === temporary.fs);
+
+    testing.expectEqual(
+      'get name[ec-],get root[ec-],@@toStringTag=DOMFileSystem',
+      shapeOf(Object.getPrototypeOf(temporary.fs)),
+    );
+    testing.expectTrue(Object.getPrototypeOf(Object.getPrototypeOf(temporary.fs)) === Object.prototype);
+    // `name` and `root` are getter-only -- the shape above already says so, and
+    // this block is a module, so assigning would throw here rather than be
+    // silently ignored the way it is in a classic script.
+  });
+}
+</script>
+
+<script id=filesystem_entries type=module>
+{
+  const state = await testing.async();
+
+  const fs = await new Promise((res, rej) => webkitRequestFileSystem(window.TEMPORARY, 1024 * 1024, res, rej));
+  const root = fs.root;
+  const call = (recv, method, ...args) => new Promise((res) => {
+    recv[method](...args, (v) => res({ ok: v }), (e) => res({ err: `${e.name}: ${e.message}` }));
+  });
+
+  const parent = await call(root, 'getParent');
+  const missing = await call(root, 'getFile', 'nope.txt', {});
+  const made = await call(root, 'getFile', 'made.txt', { create: true });
+  const madeAgain = await call(root, 'getFile', 'made.txt', {});
+  const exclusive = await call(root, 'getFile', 'made.txt', { create: true, exclusive: true });
+  const dir = await call(root, 'getDirectory', 'd', { create: true });
+  const dirAsFile = await call(root, 'getFile', 'd', {});
+  const fileAsDir = await call(root, 'getDirectory', 'made.txt', {});
+  const nested = await call(dir.ok, 'getFile', 'inner.txt', { create: true });
+  // Its own directory, because the other blocks in this file share the same
+  // per-origin filesystem and a listing of the root would race them.
+  const listing = await call(root, 'getDirectory', 'listing', { create: true });
+  await call(listing.ok, 'getFile', 'a.txt', { create: true });
+  await call(listing.ok, 'getDirectory', 'b', { create: true });
+  const reader = listing.ok.createReader();
+  const entries = await call(reader, 'readEntries');
+  const entriesAgain = await call(reader, 'readEntries');
+  const metadata = await call(made.ok, 'getMetadata');
+  const fileObject = await call(made.ok, 'file');
+  const rootRemove = await call(root, 'remove');
+
+  const moved = await call(root, 'getFile', 'mv.txt', { create: true });
+  const moveResult = await new Promise((res) => {
+    moved.ok.moveTo(root, 'mv2.txt', (e) => res({ ok: e }), (e) => res({ err: `${e.name}: ${e.message}` }));
+  });
+  const movedGone = await call(root, 'getFile', 'mv.txt', {});
+  const copied = await new Promise((res) => {
+    moveResult.ok.copyTo(root, 'cp.txt', (e) => res({ ok: e }), (e) => res({ err: `${e.name}: ${e.message}` }));
+  });
+  const removedRecursively = await call(dir.ok, 'removeRecursively');
+  const nestedGone = await call(root, 'getDirectory', 'd', {});
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object DirectoryEntry]', Object.prototype.toString.call(root));
+    testing.expectEqual('/', root.fullPath);
+    testing.expectEqual('', root.name);
+    testing.expectEqual(false, root.isFile);
+    testing.expectEqual(true, root.isDirectory);
+    testing.expectEqual(true, root.filesystem === fs);
+    testing.expectEqual(`filesystem:${location.origin}/temporary/`, root.toURL());
+
+    // Chrome hands back a *fresh* wrapper every time, so entries compare
+    // unequal even when they name the same path.
+    testing.expectEqual('/', parent.ok.fullPath);
+    testing.expectEqual(false, parent.ok === root);
+    testing.expectEqual('/made.txt', madeAgain.ok.fullPath);
+    testing.expectEqual(false, madeAgain.ok === made.ok);
+
+    testing.expectEqual(
+      'NotFoundError: A requested file or directory could not be found at the time an operation was processed.',
+      missing.err,
+    );
+    testing.expectEqual('[object FileEntry]', Object.prototype.toString.call(made.ok));
+    testing.expectEqual('/made.txt', made.ok.fullPath);
+    testing.expectEqual('made.txt', made.ok.name);
+    testing.expectEqual(true, made.ok.isFile);
+    testing.expectEqual(false, made.ok.isDirectory);
+    testing.expectEqual(`filesystem:${location.origin}/temporary/made.txt`, made.ok.toURL());
+    testing.expectEqual(
+      'InvalidModificationError: An attempt was made to create a file or directory where an element already exists.',
+      exclusive.err,
+    );
+    testing.expectEqual('[object DirectoryEntry]', Object.prototype.toString.call(dir.ok));
+    testing.expectEqual('/d', dir.ok.fullPath);
+    // Asking for a directory as a file (or the reverse) is its own error.
+    testing.expectEqual(
+      'TypeMismatchError: The path supplied exists, but was not an entry of requested type.',
+      dirAsFile.err,
+    );
+    testing.expectEqual(
+      'TypeMismatchError: The path supplied exists, but was not an entry of requested type.',
+      fileAsDir.err,
+    );
+    testing.expectEqual('/d/inner.txt', nested.ok.fullPath);
+
+    testing.expectEqual(true, Array.isArray(entries.ok));
+    testing.expectEqual(
+      ['a.txt:f', 'b:d'],
+      entries.ok.map((e) => `${e.name}:${e.isDirectory ? 'd' : 'f'}`).sort(),
+    );
+    // The reader's protocol is "read until empty", so the second call on the
+    // same reader answers empty even though the directory is not.
+    testing.expectEqual([], entriesAgain.ok);
+
+    testing.expectEqual('[object Metadata]', Object.prototype.toString.call(metadata.ok));
+    testing.expectEqual(0, metadata.ok.size);
+    testing.expectEqual(true, metadata.ok.modificationTime instanceof Date);
+    testing.expectEqual('[object File]', Object.prototype.toString.call(fileObject.ok));
+    testing.expectEqual('made.txt', fileObject.ok.name);
+    testing.expectEqual(0, fileObject.ok.size);
+    testing.expectEqual('text/plain', fileObject.ok.type);
+
+    // The root cannot be removed.
+    testing.expectEqual(
+      'InvalidModificationError: The object can not be modified in this way.',
+      rootRemove.err,
+    );
+
+    testing.expectEqual('/mv2.txt', moveResult.ok.fullPath);
+    testing.expectEqual(
+      'NotFoundError: A requested file or directory could not be found at the time an operation was processed.',
+      movedGone.err,
+    );
+    testing.expectEqual('/cp.txt', copied.ok.fullPath);
+    testing.expectEqual(undefined, removedRecursively.ok);
+    testing.expectEqual(
+      'NotFoundError: A requested file or directory could not be found at the time an operation was processed.',
+      nestedGone.err,
+    );
+
+    // The prototype chain a page can walk: DirectoryEntry -> Entry -> Object.
+    const dirProto = Object.getPrototypeOf(root);
+    const entryProto = Object.getPrototypeOf(dirProto);
+    testing.expectEqual(
+      'createReader/0[ecw],getDirectory/1[ecw],getFile/1[ecw],removeRecursively/1[ecw],@@toStringTag=DirectoryEntry',
+      shapeOf(dirProto),
+    );
+    testing.expectEqual(
+      'get isFile[ec-],get isDirectory[ec-],get name[ec-],get fullPath[ec-],' +
+      'get filesystem[ec-],copyTo/1[ecw],getMetadata/1[ecw],getParent/0[ecw],' +
+      'moveTo/1[ecw],remove/1[ecw],toURL/0[ecw],@@toStringTag=Entry',
+      shapeOf(entryProto),
+    );
+    testing.expectTrue(Object.getPrototypeOf(entryProto) === Object.prototype);
+    testing.expectEqual(
+      'createWriter/1[ecw],file/1[ecw],@@toStringTag=FileEntry',
+      shapeOf(Object.getPrototypeOf(made.ok)),
+    );
+    testing.expectTrue(Object.getPrototypeOf(Object.getPrototypeOf(made.ok)) === entryProto);
+    testing.expectEqual(
+      'readEntries/1[ecw],@@toStringTag=DirectoryReader',
+      shapeOf(Object.getPrototypeOf(root.createReader())),
+    );
+    testing.expectEqual(
+      'get modificationTime[ec-],get size[ec-],@@toStringTag=Metadata',
+      shapeOf(Object.getPrototypeOf(metadata.ok)),
+    );
+
+    testing.expectError(
+      "Failed to execute 'getFile' on 'DirectoryEntry': 1 argument required, but only 0 present.",
+      () => root.getFile(),
+    );
+    testing.expectError(
+      "Failed to execute 'getDirectory' on 'DirectoryEntry': 1 argument required, but only 0 present.",
+      () => root.getDirectory(),
+    );
+    testing.expectError(
+      "Failed to execute 'readEntries' on 'DirectoryReader': 1 argument required, but only 0 present.",
+      () => root.createReader().readEntries(),
+    );
+    testing.expectError(
+      "Failed to execute 'getMetadata' on 'Entry': 1 argument required, but only 0 present.",
+      () => root.getMetadata(),
+    );
+    testing.expectError(
+      "Failed to execute 'remove' on 'Entry': 1 argument required, but only 0 present.",
+      () => root.remove(),
+    );
+    testing.expectError(
+      "Failed to execute 'moveTo' on 'Entry': 1 argument required, but only 0 present.",
+      () => root.moveTo(),
+    );
+    // getParent's callbacks are both optional, unlike every other operation.
+    testing.expectEqual(undefined, root.getParent());
+  });
+}
+</script>
+
+<script id=filesystem_resolve type=module>
+{
+  const state = await testing.async();
+
+  const resolve = (url) => new Promise((res) => {
+    try {
+      webkitResolveLocalFileSystemURL(url, (e) => res({ ok: e }), (e) => res({ err: `${e.name}: ${e.message}` }));
+    } catch (e) { res({ threw: `${e.name}: ${e.message}` }); }
+  });
+
+  const fs = await new Promise((res, rej) => webkitRequestFileSystem(window.TEMPORARY, 1024, res, rej));
+  await new Promise((res, rej) => fs.root.getFile('resolved.txt', { create: true }, res, rej));
+
+  const rootUrl = await resolve(fs.root.toURL());
+  const fileUrl = await resolve(`filesystem:${location.origin}/temporary/resolved.txt`);
+  const missing = await resolve(`filesystem:${location.origin}/temporary/nope.txt`);
+  const crossOrigin = await resolve('filesystem:http://evil.example/temporary/x');
+  const notAUrl = await resolve('nope');
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object DirectoryEntry]', Object.prototype.toString.call(rootUrl.ok));
+    testing.expectEqual('/', rootUrl.ok.fullPath);
+    testing.expectEqual('[object FileEntry]', Object.prototype.toString.call(fileUrl.ok));
+    testing.expectEqual('/resolved.txt', fileUrl.ok.fullPath);
+    testing.expectEqual(
+      'NotFoundError: A requested file or directory could not be found at the time an operation was processed.',
+      missing.err,
+    );
+    // Another origin's filesystem is a security error, not a not-found: the
+    // distinction is observable and Chrome makes it.
+    testing.expectEqual(
+      'SecurityError: It was determined that certain files are unsafe for access within a Web application, ' +
+      'or that too many calls are being made on file resources.',
+      crossOrigin.err,
+    );
+    testing.expectEqual(
+      'EncodingError: A URI supplied to the API was malformed, or the resulting Data URL has exceeded ' +
+      'the URL length limitations for Data URLs.',
+      notAUrl.err,
+    );
+  });
+}
+</script>
+
+<script id=filesystem_writer type=module>
+{
+  const state = await testing.async();
+
+  const fs = await new Promise((res, rej) => webkitRequestFileSystem(window.TEMPORARY, 1024, res, rej));
+  const entry = await new Promise((res, rej) => fs.root.getFile('written.txt', { create: true }, res, rej));
+  const writer = await new Promise((res, rej) => entry.createWriter(res, rej));
+
+  const initial = `${writer.readyState}|${writer.error}|${writer.position}|${writer.length}`;
+  const log = [];
+  for (const t of ['writestart', 'progress', 'write', 'abort', 'error', 'writeend']) {
+    writer.addEventListener(t, () => log.push(`${t}(${writer.readyState},${writer.position},${writer.length})`));
+  }
+  const writeReturn = writer.write(new Blob(['hello']));
+  const stateDuring = writer.readyState;
+  await new Promise((r) => setTimeout(r, 150));
+  const writeSequence = log.join(' ');
+  const afterWrite = `${writer.readyState}|${writer.position}|${writer.length}`;
+
+  const metadata = await new Promise((res) => entry.getMetadata(res, res));
+  const file = await new Promise((res) => entry.file(res, res));
+  const text = await new Promise((res) => {
+    const reader = new FileReader();
+    reader.onload = () => res(String(reader.result));
+    reader.readAsText(file);
+  });
+
+  writer.truncate(2);
+  await new Promise((r) => setTimeout(r, 150));
+  const afterTruncate = `${writer.position}|${writer.length}`;
+  writer.seek(1);
+  const seeked = writer.position;
+  writer.seek(-1);
+  const seekedFromEnd = writer.position;
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('[object FileWriter]', Object.prototype.toString.call(writer));
+    testing.expectEqual(true, writer instanceof EventTarget);
+    testing.expectEqual('0|null|0|0', initial);
+    testing.expectEqual(0, writer.INIT);
+    testing.expectEqual(1, writer.WRITING);
+    testing.expectEqual(2, writer.DONE);
+    testing.expectEqual(undefined, writeReturn);
+    // readyState flips to WRITING synchronously; the events land later.
+    testing.expectEqual(1, stateDuring);
+    // Chrome fires progress twice for one write (measured), both already
+    // carrying the final position.
+    testing.expectEqual(
+      'writestart(1,0,0) progress(1,5,5) progress(1,5,5) write(2,5,5) writeend(2,5,5)',
+      writeSequence,
+    );
+    testing.expectEqual('2|5|5', afterWrite);
+    testing.expectEqual(5, metadata.size);
+    testing.expectEqual(5, file.size);
+    testing.expectEqual('text/plain', file.type);
+    testing.expectEqual('hello', text);
+    testing.expectEqual('2|2', afterTruncate);
+    testing.expectEqual(1, seeked);
+    // A negative offset counts from the end.
+    testing.expectEqual(1, seekedFromEnd);
+
+    testing.expectEqual(
+      'get readyState[ec-],get error[ec-],get position[ec-],get length[ec-],' +
+      'accessor onwritestart[ec-],accessor onprogress[ec-],accessor onwrite[ec-],' +
+      'accessor onabort[ec-],accessor onerror[ec-],accessor onwriteend[ec-],' +
+      'INIT=0[e--],WRITING=1[e--],DONE=2[e--],abort/0[ecw],seek/1[ecw],' +
+      'truncate/1[ecw],write/1[ecw],@@toStringTag=FileWriter',
+      shapeOf(Object.getPrototypeOf(writer)),
+    );
+
+    testing.expectError(
+      "Failed to execute 'write' on 'FileWriter': parameter 1 is not of type 'Blob'.",
+      () => writer.write('x'),
+    );
+    testing.expectError(
+      "Failed to execute 'createWriter' on 'FileEntry': 1 argument required, but only 0 present.",
+      () => entry.createWriter(),
+    );
+    testing.expectError(
+      "Failed to execute 'file' on 'FileEntry': 1 argument required, but only 0 present.",
+      () => entry.file(),
+    );
+  });
+}
+</script>

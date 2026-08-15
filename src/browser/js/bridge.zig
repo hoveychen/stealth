@@ -1352,6 +1352,9 @@ pub const PageJsApis = flattenTypes(&.{
     // Web Speech recognition: window-only for the same reason, and the five
     // webkit-prefixed spellings are the names CreepJS counts.
     @import("../webapi/speech/recognition.zig"),
+    // The sandboxed filesystem: window-only, and none of its interfaces is a
+    // global (see filesystem.zig).
+    @import("../webapi/filesystem.zig"),
     // WebRTC: window-only in Chrome. A worker global carries RTCDataChannel and
     // the encoded-frame types but no RTCPeerConnection (measured: the RTC* keys
     // on a DedicatedWorkerGlobalScope are RTCTransformEvent,
