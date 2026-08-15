@@ -2056,10 +2056,6 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(HtmlElement.construct, .{ .new_target = true });
-    pub const upgrade_constructor = bridge.constructor(HtmlElement.upgradeConstruct, .{});
-
-    pub const innerText = bridge.accessor(_innerText, _setInnerText, .{ .ce_reactions = true });
     fn _innerText(self: *HtmlElement, frame: *Frame) ![]const u8 {
         var buf = std.Io.Writer.Allocating.init(frame.local_arena);
         try self.getInnerText(&buf.writer, frame);
@@ -2069,19 +2065,19 @@ pub const JsApi = struct {
         // `[LegacyNullToEmptyString]`: a JS null becomes "", not "null".
         return self.setInnerText(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
-    pub const outerText = bridge.accessor(_innerText, _setOuterText, .{ .ce_reactions = true });
     fn _setOuterText(self: *HtmlElement, value: js.Value, frame: *Frame) !void {
         return self.setOuterText(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
-    // No `insertAdjacentHTML` here: Chrome declares it once, on
-    // Element.prototype, and Element.zig already forwards to
-    // HtmlElement.insertAdjacentHTML. Declaring it on both put a member on
-    // HTMLElement.prototype that no browser has.
-
-    /// Where this sits in HTMLElement.prototype's own-property order is not
-    /// measured; Chrome declares it next to the innerText group in
-    /// html_element.idl, so it goes here.
-    pub const attachInternals = bridge.function(HtmlElement.attachInternals, .{});
+    // Two absences on purpose. `insertAdjacentHTML` is Element's alone --
+    // Element.zig already forwards to HtmlElement.insertAdjacentHTML, and
+    // declaring it on both put a member on HTMLElement.prototype that no
+    // browser has. `accessKeyLabel` is Gecko-only.
+    //
+    // The `pub const` members below are in Chrome 150's own-property order
+    // (probe-g20a), because that order is itself a fingerprint surface: the
+    // bridge emits them in declaration order. The one difference we cannot
+    // close is `constructor`, which V8 always puts last while Chrome has
+    // `onpointerrawupdate` after it.
 
     // Declared here rather than on Element because Chrome declares them here:
     // an SVG or MathML element has no style, no dataset, no offset geometry and
@@ -2123,51 +2119,33 @@ pub const JsApi = struct {
     fn _blur(self: *HtmlElement, frame: *Frame) !void {
         return self.asElement().blur(frame);
     }
-    pub const click = bridge.function(HtmlElement.click, .{});
-    pub const focus = bridge.function(_focus, .{});
 
-    pub const accessKey = bridge.accessor(HtmlElement.getAccessKey, HtmlElement.setAccessKey, .{ .ce_reactions = true });
-    pub const autofocus = bridge.accessor(HtmlElement.getAutofocus, HtmlElement.setAutofocus, .{ .ce_reactions = true });
+    pub const title = bridge.accessor(HtmlElement.getTitle, HtmlElement.setTitle, .{ .ce_reactions = true });
+    pub const lang = bridge.accessor(HtmlElement.getLang, HtmlElement.setLang, .{ .ce_reactions = true });
+    pub const translate = bridge.accessor(HtmlElement.getTranslate, HtmlElement.setTranslate, .{ .ce_reactions = true });
     pub const dir = bridge.accessor(HtmlElement.getDir, HtmlElement.setDir, .{ .ce_reactions = true });
     pub const hidden = bridge.accessor(HtmlElement.getHidden, HtmlElement.setHidden, .{ .ce_reactions = true });
-    pub const translate = bridge.accessor(HtmlElement.getTranslate, HtmlElement.setTranslate, .{ .ce_reactions = true });
-    pub const popover = bridge.accessor(HtmlElement.getPopover, HtmlElement.setPopover, .{ .ce_reactions = true });
-    pub const showPopover = bridge.function(HtmlElement.showPopover, .{});
-    pub const hidePopover = bridge.function(HtmlElement.hidePopover, .{});
-    pub const togglePopover = bridge.function(HtmlElement.togglePopover, .{});
+    pub const inert = bridge.accessor(HtmlElement.getInert, HtmlElement.setInert, .{ .ce_reactions = true });
+    pub const accessKey = bridge.accessor(HtmlElement.getAccessKey, HtmlElement.setAccessKey, .{ .ce_reactions = true });
+    pub const draggable = bridge.accessor(HtmlElement.getDraggable, HtmlElement.setDraggable, .{ .ce_reactions = true });
+    pub const spellcheck = bridge.accessor(HtmlElement.getSpellcheck, HtmlElement.setSpellcheck, .{ .ce_reactions = true });
+    pub const autocapitalize = bridge.accessor(HtmlElement.getAutocapitalize, HtmlElement.setAutocapitalize, .{ .ce_reactions = true });
+    pub const editContext = bridge.accessor(HtmlElement.getEditContext, HtmlElement.setEditContext, .{});
+    pub const contentEditable = bridge.accessor(HtmlElement.getContentEditable, HtmlElement.setContentEditable, .{ .ce_reactions = true });
+    pub const enterKeyHint = bridge.accessor(HtmlElement.getEnterKeyHint, HtmlElement.setEnterKeyHint, .{ .ce_reactions = true });
     pub const isContentEditable = bridge.accessor(HtmlElement.getIsContentEditable, null, .{});
+    pub const inputMode = bridge.accessor(HtmlElement.getInputMode, HtmlElement.setInputMode, .{ .ce_reactions = true });
+    pub const virtualKeyboardPolicy = bridge.accessor(HtmlElement.getVirtualKeyboardPolicy, HtmlElement.setVirtualKeyboardPolicy, .{ .ce_reactions = true });
     pub const offsetParent = bridge.accessor(_offsetParent, null, .{});
     pub const offsetTop = bridge.accessor(_offsetTop, null, .{});
     pub const offsetLeft = bridge.accessor(_offsetLeft, null, .{});
     pub const offsetWidth = bridge.accessor(_offsetWidth, null, .{});
     pub const offsetHeight = bridge.accessor(_offsetHeight, null, .{});
-    pub const lang = bridge.accessor(HtmlElement.getLang, HtmlElement.setLang, .{ .ce_reactions = true });
-    pub const nonce = bridge.accessor(HtmlElement.getNonce, HtmlElement.setNonce, .{ .ce_reactions = true });
-    pub const tabIndex = bridge.accessor(HtmlElement.getTabIndex, HtmlElement.setTabIndex, .{ .ce_reactions = true });
-    pub const style = bridge.accessor(_style, _setStyle, .{});
-    pub const attributeStyleMap = bridge.accessor(_attributeStyleMap, null, .{});
-    pub const blur = bridge.function(_blur, .{});
-    pub const title = bridge.accessor(HtmlElement.getTitle, HtmlElement.setTitle, .{ .ce_reactions = true });
-
-    pub const inert = bridge.accessor(HtmlElement.getInert, HtmlElement.setInert, .{ .ce_reactions = true });
-    pub const draggable = bridge.accessor(HtmlElement.getDraggable, HtmlElement.setDraggable, .{ .ce_reactions = true });
-    pub const spellcheck = bridge.accessor(HtmlElement.getSpellcheck, HtmlElement.setSpellcheck, .{ .ce_reactions = true });
-    pub const autocapitalize = bridge.accessor(HtmlElement.getAutocapitalize, HtmlElement.setAutocapitalize, .{ .ce_reactions = true });
-    pub const contentEditable = bridge.accessor(HtmlElement.getContentEditable, HtmlElement.setContentEditable, .{ .ce_reactions = true });
-    pub const enterKeyHint = bridge.accessor(HtmlElement.getEnterKeyHint, HtmlElement.setEnterKeyHint, .{ .ce_reactions = true });
-    pub const inputMode = bridge.accessor(HtmlElement.getInputMode, HtmlElement.setInputMode, .{ .ce_reactions = true });
-    pub const virtualKeyboardPolicy = bridge.accessor(HtmlElement.getVirtualKeyboardPolicy, HtmlElement.setVirtualKeyboardPolicy, .{ .ce_reactions = true });
+    pub const popover = bridge.accessor(HtmlElement.getPopover, HtmlElement.setPopover, .{ .ce_reactions = true });
+    pub const innerText = bridge.accessor(_innerText, _setInnerText, .{ .ce_reactions = true });
+    pub const outerText = bridge.accessor(_innerText, _setOuterText, .{ .ce_reactions = true });
     pub const writingSuggestions = bridge.accessor(HtmlElement.getWritingSuggestions, HtmlElement.setWritingSuggestions, .{ .ce_reactions = true });
-    pub const focusGroup = bridge.accessor(HtmlElement.getFocusGroup, HtmlElement.setFocusGroup, .{ .ce_reactions = true });
-    pub const focusGroupStart = bridge.accessor(HtmlElement.getFocusGroupStart, HtmlElement.setFocusGroupStart, .{ .ce_reactions = true });
-    pub const editContext = bridge.accessor(HtmlElement.getEditContext, HtmlElement.setEditContext, .{});
-
     pub const onabort = bridge.accessor(HtmlElement.getOnAbort, HtmlElement.setOnAbort, .{});
-    pub const onanimationcancel = bridge.accessor(HtmlElement.getOnAnimationCancel, HtmlElement.setOnAnimationCancel, .{});
-    pub const onanimationend = bridge.accessor(HtmlElement.getOnAnimationEnd, HtmlElement.setOnAnimationEnd, .{});
-    pub const onanimationiteration = bridge.accessor(HtmlElement.getOnAnimationIteration, HtmlElement.setOnAnimationIteration, .{});
-    pub const onanimationstart = bridge.accessor(HtmlElement.getOnAnimationStart, HtmlElement.setOnAnimationStart, .{});
-    pub const onauxclick = bridge.accessor(HtmlElement.getOnAuxClick, HtmlElement.setOnAuxClick, .{});
     pub const onbeforeinput = bridge.accessor(HtmlElement.getOnBeforeInput, HtmlElement.setOnBeforeInput, .{});
     pub const onbeforematch = bridge.accessor(HtmlElement.getOnBeforeMatch, HtmlElement.setOnBeforeMatch, .{});
     pub const onbeforetoggle = bridge.accessor(HtmlElement.getOnBeforeToggle, HtmlElement.setOnBeforeToggle, .{});
@@ -2183,9 +2161,7 @@ pub const JsApi = struct {
     pub const oncontextlost = bridge.accessor(HtmlElement.getOnContextLost, HtmlElement.setOnContextLost, .{});
     pub const oncontextmenu = bridge.accessor(HtmlElement.getOnContextMenu, HtmlElement.setOnContextMenu, .{});
     pub const oncontextrestored = bridge.accessor(HtmlElement.getOnContextRestored, HtmlElement.setOnContextRestored, .{});
-    pub const oncopy = bridge.accessor(HtmlElement.getOnCopy, HtmlElement.setOnCopy, .{});
     pub const oncuechange = bridge.accessor(HtmlElement.getOnCueChange, HtmlElement.setOnCueChange, .{});
-    pub const oncut = bridge.accessor(HtmlElement.getOnCut, HtmlElement.setOnCut, .{});
     pub const ondblclick = bridge.accessor(HtmlElement.getOnDblClick, HtmlElement.setOnDblClick, .{});
     pub const ondrag = bridge.accessor(HtmlElement.getOnDrag, HtmlElement.setOnDrag, .{});
     pub const ondragend = bridge.accessor(HtmlElement.getOnDragEnd, HtmlElement.setOnDragEnd, .{});
@@ -2200,7 +2176,6 @@ pub const JsApi = struct {
     pub const onerror = bridge.accessor(HtmlElement.getOnError, HtmlElement.setOnError, .{});
     pub const onfocus = bridge.accessor(HtmlElement.getOnFocus, HtmlElement.setOnFocus, .{});
     pub const onformdata = bridge.accessor(HtmlElement.getOnFormData, HtmlElement.setOnFormData, .{});
-    pub const ongotpointercapture = bridge.accessor(HtmlElement.getOnGotPointerCapture, HtmlElement.setOnGotPointerCapture, .{});
     pub const oninput = bridge.accessor(HtmlElement.getOnInput, HtmlElement.setOnInput, .{});
     pub const oninvalid = bridge.accessor(HtmlElement.getOnInvalid, HtmlElement.setOnInvalid, .{});
     pub const onkeydown = bridge.accessor(HtmlElement.getOnKeyDown, HtmlElement.setOnKeyDown, .{});
@@ -2210,26 +2185,17 @@ pub const JsApi = struct {
     pub const onloadeddata = bridge.accessor(HtmlElement.getOnLoadedData, HtmlElement.setOnLoadedData, .{});
     pub const onloadedmetadata = bridge.accessor(HtmlElement.getOnLoadedMetadata, HtmlElement.setOnLoadedMetadata, .{});
     pub const onloadstart = bridge.accessor(HtmlElement.getOnLoadStart, HtmlElement.setOnLoadStart, .{});
-    pub const onlostpointercapture = bridge.accessor(HtmlElement.getOnLostPointerCapture, HtmlElement.setOnLostPointerCapture, .{});
     pub const onmousedown = bridge.accessor(HtmlElement.getOnMouseDown, HtmlElement.setOnMouseDown, .{});
+    pub const onmouseenter = bridge.accessor(HtmlElement.getOnMouseEnter, HtmlElement.setOnMouseEnter, .{});
+    pub const onmouseleave = bridge.accessor(HtmlElement.getOnMouseLeave, HtmlElement.setOnMouseLeave, .{});
     pub const onmousemove = bridge.accessor(HtmlElement.getOnMouseMove, HtmlElement.setOnMouseMove, .{});
     pub const onmouseout = bridge.accessor(HtmlElement.getOnMouseOut, HtmlElement.setOnMouseOut, .{});
     pub const onmouseover = bridge.accessor(HtmlElement.getOnMouseOver, HtmlElement.setOnMouseOver, .{});
     pub const onmouseup = bridge.accessor(HtmlElement.getOnMouseUp, HtmlElement.setOnMouseUp, .{});
-    pub const onpaste = bridge.accessor(HtmlElement.getOnPaste, HtmlElement.setOnPaste, .{});
-    pub const dataset = bridge.accessor(_dataset, null, .{});
+    pub const onmousewheel = bridge.accessor(HtmlElement.getOnMouseWheel, HtmlElement.setOnMouseWheel, .{});
     pub const onpause = bridge.accessor(HtmlElement.getOnPause, HtmlElement.setOnPause, .{});
     pub const onplay = bridge.accessor(HtmlElement.getOnPlay, HtmlElement.setOnPlay, .{});
     pub const onplaying = bridge.accessor(HtmlElement.getOnPlaying, HtmlElement.setOnPlaying, .{});
-    pub const onpointercancel = bridge.accessor(HtmlElement.getOnPointerCancel, HtmlElement.setOnPointerCancel, .{});
-    pub const onpointerdown = bridge.accessor(HtmlElement.getOnPointerDown, HtmlElement.setOnPointerDown, .{});
-    pub const onpointerenter = bridge.accessor(HtmlElement.getOnPointerEnter, HtmlElement.setOnPointerEnter, .{});
-    pub const onpointerleave = bridge.accessor(HtmlElement.getOnPointerLeave, HtmlElement.setOnPointerLeave, .{});
-    pub const onpointermove = bridge.accessor(HtmlElement.getOnPointerMove, HtmlElement.setOnPointerMove, .{});
-    pub const onpointerout = bridge.accessor(HtmlElement.getOnPointerOut, HtmlElement.setOnPointerOut, .{});
-    pub const onpointerover = bridge.accessor(HtmlElement.getOnPointerOver, HtmlElement.setOnPointerOver, .{});
-    pub const onpointerrawupdate = bridge.accessor(HtmlElement.getOnPointerRawUpdate, HtmlElement.setOnPointerRawUpdate, .{});
-    pub const onpointerup = bridge.accessor(HtmlElement.getOnPointerUp, HtmlElement.setOnPointerUp, .{});
     pub const onprogress = bridge.accessor(HtmlElement.getOnProgress, HtmlElement.setOnProgress, .{});
     pub const onratechange = bridge.accessor(HtmlElement.getOnRateChange, HtmlElement.setOnRateChange, .{});
     pub const onreset = bridge.accessor(HtmlElement.getOnReset, HtmlElement.setOnReset, .{});
@@ -2240,31 +2206,64 @@ pub const JsApi = struct {
     pub const onseeked = bridge.accessor(HtmlElement.getOnSeeked, HtmlElement.setOnSeeked, .{});
     pub const onseeking = bridge.accessor(HtmlElement.getOnSeeking, HtmlElement.setOnSeeking, .{});
     pub const onselect = bridge.accessor(HtmlElement.getOnSelect, HtmlElement.setOnSelect, .{});
-    pub const onselectionchange = bridge.accessor(HtmlElement.getOnSelectionChange, HtmlElement.setOnSelectionChange, .{});
-    pub const onselectstart = bridge.accessor(HtmlElement.getOnSelectStart, HtmlElement.setOnSelectStart, .{});
     pub const onslotchange = bridge.accessor(HtmlElement.getOnSlotChange, HtmlElement.setOnSlotChange, .{});
     pub const onstalled = bridge.accessor(HtmlElement.getOnStalled, HtmlElement.setOnStalled, .{});
     pub const onsubmit = bridge.accessor(HtmlElement.getOnSubmit, HtmlElement.setOnSubmit, .{});
     pub const onsuspend = bridge.accessor(HtmlElement.getOnSuspend, HtmlElement.setOnSuspend, .{});
     pub const ontimeupdate = bridge.accessor(HtmlElement.getOnTimeUpdate, HtmlElement.setOnTimeUpdate, .{});
     pub const ontoggle = bridge.accessor(HtmlElement.getOnToggle, HtmlElement.setOnToggle, .{});
-    pub const ontransitioncancel = bridge.accessor(HtmlElement.getOnTransitionCancel, HtmlElement.setOnTransitionCancel, .{});
-    pub const ontransitionend = bridge.accessor(HtmlElement.getOnTransitionEnd, HtmlElement.setOnTransitionEnd, .{});
-    pub const ontransitionrun = bridge.accessor(HtmlElement.getOnTransitionRun, HtmlElement.setOnTransitionRun, .{});
-    pub const ontransitionstart = bridge.accessor(HtmlElement.getOnTransitionStart, HtmlElement.setOnTransitionStart, .{});
     pub const onvolumechange = bridge.accessor(HtmlElement.getOnVolumeChange, HtmlElement.setOnVolumeChange, .{});
     pub const onwaiting = bridge.accessor(HtmlElement.getOnWaiting, HtmlElement.setOnWaiting, .{});
-    pub const onwheel = bridge.accessor(HtmlElement.getOnWheel, HtmlElement.setOnWheel, .{});
-    pub const onmouseenter = bridge.accessor(HtmlElement.getOnMouseEnter, HtmlElement.setOnMouseEnter, .{});
-    pub const onmouseleave = bridge.accessor(HtmlElement.getOnMouseLeave, HtmlElement.setOnMouseLeave, .{});
-    pub const onmousewheel = bridge.accessor(HtmlElement.getOnMouseWheel, HtmlElement.setOnMouseWheel, .{});
-    pub const onbeforexrselect = bridge.accessor(HtmlElement.getOnBeforeXrSelect, HtmlElement.setOnBeforeXrSelect, .{});
-    pub const onscrollsnapchange = bridge.accessor(HtmlElement.getOnScrollSnapChange, HtmlElement.setOnScrollSnapChange, .{});
-    pub const onscrollsnapchanging = bridge.accessor(HtmlElement.getOnScrollSnapChanging, HtmlElement.setOnScrollSnapChanging, .{});
     pub const onwebkitanimationend = bridge.accessor(HtmlElement.getOnWebkitAnimationEnd, HtmlElement.setOnWebkitAnimationEnd, .{});
     pub const onwebkitanimationiteration = bridge.accessor(HtmlElement.getOnWebkitAnimationIteration, HtmlElement.setOnWebkitAnimationIteration, .{});
     pub const onwebkitanimationstart = bridge.accessor(HtmlElement.getOnWebkitAnimationStart, HtmlElement.setOnWebkitAnimationStart, .{});
     pub const onwebkittransitionend = bridge.accessor(HtmlElement.getOnWebkitTransitionEnd, HtmlElement.setOnWebkitTransitionEnd, .{});
+    pub const onwheel = bridge.accessor(HtmlElement.getOnWheel, HtmlElement.setOnWheel, .{});
+    pub const onauxclick = bridge.accessor(HtmlElement.getOnAuxClick, HtmlElement.setOnAuxClick, .{});
+    pub const ongotpointercapture = bridge.accessor(HtmlElement.getOnGotPointerCapture, HtmlElement.setOnGotPointerCapture, .{});
+    pub const onlostpointercapture = bridge.accessor(HtmlElement.getOnLostPointerCapture, HtmlElement.setOnLostPointerCapture, .{});
+    pub const onpointerdown = bridge.accessor(HtmlElement.getOnPointerDown, HtmlElement.setOnPointerDown, .{});
+    pub const onpointermove = bridge.accessor(HtmlElement.getOnPointerMove, HtmlElement.setOnPointerMove, .{});
+    pub const onpointerup = bridge.accessor(HtmlElement.getOnPointerUp, HtmlElement.setOnPointerUp, .{});
+    pub const onpointercancel = bridge.accessor(HtmlElement.getOnPointerCancel, HtmlElement.setOnPointerCancel, .{});
+    pub const onpointerover = bridge.accessor(HtmlElement.getOnPointerOver, HtmlElement.setOnPointerOver, .{});
+    pub const onpointerout = bridge.accessor(HtmlElement.getOnPointerOut, HtmlElement.setOnPointerOut, .{});
+    pub const onpointerenter = bridge.accessor(HtmlElement.getOnPointerEnter, HtmlElement.setOnPointerEnter, .{});
+    pub const onpointerleave = bridge.accessor(HtmlElement.getOnPointerLeave, HtmlElement.setOnPointerLeave, .{});
+    pub const onselectstart = bridge.accessor(HtmlElement.getOnSelectStart, HtmlElement.setOnSelectStart, .{});
+    pub const onselectionchange = bridge.accessor(HtmlElement.getOnSelectionChange, HtmlElement.setOnSelectionChange, .{});
+    pub const onanimationcancel = bridge.accessor(HtmlElement.getOnAnimationCancel, HtmlElement.setOnAnimationCancel, .{});
+    pub const onanimationend = bridge.accessor(HtmlElement.getOnAnimationEnd, HtmlElement.setOnAnimationEnd, .{});
+    pub const onanimationiteration = bridge.accessor(HtmlElement.getOnAnimationIteration, HtmlElement.setOnAnimationIteration, .{});
+    pub const onanimationstart = bridge.accessor(HtmlElement.getOnAnimationStart, HtmlElement.setOnAnimationStart, .{});
+    pub const ontransitionrun = bridge.accessor(HtmlElement.getOnTransitionRun, HtmlElement.setOnTransitionRun, .{});
+    pub const ontransitionstart = bridge.accessor(HtmlElement.getOnTransitionStart, HtmlElement.setOnTransitionStart, .{});
+    pub const ontransitionend = bridge.accessor(HtmlElement.getOnTransitionEnd, HtmlElement.setOnTransitionEnd, .{});
+    pub const ontransitioncancel = bridge.accessor(HtmlElement.getOnTransitionCancel, HtmlElement.setOnTransitionCancel, .{});
+    pub const onbeforexrselect = bridge.accessor(HtmlElement.getOnBeforeXrSelect, HtmlElement.setOnBeforeXrSelect, .{});
+    pub const oncopy = bridge.accessor(HtmlElement.getOnCopy, HtmlElement.setOnCopy, .{});
+    pub const oncut = bridge.accessor(HtmlElement.getOnCut, HtmlElement.setOnCut, .{});
+    pub const onpaste = bridge.accessor(HtmlElement.getOnPaste, HtmlElement.setOnPaste, .{});
+    pub const dataset = bridge.accessor(_dataset, null, .{});
+    pub const nonce = bridge.accessor(HtmlElement.getNonce, HtmlElement.setNonce, .{ .ce_reactions = true });
+    pub const autofocus = bridge.accessor(HtmlElement.getAutofocus, HtmlElement.setAutofocus, .{ .ce_reactions = true });
+    pub const tabIndex = bridge.accessor(HtmlElement.getTabIndex, HtmlElement.setTabIndex, .{ .ce_reactions = true });
+    pub const style = bridge.accessor(_style, _setStyle, .{});
+    pub const attributeStyleMap = bridge.accessor(_attributeStyleMap, null, .{});
+    pub const attachInternals = bridge.function(HtmlElement.attachInternals, .{});
+    pub const blur = bridge.function(_blur, .{});
+    pub const click = bridge.function(HtmlElement.click, .{});
+    pub const focus = bridge.function(_focus, .{});
+    pub const hidePopover = bridge.function(HtmlElement.hidePopover, .{});
+    pub const showPopover = bridge.function(HtmlElement.showPopover, .{});
+    pub const togglePopover = bridge.function(HtmlElement.togglePopover, .{});
+    pub const onscrollsnapchange = bridge.accessor(HtmlElement.getOnScrollSnapChange, HtmlElement.setOnScrollSnapChange, .{});
+    pub const onscrollsnapchanging = bridge.accessor(HtmlElement.getOnScrollSnapChanging, HtmlElement.setOnScrollSnapChanging, .{});
+    pub const focusGroup = bridge.accessor(HtmlElement.getFocusGroup, HtmlElement.setFocusGroup, .{ .ce_reactions = true });
+    pub const focusGroupStart = bridge.accessor(HtmlElement.getFocusGroupStart, HtmlElement.setFocusGroupStart, .{ .ce_reactions = true });
+    pub const onpointerrawupdate = bridge.accessor(HtmlElement.getOnPointerRawUpdate, HtmlElement.setOnPointerRawUpdate, .{});
+    pub const upgrade_constructor = bridge.constructor(HtmlElement.upgradeConstruct, .{});
+    pub const constructor = bridge.constructor(HtmlElement.construct, .{ .new_target = true });
 };
 
 pub const Build = struct {

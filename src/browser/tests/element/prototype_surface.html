@@ -50,6 +50,51 @@
   }
 </script>
 
+<script id=htmlelement_prototype_roster>
+  {
+    // The whole of HTMLElement.prototype, in declaration order, measured on a
+    // headed Chrome 150 (probe-g20a). Own-property order is a fingerprint
+    // surface in its own right, so this is an ordered array and not a set.
+    //
+    // One deliberate difference: Chrome has `constructor` at index 141 with
+    // `onpointerrawupdate` (a partial interface member) after it. V8 always
+    // puts `constructor` last on a template's prototype, so ours is the same
+    // sequence with those two swapped -- the same engine-level limitation
+    // already recorded for DOMMatrix.setMatrixValue and SVGLength.
+    const expected = [
+      'title', 'lang', 'translate', 'dir', 'hidden', 'inert', 'accessKey', 'draggable',
+      'spellcheck', 'autocapitalize', 'editContext', 'contentEditable', 'enterKeyHint',
+      'isContentEditable', 'inputMode', 'virtualKeyboardPolicy', 'offsetParent', 'offsetTop',
+      'offsetLeft', 'offsetWidth', 'offsetHeight', 'popover', 'innerText', 'outerText',
+      'writingSuggestions', 'onabort', 'onbeforeinput', 'onbeforematch', 'onbeforetoggle',
+      'onblur', 'oncancel', 'oncanplay', 'oncanplaythrough', 'onchange', 'onclick', 'onclose',
+      'oncommand', 'oncontentvisibilityautostatechange', 'oncontextlost', 'oncontextmenu',
+      'oncontextrestored', 'oncuechange', 'ondblclick', 'ondrag', 'ondragend', 'ondragenter',
+      'ondragleave', 'ondragover', 'ondragstart', 'ondrop', 'ondurationchange', 'onemptied',
+      'onended', 'onerror', 'onfocus', 'onformdata', 'oninput', 'oninvalid', 'onkeydown',
+      'onkeypress', 'onkeyup', 'onload', 'onloadeddata', 'onloadedmetadata', 'onloadstart',
+      'onmousedown', 'onmouseenter', 'onmouseleave', 'onmousemove', 'onmouseout',
+      'onmouseover', 'onmouseup', 'onmousewheel', 'onpause', 'onplay', 'onplaying',
+      'onprogress', 'onratechange', 'onreset', 'onresize', 'onscroll', 'onscrollend',
+      'onsecuritypolicyviolation', 'onseeked', 'onseeking', 'onselect', 'onslotchange',
+      'onstalled', 'onsubmit', 'onsuspend', 'ontimeupdate', 'ontoggle', 'onvolumechange',
+      'onwaiting', 'onwebkitanimationend', 'onwebkitanimationiteration',
+      'onwebkitanimationstart', 'onwebkittransitionend', 'onwheel', 'onauxclick',
+      'ongotpointercapture', 'onlostpointercapture', 'onpointerdown', 'onpointermove',
+      'onpointerup', 'onpointercancel', 'onpointerover', 'onpointerout', 'onpointerenter',
+      'onpointerleave', 'onselectstart', 'onselectionchange', 'onanimationcancel',
+      'onanimationend', 'onanimationiteration', 'onanimationstart', 'ontransitionrun',
+      'ontransitionstart', 'ontransitionend', 'ontransitioncancel', 'onbeforexrselect',
+      'oncopy', 'oncut', 'onpaste', 'dataset', 'nonce', 'autofocus', 'tabIndex', 'style',
+      'attributeStyleMap', 'attachInternals', 'blur', 'click', 'focus', 'hidePopover',
+      'showPopover', 'togglePopover', 'onscrollsnapchange', 'onscrollsnapchanging',
+      'focusGroup', 'focusGroupStart', 'onpointerrawupdate', 'constructor'
+    ];
+    testing.expectEqual(expected, Object.getOwnPropertyNames(HTMLElement.prototype));
+    testing.expectEqual('HTMLElement', HTMLElement.prototype[Symbol.toStringTag]);
+  }
+</script>
+
 <script id=element_prototype_insert_adjacent_html_only_on_element>
   {
     // insertAdjacentHTML is declared once, on Element. Measured on a headed
