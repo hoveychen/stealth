@@ -33,16 +33,16 @@
 //!   new MediaStreamTrackGenerator({})    -> Required member is undefined
 //!   new MediaStreamTrackGenerator(null)  -> is not of type '...Init'
 //!
-//! Known gap: two of the generator's *inherited* MediaStreamTrack members still
-//! report this engine's WebAudio-track values. `getSettings()` carries the
-//! audio keys and a "WebAudio-"-prefixed deviceId where Chrome's generator
-//! reports a bare UUID and nothing else, and `getCapabilities()` answers the
-//! audio capability set where Chrome answers a video one
-//! ({deviceId:"", facingMode:[], resizeMode:[...]}). Closing that means giving
-//! MediaStreamTrack a notion of which source it came from, which is a change to
-//! streams.zig rather than to this file.
+//! The generator's *inherited* MediaStreamTrack members answer a generator's
+//! values rather than this engine's WebAudio ones: `MediaStreamTrack._source`
+//! carries which of the three sources made a track, and the settings and
+//! capabilities dictionaries branch on it (see streams.zig). A generator
+//! reports only its deviceId plus the one member its kind implies, and its
+//! capabilities name no device at all -- deviceId is the empty string there,
+//! not the UUID its settings report.
 //!
-//! Chrome 150, headed, over http://localhost (win57-chrome.json, p66).
+//! Chrome 150, headed, over http://localhost (win57-chrome.json, p66;
+//! win61/win62-chrome.json for the settings and capabilities).
 
 const std = @import("std");
 
@@ -107,19 +107,21 @@ pub const MediaStreamTrackGenerator = struct {
         // whole chain is built at once rather than the base being made first.
         var id: [36]u8 = undefined;
         @import("../../../id.zig").uuidv4(&id);
-        var device_id: [45]u8 = undefined;
-        @memcpy(device_id[0..9], "WebAudio-");
-        @import("../../../id.zig").uuidv4(device_id[9..]);
+
+        // A generator carries *two* UUIDs: `id`, and a second one that is both
+        // its label and its deviceId (measured: id !== label, but
+        // getSettings().deviceId === label).
+        const label = try exec.arena.alloc(u8, 36);
+        @import("../../../id.zig").uuidv4(label);
 
         const self = try exec._factory.chained(.{
             EventTarget{ ._type = undefined },
             MediaStreamTrack{
                 ._proto = undefined,
                 ._id = id,
-                ._device_id = device_id,
-                // Chrome labels a generator with a UUID rather than leaving it
-                // empty, so this one carries the same shape.
-                ._label = try exec.arena.dupe(u8, &id),
+                ._device_id = label,
+                ._label = label,
+                ._source = .generator,
                 ._kind = parsed,
             },
             MediaStreamTrackGenerator{
@@ -127,6 +129,7 @@ pub const MediaStreamTrackGenerator = struct {
                 ._writable = try WritableStream.init(null, exec),
             },
         });
+        self._proto._type = .{ .generator = self };
         self._proto._proto._type = .{ .media_stream_track_generator = self };
         return self;
     }

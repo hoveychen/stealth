@@ -30,6 +30,8 @@ const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("../../canvas/WebGL2RenderingContext.zig");
 const GPUCanvasContext = @import("../../webgpu/pipeline.zig").GPUCanvasContext;
 const OffscreenCanvas = @import("../../canvas/OffscreenCanvas.zig");
+const image_capture = @import("../../media/image_capture.zig");
+const MediaStream = @import("../../media/streams.zig").MediaStream;
 
 const Execution = js.Execution;
 
@@ -201,6 +203,16 @@ pub fn toBlob(self: *Canvas, callback: js.Function.Global, _: ?[]const u8, _: ?f
     });
 }
 
+/// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/captureStream
+///
+/// A canvas is the one video source this engine can open without a permission
+/// or a device, so unlike getUserMedia this really hands back a live stream.
+/// Nothing pulls frames from it -- see media/image_capture.zig for what the
+/// track does and does not carry.
+pub fn captureStream(self: *Canvas, frame_rate: ?js.Value, exec: *Execution) !*MediaStream {
+    return image_capture.captureStream(self, frame_rate, exec);
+}
+
 /// Transfers control of the canvas to an OffscreenCanvas.
 /// Returns an OffscreenCanvas with the same dimensions.
 pub fn transferControlToOffscreen(self: *Canvas, exec: *Execution) !*OffscreenCanvas {
@@ -218,10 +230,14 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    // Chrome's prototype order, which puts captureStream straight after the two
+    // dimensions and toBlob before toDataURL (measured).
     pub const width = bridge.accessor(Canvas.getWidth, Canvas.setWidth, .{ .ce_reactions = true });
     pub const height = bridge.accessor(Canvas.getHeight, Canvas.setHeight, .{ .ce_reactions = true });
+    // Arity 0: the frame rate is optional, so it does not count.
+    pub const captureStream = bridge.function(Canvas.captureStream, .{ .arity = 0 });
     pub const getContext = bridge.function(Canvas.getContext, .{});
-    pub const toDataURL = bridge.function(Canvas.toDataURL, .{});
     pub const toBlob = bridge.function(Canvas.toBlob, .{});
+    pub const toDataURL = bridge.function(Canvas.toDataURL, .{});
     pub const transferControlToOffscreen = bridge.function(Canvas.transferControlToOffscreen, .{});
 };

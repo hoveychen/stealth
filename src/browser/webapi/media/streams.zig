@@ -268,12 +268,25 @@ pub const MediaStreamTrack = struct {
 
     _proto: *EventTarget,
 
+    // Which subclass, if any, this track really is. A stream hands its tracks
+    // out as plain `*MediaStreamTrack`, so without this a canvas track coming
+    // back through getVideoTracks() would be wrapped as its base class and lose
+    // both its brand and its `canvas` property.
+    _type: Type = .generic,
+
     _id: [36]u8,
 
-    // "WebAudio-" followed by a second UUID, which is the form Chrome gives a
-    // track that a MediaStreamAudioDestinationNode owns (measured: 45
-    // characters, and getCapabilities().deviceId is the same string).
-    _device_id: [45]u8,
+    // What the deviceId looks like depends on the source, so it is no longer a
+    // fixed width: a WebAudio track carries "WebAudio-" plus a UUID (45
+    // characters), a generator carries a bare UUID, and a canvas track carries
+    // 88 characters of base64. All three measured.
+    _device_id: []const u8,
+
+    // Which of the three sources produced this track. It decides what
+    // getSettings(), getCapabilities() and applyConstraints() answer, and
+    // whether clone() keeps the deviceId -- Chrome's answers differ per source,
+    // not just per kind.
+    _source: Source = .web_audio,
 
     _kind: Kind = .audio,
     _label: []const u8,
@@ -290,23 +303,72 @@ pub const MediaStreamTrack = struct {
 
     _stats: ?*MediaStreamTrackAudioStats = null,
 
+    pub const Type = union(enum) {
+        generic,
+        generator: *@import("breakout_box.zig").MediaStreamTrackGenerator,
+        canvas_capture: *@import("image_capture.zig").CanvasCaptureMediaStreamTrack,
+    };
+
     pub const Kind = enum { audio, video };
 
     pub const ReadyState = enum { live, ended };
 
-    // Chrome accepts exactly these three on an audio track and drops the rest,
-    // including the spec's "speech-recognition" (measured one at a time). The
-    // video hints are unreachable: nothing here produces a video track.
+    /// Where the track's frames come from. Chrome reports a different settings
+    /// and capabilities dictionary for each, and they are not just the audio
+    /// set with video keys swapped in -- a canvas track carries sizes a
+    /// generator has no notion of.
+    pub const Source = union(enum) {
+        /// MediaStreamAudioDestinationNode's track.
+        web_audio,
+        /// The breakout box's MediaStreamTrackGenerator.
+        generator,
+        /// canvas.captureStream(). The dimensions are the canvas' size *at the
+        /// moment of capture*: resizing the canvas afterwards does not move a
+        /// live track's settings or its capability ranges (measured).
+        canvas: CanvasSource,
+
+        pub const CanvasSource = struct {
+            width: u32,
+            height: u32,
+            frame_rate: f64,
+
+            /// A zero-area canvas is still capturable, but Chrome then omits
+            /// width, height and aspectRatio from the settings rather than
+            /// reporting zero, and clamps every capability range to 1.
+            fn empty(self: CanvasSource) bool {
+                return self.width == 0 or self.height == 0;
+            }
+        };
+    };
+
+    // The two vocabularies are disjoint, and a hint from the wrong one is
+    // dropped rather than refused: setting "speech" on a video track leaves the
+    // previous value in place (measured one value at a time, both kinds). The
+    // spec's "speech-recognition" is in neither.
     pub const ContentHint = enum {
         none,
         speech,
         music,
+        motion,
+        detail,
+        text,
 
         fn label(self: ContentHint) []const u8 {
             return switch (self) {
                 .none => "",
                 .speech => "speech",
                 .music => "music",
+                .motion => "motion",
+                .detail => "detail",
+                .text => "text",
+            };
+        }
+
+        fn allowedFor(self: ContentHint, kind: Kind) bool {
+            return switch (self) {
+                .none => true,
+                .speech, .music => kind == .audio,
+                .motion, .detail, .text => kind == .video,
             };
         }
     };
@@ -315,28 +377,68 @@ pub const MediaStreamTrack = struct {
         var id: [36]u8 = undefined;
         @import("../../../id.zig").uuidv4(&id);
 
-        var device_id: [45]u8 = undefined;
-        @memcpy(device_id[0..9], "WebAudio-");
-        @import("../../../id.zig").uuidv4(device_id[9..]);
-
         return exec._factory.eventTarget(MediaStreamTrack{
             ._proto = undefined,
             ._id = id,
-            ._device_id = device_id,
+            ._device_id = try webAudioDeviceId(exec),
             ._label = label,
             ._channel_count = channel_count,
             ._sample_rate = sample_rate,
         });
     }
 
-    // A new track object with a new id and a new device id, carrying the same
-    // label and settings (measured).
+    /// "WebAudio-" followed by a UUID, which is the form Chrome gives a track a
+    /// MediaStreamAudioDestinationNode owns (measured: 45 characters, and
+    /// getCapabilities().deviceId is the same string).
+    pub fn webAudioDeviceId(exec: *Execution) ![]const u8 {
+        const device_id = try exec.arena.alloc(u8, 45);
+        @memcpy(device_id[0..9], "WebAudio-");
+        @import("../../../id.zig").uuidv4(device_id[9..]);
+        return device_id;
+    }
+
+    /// 64 random bytes in base64 -- 88 characters -- which is what a canvas
+    /// capture track reports as both its deviceId and its label (measured).
+    pub fn captureDeviceId(exec: *Execution) ![]const u8 {
+        var raw: [64]u8 = undefined;
+        lp.io.random(&raw);
+        const encoder = std.base64.standard.Encoder;
+        const out = try exec.arena.alloc(u8, encoder.calcSize(raw.len));
+        return encoder.encode(out, &raw);
+    }
+
+    // A new track object with a new id, carrying the same label and settings.
+    // Whether the deviceId comes along is per-source: a WebAudio clone gets a
+    // fresh one, a capture clone keeps the original's (both measured, and the
+    // difference is why this is not one rule).
     pub fn clone(self: *const MediaStreamTrack, exec: *Execution) !*MediaStreamTrack {
-        const copy = try create(self._label, self._channel_count, self._sample_rate, exec);
-        copy._kind = self._kind;
-        copy._enabled = self._enabled;
-        copy._content_hint = self._content_hint;
-        return copy;
+        // A canvas track clones as a canvas track: the copy keeps the brand and
+        // the `canvas` back-reference (measured). `clone` lives on this
+        // prototype rather than the subclass', so the dispatch has to happen
+        // here.
+        if (self._type == .canvas_capture) {
+            const copy = try @import("image_capture.zig").CanvasCaptureMediaStreamTrack.cloneOf(self._type.canvas_capture, exec);
+            return copy.asMediaStreamTrack();
+        }
+
+        var id: [36]u8 = undefined;
+        @import("../../../id.zig").uuidv4(&id);
+
+        return exec._factory.eventTarget(MediaStreamTrack{
+            ._proto = undefined,
+            ._id = id,
+            ._device_id = switch (self._source) {
+                .web_audio => try webAudioDeviceId(exec),
+                .generator, .canvas => self._device_id,
+            },
+            ._source = self._source,
+            ._kind = self._kind,
+            ._label = self._label,
+            ._enabled = self._enabled,
+            ._content_hint = self._content_hint,
+            ._channel_count = self._channel_count,
+            ._sample_rate = self._sample_rate,
+        });
     }
 
     pub fn asEventTarget(self: *MediaStreamTrack) *EventTarget {
@@ -382,13 +484,18 @@ pub const MediaStreamTrack = struct {
             self._content_hint = .none;
             return;
         }
-        if (std.meta.stringToEnum(ContentHint, hint)) |parsed| {
-            if (parsed != .none) self._content_hint = parsed;
+        const parsed = std.meta.stringToEnum(ContentHint, hint) orelse return;
+        if (parsed != .none and parsed.allowedFor(self._kind)) {
+            self._content_hint = parsed;
         }
     }
 
-    // The same object every time (measured: track.stats === track.stats).
-    pub fn getStats(self: *MediaStreamTrack, exec: *Execution) !*MediaStreamTrackAudioStats {
+    // The same object every time (measured: track.stats === track.stats), and
+    // null on a video track -- these counters are audio-only, so a canvas or
+    // video-generator track has no object here at all rather than one full of
+    // zeroes (measured).
+    pub fn getStats(self: *MediaStreamTrack, exec: *Execution) !?*MediaStreamTrackAudioStats {
+        if (self._kind == .video) return null;
         if (self._stats) |existing| return existing;
         const created = try exec._factory.create(MediaStreamTrackAudioStats{});
         self._stats = created;
@@ -404,13 +511,20 @@ pub const MediaStreamTrack = struct {
         "sampleRate",       "sampleSize",      "voiceIsolation",
     };
 
-    // No constraint can be satisfied, because nothing here is configurable. An
-    // empty set resolves and any non-empty one rejects, which is what Chrome
-    // does for a WebAudio-backed track (measured — `{channelCount: 1}` rejects
-    // even though the track already has two channels).
-    pub fn applyConstraints(_: *MediaStreamTrack, constraints: ?js.Value, exec: *const Execution) !js.Promise {
+    // No constraint can be satisfied on a WebAudio track, because nothing about
+    // it is configurable: an empty set resolves and any non-empty one rejects
+    // (measured — `{channelCount: 1}` rejects even though the track already has
+    // two channels). A capture track is the other way round: it can be scaled,
+    // so Chrome accepts constraints there and resolves.
+    //
+    // Known gap: Chrome then *remembers* what it accepted, and getConstraints()
+    // reports back the members it recognised. This engine keeps nothing, so
+    // getConstraints() stays empty on a capture track where Chrome would echo
+    // `{"width":10}`.
+    pub fn applyConstraints(self: *MediaStreamTrack, constraints: ?js.Value, exec: *const Execution) !js.Promise {
         const local = exec.js.local.?;
         const given = constraints orelse return local.resolvePromise({});
+        if (self._source != .web_audio) return local.resolvePromise({});
         if (given.isNullOrUndefined() or !given.isObject()) {
             return local.resolvePromise({});
         }
@@ -439,40 +553,159 @@ pub const MediaStreamTrack = struct {
     }
 
     // Chrome reports a *new* object each call, with the members in this order.
+    // Which dictionary it is depends on the source, and the three barely
+    // overlap: only deviceId is common to all of them.
     pub fn getSettings(self: *const MediaStreamTrack) Settings {
-        return .{
-            .channelCount = self._channel_count,
-            .deviceId = self._device_id,
-            .sampleRate = self._sample_rate,
+        return switch (self._source) {
+            .web_audio => .{ .web_audio = .{
+                .channelCount = self._channel_count,
+                .deviceId = self._device_id,
+                .sampleRate = self._sample_rate,
+            } },
+            // A generator has no device behind it, so it reports the bare
+            // minimum: its deviceId plus the one member its kind implies.
+            .generator => switch (self._kind) {
+                .audio => .{ .generator_audio = .{ .deviceId = self._device_id } },
+                .video => .{ .generator_video = .{ .deviceId = self._device_id } },
+            },
+            .canvas => |canvas| if (canvas.empty()) .{ .canvas_empty = .{
+                .deviceId = self._device_id,
+                .frameRate = canvas.frame_rate,
+            } } else .{ .canvas = .{
+                .aspectRatio = @as(f64, @floatFromInt(canvas.width)) / @as(f64, @floatFromInt(canvas.height)),
+                .deviceId = self._device_id,
+                .frameRate = canvas.frame_rate,
+                .height = canvas.height,
+                .width = canvas.width,
+            } },
         };
     }
 
-    pub const Settings = struct {
-        channelCount: u32,
-        deviceId: [45]u8,
-        // Chrome's WebAudio track reports a 10 ms buffer and 16-bit samples.
-        latency: f64 = 0.01,
-        sampleRate: f64,
-        sampleSize: u32 = 16,
+    pub const Settings = union(enum) {
+        web_audio: WebAudio,
+        generator_audio: GeneratorAudio,
+        generator_video: GeneratorVideo,
+        canvas: CanvasSettings,
+        canvas_empty: CanvasEmpty,
+
+        pub const WebAudio = struct {
+            channelCount: u32,
+            deviceId: []const u8,
+            // Chrome's WebAudio track reports a 10 ms buffer and 16-bit samples.
+            latency: f64 = 0.01,
+            sampleRate: f64,
+            sampleSize: u32 = 16,
+        };
+
+        pub const GeneratorAudio = struct {
+            deviceId: []const u8,
+            sampleSize: u32 = 16,
+        };
+
+        pub const GeneratorVideo = struct {
+            deviceId: []const u8,
+            resizeMode: []const u8 = "none",
+        };
+
+        pub const CanvasSettings = struct {
+            aspectRatio: f64,
+            deviceId: []const u8,
+            frameRate: f64,
+            height: u32,
+            resizeMode: []const u8 = "none",
+            width: u32,
+        };
+
+        // Zero area: the three size members are gone rather than zero.
+        pub const CanvasEmpty = struct {
+            deviceId: []const u8,
+            frameRate: f64,
+            resizeMode: []const u8 = "none",
+        };
     };
 
     pub fn getCapabilities(self: *const MediaStreamTrack) Capabilities {
-        return .{ .deviceId = self._device_id };
+        return switch (self._source) {
+            .web_audio => .{ .web_audio = .{ .deviceId = self._device_id } },
+            // A generator's capabilities name no device at all: deviceId is the
+            // empty string, not the one its settings report (measured).
+            .generator => switch (self._kind) {
+                .audio => .{ .generator_audio = .{} },
+                .video => .{ .generator_video = .{} },
+            },
+            .canvas => |canvas| {
+                // The ranges are the captured size, and a zero-area canvas
+                // clamps every one of them to 1 rather than to 0.
+                const width = @max(canvas.width, 1);
+                const height = @max(canvas.height, 1);
+                const widthf: f64 = @floatFromInt(width);
+                const heightf: f64 = @floatFromInt(height);
+                return .{
+                    .canvas = .{
+                        // Widest and narrowest a crop-and-scale could reach: the
+                        // full width over one row, and one column over the full
+                        // height.
+                        .aspectRatio = .{ .max = widthf, .min = 1 / heightf },
+                        .deviceId = self._device_id,
+                        .frameRate = .{ .max = 60, .min = 0 },
+                        .height = .{ .max = height, .min = 1 },
+                        .width = .{ .max = width, .min = 1 },
+                    },
+                };
+            },
+        };
     }
 
-    // Every boolean capability is a one-element sequence holding false: the
-    // three processing stages a microphone would offer are not available on a
-    // WebAudio track (measured, including the key order).
-    pub const Capabilities = struct {
-        autoGainControl: [1]bool = .{false},
-        deviceId: [45]u8,
-        echoCancellation: [1]bool = .{false},
-        noiseSuppression: [1]bool = .{false},
-        sampleSize: struct { max: u32 = 16, min: u32 = 16 } = .{},
-        voiceIsolation: [1]bool = .{false},
+    pub const Capabilities = union(enum) {
+        web_audio: WebAudio,
+        generator_audio: GeneratorAudio,
+        generator_video: GeneratorVideo,
+        canvas: CanvasCapabilities,
+
+        // Every boolean capability is a one-element sequence holding false: the
+        // three processing stages a microphone would offer are not available on
+        // a WebAudio track (measured, including the key order).
+        pub const WebAudio = struct {
+            autoGainControl: [1]bool = .{false},
+            deviceId: []const u8,
+            echoCancellation: [1]bool = .{false},
+            noiseSuppression: [1]bool = .{false},
+            sampleSize: struct { max: u32 = 16, min: u32 = 16 } = .{},
+            voiceIsolation: [1]bool = .{false},
+        };
+
+        // The same members as WebAudio's, but every sequence empty: a generator
+        // offers no processing stage at all, not even one it has turned off.
+        pub const GeneratorAudio = struct {
+            autoGainControl: [0]bool = .{},
+            deviceId: []const u8 = "",
+            echoCancellation: [0]bool = .{},
+            noiseSuppression: [0]bool = .{},
+            voiceIsolation: [0]bool = .{},
+        };
+
+        pub const GeneratorVideo = struct {
+            deviceId: []const u8 = "",
+            facingMode: [0][]const u8 = .{},
+            resizeMode: [2][]const u8 = .{ "none", "crop-and-scale" },
+        };
+
+        pub const Range = struct { max: f64, min: f64 };
+        pub const IntRange = struct { max: u32, min: u32 };
+
+        pub const CanvasCapabilities = struct {
+            aspectRatio: Range,
+            deviceId: []const u8,
+            facingMode: [0][]const u8 = .{},
+            frameRate: Range,
+            height: IntRange,
+            resizeMode: [2][]const u8 = .{ "none", "crop-and-scale" },
+            width: IntRange,
+        };
     };
 
-    // Empty, because applyConstraints never accepts anything to remember.
+    // Empty: applyConstraints keeps nothing, on any source. See the note there
+    // for what Chrome would echo back on a capture track.
     pub fn getConstraints(_: *const MediaStreamTrack) struct {} {
         return .{};
     }
@@ -513,7 +746,7 @@ pub const MediaStreamTrack = struct {
         pub const onunmute = bridge.accessor(MediaStreamTrack.unmute.get, MediaStreamTrack.unmute.set, .{});
         pub const readyState = bridge.accessor(MediaStreamTrack.getReadyState, null, .{});
         pub const onended = bridge.accessor(MediaStreamTrack.ended.get, MediaStreamTrack.ended.set, .{});
-        pub const stats = bridge.accessor(MediaStreamTrack.getStats, null, .{});
+        pub const stats = bridge.accessor(MediaStreamTrack.getStats, null, .{ .null_as_undefined = false });
         pub const contentHint = bridge.accessor(MediaStreamTrack.getContentHint, MediaStreamTrack.setContentHint, .{});
         pub const applyConstraints = bridge.function(MediaStreamTrack.applyConstraints, .{ .arity = 0 });
         pub const clone = bridge.function(MediaStreamTrack.clone, .{ .arity = 0 });
