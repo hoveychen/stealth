@@ -1511,3 +1511,72 @@ five are the engine-wide gaps below.
 - **`internals.labels` is an Array, not a NodeList.** `input.labels` reads the
   same way; the brand is an engine-wide property of how label lists are built,
   not something this batch introduced.
+
+## G17 batch 21: the floor, measured against the browser instead of the baseline
+
+Batch 20 left 129 `.unsupport` spans and a plan to go after the 120 in the css
+block. That plan was wrong, and finding out why took one command:
+
+```
+SITE=http://localhost:8731/ node tools/fingerprint/dump-creep-features.mjs chrome --headed
+```
+
+**Real Chrome 150 scores 128 spans against creep.js's own baseline.** Block for
+block, before this batch:
+
+| block | Chrome 150 | lightpanda |
+|---|---|---|
+| window | missing 2 + mapUnlit 2 = **4** | missing 2 + mapUnlit 3 = **5** |
+| js | **4** | **4** |
+| css | **120** | **120** |
+
+The js and css blocks were already identical. Those 120 css keys are
+`-webkit-mask-*`, `-webkit-animation-*`, `background-repeat-x/y` and the rest of
+the Chrome-115-era aliases that **Chrome 150 no longer has either**. Adding them
+would not have closed a gap; it would have opened a louder one, the same way
+shipping `openDatabase` would.
+
+The whole remaining difference was one entry. Chrome's unlit window map entries
+are `!BarcodeDetector` and `CanvasFilter`; this engine's were `BarcodeDetector`,
+`!SharedArrayBuffer` and `CanvasFilter`. `BarcodeDetector`/`!BarcodeDetector` is
+a pair where exactly one is always unlit, so it costs both engines 1 and cancels;
+`CanvasFilter` is unlit for both. The extra was `!SharedArrayBuffer` — lit only
+when the engine does *not* have `SharedArrayBuffer`.
+
+**So the last span was a global this engine exposed and the reference browser
+does not.** Measured directly rather than inferred from the map, on a headed
+Chrome 150 at the same `http://localhost:8731/` with `crossOriginIsolated`
+equally false: `typeof SharedArrayBuffer` is `"undefined"` and it is not a window
+own property. `Atomics` (`waitAsync` included) and `WebAssembly.Memory` are not
+gated with it and stay.
+
+This engine had always answered `crossOriginIsolated: false` while still handing
+out the constructor — a page could read the contradiction directly. V8 installs
+`SharedArrayBuffer` unconditionally, so it is deleted at context setup, the same
+treatment the built-in `console` already gets. It lives in `Env.zig` rather than
+in the snapshot because cross-origin isolation is a property of the page, not of
+the engine: the day COOP+COEP is negotiated, that is where the condition goes.
+
+### Result
+
+`window own keys 1165 -> 1164`, `window spans 5 -> 4`, `total spans 129 -> 128`.
+**That is the reference browser's own score, block for block.** G17's window
+surface is finished.
+
+### What "finished" does and does not mean
+
+The remaining 128 spans are not reachable by adding anything:
+
+- **120 css** — Chrome-115-era property aliases the reference Chrome dropped.
+- **2 window keys** — `openDatabase` and `MutationEvent`, both `ReferenceError`
+  on the reference Chrome.
+- **2 window map entries** — `CanvasFilter` (absent from Chrome 150 too) and one
+  half of the `BarcodeDetector`/`!BarcodeDetector` pair, which is unlit for
+  whichever engine you point it at.
+- **4 js** — `Element.getInnerHTML`, `Element.onbeforexrselect` and `Error.cause`
+  read the same way on the reference browser; G18 already took this block to its
+  floor.
+
+Closing any of them would mean shipping something Chrome 150 does not have,
+which is the louder signal. This metric is done; the next surface to work is not
+CreepJS's feature spans.
