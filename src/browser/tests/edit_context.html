@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<body>
+
+<script id=interface_shape>
+  {
+    // Measured on a headed Chrome 150 (probe-g20e): EditContext extends
+    // EventTarget, attachedElements and characterBounds are methods rather
+    // than getters, and the constructor takes an optional dictionary.
+    testing.expectEqual('function', typeof EditContext);
+    testing.expectEqual(0, EditContext.length);
+    testing.expectEqual(EventTarget.prototype, Object.getPrototypeOf(EditContext.prototype));
+    testing.expectEqual(true, new EditContext() instanceof EventTarget);
+    testing.expectEqual('[object EditContext]', String(EditContext.prototype));
+
+    const expected = [
+      'text', 'selectionStart', 'selectionEnd', 'characterBoundsRangeStart',
+      'ontextupdate', 'ontextformatupdate', 'oncharacterboundsupdate',
+      'oncompositionstart', 'oncompositionend', 'attachedElements',
+      'characterBounds', 'updateCharacterBounds', 'updateControlBounds',
+      'updateSelection', 'updateSelectionBounds', 'updateText', 'constructor',
+    ];
+    testing.expectEqual(expected, Object.getOwnPropertyNames(EditContext.prototype));
+
+    for (const name of ['text', 'selectionStart', 'selectionEnd', 'characterBoundsRangeStart']) {
+      const d = Object.getOwnPropertyDescriptor(EditContext.prototype, name);
+      testing.expectEqual('function', typeof d.get, { desc: name + ' has a getter' });
+      testing.expectEqual(undefined, d.set, { desc: name + ' is read only' });
+    }
+    for (const [name, arity] of [['attachedElements', 0], ['characterBounds', 0],
+                                 ['updateCharacterBounds', 2], ['updateControlBounds', 1],
+                                 ['updateSelection', 2], ['updateSelectionBounds', 1],
+                                 ['updateText', 3]]) {
+      testing.expectEqual(arity, EditContext.prototype[name].length, { desc: name + ' arity' });
+    }
+  }
+</script>
+
+<script id=constructor_defaults>
+  {
+    const ec = new EditContext();
+    testing.expectEqual('', ec.text);
+    testing.expectEqual(0, ec.selectionStart);
+    testing.expectEqual(0, ec.selectionEnd);
+    testing.expectEqual(0, ec.characterBoundsRangeStart);
+    testing.expectEqual(true, Array.isArray(ec.attachedElements()));
+    testing.expectEqual(0, ec.attachedElements().length);
+    testing.expectEqual(0, ec.characterBounds().length);
+
+    // A fresh array each call.
+    testing.expectEqual(false, ec.attachedElements() === ec.attachedElements());
+
+    testing.expectEqual('hello', new EditContext({ text: 'hello' }).text);
+    // The members are stringified / ToUint32'd, not type checked.
+    testing.expectEqual('5', new EditContext({ text: 5 }).text);
+    testing.expectEqual('null', new EditContext({ text: null }).text);
+    testing.expectEqual('', new EditContext(null).text);
+    testing.expectEqual('', new EditContext(undefined).text);
+    testing.expectEqual('', new EditContext({ bogus: 1 }).text);
+  }
+</script>
+
+<script id=constructor_refusals>
+  {
+    let caught = null;
+    try { new EditContext('x'); } catch (e) { caught = e; }
+    testing.expectEqual('TypeError', caught && caught.name);
+    testing.expectEqual(
+      "Failed to construct 'EditContext': The provided value is not of type 'EditContextInit'.",
+      caught && caught.message);
+  }
+</script>
+
+<script id=constructor_selection>
+  {
+    // selectionStart/selectionEnd are plain `unsigned long` -- ToUint32, so no
+    // range errors -- and are then clamped to the text length. They are not
+    // ordered: a reversed pair survives as given.
+    const ec = new EditContext({ text: 'hello', selectionStart: 1, selectionEnd: 3 });
+    testing.expectEqual(1, ec.selectionStart);
+    testing.expectEqual(3, ec.selectionEnd);
+
+    const clamped = new EditContext({ text: 'ab', selectionStart: 9 });
+    testing.expectEqual(2, clamped.selectionStart);
+    testing.expectEqual(0, clamped.selectionEnd);
+
+    const reversed = new EditContext({ text: 'abcdef', selectionStart: 4, selectionEnd: 2 });
+    testing.expectEqual(4, reversed.selectionStart);
+    testing.expectEqual(2, reversed.selectionEnd);
+
+    // ToUint32 then clamp: -1 wraps to 4294967295, so it lands on the end.
+    testing.expectEqual(6, new EditContext({ text: 'abcdef', selectionStart: -1 }).selectionStart);
+    testing.expectEqual(1, new EditContext({ text: 'abcdef', selectionStart: 1.7 }).selectionStart);
+    testing.expectEqual(2, new EditContext({ text: 'abcdef', selectionStart: '2' }).selectionStart);
+    testing.expectEqual(1, new EditContext({ text: 'abcdef', selectionStart: true }).selectionStart);
+    for (const v of [2 ** 32, NaN, Infinity, {}, null, undefined]) {
+      testing.expectEqual(0, new EditContext({ text: 'abcdef', selectionStart: v }).selectionStart,
+        { desc: 'selectionStart = ' + String(v) });
+    }
+
+    // Offsets count UTF-16 code units, so an astral character is two.
+    const astral = new EditContext({ text: '\u{1F600}ab', selectionStart: 99 });
+    testing.expectEqual(4, astral.text.length);
+    testing.expectEqual(4, astral.selectionStart);
+  }
+</script>
+
+<script id=update_text>
+  {
+    const ec = new EditContext({ text: 'hello' });
+    ec.updateText(0, 2, 'XY');
+    testing.expectEqual('XYllo', ec.text);
+
+    // The range is normalised, so a reversed pair does the same thing.
+    const rev = new EditContext({ text: 'abcdef' });
+    rev.updateText(4, 2, 'X');
+    testing.expectEqual('abXef', rev.text);
+
+    // Both offsets are ToUint32'd and clamped: -1 becomes the end.
+    const neg = new EditContext({ text: 'abcdef' });
+    neg.updateText(-1, 2, 'X');
+    testing.expectEqual('abX', neg.text);
+
+    const over = new EditContext({ text: 'abc' });
+    over.updateText(0, 99, 'z');
+    testing.expectEqual('z', over.text);
+
+    // It does not touch the selection, which can end up past the new end.
+    const sel = new EditContext({ text: 'abcdef', selectionStart: 5, selectionEnd: 6 });
+    sel.updateText(0, 3, '');
+    testing.expectEqual('def', sel.text);
+    testing.expectEqual(5, sel.selectionStart);
+    testing.expectEqual(6, sel.selectionEnd);
+
+    // text is read only; the assignment is silently dropped.
+    const ro = new EditContext();
+    ro.text = 'zzz';
+    testing.expectEqual('', ro.text);
+  }
+</script>
+
+<script id=update_selection>
+  {
+    const ec = new EditContext({ text: 'hello' });
+    ec.updateSelection(1, 3);
+    testing.expectEqual(1, ec.selectionStart);
+    testing.expectEqual(3, ec.selectionEnd);
+
+    // Each offset is clamped independently and the pair is not ordered.
+    ec.updateSelection(9, 12);
+    testing.expectEqual(5, ec.selectionStart);
+    testing.expectEqual(5, ec.selectionEnd);
+    ec.updateSelection(4, 2);
+    testing.expectEqual(4, ec.selectionStart);
+    testing.expectEqual(2, ec.selectionEnd);
+  }
+</script>
+
+<script id=method_refusals>
+  {
+    // These take plain arguments rather than a dictionary, so the arity check
+    // is Chrome's "N arguments required" wording.
+    const cases = [
+      ['updateText', [], "Failed to execute 'updateText' on 'EditContext': 3 arguments required, but only 0 present."],
+      ['updateSelection', [1], "Failed to execute 'updateSelection' on 'EditContext': 2 arguments required, but only 1 present."],
+      ['updateControlBounds', [], "Failed to execute 'updateControlBounds' on 'EditContext': 1 argument required, but only 0 present."],
+      ['updateSelectionBounds', [], "Failed to execute 'updateSelectionBounds' on 'EditContext': 1 argument required, but only 0 present."],
+      ['updateCharacterBounds', [], "Failed to execute 'updateCharacterBounds' on 'EditContext': 2 arguments required, but only 0 present."],
+    ];
+    for (const [method, args, message] of cases) {
+      let caught = null;
+      try { new EditContext()[method](...args); } catch (e) { caught = e; }
+      testing.expectEqual('TypeError', caught && caught.name, { desc: method });
+      testing.expectEqual(message, caught && caught.message, { desc: method });
+    }
+
+    let caught = null;
+    try { new EditContext().updateControlBounds('x'); } catch (e) { caught = e; }
+    testing.expectEqual(
+      "Failed to execute 'updateControlBounds' on 'EditContext': parameter 1 is not of type 'DOMRect'.",
+      caught && caught.message);
+
+    caught = null;
+    try { new EditContext().updateCharacterBounds(0, 'x'); } catch (e) { caught = e; }
+    testing.expectEqual(
+      "Failed to execute 'updateCharacterBounds' on 'EditContext': The provided value cannot be converted to a sequence.",
+      caught && caught.message);
+  }
+</script>
+
+<script id=bounds_are_inert>
+  {
+    // Outside a composition the bounds calls are accepted and dropped: nothing
+    // here renders, and Chrome answers the same way.
+    const ec = new EditContext();
+    testing.expectEqual(undefined, ec.updateControlBounds(new DOMRect(0, 0, 1, 1)));
+    testing.expectEqual(undefined, ec.updateSelectionBounds(new DOMRect(0, 0, 1, 1)));
+    testing.expectEqual(undefined, ec.updateCharacterBounds(0, [new DOMRect(0, 0, 1, 1)]));
+    testing.expectEqual(0, ec.characterBounds().length);
+    testing.expectEqual(0, ec.characterBoundsRangeStart);
+  }
+</script>
+
+<script id=handlers_fire>
+  {
+    // The five on* attributes are real event handler attributes, not plain
+    // slots: dispatching straight at the context fires them.
+    const ec = new EditContext();
+    const hits = [];
+    for (const name of ['textupdate', 'textformatupdate', 'characterboundsupdate',
+                        'compositionstart', 'compositionend']) {
+      testing.expectEqual(null, ec['on' + name], { desc: 'on' + name + ' starts null' });
+      ec['on' + name] = () => hits.push(name);
+      testing.expectEqual('function', typeof ec['on' + name], { desc: 'on' + name + ' reads back' });
+      ec.dispatchEvent(new Event(name));
+    }
+    testing.expectEqual(['textupdate', 'textformatupdate', 'characterboundsupdate',
+                         'compositionstart', 'compositionend'], hits);
+
+    ec.ontextupdate = null;
+    testing.expectEqual(null, ec.ontextupdate);
+    ec.dispatchEvent(new Event('textupdate'));
+    testing.expectEqual(5, hits.length);
+  }
+</script>
+
+<script id=element_attachment>
+  {
+    const el = document.createElement('div');
+    testing.expectEqual(null, el.editContext);
+
+    const ec = new EditContext();
+    el.editContext = ec;
+    testing.expectEqual(true, el.editContext === ec);
+    testing.expectEqual(1, ec.attachedElements().length);
+    testing.expectEqual(true, ec.attachedElements()[0] === el);
+    // Attaching leaves the markup alone: there is no content attribute here.
+    testing.expectEqual(0, el.getAttributeNames().length);
+
+    // Re-attaching the same context to the same element is a no-op.
+    el.editContext = ec;
+    testing.expectEqual(true, el.editContext === ec);
+    testing.expectEqual(1, ec.attachedElements().length);
+
+    // Replacing detaches the old one.
+    const other = new EditContext();
+    el.editContext = other;
+    testing.expectEqual(true, el.editContext === other);
+    testing.expectEqual(0, ec.attachedElements().length);
+    testing.expectEqual(1, other.attachedElements().length);
+
+    // null detaches, and the freed context can be attached elsewhere.
+    el.editContext = null;
+    testing.expectEqual(null, el.editContext);
+    testing.expectEqual(0, other.attachedElements().length);
+    const second = document.createElement('div');
+    second.editContext = other;
+    testing.expectEqual(1, other.attachedElements().length);
+
+    // undefined detaches too, and reads back as null.
+    second.editContext = undefined;
+    testing.expectEqual(null, second.editContext);
+  }
+</script>
+
+<script id=attachment_refusals>
+  {
+    let caught = null;
+    try { document.createElement('div').editContext = {}; } catch (e) { caught = e; }
+    testing.expectEqual('TypeError', caught && caught.name);
+    testing.expectEqual(
+      "Failed to set the 'editContext' property on 'HTMLElement': Failed to convert value to 'EditContext'.",
+      caught && caught.message);
+
+    // One host at a time.
+    const shared = new EditContext();
+    document.createElement('div').editContext = shared;
+    caught = null;
+    try { document.createElement('div').editContext = shared; } catch (e) { caught = e; }
+    testing.expectEqual('NotSupportedError', caught && caught.name);
+    testing.expectEqual(
+      "Failed to set the 'editContext' property on 'HTMLElement': An EditContext can be only be associated with a single element",
+      caught && caught.message);
+
+    // The host check runs first: a <br> that is also already attached reports
+    // the unsupported element rather than the double attachment.
+    caught = null;
+    try { document.createElement('br').editContext = shared; } catch (e) { caught = e; }
+    testing.expectEqual('NotSupportedError', caught && caught.name);
+    testing.expectEqual(
+      "Failed to set the 'editContext' property on 'HTMLElement': This element does not support EditContext",
+      caught && caught.message);
+  }
+</script>
+
+<script id=host_element_set>
+  {
+    // Measured over 120 tags on a headed Chrome 150 (probe-g20f/g20g). Any
+    // element whose local name is a valid custom element name is a host too,
+    // registered or not, while a hyphen-less unknown element is not.
+    const hosts = ['article', 'aside', 'blockquote', 'body', 'canvas', 'div',
+                   'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header',
+                   'main', 'nav', 'p', 'section', 'span', 'x-foo', 'custom-el'];
+    for (const tag of hosts) {
+      const el = tag === 'body' ? document.body : document.createElement(tag);
+      const previous = el.editContext;
+      el.editContext = new EditContext();
+      testing.expectEqual(true, el.editContext instanceof EditContext, { desc: tag + ' is a host' });
+      el.editContext = previous;
+    }
+
+    const notHosts = ['a', 'br', 'button', 'code', 'dd', 'details', 'dialog',
+                      'dl', 'em', 'fieldset', 'figure', 'form', 'head', 'hgroup',
+                      'hr', 'html', 'iframe', 'img', 'input', 'label', 'li',
+                      'link', 'meta', 'ol', 'option', 'pre', 'script', 'select',
+                      'slot', 'strong', 'style', 'table', 'tbody', 'td',
+                      'template', 'textarea', 'th', 'title', 'tr', 'ul',
+                      'video', 'xfoo'];
+    for (const tag of notHosts) {
+      let caught = null;
+      try { document.createElement(tag).editContext = new EditContext(); } catch (e) { caught = e; }
+      testing.expectEqual('NotSupportedError', caught && caught.name, { desc: tag + ' is not a host' });
+    }
+  }
+</script>
+
+</body>
+</html>

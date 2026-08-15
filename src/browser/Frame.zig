@@ -156,6 +156,10 @@ _element_class_lists: Element.ClassListLookup = .empty,
 _element_rel_lists: Element.RelListLookup = .empty,
 _element_token_lists: Element.TokenListLookup = .empty,
 _element_shadow_roots: Element.ShadowRootLookup = .empty,
+// The EditContext attached to an element, if any. The reverse link lives on
+// the context itself, which is how a second element attaching the same one is
+// refused.
+_element_edit_contexts: Element.EditContextLookup = .empty,
 // The handle attachInternals() hands out, one per custom element. Also the
 // "already attached" flag: a second attachInternals() on the same element is a
 // NotSupportedError.

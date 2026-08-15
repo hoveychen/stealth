@@ -29,6 +29,7 @@ const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const popover = @import("popover.zig");
 const dictionary = @import("../dictionary.zig");
+const EditContext = @import("../EditContext.zig");
 const ElementInternals = @import("ElementInternals.zig");
 const CustomElementDefinition = @import("../CustomElementDefinition.zig");
 
@@ -740,6 +741,50 @@ pub fn getFocusGroup(self: *HtmlElement, frame: *Frame) !*@import("../collection
 
 pub fn setFocusGroup(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("focusgroup"), .wrap(value), frame);
+}
+
+// editContext is not a content attribute at all -- it is a live association
+// with an EditContext object, and assigning one leaves the markup untouched.
+// Measured on a headed Chrome 150 (probe-g20e/g20f/g20j): the getter is null
+// until something is attached, a non-EditContext value is a TypeError, an
+// element outside the host set and a context that already has a host are each
+// a NotSupportedError, and the host check runs first when both would fail.
+pub fn getEditContext(self: *HtmlElement, frame: *Frame) ?*EditContext {
+    return frame._element_edit_contexts.get(self.asElement());
+}
+
+pub fn setEditContext(self: *HtmlElement, value: js.Value, exec: *const js.Execution) !void {
+    const frame = exec.js.global.frame;
+    const element = self.asElement();
+    if (value.isNullOrUndefined()) {
+        if (frame._element_edit_contexts.fetchRemove(element)) |entry| {
+            entry.value.detach();
+        }
+        return;
+    }
+    const context = value.toZig(*EditContext) catch return dictionary.throwTypeError(
+        "Failed to set the 'editContext' property on 'HTMLElement': Failed to convert value to 'EditContext'.",
+        exec,
+    );
+
+    if (!EditContext.isValidHost(element)) {
+        return dictionary.throwDom(
+            "NotSupportedError",
+            "Failed to set the 'editContext' property on 'HTMLElement': This element does not support EditContext",
+            exec,
+        );
+    }
+    context.attach(element) catch return dictionary.throwDom(
+        "NotSupportedError",
+        "Failed to set the 'editContext' property on 'HTMLElement': An EditContext can be only be associated with a single element",
+        exec,
+    );
+
+    const gop = try frame._element_edit_contexts.getOrPut(frame.arena, element);
+    if (gop.found_existing and gop.value_ptr.* != context) {
+        gop.value_ptr.*.detach();
+    }
+    gop.value_ptr.* = context;
 }
 
 // The attribute-listener plumbing lives on Element: fullscreen handlers are
@@ -2035,6 +2080,7 @@ pub const JsApi = struct {
     pub const writingSuggestions = bridge.accessor(HtmlElement.getWritingSuggestions, HtmlElement.setWritingSuggestions, .{ .ce_reactions = true });
     pub const focusGroup = bridge.accessor(HtmlElement.getFocusGroup, HtmlElement.setFocusGroup, .{ .ce_reactions = true });
     pub const focusGroupStart = bridge.accessor(HtmlElement.getFocusGroupStart, HtmlElement.setFocusGroupStart, .{ .ce_reactions = true });
+    pub const editContext = bridge.accessor(HtmlElement.getEditContext, HtmlElement.setEditContext, .{});
 
     pub const onabort = bridge.accessor(HtmlElement.getOnAbort, HtmlElement.setOnAbort, .{});
     pub const onanimationcancel = bridge.accessor(HtmlElement.getOnAnimationCancel, HtmlElement.setOnAnimationCancel, .{});
