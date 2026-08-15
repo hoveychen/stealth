@@ -1728,3 +1728,71 @@ is in the document. The five colour ones are `[LegacyNullToEmptyString]`,
   after the call, so reading `err.message` later reads freed memory. The same
   mistake in `contentEditable`'s setter segfaulted the suite under a dirty heap
   before being caught; the fix there was `frame.arena`.
+
+## G8: iphey's `i20: TypeError: Illegal invocation`, attributed
+
+iphey has alerted this since before any of this work started and it had never
+been pinned to an API. It is now: **every `console` method throws
+`Illegal invocation` when called without a receiver.**
+
+### How it was pinned
+
+iphey swallows the error and alerts `String(err)`, which throws away the stack —
+but `String(err)` on an `Error` routes through `Error.prototype.toString`, and
+that is reachable. Patching it from
+`Page.addScriptToEvaluateOnNewDocument` records `this.stack` before the message
+is flattened (`run-iphey.mjs` in `stealth-detector-probes/win-batch`):
+
+```
+TypeError: Illegal invocation
+  at Object.<anonymous>  (cdn.iphey.com/index.js:25:2520)
+  at Object.isOpen       (cdn.iphey.com/index.js:25:2418)
+  at m5                  (cdn.iphey.com/index.js:26:435002)
+```
+
+`i20` is a **devtools detector** called `dep-reg-to-string`, the classic
+"a RegExp whose toString sets a flag, logged and then cleared":
+
+```js
+var I = / /, T = false;
+I.toString = function () { T = true; return D.name; };
+var D = { name: 'dep-reg-to-string', isOpen: function () {
+  T = false;
+  Object(t.c)({ dep: I });   // <- throws here
+  Object(t.a)();
+  return T;
+} };
+```
+
+`Object(fn)(...)` is a call with **no receiver**. `t.c` and `t.a` are console
+methods, so what iphey is doing is `console.log.call(undefined, …)` — and every
+one of ours refuses it.
+
+### The isolated repro
+
+`probe-g8a.js`, both engines, `http://localhost`:
+
+| | Chrome 150 | this engine |
+|---|---|---|
+| `const f = console.log; f({})` | runs | `TypeError: Illegal invocation` |
+| `console.log.call(undefined, {})` | runs | `TypeError: Illegal invocation` |
+| `console.log.call(window, {})` | runs | `TypeError: Illegal invocation` |
+
+All 18 of our console methods fail all three ways. Chrome's only complaint
+across its 24 is `createTask`, and that is about its argument, not its receiver.
+Chrome's console is a namespace whose methods do not brand-check `this` at all;
+ours go through the bridge's normal receiver unwrap, which does.
+
+### Also measured while there, not part of i20
+
+- **`i19` is a second alert, new since the last sweep**: `TypeError: Cannot set
+  properties of undefined (setting 'position')`, thrown in iphey's `T2`
+  (`index.js:63:126758`), not yet attributed.
+- **Our console roster does not match Chrome's.** We expose `exception`, which
+  Chrome does not, and we are missing `dir`, `dirxml`, `profile`, `profileEnd`,
+  `timeStamp`, `context` and `createTask`. Chrome has 24 function members and we
+  have 18.
+- **Fourteen of iphey's own probes throw inside its `permissions.query` sweep**
+  on Chrome too (`'speaker' is not a valid enum value`, `Web NFC is not
+  enabled`, …). Those are Chrome's own refusals for unsupported permission
+  names, caught and expected by iphey — noise, not signal.
