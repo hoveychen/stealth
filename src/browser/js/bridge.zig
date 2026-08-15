@@ -997,6 +997,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/ClipboardItem.zig"),
     @import("../webapi/EyeDropper.zig"),
     @import("../webapi/IdleDetector.zig"),
+    @import("../webapi/EditContext.zig"),
     @import("../webapi/InputDeviceCapabilities.zig"),
     @import("../webapi/Profiler.zig"),
     @import("../webapi/DOMImplementation.zig"),

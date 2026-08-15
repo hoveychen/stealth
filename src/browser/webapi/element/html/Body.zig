@@ -23,6 +23,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
 const Window = @import("../../Window.zig");
+const global_event_handlers = @import("../../global_event_handlers.zig");
 const HtmlElement = @import("../Html.zig");
 
 const String = lp.String;
@@ -40,57 +41,59 @@ pub fn asNode(self: *Body) *Node {
     return self.asElement().asNode();
 }
 
-// Special-case: the "window-reflecting body element event handler set"
-// (blur, error, focus, load, resize, scroll) are aliases for the Window's
-// event handlers.
+// The presentational attributes are plain string reflections -- no colour
+// parsing on the five colour ones and no URL resolution on background.
+// Measured on a headed Chrome 150 (probe-g20k): `body.background` hands back
+// the raw "x.png" even once the body is in the document. The five colour ones
+// are [LegacyNullToEmptyString], background is not, which is the only way they
+// differ.
+fn presentational(comptime attribute: []const u8, comptime null_to_empty: bool) type {
+    return struct {
+        fn get(self: *Body) []const u8 {
+            return self.asElement().getAttributeSafe(.wrap(attribute)) orelse "";
+        }
+        fn set(self: *Body, value: js.Value, frame: *Frame) !void {
+            const text = if (null_to_empty and value.isNull()) "" else try value.toZig([]const u8);
+            return self.asElement().setAttributeSafe(.wrap(attribute), .wrap(text), frame);
+        }
+    };
+}
 
-// The aliased Window is the one of the element's node document's frame — not
+// The "window-reflecting body element event handler set": these are aliases
+// for the Window's own handler slots, so `document.body.onunload = f` makes
+// `window.onunload === f` and clearing either clears both.
+//
+// The aliased Window is the one of the element's node document's frame -- not
 // the caller's frame, which differs when a same-origin script reaches into
 // another frame (e.g. the parent setting iframeDoc.body.onblur).
 fn reflectedWindow(self: *Body, frame: *Frame) *Window {
     return self.asElement().ownerFrame(frame).window;
 }
 
-pub fn getOnBlur(self: *Body, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame)._on_blur;
-}
-pub fn setOnBlur(self: *Body, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    self.reflectedWindow(frame)._on_blur = Window.getFunctionFromSetter(setter);
-}
-
-pub fn getOnError(self: *Body, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame)._on_error;
-}
-pub fn setOnError(self: *Body, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    self.reflectedWindow(frame)._on_error = Window.getFunctionFromSetter(setter);
+fn reflected(comptime handler: global_event_handlers.Handler) type {
+    return struct {
+        fn get(self: *Body, frame: *Frame) ?js.Function.Global {
+            return self.reflectedWindow(frame).getReflectedHandler(handler);
+        }
+        fn set(self: *Body, setter: ?Window.FunctionSetter, frame: *Frame) !void {
+            return self.reflectedWindow(frame).setReflectedHandler(handler, Window.getFunctionFromSetter(setter));
+        }
+    };
 }
 
-pub fn getOnFocus(self: *Body, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame)._on_focus;
-}
-pub fn setOnFocus(self: *Body, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    self.reflectedWindow(frame)._on_focus = Window.getFunctionFromSetter(setter);
-}
-
-pub fn getOnLoad(self: *Body, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame)._on_load;
-}
-pub fn setOnLoad(self: *Body, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    self.reflectedWindow(frame)._on_load = Window.getFunctionFromSetter(setter);
-}
-
-pub fn getOnResize(self: *Body, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame)._on_resize;
-}
-pub fn setOnResize(self: *Body, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    self.reflectedWindow(frame)._on_resize = Window.getFunctionFromSetter(setter);
-}
-
-pub fn getOnScroll(self: *Body, frame: *Frame) ?js.Function.Global {
-    return self.reflectedWindow(frame)._on_scroll;
-}
-pub fn setOnScroll(self: *Body, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-    self.reflectedWindow(frame)._on_scroll = Window.getFunctionFromSetter(setter);
+// ...and the two exceptions. HTMLBodyElement carries the gamepad handlers too,
+// but measured on a headed Chrome 150 they are element-local: setting
+// `body.ongamepadconnected` leaves `window.ongamepadconnected` alone, and the
+// event has to be dispatched at the body to reach it.
+fn local(comptime handler: global_event_handlers.Handler) type {
+    return struct {
+        fn get(self: *Body, frame: *Frame) !?js.Function.Global {
+            return self.asElement().getAttributeFunction(handler, frame);
+        }
+        fn set(self: *Body, callback: ?js.Function.Global, frame: *Frame) !void {
+            return self.asElement().setAttributeListener(handler, callback, frame);
+        }
+    };
 }
 
 pub const JsApi = struct {
@@ -102,25 +105,50 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const onblur = bridge.accessor(getOnBlur, setOnBlur, .{ .null_as_undefined = false });
-    pub const onerror = bridge.accessor(getOnError, setOnError, .{ .null_as_undefined = false });
-    pub const onfocus = bridge.accessor(getOnFocus, setOnFocus, .{ .null_as_undefined = false });
-    pub const onload = bridge.accessor(getOnLoad, setOnLoad, .{ .null_as_undefined = false });
-    pub const onresize = bridge.accessor(getOnResize, setOnResize, .{ .null_as_undefined = false });
-    pub const onscroll = bridge.accessor(getOnScroll, setOnScroll, .{ .null_as_undefined = false });
+    // Chrome 150's own-property order (probe-g20a); the bridge emits members
+    // in declaration order and that order is a fingerprint surface.
+    pub const text = bridge.accessor(presentational("text", true).get, presentational("text", true).set, .{ .ce_reactions = true });
+    pub const link = bridge.accessor(presentational("link", true).get, presentational("link", true).set, .{ .ce_reactions = true });
+    pub const vLink = bridge.accessor(presentational("vlink", true).get, presentational("vlink", true).set, .{ .ce_reactions = true });
+    pub const aLink = bridge.accessor(presentational("alink", true).get, presentational("alink", true).set, .{ .ce_reactions = true });
+    pub const bgColor = bridge.accessor(presentational("bgcolor", true).get, presentational("bgcolor", true).set, .{ .ce_reactions = true });
+    pub const background = bridge.accessor(presentational("background", false).get, presentational("background", false).set, .{ .ce_reactions = true });
+    pub const onblur = bridge.accessor(reflected(.onblur).get, reflected(.onblur).set, .{ .null_as_undefined = false });
+    pub const onerror = bridge.accessor(reflected(.onerror).get, reflected(.onerror).set, .{ .null_as_undefined = false });
+    pub const onfocus = bridge.accessor(reflected(.onfocus).get, reflected(.onfocus).set, .{ .null_as_undefined = false });
+    pub const onload = bridge.accessor(reflected(.onload).get, reflected(.onload).set, .{ .null_as_undefined = false });
+    pub const onresize = bridge.accessor(reflected(.onresize).get, reflected(.onresize).set, .{ .null_as_undefined = false });
+    pub const onscroll = bridge.accessor(reflected(.onscroll).get, reflected(.onscroll).set, .{ .null_as_undefined = false });
+    pub const onafterprint = bridge.accessor(reflected(.onafterprint).get, reflected(.onafterprint).set, .{ .null_as_undefined = false });
+    pub const onbeforeprint = bridge.accessor(reflected(.onbeforeprint).get, reflected(.onbeforeprint).set, .{ .null_as_undefined = false });
+    pub const onbeforeunload = bridge.accessor(reflected(.onbeforeunload).get, reflected(.onbeforeunload).set, .{ .null_as_undefined = false });
+    pub const onhashchange = bridge.accessor(reflected(.onhashchange).get, reflected(.onhashchange).set, .{ .null_as_undefined = false });
+    pub const onlanguagechange = bridge.accessor(reflected(.onlanguagechange).get, reflected(.onlanguagechange).set, .{ .null_as_undefined = false });
+    pub const onmessage = bridge.accessor(reflected(.onmessage).get, reflected(.onmessage).set, .{ .null_as_undefined = false });
+    pub const onmessageerror = bridge.accessor(reflected(.onmessageerror).get, reflected(.onmessageerror).set, .{ .null_as_undefined = false });
+    pub const onoffline = bridge.accessor(reflected(.onoffline).get, reflected(.onoffline).set, .{ .null_as_undefined = false });
+    pub const ononline = bridge.accessor(reflected(.ononline).get, reflected(.ononline).set, .{ .null_as_undefined = false });
+    pub const onpagehide = bridge.accessor(reflected(.onpagehide).get, reflected(.onpagehide).set, .{ .null_as_undefined = false });
+    pub const onpageshow = bridge.accessor(reflected(.onpageshow).get, reflected(.onpageshow).set, .{ .null_as_undefined = false });
+    pub const onpopstate = bridge.accessor(reflected(.onpopstate).get, reflected(.onpopstate).set, .{ .null_as_undefined = false });
+    pub const onrejectionhandled = bridge.accessor(reflected(.onrejectionhandled).get, reflected(.onrejectionhandled).set, .{ .null_as_undefined = false });
+    pub const onstorage = bridge.accessor(reflected(.onstorage).get, reflected(.onstorage).set, .{ .null_as_undefined = false });
+    pub const onunhandledrejection = bridge.accessor(reflected(.onunhandledrejection).get, reflected(.onunhandledrejection).set, .{ .null_as_undefined = false });
+    pub const onunload = bridge.accessor(reflected(.onunload).get, reflected(.onunload).set, .{ .null_as_undefined = false });
+    pub const ongamepadconnected = bridge.accessor(local(.ongamepadconnected).get, local(.ongamepadconnected).set, .{});
+    pub const ongamepaddisconnected = bridge.accessor(local(.ongamepaddisconnected).get, local(.ongamepaddisconnected).set, .{});
 };
 
 pub const Build = struct {
-    const window_reflecting_attributes = [_][]const u8{
-        "onblur", "onerror", "onfocus", "onload", "onresize", "onscroll",
-    };
-
     pub fn complete(node: *Node, frame: *Frame) !void {
         const el = node.as(Element);
         const owner = node.ownerFrame(frame);
-        inline for (window_reflecting_attributes) |attr| {
-            if (el.getAttributeSafe(comptime .wrap(attr))) |value| {
-                owner.window.setWindowReflectingHandlerFromAttribute(comptime .wrap(attr), value, owner);
+        inline for (Window.WINDOW_REFLECTING) |handler| {
+            // Several of these names are past the 12-byte comptime SSO limit,
+            // so the wrap runs at runtime over the tag name's static bytes.
+            const attr = String.wrap(@as([]const u8, @tagName(handler)));
+            if (el.getAttributeSafe(attr)) |value| {
+                owner.window.setWindowReflectingHandlerFromAttribute(attr, value, owner);
             }
         }
     }
@@ -135,3 +163,8 @@ pub const Build = struct {
         owner.window.setWindowReflectingHandlerFromAttribute(name, null, owner);
     }
 };
+
+const testing = @import("../../../../testing.zig");
+test "WebApi: HTMLBodyElement" {
+    try testing.htmlRunner("element/html/body.html", .{});
+}

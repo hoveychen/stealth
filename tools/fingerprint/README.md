@@ -1580,3 +1580,151 @@ The remaining 128 spans are not reachable by adding anything:
 Closing any of them would mean shipping something Chrome 150 does not have,
 which is the louder signal. This metric is done; the next surface to work is not
 CreepJS's feature spans.
+
+## G20: HTMLElement.prototype and HTMLBodyElement.prototype
+
+CreepJS never looks at either interface — its `globalObjects` list does not
+include them — so nothing here moves the feature-span number. browserleaks-js
+and anything else that walks prototypes per interface does count them, and both
+were visibly short: 122 of Chrome 150's 144 own properties on
+`HTMLElement.prototype`, 8 of 32 on `HTMLBodyElement.prototype`.
+
+Everything below was measured on a headed Chrome 150 over `http://localhost`
+with the `probe-g20*` scripts in `stealth-detector-probes/win-batch`, not read
+off the spec. The mappings the two disagree on are the point of the exercise.
+
+### Result
+
+| interface | Chrome 150 | before | after |
+|---|---|---|---|
+| `HTMLElement.prototype` | 144 | 122 (+1 surplus) | 144, 0 surplus |
+| `HTMLBodyElement.prototype` | 32 | 8 | 32 |
+
+Own-property **order** matches too: `HTMLBodyElement.prototype` is identical
+entry for entry, and `HTMLElement.prototype` differs at exactly one index (see
+below). Descriptor flags and getter/setter shapes match everywhere. Behaviour
+probes: 963 fields compared, 18 differences, all one pre-existing bug (also
+below).
+
+### The surplus member
+
+We declared `insertAdjacentHTML` on both `Element.prototype` and
+`HTMLElement.prototype`. Chrome declares it once, on `Element`. A member no
+browser has is as loud as a missing one, so the duplicate went; `Element.zig`
+already forwarded to `HtmlElement.insertAdjacentHTML`, so nothing changed
+behaviourally.
+
+### Reflections that are not what they look like
+
+Four shapes hide behind "22 missing attributes":
+
+- **`spellcheck` and `writingSuggestions` walk ancestors, and disagree about
+  how.** Both answer off the first ancestor whose value maps to a state, but
+  `spellcheck`'s invalid-value default is *inherit*, so `<div spellcheck=false>
+  <div spellcheck=garbage><span>` gives the span `false` — the garbage keeps
+  walking. `writingsuggestions`' invalid-value default is *true*, so the same
+  nesting gives `"true"` — anything that is not the `false` keyword stops the
+  walk. Their empty-string states differ for the same reason: an empty
+  `spellcheck` is the true state and stops, an empty `writingsuggestions` also
+  stops but only because everything non-`false` does.
+- **`inert` does not inherit** even though inertness as a *state* does. The IDL
+  attribute is a plain boolean content attribute.
+- **`draggable`'s default is per element**: `img`, and `a`/`area` carrying
+  `href`. An `href` on `link`, `base` or `object` changes nothing. The getter is
+  enumerated (only an ASCII case-insensitive `"true"`), the setter is a boolean
+  coercion.
+- **`autocapitalize` carries two legacy aliases** — `off` reads as `none` and
+  `on` as `sentences` — and an absent *or empty* attribute is `""` while any
+  other value is `sentences`.
+
+`contentEditable` is the only one whose setter validates: `inherit` removes the
+attribute, the three keywords are lowercased, and anything else is a
+`SyntaxError` naming the value.
+
+`focusGroup` is a `DOMTokenList` over `focusgroup`, which gave `DOMTokenList` a
+second supported-token set next to `rel`'s: `inline block wrap none nomemory
+toolbar`, ASCII case-insensitive. `supports()` only reports — `add('bogus')`
+still writes the attribute.
+
+### editContext dragged in a whole interface
+
+`HTMLElement.prototype.editContext` is not a content attribute but a live
+association, so its setter has to type-check against `EditContext` — and a
+prototype slot whose type is not a global is a shape no browser has. So
+`EditContext` (18 prototype members, `EventTarget` prototype) came with it.
+
+It models the text buffer and the selection and nothing else, which is what
+Chrome does too outside a composition: after
+`updateCharacterBounds(0, [new DOMRect(0, 0, 1, 1)])` its `characterBounds()`
+is still empty and `characterBoundsRangeStart` still 0. Faking those would be
+inventing behaviour no headless run can produce.
+
+Worth naming, because none of it is guessable:
+
+- `attachedElements()` and `characterBounds()` are **methods**, not getters, and
+  return a fresh array per call.
+- `EditContextInit`'s selection members are plain `unsigned long` — ToUint32,
+  not `[EnforceRange]` — so `-1` wraps to 4294967295 and then clamps to the text
+  length, while `NaN`, `Infinity`, `{}` and `null` all become 0. The offsets
+  count UTF-16 code units, so the splice has to convert from our UTF-8.
+- `updateText` normalises its range but leaves the selection alone, which can
+  leave it pointing past the end of the new text.
+- The host set is 19 tags (`article aside blockquote body canvas div footer
+  h1`–`h6 header main nav p section span`) plus anything with a valid custom
+  element name, registered or not. `pre`, `li`, `form` and `textarea` are all
+  refused. When a host is both unsupported *and* already carrying another
+  context, the unsupported-element error is the one that comes out.
+
+### The webkit handlers listen for a name they do not spell
+
+`el.onwebkitanimationend` fires for `new Event('webkitAnimationEnd')` and stays
+silent for `new Event('webkitanimationend')`. Our event-type map derived every
+name by stripping `on` from the enum tag, which produced only the lowercase
+spelling. It now takes an override table, and the derived entry is *replaced*
+rather than supplemented — Chrome routes only the camel case. The same is true
+of `onwebkitanimationiteration`, `onwebkitanimationstart` and
+`onwebkittransitionend`. `webkitfullscreenchange` and `webkitfullscreenerror`
+are genuinely lowercase and stay derived.
+
+### HTMLBodyElement: two of the eighteen are not window handlers
+
+Sixteen of the eighteen handlers are aliases for the Window's slot —
+`document.body.onunload = f` makes `window.onunload === f`, and clearing either
+clears both. `ongamepadconnected` and `ongamepaddisconnected` look identical and
+are not: they are element-local, and the event has to be dispatched at the body.
+
+The six presentational attributes do nothing at all beyond reflecting a string.
+No colour parsing on the five colour ones, and no URL resolution on
+`background` — `body.background` hands back the raw `"x.png"` even once the body
+is in the document. The five colour ones are `[LegacyNullToEmptyString]`,
+`background` is not, and that is the entire difference between them.
+
+### Measured and not closed
+
+- **`constructor` at index 141.** Chrome puts `constructor` there with
+  `onpointerrawupdate` (a partial-interface member) after it. V8 always puts
+  `constructor` last on a template's prototype, so ours are swapped. Same
+  engine-level limitation already recorded for `DOMMatrix.setMatrixValue` and
+  `SVGLength`. `HTMLBodyElement` is unaffected — `constructor` is last there in
+  Chrome too.
+- **`JSON.stringify(el.classList)` is `{}` for us and `{"0":"a","1":"b"}` for
+  Chrome.** Our `DOMTokenList` serves indexed access through an interceptor but
+  does not report the indices as own properties, so
+  `Object.getOwnPropertyNames(classList)` is empty. Pre-existing and
+  interface-wide — `classList`, `relList` and the new `focusGroup` all do it —
+  and every one of the 18 behaviour-probe differences is this one bug.
+- **`window.onhashchange` does not fire for a manually dispatched
+  `hashchange`.** The engine dispatches its own hashchange through
+  `dispatchDirect`, passing `_on_hashchange` explicitly, so the generic
+  inline-handler lookup never learns about it. Same for the other five handlers
+  with a dedicated Window field (`onmessage`, `onpageshow`, `onpopstate`,
+  `onrejectionhandled`, `onunhandledrejection`). Surfaced here because
+  `body.onhashchange` now aliases that slot; the cause is on the Window side and
+  wiring it into the generic lookup risks double-firing on the real path.
+- **`Document.createEvent`'s refusal message is a use-after-free.**
+  `invalidEventType` in `Document.zig` builds the message from
+  `frame.local_arena` and hands it to `DOMException.init`, which keeps the slice
+  rather than copying (every other caller passes a literal). The arena is reset
+  after the call, so reading `err.message` later reads freed memory. The same
+  mistake in `contentEditable`'s setter segfaulted the suite under a dirty heap
+  before being caught; the fix there was `frame.arena`.

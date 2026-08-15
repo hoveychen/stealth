@@ -29,6 +29,7 @@ const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const popover = @import("popover.zig");
 const dictionary = @import("../dictionary.zig");
+const EditContext = @import("../EditContext.zig");
 const ElementInternals = @import("ElementInternals.zig");
 const CustomElementDefinition = @import("../CustomElementDefinition.zig");
 
@@ -104,6 +105,7 @@ pub const UL = @import("html/UL.zig");
 pub const Unknown = @import("html/Unknown.zig");
 
 const log = lp.log;
+const String = lp.String;
 const IS_DEBUG = @import("builtin").mode == .Debug;
 
 const HtmlElement = @This();
@@ -556,6 +558,233 @@ pub fn getIsContentEditable(self: *HtmlElement) bool {
         break;
     }
     return false;
+}
+
+// `inert` and `focusgroupstart` are boolean content attributes: present is
+// true whatever the value, and the setter writes "" or removes. Measured on a
+// headed Chrome 150 -- unlike the inertness *state*, which a subtree inherits,
+// the IDL attribute is attribute-local.
+pub fn getInert(self: *HtmlElement) bool {
+    return self.asElement().getAttributeSafe(comptime .wrap("inert")) != null;
+}
+
+pub fn setInert(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    return self.setBooleanAttribute(comptime .wrap("inert"), value, frame);
+}
+
+pub fn getFocusGroupStart(self: *HtmlElement) bool {
+    return self.asElement().getAttributeSafe(.wrap("focusgroupstart")) != null;
+}
+
+pub fn setFocusGroupStart(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    return self.setBooleanAttribute(.wrap("focusgroupstart"), value, frame);
+}
+
+fn setBooleanAttribute(self: *HtmlElement, name: String, value: bool, frame: *Frame) !void {
+    const el = self.asElement();
+    if (value) {
+        return el.setAttributeSafe(name, .wrap(""), frame);
+    }
+    return el.removeAttribute(name, frame);
+}
+
+// draggable is enumerated, not boolean: only an ASCII case-insensitive "true"
+// enables it. With no attribute the default is per-element -- measured on a
+// headed Chrome 150, `img` and an `a`/`area` carrying href are draggable and
+// nothing else is (an href on `link`, `base` or `object` changes nothing).
+pub fn getDraggable(self: *HtmlElement) bool {
+    const el = self.asElement();
+    if (el.getAttributeSafe(comptime .wrap("draggable"))) |value| {
+        return std.ascii.eqlIgnoreCase(value, "true");
+    }
+    return switch (self._type) {
+        .img => true,
+        .anchor, .area => el.hasAttributeSafe(comptime .wrap("href")),
+        else => false,
+    };
+}
+
+pub fn setDraggable(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("draggable"), .wrap(if (value) "true" else "false"), frame);
+}
+
+// spellcheck and writingSuggestions are the two inherited enumerated
+// attributes: the getter walks self and ancestors and answers off the first
+// element whose value maps to a state. They differ in what an unrecognised
+// value does, which is visible in the walk -- measured on a headed Chrome 150
+// with `<div spellcheck=false><div spellcheck=garbage><span>`:
+//
+//   * spellcheck's invalid-value default is "inherit", so "garbage" keeps
+//     walking and the span answers false. Its empty-string state is "true",
+//     so an empty attribute stops the walk and answers true.
+//   * writingsuggestions' invalid-value default is "true", so any value that
+//     is not "false" stops the walk. Only an absent attribute keeps walking.
+pub fn getSpellcheck(self: *HtmlElement) bool {
+    var current: ?*Element = self.asElement();
+    while (current) |el| : (current = el.parentElement()) {
+        const value = el.getAttributeSafe(comptime .wrap("spellcheck")) orelse continue;
+        if (value.len == 0 or std.ascii.eqlIgnoreCase(value, "true")) return true;
+        if (std.ascii.eqlIgnoreCase(value, "false")) return false;
+    }
+    return true;
+}
+
+pub fn setSpellcheck(self: *HtmlElement, value: bool, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("spellcheck"), .wrap(if (value) "true" else "false"), frame);
+}
+
+pub fn getWritingSuggestions(self: *HtmlElement) []const u8 {
+    var current: ?*Element = self.asElement();
+    while (current) |el| : (current = el.parentElement()) {
+        const value = el.getAttributeSafe(.wrap("writingsuggestions")) orelse continue;
+        return if (std.ascii.eqlIgnoreCase(value, "false")) "false" else "true";
+    }
+    return "true";
+}
+
+// The setter is a plain string reflection: whatever it is given lands in the
+// attribute verbatim, even though the getter only reads the two keywords.
+pub fn setWritingSuggestions(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(.wrap("writingsuggestions"), .wrap(value), frame);
+}
+
+// autocapitalize carries two legacy aliases -- "off" is "none" and "on" is
+// "sentences" -- and an empty (or absent) attribute is the empty string while
+// any other value is "sentences".
+pub fn getAutocapitalize(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(.wrap("autocapitalize")) orelse return "";
+    if (value.len == 0) return "";
+    if (std.ascii.eqlIgnoreCase(value, "off")) return "none";
+    if (std.ascii.eqlIgnoreCase(value, "on")) return "sentences";
+    return reflectEnumerated(value, &.{ "none", "sentences", "words", "characters" }, "", "sentences").?;
+}
+
+pub fn setAutocapitalize(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(.wrap("autocapitalize"), .wrap(value), frame);
+}
+
+pub fn getEnterKeyHint(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(comptime .wrap("enterkeyhint"));
+    return reflectEnumerated(value, &.{ "enter", "done", "go", "next", "previous", "search", "send" }, "", "").?;
+}
+
+pub fn setEnterKeyHint(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("enterkeyhint"), .wrap(value), frame);
+}
+
+pub fn getInputMode(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(comptime .wrap("inputmode"));
+    return reflectEnumerated(value, &.{ "none", "text", "tel", "url", "email", "numeric", "decimal", "search" }, "", "").?;
+}
+
+pub fn setInputMode(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("inputmode"), .wrap(value), frame);
+}
+
+pub fn getVirtualKeyboardPolicy(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(.wrap("virtualkeyboardpolicy"));
+    return reflectEnumerated(value, &.{ "auto", "manual" }, "", "").?;
+}
+
+pub fn setVirtualKeyboardPolicy(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(.wrap("virtualkeyboardpolicy"), .wrap(value), frame);
+}
+
+// contentEditable has a fourth state, "inherit", which means "no attribute" --
+// so unlike every other enumerated reflection here its missing and invalid
+// values are the same keyword rather than the empty string. An empty attribute
+// reads as "true".
+const CONTENT_EDITABLE = "contenteditable";
+
+pub fn getContentEditable(self: *HtmlElement) []const u8 {
+    const value = self.asElement().getAttributeSafe(.wrap(CONTENT_EDITABLE)) orelse return "inherit";
+    if (value.len == 0) return "true";
+    return reflectEnumerated(value, &.{ "true", "false", "plaintext-only" }, "inherit", "inherit").?;
+}
+
+// The setter validates: "inherit" removes the attribute, the three keywords
+// are normalised to lowercase, and anything else throws a SyntaxError naming
+// the offending value (message measured on a headed Chrome 150).
+pub fn setContentEditable(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    for ([_][]const u8{ "true", "false", "plaintext-only" }) |keyword| {
+        if (std.ascii.eqlIgnoreCase(value, keyword)) {
+            return self.asElement().setAttributeSafe(.wrap(CONTENT_EDITABLE), .wrap(keyword), frame);
+        }
+    }
+    if (std.ascii.eqlIgnoreCase(value, "inherit")) {
+        return self.asElement().removeAttribute(.wrap(CONTENT_EDITABLE), frame);
+    }
+
+    const local = frame.js.local orelse return error.SyntaxError;
+    // DOMException.init() keeps the slice rather than copying it -- every other
+    // caller hands it a literal -- so the message has to outlive this call. The
+    // frame arena is the shortest-lived one that does.
+    const message = std.fmt.allocPrint(
+        frame.arena,
+        "Failed to set the 'contentEditable' property on 'HTMLElement': The value provided ('{s}') is not one of 'true', 'false', 'plaintext-only', or 'inherit'.",
+        .{value},
+    ) catch return error.SyntaxError;
+    const exception = local.zigValueToJs(
+        @import("../DOMException.zig").init(message, "SyntaxError"),
+        .{},
+    ) catch return error.JsException;
+    _ = local.isolate.throwException(exception.handle);
+    return error.JsException;
+}
+
+// focusGroup is a DOMTokenList over the focusgroup attribute, with
+// `[PutForwards=value]` on the setter. Unlike classList it declares supported
+// tokens, so `supports()` answers rather than throwing -- see DOMTokenList.
+pub fn getFocusGroup(self: *HtmlElement, frame: *Frame) !*@import("../collections.zig").DOMTokenList {
+    return self.asElement().getTokenList(.focusgroup, frame);
+}
+
+pub fn setFocusGroup(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
+    try self.asElement().setAttributeSafe(comptime .wrap("focusgroup"), .wrap(value), frame);
+}
+
+// editContext is not a content attribute at all -- it is a live association
+// with an EditContext object, and assigning one leaves the markup untouched.
+// Measured on a headed Chrome 150 (probe-g20e/g20f/g20j): the getter is null
+// until something is attached, a non-EditContext value is a TypeError, an
+// element outside the host set and a context that already has a host are each
+// a NotSupportedError, and the host check runs first when both would fail.
+pub fn getEditContext(self: *HtmlElement, frame: *Frame) ?*EditContext {
+    return frame._element_edit_contexts.get(self.asElement());
+}
+
+pub fn setEditContext(self: *HtmlElement, value: js.Value, exec: *const js.Execution) !void {
+    const frame = exec.js.global.frame;
+    const element = self.asElement();
+    if (value.isNullOrUndefined()) {
+        if (frame._element_edit_contexts.fetchRemove(element)) |entry| {
+            entry.value.detach();
+        }
+        return;
+    }
+    const context = value.toZig(*EditContext) catch return dictionary.throwTypeError(
+        "Failed to set the 'editContext' property on 'HTMLElement': Failed to convert value to 'EditContext'.",
+        exec,
+    );
+
+    if (!EditContext.isValidHost(element)) {
+        return dictionary.throwDom(
+            "NotSupportedError",
+            "Failed to set the 'editContext' property on 'HTMLElement': This element does not support EditContext",
+            exec,
+        );
+    }
+    context.attach(element) catch return dictionary.throwDom(
+        "NotSupportedError",
+        "Failed to set the 'editContext' property on 'HTMLElement': An EditContext can be only be associated with a single element",
+        exec,
+    );
+
+    const gop = try frame._element_edit_contexts.getOrPut(frame.arena, element);
+    if (gop.found_existing and gop.value_ptr.* != context) {
+        gop.value_ptr.*.detach();
+    }
+    gop.value_ptr.* = context;
 }
 
 // The attribute-listener plumbing lives on Element: fullscreen handlers are
@@ -1379,6 +1608,86 @@ pub fn getOnWheel(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
     return self.getAttributeFunction(.onwheel, frame);
 }
 
+pub fn setOnMouseEnter(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onmouseenter, callback, frame);
+}
+
+pub fn getOnMouseEnter(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onmouseenter, frame);
+}
+
+pub fn setOnMouseLeave(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onmouseleave, callback, frame);
+}
+
+pub fn getOnMouseLeave(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onmouseleave, frame);
+}
+
+pub fn setOnMouseWheel(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onmousewheel, callback, frame);
+}
+
+pub fn getOnMouseWheel(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onmousewheel, frame);
+}
+
+pub fn setOnBeforeXrSelect(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onbeforexrselect, callback, frame);
+}
+
+pub fn getOnBeforeXrSelect(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onbeforexrselect, frame);
+}
+
+pub fn setOnScrollSnapChange(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onscrollsnapchange, callback, frame);
+}
+
+pub fn getOnScrollSnapChange(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onscrollsnapchange, frame);
+}
+
+pub fn setOnScrollSnapChanging(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onscrollsnapchanging, callback, frame);
+}
+
+pub fn getOnScrollSnapChanging(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onscrollsnapchanging, frame);
+}
+
+pub fn setOnWebkitAnimationEnd(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkitanimationend, callback, frame);
+}
+
+pub fn getOnWebkitAnimationEnd(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkitanimationend, frame);
+}
+
+pub fn setOnWebkitAnimationIteration(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkitanimationiteration, callback, frame);
+}
+
+pub fn getOnWebkitAnimationIteration(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkitanimationiteration, frame);
+}
+
+pub fn setOnWebkitAnimationStart(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkitanimationstart, callback, frame);
+}
+
+pub fn getOnWebkitAnimationStart(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkitanimationstart, frame);
+}
+
+pub fn setOnWebkitTransitionEnd(self: *HtmlElement, callback: ?js.Function.Global, frame: *Frame) !void {
+    return self.setAttributeListener(.onwebkittransitionend, callback, frame);
+}
+
+pub fn getOnWebkitTransitionEnd(self: *HtmlElement, frame: *Frame) !?js.Function.Global {
+    return self.getAttributeFunction(.onwebkittransitionend, frame);
+}
+
 // HTML integer parsing is lax
 pub fn parseInteger(input: []const u8) ?i32 {
     var normalized = std.mem.trimStart(u8, input, "\t\n\r\x0c ");
@@ -1747,10 +2056,6 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(HtmlElement.construct, .{ .new_target = true });
-    pub const upgrade_constructor = bridge.constructor(HtmlElement.upgradeConstruct, .{});
-
-    pub const innerText = bridge.accessor(_innerText, _setInnerText, .{ .ce_reactions = true });
     fn _innerText(self: *HtmlElement, frame: *Frame) ![]const u8 {
         var buf = std.Io.Writer.Allocating.init(frame.local_arena);
         try self.getInnerText(&buf.writer, frame);
@@ -1760,16 +2065,19 @@ pub const JsApi = struct {
         // `[LegacyNullToEmptyString]`: a JS null becomes "", not "null".
         return self.setInnerText(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
-    pub const outerText = bridge.accessor(_innerText, _setOuterText, .{ .ce_reactions = true });
     fn _setOuterText(self: *HtmlElement, value: js.Value, frame: *Frame) !void {
         return self.setOuterText(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
-    pub const insertAdjacentHTML = bridge.function(HtmlElement.insertAdjacentHTML, .{ .ce_reactions = true });
-
-    /// Where this sits in HTMLElement.prototype's own-property order is not
-    /// measured; Chrome declares it next to the innerText group in
-    /// html_element.idl, so it goes here.
-    pub const attachInternals = bridge.function(HtmlElement.attachInternals, .{});
+    // Two absences on purpose. `insertAdjacentHTML` is Element's alone --
+    // Element.zig already forwards to HtmlElement.insertAdjacentHTML, and
+    // declaring it on both put a member on HTMLElement.prototype that no
+    // browser has. `accessKeyLabel` is Gecko-only.
+    //
+    // The `pub const` members below are in Chrome 150's own-property order
+    // (probe-g20a), because that order is itself a fingerprint surface: the
+    // bridge emits them in declaration order. The one difference we cannot
+    // close is `constructor`, which V8 always puts last while Chrome has
+    // `onpointerrawupdate` after it.
 
     // Declared here rather than on Element because Chrome declares them here:
     // an SVG or MathML element has no style, no dataset, no offset geometry and
@@ -1811,38 +2119,33 @@ pub const JsApi = struct {
     fn _blur(self: *HtmlElement, frame: *Frame) !void {
         return self.asElement().blur(frame);
     }
-    pub const click = bridge.function(HtmlElement.click, .{});
-    pub const focus = bridge.function(_focus, .{});
 
-    pub const accessKey = bridge.accessor(HtmlElement.getAccessKey, HtmlElement.setAccessKey, .{ .ce_reactions = true });
-    pub const autofocus = bridge.accessor(HtmlElement.getAutofocus, HtmlElement.setAutofocus, .{ .ce_reactions = true });
+    pub const title = bridge.accessor(HtmlElement.getTitle, HtmlElement.setTitle, .{ .ce_reactions = true });
+    pub const lang = bridge.accessor(HtmlElement.getLang, HtmlElement.setLang, .{ .ce_reactions = true });
+    pub const translate = bridge.accessor(HtmlElement.getTranslate, HtmlElement.setTranslate, .{ .ce_reactions = true });
     pub const dir = bridge.accessor(HtmlElement.getDir, HtmlElement.setDir, .{ .ce_reactions = true });
     pub const hidden = bridge.accessor(HtmlElement.getHidden, HtmlElement.setHidden, .{ .ce_reactions = true });
-    pub const translate = bridge.accessor(HtmlElement.getTranslate, HtmlElement.setTranslate, .{ .ce_reactions = true });
-    pub const popover = bridge.accessor(HtmlElement.getPopover, HtmlElement.setPopover, .{ .ce_reactions = true });
-    pub const showPopover = bridge.function(HtmlElement.showPopover, .{});
-    pub const hidePopover = bridge.function(HtmlElement.hidePopover, .{});
-    pub const togglePopover = bridge.function(HtmlElement.togglePopover, .{});
+    pub const inert = bridge.accessor(HtmlElement.getInert, HtmlElement.setInert, .{ .ce_reactions = true });
+    pub const accessKey = bridge.accessor(HtmlElement.getAccessKey, HtmlElement.setAccessKey, .{ .ce_reactions = true });
+    pub const draggable = bridge.accessor(HtmlElement.getDraggable, HtmlElement.setDraggable, .{ .ce_reactions = true });
+    pub const spellcheck = bridge.accessor(HtmlElement.getSpellcheck, HtmlElement.setSpellcheck, .{ .ce_reactions = true });
+    pub const autocapitalize = bridge.accessor(HtmlElement.getAutocapitalize, HtmlElement.setAutocapitalize, .{ .ce_reactions = true });
+    pub const editContext = bridge.accessor(HtmlElement.getEditContext, HtmlElement.setEditContext, .{});
+    pub const contentEditable = bridge.accessor(HtmlElement.getContentEditable, HtmlElement.setContentEditable, .{ .ce_reactions = true });
+    pub const enterKeyHint = bridge.accessor(HtmlElement.getEnterKeyHint, HtmlElement.setEnterKeyHint, .{ .ce_reactions = true });
     pub const isContentEditable = bridge.accessor(HtmlElement.getIsContentEditable, null, .{});
+    pub const inputMode = bridge.accessor(HtmlElement.getInputMode, HtmlElement.setInputMode, .{ .ce_reactions = true });
+    pub const virtualKeyboardPolicy = bridge.accessor(HtmlElement.getVirtualKeyboardPolicy, HtmlElement.setVirtualKeyboardPolicy, .{ .ce_reactions = true });
     pub const offsetParent = bridge.accessor(_offsetParent, null, .{});
     pub const offsetTop = bridge.accessor(_offsetTop, null, .{});
     pub const offsetLeft = bridge.accessor(_offsetLeft, null, .{});
     pub const offsetWidth = bridge.accessor(_offsetWidth, null, .{});
     pub const offsetHeight = bridge.accessor(_offsetHeight, null, .{});
-    pub const lang = bridge.accessor(HtmlElement.getLang, HtmlElement.setLang, .{ .ce_reactions = true });
-    pub const nonce = bridge.accessor(HtmlElement.getNonce, HtmlElement.setNonce, .{ .ce_reactions = true });
-    pub const tabIndex = bridge.accessor(HtmlElement.getTabIndex, HtmlElement.setTabIndex, .{ .ce_reactions = true });
-    pub const style = bridge.accessor(_style, _setStyle, .{});
-    pub const attributeStyleMap = bridge.accessor(_attributeStyleMap, null, .{});
-    pub const blur = bridge.function(_blur, .{});
-    pub const title = bridge.accessor(HtmlElement.getTitle, HtmlElement.setTitle, .{ .ce_reactions = true });
-
+    pub const popover = bridge.accessor(HtmlElement.getPopover, HtmlElement.setPopover, .{ .ce_reactions = true });
+    pub const innerText = bridge.accessor(_innerText, _setInnerText, .{ .ce_reactions = true });
+    pub const outerText = bridge.accessor(_innerText, _setOuterText, .{ .ce_reactions = true });
+    pub const writingSuggestions = bridge.accessor(HtmlElement.getWritingSuggestions, HtmlElement.setWritingSuggestions, .{ .ce_reactions = true });
     pub const onabort = bridge.accessor(HtmlElement.getOnAbort, HtmlElement.setOnAbort, .{});
-    pub const onanimationcancel = bridge.accessor(HtmlElement.getOnAnimationCancel, HtmlElement.setOnAnimationCancel, .{});
-    pub const onanimationend = bridge.accessor(HtmlElement.getOnAnimationEnd, HtmlElement.setOnAnimationEnd, .{});
-    pub const onanimationiteration = bridge.accessor(HtmlElement.getOnAnimationIteration, HtmlElement.setOnAnimationIteration, .{});
-    pub const onanimationstart = bridge.accessor(HtmlElement.getOnAnimationStart, HtmlElement.setOnAnimationStart, .{});
-    pub const onauxclick = bridge.accessor(HtmlElement.getOnAuxClick, HtmlElement.setOnAuxClick, .{});
     pub const onbeforeinput = bridge.accessor(HtmlElement.getOnBeforeInput, HtmlElement.setOnBeforeInput, .{});
     pub const onbeforematch = bridge.accessor(HtmlElement.getOnBeforeMatch, HtmlElement.setOnBeforeMatch, .{});
     pub const onbeforetoggle = bridge.accessor(HtmlElement.getOnBeforeToggle, HtmlElement.setOnBeforeToggle, .{});
@@ -1858,9 +2161,7 @@ pub const JsApi = struct {
     pub const oncontextlost = bridge.accessor(HtmlElement.getOnContextLost, HtmlElement.setOnContextLost, .{});
     pub const oncontextmenu = bridge.accessor(HtmlElement.getOnContextMenu, HtmlElement.setOnContextMenu, .{});
     pub const oncontextrestored = bridge.accessor(HtmlElement.getOnContextRestored, HtmlElement.setOnContextRestored, .{});
-    pub const oncopy = bridge.accessor(HtmlElement.getOnCopy, HtmlElement.setOnCopy, .{});
     pub const oncuechange = bridge.accessor(HtmlElement.getOnCueChange, HtmlElement.setOnCueChange, .{});
-    pub const oncut = bridge.accessor(HtmlElement.getOnCut, HtmlElement.setOnCut, .{});
     pub const ondblclick = bridge.accessor(HtmlElement.getOnDblClick, HtmlElement.setOnDblClick, .{});
     pub const ondrag = bridge.accessor(HtmlElement.getOnDrag, HtmlElement.setOnDrag, .{});
     pub const ondragend = bridge.accessor(HtmlElement.getOnDragEnd, HtmlElement.setOnDragEnd, .{});
@@ -1875,7 +2176,6 @@ pub const JsApi = struct {
     pub const onerror = bridge.accessor(HtmlElement.getOnError, HtmlElement.setOnError, .{});
     pub const onfocus = bridge.accessor(HtmlElement.getOnFocus, HtmlElement.setOnFocus, .{});
     pub const onformdata = bridge.accessor(HtmlElement.getOnFormData, HtmlElement.setOnFormData, .{});
-    pub const ongotpointercapture = bridge.accessor(HtmlElement.getOnGotPointerCapture, HtmlElement.setOnGotPointerCapture, .{});
     pub const oninput = bridge.accessor(HtmlElement.getOnInput, HtmlElement.setOnInput, .{});
     pub const oninvalid = bridge.accessor(HtmlElement.getOnInvalid, HtmlElement.setOnInvalid, .{});
     pub const onkeydown = bridge.accessor(HtmlElement.getOnKeyDown, HtmlElement.setOnKeyDown, .{});
@@ -1885,26 +2185,17 @@ pub const JsApi = struct {
     pub const onloadeddata = bridge.accessor(HtmlElement.getOnLoadedData, HtmlElement.setOnLoadedData, .{});
     pub const onloadedmetadata = bridge.accessor(HtmlElement.getOnLoadedMetadata, HtmlElement.setOnLoadedMetadata, .{});
     pub const onloadstart = bridge.accessor(HtmlElement.getOnLoadStart, HtmlElement.setOnLoadStart, .{});
-    pub const onlostpointercapture = bridge.accessor(HtmlElement.getOnLostPointerCapture, HtmlElement.setOnLostPointerCapture, .{});
     pub const onmousedown = bridge.accessor(HtmlElement.getOnMouseDown, HtmlElement.setOnMouseDown, .{});
+    pub const onmouseenter = bridge.accessor(HtmlElement.getOnMouseEnter, HtmlElement.setOnMouseEnter, .{});
+    pub const onmouseleave = bridge.accessor(HtmlElement.getOnMouseLeave, HtmlElement.setOnMouseLeave, .{});
     pub const onmousemove = bridge.accessor(HtmlElement.getOnMouseMove, HtmlElement.setOnMouseMove, .{});
     pub const onmouseout = bridge.accessor(HtmlElement.getOnMouseOut, HtmlElement.setOnMouseOut, .{});
     pub const onmouseover = bridge.accessor(HtmlElement.getOnMouseOver, HtmlElement.setOnMouseOver, .{});
     pub const onmouseup = bridge.accessor(HtmlElement.getOnMouseUp, HtmlElement.setOnMouseUp, .{});
-    pub const onpaste = bridge.accessor(HtmlElement.getOnPaste, HtmlElement.setOnPaste, .{});
-    pub const dataset = bridge.accessor(_dataset, null, .{});
+    pub const onmousewheel = bridge.accessor(HtmlElement.getOnMouseWheel, HtmlElement.setOnMouseWheel, .{});
     pub const onpause = bridge.accessor(HtmlElement.getOnPause, HtmlElement.setOnPause, .{});
     pub const onplay = bridge.accessor(HtmlElement.getOnPlay, HtmlElement.setOnPlay, .{});
     pub const onplaying = bridge.accessor(HtmlElement.getOnPlaying, HtmlElement.setOnPlaying, .{});
-    pub const onpointercancel = bridge.accessor(HtmlElement.getOnPointerCancel, HtmlElement.setOnPointerCancel, .{});
-    pub const onpointerdown = bridge.accessor(HtmlElement.getOnPointerDown, HtmlElement.setOnPointerDown, .{});
-    pub const onpointerenter = bridge.accessor(HtmlElement.getOnPointerEnter, HtmlElement.setOnPointerEnter, .{});
-    pub const onpointerleave = bridge.accessor(HtmlElement.getOnPointerLeave, HtmlElement.setOnPointerLeave, .{});
-    pub const onpointermove = bridge.accessor(HtmlElement.getOnPointerMove, HtmlElement.setOnPointerMove, .{});
-    pub const onpointerout = bridge.accessor(HtmlElement.getOnPointerOut, HtmlElement.setOnPointerOut, .{});
-    pub const onpointerover = bridge.accessor(HtmlElement.getOnPointerOver, HtmlElement.setOnPointerOver, .{});
-    pub const onpointerrawupdate = bridge.accessor(HtmlElement.getOnPointerRawUpdate, HtmlElement.setOnPointerRawUpdate, .{});
-    pub const onpointerup = bridge.accessor(HtmlElement.getOnPointerUp, HtmlElement.setOnPointerUp, .{});
     pub const onprogress = bridge.accessor(HtmlElement.getOnProgress, HtmlElement.setOnProgress, .{});
     pub const onratechange = bridge.accessor(HtmlElement.getOnRateChange, HtmlElement.setOnRateChange, .{});
     pub const onreset = bridge.accessor(HtmlElement.getOnReset, HtmlElement.setOnReset, .{});
@@ -1915,21 +2206,64 @@ pub const JsApi = struct {
     pub const onseeked = bridge.accessor(HtmlElement.getOnSeeked, HtmlElement.setOnSeeked, .{});
     pub const onseeking = bridge.accessor(HtmlElement.getOnSeeking, HtmlElement.setOnSeeking, .{});
     pub const onselect = bridge.accessor(HtmlElement.getOnSelect, HtmlElement.setOnSelect, .{});
-    pub const onselectionchange = bridge.accessor(HtmlElement.getOnSelectionChange, HtmlElement.setOnSelectionChange, .{});
-    pub const onselectstart = bridge.accessor(HtmlElement.getOnSelectStart, HtmlElement.setOnSelectStart, .{});
     pub const onslotchange = bridge.accessor(HtmlElement.getOnSlotChange, HtmlElement.setOnSlotChange, .{});
     pub const onstalled = bridge.accessor(HtmlElement.getOnStalled, HtmlElement.setOnStalled, .{});
     pub const onsubmit = bridge.accessor(HtmlElement.getOnSubmit, HtmlElement.setOnSubmit, .{});
     pub const onsuspend = bridge.accessor(HtmlElement.getOnSuspend, HtmlElement.setOnSuspend, .{});
     pub const ontimeupdate = bridge.accessor(HtmlElement.getOnTimeUpdate, HtmlElement.setOnTimeUpdate, .{});
     pub const ontoggle = bridge.accessor(HtmlElement.getOnToggle, HtmlElement.setOnToggle, .{});
-    pub const ontransitioncancel = bridge.accessor(HtmlElement.getOnTransitionCancel, HtmlElement.setOnTransitionCancel, .{});
-    pub const ontransitionend = bridge.accessor(HtmlElement.getOnTransitionEnd, HtmlElement.setOnTransitionEnd, .{});
-    pub const ontransitionrun = bridge.accessor(HtmlElement.getOnTransitionRun, HtmlElement.setOnTransitionRun, .{});
-    pub const ontransitionstart = bridge.accessor(HtmlElement.getOnTransitionStart, HtmlElement.setOnTransitionStart, .{});
     pub const onvolumechange = bridge.accessor(HtmlElement.getOnVolumeChange, HtmlElement.setOnVolumeChange, .{});
     pub const onwaiting = bridge.accessor(HtmlElement.getOnWaiting, HtmlElement.setOnWaiting, .{});
+    pub const onwebkitanimationend = bridge.accessor(HtmlElement.getOnWebkitAnimationEnd, HtmlElement.setOnWebkitAnimationEnd, .{});
+    pub const onwebkitanimationiteration = bridge.accessor(HtmlElement.getOnWebkitAnimationIteration, HtmlElement.setOnWebkitAnimationIteration, .{});
+    pub const onwebkitanimationstart = bridge.accessor(HtmlElement.getOnWebkitAnimationStart, HtmlElement.setOnWebkitAnimationStart, .{});
+    pub const onwebkittransitionend = bridge.accessor(HtmlElement.getOnWebkitTransitionEnd, HtmlElement.setOnWebkitTransitionEnd, .{});
     pub const onwheel = bridge.accessor(HtmlElement.getOnWheel, HtmlElement.setOnWheel, .{});
+    pub const onauxclick = bridge.accessor(HtmlElement.getOnAuxClick, HtmlElement.setOnAuxClick, .{});
+    pub const ongotpointercapture = bridge.accessor(HtmlElement.getOnGotPointerCapture, HtmlElement.setOnGotPointerCapture, .{});
+    pub const onlostpointercapture = bridge.accessor(HtmlElement.getOnLostPointerCapture, HtmlElement.setOnLostPointerCapture, .{});
+    pub const onpointerdown = bridge.accessor(HtmlElement.getOnPointerDown, HtmlElement.setOnPointerDown, .{});
+    pub const onpointermove = bridge.accessor(HtmlElement.getOnPointerMove, HtmlElement.setOnPointerMove, .{});
+    pub const onpointerup = bridge.accessor(HtmlElement.getOnPointerUp, HtmlElement.setOnPointerUp, .{});
+    pub const onpointercancel = bridge.accessor(HtmlElement.getOnPointerCancel, HtmlElement.setOnPointerCancel, .{});
+    pub const onpointerover = bridge.accessor(HtmlElement.getOnPointerOver, HtmlElement.setOnPointerOver, .{});
+    pub const onpointerout = bridge.accessor(HtmlElement.getOnPointerOut, HtmlElement.setOnPointerOut, .{});
+    pub const onpointerenter = bridge.accessor(HtmlElement.getOnPointerEnter, HtmlElement.setOnPointerEnter, .{});
+    pub const onpointerleave = bridge.accessor(HtmlElement.getOnPointerLeave, HtmlElement.setOnPointerLeave, .{});
+    pub const onselectstart = bridge.accessor(HtmlElement.getOnSelectStart, HtmlElement.setOnSelectStart, .{});
+    pub const onselectionchange = bridge.accessor(HtmlElement.getOnSelectionChange, HtmlElement.setOnSelectionChange, .{});
+    pub const onanimationcancel = bridge.accessor(HtmlElement.getOnAnimationCancel, HtmlElement.setOnAnimationCancel, .{});
+    pub const onanimationend = bridge.accessor(HtmlElement.getOnAnimationEnd, HtmlElement.setOnAnimationEnd, .{});
+    pub const onanimationiteration = bridge.accessor(HtmlElement.getOnAnimationIteration, HtmlElement.setOnAnimationIteration, .{});
+    pub const onanimationstart = bridge.accessor(HtmlElement.getOnAnimationStart, HtmlElement.setOnAnimationStart, .{});
+    pub const ontransitionrun = bridge.accessor(HtmlElement.getOnTransitionRun, HtmlElement.setOnTransitionRun, .{});
+    pub const ontransitionstart = bridge.accessor(HtmlElement.getOnTransitionStart, HtmlElement.setOnTransitionStart, .{});
+    pub const ontransitionend = bridge.accessor(HtmlElement.getOnTransitionEnd, HtmlElement.setOnTransitionEnd, .{});
+    pub const ontransitioncancel = bridge.accessor(HtmlElement.getOnTransitionCancel, HtmlElement.setOnTransitionCancel, .{});
+    pub const onbeforexrselect = bridge.accessor(HtmlElement.getOnBeforeXrSelect, HtmlElement.setOnBeforeXrSelect, .{});
+    pub const oncopy = bridge.accessor(HtmlElement.getOnCopy, HtmlElement.setOnCopy, .{});
+    pub const oncut = bridge.accessor(HtmlElement.getOnCut, HtmlElement.setOnCut, .{});
+    pub const onpaste = bridge.accessor(HtmlElement.getOnPaste, HtmlElement.setOnPaste, .{});
+    pub const dataset = bridge.accessor(_dataset, null, .{});
+    pub const nonce = bridge.accessor(HtmlElement.getNonce, HtmlElement.setNonce, .{ .ce_reactions = true });
+    pub const autofocus = bridge.accessor(HtmlElement.getAutofocus, HtmlElement.setAutofocus, .{ .ce_reactions = true });
+    pub const tabIndex = bridge.accessor(HtmlElement.getTabIndex, HtmlElement.setTabIndex, .{ .ce_reactions = true });
+    pub const style = bridge.accessor(_style, _setStyle, .{});
+    pub const attributeStyleMap = bridge.accessor(_attributeStyleMap, null, .{});
+    pub const attachInternals = bridge.function(HtmlElement.attachInternals, .{});
+    pub const blur = bridge.function(_blur, .{});
+    pub const click = bridge.function(HtmlElement.click, .{});
+    pub const focus = bridge.function(_focus, .{});
+    pub const hidePopover = bridge.function(HtmlElement.hidePopover, .{});
+    pub const showPopover = bridge.function(HtmlElement.showPopover, .{});
+    pub const togglePopover = bridge.function(HtmlElement.togglePopover, .{});
+    pub const onscrollsnapchange = bridge.accessor(HtmlElement.getOnScrollSnapChange, HtmlElement.setOnScrollSnapChange, .{});
+    pub const onscrollsnapchanging = bridge.accessor(HtmlElement.getOnScrollSnapChanging, HtmlElement.setOnScrollSnapChanging, .{});
+    pub const focusGroup = bridge.accessor(HtmlElement.getFocusGroup, HtmlElement.setFocusGroup, .{ .ce_reactions = true });
+    pub const focusGroupStart = bridge.accessor(HtmlElement.getFocusGroupStart, HtmlElement.setFocusGroupStart, .{ .ce_reactions = true });
+    pub const onpointerrawupdate = bridge.accessor(HtmlElement.getOnPointerRawUpdate, HtmlElement.setOnPointerRawUpdate, .{});
+    pub const upgrade_constructor = bridge.constructor(HtmlElement.upgradeConstruct, .{});
+    pub const constructor = bridge.constructor(HtmlElement.construct, .{ .new_target = true });
 };
 
 pub const Build = struct {

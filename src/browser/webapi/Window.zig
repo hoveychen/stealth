@@ -712,32 +712,87 @@ pub fn setOnClick(self: *Window, setter: ?FunctionSetter) !void {
 
 // The "window-reflecting body element event handler set" (HTML spec): these
 // event handlers of body and frameset elements are aliases for the Window's.
-// Returns the Window storage slot for the given content attribute name, or
-// null if the attribute isn't part of the set.
-fn windowReflectingHandler(self: *Window, name: lp.String) ?*?js.Function.Global {
-    if (name.eql(comptime .wrap("onblur"))) return &self._on_blur;
-    if (name.eql(comptime .wrap("onerror"))) return &self._on_error;
-    if (name.eql(comptime .wrap("onfocus"))) return &self._on_focus;
-    if (name.eql(comptime .wrap("onload"))) return &self._on_load;
-    if (name.eql(comptime .wrap("onresize"))) return &self._on_resize;
-    if (name.eql(comptime .wrap("onscroll"))) return &self._on_scroll;
+// Twenty-two of them, measured on a headed Chrome 150 (probe-g20k) --
+// `document.body.onunload = f` makes `window.onunload === f`, and clearing
+// either clears both. The two gamepad handlers HTMLBodyElement also carries
+// are *not* in the set: they are element-local.
+pub const WINDOW_REFLECTING = [_]global_event_handlers.Handler{
+    .onblur,               .onerror,      .onfocus,            .onload,
+    .onresize,             .onscroll,     .onafterprint,       .onbeforeprint,
+    .onbeforeunload,       .onhashchange, .onlanguagechange,   .onmessage,
+    .onmessageerror,       .onoffline,    .ononline,           .onpagehide,
+    .onpageshow,           .onpopstate,   .onrejectionhandled, .onstorage,
+    .onunhandledrejection, .onunload,
+};
+
+/// The Window's dedicated field for a handler, when it has one. The rest live
+/// in the frame's attribute-listener store, which is also where Window's own
+/// accessors put them.
+fn dedicatedSlot(self: *Window, handler: global_event_handlers.Handler) ?*?js.Function.Global {
+    return switch (handler) {
+        .onblur => &self._on_blur,
+        .onerror => &self._on_error,
+        .onfocus => &self._on_focus,
+        .onload => &self._on_load,
+        .onresize => &self._on_resize,
+        .onscroll => &self._on_scroll,
+        .onhashchange => &self._on_hashchange,
+        .onmessage => &self._on_message,
+        .onpageshow => &self._on_pageshow,
+        .onpopstate => &self._on_popstate,
+        .onrejectionhandled => &self._on_rejection_handled,
+        .onunhandledrejection => &self._on_unhandled_rejection,
+        else => null,
+    };
+}
+
+/// Read the Window slot a body/frameset handler alias points at.
+pub fn getReflectedHandler(self: *Window, handler: global_event_handlers.Handler) ?js.Function.Global {
+    if (self.dedicatedSlot(handler)) |slot| {
+        return slot.*;
+    }
+    return self._frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = handler });
+}
+
+/// Write it. Passing null clears, which is what `window.onX = null` does too.
+pub fn setReflectedHandler(self: *Window, handler: global_event_handlers.Handler, callback: ?js.Function.Global) !void {
+    if (self.dedicatedSlot(handler)) |slot| {
+        slot.* = callback;
+        return;
+    }
+    if (callback) |cb| {
+        return self._frame._event_target_attr_listeners.put(
+            self._frame.arena,
+            .{ .target = self.asEventTarget(), .handler = handler },
+            cb,
+        );
+    }
+    _ = self._frame._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = handler });
+}
+
+fn windowReflectingHandler(name: lp.String) ?global_event_handlers.Handler {
+    const handler = global_event_handlers.fromEventType(name.str()[2..]) orelse return null;
+    for (WINDOW_REFLECTING) |candidate| {
+        if (candidate == handler) return handler;
+    }
     return null;
 }
 
 // Applies a window-reflecting content attribute (set on a body or frameset
 // element) to the Window's event handler. A null value clears the handler.
 pub fn setWindowReflectingHandlerFromAttribute(self: *Window, name: lp.String, value: ?[]const u8, frame: *Frame) void {
-    const slot = self.windowReflectingHandler(name) orelse return;
-    const expr = value orelse {
-        slot.* = null;
-        return;
+    if (name.len < 3) return;
+    const handler = windowReflectingHandler(name) orelse return;
+    const func: ?js.Function.Global = blk: {
+        const expr = value orelse break :blk null;
+        break :blk frame.js.stringToPersistedFunction(expr, &.{"event"}, &.{}) catch |err| {
+            log.err(.js, "window reflecting handler", .{ .err = err, .str = expr });
+            break :blk null;
+        };
     };
-    if (frame.js.stringToPersistedFunction(expr, &.{"event"}, &.{})) |func| {
-        slot.* = func;
-    } else |err| {
-        log.err(.js, "window reflecting handler", .{ .err = err, .str = expr });
-        slot.* = null;
-    }
+    self.setReflectedHandler(handler, func) catch |err| {
+        log.err(.js, "window reflecting handler", .{ .err = err, .str = name.str() });
+    };
 }
 
 pub fn getOnMessage(self: *const Window) ?js.Function.Global {

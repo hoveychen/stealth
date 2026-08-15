@@ -70,14 +70,20 @@ pub fn item(self: *const DOMTokenList, index: usize, frame: *Frame) !?[]const u8
 }
 
 /// https://dom.spec.whatwg.org/#dom-domtokenlist-supports
-/// Only `rel` defines supported tokens here; per spec every other backing
-/// attribute throws. Loaders probe `relList.supports("modulepreload")` and
-/// fall back to fetch()-based legacy loading when it fails.
+/// Only some backing attributes define supported tokens; per spec the rest
+/// throw. Loaders probe `relList.supports("modulepreload")` and fall back to
+/// fetch()-based legacy loading when it fails. The focusgroup set was measured
+/// on a headed Chrome 150 -- note `supports()` only reports, it does not gate
+/// add(): `el.focusGroup.add('bogus')` still writes the attribute.
 pub fn supports(self: *const DOMTokenList, token: []const u8, frame: *Frame) !bool {
-    if (!std.ascii.eqlIgnoreCase(self._attribute_name.str(), "rel")) {
+    const attribute = self._attribute_name.str();
+    const supported: []const []const u8 = if (std.ascii.eqlIgnoreCase(attribute, "rel"))
+        &.{ "stylesheet", "preload", "modulepreload" }
+    else if (std.ascii.eqlIgnoreCase(attribute, "focusgroup"))
+        &.{ "inline", "block", "wrap", "none", "nomemory", "toolbar" }
+    else
         return error.TypeError;
-    }
-    const supported = [_][]const u8{ "stylesheet", "preload", "modulepreload" };
+
     const lower = try std.ascii.allocLowerString(frame.local_arena, token);
     for (supported) |s| {
         if (std.mem.eql(u8, lower, s)) return true;

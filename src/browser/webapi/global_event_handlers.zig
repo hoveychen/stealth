@@ -93,9 +93,12 @@ pub const Handler = enum(u8) {
     oncanplay,
     oncanplaythrough,
     onchange,
+    oncharacterboundsupdate,
     onclick,
     onclose,
     oncommand,
+    oncompositionend,
+    oncompositionstart,
     oncontentvisibilityautostatechange,
     oncontextlost,
     oncontextmenu,
@@ -198,6 +201,8 @@ pub const Handler = enum(u8) {
     onstorage,
     onsubmit,
     onsuspend,
+    ontextformatupdate,
+    ontextupdate,
     ontimeupdate,
     ontoggle,
     ontouchcancel,
@@ -223,14 +228,38 @@ pub const Handler = enum(u8) {
     onwheel,
 };
 
+/// The handlers whose event type is not the property name with `on` stripped.
+/// The four webkit-prefixed animation/transition aliases kept the camel case
+/// of the events they shipped as -- measured on a headed Chrome 150,
+/// `el.onwebkitanimationend` fires for `new Event('webkitAnimationEnd')` and
+/// not for `new Event('webkitanimationend')`. (webkitfullscreenchange and
+/// webkitfullscreenerror are genuinely lowercase and stay derived.)
+const CAMEL_CASE_TYPES = [_]struct { []const u8, Handler }{
+    .{ "webkitAnimationEnd", .onwebkitanimationend },
+    .{ "webkitAnimationIteration", .onwebkitanimationiteration },
+    .{ "webkitAnimationStart", .onwebkitanimationstart },
+    .{ "webkitTransitionEnd", .onwebkittransitionend },
+};
+
 const typeToHandler = std.StaticStringMap(Handler).initComptime(blk: {
     const fields = std.meta.fields(Handler);
     var entries: [fields.len]struct { []const u8, Handler } = undefined;
     for (fields, 0..) |field, i| {
-        entries[i] = .{ field.name[2..], @enumFromInt(field.value) };
+        const handler: Handler = @enumFromInt(field.value);
+        entries[i] = .{ derivedType(field.name, handler), handler };
     }
     break :blk entries;
 });
+
+/// The event type for a handler: the property name without `on`, unless the
+/// handler is one of the camel-cased aliases, in which case the derived
+/// spelling is replaced rather than added -- Chrome routes only the camel case.
+fn derivedType(comptime name: []const u8, comptime handler: Handler) []const u8 {
+    for (CAMEL_CASE_TYPES) |entry| {
+        if (entry[1] == handler) return entry[0];
+    }
+    return name[2..];
+}
 
 pub fn fromEventType(typ: []const u8) ?Handler {
     return typeToHandler.get(typ);
