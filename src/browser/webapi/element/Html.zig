@@ -1764,7 +1764,10 @@ pub const JsApi = struct {
     fn _setOuterText(self: *HtmlElement, value: js.Value, frame: *Frame) !void {
         return self.setOuterText(if (value.isNull()) "" else try value.toZig([]const u8), frame);
     }
-    pub const insertAdjacentHTML = bridge.function(HtmlElement.insertAdjacentHTML, .{ .ce_reactions = true });
+    // No `insertAdjacentHTML` here: Chrome declares it once, on
+    // Element.prototype, and Element.zig already forwards to
+    // HtmlElement.insertAdjacentHTML. Declaring it on both put a member on
+    // HTMLElement.prototype that no browser has.
 
     /// Where this sits in HTMLElement.prototype's own-property order is not
     /// measured; Chrome declares it next to the innerText group in

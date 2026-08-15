@@ -50,6 +50,23 @@
   }
 </script>
 
+<script id=element_prototype_insert_adjacent_html_only_on_element>
+  {
+    // insertAdjacentHTML is declared once, on Element. Measured on a headed
+    // Chrome 150: HTMLElement.prototype does not own it, and on Element it sits
+    // between insertAdjacentElement and insertAdjacentText.
+    const own = Object.getOwnPropertyNames(Element.prototype);
+    testing.expectEqual(true, own.includes('insertAdjacentHTML'));
+    testing.expectEqual(false,
+      Object.getOwnPropertyNames(HTMLElement.prototype).includes('insertAdjacentHTML'));
+
+    // Removing the duplicate must not change what an HTML element can do.
+    const div = document.createElement('div');
+    div.insertAdjacentHTML('beforeend', '<b>x</b>');
+    testing.expectEqual('<b>x</b>', div.innerHTML);
+  }
+</script>
+
 <script id=element_prototype_moved_members_still_work>
   {
     // Moving a declaration must not change what it does.
