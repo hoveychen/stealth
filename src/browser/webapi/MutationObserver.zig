@@ -437,15 +437,17 @@ pub const MutationRecord = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
+        // Chrome's own order: the node members before the attribute ones
+        // (measured, win63-chrome.json -> shapes.MutationRecord).
         pub const @"type" = bridge.accessor(MutationRecord.getType, null, .{});
         pub const target = bridge.accessor(MutationRecord.getTarget, null, .{});
-        pub const attributeName = bridge.accessor(MutationRecord.getAttributeName, null, .{});
-        pub const attributeNamespace = bridge.accessor(MutationRecord.getAttributeNamespace, null, .{});
-        pub const oldValue = bridge.accessor(MutationRecord.getOldValue, null, .{});
         pub const addedNodes = bridge.accessor(MutationRecord.getAddedNodes, null, .{});
         pub const removedNodes = bridge.accessor(MutationRecord.getRemovedNodes, null, .{});
         pub const previousSibling = bridge.accessor(MutationRecord.getPreviousSibling, null, .{});
         pub const nextSibling = bridge.accessor(MutationRecord.getNextSibling, null, .{});
+        pub const attributeName = bridge.accessor(MutationRecord.getAttributeName, null, .{});
+        pub const attributeNamespace = bridge.accessor(MutationRecord.getAttributeNamespace, null, .{});
+        pub const oldValue = bridge.accessor(MutationRecord.getOldValue, null, .{});
     };
 };
 
@@ -470,7 +472,9 @@ pub const JsApi = struct {
     // Chrome's order, which is not the obvious one: disconnect comes first
     // (measured), and declaration order here is what a page reads back.
     pub const disconnect = bridge.function(MutationObserver.disconnect, .{});
-    pub const observe = bridge.function(MutationObserver.observe, .{});
+    // `options` is an optional dictionary in the IDL, so Chrome reports arity 1
+    // where counting the Zig parameters gives 2 (measured).
+    pub const observe = bridge.function(MutationObserver.observe, .{ .arity = 1 });
     pub const takeRecords = bridge.function(MutationObserver.takeRecords, .{});
 };
 

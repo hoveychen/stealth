@@ -191,5 +191,63 @@
     ['disconnect', 'observe', 'takeRecords', 'constructor'],
     Object.getOwnPropertyNames(MutationObserver.prototype),
   );
+
+  // `options` is optional in the IDL, so Chrome reports arity 1.
+  testing.expectEqual(1, MutationObserver.prototype.observe.length);
+}
+</script>
+
+<script id=legacy_mutation_record_order>
+{
+  // MutationRecord lists the node members before the attribute ones. Its own
+  // block: expectEqual throws, so a failure here would otherwise hide the
+  // DOMMatrix order below.
+  testing.expectEqual(
+    ['type', 'target', 'addedNodes', 'removedNodes', 'previousSibling', 'nextSibling',
+      'attributeName', 'attributeNamespace', 'oldValue', 'constructor'],
+    Object.getOwnPropertyNames(MutationRecord.prototype),
+  );
+}
+</script>
+
+<script id=legacy_matrix_order>
+{
+  // The mutating DOMMatrix operations are declared alphabetically, and the
+  // statics are too. `setMatrixValue` comes from the legacy WebKitCSSMatrix
+  // partial interface, so Chrome lists it *after* `constructor`; the bridge
+  // always appends `constructor` last, so that one slot still differs and the
+  // assertion stops before it.
+  testing.expectEqual(
+    ['a', 'b', 'c', 'd', 'e', 'f',
+      'm11', 'm12', 'm13', 'm14', 'm21', 'm22', 'm23', 'm24',
+      'm31', 'm32', 'm33', 'm34', 'm41', 'm42', 'm43', 'm44',
+      'invertSelf', 'multiplySelf', 'preMultiplySelf', 'rotateAxisAngleSelf',
+      'rotateFromVectorSelf', 'rotateSelf', 'scale3dSelf', 'scaleSelf',
+      'skewXSelf', 'skewYSelf', 'translateSelf'],
+    Object.getOwnPropertyNames(DOMMatrix.prototype).slice(0, 33),
+  );
+  testing.expectEqual(
+    ['fromFloat32Array', 'fromFloat64Array', 'fromMatrix'],
+    Object.getOwnPropertyNames(DOMMatrix).filter((k) => !['length', 'name', 'prototype'].includes(k)),
+  );
+}
+</script>
+
+<script id=legacy_create_event>
+{
+  // createEvent names the type it refused rather than answering the bare
+  // "operation is not supported" (measured on Chrome 150 with MutationEvent,
+  // which Chrome 150 no longer has at all). The original casing is echoed.
+  testing.expectError(
+    "Failed to execute 'createEvent' on 'Document': The provided event type ('MutationEvent') is invalid.",
+    () => document.createEvent('MutationEvent'),
+  );
+  testing.expectError(
+    "Failed to execute 'createEvent' on 'Document': The provided event type ('NoSuchEvent') is invalid.",
+    () => document.createEvent('NoSuchEvent'),
+  );
+  let err;
+  try { document.createEvent('MutationEvent'); } catch (e) { err = e; }
+  testing.expectEqual('NotSupportedError', err.name);
 }
 </script>
