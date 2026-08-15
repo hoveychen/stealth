@@ -116,6 +116,10 @@ _connection: *NetworkInformation,
 // navigator.mediaDevices and the BatteryManager navigator.getBattery()
 // resolves with. Both are built on first use: pages that never ask shouldn't
 // pay for them, and getBattery() has to hand back the same object every call.
+// RemotePlayback.watchAvailability()'s id counter. One per window rather than
+// one per RemotePlayback: a second media element continues the same sequence
+// instead of starting over (measured).
+_remote_playback_watch_id: u32 = 0,
 _media_devices: ?*MediaDevices = null,
 _battery: ?*BatteryManager = null,
 // CSS.highlights. One registry per window, built on first use, because a page

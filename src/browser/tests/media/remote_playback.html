@@ -1,0 +1,202 @@
+<!--
+  RemotePlayback (video.remote) and VideoPlaybackQuality
+  (video.getVideoPlaybackQuality()).
+
+  Neither has anything behind it here -- there is no cast device to connect to
+  and no decoder to drop frames -- but both are reachable off a bare element
+  with no source attached, so what a page sees is the "nothing is happening"
+  state a real Chrome reports rather than a missing property.
+
+  Four measured details worth pinning:
+
+    * getVideoPlaybackQuality lives on HTMLVideoElement.prototype, NOT on
+      HTMLMediaElement.prototype, so an <audio> element does not have it.
+    * `video.remote` is one object per element, stable across reads, and an
+      <audio> element gets its own distinct one.
+    * watchAvailability() ids come from a counter shared by every
+      RemotePlayback in the window -- two elements do not each start at 1 --
+      but cancelWatchAvailability() only knows the ids its *own* object handed
+      out.
+    * Every one of the three methods reports failure by rejecting. None of them
+      throws synchronously, not even for a missing or non-callable argument.
+
+  Chrome 150, headed, over http://localhost
+  (win57-chrome.json, win60-chrome.json, win61-chrome.json).
+-->
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<script src="../shape.js"></script>
+
+<script id=interface_objects>
+{
+  expectInterfaceObject('VideoPlaybackQuality');
+  expectInterfaceObject('RemotePlayback', { inherits: EventTarget, protoOf: EventTarget.prototype });
+
+  const proto = (C) => Object.getOwnPropertyNames(C.prototype).join(' ');
+  testing.expectEqual(
+    'creationTime totalVideoFrames droppedVideoFrames corruptedVideoFrames constructor',
+    proto(VideoPlaybackQuality));
+  testing.expectEqual(
+    'state onconnecting onconnect ondisconnect cancelWatchAvailability prompt ' +
+    'watchAvailability constructor',
+    proto(RemotePlayback));
+  testing.expectEqual('[object VideoPlaybackQuality]', String(VideoPlaybackQuality.prototype));
+  testing.expectEqual('[object RemotePlayback]', String(RemotePlayback.prototype));
+
+  // Every VideoPlaybackQuality member is a read-only accessor.
+  testing.expectEqual(
+    'get creationTime[ec-],get totalVideoFrames[ec-],get droppedVideoFrames[ec-],' +
+    'get corruptedVideoFrames[ec-],@@toStringTag=VideoPlaybackQuality',
+    shapeOf(VideoPlaybackQuality.prototype));
+  // On RemotePlayback only the three handlers take a setter.
+  testing.expectEqual(
+    'get state[ec-],accessor onconnecting[ec-],accessor onconnect[ec-],' +
+    'accessor ondisconnect[ec-],cancelWatchAvailability/0[ecw],prompt/0[ecw],' +
+    'watchAvailability/1[ecw],@@toStringTag=RemotePlayback',
+    shapeOf(RemotePlayback.prototype));
+}
+</script>
+
+<script id=video_playback_quality>
+{
+  // The method is on HTMLVideoElement, not on the media base class, so <audio>
+  // does not get it.
+  testing.expectTrue(
+    Object.prototype.hasOwnProperty.call(HTMLVideoElement.prototype, 'getVideoPlaybackQuality'));
+  testing.expectFalse(
+    Object.prototype.hasOwnProperty.call(HTMLMediaElement.prototype, 'getVideoPlaybackQuality'));
+  testing.expectEqual(0, HTMLVideoElement.prototype.getVideoPlaybackQuality.length);
+  testing.expectEqual('undefined', typeof document.createElement('audio').getVideoPlaybackQuality);
+
+  // A <video> with no source still answers: every counter is zero.
+  const video = document.createElement('video');
+  const first = video.getVideoPlaybackQuality();
+  testing.expectEqual('[object VideoPlaybackQuality]', Object.prototype.toString.call(first));
+  testing.expectEqual(0, first.totalVideoFrames);
+  testing.expectEqual(0, first.droppedVideoFrames);
+  testing.expectEqual(0, first.corruptedVideoFrames);
+
+  // A fresh object each call, stamped when it is made.
+  const second = video.getVideoPlaybackQuality();
+  testing.expectFalse(first === second);
+  testing.expectEqual('number', typeof first.creationTime);
+  testing.expectTrue(Number.isFinite(first.creationTime));
+  testing.expectTrue(second.creationTime >= first.creationTime);
+  // It is a DOMHighResTimeStamp on the same clock as performance.now().
+  testing.expectTrue(Math.abs(first.creationTime - performance.now()) < 2000);
+}
+</script>
+
+<script id=remote_shape>
+{
+  const video = document.createElement('video');
+  const audio = document.createElement('audio');
+
+  testing.expectTrue(Object.prototype.hasOwnProperty.call(HTMLMediaElement.prototype, 'remote'));
+  testing.expectTrue(
+    Object.prototype.hasOwnProperty.call(HTMLMediaElement.prototype, 'disableRemotePlayback'));
+
+  const remote = video.remote;
+  testing.expectEqual('[object RemotePlayback]', Object.prototype.toString.call(remote));
+  testing.expectTrue(remote instanceof RemotePlayback);
+  testing.expectTrue(remote instanceof EventTarget);
+  // One object per element, stable across reads -- and <audio> has its own.
+  testing.expectTrue(video.remote === remote);
+  testing.expectTrue(video.remote === video.remote);
+  testing.expectEqual('[object RemotePlayback]', Object.prototype.toString.call(audio.remote));
+  testing.expectFalse(audio.remote === remote);
+
+  testing.expectEqual('disconnected', remote.state);
+  testing.expectEqual(null, remote.onconnecting);
+  testing.expectEqual(null, remote.onconnect);
+  testing.expectEqual(null, remote.ondisconnect);
+  const handler = () => {};
+  remote.onconnect = handler;
+  testing.expectTrue(remote.onconnect === handler);
+  remote.onconnect = null;
+  testing.expectEqual(null, remote.onconnect);
+
+  // disableRemotePlayback reflects the content attribute: setting it true
+  // writes an empty attribute, false removes it.
+  testing.expectEqual(false, video.disableRemotePlayback);
+  video.disableRemotePlayback = true;
+  testing.expectEqual(true, video.disableRemotePlayback);
+  testing.expectEqual('', video.getAttribute('disableremoteplayback'));
+  video.disableRemotePlayback = false;
+  testing.expectEqual(false, video.disableRemotePlayback);
+  testing.expectEqual(null, video.getAttribute('disableremoteplayback'));
+}
+</script>
+
+<script id=remote_methods type=module>
+  const state = await testing.async();
+
+  const video = document.createElement('video');
+  const other = document.createElement('video');
+  const remote = video.remote;
+  const otherRemote = other.remote;
+  // Not wrapped in Promise.resolve(): every one of these reports by rejecting,
+  // so a synchronous throw would show up here as an unhandled error rather
+  // than as a value.
+  const settle = (p) => p.then((v) => `OK ${typeof v} ${String(v)}`, (e) => `${e.name}: ${e.message}`);
+
+  const noArgs = await settle(remote.watchAvailability());
+  const notCallable = await settle(remote.watchAvailability(42));
+  const first = await settle(remote.watchAvailability(() => {}));
+  const second = await settle(remote.watchAvailability(() => {}));
+  // A second element continues the same counter rather than starting over.
+  const third = await settle(otherRemote.watchAvailability(() => {}));
+
+  const cancelAll = await settle(remote.cancelWatchAvailability());
+  const cancelUnknown = await settle(remote.cancelWatchAvailability(999999));
+  // An id belongs to the object that handed it out: this one is not the
+  // other's to cancel.
+  const fourth = await remote.watchAvailability(() => {});
+  const cancelCrossObject = await settle(otherRemote.cancelWatchAvailability(fourth));
+  const cancelReal = await settle(remote.cancelWatchAvailability(fourth));
+  const cancelTwice = await settle(remote.cancelWatchAvailability(fourth));
+
+  const prompt = await settle(remote.prompt());
+
+  // With the attribute present, both watchAvailability and prompt refuse for
+  // that reason instead of their usual one.
+  video.disableRemotePlayback = true;
+  const watchDisabled = await settle(remote.watchAvailability(() => {}));
+  const promptDisabled = await settle(remote.prompt());
+  video.disableRemotePlayback = false;
+
+  state.resolve();
+  await state.done(() => {
+    const E = "Failed to execute 'watchAvailability' on 'RemotePlayback': ";
+    testing.expectEqual('TypeError: ' + E + '1 argument required, but only 0 present.', noArgs);
+    testing.expectEqual("TypeError: " + E + "parameter 1 is not of type 'Function'.", notCallable);
+
+    // Ids are numbers off a window-wide counter that starts at 1.
+    testing.expectEqual('OK number 1', first);
+    testing.expectEqual('OK number 2', second);
+    testing.expectEqual('OK number 3', third);
+    testing.expectEqual(4, fourth);
+
+    // Cancelling everything, then an id nobody holds.
+    testing.expectEqual('OK undefined undefined', cancelAll);
+    const notFound =
+      "NotFoundError: Failed to execute 'cancelWatchAvailability' on 'RemotePlayback': " +
+      'A callback with the given id is not found.';
+    testing.expectEqual(notFound, cancelUnknown);
+    testing.expectEqual(notFound, cancelCrossObject);
+    testing.expectEqual('OK undefined undefined', cancelReal);
+    testing.expectEqual(notFound, cancelTwice);
+
+    // prompt() needs a user gesture, and a script never has one.
+    testing.expectEqual(
+      "InvalidAccessError: Failed to execute 'prompt' on 'RemotePlayback': " +
+      'RemotePlayback::prompt() requires user gesture.',
+      prompt);
+
+    const disabled = 'disableRemotePlayback attribute is present.';
+    testing.expectEqual('InvalidStateError: ' + E + disabled, watchDisabled);
+    testing.expectEqual(
+      "InvalidStateError: Failed to execute 'prompt' on 'RemotePlayback': " + disabled,
+      promptDisabled);
+  });
+</script>

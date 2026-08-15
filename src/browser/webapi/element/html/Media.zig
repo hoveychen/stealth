@@ -34,6 +34,7 @@ const String = @import("lightpanda").String;
 const mime = @import("../../media/mime.zig");
 const eme = @import("../../media/eme.zig");
 const global_event_handlers = @import("../../global_event_handlers.zig");
+const playback = @import("../../media/playback.zig");
 
 const Media = @This();
 
@@ -80,6 +81,11 @@ _error: ?*MediaError = null,
 // The MediaKeys last handed to setMediaKeys(). Null until a page attaches one,
 // and settable back to null (measured).
 _media_keys: ?*eme.MediaKeys = null,
+
+// video.remote. Built on first read and then kept, because
+// `video.remote === video.remote` has to hold -- and each element gets its own,
+// so an <audio> next to a <video> does not share one (both measured).
+_remote: ?*playback.RemotePlayback = null,
 
 pub fn asElement(self: *Media) *Element {
     return self._proto._proto;
@@ -371,6 +377,28 @@ pub fn setMediaKeys(self: *Media, keys_: ?js.Value, exec: *const js.Execution) j
     });
 }
 
+/// video.remote, created on first read.
+pub fn getRemote(self: *Media, exec: *js.Execution) !*playback.RemotePlayback {
+    if (self._remote) |existing| return existing;
+    const created = try playback.RemotePlayback.create(self, exec);
+    self._remote = created;
+    return created;
+}
+
+/// Reflects the `disableremoteplayback` content attribute: setting it true
+/// writes an empty attribute, false removes it (measured).
+pub fn getDisableRemotePlayback(self: *const Media) bool {
+    return self.asConstElement().getAttributeSafe(.wrap("disableremoteplayback")) != null;
+}
+
+pub fn setDisableRemotePlayback(self: *Media, value: bool, frame: *Frame) !void {
+    if (value) {
+        try self.asElement().setAttributeSafe(.wrap("disableremoteplayback"), .wrap(""), frame);
+    } else {
+        try self.asElement().removeAttribute(.wrap("disableremoteplayback"), frame);
+    }
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Media);
 
@@ -435,9 +463,13 @@ pub const JsApi = struct {
 
     pub const addTextTrack = bridge.function(Media.addTextTrack, .{ .arity = 1 });
     pub const canPlayType = bridge.function(Media.canPlayType, .{});
-    pub const play = bridge.function(Media.play, .{});
-    pub const pause = bridge.function(Media.pause, .{});
     pub const load = bridge.function(Media.load, .{});
+    pub const pause = bridge.function(Media.pause, .{});
+    pub const play = bridge.function(Media.play, .{});
+
+    // Chrome lists these two after the three playback verbs (measured).
+    pub const remote = bridge.accessor(Media.getRemote, null, .{});
+    pub const disableRemotePlayback = bridge.accessor(Media.getDisableRemotePlayback, Media.setDisableRemotePlayback, .{ .ce_reactions = true });
 
     // EME arrives on a partial interface, so Chrome lists these two *after*
     // `constructor`. V8 can only put `constructor` last, so last-but-one is as
