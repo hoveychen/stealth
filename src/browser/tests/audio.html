@@ -1146,3 +1146,56 @@
   });
 }
 </script>
+
+<script id=offline_audio_render_is_async type=module>
+{
+  // The render is asynchronous, and the whole point is *when* `complete` is
+  // dispatched: the test above attaches its handler before startRendering(),
+  // which hides the case every real caller uses. CreepJS's hasFakeAudio()
+  // assigns `oncomplete` on the line after startRendering() and awaits a promise
+  // that has no timeout and no reject path, so a `complete` dispatched inside
+  // the call reaches nobody and CreepJS hangs at "FP ID: Computing..." forever.
+  //
+  // Measured on a headed Chrome 150 (probe-g11/probe-g11b): the call returns
+  // with the state still "running", a microtask queued right after it runs
+  // *before* the event, and the promise settles after the event.
+  const state = await testing.async();
+  const order = [];
+
+  // 100 frames is deliberately not a multiple of the 128-frame render quantum:
+  // Chrome renders whole quanta, so currentTime lands on 128/44100, not
+  // 100/44100. Confirmed across 1/100/128/129/5000 @44100 and 256/300 @48000.
+  const oc = new OfflineAudioContext(1, 100, 44100);
+  oc.createOscillator().start(0);
+
+  const rendering = oc.startRendering();
+  const afterCall = { state: oc.state, currentTime: oc.currentTime };
+
+  const completed = new Promise((resolve) => {
+    oc.oncomplete = (e) => {
+      order.push('oncomplete');
+      resolve({ state: oc.state, currentTime: oc.currentTime, length: e.renderedBuffer.length });
+    };
+  });
+  oc.addEventListener('complete', () => order.push('listener'));
+  rendering.then(() => order.push('promise'));
+  queueMicrotask(() => order.push('microtask'));
+
+  const inHandler = await Promise.race([
+    completed,
+    new Promise((r) => setTimeout(() => r('complete never fired'), 1000)),
+  ]);
+  await rendering;
+  await new Promise((r) => setTimeout(r, 0));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual('running', afterCall.state);
+    testing.expectEqual(0, afterCall.currentTime);
+    testing.expectEqual('closed', inHandler.state);
+    testing.expectEqual(128 / 44100, inHandler.currentTime);
+    testing.expectEqual(100, inHandler.length);
+    testing.expectEqual('microtask,oncomplete,listener,promise', order.join(','));
+  });
+}
+</script>

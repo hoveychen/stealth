@@ -112,6 +112,17 @@ try {
         await cdp.send('Runtime.enable', {}, sessionId);
     }
 
+    // --window-size alone is not enough: macOS clamps a real Chrome window to
+    // the display, so asking for 1920 on a 1512-wide screen quietly gives
+    // 1512 and the baseline disagrees with lightpanda's 1920 default all over
+    // again. Both engines implement setDeviceMetricsOverride, so state the
+    // viewport rather than inherit it. deviceScaleFactor 1 keeps lightpanda
+    // from logging it as unimplemented.
+    const [w, h] = windowSize.split(',').map(Number);
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: w, height: h, deviceScaleFactor: 1, mobile: false,
+    }, sessionId);
+
     for (const { name, url, settleMs } of DETECTORS) {
         const site = { name, url };
         const started = Date.now();
