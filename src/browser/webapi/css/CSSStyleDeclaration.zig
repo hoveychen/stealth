@@ -215,6 +215,12 @@ fn applyParsedDeclaration(self: *CSSStyleDeclaration, declaration: CssParser.Dec
             if (existing._important) return;
         }
     }
+    // A custom property's value may be empty (`--d:;`), and Chrome keeps the
+    // declaration; an empty value for a normal property drops it, and so does
+    // an explicit `setProperty(name, "")` for either kind.
+    if (isCustomProperty(declaration.name) and declaration.value.len == 0) {
+        return self.storeProperty(declaration.name, "", declaration.important, frame);
+    }
     try self.setPropertyImpl(declaration.name, declaration.value, declaration.important, frame);
 }
 
@@ -224,6 +230,10 @@ fn setPropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, value:
         return;
     }
 
+    return self.storeProperty(property_name, value, important, frame);
+}
+
+fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !void {
     const normalized = normalizePropertyName(property_name, &frame.buf);
 
     // Normalize the value for canonical serialization
@@ -331,6 +341,11 @@ pub fn findProperty(self: *const CSSStyleDeclaration, name: String) ?*Property {
 }
 
 fn normalizePropertyName(name: []const u8, buf: []u8) []const u8 {
+    // Custom property names are case-sensitive: Chrome answers `--Case` and
+    // `--case` as two different properties.
+    if (isCustomProperty(name)) {
+        return name;
+    }
     if (name.len > buf.len) {
         log.info(.dom, "css.long.name", .{ .name = name });
         return name;
@@ -338,8 +353,20 @@ fn normalizePropertyName(name: []const u8, buf: []u8) []const u8 {
     return std.ascii.lowerString(buf, name);
 }
 
+/// A property name starting with two dashes is a custom property, whose name
+/// and value the CSSOM stores as written.
+pub fn isCustomProperty(name: []const u8) bool {
+    return std.mem.startsWith(u8, name, "--");
+}
+
 // Normalize CSS property values for canonical serialization
 fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value: []const u8) ![]const u8 {
+    // A custom property's value is an arbitrary token stream: Chrome stores it
+    // as written, minus the surrounding whitespace (`--c: 01.50` stays
+    // "01.50", `--e: a  b   c` keeps its inner runs).
+    if (isCustomProperty(property_name)) {
+        return std.mem.trim(u8, raw_value, &std.ascii.whitespace);
+    }
     const value = try normalizeLeadingZeros(arena, raw_value);
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
@@ -1277,4 +1304,8 @@ test "normalizePropertyValue: anchor() canonical order" {
 
 test "WebApi: CSSStyleDeclaration surface" {
     try testing.htmlRunner("css/declaration_surface.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration custom properties" {
+    try testing.htmlRunner("css/custom_properties_inline.html", .{});
 }

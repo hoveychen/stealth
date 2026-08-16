@@ -112,7 +112,10 @@ pub const DeclarationsIterator = struct {
             return null;
         }
 
-        const value = self.consumeValue() orelse return null;
+        // A custom property accepts an empty value (`--d:;`), where a normal
+        // property with nothing after the colon is an invalid declaration.
+        const allow_empty = std.mem.startsWith(u8, name, "--");
+        const value = self.consumeValue(allow_empty) orelse return null;
         return .{
             .name = name,
             .value = value.value,
@@ -125,7 +128,7 @@ pub const DeclarationsIterator = struct {
         important: bool,
     };
 
-    fn consumeValue(self: *DeclarationsIterator) ?ValueResult {
+    fn consumeValue(self: *DeclarationsIterator, allow_empty: bool) ?ValueResult {
         self.skipTrivia();
 
         var depth: usize = 0;
@@ -151,7 +154,10 @@ pub const DeclarationsIterator = struct {
             updateDepth(span.token, &depth);
         }
 
-        const value_start = start orelse return null;
+        const value_start = start orelse {
+            if (allow_empty) return .{ .value = "", .important = false };
+            return null;
+        };
         const last = last_sig orelse return null;
 
         var important = false;
@@ -166,7 +172,7 @@ pub const DeclarationsIterator = struct {
 
         var value_slice = self.input[value_start..end_pos];
         value_slice = std.mem.trim(u8, value_slice, &std.ascii.whitespace);
-        if (value_slice.len == 0) return null;
+        if (value_slice.len == 0 and !allow_empty) return null;
 
         return .{ .value = value_slice, .important = important };
     }
