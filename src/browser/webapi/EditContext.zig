@@ -298,14 +298,7 @@ pub const JsApi = struct {
                 return frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = which });
             }
             fn set(self: *EditContext, callback: ?js.Function.Global, frame: *Frame) !void {
-                if (callback) |cb| {
-                    return frame._event_target_attr_listeners.put(
-                        frame.arena,
-                        .{ .target = self.asEventTarget(), .handler = which },
-                        cb,
-                    );
-                }
-                _ = frame._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = which });
+                return frame.setEventHandler(self.asEventTarget(), which, callback);
             }
         };
     }

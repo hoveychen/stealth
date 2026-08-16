@@ -117,11 +117,7 @@ pub fn getOnSlotChange(self: *ShadowRoot, frame: *Frame) ?js.Function.Global {
 }
 
 pub fn setOnSlotChange(self: *ShadowRoot, callback: ?js.Function.Global, frame: *Frame) !void {
-    if (callback) |cb| {
-        try frame._event_target_attr_listeners.put(frame.arena, .{ .target = self.asEventTarget(), .handler = .onslotchange }, cb);
-    } else {
-        _ = frame._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = .onslotchange });
-    }
+    return frame.setEventHandler(self.asEventTarget(), .onslotchange, callback);
 }
 
 pub fn getElementById(self: *ShadowRoot, id: []const u8, frame: *Frame) ?*Element {

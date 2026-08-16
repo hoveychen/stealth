@@ -1093,7 +1093,7 @@ fn populateElementAttributes(frame: *Frame, element: *Element, list: anytype) !v
     var attributes = &element._attributes;
     try attributes.ensureTotalCapacity(count, frame);
     while (list.next()) |attr| {
-        try attributes.putNew(attr.name.local.slice(), attr.value.slice(), frame);
+        try attributes.putNew(attr.name.local.slice(), attr.value.slice(), element, frame);
     }
 }
 

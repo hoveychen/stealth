@@ -71,3 +71,166 @@
 
     testing.expectEqual(true, true);
 </script>
+
+<script id="no_receiver_check">
+    // console is a namespace, not an interface: its methods do no brand check
+    // on `this`. Measured on Chrome 150 -- all three shapes run and return
+    // undefined. iphey's `dep-reg-to-string` devtools probe relies on it, via
+    // `Object(console.log)({dep: re})`.
+    const shapes = {
+        unbound: (f) => { const g = f; return g({dep: 1}); },
+        undefined_this: (f) => f.call(undefined, {dep: 1}),
+        window_this: (f) => f.call(window, {dep: 1}),
+        object_wrap: (f) => Object(f)({dep: 1}),
+    };
+    const threw = [];
+    for (const name of Object.getOwnPropertyNames(console)) {
+        // context/createTask return an object rather than undefined; they are
+        // covered by their own blocks.
+        if (typeof console[name] !== 'function' || name === 'createTask' || name === 'context') {
+            continue;
+        }
+        for (const [shape, invoke] of Object.entries(shapes)) {
+            let result;
+            try {
+                result = invoke(console[name]);
+            } catch (e) {
+                threw.push(`${name}/${shape}: ${e}`);
+                continue;
+            }
+            if (result !== undefined) {
+                threw.push(`${name}/${shape}: returned ${result}`);
+            }
+        }
+    }
+    testing.expectEqual('', threw.join('\n'));
+</script>
+
+<script id="member_table">
+    // Own property names, in order, measured on a headed Chrome 150.
+    testing.expectEqual(
+        'debug,error,info,log,warn,dir,dirxml,table,trace,group,groupCollapsed,' +
+        'groupEnd,clear,count,countReset,assert,profile,profileEnd,time,timeLog,' +
+        'timeEnd,timeStamp,context,createTask,memory',
+        Object.getOwnPropertyNames(console).join(','),
+    );
+</script>
+
+<script id="member_descriptors">
+    // Every console function reports length 0 -- variadic arguments contribute
+    // nothing -- except `context`, which takes a required name. All members are
+    // writable/enumerable/configurable except the `memory` accessor.
+    const describe = (name) => {
+        const d = Object.getOwnPropertyDescriptor(console, name);
+        const flags = `e=${d.enumerable ? 1 : 0} c=${d.configurable ? 1 : 0}`;
+        if (typeof d.get === 'function' || typeof d.set === 'function') {
+            return `${name}: get=${typeof d.get} set=${typeof d.set} ${flags}`;
+        }
+        return `${name}: ${typeof d.value} name=${d.value.name} len=${d.value.length} w=${d.writable ? 1 : 0} ${flags}`;
+    };
+    const expected = Object.getOwnPropertyNames(console).map((name) => {
+        if (name === 'memory') return `${name}: get=function set=function e=1 c=1`;
+        return `${name}: function name=${name} len=${name === 'context' ? 1 : 0} w=1 e=1 c=1`;
+    });
+    testing.expectEqual(
+        expected.join('\n'),
+        Object.getOwnPropertyNames(console).map(describe).join('\n'),
+    );
+</script>
+
+<script id="no_exception_member">
+    // Chrome has no console.exception; we used to expose one, which is a
+    // signal in exactly the same way a missing member is.
+    testing.expectEqual(undefined, console.exception);
+</script>
+
+<script id="new_members_are_silent">
+    testing.expectEqual(undefined, console.dir({a: 1}));
+    testing.expectEqual(undefined, console.dirxml({a: 1}));
+    testing.expectEqual(undefined, console.profile('p'));
+    testing.expectEqual(undefined, console.profileEnd());
+    testing.expectEqual(undefined, console.timeStamp('t'));
+    // Chrome tolerates a missing argument on every logger.
+    testing.expectEqual(undefined, console.table());
+    testing.expectEqual(undefined, console.dir());
+</script>
+
+<script id="context">
+    // console.context(name) hands back a fresh console-like object whose 22
+    // members are own, writable/enumerable/configurable functions of length 1.
+    // Note `dirXml`, which is spelled with a capital X here but not on console.
+    const ctx = console.context('c');
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(ctx));
+    testing.expectEqual(
+        'dir,dirXml,table,groupEnd,clear,count,countReset,profile,profileEnd,debug,' +
+        'error,info,log,warn,trace,group,groupCollapsed,assert,time,timeLog,timeEnd,timeStamp',
+        Object.getOwnPropertyNames(ctx).join(','),
+    );
+    testing.expectEqual(false, console.context('c') === ctx);
+    testing.expectEqual(false, ctx.log === console.log);
+    testing.expectEqual(undefined, ctx.log('hello'));
+    const names = Object.getOwnPropertyNames(ctx);
+    testing.expectEqual(
+        names.map((n) => `${n}: function name=${n} len=1 w=1 e=1 c=1`).join('\n'),
+        names.map((n) => {
+            const d = Object.getOwnPropertyDescriptor(ctx, n);
+            return `${n}: ${typeof d.value} name=${d.value.name} len=${d.value.length}` +
+                ` w=${d.writable ? 1 : 0} e=${d.enumerable ? 1 : 0} c=${d.configurable ? 1 : 0}`;
+        }).join('\n'),
+    );
+    // No argument is accepted too, and the members do not brand-check either.
+    testing.expectEqual(22, Object.getOwnPropertyNames(console.context()).length);
+</script>
+
+<script id="create_task">
+    // console.createTask(name) returns a plain object carrying a single `run`
+    // method that invokes its callback and returns the result.
+    const task = console.createTask('t');
+    testing.expectEqual('[object Object]', Object.prototype.toString.call(task));
+    testing.expectEqual('Object', Object.getPrototypeOf(task).constructor.name);
+    testing.expectEqual('run', Object.getOwnPropertyNames(task).join(','));
+    testing.expectEqual(0, task.run.length);
+    testing.expectEqual(42, task.run(() => 42));
+</script>
+
+<script id="create_task_errors">
+    // Both are a plain Error in Chrome, not a TypeError (measured).
+    testing.expectError('First argument must be a non-empty string.', () => console.createTask());
+    testing.expectError('First argument must be a non-empty string.', () => console.createTask(''));
+    testing.expectError('First argument must be a function.', () => console.createTask('t').run());
+</script>
+
+<script id="create_task_takes_no_coercion">
+    // Chrome runs no ToString on the name: everything that is not a primitive
+    // string is rejected, wrapper objects and `toString` holders included.
+    // iphey's devtools probes pass an object, so coercing would answer a task
+    // where Chrome answers an Error.
+    for (const arg of [{dep: 1}, 123, null, true, new String('t'), {toString: () => 't'}]) {
+        testing.expectError('First argument must be a non-empty string.', () => console.createTask(arg));
+    }
+</script>
+
+<script id="memory">
+    // console.memory is the same MemoryInfo performance.memory hands out, and
+    // like it, a fresh object on every read.
+    testing.expectEqual('[object MemoryInfo]', Object.prototype.toString.call(console.memory));
+    testing.expectEqual(false, console.memory === console.memory);
+    testing.expectEqual(true, Object.getPrototypeOf(console.memory) === Object.getPrototypeOf(performance.memory));
+    testing.expectEqual('number', typeof console.memory.jsHeapSizeLimit);
+</script>
+
+<script id="memory_accessor_is_anonymous">
+    // console.memory is V8's own accessor, not a WebIDL attribute: both halves
+    // are anonymous and the setter takes no declared argument. Blink's own
+    // attributes keep the "get X"/"set X" naming -- performance.memory, which
+    // hands back the very same MemoryInfo, is named (all measured).
+    const d = Object.getOwnPropertyDescriptor(console, 'memory');
+    testing.expectEqual('', d.get.name);
+    testing.expectEqual(0, d.get.length);
+    testing.expectEqual('', d.set.name);
+    testing.expectEqual(0, d.set.length);
+    testing.expectEqual('get memory', Object.getOwnPropertyDescriptor(Performance.prototype, 'memory').get.name);
+    // The setter is a silent no-op, so console.memory survives assignment.
+    console.memory = 5;
+    testing.expectEqual('object', typeof console.memory);
+</script>

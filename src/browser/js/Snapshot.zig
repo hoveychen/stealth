@@ -1122,20 +1122,25 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
         .callback = value.getter,
         .signature = getter_signature,
     }).?;
-    // WebIDL: getter function's .name should be "get X"
-    const getter_name_str = "get " ++ name;
-    const getter_name_v8 = v8.v8__String__NewFromUtf8(isolate, getter_name_str.ptr, v8.kNormal, @intCast(getter_name_str.len));
-    v8.v8__FunctionTemplate__SetClassName(getter_callback, getter_name_v8);
+    // WebIDL: getter function's .name should be "get X". An anonymous accessor
+    // (console.memory) keeps v8's default empty name instead.
+    if (!value.anonymous) {
+        const getter_name_str = "get " ++ name;
+        const getter_name_v8 = v8.v8__String__NewFromUtf8(isolate, getter_name_str.ptr, v8.kNormal, @intCast(getter_name_str.len));
+        v8.v8__FunctionTemplate__SetClassName(getter_callback, getter_name_v8);
+    }
 
     const setter_callback = if (value.setter) |setter| blk: {
         const cb = v8.v8__FunctionTemplate__New__Config(isolate, &.{
             .callback = setter,
             .signature = getter_signature,
-            .length = 1,
+            .length = if (value.anonymous) 0 else 1,
         }).?;
-        const setter_name_str = "set " ++ name;
-        const setter_name_v8 = v8.v8__String__NewFromUtf8(isolate, setter_name_str.ptr, v8.kNormal, @intCast(setter_name_str.len));
-        v8.v8__FunctionTemplate__SetClassName(cb, setter_name_v8);
+        if (!value.anonymous) {
+            const setter_name_str = "set " ++ name;
+            const setter_name_v8 = v8.v8__String__NewFromUtf8(isolate, setter_name_str.ptr, v8.kNormal, @intCast(setter_name_str.len));
+            v8.v8__FunctionTemplate__SetClassName(cb, setter_name_v8);
+        }
         break :blk cb;
     } else null;
 

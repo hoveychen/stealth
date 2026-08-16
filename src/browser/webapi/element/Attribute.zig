@@ -296,8 +296,11 @@ pub const List = struct {
         return existing_attribute;
     }
 
-    // called form our parser, names already lower-cased
-    pub fn putNew(self: *List, name: []const u8, value: []const u8, frame: *Frame) !void {
+    // called form our parser, names already lower-cased. Unlike put(), this
+    // doesn't run attribute-change reactions -- these are a node's initial
+    // attributes -- so an `on*` handler among them has to claim its spot in
+    // the listener list here.
+    pub fn putNew(self: *List, name: []const u8, value: []const u8, element: *Element, frame: *Frame) !void {
         if (try self.getEntry(.wrap(name), frame) != null) {
             // When parsing, if there are duplicate names, it isn't valid, and
             // the first is kept
@@ -315,6 +318,8 @@ pub const List = struct {
             try frame.dupeString(value),
         );
         self._len = len + 1;
+
+        element.ownerFrame(frame).parsedEventHandlerAttribute(element, name);
     }
 
     pub fn delete(self: *List, name: String, element: *Element, frame: *Frame) !void {

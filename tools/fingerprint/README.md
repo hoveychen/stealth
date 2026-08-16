@@ -1796,3 +1796,260 @@ ours go through the bridge's normal receiver unwrap, which does.
   on Chrome too (`'speaker' is not a valid enum value`, `Web NFC is not
   enabled`, …). Those are Chrome's own refusals for unsupported permission
   names, caught and expected by iphey — noise, not signal.
+
+## G8b: the console surface, closed
+
+G8 left two things open on `console`: the receiver check behind iphey's `i20`,
+and a member roster that matched neither Chrome's contents nor its order. Both
+are now closed, and every console probe (`probe-g8a` … `probe-g8f`) diffs clean
+against a headed Chrome 150 apart from live heap byte counts.
+
+### The receiver check
+
+Every member is now bound `.static`. That drops two things at once: v8's
+`Signature` on the method's `FunctionTemplate` (which is what actually produced
+`Illegal invocation`, before our callback ever ran) and the bridge's
+`TaggedOpaque.fromJS` unwrap of `this`. The five members that really do need
+state — `count`, `countReset`, `time`, `timeLog`, `timeEnd` — reach the realm's
+`Console` through `exec.js.global` instead of through `self` (`Console.realm`).
+
+**iphey's `i20` is gone**: re-running `run-iphey.mjs` against the patched binary
+leaves exactly one alert, the already-known `i19`.
+
+### The member table
+
+Chrome 150, `Object.getOwnPropertyNames(console)` — 25 members, in an order that
+is neither alphabetical nor the Console Standard's IDL order, so it can only be
+copied:
+
+```
+debug, error, info, log, warn, dir, dirxml, table, trace, group,
+groupCollapsed, groupEnd, clear, count, countReset, assert, profile,
+profileEnd, time, timeLog, timeEnd, timeStamp, context, createTask, memory
+```
+
+We were at 18 with `exception` — which Chrome does not have — in the set.
+`memory` is the 25th: G8's count of 24 came from a probe that filtered to
+`typeof === 'function'`, and `memory` is an accessor.
+
+Every function reports `length` 0, `context` excepted (1). A variadic argument
+contributes nothing to `length`, and every console operation but `context` is
+variadic — including `assert`, whose IDL declares a required `condition`.
+
+### What the new members actually do (measured, not guessed)
+
+| member | Chrome's behaviour |
+|---|---|
+| `dir`, `dirxml` | log and return undefined; the interactive tree is devtools-only |
+| `profile`, `profileEnd`, `timeStamp` | return undefined with or without an argument |
+| `context(name)` | a **fresh** plain object (`[object Object]`, `Object.prototype` proto) carrying its own 22 logging operations, each writable/enumerable/configurable with `length` 1. Note `dirXml` — capitalised differently there than on `console` itself. `console.context()` with no argument works too |
+| `createTask(name)` | a plain object with one own `run` (`length` 0) that invokes its callback and returns the result. `run()` with no function throws `Error: First argument must be a function.` |
+| `memory` | the same `MemoryInfo` `performance.memory` hands out — the two share a prototype — fresh per read |
+
+Two traps worth keeping:
+
+- **`createTask` runs no ToString on its name.** `123`, `null`, `true`,
+  `new String('t')` and `{toString: () => 't'}` are all rejected with the same
+  plain `Error: First argument must be a non-empty string.` (`probe-g8f`).
+  Taking a `?[]const u8` parameter would have coerced them and answered a task
+  where Chrome answers an error — and iphey's devtools probes pass objects.
+- **Both errors are a plain `Error`, not a `TypeError`.**
+
+### `console.memory` is not a WebIDL attribute
+
+Blink names every WebIDL attribute's accessor pair `get X` / `set X`, and we
+match that: `Navigator.prototype.userAgent`, `Document.prototype.title` and
+`performance.memory` all report `"get …"` on both engines. `console.memory` is
+V8's own accessor instead, and both halves of it are anonymous with a
+zero-length setter. That is what the new `anonymous` option on
+`bridge.accessor` is for; `console.memory` is its only user.
+
+The setter is a silent no-op on Chrome — `console.memory = 5` leaves
+`typeof console.memory === 'object'` — so ours ignores its argument too.
+
+### Still open on iphey
+
+`i19: TypeError: Cannot set properties of undefined (setting 'position')`,
+thrown in iphey's own `T2` (`index.js:63:126758`). Unattributed; it is the only
+alert left.
+
+## G9: where an `on*` handler sits in the listener order
+
+Per DOM, an event handler *is* an event listener. It joins the target's
+listener list the moment the property (or content attribute) is first set, and
+it runs from that place: re-assigning the property swaps the function without
+moving the listener, assigning `null` removes it, and assigning again appends at
+the end. We kept handlers in a side table (`Frame._event_target_attr_listeners`)
+and ran them ahead of the list at all three dispatch points, so a handler always
+fired first.
+
+Measured with `probe-g9` on a headed Chrome 150 versus our pre-fix binary — five
+of nine cases were wrong:
+
+| case | Chrome | ours (before) |
+|---|---|---|
+| `addEventListener` → `onclick` → `addEventListener` | `al1,on,al2` | `on,al1,al2` |
+| `onclick` → `addEventListener` | `on,al1` | same |
+| re-assign `onclick` without clearing | `al1,on-second,al2` | `on-second,al1,al2` |
+| `onclick = null`, then assign again | `al1,al2,on-second` | `on-second,al1,al2` |
+| parsed `onclick=` before `addEventListener` | `on,al1` | same |
+| `setAttribute('onclick')` after `addEventListener` | `al1,on,al2` | `on,al1,al2` |
+| `window.ong9evt` (not a handler name) | `al1,al2` | same |
+| same three steps on `document` | `al1,on,al2` | `on,al1,al2` |
+| ancestor capture listener vs handler at target | `parent-capture,child-on,child-al,parent-bubble` | same |
+
+### The fix
+
+`EventManagerBase.registerHandler` appends a real `Listener` whose `Function` is
+just the handler *kind*; the function is resolved from the side table (or
+compiled from the content attribute) when the listener runs. That is what buys
+the re-assignment semantics for free — the table entry changes, the list node
+does not — and it deletes the three special-cased inline-handler branches.
+
+The content attribute was the one part that could not stay lazy. We compiled
+`onclick="…"` at first dispatch and only then recorded it, which is far too late
+to decide where it sits; the spot is now claimed when the attribute is set —
+`Frame.attributeChange` / `attributeRemove` for scripted changes, and
+`Attribute.List.putNew` for the attributes the parser puts on a new element,
+which fires no change reactions.
+
+`Frame.setEventHandler` is the single entry point, so Element, Document,
+ShadowRoot, EditContext, MediaQueryList and the Window's ~120 store-backed
+handler properties all get the ordering. After the change `probe-g9` diffs clean
+against Chrome, as does `probe-g9b`, which pins the parts the first probe left
+untested: `stopImmediatePropagation` from a handler, `stopPropagation` from one
+(it does *not* skip the target's remaining listeners — we used to, and that is
+fixed by the same move), `return false` cancelling, `removeEventListener` being
+unable to take a handler away, the same function registered both ways running
+twice, a content attribute overriding a property without moving it,
+`removeAttribute` clearing the handler, re-`setAttribute` recompiling, and a
+handler assigned mid-dispatch not running for that event.
+
+### Still open: the handlers that live in a dedicated field
+
+Only the side-table-backed handlers moved. Anything whose handler is a field on
+its owner still runs ahead of the listener list, because nothing records *when*
+that field was first written. Measured with `probe-g9c` (`al1,on,al2` is
+Chrome's answer in every row):
+
+| target | ours |
+|---|---|
+| `window.onscroll` / `onblur` / `onfocus` / `onresize` (4 of the Window's 6 dedicated slots) | `on,al1,al2` |
+| `XMLHttpRequest.onprogress` | `on,al1,al2` |
+| `AbortSignal.onabort` | `on,al1,al2` |
+| `FileReader.onload` | `al1,al2` |
+| `BroadcastChannel.onmessage` | `al1,al2` |
+
+The last two are a second, older gap: their handler field is only consulted on
+the object's own internal dispatch path, so a synthetic `dispatchEvent` skips it
+entirely. Closing this row of the table means giving ~30 classes
+(`XMLHttpRequestEventTarget`, `WebSocket`, `EventSource`, `FileReader`, the IDB
+trio, `Worker`, `MessagePort`, `BroadcastChannel`, …) the same treatment, plus
+untangling the Window's six slots from the explicit `dispatchDirect` calls that
+pass them by hand (page load, pageshow, hashchange, popstate).
+
+## G10: can an OfflineAudioContext render be aligned with Chrome sample for sample?
+
+**No — not as a computation.** The render is a function of the host, by
+construction, so there is no single set of samples that "Chrome" produces.
+Below is what we read in Blink's source (fetched from Chromium main this
+session) and what we measured on a headed Chrome 150.
+
+### What a detector actually reads
+
+The canonical audio fingerprint — fingerprintjs and every clone — is one graph:
+a triangle `OscillatorNode` at 10 kHz through a `DynamicsCompressorNode`
+(threshold -50, knee 40, ratio 12, attack 0, release 0.25) into a
+`OfflineAudioContext(1, 5000, 44100)` destination, then the sum of
+`|sample|` over frames 4500..4999, read at full double precision.
+
+Measured here (`probe-g10`, macOS/arm64, Chrome 150):
+
+| quantity | value |
+|---|---|
+| canonical sum | `124.04347624466754` |
+| same graph rendered twice in one page | identical |
+| headed vs headless | identical |
+| oscillator alone, no compressor | `258.09813959815074` |
+| built-in 440 Hz "sine" vs closed-form `sin()` | max deviation `1.18e-6` |
+
+The last row is the important one: the built-in sine is *not* `sin()`. It is a
+band-limited wavetable, and reproducing it means reproducing how that table was
+built, not what it approximates. Head/headless parity says the number is a pure
+function of the build and the CPU — which is exactly what makes it a
+fingerprint.
+
+### Why the number is host-dependent (read in source, not inferred)
+
+**The wavetable.** `PeriodicWaveImpl::PeriodicWaveSize()` is 4096 at 44.1 kHz
+and `NumberOfRanges()` is `0.5 + 3*log2(4096)` = 36. `CreateBandLimitedTables`
+runs **36 inverse FFTs of size 4096**, one per pitch range, culling partials
+per range, and normalizes every table by `1/peak` of range 0.
+`FFTFrame::DoInverseFFT` is backed by **Accelerate/vDSP on macOS and PFFFT
+everywhere else** (`#if BUILDFLAG(IS_MAC)` in `platform/audio/fft_frame.h`).
+Two different FFT implementations do not agree in the last bits, so the tables
+themselves differ by platform before a single sample is rendered.
+
+**The interpolation.** `modules/webaudio/BUILD.gn` adds
+`cpu/x86/oscillator_kernel_sse2.cc` on x86 and `cpu/arm/oscillator_kernel_neon.cc`
+on NEON; `oscillator_handler.cc` guards its generic versions with
+`#if !(ARCH_CPU_X86_FAMILY || CPU_ARM_NEON)`. Same for `vector_math`, which
+picks mac/neon/x86/scalar and does a **runtime** AVX check on non-Mac x86. The
+floating-point operation order therefore depends on the arch and, on x86, on
+the CPU the page happens to be running on.
+
+**The compressor.** `DynamicsCompressor::Process` is careful in three places —
+`fdlibm::powf` twice and `fdlibm::asinf` once, which are Chromium's own
+deterministic implementations — and not careful anywhere else:
+
+- `audio_utilities::DecibelsToLinear` / `LinearToDecibels` call **unqualified**
+  `powf` / `log10f`. That file includes `third_party/fdlibm/ieee754.h` but does
+  not use it here, so these are the platform's libm. Both are called *per
+  sample* in the inner loop.
+- The gain warp in the inner loop is `sin()` on a `double` — platform libm.
+- `KneeCurve` uses `exp()` on a `double` — platform libm.
+- `DenormalDisabler::FlushDenormalFloatToZero` is applied to the two state
+  variables every 32 frames, so the FPU's denormal mode is part of the answer.
+
+### What matching one chosen platform would cost
+
+Picking a single target (say Linux/x86-64 with a fixed SIMD level) makes the
+question well posed, and it is still expensive:
+
+1. A bit-exact port of that platform's FFT. PFFFT is portable C and small, so a
+   non-Mac target is at least *possible*; **vDSP is closed source, so a macOS
+   target is not**.
+2. A bit-exact port of that arch's oscillator interpolation kernel, matching
+   operation order, not just the formula.
+3. Bit-exact `powf`, `log10f`, `exp` and `sin` for that platform's libm.
+   Chromium's own fdlibm covers the first two shapes but is *not* what
+   `audio_utilities` calls, so using fdlibm gives a different answer than
+   Chrome on that same platform.
+4. The graph plumbing around it: 128-frame render quanta, channel up/down mix,
+   the 6 ms pre-delay ring buffer, AudioParam automation.
+
+And the tolerance is unforgiving. The detector reads the sum of 500 `f32`
+samples printed as a double: one 1-ULP difference anywhere in the tail
+(~6e-8) changes the printed string, so "close" is worth exactly as much as
+"silent".
+
+### The options, and which one is worth it
+
+- **(a) Keep rendering silence** (what we do today). Correct for an empty
+  graph — Chrome renders zeros there too, measured in win18/win19 — and a
+  constant for every graph with a source in it. Cheap; the tell is that the
+  number never moves.
+- **(b) Replay a captured buffer.** Record Chrome's 5000 samples for the
+  canonical graph on one chosen platform and return them when the graph matches
+  that shape. Exactly right for the one graph detectors actually use, wrong for
+  anything else, and it pins us to whatever platform the rest of the fingerprint
+  claims to be.
+- **(c) Implement the graph honestly** with a ported PFFFT and fdlibm
+  throughout. Gives audio that is non-constant and moves with the parameters,
+  which defeats a detector that only checks "did it change", but matches no real
+  Chrome's number, which defeats nothing that compares hashes.
+
+**Recommendation: (b) if the audio hash is worth spending on, otherwise stay on
+(a).** (c) is the most work for the least benefit against a hash-comparing
+detector; it only pays off against a detector that probes the graph rather than
+hashing one fixed render.

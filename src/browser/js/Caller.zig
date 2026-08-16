@@ -832,6 +832,12 @@ pub const Function = struct {
         // window.webkitURL both come back with enumerable: false (measured on a
         // headed Chrome 150).
         enumerable: bool = true,
+        // Accessors only. Blink names every WebIDL attribute's accessor pair
+        // "get X"/"set X" (measured: Navigator.prototype.userAgent, Document
+        // .prototype.title, performance.memory), but console.memory is V8's own
+        // accessor rather than a WebIDL attribute and both halves of it are
+        // anonymous, with a zero-length setter.
+        anonymous: bool = false,
 
         pub const Exposed = enum { both, window, worker };
 

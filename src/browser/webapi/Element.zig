@@ -951,7 +951,14 @@ pub fn getAttributeFunction(
         return null;
     };
 
-    try self.setAttributeListener(listener_type, function, frame);
+    // Cache the compiled expression, but don't go through setAttributeListener:
+    // this runs from inside a dispatch, where the handler's listener is already
+    // in the list (it was registered when the attribute was set) and touching
+    // the list mid-iteration would be a mistake.
+    try frame._event_target_attr_listeners.put(frame.arena, .{
+        .target = self.asEventTarget(),
+        .handler = listener_type,
+    }, function);
     return function;
 }
 
@@ -965,18 +972,7 @@ pub fn setAttributeListener(
     listener_callback: ?js.Function.Global,
     frame: *Frame,
 ) !void {
-    if (listener_callback) |cb| {
-        try frame._event_target_attr_listeners.put(frame.arena, .{
-            .target = self.asEventTarget(),
-            .handler = listener_type,
-        }, cb);
-        return;
-    }
-
-    _ = frame._event_target_attr_listeners.remove(.{
-        .target = self.asEventTarget(),
-        .handler = listener_type,
-    });
+    return frame.setEventHandler(self.asEventTarget(), listener_type, listener_callback);
 }
 
 pub fn getOrCreateStyle(self: *Element, frame: *Frame) !*CSSStyleDeclaration {
