@@ -545,6 +545,15 @@ pub fn element(self: *Factory, child: anytype) !*@TypeOf(child) {
     ).create(allocator, child);
 }
 
+// An element in a namespace with no interface of its own: here `Element` is
+// the leaf rather than a base (see `Element.Type.plain`).
+pub fn plainElement(self: *Factory, child: Element) !*Element {
+    const allocator = self._slab.allocator();
+    return try AutoPrototypeChain(
+        &.{ EventTarget, Node, Element },
+    ).create(allocator, child);
+}
+
 pub fn htmlElement(self: *Factory, child: anytype) !*@TypeOf(child) {
     const allocator = self._slab.allocator();
     return try AutoPrototypeChain(
