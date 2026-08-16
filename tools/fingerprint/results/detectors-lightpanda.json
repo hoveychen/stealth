@@ -6,7 +6,7 @@
     "Browser": "Lightpanda/1.0",
     "Protocol-Version": "1.3",
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-    "Lightpanda-Version": "1.0.0-dev.210+b766ef9a6",
+    "Lightpanda-Version": "1.0.0-dev.211+c82b7dd77",
     "webSocketDebuggerUrl": "ws://127.0.0.1:9224/"
   },
   "sites": [
@@ -24,7 +24,7 @@
       "verdictWords": 2,
       "snippet": "Intoli.com tests + additions Test Name Result User Agent (Old) Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 WebDriver (New) missing (passed) WebDri",
       "navigated": true,
-      "ms": 7913
+      "ms": 8105
     },
     {
       "name": "creepjs",
@@ -32,15 +32,15 @@
       "title": "CreepJS",
       "href": "https://abrahamjuliot.github.io/creepjs/",
       "ready": "complete",
-      "nodes": 249,
-      "textLength": 1347,
+      "nodes": 3607,
+      "textLength": 87879,
       "innerWidth": 1920,
       "innerHeight": 1080,
       "dpr": 1,
-      "verdictWords": 3,
-      "snippet": "FP ID: Computing... Fuzzy: 0000000000000000000000000000000000000000000000000000000000000000 0 ms WebRTC host connection: foundation/ip: sdp capabilities: stun connection: devices (0): Timezone Intl Headless chromium: 0% ",
+      "verdictWords": 0,
+      "snippet": "FP ID: 8d3ba795b426b73ab69c93102d021aedf3c70be9407abef687c09ec06f483ca0 Fuzzy: ef117c997b22118fb63954f1425e121e7fa5207cffc57fff2e2a000000000000 401.75 ms WebRTC714b1607 host connection: candidate:475955813 1 udp 21139371",
       "navigated": true,
-      "ms": 22511
+      "ms": 22409
     },
     {
       "name": "areyouheadless",
@@ -56,7 +56,7 @@
       "verdictWords": 0,
       "snippet": "502 Bad Gateway nginx/1.18.0 (Ubuntu)",
       "navigated": true,
-      "ms": 8565
+      "ms": 8644
     },
     {
       "name": "fpscanner",
@@ -72,7 +72,7 @@
       "verdictWords": 0,
       "snippet": "502 Bad Gateway nginx/1.18.0 (Ubuntu)",
       "navigated": true,
-      "ms": 8216
+      "ms": 8301
     },
     {
       "name": "rebrowser",
@@ -86,9 +86,9 @@
       "innerHeight": 1080,
       "dpr": 1,
       "verdictWords": 6,
-      "snippet": "🕵️ rebrowser-bot-detector Modern tests to detect automated browser behavior. See github repo for more details. How to properly run the tests? Test name Time since load Notes⚪️ dummyFn 0.135 ms Call window.dummyFn() to t",
+      "snippet": "🕵️ rebrowser-bot-detector Modern tests to detect automated browser behavior. See github repo for more details. How to properly run the tests? Test name Time since load Notes⚪️ dummyFn 0.32 ms Call window.dummyFn() to te",
       "navigated": true,
-      "ms": 12311
+      "ms": 12610
     },
     {
       "name": "deviceinfo",
@@ -104,7 +104,7 @@
       "verdictWords": 25,
       "snippet": "Search proxy IP Proxy Detection Database Pricing My Device Fingerprinting bot test Behavioral bot test My fingerprint APIs My IP address My HTTP headers List of user agents Email domain verification Tor IP addresses Disp",
       "navigated": true,
-      "ms": 14129
+      "ms": 14701
     },
     {
       "name": "browserleaks-js",
@@ -113,14 +113,14 @@
       "href": "https://browserleaks.com/javascript",
       "ready": "complete",
       "nodes": 1184,
-      "textLength": 9964,
+      "textLength": 9962,
       "innerWidth": 1920,
       "innerHeight": 1080,
       "dpr": 1,
       "verdictWords": 1,
       "snippet": "Home Page IP Address JavaScript WebRTC Leak Test Canvas Fingerprint WebGL Report Font Fingerprinting Geolocation API Features Detection TLS Client Test Content Filters More Tools Settings JavaScript Browser Information w",
       "navigated": true,
-      "ms": 10625
+      "ms": 10792
     },
     {
       "name": "browserleaks-tls",
@@ -136,7 +136,7 @@
       "verdictWords": 0,
       "snippet": "{ \"user_agent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36\", \"ja4\": \"t13d1516h2_8daaf6152771_806a8c22fdea\", \"ja4_r\": \"t13d1516h2_002f,0035,009c,",
       "navigated": true,
-      "ms": 8305
+      "ms": 8355
     },
     {
       "name": "amiunique",
@@ -152,7 +152,7 @@
       "verdictWords": 0,
       "snippet": "My Fingerprint My Extension Global Statistics Survey Blog Useful Links Language See My History See Timeline Global Statistics Privacy Policy Privacy Tools Useful Links Survey Blog Join Us About Install AmIUnique App Be o",
       "navigated": true,
-      "ms": 19615
+      "ms": 19625
     },
     {
       "name": "iphey",
@@ -161,14 +161,14 @@
       "href": "https://iphey.com/",
       "ready": "complete",
       "nodes": 485,
-      "textLength": 7127,
+      "textLength": 7139,
       "innerWidth": 1920,
       "innerHeight": 1080,
       "dpr": 1,
       "verdictWords": 4,
       "snippet": "Blog Your Digital Identity LooksUnreliable See what your browser reveals about you. Run a real-time browser fingerprinting test to detect tracking risks and hidden leaks. Learn more Browser Chrome Location Click here to ",
       "navigated": true,
-      "ms": 23939
+      "ms": 23134
     },
     {
       "name": "pixelscan",
@@ -184,7 +184,7 @@
       "verdictWords": 4,
       "snippet": "Products Resources Special Offers Company Fingerprint Check Verify your browser fingerprint Checkers IP Address Check See your IP details IP Blacklist Check Reviewing blacklist agent Bot Verification Verify that a user i",
       "navigated": true,
-      "ms": 19436
+      "ms": 19590
     },
     {
       "name": "browserscan",
@@ -200,46 +200,46 @@
       "verdictWords": 4,
       "snippet": "blog Antidetect Browser Utilities EN Sign In Best BrowserScan Fingerprint Detection Tool - Improve your online privacy security|Enhance your online privacy security with the best BrowserScan fingerprint checking tool. Pr",
       "navigated": true,
-      "ms": 18979
+      "ms": 19234
     }
   ],
   "engineLog": [
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+168.96s]",
-    "      source = fetch",
-    "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
-    "      status = 200",
-    "      len = 41",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+168.963s]",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+169.821s]",
     "      source = fetch",
     "      url = https://www.browserscan.net/api/dc1d71bb",
     "      status = 407",
     "      len = 107",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+168.99s]",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+169.84s]",
     "      source = fetch",
     "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
     "      status = 200",
     "      len = 41",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+169.214s]",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+169.848s]",
     "      source = fetch",
     "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
     "      status = 200",
     "      len = 41",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+171.915s]",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+170.066s]",
+    "      source = fetch",
+    "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
+    "      status = 200",
+    "      len = 41",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+172.837s]",
+    "      source = fetch",
+    "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
+    "      status = 200",
+    "      len = 41",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+172.84s]",
     "      source = fetch",
     "      url = https://www.browserscan.net/api/dc1d71bb",
     "      status = 407",
     "      len = 107",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+171.928s]",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+172.866s]",
     "      source = fetch",
     "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
     "      status = 200",
     "      len = 41",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+171.944s]",
-    "      source = fetch",
-    "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
-    "      status = 200",
-    "      len = 41",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+172.147s]",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+173.092s]",
     "      source = fetch",
     "      url = https://sentry.adspower.com/api/16/envelope/?sentry_version=7&sentry_key=d73c552868a1b847e01b700daad218d1&sentry_client=sentry.javascript.nuxt%2F9.29.0",
     "      status = 200",
