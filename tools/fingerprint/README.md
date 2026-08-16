@@ -1947,3 +1947,109 @@ entirely. Closing this row of the table means giving ~30 classes
 trio, `Worker`, `MessagePort`, `BroadcastChannel`, …) the same treatment, plus
 untangling the Window's six slots from the explicit `dispatchDirect` calls that
 pass them by hand (page load, pageshow, hashchange, popstate).
+
+## G10: can an OfflineAudioContext render be aligned with Chrome sample for sample?
+
+**No — not as a computation.** The render is a function of the host, by
+construction, so there is no single set of samples that "Chrome" produces.
+Below is what we read in Blink's source (fetched from Chromium main this
+session) and what we measured on a headed Chrome 150.
+
+### What a detector actually reads
+
+The canonical audio fingerprint — fingerprintjs and every clone — is one graph:
+a triangle `OscillatorNode` at 10 kHz through a `DynamicsCompressorNode`
+(threshold -50, knee 40, ratio 12, attack 0, release 0.25) into a
+`OfflineAudioContext(1, 5000, 44100)` destination, then the sum of
+`|sample|` over frames 4500..4999, read at full double precision.
+
+Measured here (`probe-g10`, macOS/arm64, Chrome 150):
+
+| quantity | value |
+|---|---|
+| canonical sum | `124.04347624466754` |
+| same graph rendered twice in one page | identical |
+| headed vs headless | identical |
+| oscillator alone, no compressor | `258.09813959815074` |
+| built-in 440 Hz "sine" vs closed-form `sin()` | max deviation `1.18e-6` |
+
+The last row is the important one: the built-in sine is *not* `sin()`. It is a
+band-limited wavetable, and reproducing it means reproducing how that table was
+built, not what it approximates. Head/headless parity says the number is a pure
+function of the build and the CPU — which is exactly what makes it a
+fingerprint.
+
+### Why the number is host-dependent (read in source, not inferred)
+
+**The wavetable.** `PeriodicWaveImpl::PeriodicWaveSize()` is 4096 at 44.1 kHz
+and `NumberOfRanges()` is `0.5 + 3*log2(4096)` = 36. `CreateBandLimitedTables`
+runs **36 inverse FFTs of size 4096**, one per pitch range, culling partials
+per range, and normalizes every table by `1/peak` of range 0.
+`FFTFrame::DoInverseFFT` is backed by **Accelerate/vDSP on macOS and PFFFT
+everywhere else** (`#if BUILDFLAG(IS_MAC)` in `platform/audio/fft_frame.h`).
+Two different FFT implementations do not agree in the last bits, so the tables
+themselves differ by platform before a single sample is rendered.
+
+**The interpolation.** `modules/webaudio/BUILD.gn` adds
+`cpu/x86/oscillator_kernel_sse2.cc` on x86 and `cpu/arm/oscillator_kernel_neon.cc`
+on NEON; `oscillator_handler.cc` guards its generic versions with
+`#if !(ARCH_CPU_X86_FAMILY || CPU_ARM_NEON)`. Same for `vector_math`, which
+picks mac/neon/x86/scalar and does a **runtime** AVX check on non-Mac x86. The
+floating-point operation order therefore depends on the arch and, on x86, on
+the CPU the page happens to be running on.
+
+**The compressor.** `DynamicsCompressor::Process` is careful in three places —
+`fdlibm::powf` twice and `fdlibm::asinf` once, which are Chromium's own
+deterministic implementations — and not careful anywhere else:
+
+- `audio_utilities::DecibelsToLinear` / `LinearToDecibels` call **unqualified**
+  `powf` / `log10f`. That file includes `third_party/fdlibm/ieee754.h` but does
+  not use it here, so these are the platform's libm. Both are called *per
+  sample* in the inner loop.
+- The gain warp in the inner loop is `sin()` on a `double` — platform libm.
+- `KneeCurve` uses `exp()` on a `double` — platform libm.
+- `DenormalDisabler::FlushDenormalFloatToZero` is applied to the two state
+  variables every 32 frames, so the FPU's denormal mode is part of the answer.
+
+### What matching one chosen platform would cost
+
+Picking a single target (say Linux/x86-64 with a fixed SIMD level) makes the
+question well posed, and it is still expensive:
+
+1. A bit-exact port of that platform's FFT. PFFFT is portable C and small, so a
+   non-Mac target is at least *possible*; **vDSP is closed source, so a macOS
+   target is not**.
+2. A bit-exact port of that arch's oscillator interpolation kernel, matching
+   operation order, not just the formula.
+3. Bit-exact `powf`, `log10f`, `exp` and `sin` for that platform's libm.
+   Chromium's own fdlibm covers the first two shapes but is *not* what
+   `audio_utilities` calls, so using fdlibm gives a different answer than
+   Chrome on that same platform.
+4. The graph plumbing around it: 128-frame render quanta, channel up/down mix,
+   the 6 ms pre-delay ring buffer, AudioParam automation.
+
+And the tolerance is unforgiving. The detector reads the sum of 500 `f32`
+samples printed as a double: one 1-ULP difference anywhere in the tail
+(~6e-8) changes the printed string, so "close" is worth exactly as much as
+"silent".
+
+### The options, and which one is worth it
+
+- **(a) Keep rendering silence** (what we do today). Correct for an empty
+  graph — Chrome renders zeros there too, measured in win18/win19 — and a
+  constant for every graph with a source in it. Cheap; the tell is that the
+  number never moves.
+- **(b) Replay a captured buffer.** Record Chrome's 5000 samples for the
+  canonical graph on one chosen platform and return them when the graph matches
+  that shape. Exactly right for the one graph detectors actually use, wrong for
+  anything else, and it pins us to whatever platform the rest of the fingerprint
+  claims to be.
+- **(c) Implement the graph honestly** with a ported PFFFT and fdlibm
+  throughout. Gives audio that is non-constant and moves with the parameters,
+  which defeats a detector that only checks "did it change", but matches no real
+  Chrome's number, which defeats nothing that compares hashes.
+
+**Recommendation: (b) if the audio hash is worth spending on, otherwise stay on
+(a).** (c) is the most work for the least benefit against a hash-comparing
+detector; it only pays off against a detector that probes the graph rather than
+hashing one fixed render.
