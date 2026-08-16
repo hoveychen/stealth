@@ -2285,3 +2285,78 @@ foreign element ASCII-case-insensitively (`querySelector('Thing')` and
 plain element or for an SVG element with a mixed-case tag such as `clipPath` —
 because `matchesPart` compares a lowercased selector against a case-preserved
 tag name. Unchanged by this task, in either direction.
+
+## G12: CSS custom properties, all three layers
+
+CreepJS's `@media` row reads a `--custom-property` back out of
+`getComputedStyle` after setting it inside a media block. Ours answered `""`,
+and `probe-g12.js` (23 observations against headed Chrome 150) found the gap
+starts one layer earlier than the plan assumed and runs two layers deeper.
+
+### Layer 1 — the style attribute dropped them at the tokenizer
+
+`el.setAttribute('style', '--a: 1')` left `el.style` empty, `el.style.length`
+zero, and a later `setProperty` rewrote the attribute with only the new value.
+The imperative path (`setProperty('--a', '1')`) worked, which is why the
+existing Typed OM coverage never caught it: it only ever set custom properties
+that way.
+
+`isIdentStart` rejected a second dash, so `--a` tokenised as a delim and the
+declaration was skipped as invalid. Per CSS Syntax §4.3.9 a second `-` ends the
+check on its own. Three measured Chrome behaviours came with the fix
+(`probe-g12b`):
+
+* names are case-sensitive — `--Case` and `--case` are two properties, and only
+  custom names escape the lowercasing every other property name gets;
+* values are stored verbatim minus the surrounding whitespace: `--c: 01.50`
+  stays `01.50` (no leading-zero normalisation), `--e: a  b   c` keeps its
+  inner runs, `1PX` keeps its case;
+* an empty value is a valid declaration for a custom property (`--d:;` is kept
+  and enumerated) where the same for a normal property is not.
+
+### Layer 2 — stylesheet rules never reached the cascade
+
+`StyleManager` keeps a fixed set of properties per rule — the visibility
+filter's four, plus font-size and font-family — because those are all the faux
+computed style ever answered. A custom property has no fixed name to pick from,
+so rules now carry every custom declaration they hold, and a computed read
+resolves one through the same cascade: importance over the style attribute,
+then specificity, then document order, then a walk to the parent, because
+custom properties inherit. Measured and pinned in
+`tests/css/custom_properties_cascade.html`: inline beats the sheet, `#id` beats
+`.class`, `!important` beats `#id`, a later rule of equal specificity wins, a
+matching `@media` block contributes and a non-matching one does not, `:root`
+reaches every element, and a detached element inherits nothing.
+
+### Layer 3 — var() substitution
+
+Substitution happens at computed-value time; the specified value keeps its
+`var()` text (`el.style.getPropertyValue('--x')` still reads `var(--y)`). What
+`probe-g12d` measured, and what `tests/css/custom_properties_var.html` now
+pins:
+
+| input | Chrome |
+|---|---|
+| `--with-var: var(--defined)` | `dv` (chains resolve) |
+| `--fallback-used: var(--nope, fb)` | `fb` |
+| `--fallback-unused: var(--defined, fb)` | `dv` |
+| `--empty: ;` then `var(--empty, fb)` | `""` — declared-empty suppresses the fallback |
+| `var(--nope, a, b)` | `a, b` — the fallback is everything after the first comma |
+| `var(--nope, var(--defined))` | `dv` |
+| `pre var(--defined) post` | `pre dv post` |
+| `--cycle-a: var(--cycle-b); --cycle-b: var(--cycle-a)` | `""` — invalid at computed-value time |
+
+### Where it landed
+
+`probe-g12` against headed Chrome 150: **20 of 23 observations identical**, from
+3 of 23 before. What is left:
+
+* `color: var(--never, rgb(1, 2, 3))` and `width: var(--never2, 42px)` declared
+  **in a stylesheet** still read the engine's defaults. Not a var() gap — the
+  same declaration inline resolves correctly — but the pre-existing one where
+  the faux computed style consults stylesheet rules for `display` and
+  `visibility` only. Closing it means a general cascade for arbitrary
+  properties, which is its own task.
+* The custom names a computed style enumerates now match Chrome's set exactly
+  (the same ten on the probe page); the order within that tail is Blink's
+  internal one and is not reproduced.
