@@ -97,6 +97,11 @@ pub const Namespace = enum(u8) {
 
     pub fn parse(namespace_: ?[]const u8) Namespace {
         const namespace = namespace_ orelse return .null;
+        // Chrome maps an empty namespace to a null one: the namespaceURI of
+        // `createElementNS('', 'x')` reads back as null, not "".
+        if (namespace.len == 0) {
+            return .null;
+        }
         if (namespace.len == "http://www.w3.org/1999/xhtml".len) {
             // Common case, avoid the string comparison. Recklessly
             @branchHint(.likely);
@@ -118,6 +123,12 @@ pub const Namespace = enum(u8) {
 _type: Type,
 _namespace: Namespace = .html,
 _attributes: Attribute.List = .{},
+// The tag name of a `.plain` element. Html, Svg and MathML each keep their own
+// copy on the subtype, which is where this would belong -- but a `.plain`
+// element has no subtype by construction: the JS bridge brands an element from
+// whatever the `_type` payload points at, and Chrome's chain for one of these
+// is exactly Element < Node < EventTarget, so the payload has to be `void`.
+_plain_tag_name: String = .empty,
 // In debug, set so that we can check that we have a proper contiguous block
 // of memory for the entire chain (and thus, simple pointer arithmetics will
 // work to resolve the proto).
@@ -129,6 +140,12 @@ pub const Type = union(enum) {
     // The whole MathML namespace is one interface, so there is nothing under
     // this the way there is under Html and Svg.
     mathml: *MathML,
+    // A namespace with no interface of its own -- null, XML, or anything
+    // unrecognised. Measured on Chrome 150: `createElementNS('urn:x', 'thing')`
+    // is `[object Element]` sitting straight on Element.prototype, with no
+    // style, no dataset and no constructor of its own. The payload is `void`
+    // rather than a pointer for exactly that reason (see `_plain_tag_name`).
+    plain: void,
 };
 
 pub fn is(self: *Element, comptime T: type) ?*T {
@@ -155,6 +172,8 @@ pub fn is(self: *Element, comptime T: type) ?*T {
                 return mathml;
             }
         },
+        // No subtype to hand back, by construction.
+        .plain => {},
     }
     return null;
 }
@@ -279,6 +298,7 @@ pub fn getTagNameLower(self: *const Element) []const u8 {
         .svg => |svg| return svg._tag_name.str(),
         // Case-preserving, like SVG: 'mSpace' stays 'mSpace'.
         .mathml => |mathml| return mathml._tag_name.str(),
+        .plain => return self._plain_tag_name.str(),
     }
 }
 
@@ -365,6 +385,9 @@ pub fn getTagNameSpec(self: *const Element, buf: []u8) []const u8 {
         },
         .svg => |svg| svg._tag_name.str(),
         .mathml => |mathml| mathml._tag_name.str(),
+        // Only the HTML namespace uppercases, and a plain element is never in
+        // it.
+        .plain => self._plain_tag_name.str(),
     };
 }
 
@@ -373,6 +396,7 @@ pub fn getTagNameDump(self: *const Element) []const u8 {
         .html => return self.getTagNameLower(),
         .svg => |svg| return svg._tag_name.str(),
         .mathml => |mathml| return mathml._tag_name.str(),
+        .plain => return self._plain_tag_name.str(),
     }
 }
 
@@ -2235,8 +2259,9 @@ pub fn getTag(self: *const Element) Tag {
         },
         .svg => |se| se.getTag(),
         // No MathML tag is in Element.Tag; tag-name matching falls back to
-        // _tag_name, the way it does for generic SVG elements.
-        .mathml => .unknown,
+        // _tag_name, the way it does for generic SVG elements. Same for a
+        // plain element, whose name is arbitrary by definition.
+        .mathml, .plain => .unknown,
     };
 }
 
@@ -2697,7 +2722,9 @@ pub const Build = struct {
     // implement. This could be on the Element itself.
     pub fn call(self: *const Element, comptime func_name: []const u8, args: anytype) !bool {
         inline for (@typeInfo(Element.Type).@"union".fields) |f| {
-            if (@field(Element.Type, f.name) == self._type) {
+            // `.plain` carries no subtype to dispatch to; it falls through to
+            // Element.Build below like any type that implements nothing.
+            if (f.type != void and @field(Element.Type, f.name) == self._type) {
                 // The inner type implements this function. Call it and we're done.
                 const S = reflect.Struct(f.type);
                 if (@hasDecl(S, "Build")) {

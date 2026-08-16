@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<head>
+  <title>createElementNS outside the three known namespaces</title>
+  <script src="../testing.js"></script>
+</head>
+
+<script id=plain_element>
+  {
+    // Measured on Chrome 150 (probe-g24): only the XHTML namespace produces an
+    // HTML element. Every other namespace -- null, empty, unknown, XML --
+    // produces a bare Element: no interface of its own, no style, no dataset,
+    // and a prototype chain of exactly Element < Node < EventTarget.
+    for (const ns of [null, '', 'urn:x', 'http://www.w3.org/XML/1998/namespace']) {
+      const el = document.createElementNS(ns, 'thing');
+      testing.expectEqual('[object Element]', Object.prototype.toString.call(el));
+      testing.expectEqual('Element', el.constructor.name);
+      testing.expectTrue(Object.getPrototypeOf(el) === Element.prototype);
+      testing.expectTrue(el instanceof Element);
+      testing.expectFalse(el instanceof HTMLElement);
+      testing.expectFalse(el instanceof SVGElement);
+      testing.expectEqual(undefined, el.style);
+      testing.expectEqual(undefined, el.dataset);
+      testing.expectEqual('thing', el.tagName);
+      testing.expectEqual('thing', el.localName);
+    }
+  }
+</script>
+
+<script id=namespace_uri>
+  {
+    // An empty namespace is a null namespace.
+    testing.expectEqual(null, document.createElementNS(null, 'thing').namespaceURI);
+    testing.expectEqual(null, document.createElementNS('', 'thing').namespaceURI);
+    testing.expectEqual('urn:x', document.createElementNS('urn:x', 'thing').namespaceURI);
+    testing.expectEqual('http://www.w3.org/XML/1998/namespace',
+      document.createElementNS('http://www.w3.org/XML/1998/namespace', 'thing').namespaceURI);
+  }
+</script>
+
+<script id=case_and_prefix>
+  {
+    // No uppercasing outside the HTML namespace, and a prefix splits off the
+    // local name the same way it does for a known namespace.
+    const mixed = document.createElementNS('urn:x', 'ThInG');
+    testing.expectEqual('ThInG', mixed.tagName);
+    testing.expectEqual('ThInG', mixed.localName);
+
+    const prefixed = document.createElementNS('urn:x', 'p:thing');
+    testing.expectEqual('p:thing', prefixed.tagName);
+    testing.expectEqual('thing', prefixed.localName);
+    testing.expectEqual('p', prefixed.prefix);
+
+    // A tag that would be an HTML element in the HTML namespace is still a
+    // bare Element outside it.
+    const div = document.createElementNS('urn:x', 'div');
+    testing.expectEqual('[object Element]', Object.prototype.toString.call(div));
+    testing.expectEqual('div', div.tagName);
+    testing.expectEqual(undefined, div.style);
+  }
+</script>
+
+<script id=html_namespace_unaffected>
+  {
+    const XHTML = 'http://www.w3.org/1999/xhtml';
+    for (const el of [document.createElementNS(XHTML, 'thing'), document.createElement('nope')]) {
+      testing.expectEqual('[object HTMLUnknownElement]', Object.prototype.toString.call(el));
+      testing.expectEqual('THING', document.createElementNS(XHTML, 'thing').tagName);
+      testing.expectTrue(el instanceof HTMLElement);
+      testing.expectEqual('[object CSSStyleDeclaration]', String(el.style));
+    }
+  }
+</script>
+
+<script id=still_a_node>
+  {
+    // The bare Element is a working node: it takes attributes, children and
+    // serialises case-preserved.
+    const foreign = document.createElementNS('urn:x', 'Thing');
+    foreign.setAttribute('Attr', 'v');
+    testing.expectEqual('Attr', foreign.getAttributeNames().join(','));
+    testing.expectEqual('v', foreign.getAttribute('Attr'));
+    // Attribute names are case-sensitive outside the HTML namespace.
+    testing.expectEqual(null, foreign.getAttribute('attr'));
+
+    foreign.appendChild(document.createElementNS('urn:x', 'kid'));
+    testing.expectEqual(1, foreign.children.length);
+    testing.expectEqual('kid', foreign.firstElementChild.tagName);
+
+    const holder = document.createElement('div');
+    holder.appendChild(foreign);
+    testing.expectEqual('<Thing Attr="v"><kid></kid></Thing>', holder.innerHTML);
+    testing.expectEqual(2, holder.querySelectorAll('*').length);
+    // getElementsByTagName stays case-sensitive for a non-HTML element.
+    testing.expectEqual(1, holder.getElementsByTagName('Thing').length);
+    testing.expectEqual(0, holder.getElementsByTagName('thing').length);
+    // Chrome also matches a type selector against it case-insensitively
+    // (`querySelector('Thing')` and `querySelector('thing')` both find it).
+    // We match neither, here or on an SVG element with a mixed-case tag --
+    // a pre-existing gap in type-selector matching for foreign elements,
+    // unchanged by this task.
+
+    // Element-level machinery still works on it.
+    const nullNs = document.createElementNS(null, 'thing');
+    nullNs.classList.add('a');
+    testing.expectEqual('a', nullNs.getAttribute('class'));
+  }
+</script>

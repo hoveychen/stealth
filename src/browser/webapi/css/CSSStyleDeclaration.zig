@@ -872,8 +872,9 @@ fn getDefaultDisplay(element: *const Element) []const u8 {
             };
         },
         // Chrome lays MathML out as inline too (`math` is display: inline
-        // math), which is as close as the faux layout gets.
-        .svg, .mathml => return "inline",
+        // math), which is as close as the faux layout gets. An element in a
+        // namespace we know nothing about is inline for the same reason.
+        .svg, .mathml, .plain => return "inline",
     }
 }
 
@@ -901,7 +902,7 @@ fn getDefaultColor(element: *const Element) []const u8 {
                 else => "rgb(0, 0, 0)",
             };
         },
-        .svg, .mathml => return "rgb(0, 0, 0)",
+        .svg, .mathml, .plain => return "rgb(0, 0, 0)",
     }
 }
 

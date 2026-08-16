@@ -1016,11 +1016,23 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
         // The whole MathML namespace is MathMLElement -- there are no per-tag
         // subclasses -- so no tag dispatch here at all.
         .mathml => return createMathmlElement(frame, name, attribute_iterator),
-        else => {
-            const tag_name = try String.init(frame.arena, name, .{});
-            return createHtmlElementT(frame, Element.Html.Unknown, namespace, attribute_iterator, .{ ._proto = undefined, ._tag_name = tag_name });
-        },
+        // A namespace with no interface of its own -- null, XML, or anything
+        // unrecognised. Chrome builds a bare Element for these, not an
+        // HTMLUnknownElement: no style, no dataset, no uppercasing.
+        else => return createPlainElement(frame, namespace, name, attribute_iterator),
     }
+}
+
+fn createPlainElement(frame: *Frame, namespace: Element.Namespace, name: []const u8, attribute_iterator: anytype) !*Node {
+    const element = try frame._factory.plainElement(.{
+        ._type = .plain,
+        ._namespace = namespace,
+        ._plain_tag_name = try String.init(frame.arena, name, .{}),
+    });
+    // Case-preserving, like SVG and MathML.
+    element._attributes.normalize = false;
+    try populateElementAttributes(frame, element, attribute_iterator);
+    return element.asNode();
 }
 
 fn createMathmlElement(frame: *Frame, name: []const u8, attribute_iterator: anytype) !*Node {

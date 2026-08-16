@@ -2248,3 +2248,40 @@ standing between us and every value-bearing card on browserscan.
 * `document.createElementNS(SVG, 'nope')` brands as `SVGGenericElement` where
   Chrome says `SVGElement`; `SVGGenericElement` is already on G17's list of
   globals Chrome does not have.
+
+## G24: what `createElementNS` builds outside the three known namespaces
+
+Found while fixing G23. `probe-g24.js` asks for nine element/namespace
+combinations and reports the brand, the constructor, the full prototype chain,
+the tag name casing and whether a `style` and a `dataset` came with it.
+
+Chrome's rule is one line: **only the XHTML namespace produces an HTML
+element.** `null`, `''`, `urn:x` and the XML namespace each produce a bare
+`Element` — `[object Element]`, `constructor === Element`, chain exactly
+`Element < Node < EventTarget`, tag name case-preserved, and no `style` or
+`dataset` at all. An empty namespace string reads back as `namespaceURI ===
+null`, not `""`.
+
+We built an `HTMLUnknownElement` for all of them, which meant a foreign element
+answered `[object HTMLUnknownElement]`, carried a `CSSStyleDeclaration` and an
+extra `HTMLElement` on its prototype chain, and reported `namespaceURI === ""`
+for the empty namespace.
+
+The interesting constraint is in the fix rather than the finding.
+`Element._type` is the union the JS bridge reads to decide which class to brand
+an instance with: it walks to whatever the active variant points at. Any
+payload — a pointer or an inline struct — is therefore a class of its own, and
+a class of its own is a fourth prototype in the chain, which the probe would
+see. The one variant the bridge passes through untouched is `void`, so `plain`
+carries no payload and the tag name lives on `Element` instead of on a subtype.
+
+Measured after the change: `probe-g24` is **0 diffs across all 11 keys** against
+headed Chrome 150.
+
+**Not closed, and pre-existing:** Chrome matches a type selector against a
+foreign element ASCII-case-insensitively (`querySelector('Thing')` and
+`querySelector('thing')` both find `<Thing>` in an HTML document), while
+`getElementsByTagName` stays case-sensitive. We match neither selector — for a
+plain element or for an SVG element with a mixed-case tag such as `clipPath` —
+because `matchesPart` compares a lowercased selector against a case-preserved
+tag name. Unchanged by this task, in either direction.
