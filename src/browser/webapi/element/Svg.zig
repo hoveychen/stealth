@@ -232,6 +232,24 @@ pub const JsApi = struct {
     pub const ownerSVGElement = bridge.accessor(Svg.getOwnerSvgElement, null, .{});
     // closest thing we can provide
     pub const viewportElement = bridge.accessor(Svg.getOwnerSvgElement, null, .{});
+
+    // Chrome declares `style` and `attributeStyleMap` on SVGElement.prototype
+    // as well as on HTMLElement.prototype -- neither is on Element.prototype.
+    // Without them a Vue-style `element.style[prop] = value` on an SVG node
+    // throws, which is enough to take a whole page's render down.
+    pub const style = bridge.accessor(_style, _setStyle, .{});
+    fn _style(self: *Svg, frame: *Frame) !*@import("../css/CSSStyleDeclaration.zig") {
+        return self.asElement().getOrCreateStyle(frame);
+    }
+    fn _setStyle(self: *Svg, value: []const u8, frame: *Frame) !void {
+        return self.asElement().setStyle(value, frame);
+    }
+
+    pub const attributeStyleMap = bridge.accessor(_attributeStyleMap, null, .{});
+    fn _attributeStyleMap(self: *Svg, frame: *Frame) !*@import("../css/typed_om.zig").StylePropertyMap {
+        const declaration = try self.asElement().getOrCreateStyle(frame);
+        return declaration.getPropertyMap(frame);
+    }
 };
 
 const testing = @import("../../../testing.zig");

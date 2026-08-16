@@ -2149,4 +2149,102 @@ gap was entirely the window width — there was never a pixelscan difference.
 1180 against 1184.
 
 Two sites remain open — **amiunique (−980)** and **browserscan (−687)**. Both
-render their shell and stop short; neither has been attributed yet.
+render their shell and stop short. Both are attributed and amiunique is closed
+in the G23 section below; browserscan's remainder is −178 and is waiting on RSA
+in SubtleCrypto.
+
+## G23: amiunique and browserscan, attributed
+
+Both sites rendered their shell and stopped short. They turned out to share a
+first cause, and browserscan has a second one behind it.
+
+### One missing accessor cost amiunique its whole result table
+
+amiunique's Vue bundle (`_nuxt/66e1ca0.js`) does `t.style[r] = n` where `t` is
+an SVG element. On lightpanda `t.style` was `undefined`, so that line threw
+`TypeError: Cannot set properties of undefined (setting 'transform')`, the
+uncaught throw aborted the render, and the *Javascript attributes* table — the
+entire point of the page — displayed "No data available".
+
+`probe-g23.js` asks fourteen kinds of element for their `style` and reports
+where the descriptor lives. Chrome answers `[object CSSStyleDeclaration]` for
+every SVG element including one with an invented tag, and finds the descriptor
+on **`SVGElement.prototype`, three hops up**. We answered `undefined` for all
+four and "not found on the chain": `style` was declared on
+`HTMLElement.prototype` only. `attributeStyleMap` sits next to it in Chrome and
+was missing for the same reason.
+
+Both now forward to the machinery `Element` already had (`getOrCreateStyle` /
+`setStyle` / `getPropertyMap`). The measured Chrome semantics that
+`element/svg/style.html` pins: `e.style === e.style`; `setAttribute('style',
+'fill:red')` then `e.style.fill === 'red'` and `cssText === 'fill: red;'`;
+`e.style.fill = 'blue'` then `getAttribute('style') === 'fill: blue;'`.
+
+| site | Chrome (headed) | lightpanda before | after |
+|---|---|---|---|
+| amiunique | 1551 | 571 (−980) | **1560 (+9)** |
+| browserscan | 2063 | 1376 (−687) | **1885 (−178)** |
+| iphey | 487 | 485 (−2) | **487 (0)** |
+
+iphey's outstanding `i19: Cannot set properties of undefined (setting
+'position')` was the same shape and went with it.
+
+**Known divergence, not closed here:** a `CSSStyleDeclaration` is parsed from
+the `style` attribute when it is first materialised and is not resynced
+afterwards, so `el.style` read *before* a later `setAttribute('style', …)` keeps
+the old text. This is engine-wide (a plain `div` behaves the same), not an SVG
+thing, and out of G23's scope.
+
+### browserscan's remaining −178: ads, and one algorithm
+
+Section diff (`browserscan-diff.mjs`, `DEPTH=7`, both engines pinned to 1920):
+
+* **~75–80 nodes are third-party** and carry no detection signal: the
+  `fc-ccpa-root` consent dialog (21), `google-auto-placed` / `ins.adsbygoogle`
+  units inside the page (≈47), body-level ad iframes (≈8), a hover tooltip (4).
+  The only console error either engine logs on this page comes from AdSense.
+* **The rest are values that never arrived.** The *Hardware* card renders every
+  label — visitor ID, Canvas, WebGL, Unmasked Vendor/Renderer, Audio, Client
+  Rects, WebGPU, Screen Resolution, Color Depth, Device Memory, Hardware
+  Concurrency — and each value slot holds `<div class="skeleton">` instead of a
+  hash. It is not that we answer blank: the data never came back.
+
+Nothing is logged because Vue swallows it, so `browserscan-sentry.mjs` taps
+`fetch` / XHR / `sendBeacon` through `Page.addScriptToEvaluateOnNewDocument`
+before any page script runs (browserscan ships ~20 envelopes to
+`sentry.adspower.com` while rendering — that was the tell). Wrapping the async
+suspects gives the name back:
+
+```
+reject crypto.subtle.importKey => NotSupportedError: The operation is not supported
+                                  args=spki,[object ArrayBuffer],RSA-OAEP,…
+```
+
+browserscan imports an RSA-OAEP public key, encrypts a session key with it, and
+sends it as `_k` alongside the encrypted payload `_p`. Measured, same tap on
+both engines:
+
+```
+chrome      /api/a60aeea3?_k=JloqJCNwzfy35U2ihTXovIhw%2BB%2FrdxNP…&_p=…
+lightpanda  /api/a60aeea3?_k&_p=…
+```
+
+Every `/api/*` call we make comes back **407**; Chrome's succeed. `probe-g23c.js`
+against both engines: `importKey('spki', …, 'RSA-OAEP')`, `generateKey`
+RSA-OAEP and `generateKey` RSASSA-PKCS1-v1_5 all reject NotSupportedError here
+and all work in Chrome, while AES-GCM, ECDH P-256 and SHA-256 digest work in
+both. **Our SubtleCrypto has no RSA at all.** That is one algorithm family
+standing between us and every value-bearing card on browserscan.
+
+### Smaller things this measurement turned up
+
+* `document.fonts.ready` resolves to `undefined` (Chrome resolves the
+  `FontFaceSet` itself), so `(await document.fonts.ready).status` throws.
+* `Element.setAttributeNS` ignores the xlink namespace, so browserscan's
+  `<use xlink:href="#icon">` serialises as `<use href="#icon">`.
+* browserscan's font list reads 0 fonts against Chrome's 342 (hash `DA39A3EE`
+  is SHA-1 of the empty string) and its WebRTC rows read "disabled" — both are
+  known engine surfaces, both cost only a handful of nodes.
+* `document.createElementNS(SVG, 'nope')` brands as `SVGGenericElement` where
+  Chrome says `SVGElement`; `SVGGenericElement` is already on G17's list of
+  globals Chrome does not have.
