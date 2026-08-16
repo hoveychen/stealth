@@ -1796,3 +1796,79 @@ ours go through the bridge's normal receiver unwrap, which does.
   on Chrome too (`'speaker' is not a valid enum value`, `Web NFC is not
   enabled`, …). Those are Chrome's own refusals for unsupported permission
   names, caught and expected by iphey — noise, not signal.
+
+## G8b: the console surface, closed
+
+G8 left two things open on `console`: the receiver check behind iphey's `i20`,
+and a member roster that matched neither Chrome's contents nor its order. Both
+are now closed, and every console probe (`probe-g8a` … `probe-g8f`) diffs clean
+against a headed Chrome 150 apart from live heap byte counts.
+
+### The receiver check
+
+Every member is now bound `.static`. That drops two things at once: v8's
+`Signature` on the method's `FunctionTemplate` (which is what actually produced
+`Illegal invocation`, before our callback ever ran) and the bridge's
+`TaggedOpaque.fromJS` unwrap of `this`. The five members that really do need
+state — `count`, `countReset`, `time`, `timeLog`, `timeEnd` — reach the realm's
+`Console` through `exec.js.global` instead of through `self` (`Console.realm`).
+
+**iphey's `i20` is gone**: re-running `run-iphey.mjs` against the patched binary
+leaves exactly one alert, the already-known `i19`.
+
+### The member table
+
+Chrome 150, `Object.getOwnPropertyNames(console)` — 25 members, in an order that
+is neither alphabetical nor the Console Standard's IDL order, so it can only be
+copied:
+
+```
+debug, error, info, log, warn, dir, dirxml, table, trace, group,
+groupCollapsed, groupEnd, clear, count, countReset, assert, profile,
+profileEnd, time, timeLog, timeEnd, timeStamp, context, createTask, memory
+```
+
+We were at 18 with `exception` — which Chrome does not have — in the set.
+`memory` is the 25th: G8's count of 24 came from a probe that filtered to
+`typeof === 'function'`, and `memory` is an accessor.
+
+Every function reports `length` 0, `context` excepted (1). A variadic argument
+contributes nothing to `length`, and every console operation but `context` is
+variadic — including `assert`, whose IDL declares a required `condition`.
+
+### What the new members actually do (measured, not guessed)
+
+| member | Chrome's behaviour |
+|---|---|
+| `dir`, `dirxml` | log and return undefined; the interactive tree is devtools-only |
+| `profile`, `profileEnd`, `timeStamp` | return undefined with or without an argument |
+| `context(name)` | a **fresh** plain object (`[object Object]`, `Object.prototype` proto) carrying its own 22 logging operations, each writable/enumerable/configurable with `length` 1. Note `dirXml` — capitalised differently there than on `console` itself. `console.context()` with no argument works too |
+| `createTask(name)` | a plain object with one own `run` (`length` 0) that invokes its callback and returns the result. `run()` with no function throws `Error: First argument must be a function.` |
+| `memory` | the same `MemoryInfo` `performance.memory` hands out — the two share a prototype — fresh per read |
+
+Two traps worth keeping:
+
+- **`createTask` runs no ToString on its name.** `123`, `null`, `true`,
+  `new String('t')` and `{toString: () => 't'}` are all rejected with the same
+  plain `Error: First argument must be a non-empty string.` (`probe-g8f`).
+  Taking a `?[]const u8` parameter would have coerced them and answered a task
+  where Chrome answers an error — and iphey's devtools probes pass objects.
+- **Both errors are a plain `Error`, not a `TypeError`.**
+
+### `console.memory` is not a WebIDL attribute
+
+Blink names every WebIDL attribute's accessor pair `get X` / `set X`, and we
+match that: `Navigator.prototype.userAgent`, `Document.prototype.title` and
+`performance.memory` all report `"get …"` on both engines. `console.memory` is
+V8's own accessor instead, and both halves of it are anonymous with a
+zero-length setter. That is what the new `anonymous` option on
+`bridge.accessor` is for; `console.memory` is its only user.
+
+The setter is a silent no-op on Chrome — `console.memory = 5` leaves
+`typeof console.memory === 'object'` — so ours ignores its argument too.
+
+### Still open on iphey
+
+`i19: TypeError: Cannot set properties of undefined (setting 'position')`,
+thrown in iphey's own `T2` (`index.js:63:126758`). Unattributed; it is the only
+alert left.
