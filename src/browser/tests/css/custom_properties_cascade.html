@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<style>
+  :root { --root-prop: rooted; }
+  #probe { --sheet: yes; --later: first; }
+  #probe { --later: wins; }
+  #probe { --Case: upper; --case: lower; }
+  .low { --spec: low; }
+  #probe { --spec: high; }
+  #parent { --inherited: from-parent; }
+  #probe { --shout: quiet; }
+  .low { --shout: loud !important; }
+  @media (min-width: 100px) { #probe { --wide: yes } }
+  @media (min-width: 99999px) { #probe { --narrow: yes } }
+</style>
+
+<div id=parent><div id=probe class=low style="--inline: inline-value; --sheet: inline-wins"></div></div>
+
+<script id=cascade>
+{
+  // Measured on Chrome 150 (probe-g12): a custom property set by a stylesheet
+  // rule reaches getComputedStyle, and the usual cascade decides the winner.
+  const el = document.getElementById('probe');
+  const cs = getComputedStyle(el);
+  const get = (n) => cs.getPropertyValue(n).trim();
+
+  testing.expectEqual('inline-wins', get('--sheet'));   // inline beats the sheet
+  testing.expectEqual('inline-value', get('--inline'));
+  testing.expectEqual('wins', get('--later'));      // later rule, equal specificity
+  testing.expectEqual('high', get('--spec'));       // #id beats .class
+  testing.expectEqual('loud', get('--shout'));      // !important beats specificity
+  testing.expectEqual('upper', get('--Case'));      // names are case-sensitive
+  testing.expectEqual('lower', get('--case'));
+  testing.expectEqual('yes', get('--wide'));        // inside a matching @media
+  testing.expectEqual('', get('--narrow'));         // inside one that does not match
+  testing.expectEqual('', get('--nope'));
+}
+</script>
+
+<script id=inheritance>
+{
+  const el = document.getElementById('probe');
+  const cs = getComputedStyle(el);
+  // Custom properties inherit: #parent declares it, #probe reads it.
+  testing.expectEqual('from-parent', cs.getPropertyValue('--inherited').trim());
+  // ... all the way from :root.
+  testing.expectEqual('rooted', cs.getPropertyValue('--root-prop').trim());
+  testing.expectEqual('rooted',
+    getComputedStyle(document.documentElement).getPropertyValue('--root-prop').trim());
+
+  // A detached element inherits nothing.
+  const orphan = document.createElement('div');
+  testing.expectEqual('', getComputedStyle(orphan).getPropertyValue('--root-prop').trim());
+}
+</script>
+
+<script id=inline_still_wins_on_a_child>
+{
+  // The child's own inline declaration beats an inherited one.
+  const child = document.createElement('div');
+  child.setAttribute('style', '--inherited: mine');
+  document.getElementById('probe').appendChild(child);
+  testing.expectEqual('mine', getComputedStyle(child).getPropertyValue('--inherited').trim());
+  // and a property it does not declare still comes down the tree
+  testing.expectEqual('inline-wins', getComputedStyle(child).getPropertyValue('--sheet').trim());
+  child.remove();
+}
+</script>

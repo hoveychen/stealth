@@ -134,6 +134,14 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
     // Computed styles must reflect stylesheet rules, not just the element's
     // inline `style=` attribute. Limited to display/visibility — what aria
     // tree builders (Playwright ariaSnapshot) consult on every element.
+    // A custom property is resolved by the cascade rather than stored on the
+    // computed declaration: it can come from a stylesheet rule, from the style
+    // attribute, or from an ancestor, and nothing precomputes the set.
+    if (self._is_computed and isCustomProperty(normalized)) {
+        const element = self._element orelse return "";
+        return frame._style_manager.customPropertyValue(element, normalized) orelse "";
+    }
+
     if (self._is_computed) {
         if (self._element) |element| {
             if (wrapped.eql(comptime .wrap("display"))) {
@@ -939,7 +947,7 @@ pub const Property = struct {
     _important: bool = false,
     _node: std.DoublyLinkedList.Node,
 
-    fn fromNodeLink(n: *std.DoublyLinkedList.Node) *Property {
+    pub fn fromNodeLink(n: *std.DoublyLinkedList.Node) *Property {
         return @alignCast(@fieldParentPtr("_node", n));
     }
 
@@ -1308,4 +1316,8 @@ test "WebApi: CSSStyleDeclaration surface" {
 
 test "WebApi: CSSStyleDeclaration custom properties" {
     try testing.htmlRunner("css/custom_properties_inline.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration custom property cascade" {
+    try testing.htmlRunner("css/custom_properties_cascade.html", .{});
 }
