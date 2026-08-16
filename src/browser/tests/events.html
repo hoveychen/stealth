@@ -737,6 +737,146 @@
   }
 </script>
 
+<script id=eventHandlerOrder>
+  // Where an on* handler sits relative to addEventListener listeners. Per DOM,
+  // the handler is an ordinary listener registered the moment it is first set;
+  // re-assigning swaps the function without moving it, clearing it removes the
+  // listener, and setting it again appends at the end. Every expectation below
+  // is the answer a headed Chrome 150 gives (probe-g9).
+  {
+    const got = [];
+    const fire = (el) => el.dispatchEvent(new Event('click'));
+
+    // 1. addEventListener, then onclick, then addEventListener.
+    {
+      const order = [];
+      const d = document.createElement('div');
+      d.addEventListener('click', () => order.push('al1'));
+      d.onclick = () => order.push('on');
+      d.addEventListener('click', () => order.push('al2'));
+      fire(d);
+      got.push(`al_then_on_then_al: ${order.join(',')}`);
+    }
+
+    // 2. onclick assigned first.
+    {
+      const order = [];
+      const d = document.createElement('div');
+      d.onclick = () => order.push('on');
+      d.addEventListener('click', () => order.push('al1'));
+      fire(d);
+      got.push(`on_then_al: ${order.join(',')}`);
+    }
+
+    // 3. Re-assigning onclick must NOT move its position.
+    {
+      const order = [];
+      const d = document.createElement('div');
+      d.addEventListener('click', () => order.push('al1'));
+      d.onclick = () => order.push('on-first');
+      d.addEventListener('click', () => order.push('al2'));
+      d.onclick = () => order.push('on-second');
+      fire(d);
+      got.push(`reassign_keeps_position: ${order.join(',')}`);
+    }
+
+    // 4. Clearing then re-setting onclick moves it to the end.
+    {
+      const order = [];
+      const d = document.createElement('div');
+      d.addEventListener('click', () => order.push('al1'));
+      d.onclick = () => order.push('on-first');
+      d.addEventListener('click', () => order.push('al2'));
+      d.onclick = null;
+      d.onclick = () => order.push('on-second');
+      fire(d);
+      got.push(`clear_then_reset_moves: ${order.join(',')}`);
+    }
+
+    // 5. Content attribute parsed before any addEventListener.
+    {
+      window.__g9a = [];
+      const host = document.createElement('div');
+      host.innerHTML = '<b id=g9a onclick="window.__g9a.push(\'on\')"></b>';
+      document.body.appendChild(host);
+      const el = $('#g9a');
+      el.addEventListener('click', () => window.__g9a.push('al1'));
+      fire(el);
+      got.push(`content_attr_first: ${window.__g9a.join(',')}`);
+    }
+
+    // 6. Content attribute set after an addEventListener.
+    {
+      window.__g9b = [];
+      const el = document.createElement('div');
+      document.body.appendChild(el);
+      el.addEventListener('click', () => window.__g9b.push('al1'));
+      el.setAttribute('onclick', "window.__g9b.push('on')");
+      el.addEventListener('click', () => window.__g9b.push('al2'));
+      fire(el);
+      got.push(`content_attr_after_al: ${window.__g9b.join(',')}`);
+    }
+
+    // 7. `ong9evt` is not a known handler name, so it is a plain property.
+    {
+      const order = [];
+      const h1 = () => order.push('al1');
+      const h3 = () => order.push('al2');
+      window.addEventListener('g9evt', h1);
+      window.ong9evt = () => order.push('on');
+      window.addEventListener('g9evt', h3);
+      window.dispatchEvent(new Event('g9evt'));
+      window.removeEventListener('g9evt', h1);
+      window.removeEventListener('g9evt', h3);
+      got.push(`window_unknown_handler: ${order.join(',')}`);
+    }
+
+    // 8. Same three steps on the document.
+    {
+      const order = [];
+      const h1 = () => order.push('al1');
+      const h3 = () => order.push('al2');
+      document.addEventListener('click', h1);
+      document.onclick = () => order.push('on');
+      document.addEventListener('click', h3);
+      document.dispatchEvent(new Event('click'));
+      document.removeEventListener('click', h1);
+      document.removeEventListener('click', h3);
+      document.onclick = null;
+      got.push(`doc_order: ${order.join(',')}`);
+    }
+
+    // 9. A capture listener on an ancestor still runs before anything at target.
+    {
+      const order = [];
+      const parent = document.createElement('div');
+      const child = document.createElement('span');
+      parent.appendChild(child);
+      document.body.appendChild(parent);
+      parent.addEventListener('click', () => order.push('parent-capture'), true);
+      child.onclick = () => order.push('child-on');
+      child.addEventListener('click', () => order.push('child-al'));
+      parent.addEventListener('click', () => order.push('parent-bubble'));
+      child.dispatchEvent(new Event('click', {bubbles: true}));
+      got.push(`capture_vs_on: ${order.join(',')}`);
+    }
+
+    // Compared as one blob: expectEqual throws on the first mismatch, and a
+    // per-case assertion would hide every later case behind the first failure.
+    testing.expectEqual([
+      'al_then_on_then_al: al1,on,al2',
+      'on_then_al: on,al1',
+      'reassign_keeps_position: al1,on-second,al2',
+      'clear_then_reset_moves: al1,al2,on-second',
+      'content_attr_first: on,al1',
+      'content_attr_after_al: al1,on,al2',
+      'window_unknown_handler: al1,al2',
+      'doc_order: al1,on,al2',
+      'capture_vs_on: parent-capture,child-on,child-al,parent-bubble',
+    ].join('\n'), got.join('\n'));
+  }
+</script>
+
 <div id=inline_prevent><div id=inline_prevent_child></div></div>
 <script id=inlineHandlerPreventDefault>
   // Test that inline handler can preventDefault and it affects addEventListener listeners
