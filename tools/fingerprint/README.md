@@ -1872,3 +1872,78 @@ The setter is a silent no-op on Chrome — `console.memory = 5` leaves
 `i19: TypeError: Cannot set properties of undefined (setting 'position')`,
 thrown in iphey's own `T2` (`index.js:63:126758`). Unattributed; it is the only
 alert left.
+
+## G9: where an `on*` handler sits in the listener order
+
+Per DOM, an event handler *is* an event listener. It joins the target's
+listener list the moment the property (or content attribute) is first set, and
+it runs from that place: re-assigning the property swaps the function without
+moving the listener, assigning `null` removes it, and assigning again appends at
+the end. We kept handlers in a side table (`Frame._event_target_attr_listeners`)
+and ran them ahead of the list at all three dispatch points, so a handler always
+fired first.
+
+Measured with `probe-g9` on a headed Chrome 150 versus our pre-fix binary — five
+of nine cases were wrong:
+
+| case | Chrome | ours (before) |
+|---|---|---|
+| `addEventListener` → `onclick` → `addEventListener` | `al1,on,al2` | `on,al1,al2` |
+| `onclick` → `addEventListener` | `on,al1` | same |
+| re-assign `onclick` without clearing | `al1,on-second,al2` | `on-second,al1,al2` |
+| `onclick = null`, then assign again | `al1,al2,on-second` | `on-second,al1,al2` |
+| parsed `onclick=` before `addEventListener` | `on,al1` | same |
+| `setAttribute('onclick')` after `addEventListener` | `al1,on,al2` | `on,al1,al2` |
+| `window.ong9evt` (not a handler name) | `al1,al2` | same |
+| same three steps on `document` | `al1,on,al2` | `on,al1,al2` |
+| ancestor capture listener vs handler at target | `parent-capture,child-on,child-al,parent-bubble` | same |
+
+### The fix
+
+`EventManagerBase.registerHandler` appends a real `Listener` whose `Function` is
+just the handler *kind*; the function is resolved from the side table (or
+compiled from the content attribute) when the listener runs. That is what buys
+the re-assignment semantics for free — the table entry changes, the list node
+does not — and it deletes the three special-cased inline-handler branches.
+
+The content attribute was the one part that could not stay lazy. We compiled
+`onclick="…"` at first dispatch and only then recorded it, which is far too late
+to decide where it sits; the spot is now claimed when the attribute is set —
+`Frame.attributeChange` / `attributeRemove` for scripted changes, and
+`Attribute.List.putNew` for the attributes the parser puts on a new element,
+which fires no change reactions.
+
+`Frame.setEventHandler` is the single entry point, so Element, Document,
+ShadowRoot, EditContext, MediaQueryList and the Window's ~120 store-backed
+handler properties all get the ordering. After the change `probe-g9` diffs clean
+against Chrome, as does `probe-g9b`, which pins the parts the first probe left
+untested: `stopImmediatePropagation` from a handler, `stopPropagation` from one
+(it does *not* skip the target's remaining listeners — we used to, and that is
+fixed by the same move), `return false` cancelling, `removeEventListener` being
+unable to take a handler away, the same function registered both ways running
+twice, a content attribute overriding a property without moving it,
+`removeAttribute` clearing the handler, re-`setAttribute` recompiling, and a
+handler assigned mid-dispatch not running for that event.
+
+### Still open: the handlers that live in a dedicated field
+
+Only the side-table-backed handlers moved. Anything whose handler is a field on
+its owner still runs ahead of the listener list, because nothing records *when*
+that field was first written. Measured with `probe-g9c` (`al1,on,al2` is
+Chrome's answer in every row):
+
+| target | ours |
+|---|---|
+| `window.onscroll` / `onblur` / `onfocus` / `onresize` (4 of the Window's 6 dedicated slots) | `on,al1,al2` |
+| `XMLHttpRequest.onprogress` | `on,al1,al2` |
+| `AbortSignal.onabort` | `on,al1,al2` |
+| `FileReader.onload` | `al1,al2` |
+| `BroadcastChannel.onmessage` | `al1,al2` |
+
+The last two are a second, older gap: their handler field is only consulted on
+the object's own internal dispatch path, so a synthetic `dispatchEvent` skips it
+entirely. Closing this row of the table means giving ~30 classes
+(`XMLHttpRequestEventTarget`, `WebSocket`, `EventSource`, `FileReader`, the IDB
+trio, `Worker`, `MessagePort`, `BroadcastChannel`, …) the same treatment, plus
+untangling the Window's six slots from the explicit `dispatchDirect` calls that
+pass them by hand (page load, pageshow, hashchange, popstate).
