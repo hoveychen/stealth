@@ -2149,7 +2149,9 @@ gap was entirely the window width — there was never a pixelscan difference.
 1180 against 1184.
 
 Two sites remain open — **amiunique (−980)** and **browserscan (−687)**. Both
-render their shell and stop short; neither has been attributed yet.
+render their shell and stop short. Both are attributed and amiunique is closed
+in the G23 section below; browserscan's remainder is −178 and is waiting on RSA
+in SubtleCrypto.
 
 ## G23: amiunique and browserscan, attributed
 
