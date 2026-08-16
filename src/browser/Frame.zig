@@ -85,7 +85,8 @@ const AnimatedPreserveAspectRatio = @import("webapi/svg/AnimatedPreserveAspectRa
 const sys_url = @import("../sys/url.zig");
 const HttpClient = @import("../network/HttpClient.zig");
 
-const GlobalEventHandlersLookup = @import("webapi/global_event_handlers.zig").Lookup;
+const global_event_handlers = @import("webapi/global_event_handlers.zig");
+const GlobalEventHandlersLookup = global_event_handlers.Lookup;
 
 pub const parse = @import("frame/parse.zig");
 pub const preload = @import("frame/preload.zig");
@@ -3065,7 +3066,68 @@ fn notifyChildInserted(self: *Frame, parent: *Node, child: *Node) void {
     observers.notifyChildListChange(self, parent, &added, &.{}, previous_sibling, next_sibling);
 }
 
+// The single entry point for `target.onX = f` and `target.onX = null`. The
+// function goes in the attribute-listener store, and a listener standing for
+// the handler joins (or leaves) the target's listener list -- which is where
+// the handler's place in the dispatch order comes from. Handlers that live in
+// a dedicated field instead (the Window's six, XMLHttpRequest's, ...) don't go
+// through here and still run ahead of the list.
+pub fn setEventHandler(
+    self: *Frame,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+    callback: ?JS.Function.Global,
+) !void {
+    if (callback) |cb| {
+        try self._event_target_attr_listeners.put(self.arena, .{ .target = target, .handler = handler }, cb);
+        return self._event_manager.registerHandler(target, handler);
+    }
+    _ = self._event_target_attr_listeners.remove(.{ .target = target, .handler = handler });
+    self._event_manager.removeHandler(target, handler);
+}
+
+// A content attribute (`onclick="..."`) fills the same slot as the property.
+// The expression is only compiled when the event first fires, but the place in
+// the listener list is taken now, when the attribute is set -- which is what
+// Chrome does, and the reason this can't wait for the lazy compile.
+fn setEventHandlerAttribute(self: *Frame, element: *Element, name: String, present: bool) void {
+    if (name.len < 3 or name.str()[0] != 'o' or name.str()[1] != 'n') {
+        return;
+    }
+    const handler = global_event_handlers.fromEventType(name.str()[2..]) orelse return;
+
+    // On a body or frameset, these name the *Window's* handler, not the
+    // element's -- Body.Build.attributeChange routes them there.
+    if (element.is(Element.Html.Body) != null or element.is(Element.Html.FrameSet) != null) {
+        for (Window.WINDOW_REFLECTING) |reflected| {
+            if (reflected == handler) return;
+        }
+    }
+
+    const target = element.asEventTarget();
+
+    // Drop whatever was compiled from the previous value; the next dispatch
+    // recompiles from the attribute.
+    _ = self._event_target_attr_listeners.remove(.{ .target = target, .handler = handler });
+    if (!present) {
+        self._event_manager.removeHandler(target, handler);
+        return;
+    }
+    self._event_manager.registerHandler(target, handler) catch |err| {
+        log.err(.event, "frame.setEventHandlerAttribute", .{ .err = err, .name = name });
+    };
+}
+
+// Same, for an attribute the parser put on a brand new element. Goes through
+// the element rather than attributeChange because the parser doesn't fire
+// attribute-change reactions for a node's initial attributes.
+pub fn parsedEventHandlerAttribute(self: *Frame, element: *Element, name: []const u8) void {
+    self.setEventHandlerAttribute(element, .wrap(name), true);
+}
+
 pub fn attributeChange(self: *Frame, element: *Element, name: String, value: String, old_value: ?String) void {
+    self.setEventHandlerAttribute(element, name, true);
+
     _ = Element.Build.call(element, "attributeChange", .{ element, name, value, self }) catch |err| {
         log.err(.bug, "build.attributeChange", .{ .tag = element.getTag(), .name = name, .value = value, .err = err, .type = self._type, .url = self.url });
     };
@@ -3090,6 +3152,8 @@ pub fn attributeChange(self: *Frame, element: *Element, name: String, value: Str
 }
 
 pub fn attributeRemove(self: *Frame, element: *Element, name: String, old_value: String) void {
+    self.setEventHandlerAttribute(element, name, false);
+
     _ = Element.Build.call(element, "attributeRemove", .{ element, name, self }) catch |err| {
         log.err(.bug, "build.attributeRemove", .{ .tag = element.getTag(), .name = name, .err = err, .type = self._type, .url = self.url });
     };

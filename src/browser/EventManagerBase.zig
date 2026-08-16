@@ -25,6 +25,7 @@ const Page = @import("Page.zig");
 
 const Event = @import("webapi/Event.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
+const global_event_handlers = @import("webapi/global_event_handlers.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -172,6 +173,69 @@ pub fn remove(self: *EventManagerBase, target: *EventTarget, typ: []const u8, ca
     if (findListener(list, callback, use_capture)) |listener| {
         self.removeListener(list, listener);
     }
+}
+
+// An `on*` handler is an ordinary listener: it takes its place in the target's
+// listener list the moment the property (or content attribute) is first set,
+// and runs in that place. The listener we append here doesn't carry the
+// function -- that lives in the frame's attribute-listener store and is looked
+// up at dispatch -- which is what lets `el.onclick = other` swap the function
+// without moving the listener. Setting the property to null removes it, so
+// setting it again appends at the end, exactly like Chrome.
+//
+// A given (target, event type) can have at most one of these, since the
+// handler <-> event type mapping is one to one.
+pub fn registerHandler(self: *EventManagerBase, target: *EventTarget, handler: global_event_handlers.Handler) !void {
+    const arena = self.arena;
+    const type_string = try String.init(arena, global_event_handlers.toEventType(handler), .{});
+
+    const gop = try self.lookup.getOrPut(arena, .{
+        .type_string = type_string,
+        .event_target = @intFromPtr(target),
+    });
+    if (gop.found_existing) {
+        if (findHandlerListener(gop.value_ptr.*) != null) {
+            return;
+        }
+    } else {
+        gop.value_ptr.* = try self.list_pool.create(arena);
+        gop.value_ptr.*.* = .{};
+    }
+
+    const listener = try self.listener_pool.create(arena);
+    listener.* = .{
+        .node = .{},
+        .once = false,
+        .capture = false,
+        .passive = false,
+        .function = .{ .handler = handler },
+        .signal = null,
+        .typ = type_string,
+    };
+    gop.value_ptr.*.append(&listener.node);
+}
+
+pub fn removeHandler(self: *EventManagerBase, target: *EventTarget, handler: global_event_handlers.Handler) void {
+    const list = self.lookup.get(.{
+        .type_string = .wrap(global_event_handlers.toEventType(handler)),
+        .event_target = @intFromPtr(target),
+    }) orelse return;
+    if (findHandlerListener(list)) |listener| {
+        self.removeListener(list, listener);
+    }
+}
+
+fn findHandlerListener(list: *const std.DoublyLinkedList) ?*Listener {
+    var node = list.first;
+    while (node) |n| {
+        node = n.next;
+        const listener: *Listener = @alignCast(@fieldParentPtr("node", n));
+        if (listener.removed) continue;
+        if (listener.function == .handler) {
+            return listener;
+        }
+    }
+    return null;
 }
 
 pub fn removeListener(self: *EventManagerBase, list: *std.DoublyLinkedList, listener: *Listener) void {
@@ -422,6 +486,33 @@ fn findListener(list: *const std.DoublyLinkedList, callback: Callback, capture: 
     return null;
 }
 
+// Where an `on*` handler's function comes from at dispatch time: the frame's
+// attribute-listener store, or -- when a content attribute has been set but
+// never read back through the property -- the attribute, compiled on the spot
+// and cached in that same store.
+fn resolveHandler(local: *const js.Local, target: *EventTarget, handler: global_event_handlers.Handler) ?js.Function.Global {
+    const frame = switch (local.ctx.global) {
+        .frame => |f| f,
+        // Workers have no attribute-listener store, so nothing ever registers
+        // one of these listeners on one of their targets.
+        .worker => return null,
+    };
+
+    if (frame._event_target_attr_listeners.get(.{ .target = target, .handler = handler })) |cached| {
+        return cached;
+    }
+
+    const Element = @import("webapi/Element.zig");
+    const element = switch (target._type) {
+        .node => |n| n.is(Element) orelse return null,
+        else => return null,
+    };
+    return element.getAttributeFunction(handler, frame) catch |err| {
+        log.warn(.event, "inline html callback", .{ .type = handler, .err = err });
+        return null;
+    };
+}
+
 pub const Listener = struct {
     typ: String,
     once: bool,
@@ -520,6 +611,30 @@ pub const Listener = struct {
                     else => log.warn(.event, context, .{ .err = err }),
                 };
             },
+            .handler => |handler| {
+                // The current target is the target the handler is attached to,
+                // which is all resolveHandler needs -- the listener itself
+                // doesn't carry one.
+                const target = event._current_target.?;
+                const func = resolveHandler(local, target, handler) orelse return;
+
+                var caught: js.TryCatch.Caught = undefined;
+                const handler_return: ?js.Value = local.toLocal(func).tryCallWithThis(js.Value, target, .{event}, &caught) catch |err| ret: {
+                    if (err == error.ExecutionTerminated) {
+                        return error.ExecutionTerminated;
+                    }
+                    local.ctx.page.recordJsError(err);
+                    log.warn(.event, "inline handler", .{ .err = err, .caught = caught });
+                    break :ret null;
+                };
+                // Unlike an addEventListener listener, an event handler that
+                // returns false cancels the event.
+                if (handler_return) |ret| {
+                    if (ret.isFalse() and !event._type_string.eql(comptime .wrap("error"))) {
+                        event.preventDefault();
+                    }
+                }
+            },
         }
     }
 
@@ -545,6 +660,13 @@ pub const Function = union(enum) {
     value: js.Function.Global,
     string: String,
     object: js.Object.Global,
+    // An `on*` handler; see registerHandler. The function is resolved from the
+    // frame at dispatch, so neither removeEventListener (which matches on the
+    // function) nor the duplicate check in register can ever see it -- both of
+    // which is what we want: a handler is not removable that way, and setting
+    // the same function via both the property and addEventListener registers
+    // two listeners.
+    handler: global_event_handlers.Handler,
 
     pub fn eqlFunction(self: Function, func: js.Function) bool {
         return switch (self) {

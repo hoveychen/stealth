@@ -597,7 +597,7 @@ fn _addAttrsIfMissingCallback(self: *Parser, node: *Node, attributes: h5e.Attrib
         const name = attr.name.local.slice();
         const value = attr.value.slice();
         // putNew only adds if the attribute doesn't already exist
-        try attr_list.putNew(name, value, frame);
+        try attr_list.putNew(name, value, element, frame);
     }
 }
 

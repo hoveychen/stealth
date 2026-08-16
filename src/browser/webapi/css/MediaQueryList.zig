@@ -68,11 +68,7 @@ fn handlerAccessor(comptime handler: @import("../global_event_handlers.zig").Han
         }
 
         pub fn set(self: *MediaQueryList, setter: ?Window.FunctionSetter, frame: *Frame) !void {
-            if (Window.getFunctionFromSetter(setter)) |cb| {
-                try frame._event_target_attr_listeners.put(frame.arena, .{ .target = self.asEventTarget(), .handler = handler }, cb);
-            } else {
-                _ = frame._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = handler });
-            }
+            return frame.setEventHandler(self.asEventTarget(), handler, Window.getFunctionFromSetter(setter));
         }
     };
 }

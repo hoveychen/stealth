@@ -261,8 +261,23 @@ fn derivedType(comptime name: []const u8, comptime handler: Handler) []const u8 
     return name[2..];
 }
 
+const handlerToType = blk: {
+    const fields = std.meta.fields(Handler);
+    var entries: [fields.len][]const u8 = undefined;
+    for (fields) |field| {
+        const handler: Handler = @enumFromInt(field.value);
+        entries[field.value] = derivedType(field.name, handler);
+    }
+    break :blk entries;
+};
+
 pub fn fromEventType(typ: []const u8) ?Handler {
     return typeToHandler.get(typ);
+}
+
+/// The inverse of `fromEventType`: the event type a handler listens for.
+pub fn toEventType(handler: Handler) []const u8 {
+    return handlerToType[@intFromEnum(handler)];
 }
 
 const testing = @import("../../testing.zig");
@@ -271,4 +286,12 @@ test "GlobalEventHandlers: fromEventType" {
     try testing.expectEqual(.onselect, fromEventType("select"));
     try testing.expectEqual(null, fromEventType(""));
     try testing.expectEqual(null, fromEventType("unknown"));
+}
+
+test "GlobalEventHandlers: toEventType round trips" {
+    inline for (std.meta.fields(Handler)) |field| {
+        const handler: Handler = @enumFromInt(field.value);
+        try testing.expectEqual(handler, fromEventType(toEventType(handler)));
+    }
+    try testing.expectEqual("webkitAnimationEnd", toEventType(.onwebkitanimationend));
 }

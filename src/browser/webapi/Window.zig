@@ -703,11 +703,7 @@ pub fn getOnClick(self: *Window) ?js.Function.Global {
 }
 
 pub fn setOnClick(self: *Window, setter: ?FunctionSetter) !void {
-    if (getFunctionFromSetter(setter)) |cb| {
-        try self._frame._event_target_attr_listeners.put(self._frame.arena, .{ .target = self.asEventTarget(), .handler = .onclick }, cb);
-    } else {
-        _ = self._frame._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = .onclick });
-    }
+    return self._frame.setEventHandler(self.asEventTarget(), .onclick, getFunctionFromSetter(setter));
 }
 
 // The "window-reflecting body element event handler set" (HTML spec): these
@@ -760,14 +756,7 @@ pub fn setReflectedHandler(self: *Window, handler: global_event_handlers.Handler
         slot.* = callback;
         return;
     }
-    if (callback) |cb| {
-        return self._frame._event_target_attr_listeners.put(
-            self._frame.arena,
-            .{ .target = self.asEventTarget(), .handler = handler },
-            cb,
-        );
-    }
-    _ = self._frame._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = handler });
+    return self._frame.setEventHandler(self.asEventTarget(), handler, callback);
 }
 
 fn windowReflectingHandler(name: lp.String) ?global_event_handlers.Handler {
@@ -1594,11 +1583,7 @@ pub const JsApi = struct {
             }
 
             pub fn set(win: *Window, setter: ?FunctionSetter) !void {
-                if (getFunctionFromSetter(setter)) |cb| {
-                    try win._frame._event_target_attr_listeners.put(win._frame.arena, .{ .target = win.asEventTarget(), .handler = handler }, cb);
-                } else {
-                    _ = win._frame._event_target_attr_listeners.remove(.{ .target = win.asEventTarget(), .handler = handler });
-                }
+                return win._frame.setEventHandler(win.asEventTarget(), handler, getFunctionFromSetter(setter));
             }
         };
     }

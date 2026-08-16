@@ -2348,11 +2348,7 @@ pub const JsApi = struct {
 
             pub fn set(self: *Document, setter: ?Window.FunctionSetter, frame: *Frame) !void {
                 const owner = self._frame orelse frame;
-                if (Window.getFunctionFromSetter(setter)) |cb| {
-                    try owner._event_target_attr_listeners.put(owner.arena, .{ .target = self.asEventTarget(), .handler = handler }, cb);
-                } else {
-                    _ = owner._event_target_attr_listeners.remove(.{ .target = self.asEventTarget(), .handler = handler });
-                }
+                return owner.setEventHandler(self.asEventTarget(), handler, Window.getFunctionFromSetter(setter));
             }
         };
     }

@@ -71,6 +71,20 @@ pub fn remove(self: *EventManager, target: *EventTarget, typ: []const u8, callba
     self.base.remove(target, typ, callback, use_capture);
 }
 
+// Gives an `on*` handler its place in the target's listener list; see
+// EventManagerBase.registerHandler. Go through Frame.setEventHandler rather
+// than calling this directly, so the store and the list stay in step.
+// has_dom_load_listener deliberately stays untouched: it only tracks
+// addEventListener("load") registrations, and its one reader
+// (Frame.processQueuedEvents) checks a node's own handler separately.
+pub fn registerHandler(self: *EventManager, target: *EventTarget, handler: @import("webapi/global_event_handlers.zig").Handler) !void {
+    return self.base.registerHandler(target, handler);
+}
+
+pub fn removeHandler(self: *EventManager, target: *EventTarget, handler: @import("webapi/global_event_handlers.zig").Handler) void {
+    self.base.removeHandler(target, handler);
+}
+
 // Re-export DispatchError from base
 pub const DispatchError = EventManagerBase.DispatchError;
 
@@ -88,36 +102,25 @@ pub fn dispatch(self: *EventManager, target: *EventTarget, event: *Event) Dispat
     switch (target._type) {
         .node => |node| try self.dispatchNode(node, event),
         .xhr => |xhr| try self.dispatchDirect(target, event, xhr.inlineHandler(event._type_string), .{ .context = "dispatch" }),
-        .window => |w| try self.dispatchDirect(target, event, self.windowInlineHandler(w, target, event._type_string), .{ .context = "dispatch" }),
-        else => try self.dispatchDirect(target, event, self.attrInlineHandler(target, event._type_string), .{ .context = "dispatch" }),
+        // Every other handler property is backed by the frame's
+        // attribute-listener store, and so already sits in the target's
+        // listener list as a listener of its own (see
+        // EventManagerBase.registerHandler). The Window's six dedicated slots
+        // are the exception and still run ahead of the list.
+        .window => try self.dispatchDirect(target, event, windowInlineHandler(target, event._type_string), .{ .context = "dispatch" }),
+        else => try self.dispatchDirect(target, event, null, .{ .context = "dispatch" }),
     }
 }
 
-// Resolves a property event handler kept in the frame's attribute-listener
-// store. Every EventTarget that is neither a node nor the window used to get a
-// null handler here, so an `on*` property set on one of them (MediaQueryList's
-// onchange is the first) never fired for an event dispatched straight at it,
-// even though addEventListener on the same target worked. Nodes reach the same
-// store through getInlineHandler on the propagation path.
-fn attrInlineHandler(self: *EventManager, target: *EventTarget, typ: lp.String) ?js.Function.Global {
+// Resolves one of the Window's six dedicated handler slots. The rest of its
+// handler properties live in the frame's attribute-listener store.
+fn windowInlineHandler(target: *EventTarget, typ: lp.String) ?js.Function.Global {
     const global_event_handlers = @import("webapi/global_event_handlers.zig");
     const handler_type = global_event_handlers.fromEventType(typ.str()) orelse return null;
-    return self.frame._event_target_attr_listeners.get(.{ .target = target, .handler = handler_type });
-}
-
-// Resolves the Window's property event handler for the given event type.
-fn windowInlineHandler(self: *EventManager, window: *@import("webapi/Window.zig"), target: *EventTarget, typ: lp.String) ?js.Function.Global {
-    const global_event_handlers = @import("webapi/global_event_handlers.zig");
-    const handler_type = global_event_handlers.fromEventType(typ.str()) orelse return null;
-
-    // Most of the Window's handler properties live in the frame's
-    // attribute-listener store; only the six below have a dedicated slot.
-    // Without this lookup an event dispatched straight at the window (as
-    // opposed to one bubbling up to it, which goes through getInlineHandler)
-    // would skip window.onclick and friends entirely.
-    if (self.frame._event_target_attr_listeners.get(.{ .target = target, .handler = handler_type })) |cached| {
-        return cached;
-    }
+    const window = switch (target._type) {
+        .window => |w| w,
+        else => return null,
+    };
 
     return switch (handler_type) {
         .onerror => window._on_error,
@@ -335,53 +338,22 @@ fn dispatchNode(self: *EventManager, target: *Node, event: *Event) !void {
     event._event_phase = .at_target;
     const target_et = target.asEventTarget();
 
-    blk: {
-        // Get inline handler (e.g., onclick property) for this target
-        if (self.getInlineHandler(target_et, event)) |inline_handler| {
-            was_handled = true;
-            event._current_target = target_et;
-
-            const prev_current_event = window._current_event;
-            window._current_event = currentEventForTarget(target_et, event);
-            defer window._current_event = prev_current_event;
-
-            // Inline handlers (e.g. onclick property) follow the same "report,
-            // don't propagate" rule as addEventListener listeners — see Listener.run.
-            var caught: js.TryCatch.Caught = undefined;
-            const handler_return: ?js.Value = ls.toLocal(inline_handler).tryCallWithThis(js.Value, target_et, .{event}, &caught) catch |err| ret: {
-                if (err == error.ExecutionTerminated) {
-                    return error.ExecutionTerminated;
-                }
-                frame._page.recordJsError(err);
-                log.warn(.event, "inline handler", .{ .err = err, .caught = caught });
-                break :ret null;
-            };
-            processHandlerReturnValue(event, handler_return);
-
-            if (event._stop_propagation) {
-                return;
-            }
-
-            if (event._stop_immediate_propagation) {
-                break :blk;
-            }
+    // Per spec, the target is invoked once during the capturing iteration
+    // and once during the bubbling iteration, each with its own snapshot
+    // of the listener list: a bubble listener added while running the
+    // target's capture listeners must run. An `on*` handler is a non-capture
+    // listener in that same list, so it runs in the second pass, in the place
+    // it took when it was first set.
+    if (self.base.getListeners(target_et, event._type_string)) |list| {
+        try self.dispatchPhase(list, target_et, event, &was_handled, &ls.local, true);
+        if (event._stop_propagation) {
+            return;
         }
-
-        // Per spec, the target is invoked once during the capturing iteration
-        // and once during the bubbling iteration, each with its own snapshot
-        // of the listener list: a bubble listener added while running the
-        // target's capture listeners must run.
-        if (self.base.getListeners(target_et, event._type_string)) |list| {
-            try self.dispatchPhase(list, target_et, event, &was_handled, &ls.local, true);
-            if (event._stop_propagation) {
-                return;
-            }
-        }
-        if (self.base.getListeners(target_et, event._type_string)) |list| {
-            try self.dispatchPhase(list, target_et, event, &was_handled, &ls.local, false);
-            if (event._stop_propagation) {
-                return;
-            }
+    }
+    if (self.base.getListeners(target_et, event._type_string)) |list| {
+        try self.dispatchPhase(list, target_et, event, &was_handled, &ls.local, false);
+        if (event._stop_propagation) {
+            return;
         }
     }
 
@@ -392,9 +364,10 @@ fn dispatchNode(self: *EventManager, target: *Node, event: *Event) !void {
         for (path[1..]) |current_target| {
             if (event._stop_propagation) break;
 
-            // Inline handlers (e.g. shadowRoot.onslotchange, div.onclick) are
-            // regular non-capture listeners and also fire on ancestors.
-            if (self.getInlineHandler(current_target, event)) |inline_handler| {
+            // Only the Window's six dedicated handler slots are still resolved
+            // here; every other ancestor handler is a listener in the list
+            // below, which is where its ordering comes from.
+            if (windowInlineHandler(current_target, event._type_string)) |inline_handler| {
                 was_handled = true;
                 event._current_target = current_target;
 
@@ -537,39 +510,6 @@ fn dispatchPhase(self: *EventManager, list: *std.DoublyLinkedList, current_targe
             return;
         }
     }
-}
-
-fn getInlineHandler(self: *EventManager, target: *EventTarget, event: *Event) ?js.Function.Global {
-    const global_event_handlers = @import("webapi/global_event_handlers.zig");
-    const handler_type = global_event_handlers.fromEventType(event._type_string.str()) orelse return null;
-
-    // Non-element targets (e.g. ShadowRoot.onslotchange) only ever set their
-    // handler via the property, so the lookup alone covers them.
-    if (self.frame._event_target_attr_listeners.get(.{ .target = target, .handler = handler_type })) |cached| {
-        return cached;
-    }
-
-    // Look up the inline handler for this target
-    const html_element = switch (target._type) {
-        .node => |n| n.is(Element.Html) orelse return null,
-        // The Window stores its event handlers in dedicated fields; an event
-        // propagating to the window must fire them too.
-        .window => |w| return switch (handler_type) {
-            .onerror => w._on_error,
-            .onload => w._on_load,
-            .onblur => w._on_blur,
-            .onfocus => w._on_focus,
-            .onresize => w._on_resize,
-            .onscroll => w._on_scroll,
-            else => null,
-        },
-        else => return null,
-    };
-
-    return html_element.getAttributeFunction(handler_type, self.frame) catch |err| {
-        log.warn(.event, "inline html callback", .{ .type = handler_type, .err = err });
-        return null;
-    };
 }
 
 // DOM spec "retarget": walk original_target out of shadow trees until the
