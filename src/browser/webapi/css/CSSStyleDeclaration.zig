@@ -139,7 +139,10 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
     // attribute, or from an ancestor, and nothing precomputes the set.
     if (self._is_computed and isCustomProperty(normalized)) {
         const element = self._element orelse return "";
-        return frame._style_manager.customPropertyValue(element, normalized) orelse "";
+        const value = frame._style_manager.customPropertyValue(element, normalized) orelse return "";
+        // var() is substituted at computed-value time; the specified value
+        // that `el.style` hands out keeps its var() text.
+        return frame._style_manager.substituteVars(element, value) orelse "";
     }
 
     if (self._is_computed) {
@@ -159,7 +162,7 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
                 // Resolve inline `style=` declarations through the element's
                 // parsed inline style, so computed values match `el.style`.
                 if (frame._style_manager.inlineStyleValue(element, wrapped)) |value| {
-                    return value;
+                    return frame._style_manager.substituteVars(element, value) orelse "";
                 }
 
                 // Computed width/height must agree with the synthetic layout
@@ -1320,4 +1323,8 @@ test "WebApi: CSSStyleDeclaration custom properties" {
 
 test "WebApi: CSSStyleDeclaration custom property cascade" {
     try testing.htmlRunner("css/custom_properties_cascade.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration custom property var substitution" {
+    try testing.htmlRunner("css/custom_properties_var.html", .{});
 }

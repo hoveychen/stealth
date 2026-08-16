@@ -1457,6 +1457,106 @@ fn customPropertyValueAt(self: *StyleManager, element: ?*Element, name: []const 
     return self.customPropertyValueAt(current.parentElement(), name, depth + 1);
 }
 
+/// Bounds the var() substitution recursion. A reference cycle
+/// (`--a: var(--b); --b: var(--a)`) is only visible as depth here, and Chrome
+/// makes a cycle invalid at computed-value time -- which is what returning
+/// null means to the caller.
+const MAX_VAR_DEPTH = 16;
+
+/// `raw` with every `var()` replaced by the custom property it names, or by
+/// that reference's fallback when the name is not declared anywhere up the
+/// tree. Returns null when the value is invalid at computed-value time: an
+/// undeclared name with no fallback, or a reference cycle.
+///
+/// Only computed values are substituted; a specified value keeps its var()
+/// text, which is why this is applied at read time rather than when a
+/// declaration is stored.
+pub fn substituteVars(self: *StyleManager, element: *Element, raw: []const u8) ?[]const u8 {
+    if (std.mem.indexOf(u8, raw, "var(") == null and std.mem.indexOf(u8, raw, "VAR(") == null) {
+        return raw;
+    }
+    return self.substituteVarsAt(element, raw, 0);
+}
+
+fn substituteVarsAt(self: *StyleManager, element: *Element, raw: []const u8, depth: u8) ?[]const u8 {
+    if (depth >= MAX_VAR_DEPTH) {
+        return null;
+    }
+
+    const allocator = self.frame.local_arena;
+    var out: std.ArrayList(u8) = .empty;
+    var rest = raw;
+    while (findVarReference(rest)) |reference| {
+        out.appendSlice(allocator, rest[0..reference.start]) catch return null;
+
+        const name = std.mem.trim(u8, reference.name, &std.ascii.whitespace);
+        if (self.customPropertyValue(element, name)) |value| {
+            // A property declared empty is still declared: the fallback does
+            // not apply, and the reference contributes nothing.
+            const substituted = self.substituteVarsAt(element, value, depth + 1) orelse return null;
+            out.appendSlice(allocator, substituted) catch return null;
+        } else {
+            const fallback = reference.fallback orelse return null;
+            const trimmed = std.mem.trim(u8, fallback, &std.ascii.whitespace);
+            const substituted = self.substituteVarsAt(element, trimmed, depth + 1) orelse return null;
+            out.appendSlice(allocator, substituted) catch return null;
+        }
+
+        rest = rest[reference.end..];
+    }
+    out.appendSlice(allocator, rest) catch return null;
+    return std.mem.trim(u8, out.items, &std.ascii.whitespace);
+}
+
+const VarReference = struct {
+    // Offsets into the slice searched: `start` is the `v` of `var(`, `end` is
+    // one past the closing paren.
+    start: usize,
+    end: usize,
+    name: []const u8,
+    // Everything after the first top-level comma, verbatim: Chrome keeps the
+    // commas of `var(--nope, a, b)` and answers "a, b".
+    fallback: ?[]const u8,
+};
+
+fn findVarReference(input: []const u8) ?VarReference {
+    var i: usize = 0;
+    const start = while (i + 4 <= input.len) : (i += 1) {
+        if (std.ascii.eqlIgnoreCase(input[i .. i + 4], "var(")) break i;
+    } else return null;
+
+    var depth: usize = 1;
+    var comma: ?usize = null;
+    var j = start + 4;
+    while (j < input.len) : (j += 1) {
+        switch (input[j]) {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if (depth == 0) break;
+            },
+            ',' => if (depth == 1 and comma == null) {
+                comma = j;
+            },
+            else => {},
+        }
+    }
+    if (depth != 0) {
+        // Unclosed reference: treat the rest as the name, the way a token
+        // stream that ends mid-function does.
+        return .{ .start = start, .end = input.len, .name = input[start + 4 ..], .fallback = null };
+    }
+
+    const close = j;
+    const inner_end = comma orelse close;
+    return .{
+        .start = start,
+        .end = close + 1,
+        .name = input[start + 4 .. inner_end],
+        .fallback = if (comma) |c| input[c + 1 .. close] else null,
+    };
+}
+
 /// The winning declaration of custom property `name` among the stylesheet
 /// rules matching `el`. Custom property names are case-sensitive.
 fn cascadedCustomDeclaration(self: *StyleManager, el: *Element, name: []const u8) ?Declaration {
