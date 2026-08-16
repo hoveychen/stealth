@@ -188,10 +188,23 @@ pub fn setOnComplete(self: *OfflineAudioContext, listener: ?js.Function) !void {
     }
 }
 
+// The render quantum. Chrome renders whole quanta, so a context asked for 100
+// frames still advances its clock by 128 -- measured across 1/100/128/129/5000
+// frames at 44100 and 256/300 at 48000, which all land on
+// ceil(length / 128) * 128 / sampleRate.
+const RENDER_QUANTUM: u32 = 128;
+
 // Renders the graph. The graph is empty, so the buffer is silent — see the
-// header. Everything around it is Chrome's: two state transitions, a clock that
-// lands on length/sampleRate, `complete` dispatched before the promise settles,
-// and a second call refused.
+// header. The rest is Chrome's shape, and the *timing* is the part that matters:
+// the call returns with the state still "running" and everything else — the
+// clock, the transition to "closed", the `complete` event, and finally the
+// promise — happens in a later task.
+//
+// Doing it inline instead looks equivalent and is not. Every real caller
+// attaches its handler on the line *after* startRendering(), so an event
+// dispatched inside the call reaches nobody: CreepJS's hasFakeAudio() awaits a
+// promise resolved only from `oncomplete`, with no timeout and no reject path,
+// and the whole fingerprint stops at "FP ID: Computing..." forever.
 pub fn startRendering(self: *OfflineAudioContext, exec: *Execution) !js.Promise {
     const local = exec.js.local.?;
     if (self._started) {
@@ -215,17 +228,70 @@ pub fn startRendering(self: *OfflineAudioContext, exec: *Execution) !js.Promise 
     );
 
     try base.transition(.running, exec);
-    base._current_time = @as(f64, @floatFromInt(self._length)) / base._sample_rate;
-    try base.transition(.closed, exec);
 
-    const target = base.asEventTarget();
-    if (exec.hasDirectListeners(target, "complete", self._on_complete)) {
-        const event = try events.OfflineAudioCompletionEvent.initTrusted(buffer, exec);
-        try exec.dispatch(target, event.asEvent(), self._on_complete, .{ .context = "audio complete" });
+    const resolver = local.createPromiseResolver();
+    const promise = resolver.promise();
+    const completion = try exec._factory.create(Completion{
+        .exec = exec,
+        .context = self,
+        .buffer = buffer,
+        .resolver = try resolver.persist(),
+    });
+    try exec._scheduler.add(completion, Completion.run, 0, .{
+        .name = "audio.offlineRenderComplete",
+        .finalizer = Completion.cancelled,
+    });
+
+    return promise;
+}
+
+// The tail of a render, run as a task rather than inline; see startRendering.
+const Completion = struct {
+    exec: *Execution,
+    context: *OfflineAudioContext,
+    buffer: *AudioBuffer,
+    resolver: js.PromiseResolver.Global,
+
+    // The scheduler dropped us before we ran (the page went away). The promise
+    // stays pending, which is what a torn-down render gives anyway.
+    fn cancelled(ctx: *anyopaque) void {
+        const self: *Completion = @ptrCast(@alignCast(ctx));
+        self.resolver.release();
+        self.exec._factory.destroy(self);
     }
 
-    return local.resolvePromise(buffer);
-}
+    fn run(ctx: *anyopaque) !?u32 {
+        const self: *Completion = @ptrCast(@alignCast(ctx));
+        const exec = self.exec;
+        defer {
+            self.resolver.release();
+            exec._factory.destroy(self);
+        }
+
+        const offline = self.context;
+        const base = offline._proto;
+        const quanta = (offline._length + RENDER_QUANTUM - 1) / RENDER_QUANTUM;
+        base._current_time = @as(f64, @floatFromInt(quanta * RENDER_QUANTUM)) / base._sample_rate;
+        try base.transition(.closed, exec);
+
+        const target = base.asEventTarget();
+        if (exec.hasDirectListeners(target, "complete", offline._on_complete)) {
+            const event = try events.OfflineAudioCompletionEvent.initTrusted(self.buffer, exec);
+            try exec.dispatch(target, event.asEvent(), offline._on_complete, .{ .context = "audio complete" });
+        }
+
+        // Settles after the event, matching Chrome: a `complete` handler sees
+        // the buffer before anything awaiting startRendering() does.
+        var ls: js.Local.Scope = undefined;
+        exec.js.localScope(&ls);
+        defer {
+            ls.local.runMicrotasks();
+            ls.deinit();
+        }
+        self.resolver.local(&ls.local).resolve("OfflineAudioContext.startRendering", self.buffer);
+        return null;
+    }
+};
 
 // Rejects rather than hanging: an offline context that has not started has
 // nothing to resume (measured, and the message says exactly that).

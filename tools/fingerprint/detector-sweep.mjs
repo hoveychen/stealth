@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed]');
+    console.error('usage: detector-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080]');
     process.exit(2);
 }
 const outArg = process.argv.indexOf('--out');
@@ -31,6 +31,17 @@ const outPath = path.resolve(
 // README), so a sweep that has to be trusted runs through a plain proxy.
 const proxyArg = process.argv.indexOf('--proxy');
 const proxy = proxyArg !== -1 ? process.argv[proxyArg + 1] : null;
+// Every detector in the list lays out responsively, so a node count only means
+// something next to the width it was taken at. Left to itself a headed Chrome
+// opens at whatever size the window manager feels like -- around 1200 wide
+// here -- and the resulting baseline silently disagrees with any other run.
+// Pin it, and record what the page actually saw (see extractReach).
+const sizeArg = process.argv.indexOf('--window-size');
+const windowSize = sizeArg !== -1 ? process.argv[sizeArg + 1] : '1920,1080';
+if (!/^\d+,\d+$/.test(windowSize)) {
+    console.error(`--window-size wants WIDTH,HEIGHT, got ${windowSize}`);
+    process.exit(2);
+}
 // Headless Chrome is not a safe stand-in for the reference: some sites treat it
 // differently, and some of its own APIs report differently (speechSynthesis
 // fills its voice list too late for CreepJS to see it). --headed makes the
@@ -47,10 +58,15 @@ if (engine === 'chrome') {
         `--user-data-dir=${profile}`,
         '--no-first-run',
         '--no-default-browser-check',
+        `--window-size=${windowSize}`,
         ...(headed ? [] : ['--headless=new']),
         ...(proxy ? [`--proxy-server=${proxy}`] : []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
+    // lightpanda has no viewport flag; Viewport.default is already 1920x1080,
+    // which is what --window-size defaults to. extractReach records the width
+    // each page actually saw, so a mismatch shows up in the results instead of
+    // hiding inside a node count.
     proc = spawn(path.join(repo, 'zig-out/bin/lightpanda'), [
         'serve', '--host', '127.0.0.1', '--port', String(PORT),
         ...(proxy ? ['--http-proxy', proxy] : []),
@@ -71,7 +87,7 @@ const keep = (d) => {
 proc.stdout.on('data', keep);
 proc.stderr.on('data', keep);
 
-const snapshot = { headed, engine, version: null, sites: [] };
+const snapshot = { headed, engine, windowSize, version: null, sites: [] };
 
 try {
     for (let i = 0; i < 120; i++) {
@@ -96,6 +112,17 @@ try {
         await cdp.send('Runtime.enable', {}, sessionId);
     }
 
+    // --window-size alone is not enough: macOS clamps a real Chrome window to
+    // the display, so asking for 1920 on a 1512-wide screen quietly gives
+    // 1512 and the baseline disagrees with lightpanda's 1920 default all over
+    // again. Both engines implement setDeviceMetricsOverride, so state the
+    // viewport rather than inherit it. deviceScaleFactor 1 keeps lightpanda
+    // from logging it as unimplemented.
+    const [w, h] = windowSize.split(',').map(Number);
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+        width: w, height: h, deviceScaleFactor: 1, mobile: false,
+    }, sessionId);
+
     for (const { name, url, settleMs } of DETECTORS) {
         const site = { name, url };
         const started = Date.now();
@@ -116,7 +143,7 @@ try {
             `${String(site.ms).padStart(6)}ms ${name.padEnd(17)} ` +
             (site.error
                 ? `ERR ${site.error}`
-                : `nodes=${String(site.nodes).padStart(5)} text=${String(site.textLength).padStart(6)} verdictWords=${site.verdictWords}${site.navigated ? '' : ' NAVIGATION-DID-NOT-HAPPEN'}`),
+                : `nodes=${String(site.nodes).padStart(5)} text=${String(site.textLength).padStart(6)} verdictWords=${site.verdictWords} w=${site.innerWidth}${site.navigated ? '' : ' NAVIGATION-DID-NOT-HAPPEN'}`),
         );
     }
     cdp.close();

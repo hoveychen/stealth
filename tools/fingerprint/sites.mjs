@@ -41,6 +41,14 @@ export const extractReach = `(() => {
     nodes: document.getElementsByTagName('*').length,
     textLength: text.length,
     text: text.slice(0, 4000),
+    // Recorded per site, not once per run: a responsive layout deals a
+    // different number of cards at a different width, so a node count is only
+    // comparable against another count taken at the same width. A baseline
+    // that does not carry its own viewport is how G7's pixelscan "+184
+    // elements" turned out to be a window that happened to be 1200 wide.
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+    dpr: window.devicePixelRatio,
   };
 })()`;
 

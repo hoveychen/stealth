@@ -2053,3 +2053,100 @@ samples printed as a double: one 1-ULP difference anywhere in the tail
 (a).** (c) is the most work for the least benefit against a hash-comparing
 detector; it only pays off against a detector that probes the graph rather than
 hashing one fixed render.
+
+## G11: the re-sweep, and the regression it found
+
+All twelve detectors, both engines, same day, **matched viewport** — the point
+of the exercise. `detectors-chrome-headed.json` and `detectors-lightpanda.json`
+are the current pair; `detectors-api-gaps-lightpanda.json` and its siblings stay
+as the historical columns of the plans that produced them, not as live
+baselines.
+
+### Two things had to be fixed before the numbers meant anything
+
+**The viewport.** `--window-size` is not enough on macOS: the window manager
+clamps a real Chrome window to the display, so a request for 1920 silently
+became 1512 here. The sweep now sends `Emulation.setDeviceMetricsOverride` to
+whichever engine it is driving, and `extractReach` records the width each page
+actually saw. That guard paid for itself immediately — the first run after
+adding it reported `w=1512` instead of the 1920 it had asked for.
+
+**The route.** The README's standing rule is that a sweep over a fake-IP tunnel
+is a measurement, not a finding. Checked before running rather than assumed:
+the system proxies are all disabled, the default route is a plain LAN gateway on
+`en0` with no `utun` in the path, and eleven of the twelve sites answered a
+direct `curl` in under 2.4 s with no TLS failure. `arh.antoinevastel.com` (which
+hosts both `areyouheadless` and `fpscanner`) returns a persistent HTTP 502 — the
+site is down, on three consecutive checks, which is why both read 8 nodes.
+
+### The regression: CreepJS had stopped finishing
+
+The sweep found lightpanda rendering **249 nodes / 1347 characters** of CreepJS
+against Chrome's 3758, stuck on `FP ID: Computing...`. The page had every
+section heading and not one value: `Window keys (0)`, `Navigator properties (0)`,
+`Computed Style keys (0)`, `mimeTypes (0)`, `plugins (0)`.
+
+`git bisect` over the 154 commits since the last good sweep (`dev.56+339149740`,
+which produced a full fingerprint, id `cc9eb98f6aa9…`) landed on **`b2ebdb27e`,
+the commit that added `OfflineAudioContext`** — seven builds, each one asked the
+same question: does CreepJS produce an id?
+
+The mechanism, once pointed at:
+
+```js
+// creep.js, hasFakeAudio()
+context.startRendering();
+return new Promise((resolve) => {
+    context.oncomplete = (event) => { /* … */ };   // assigned AFTER the call
+});
+```
+
+That promise has no timeout and no reject path. `getRenderedBuffer()` does the
+same through `addEventListener('complete', …)`, also after the call, and a
+`Promise.all` upstream awaits both. Our `startRendering()` did the entire render
+inline — state transitions, clock, `complete` event, promise — so by the time
+either handler was attached the event had already been dispatched to nobody, and
+CreepJS waited forever.
+
+Isolated rather than assumed: the viewport override was ruled out first (same
+249/1347 with and without it), then a page that logs each step showed
+`startRendering()`'s promise resolving while neither `oncomplete` nor the
+listener ever fired — and both firing when attached *before* the call.
+
+**The fix** moves the completion into a scheduled task. Measured on a headed
+Chrome 150 (`probe-g11b`) and now reproduced: the call returns with the state
+still `running`, a microtask queued right after it runs *before* the event, the
+`complete` event fires, and the promise settles last. The clock also lands on a
+whole number of 128-frame render quanta — 100 frames at 44100 gives `128/44100`,
+not `100/44100` — measured across 1/100/128/129/5000 at 44100 and 256/300 at
+48000.
+
+CreepJS went from 1347 characters to **87881**, with a real fingerprint id.
+
+### Where the twelve stand now
+
+Node counts, both engines at 1920×1080 on the same day:
+
+| site | Chrome (headed) | lightpanda | note |
+|---|---|---|---|
+| pixelscan | 1828 | **1828** | exact |
+| deviceinfo | 263 | **263** | exact |
+| sannysoft | 290 | 291 | +1 |
+| iphey | 487 | 485 | −2 |
+| browserleaks-js | 1180 | 1184 | +4 |
+| rebrowser | 91 | 98 | +7 |
+| browserleaks-tls | 7 | 5 | −2 |
+| creepjs | 3758 | 3607 | −151 |
+| browserscan | 2063 | 1376 | **−687, open** |
+| amiunique | 1551 | 571 | **−980, open** |
+| areyouheadless / fpscanner | 8 | 8 | host is 502, not measurable |
+
+**G7's pixelscan finding is settled.** It recorded us +184 elements over Chrome
+and suspected the viewport; at a matched 1920 the two are 1828 and 1828. The
+gap was entirely the window width — there was never a pixelscan difference.
+
+**G6's browserleaks-js −141 is closed** as a side effect of the batches since:
+1180 against 1184.
+
+Two sites remain open — **amiunique (−980)** and **browserscan (−687)**. Both
+render their shell and stop short; neither has been attributed yet.
