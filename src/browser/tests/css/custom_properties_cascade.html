@@ -67,3 +67,33 @@
   child.remove();
 }
 </script>
+
+<script id=computed_enumeration>
+{
+  // Chrome lists the custom properties in effect on the element alongside the
+  // standard longhands in the computed style's indexed list (measured: the
+  // same ten names this page declares). The order within the custom tail is
+  // Blink's own and is not reproduced -- compare as a set.
+  const cs = getComputedStyle(document.getElementById('probe'));
+  const custom = [];
+  for (let i = 0; i < cs.length; i++) {
+    if (cs[i].startsWith('--')) custom.push(cs[i]);
+  }
+  custom.sort();
+  testing.expectEqual(
+    '["--Case","--case","--inherited","--inline","--later","--root-prop","--sheet","--shout","--spec","--wide"]',
+    JSON.stringify(custom));
+  testing.expectEqual(true, cs.length > custom.length);
+  testing.expectEqual('', cs.item(cs.length));
+
+  // A plain element in a page that declares custom properties on it inherits
+  // them, so they are enumerated there too.
+  const orphan = document.createElement('div');
+  const orphanCustom = [];
+  const ocs = getComputedStyle(orphan);
+  for (let i = 0; i < ocs.length; i++) {
+    if (ocs[i].startsWith('--')) orphanCustom.push(ocs[i]);
+  }
+  testing.expectEqual('[]', JSON.stringify(orphanCustom));
+}
+</script>

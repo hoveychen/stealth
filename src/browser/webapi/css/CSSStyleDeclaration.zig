@@ -37,6 +37,11 @@ const CSSStyleDeclaration = @This();
 _element: ?*Element = null,
 _properties: std.DoublyLinkedList = .{},
 _is_computed: bool = false,
+/// The frame this declaration belongs to. A computed view's indexed list has
+/// to resolve the element's custom properties through the style manager, and
+/// the accessors behind it (`cs.length`, `cs[0]`, the iterator) are not all
+/// handed a frame.
+_frame: *Frame = undefined,
 /// The Typed OM view of this declaration, created on first use. Measured:
 /// `el.attributeStyleMap` and `rule.styleMap` are stable objects, so the map
 /// has to be cached rather than rebuilt per access.
@@ -52,6 +57,7 @@ pub fn init(element: ?*Element, is_computed: bool, frame: *Frame) !*CSSStyleDecl
     const self = try frame._factory.create(CSSStyleDeclaration{
         ._element = element,
         ._is_computed = is_computed,
+        ._frame = frame,
     });
     try self.parseInlineStyle(frame);
     return self;
@@ -98,6 +104,39 @@ pub fn length(self: *const CSSStyleDeclaration) u32 {
         return chrome_properties.computed.len;
     }
     return @intCast(self._properties.len());
+}
+
+/// What the indexed surface reports, which for a computed view is the standard
+/// longhands plus the custom properties in effect on the element -- Chrome
+/// lists those alongside them. The Typed OM views keep to `length`, whose
+/// measured size is the standard count alone.
+pub fn indexedLength(self: *const CSSStyleDeclaration) u32 {
+    if (!self._is_computed) {
+        return self.length();
+    }
+    return self.length() + @as(u32, @intCast(self.computedCustomNames().len));
+}
+
+/// The custom property names a computed view enumerates. Recomputed per call:
+/// the declaration object is cached per element for the frame's lifetime, so a
+/// stored list would go stale the moment the page declares another one.
+fn computedCustomNames(self: *const CSSStyleDeclaration) [][]const u8 {
+    const element = self._element orelse return &.{};
+    var names: std.ArrayList([]const u8) = .empty;
+    self._frame._style_manager.collectCustomPropertyNames(element, &names) catch return &.{};
+    return names.items;
+}
+
+pub fn indexedItem(self: *const CSSStyleDeclaration, index: u32) []const u8 {
+    if (self._is_computed and index >= chrome_properties.computed.len) {
+        const names = self.computedCustomNames();
+        const custom_index = index - chrome_properties.computed.len;
+        if (custom_index >= names.len) {
+            return "";
+        }
+        return names[custom_index];
+    }
+    return self.item(index);
 }
 
 pub fn item(self: *const CSSStyleDeclaration, index: u32) []const u8 {
@@ -1155,7 +1194,7 @@ fn queryAlias(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame)
 }
 
 fn indexes(self: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Array {
-    const len = self.length();
+    const len = self.indexedLength();
     var arr = exec.js.local.?.newArray(len);
     for (0..len) |i| {
         _ = try arr.set(@intCast(i), i, .{});
@@ -1164,10 +1203,10 @@ fn indexes(self: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Arra
 }
 
 fn getAtIndex(self: *const CSSStyleDeclaration, index: u32) ?[]const u8 {
-    if (index >= self.length()) {
+    if (index >= self.indexedLength()) {
         return null;
     }
-    return self.item(index);
+    return self.indexedItem(index);
 }
 
 /// Chrome puts Symbol.iterator on CSSStyleDeclaration.prototype and it walks
@@ -1185,11 +1224,11 @@ const Iterator = struct {
 
     pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
         const index = self.index;
-        if (index >= self.declaration.length()) {
+        if (index >= self.declaration.indexedLength()) {
             return null;
         }
         self.index = index + 1;
-        return .{ index, self.declaration.item(index) };
+        return .{ index, self.declaration.indexedItem(index) };
     }
 };
 
@@ -1210,7 +1249,7 @@ pub const JsApi = struct {
     // Measured off a headed Chrome 150 and asserted in
     // tests/css/declaration_surface.html, so reordering these renames the engine.
     pub const cssText = bridge.accessor(CSSStyleDeclaration.getCssText, CSSStyleDeclaration.setCssText, .{});
-    pub const length = bridge.accessor(CSSStyleDeclaration.length, null, .{});
+    pub const length = bridge.accessor(CSSStyleDeclaration.indexedLength, null, .{});
     pub const parentRule = bridge.accessor(CSSStyleDeclaration.getParentRule, null, .{});
     pub const cssFloat = bridge.accessor(CSSStyleDeclaration.getFloat, CSSStyleDeclaration.setFloat, .{});
     pub const getPropertyPriority = bridge.function(CSSStyleDeclaration.getPropertyPriority, .{});
@@ -1224,7 +1263,7 @@ pub const JsApi = struct {
         if (index < 0) {
             return "";
         }
-        return self.item(@intCast(index));
+        return self.indexedItem(@intCast(index));
     }
 
     // The indexed half is the property list -- Chrome's 474 computed longhands

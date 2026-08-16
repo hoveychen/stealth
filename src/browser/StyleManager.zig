@@ -1457,6 +1457,79 @@ fn customPropertyValueAt(self: *StyleManager, element: ?*Element, name: []const 
     return self.customPropertyValueAt(current.parentElement(), name, depth + 1);
 }
 
+/// Every custom property name in effect on `element`: the ones it declares
+/// itself, inline or through a matching rule, then the ones it inherits, each
+/// name once. Chrome's computed style enumerates these alongside the standard
+/// longhands (the order within them is Blink's own and is not reproduced).
+pub fn collectCustomPropertyNames(self: *StyleManager, element: *Element, out: *std.ArrayList([]const u8)) !void {
+    self.rebuildIfDirty() catch return;
+
+    var current: ?*Element = element;
+    var depth: u8 = 0;
+    while (current) |el| : ({
+        current = el.parentElement();
+        depth += 1;
+    }) {
+        if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+            return;
+        }
+        if (self.frame._element_styles.get(el) orelse blk: {
+            if (el.getAttributeSafe(comptime .wrap("style")) == null) break :blk null;
+            break :blk el.getOrCreateStyle(self.frame) catch null;
+        }) |style| {
+            var node = style._properties.first;
+            while (node) |n| : (node = n.next) {
+                const property = CSSStyleProperty.fromNodeLink(n);
+                try appendUnique(self.frame.local_arena, out, property._name.str());
+            }
+        }
+
+        try self.appendMatchingCustomNames(el, out);
+    }
+}
+
+fn appendMatchingCustomNames(self: *StyleManager, el: *Element, out: *std.ArrayList([]const u8)) !void {
+    const collect = struct {
+        fn run(manager: *StyleManager, rules: *const RuleList, elem: *Element, sink: *std.ArrayList([]const u8)) !void {
+            for (rules.items(.props), rules.items(.selector)) |props, selector| {
+                if (props.custom.len == 0) continue;
+                if (!matchesSelector(elem, selector, manager.frame)) continue;
+                for (props.custom) |declaration| {
+                    try appendUnique(manager.frame.local_arena, sink, declaration.name);
+                }
+            }
+        }
+    }.run;
+
+    if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
+        if (self.id_rules.get(id)) |rules| {
+            try collect(self, &rules, el, out);
+        }
+    }
+    if (el.getAttributeSafe(comptime .wrap("class"))) |class_attr| {
+        var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
+        while (it.next()) |class| {
+            if (self.class_rules.get(class)) |rules| {
+                try collect(self, &rules, el, out);
+            }
+        }
+    }
+    if (self.tag_rules.get(el.getTag())) |rules| {
+        try collect(self, &rules, el, out);
+    }
+    try collect(self, &self.other_rules, el, out);
+}
+
+fn appendUnique(allocator: Allocator, out: *std.ArrayList([]const u8), name: []const u8) !void {
+    if (!CSSStyleDeclaration.isCustomProperty(name)) {
+        return;
+    }
+    for (out.items) |seen| {
+        if (std.mem.eql(u8, seen, name)) return;
+    }
+    try out.append(allocator, name);
+}
+
 /// Bounds the var() substitution recursion. A reference cycle
 /// (`--a: var(--b); --b: var(--a)`) is only visible as depth here, and Chrome
 /// makes a cycle invalid at computed-value time -- which is what returning
