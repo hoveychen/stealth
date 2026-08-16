@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<script id=style>
+{
+  // Measured on Chrome 150: `style` sits on SVGElement.prototype, so every SVG
+  // element -- including one whose tag no spec defines -- hands out a live
+  // CSSStyleDeclaration backed by the style attribute.
+  const NS = 'http://www.w3.org/2000/svg';
+  for (const tag of ['svg', 'g', 'path', 'nope']) {
+    const e = document.createElementNS(NS, tag);
+    e.setAttribute('style', 'fill:red');
+    testing.expectEqual('[object CSSStyleDeclaration]', String(e.style));
+    testing.expectEqual(true, e.style === e.style);
+    testing.expectEqual('red', e.style.fill);
+    testing.expectEqual('fill: red;', e.style.cssText);
+
+    e.style.fill = 'blue';
+    testing.expectEqual('fill: blue;', e.getAttribute('style'));
+  }
+
+  // A tag-less-known SVG element still resolves through SVGElement.
+  const nope = document.createElementNS(NS, 'nope');
+  testing.expectEqual(true, nope instanceof SVGElement);
+}
+</script>
+
+<script id=style_descriptor>
+{
+  const NS = 'http://www.w3.org/2000/svg';
+  const path = document.createElementNS(NS, 'path');
+  testing.expectEqual(false, Object.getOwnPropertyNames(path).includes('style'));
+  testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(Element.prototype, 'style'));
+
+  const descriptor = Object.getOwnPropertyDescriptor(SVGElement.prototype, 'style');
+  testing.expectEqual('function', typeof descriptor.get);
+  testing.expectEqual('function', typeof descriptor.set);
+  testing.expectEqual(true, descriptor.enumerable);
+  testing.expectEqual(true, descriptor.configurable);
+
+  path.style = 'stroke: green';
+  testing.expectEqual('green', path.style.stroke);
+}
+</script>
+
+<script id=attribute_style_map>
+{
+  const NS = 'http://www.w3.org/2000/svg';
+  const g = document.createElementNS(NS, 'g');
+  g.setAttribute('style', 'fill: red');
+  testing.expectEqual('[object StylePropertyMap]', String(g.attributeStyleMap));
+  testing.expectEqual(true, g.attributeStyleMap === g.attributeStyleMap);
+  testing.expectEqual('red', String(g.attributeStyleMap.get('fill')));
+  testing.expectEqual(1, g.attributeStyleMap.size);
+}
+</script>
+
+<script id=writes_through_to_attribute>
+{
+  // The pattern that took amiunique's whole "Javascript attributes" table down:
+  // a Vue bundle doing `element.style[prop] = value` on an SVG node.
+  const NS = 'http://www.w3.org/2000/svg';
+  const rect = document.createElementNS(NS, 'rect');
+  rect.style['transform'] = 'translateX(10px)';
+  testing.expectEqual('translateX(10px)', rect.style.transform);
+  testing.expectEqual('transform: translateX(10px);', rect.getAttribute('style'));
+}
+</script>
