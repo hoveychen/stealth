@@ -21,6 +21,7 @@ const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
 
 const Notification = @import("../../Notification.zig");
+const Performance = @import("Performance.zig");
 
 const logger = lp.log;
 
@@ -30,6 +31,23 @@ _timers: std.StringHashMapUnmanaged(u64) = .{},
 _counts: std.StringHashMapUnmanaged(u64) = .{},
 
 pub const init: Console = .{};
+
+/// The calling realm's console namespace object.
+///
+/// console is a namespace, not an interface, and Chrome's members do no brand
+/// check on `this`: `console.log.call(undefined, x)`, `const f = console.log;
+/// f(x)` and `Object(console.log)(x)` all log (measured on a headed Chrome
+/// 150, probe-g8a). iphey's `dep-reg-to-string` devtools probe takes the last
+/// of those shapes, and answering it `Illegal invocation` was tripping the
+/// detector. So every member is bound `.static` -- no receiver to unwrap and
+/// no v8 Signature to fail -- and the two stateful tables are reached through
+/// the global scope instead of through `self`.
+fn realm(exec: *const js.Execution) *Console {
+    return switch (exec.js.global) {
+        .frame => |frame| &frame.window._console,
+        .worker => |worker| &worker._console,
+    };
+}
 
 fn dispatchConsoleMessage(values: []js.Value, console_type: Notification.ConsoleMessageType, exec: *js.Execution) void {
     const notification = exec.session.notification;
@@ -50,7 +68,7 @@ fn dispatchConsoleMessage(values: []js.Value, console_type: Notification.Console
     });
 }
 
-pub fn trace(_: *const Console, values: []js.Value, exec: *js.Execution) !void {
+pub fn trace(values: []js.Value, exec: *js.Execution) !void {
     logger.debug(.js, "console.trace", .{
         .stack = exec.js.local.?.stackTrace() catch "???",
         .args = ValueWriter{ .values = values },
@@ -58,46 +76,71 @@ pub fn trace(_: *const Console, values: []js.Value, exec: *js.Execution) !void {
     dispatchConsoleMessage(values, .trace, exec);
 }
 
-pub fn debug(_: *const Console, values: []js.Value, exec: *js.Execution) void {
+pub fn debug(values: []js.Value, exec: *js.Execution) void {
     logger.debug(.js, "console.debug", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .debug, exec);
 }
 
-pub fn info(_: *const Console, values: []js.Value, exec: *js.Execution) void {
+pub fn info(values: []js.Value, exec: *js.Execution) void {
     logger.info(.js, "console.info", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .info, exec);
 }
 
-pub fn log(_: *const Console, values: []js.Value, exec: *js.Execution) void {
+pub fn log(values: []js.Value, exec: *js.Execution) void {
     logger.info(.js, "console.log", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .log, exec);
 }
 
-pub fn warn(_: *const Console, values: []js.Value, exec: *js.Execution) void {
+pub fn warn(values: []js.Value, exec: *js.Execution) void {
     logger.warn(.js, "console.warn", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .warning, exec);
 }
 
-pub fn clear(_: *const Console) void {}
+/// console.dir / console.dirxml. Chrome logs the value like console.log does
+/// and returns undefined; the interactive object/DOM tree they draw in devtools
+/// has no headless equivalent.
+pub fn dir(values: []js.Value, exec: *js.Execution) void {
+    logger.info(.js, "console.dir", .{ValueWriter{ .values = values }});
+    dispatchConsoleMessage(values, .log, exec);
+}
 
-pub fn assert(_: *const Console, assertion: js.Value, values: []js.Value, exec: *js.Execution) void {
-    if (assertion.toBool()) {
-        return;
+pub fn dirxml(values: []js.Value, exec: *js.Execution) void {
+    logger.info(.js, "console.dirxml", .{ValueWriter{ .values = values }});
+    dispatchConsoleMessage(values, .log, exec);
+}
+
+pub fn clear() void {}
+
+pub fn assert(assertion: ?js.Value, values: []js.Value, exec: *js.Execution) void {
+    if (assertion) |a| {
+        if (a.toBool()) {
+            return;
+        }
     }
     logger.warn(.js, "console.assert", .{ValueWriter{ .values = values }});
     dispatchConsoleMessage(values, .warning, exec);
 }
 
-pub fn @"error"(_: *const Console, values: []js.Value, exec: *js.Execution) void {
+pub fn @"error"(values: []js.Value, exec: *js.Execution) void {
     logger.warn(.js, "console.error", .{ValueWriter{ .values = values, .stack = exec.js.local.?.stackTrace() catch |err| @errorName(err) orelse "???" }});
     dispatchConsoleMessage(values, .@"error", exec);
 }
 
-pub fn table(_: *const Console, data: js.Value, columns: ?js.Value) void {
+pub fn table(data: ?js.Value, columns: ?js.Value) void {
     logger.info(.js, "console.table", .{ .data = data, .columns = columns });
 }
 
-pub fn count(self: *Console, label_: ?[]const u8, exec: *js.Execution) !void {
+/// console.profile / console.profileEnd / console.timeStamp drive the devtools
+/// CPU profiler and performance timeline. Chrome returns undefined from all
+/// three with or without arguments (measured); there is nothing to drive here.
+pub fn profile(_: ?[]const u8) void {}
+
+pub fn profileEnd(_: ?[]const u8) void {}
+
+pub fn timeStamp(_: ?[]const u8) void {}
+
+pub fn count(label_: ?[]const u8, exec: *js.Execution) !void {
+    const self = realm(exec);
     const label = label_ orelse "default";
     const gop = try self._counts.getOrPut(exec.arena, label);
 
@@ -114,7 +157,8 @@ pub fn count(self: *Console, label_: ?[]const u8, exec: *js.Execution) !void {
     logger.info(.js, "console.count", .{ .label = label, .count = c });
 }
 
-pub fn countReset(self: *Console, label_: ?[]const u8) !void {
+pub fn countReset(label_: ?[]const u8, exec: *js.Execution) !void {
+    const self = realm(exec);
     const label = label_ orelse "default";
     const kv = self._counts.fetchRemove(label) orelse {
         logger.info(.js, "console.countReset", .{ .label = label, .err = "invalid label" });
@@ -123,7 +167,8 @@ pub fn countReset(self: *Console, label_: ?[]const u8) !void {
     logger.info(.js, "console.countReset", .{ .label = label, .count = kv.value });
 }
 
-pub fn time(self: *Console, label_: ?[]const u8, exec: *js.Execution) !void {
+pub fn time(label_: ?[]const u8, exec: *js.Execution) !void {
+    const self = realm(exec);
     const label = label_ orelse "default";
     const gop = try self._timers.getOrPut(exec.arena, label);
 
@@ -135,7 +180,8 @@ pub fn time(self: *Console, label_: ?[]const u8, exec: *js.Execution) !void {
     gop.value_ptr.* = lp.datetime.timestamp(.boot);
 }
 
-pub fn timeLog(self: *Console, label_: ?[]const u8) void {
+pub fn timeLog(label_: ?[]const u8, exec: *js.Execution) void {
+    const self = realm(exec);
     const elapsed = lp.datetime.timestamp(.boot);
     const label = label_ orelse "default";
     const start = self._timers.get(label) orelse {
@@ -145,7 +191,8 @@ pub fn timeLog(self: *Console, label_: ?[]const u8) void {
     logger.info(.js, "console.timeLog", .{ .label = label, .elapsed = elapsed - start });
 }
 
-pub fn timeEnd(self: *Console, label_: ?[]const u8) void {
+pub fn timeEnd(label_: ?[]const u8, exec: *js.Execution) void {
+    const self = realm(exec);
     const elapsed = lp.datetime.timestamp(.boot);
     const label = label_ orelse "default";
     const kv = self._timers.fetchRemove(label) orelse {
@@ -156,15 +203,93 @@ pub fn timeEnd(self: *Console, label_: ?[]const u8) void {
     logger.info(.js, "console.timeEnd", .{ .label = label, .elapsed = elapsed - kv.value });
 }
 
-pub fn group(_: *const Console, values: []js.Value) void {
+pub fn group(values: []js.Value) void {
     logger.info(.js, "console.group", .{ValueWriter{ .values = values }});
 }
 
-pub fn groupCollapsed(_: *const Console, values: []js.Value) void {
+pub fn groupCollapsed(values: []js.Value) void {
     logger.info(.js, "console.groupCollapsed", .{ValueWriter{ .values = values }});
 }
 
-pub fn groupEnd(_: *const Console) void {}
+pub fn groupEnd() void {}
+
+/// The members of the object `console.context(name)` hands back, in the order
+/// Chrome lists them. Note `dirXml`: the same operation is spelled with a
+/// capital X here and lower case on `console` itself (measured).
+const CONTEXT_MEMBERS = [_][:0]const u8{
+    "dir",        "dirXml",  "table",      "groupEnd",  "clear",          "count",
+    "countReset", "profile", "profileEnd", "debug",     "error",          "info",
+    "log",        "warn",    "trace",      "group",     "groupCollapsed", "assert",
+    "time",       "timeLog", "timeEnd",    "timeStamp",
+};
+
+/// console.context(name) is a devtools affordance: a fresh, plain object -- no
+/// brand, Object.prototype as its proto -- carrying its own copy of the 22
+/// logging operations, each an own writable/enumerable/configurable function of
+/// length 1 (all measured on Chrome 150). The copies log but do not feed the
+/// CDP console stream: a named context is not the page's console.
+pub fn context(_: ?[]const u8, exec: *js.Execution) !js.Object {
+    const local = exec.js.local.?;
+    const object = local.newObject();
+    inline for (CONTEXT_MEMBERS) |name| {
+        const func = try local.newNamedCallback(name, 1, contextMember(name), exec.js);
+        _ = try object.set(name, func, .{});
+    }
+    return object;
+}
+
+fn contextMember(comptime name: [:0]const u8) fn (*js.Context, []js.Value) void {
+    return struct {
+        fn call(_: *js.Context, values: []js.Value) void {
+            logger.info(.js, "console.context." ++ name, .{ValueWriter{ .values = values }});
+        }
+    }.call;
+}
+
+/// console.createTask(name) returns an async-stack-tagging token: a plain
+/// object whose single own `run` method invokes its callback and hands back the
+/// result. Both argument checks are a plain Error in Chrome, not a TypeError.
+///
+/// The name is taken strictly: Chrome runs no ToString on it, so a number, a
+/// `new String('t')` wrapper and an object with a `toString` are all rejected
+/// exactly like a missing or empty one (measured, probe-g8f). iphey's devtools
+/// probes call console members with an object argument, so coercing here would
+/// hand back a task where Chrome throws.
+pub fn createTask(name_: ?js.Value, exec: *js.Execution) !js.Object {
+    const local = exec.js.local.?;
+    const too_short = if (name_) |name| blk: {
+        const str = name.isString() orelse break :blk true;
+        break :blk str.len() == 0;
+    } else true;
+    if (too_short) {
+        return throwError("First argument must be a non-empty string.", local);
+    }
+
+    const task = local.newObject();
+    _ = try task.set("run", try local.newNamedCallback("run", 0, taskRun, exec.js), .{});
+    return task;
+}
+
+fn taskRun(ctx: *js.Context, callback_: ?js.Function) !js.Value {
+    const local = ctx.local.?;
+    const callback = callback_ orelse {
+        return throwError("First argument must be a function.", local);
+    };
+    return callback.call(js.Value, .{});
+}
+
+pub fn getMemory(exec: *const js.Execution) !*Performance.MemoryInfo {
+    return Performance.memoryInfo(exec);
+}
+
+pub fn setMemory(_: js.Value) void {}
+
+fn throwError(message: []const u8, local: *const js.Local) anyerror {
+    const isolate = local.isolate;
+    _ = isolate.throwException(isolate.createError(message));
+    return error.JsException;
+}
+
 const ValueWriter = struct {
     values: []js.Value,
     stack: ?[]const u8 = null,
@@ -228,24 +353,45 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const trace = bridge.function(Console.trace, .{});
-    pub const debug = bridge.function(Console.debug, .{});
-    pub const info = bridge.function(Console.info, .{});
-    pub const log = bridge.function(Console.log, .{});
-    pub const warn = bridge.function(Console.warn, .{});
-    pub const clear = bridge.function(Console.clear, .{ .noop = true });
-    pub const assert = bridge.function(Console.assert, .{});
-    pub const @"error" = bridge.function(Console.@"error", .{});
-    pub const exception = bridge.function(Console.@"error", .{});
-    pub const table = bridge.function(Console.table, .{});
-    pub const count = bridge.function(Console.count, .{});
-    pub const countReset = bridge.function(Console.countReset, .{});
-    pub const time = bridge.function(Console.time, .{});
-    pub const timeLog = bridge.function(Console.timeLog, .{});
-    pub const timeEnd = bridge.function(Console.timeEnd, .{});
-    pub const group = bridge.function(Console.group, .{});
-    pub const groupCollapsed = bridge.function(Console.groupCollapsed, .{});
-    pub const groupEnd = bridge.function(Console.groupEnd, .{});
+    // Declaration order is property order. This is Chrome 150's, measured with
+    // Object.getOwnPropertyNames(console) -- it is neither alphabetical nor the
+    // Console Standard's IDL order, so it can only be copied.
+    //
+    // Every member is `.static`: see `Console.realm` for why console does no
+    // receiver check. Every one also reports length 0, because a variadic
+    // argument contributes nothing to a function's length and every console
+    // operation but `context` is variadic (measured: even console.assert, whose
+    // IDL declares a required `condition`, is 0).
+    pub const debug = bridge.function(Console.debug, .{ .static = true, .arity = 0 });
+    pub const @"error" = bridge.function(Console.@"error", .{ .static = true, .arity = 0 });
+    pub const info = bridge.function(Console.info, .{ .static = true, .arity = 0 });
+    pub const log = bridge.function(Console.log, .{ .static = true, .arity = 0 });
+    pub const warn = bridge.function(Console.warn, .{ .static = true, .arity = 0 });
+    pub const dir = bridge.function(Console.dir, .{ .static = true, .arity = 0 });
+    pub const dirxml = bridge.function(Console.dirxml, .{ .static = true, .arity = 0 });
+    pub const table = bridge.function(Console.table, .{ .static = true, .arity = 0 });
+    pub const trace = bridge.function(Console.trace, .{ .static = true, .arity = 0 });
+    pub const group = bridge.function(Console.group, .{ .static = true, .arity = 0 });
+    pub const groupCollapsed = bridge.function(Console.groupCollapsed, .{ .static = true, .arity = 0 });
+    pub const groupEnd = bridge.function(Console.groupEnd, .{ .static = true, .arity = 0 });
+    pub const clear = bridge.function(Console.clear, .{ .static = true, .arity = 0, .noop = true });
+    pub const count = bridge.function(Console.count, .{ .static = true, .arity = 0 });
+    pub const countReset = bridge.function(Console.countReset, .{ .static = true, .arity = 0 });
+    pub const assert = bridge.function(Console.assert, .{ .static = true, .arity = 0 });
+    pub const profile = bridge.function(Console.profile, .{ .static = true, .arity = 0, .noop = true });
+    pub const profileEnd = bridge.function(Console.profileEnd, .{ .static = true, .arity = 0, .noop = true });
+    pub const time = bridge.function(Console.time, .{ .static = true, .arity = 0 });
+    pub const timeLog = bridge.function(Console.timeLog, .{ .static = true, .arity = 0 });
+    pub const timeEnd = bridge.function(Console.timeEnd, .{ .static = true, .arity = 0 });
+    pub const timeStamp = bridge.function(Console.timeStamp, .{ .static = true, .arity = 0, .noop = true });
+    pub const context = bridge.function(Console.context, .{ .static = true, .arity = 1 });
+    pub const createTask = bridge.function(Console.createTask, .{ .static = true, .arity = 0 });
+
+    // console.memory is the same MemoryInfo performance.memory hands out (the
+    // two share a prototype, measured), and like it a fresh object per read.
+    // It is one of the few console members that is an accessor, and it has a
+    // setter, which Chrome silently ignores.
+    pub const memory = bridge.accessor(Console.getMemory, Console.setMemory, .{ .static = true, .anonymous = true });
 };
 
 const testing = @import("../../testing.zig");

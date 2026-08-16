@@ -245,6 +245,7 @@ pub const Accessor = struct {
     wpt_only: bool = false,
     unforgeable: bool = false, // Web IDL [LegacyUnforgeable]
     enumerable: bool = true,
+    anonymous: bool = false,
     exposed: Caller.Function.Opts.Exposed = .both,
     cache: ?Caller.Function.Opts.Caching = null,
     getter: ?*const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void = null,
@@ -258,6 +259,7 @@ pub const Accessor = struct {
             .deletable = opts.deletable,
             .unforgeable = opts.unforgeable,
             .enumerable = opts.enumerable,
+            .anonymous = opts.anonymous,
             .exposed = opts.exposed,
         };
 

@@ -123,10 +123,15 @@ pub fn getEventCounts(self: *Performance) *EventCounts {
     return &self._event_counts;
 }
 
+pub fn getMemory(_: *Performance, exec: *const Execution) !*MemoryInfo {
+    return memoryInfo(exec);
+}
+
 /// V8's live heap numbers, which is what Chrome's performance.memory reports
 /// too. A fresh object every read (measured: `performance.memory !==
-/// performance.memory`).
-pub fn getMemory(_: *Performance, exec: *const Execution) !*MemoryInfo {
+/// performance.memory`). console.memory hands out the same thing: on Chrome the
+/// two share a prototype.
+pub fn memoryInfo(exec: *const Execution) !*MemoryInfo {
     const stats = exec.js.isolate.getHeapStatistics();
     return exec._factory.create(MemoryInfo{
         ._total = stats.total_heap_size,
