@@ -2652,3 +2652,39 @@ payload type, and a renumbered video payload list). So bumping `chrome_major` to
 151 cannot be done on its own — the CSS and SDP tables have to be re-recorded in
 the same change, or the version the engine claims contradicts the tables beside
 it.
+
+### What got replaced, and what is still macOS (P5)
+
+Re-recorded from the container (`CDP_ENDPOINT` now points any of the generators
+at a Chrome it did not spawn, which is how a Linux table gets measured from a
+macOS host at all):
+
+| table | before | after |
+|---|---|---|
+| `css/chrome_properties.zig` | 474 computed / 735 aliases, Chrome 150 macOS | 475 / 736, Chrome 151 Linux |
+| `media/chrome_mimes.zig` | 21 containers, Chrome 150 macOS | 21 containers, Chrome 151 Linux — HEVC gone, `MediaRecorder` no longer takes AAC-in-MP4 |
+| `webrtc/chrome_sdp.zig` | 15 send / 23 receive video codecs, Chrome 150 macOS | 13 / 19, Chrome 151 Linux — no H264 High profile, no H265, video payload types renumbered, `rrtr` feedback and `a=rtcp-xr:rcvr-rtt=all` added by 151 |
+
+The CSS numbers moving is the version, not the platform: `mac151` and
+`linux151` agree exactly (P4), so this refresh would have been due anyway.
+
+Nine assertions across four test files pinned the old counts and had to move
+with the tables — `cs.length`, the last computed longhand's index, the alias
+count, `computedStyleMap().size`, the video payload-type count, the H264 payload
+number, the receive-codec count and the per-codec feedback set. They are the
+tables' regression net, so each one moving is a table that changed, not a test
+that was wrong.
+
+**Still macOS, deliberately, because the container cannot supply them:**
+
+* `canvas/WebGLRenderingContext.zig` still reports `Google Inc. (Apple)` /
+  `ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)` and the
+  Metal limits, beside a user-agent that now says Linux. This is a live
+  contradiction and the worst single row in the engine right now. The container's
+  answer is SwiftShader, which is the headless signature — so this is a choice
+  between two tells, not a fix waiting to be applied. See P4.
+* `speech/voices.zig` still lists the 199 macOS system voices. Same shape of
+  problem: the container offers 19 Google network voices and zero local ones,
+  which reads as "local (0): blocked".
+
+Both need a Linux machine with a GPU and speech-dispatcher to resolve honestly.

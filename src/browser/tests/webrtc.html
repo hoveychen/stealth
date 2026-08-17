@@ -148,7 +148,9 @@
 
   // Video codecs carry no `channels` key at all.
   const video = RTCRtpSender.getCapabilities('video');
-  testing.expectEqual(15, video.codecs.length);
+  // Thirteen on Linux, not the fifteen macOS reports: H264 High profile and
+  // H265 both need a platform decoder, which is measured absent here (G21 P4).
+  testing.expectEqual(13, video.codecs.length);
   testing.expectEqual(11, video.headerExtensions.length);
   testing.expectEqual(['clockRate', 'mimeType'], Object.keys(video.codecs[0]));
   testing.expectEqual('video/VP8', video.codecs[0].mimeType);
@@ -156,7 +158,9 @@
 
   // The receiver decodes profiles the encoder will not emit, so its video
   // table is longer; audio is the same for both.
-  testing.expectEqual(23, RTCRtpReceiver.getCapabilities('video').codecs.length);
+  // Nineteen on Linux: the four H264-High / H265 receive entries macOS lists
+  // need a platform decoder (G21 P4).
+  testing.expectEqual(19, RTCRtpReceiver.getCapabilities('video').codecs.length);
   testing.expectEqual(
     JSON.stringify(audio),
     JSON.stringify(RTCRtpReceiver.getCapabilities('audio')),
@@ -243,16 +247,17 @@
     const sdp = offer.sdp;
     const payloads = (kind) => (new RegExp(`m=${kind} [^\\s]+ [^\\s]+ ([^\\r\\n]+)`).exec(sdp) || [])[1].split(' ');
     testing.expectEqual(8, payloads('audio').length);
-    testing.expectEqual(42, payloads('video').length);
+    testing.expectEqual(34, payloads('video').length);
 
     const rtpmap = (pt) => (new RegExp(`a=rtpmap:${pt} ([^\\r\\n]+)`).exec(sdp) || [])[1];
     testing.expectEqual('opus/48000/2', rtpmap(111));
     testing.expectEqual('VP8/90000', rtpmap(96));
-    testing.expectEqual('H264/90000', rtpmap(103));
+    // Chrome 151 renumbered the video payload types; H264 starts at 102.
+    testing.expectEqual('H264/90000', rtpmap(102));
 
     const fmtp = (pt) => (new RegExp(`a=fmtp:${pt} ([^\\r\\n]+)`).exec(sdp) || [])[1];
     testing.expectEqual('minptime=10;useinbandfec=1', fmtp(111));
-    testing.expectEqual('level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f', fmtp(103));
+    testing.expectEqual('level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f', fmtp(102));
 
     // The extension list CreepJS renders under the modal.
     const extensions = [...new Set((sdp.match(/extmap:\d+ [^\r\n]+/g) || [])
@@ -276,7 +281,8 @@
 
     // Feedback lines are what the modal lists per codec.
     testing.expectEqual(
-      ['ccm fir', 'goog-remb', 'nack', 'nack pli', 'transport-cc'],
+      // Chrome 151 added 'rrtr' (with an a=rtcp-xr:rcvr-rtt=all line per m-section).
+      ['ccm fir', 'goog-remb', 'nack', 'nack pli', 'rrtr', 'transport-cc'],
       [...new Set((sdp.match(/a=rtcp-fb:96 ([^\r\n]+)/g) || []).map((x) => x.replace('a=rtcp-fb:96 ', '')))].sort(),
     );
   });
