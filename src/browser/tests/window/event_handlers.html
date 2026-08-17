@@ -138,3 +138,114 @@
     testing.expectEqual(['property', 'listener'], order);
   }
 </script>
+
+<script id=window_dedicated_slot_handler_order>
+  {
+    // A handler is an event listener: it takes its place in the Window's
+    // listener list when first set and runs from there. Measured on a headed
+    // Chrome 150 (probe-g22b): every one of these is "al1,on,al2". Twelve of
+    // them used to live in a dedicated field on the Window rather than in the
+    // handler store, and so ran ahead of the list (or, for the six the direct
+    // dispatch never consulted, not at all).
+    for (const [name, type] of [
+      ['onscroll', 'scroll'], ['onblur', 'blur'], ['onfocus', 'focus'],
+      ['onresize', 'resize'], ['onhashchange', 'hashchange'],
+      ['onmessage', 'message'], ['onpageshow', 'pageshow'],
+      ['onpopstate', 'popstate'], ['onrejectionhandled', 'rejectionhandled'],
+      ['onunhandledrejection', 'unhandledrejection'], ['onload', 'load'],
+      ['onerror', 'error'],
+    ]) {
+      const log = [];
+      const h1 = () => log.push('al1');
+      const h3 = () => log.push('al2');
+      window.addEventListener(type, h1);
+      window[name] = () => log.push('on');
+      window.addEventListener(type, h3);
+      window.dispatchEvent(new Event(type));
+      window.removeEventListener(type, h1);
+      window.removeEventListener(type, h3);
+      window[name] = null;
+      testing.expectEqual('al1,on,al2', log.join(','), { desc: name + ' order' });
+    }
+  }
+</script>
+
+<script id=window_dedicated_slot_reassignment_keeps_place>
+  {
+    // Re-assigning swaps the function without moving the listener.
+    const log = [];
+    window.addEventListener('scroll', () => log.push('al1'));
+    window.onscroll = () => log.push('on-first');
+    window.addEventListener('scroll', () => log.push('al2'));
+    window.onscroll = () => log.push('on-second');
+    window.dispatchEvent(new Event('scroll'));
+    window.onscroll = null;
+    testing.expectEqual('al1,on-second,al2', log.join(','));
+  }
+</script>
+
+<script id=window_onerror_calling_convention>
+  {
+    // `window.onerror` gets five arguments and cancels on `return true` --
+    // but only when the dispatched event is an ErrorEvent. Measured on a
+    // headed Chrome 150 (probe-g22c): it is the interface that selects the
+    // convention, not the "error" type string, not the target on its own.
+    const shape = (args) => Array.from(args).map((a) => (a && a.type) ? 'Event(' + a.type + ')' : typeof a).join('|');
+    const errorEvent = (type, init) => new ErrorEvent(type, init);
+
+    let seen = null;
+    window.onerror = function () { seen = shape(arguments); };
+    window.dispatchEvent(errorEvent('error', { message: 'm', filename: 'f', lineno: 7, colno: 9, error: new Error('e') }));
+    window.onerror = null;
+    testing.expectEqual('string|string|number|number|object', seen, { desc: 'ErrorEvent at the window' });
+
+    // A plain Event('error') is not an ErrorEvent: one argument.
+    seen = null;
+    window.onerror = function () { seen = shape(arguments); };
+    window.dispatchEvent(new Event('error'));
+    window.onerror = null;
+    testing.expectEqual('Event(error)', seen, { desc: 'plain Event at the window' });
+
+    // An ErrorEvent of another type reaches its handler as the event.
+    seen = null;
+    window.onscroll = function () { seen = shape(arguments); };
+    window.dispatchEvent(errorEvent('scroll', { message: 'm' }));
+    window.onscroll = null;
+    testing.expectEqual('Event(scroll)', seen, { desc: 'ErrorEvent of another type' });
+
+    // An addEventListener listener never gets the five arguments.
+    seen = null;
+    const listener = function () { seen = shape(arguments); };
+    window.addEventListener('error', listener);
+    window.dispatchEvent(errorEvent('error', { message: 'm' }));
+    window.removeEventListener('error', listener);
+    testing.expectEqual('Event(error)', seen, { desc: 'addEventListener at the window' });
+
+    // Neither does a handler on any other target.
+    seen = null;
+    document.onerror = function () { seen = shape(arguments); };
+    document.dispatchEvent(errorEvent('error', { message: 'm' }));
+    document.onerror = null;
+    testing.expectEqual('Event(error)', seen, { desc: 'ErrorEvent at the document' });
+  }
+</script>
+
+<script id=window_onerror_cancel_rule>
+  {
+    // The inverted cancel rule travels with the five-argument convention:
+    // `return true` cancels an ErrorEvent at the window, `return false` does
+    // not. For every other combination the ordinary `return false` rule holds.
+    const cancelled = (event, handlerName, ret) => {
+      window[handlerName] = () => ret;
+      window.dispatchEvent(event);
+      window[handlerName] = null;
+      return event.defaultPrevented;
+    };
+
+    testing.expectEqual(true, cancelled(new ErrorEvent('error', { message: 'm', cancelable: true }), 'onerror', true), { desc: 'ErrorEvent + true' });
+    testing.expectEqual(false, cancelled(new ErrorEvent('error', { message: 'm', cancelable: true }), 'onerror', false), { desc: 'ErrorEvent + false' });
+    testing.expectEqual(false, cancelled(new Event('error', { cancelable: true }), 'onerror', true), { desc: 'plain Event + true' });
+    testing.expectEqual(true, cancelled(new Event('error', { cancelable: true }), 'onerror', false), { desc: 'plain Event + false' });
+    testing.expectEqual(true, cancelled(new Event('scroll', { cancelable: true }), 'onscroll', false), { desc: 'other handler + false' });
+  }
+</script>

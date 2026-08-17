@@ -36,8 +36,6 @@ _exec: *Execution,
 _name: lp.String,
 _sequence: u64,
 _closed: bool = false,
-_on_message: ?js.Function.Global = null,
-_on_message_error: ?js.Function.Global = null,
 
 // Intrusive node, registered in `frame._broadcast_channels` (or WGS)
 // for the lifetime of the channel (until close()). The registry is how a
@@ -116,20 +114,24 @@ pub fn close(self: *BroadcastChannel) void {
     self._exec.getBroadcastChannels().remove(&self._node);
 }
 
-pub fn getOnMessage(self: *const BroadcastChannel) ?js.Function.Global {
-    return self._on_message;
+// `onmessage` / `onmessageerror` are ordinary event listeners: they take their
+// place in the channel's listener list when first set (see
+// EventManagerBase.setHandler), which is why the delivery path below doesn't
+// pass them by hand any more.
+pub fn getOnMessage(self: *BroadcastChannel) ?js.Function.Global {
+    return self._exec.getEventHandler(self.asEventTarget(), .onmessage);
 }
 
 pub fn setOnMessage(self: *BroadcastChannel, cb: ?js.Function.Global) !void {
-    self._on_message = cb;
+    return self._exec.setEventHandler(self.asEventTarget(), .onmessage, cb);
 }
 
-pub fn getOnMessageError(self: *const BroadcastChannel) ?js.Function.Global {
-    return self._on_message_error;
+pub fn getOnMessageError(self: *BroadcastChannel) ?js.Function.Global {
+    return self._exec.getEventHandler(self.asEventTarget(), .onmessageerror);
 }
 
 pub fn setOnMessageError(self: *BroadcastChannel, cb: ?js.Function.Global) !void {
-    self._on_message_error = cb;
+    return self._exec.setEventHandler(self.asEventTarget(), .onmessageerror, cb);
 }
 
 const PostMessageCallback = struct {
@@ -209,7 +211,7 @@ const PostMessageCallback = struct {
                 }
 
                 const target = channel.asEventTarget();
-                if (!exec.hasDirectListeners(target, "message", channel._on_message)) {
+                if (!exec.hasDirectListeners(target, "message", null)) {
                     continue;
                 }
 
@@ -238,7 +240,7 @@ const PostMessageCallback = struct {
                     continue;
                 }).asEvent();
 
-                exec.dispatch(target, event, channel._on_message, .{ .context = "BroadcastChannel message" }) catch |err| {
+                exec.dispatch(target, event, null, .{ .context = "BroadcastChannel message" }) catch |err| {
                     log.err(.dom, "BroadcastChannel.postMessage", .{ .err = err });
                 };
             }

@@ -39,6 +39,15 @@ const Element = @import("../Element.zig");
 const EventTarget = @import("../EventTarget.zig");
 const DOMException = @import("../DOMException.zig");
 const MediaStreamTrack = @import("streams.zig").MediaStreamTrack;
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 pub fn registerTypes() []const type {
     return &.{
@@ -71,7 +80,6 @@ pub const CaptureController = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_zoom_level_change: ?js.Function.Global = null,
 
     /// The focus behaviour a later getDisplayMedia would use. Chrome keeps it
     /// write-only (there is no getter) and validates the enum.
@@ -155,21 +163,13 @@ pub const CaptureController = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        fn getOnZoomLevelChange(self: *CaptureController) ?js.Function.Global {
-            return self._on_zoom_level_change;
-        }
-
-        fn setOnZoomLevelChange(self: *CaptureController, listener: ?js.Function) !void {
-            self._on_zoom_level_change = if (listener) |l| try l.persistWithThis(self) else null;
-        }
-
         pub const constructor = bridge.constructor(CaptureController.constructor, .{});
 
         // Chrome's own prototype order: setFocusBehavior and zoomLevel first,
         // then the zoom operations alphabetically (measured).
         pub const setFocusBehavior = bridge.function(CaptureController.setFocusBehavior, .{ .arity = 1 });
         pub const zoomLevel = bridge.accessor(CaptureController.getZoomLevel, null, .{});
-        pub const onzoomlevelchange = bridge.accessor(getOnZoomLevelChange, setOnZoomLevelChange, .{});
+        pub const onzoomlevelchange = bridge.accessor(handlerProperty(CaptureController, .onzoomlevelchange).get, handlerProperty(CaptureController, .onzoomlevelchange).set, .{});
         pub const decreaseZoomLevel = bridge.function(CaptureController.decreaseZoomLevel, .{});
         pub const forwardWheel = bridge.function(CaptureController.forwardWheel, .{ .arity = 1 });
         pub const getSupportedZoomLevels = bridge.function(CaptureController.getSupportedZoomLevels, .{});

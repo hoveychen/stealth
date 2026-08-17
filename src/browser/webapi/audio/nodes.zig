@@ -44,6 +44,16 @@ const AudioBuffer = @import("AudioBuffer.zig");
 const PeriodicWave = @import("PeriodicWave.zig");
 const BaseAudioContext = @import("BaseAudioContext.zig");
 const AudioScheduledSourceNode = @import("AudioScheduledSourceNode.zig");
+const handler_property = @import("../handler_property.zig");
+const EventTarget = @import("../EventTarget.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 const Float32Array = js.ArrayBufferRef(.float32);
@@ -1387,7 +1397,6 @@ pub const ScriptProcessorNode = struct {
 
     _proto: *AudioNode,
     _buffer_size: u32,
-    _on_audio_process: ?js.Function.Global = null,
 
     // Reachable only through createScriptProcessor: Chrome answers
     // `new ScriptProcessorNode(ctx)` with an illegal constructor (measured).
@@ -1404,20 +1413,12 @@ pub const ScriptProcessorNode = struct {
         return self._proto;
     }
 
-    pub fn getOnAudioProcess(self: *const ScriptProcessorNode) ?js.Function.Global {
-        return self._on_audio_process;
-    }
-
-    pub fn setOnAudioProcess(self: *ScriptProcessorNode, listener: ?js.Function) !void {
-        if (listener) |listen| {
-            self._on_audio_process = try listen.persistWithThis(self);
-        } else {
-            self._on_audio_process = null;
-        }
-    }
-
     pub fn getBufferSize(self: *const ScriptProcessorNode) u32 {
         return self._buffer_size;
+    }
+
+    pub fn asEventTarget(self: *ScriptProcessorNode) *EventTarget {
+        return self._proto.asEventTarget();
     }
 
     pub const JsApi = struct {
@@ -1427,7 +1428,7 @@ pub const ScriptProcessorNode = struct {
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
-        pub const onaudioprocess = bridge.accessor(ScriptProcessorNode.getOnAudioProcess, ScriptProcessorNode.setOnAudioProcess, .{});
+        pub const onaudioprocess = bridge.accessor(handlerProperty(ScriptProcessorNode, .onaudioprocess).get, handlerProperty(ScriptProcessorNode, .onaudioprocess).set, .{});
         pub const bufferSize = bridge.accessor(ScriptProcessorNode.getBufferSize, null, .{});
     };
 };

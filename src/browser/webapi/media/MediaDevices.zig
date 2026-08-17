@@ -41,6 +41,15 @@
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -53,7 +62,6 @@ const MediaDevices = @This();
 pub const Proto = EventTarget;
 
 _proto: *EventTarget,
-_on_devicechange: ?js.Function.Global = null,
 
 // Built on the first enumerateDevices(). Most pages never ask, and building
 // three objects per frame for an API nobody called would be waste.
@@ -117,20 +125,6 @@ pub fn getSupportedConstraints(_: *MediaDevices) SupportedConstraints {
 }
 
 pub fn setCaptureHandleConfig(_: *MediaDevices, _: ?js.Value) void {}
-
-// Nothing ever fires devicechange — the list doesn't move — but the handler is
-// on Chrome's prototype and its absence would show up in an enumeration.
-pub fn getOnDeviceChange(self: *MediaDevices) ?js.Function.Global {
-    return self._on_devicechange;
-}
-
-pub fn setOnDeviceChange(self: *MediaDevices, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_devicechange = try listen.persistWithThis(self);
-    } else {
-        self._on_devicechange = null;
-    }
-}
 
 const SupportedConstraints = struct {
     width: bool = true,
@@ -266,7 +260,7 @@ pub const JsApi = struct {
     pub const getDisplayMedia = bridge.function(MediaDevices.getDisplayMedia, .{});
     pub const getSupportedConstraints = bridge.function(MediaDevices.getSupportedConstraints, .{});
     pub const setCaptureHandleConfig = bridge.function(MediaDevices.setCaptureHandleConfig, .{});
-    pub const ondevicechange = bridge.accessor(MediaDevices.getOnDeviceChange, MediaDevices.setOnDeviceChange, .{});
+    pub const ondevicechange = bridge.accessor(handlerProperty(MediaDevices, .ondevicechange).get, handlerProperty(MediaDevices, .ondevicechange).set, .{});
 };
 
 const testing = @import("../../../testing.zig");

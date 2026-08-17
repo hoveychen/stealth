@@ -59,6 +59,15 @@ const DOMException = @import("../DOMException.zig");
 const Frame = @import("../../Frame.zig");
 const dictionary = @import("../dictionary.zig");
 const mime = @import("mime.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const String = lp.String;
 const Execution = js.Execution;
@@ -663,8 +672,6 @@ pub const MediaKeySession = struct {
     _key_statuses: MediaKeyStatusMap = .{},
     /// Created once and kept: Chrome hands back the same promise every time.
     _closed: ?js.Promise.Global = null,
-    _on_key_statuses_change: ?js.Function.Global = null,
-    _on_message: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *MediaKeySession) *EventTarget {
         return self._proto;
@@ -812,29 +819,13 @@ pub const MediaKeySession = struct {
 
         pub const Prototype = EventTarget;
 
-        fn getOnKeyStatusesChange(self: *MediaKeySession) ?js.Function.Global {
-            return self._on_key_statuses_change;
-        }
-
-        fn setOnKeyStatusesChange(self: *MediaKeySession, listener: ?js.Function) !void {
-            self._on_key_statuses_change = if (listener) |l| try l.persistWithThis(self) else null;
-        }
-
-        fn getOnMessage(self: *MediaKeySession) ?js.Function.Global {
-            return self._on_message;
-        }
-
-        fn setOnMessage(self: *MediaKeySession, listener: ?js.Function) !void {
-            self._on_message = if (listener) |l| try l.persistWithThis(self) else null;
-        }
-
         // Chrome's own prototype order.
         pub const sessionId = bridge.accessor(MediaKeySession.getSessionId, null, .{});
         pub const expiration = bridge.accessor(MediaKeySession.getExpiration, null, .{});
         pub const closed = bridge.accessor(MediaKeySession.getClosed, null, .{});
         pub const keyStatuses = bridge.accessor(MediaKeySession.getKeyStatuses, null, .{});
-        pub const onkeystatuseschange = bridge.accessor(getOnKeyStatusesChange, setOnKeyStatusesChange, .{});
-        pub const onmessage = bridge.accessor(getOnMessage, setOnMessage, .{});
+        pub const onkeystatuseschange = bridge.accessor(handlerProperty(MediaKeySession, .onkeystatuseschange).get, handlerProperty(MediaKeySession, .onkeystatuseschange).set, .{});
+        pub const onmessage = bridge.accessor(handlerProperty(MediaKeySession, .onmessage).get, handlerProperty(MediaKeySession, .onmessage).set, .{});
         pub const close = bridge.function(MediaKeySession.close, .{});
         pub const generateRequest = bridge.function(MediaKeySession.generateRequest, .{ .arity = 2 });
         pub const load = bridge.function(MediaKeySession.load, .{ .arity = 1 });

@@ -38,6 +38,15 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -469,7 +478,6 @@ pub const BluetoothDevice = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_gatt_server_disconnected: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *BluetoothDevice) *EventTarget {
         return self._proto;
@@ -487,14 +495,6 @@ pub const BluetoothDevice = struct {
         return null;
     }
 
-    pub fn getOnGattServerDisconnected(self: *const BluetoothDevice) ?js.Function.Global {
-        return self._on_gatt_server_disconnected;
-    }
-
-    pub fn setOnGattServerDisconnected(self: *BluetoothDevice, callback: ?js.Function.Global) void {
-        self._on_gatt_server_disconnected = callback;
-    }
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(BluetoothDevice);
 
@@ -509,11 +509,7 @@ pub const BluetoothDevice = struct {
         pub const id = bridge.accessor(BluetoothDevice.getId, null, .{});
         pub const name = bridge.accessor(BluetoothDevice.getName, null, .{});
         pub const gatt = bridge.accessor(BluetoothDevice.getGatt, null, .{});
-        pub const ongattserverdisconnected = bridge.accessor(
-            BluetoothDevice.getOnGattServerDisconnected,
-            BluetoothDevice.setOnGattServerDisconnected,
-            .{},
-        );
+        pub const ongattserverdisconnected = bridge.accessor(handlerProperty(BluetoothDevice, .ongattserverdisconnected).get, handlerProperty(BluetoothDevice, .ongattserverdisconnected).set, .{});
     };
 };
 
@@ -604,7 +600,6 @@ pub const BluetoothRemoteGATTCharacteristic = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_characteristic_value_changed: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *BluetoothRemoteGATTCharacteristic) *EventTarget {
         return self._proto;
@@ -624,14 +619,6 @@ pub const BluetoothRemoteGATTCharacteristic = struct {
 
     pub fn getValue(_: *const BluetoothRemoteGATTCharacteristic) ?[]const u8 {
         return null;
-    }
-
-    pub fn getOnCharacteristicValueChanged(self: *const BluetoothRemoteGATTCharacteristic) ?js.Function.Global {
-        return self._on_characteristic_value_changed;
-    }
-
-    pub fn setOnCharacteristicValueChanged(self: *BluetoothRemoteGATTCharacteristic, callback: ?js.Function.Global) void {
-        self._on_characteristic_value_changed = callback;
     }
 
     pub fn getDescriptor(_: *const BluetoothRemoteGATTCharacteristic, _: ?js.Value, exec: *const Execution) js.Promise {
@@ -675,11 +662,7 @@ pub const BluetoothRemoteGATTCharacteristic = struct {
         pub const uuid = bridge.accessor(C.getUuid, null, .{});
         pub const properties = bridge.accessor(C.getProperties, null, .{});
         pub const value = bridge.accessor(C.getValue, null, .{});
-        pub const oncharacteristicvaluechanged = bridge.accessor(
-            C.getOnCharacteristicValueChanged,
-            C.setOnCharacteristicValueChanged,
-            .{},
-        );
+        pub const oncharacteristicvaluechanged = bridge.accessor(handlerProperty(BluetoothRemoteGATTCharacteristic, .oncharacteristicvaluechanged).get, handlerProperty(BluetoothRemoteGATTCharacteristic, .oncharacteristicvaluechanged).set, .{});
         pub const getDescriptor = bridge.function(C.getDescriptor, .{ .arity = 1 });
         pub const getDescriptors = bridge.function(C.getDescriptors, .{ .arity = 0 });
         pub const readValue = bridge.function(C.readValue, .{});

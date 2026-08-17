@@ -61,6 +61,21 @@ const dictionary = @import("dictionary.zig");
 const mime = @import("../mime.zig");
 const Factory = @import("../Factory.zig");
 const Window = @import("Window.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
+
+/// As `handlerProperty`, for the properties whose setter takes a non-callable
+/// and stores null rather than refusing it.
+fn handlerPropertyLenient(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.lenientAccessors(T, which);
+}
 
 const Execution = js.Execution;
 const String = lp.String;
@@ -707,13 +722,6 @@ pub const FileWriter = struct {
     _position: u64 = 0,
     _ready_state: u16 = 0,
 
-    _on_write_start: ?js.Function.Global = null,
-    _on_progress: ?js.Function.Global = null,
-    _on_write: ?js.Function.Global = null,
-    _on_abort: ?js.Function.Global = null,
-    _on_error: ?js.Function.Global = null,
-    _on_write_end: ?js.Function.Global = null,
-
     const INIT: u16 = 0;
     const WRITING: u16 = 1;
     const DONE: u16 = 2;
@@ -852,15 +860,15 @@ pub const FileWriter = struct {
             defer self.exec._factory.destroy(self);
 
             const writer = self.writer;
-            try writer.fire(self.exec, comptime String.wrap("writestart"), writer._on_write_start);
+            try writer.fire(self.exec, comptime String.wrap("writestart"), null);
             try writer.apply(self.pending, self.exec);
             // Chrome fires progress twice for one write, both already carrying
             // the final position (measured).
-            try writer.fire(self.exec, comptime String.wrap("progress"), writer._on_progress);
-            try writer.fire(self.exec, comptime String.wrap("progress"), writer._on_progress);
+            try writer.fire(self.exec, comptime String.wrap("progress"), null);
+            try writer.fire(self.exec, comptime String.wrap("progress"), null);
             writer._ready_state = DONE;
-            try writer.fire(self.exec, comptime String.wrap("write"), writer._on_write);
-            try writer.fire(self.exec, comptime String.wrap("writeend"), writer._on_write_end);
+            try writer.fire(self.exec, comptime String.wrap("write"), null);
+            try writer.fire(self.exec, comptime String.wrap("writeend"), null);
             return null;
         }
     };
@@ -868,67 +876,6 @@ pub const FileWriter = struct {
     fn fire(self: *FileWriter, exec: *Execution, typ: String, handler: ?js.Function.Global) !void {
         const event = try Event.initTrusted(typ, .{}, exec.page);
         return exec.dispatch(self.asEventTarget(), event, handler, .{ .context = "FileWriter" });
-    }
-
-    const HandlerSetter = union(enum) {
-        func: js.Function,
-        anything: js.Value,
-    };
-
-    fn persist(self: *FileWriter, setter_: ?HandlerSetter) !?js.Function.Global {
-        const setter = setter_ orelse return null;
-        return switch (setter) {
-            .func => |listener| try listener.persistWithThis(self),
-            .anything => null,
-        };
-    }
-
-    pub fn getOnWriteStart(self: *const FileWriter) ?js.Function.Global {
-        return self._on_write_start;
-    }
-
-    pub fn setOnWriteStart(self: *FileWriter, cb: ?HandlerSetter) !void {
-        self._on_write_start = try persist(self, cb);
-    }
-
-    pub fn getOnProgress(self: *const FileWriter) ?js.Function.Global {
-        return self._on_progress;
-    }
-
-    pub fn setOnProgress(self: *FileWriter, cb: ?HandlerSetter) !void {
-        self._on_progress = try persist(self, cb);
-    }
-
-    pub fn getOnWrite(self: *const FileWriter) ?js.Function.Global {
-        return self._on_write;
-    }
-
-    pub fn setOnWrite(self: *FileWriter, cb: ?HandlerSetter) !void {
-        self._on_write = try persist(self, cb);
-    }
-
-    pub fn getOnAbort(self: *const FileWriter) ?js.Function.Global {
-        return self._on_abort;
-    }
-
-    pub fn setOnAbort(self: *FileWriter, cb: ?HandlerSetter) !void {
-        self._on_abort = try persist(self, cb);
-    }
-
-    pub fn getOnError(self: *const FileWriter) ?js.Function.Global {
-        return self._on_error;
-    }
-
-    pub fn setOnError(self: *FileWriter, cb: ?HandlerSetter) !void {
-        self._on_error = try persist(self, cb);
-    }
-
-    pub fn getOnWriteEnd(self: *const FileWriter) ?js.Function.Global {
-        return self._on_write_end;
-    }
-
-    pub fn setOnWriteEnd(self: *FileWriter, cb: ?HandlerSetter) !void {
-        self._on_write_end = try persist(self, cb);
     }
 
     pub const JsApi = struct {
@@ -945,12 +892,12 @@ pub const FileWriter = struct {
         pub const @"error" = bridge.accessor(FileWriter.getError, null, .{ .null_as_undefined = false });
         pub const position = bridge.accessor(FileWriter.getPosition, null, .{});
         pub const length = bridge.accessor(FileWriter.getLength, null, .{});
-        pub const onwritestart = bridge.accessor(FileWriter.getOnWriteStart, FileWriter.setOnWriteStart, .{});
-        pub const onprogress = bridge.accessor(FileWriter.getOnProgress, FileWriter.setOnProgress, .{});
-        pub const onwrite = bridge.accessor(FileWriter.getOnWrite, FileWriter.setOnWrite, .{});
-        pub const onabort = bridge.accessor(FileWriter.getOnAbort, FileWriter.setOnAbort, .{});
-        pub const onerror = bridge.accessor(FileWriter.getOnError, FileWriter.setOnError, .{});
-        pub const onwriteend = bridge.accessor(FileWriter.getOnWriteEnd, FileWriter.setOnWriteEnd, .{});
+        pub const onwritestart = bridge.accessor(handlerPropertyLenient(FileWriter, .onwritestart).get, handlerPropertyLenient(FileWriter, .onwritestart).set, .{});
+        pub const onprogress = bridge.accessor(handlerPropertyLenient(FileWriter, .onprogress).get, handlerPropertyLenient(FileWriter, .onprogress).set, .{});
+        pub const onwrite = bridge.accessor(handlerPropertyLenient(FileWriter, .onwrite).get, handlerPropertyLenient(FileWriter, .onwrite).set, .{});
+        pub const onabort = bridge.accessor(handlerPropertyLenient(FileWriter, .onabort).get, handlerPropertyLenient(FileWriter, .onabort).set, .{});
+        pub const onerror = bridge.accessor(handlerPropertyLenient(FileWriter, .onerror).get, handlerPropertyLenient(FileWriter, .onerror).set, .{});
+        pub const onwriteend = bridge.accessor(handlerPropertyLenient(FileWriter, .onwriteend).get, handlerPropertyLenient(FileWriter, .onwriteend).set, .{});
         pub const INIT = bridge.property(0, .{ .template = true });
         pub const WRITING = bridge.property(1, .{ .template = true });
         pub const DONE = bridge.property(2, .{ .template = true });

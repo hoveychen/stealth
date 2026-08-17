@@ -31,6 +31,18 @@ const MessageEvent = @import("event/MessageEvent.zig");
 
 const log = lp.log;
 const IS_DEBUG = @import("builtin").mode == .Debug;
+const handler_property = @import("handler_property.zig");
+const EventTarget = @import("EventTarget.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+/// As `handlerProperty` elsewhere, but these setters take a non-callable and
+/// store null rather than refusing it, which is what the worker scopes measured.
+fn handlerPropertyLenient(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.lenientAccessors(T, which);
+}
 
 const SharedWorkerGlobalScope = @This();
 
@@ -57,8 +69,6 @@ _script_loaded: bool = false,
 _script_arena: ?*lp.Arena = null,
 _script_buffer: std.ArrayList(u8) = .empty,
 _http_transfer: ?*Transfer = null,
-
-_on_connect: ?js.Function.Global = null,
 
 // Ports pending connnection, created before the initial script finished
 _pending_connects: std.ArrayList(*MessagePort) = .empty,
@@ -190,14 +200,6 @@ pub fn close(self: *SharedWorkerGlobalScope) void {
     self._proto._session.idb.detachContext(self._proto.js);
     self._proto.js.scheduler.reset();
     self._closed = true;
-}
-
-pub fn getOnConnect(self: *const SharedWorkerGlobalScope) ?js.Function.Global {
-    return self._on_connect;
-}
-
-pub fn setOnConnect(self: *SharedWorkerGlobalScope, setter: ?WorkerGlobalScope.FunctionSetter) void {
-    self._on_connect = WorkerGlobalScope.getFunctionFromSetter(setter);
 }
 
 fn httpHeaderCallback(transfer: *Transfer) !Transfer.HeaderResult {
@@ -375,9 +377,7 @@ const ConnectCallback = struct {
         const worker_scope = self.worker_scope;
         const wgs = worker_scope._proto;
         const target = wgs.asEventTarget();
-
-        const on_connect = worker_scope._on_connect;
-        if (!wgs._event_manager.hasDirectListeners(target, "connect", on_connect)) {
+        if (!wgs._event_manager.hasDirectListeners(target, "connect", null)) {
             return null;
         }
 
@@ -391,10 +391,14 @@ const ConnectCallback = struct {
             .cancelable = false,
         }, wgs._page)).asEvent();
 
-        try wgs.dispatch(target, event, on_connect, .{ .context = "SharedWorkerGlobalScope.connect" });
+        try wgs.dispatch(target, event, null, .{ .context = "SharedWorkerGlobalScope.connect" });
         return null;
     }
 };
+
+pub fn asEventTarget(self: *SharedWorkerGlobalScope) *EventTarget {
+    return self._proto.asEventTarget();
+}
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(SharedWorkerGlobalScope);
@@ -407,5 +411,5 @@ pub const JsApi = struct {
 
     pub const name = bridge.accessor(SharedWorkerGlobalScope.getName, null, .{});
     pub const close = bridge.function(SharedWorkerGlobalScope.close, .{});
-    pub const onconnect = bridge.accessor(SharedWorkerGlobalScope.getOnConnect, SharedWorkerGlobalScope.setOnConnect, .{});
+    pub const onconnect = bridge.accessor(handlerPropertyLenient(SharedWorkerGlobalScope, .onconnect).get, handlerPropertyLenient(SharedWorkerGlobalScope, .onconnect).set, .{});
 };

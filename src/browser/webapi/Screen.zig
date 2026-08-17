@@ -19,6 +19,15 @@
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const EventTarget = @import("EventTarget.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 pub fn registerTypes() []const type {
     return &.{
@@ -33,25 +42,9 @@ pub const Proto = EventTarget;
 
 _proto: *EventTarget,
 _orientation: ?*Orientation = null,
-_on_change: ?js.Function.Global = null,
 
 pub fn asEventTarget(self: *Screen) *EventTarget {
     return self._proto;
-}
-
-// Nothing ever fires a change event — the screen doesn't move — but the
-// handler has to exist: it is on Chrome's Screen.prototype, and a script that
-// enumerates the prototype would notice it missing.
-pub fn getOnChange(self: *Screen) ?js.Function.Global {
-    return self._on_change;
-}
-
-pub fn setOnChange(self: *Screen, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_change = try listen.persistWithThis(self);
-    } else {
-        self._on_change = null;
-    }
 }
 
 pub fn getOrientation(self: *Screen, frame: *Frame) !*Orientation {
@@ -93,7 +86,7 @@ pub const JsApi = struct {
     pub const availLeft = bridge.property(0, .{ .template = false });
     pub const availTop = bridge.property(40, .{ .template = false });
     pub const orientation = bridge.accessor(Screen.getOrientation, null, .{});
-    pub const onchange = bridge.accessor(Screen.getOnChange, Screen.setOnChange, .{});
+    pub const onchange = bridge.accessor(handlerProperty(Screen, .onchange).get, handlerProperty(Screen, .onchange).set, .{});
     // One display. A second one would be extra entropy, not less.
     pub const isExtended = bridge.property(false, .{ .template = false });
 };

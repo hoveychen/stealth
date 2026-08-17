@@ -331,4 +331,83 @@
     });
 }
 </script>
+
+<!-- `onmessage` is an event listener: it takes its place in the channel's
+     listener list when it is first set, and runs from there. Measured on a
+     headed Chrome 150 (probe-g22a): "al1,on,al2" on a synthetic dispatchEvent
+     and on the real cross-channel delivery alike. -->
+<script id="handler_order_synthetic" type=module>
+{
+    const log = [];
+    const c = new BroadcastChannel("order-syn");
+    c.addEventListener("message", () => log.push("al1"));
+    c.onmessage = () => log.push("on");
+    c.addEventListener("message", () => log.push("al2"));
+    c.dispatchEvent(new Event("message"));
+    testing.expectEqual("al1,on,al2", log.join(","));
+    c.close();
+}
+</script>
+
+<script id="handler_order_delivery" type=module>
+{
+    const state = await testing.async();
+    const log = [];
+    const rx = new BroadcastChannel("order-real");
+    const tx = new BroadcastChannel("order-real");
+    rx.addEventListener("message", () => log.push("al1"));
+    rx.onmessage = () => log.push("on");
+    rx.addEventListener("message", () => log.push("al2"));
+    tx.postMessage("x");
+
+    setTimeout(() => state.resolve(), 50);
+    await state.done(() => {
+        testing.expectEqual("al1,on,al2", log.join(","));
+        rx.close();
+        tx.close();
+    });
+}
+</script>
+
+<!-- Same, inside a worker: the handler store has to reach a worker's targets
+     too, since a worker has no frame. -->
+<script id="handler_order_in_worker" type=module>
+{
+    const state = await testing.async();
+    const blob = new Blob([
+        'const log = [];' +
+        'const c = new BroadcastChannel("order-wk");' +
+        'c.addEventListener("message", () => log.push("al1"));' +
+        'c.onmessage = () => log.push("on");' +
+        'c.addEventListener("message", () => log.push("al2"));' +
+        'c.dispatchEvent(new Event("message"));' +
+        'const synthetic = log.join(",");' +
+        'const rlog = [];' +
+        'const r = new BroadcastChannel("order-wk-real");' +
+        'r.addEventListener("message", () => rlog.push("al1"));' +
+        'r.onmessage = () => rlog.push("on");' +
+        'r.addEventListener("message", () => rlog.push("al2"));' +
+        'postMessage({ ready: true, synthetic });' +
+        'setTimeout(() => postMessage({ real: rlog.join(",") }), 50);'
+    ], { type: "text/javascript" });
+    const worker = new Worker(URL.createObjectURL(blob));
+
+    let synthetic = null;
+    worker.onmessage = (e) => {
+        if (e.data.ready) {
+            synthetic = e.data.synthetic;
+            const tx = new BroadcastChannel("order-wk-real");
+            tx.postMessage("y");
+            tx.close();
+            return;
+        }
+        state.resolve(e.data.real);
+    };
+
+    await state.done((real) => {
+        testing.expectEqual("al1,on,al2", synthetic);
+        testing.expectEqual("al1,on,al2", real);
+    });
+}
+</script>
 </body>

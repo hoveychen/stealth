@@ -83,7 +83,6 @@ _type: Type = .generic,
 _aborted: bool = false,
 _is_dependent: bool = false,
 _reason: Reason = .undefined,
-_on_abort: ?js.Function.Global = null,
 _dependents: std.ArrayList(Dependend) = .empty,
 _source_signals: std.ArrayList(*AbortSignal) = .empty,
 
@@ -100,14 +99,6 @@ pub fn getAborted(self: *const AbortSignal) bool {
 
 pub fn getReason(self: *const AbortSignal) Reason {
     return self._reason;
-}
-
-pub fn getOnAbort(self: *const AbortSignal) ?js.Function.Global {
-    return self._on_abort;
-}
-
-pub fn setOnAbort(self: *AbortSignal, cb: ?js.Function.Global) !void {
-    self._on_abort = cb;
 }
 
 pub fn asEventTarget(self: *AbortSignal) *EventTarget {
@@ -159,12 +150,11 @@ fn markAborted(self: *AbortSignal, reason_: ?Reason, exec: *const Execution) !vo
 
 fn dispatchAbortEvent(self: *AbortSignal, exec: *const Execution) !void {
     const target = self.asEventTarget();
-    const on_abort = self._on_abort;
     switch (exec.js.global) {
         inline else => |g| {
-            if (g._event_manager.hasDirectListeners(target, "abort", on_abort)) {
+            if (g._event_manager.hasDirectListeners(target, "abort", null)) {
                 const event = try Event.initTrusted(comptime .wrap("abort"), .{}, g._page);
-                try g.dispatch(target, event, on_abort, .{ .context = "abort signal" });
+                try g.dispatch(target, event, null, .{ .context = "abort signal" });
             }
         },
     }
@@ -312,7 +302,11 @@ pub const JsApi = struct {
 
     pub const aborted = bridge.accessor(AbortSignal.getAborted, null, .{});
     pub const reason = bridge.accessor(AbortSignal.getReason, null, .{});
-    pub const onabort = bridge.accessor(AbortSignal.getOnAbort, AbortSignal.setOnAbort, .{});
+    pub const onabort = bridge.accessor(
+        @import("handler_property.zig").accessors(AbortSignal, .onabort).get,
+        @import("handler_property.zig").accessors(AbortSignal, .onabort).set,
+        .{},
+    );
     pub const throwIfAborted = bridge.function(AbortSignal.throwIfAborted, .{});
 
     // Static method

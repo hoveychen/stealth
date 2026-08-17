@@ -42,7 +42,6 @@ const NetworkInformation = @This();
 pub const Proto = EventTarget;
 
 _proto: *EventTarget,
-_on_change: ?js.Function.Global = null,
 
 pub fn asEventTarget(self: *NetworkInformation) *EventTarget {
     return self._proto;
@@ -64,21 +63,6 @@ pub fn getSaveData(_: *const NetworkInformation) bool {
     return false;
 }
 
-// Nothing ever fires a change event — the values don't move — but the handler
-// has to exist: it is on Chrome's prototype, and a script that enumerates
-// NetworkInformation.prototype would notice it missing.
-pub fn getOnChange(self: *NetworkInformation) ?js.Function.Global {
-    return self._on_change;
-}
-
-pub fn setOnChange(self: *NetworkInformation, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_change = try listen.persistWithThis(self);
-    } else {
-        self._on_change = null;
-    }
-}
-
 pub const JsApi = struct {
     pub const bridge = js.Bridge(NetworkInformation);
 
@@ -92,10 +76,19 @@ pub const JsApi = struct {
     pub const rtt = bridge.accessor(NetworkInformation.getRtt, null, .{});
     pub const downlink = bridge.accessor(NetworkInformation.getDownlink, null, .{});
     pub const saveData = bridge.accessor(NetworkInformation.getSaveData, null, .{});
-    pub const onchange = bridge.accessor(NetworkInformation.getOnChange, NetworkInformation.setOnChange, .{});
+    pub const onchange = bridge.accessor(handlerProperty(NetworkInformation, .onchange).get, handlerProperty(NetworkInformation, .onchange).set, .{});
 };
 
 const testing = @import("../../testing.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 test "WebApi: NetworkInformation" {
     try testing.htmlRunner("network_information.html", .{});
 }

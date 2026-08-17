@@ -20,6 +20,15 @@ const js = @import("../../js/js.zig");
 
 const Frame = @import("../../Frame.zig");
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const TextTrackCue = @This();
 
@@ -31,8 +40,6 @@ _id: []const u8 = "",
 _start_time: f64 = 0,
 _end_time: f64 = 0,
 _pause_on_exit: bool = false,
-_on_enter: ?js.Function.Global = null,
-_on_exit: ?js.Function.Global = null,
 
 // Set by TextTrack.addCue, cleared by removeCue. Chrome puts `track` first on
 // TextTrackCue.prototype and answers null for a cue no track owns (measured).
@@ -82,22 +89,6 @@ pub fn setPauseOnExit(self: *TextTrackCue, value: bool) void {
     self._pause_on_exit = value;
 }
 
-pub fn getOnEnter(self: *const TextTrackCue) ?js.Function.Global {
-    return self._on_enter;
-}
-
-pub fn setOnEnter(self: *TextTrackCue, cb: ?js.Function.Global) !void {
-    self._on_enter = cb;
-}
-
-pub fn getOnExit(self: *const TextTrackCue) ?js.Function.Global {
-    return self._on_exit;
-}
-
-pub fn setOnExit(self: *TextTrackCue, cb: ?js.Function.Global) !void {
-    self._on_exit = cb;
-}
-
 pub const JsApi = struct {
     pub const bridge = js.Bridge(TextTrackCue);
 
@@ -115,6 +106,6 @@ pub const JsApi = struct {
     pub const startTime = bridge.accessor(TextTrackCue.getStartTime, TextTrackCue.setStartTime, .{});
     pub const endTime = bridge.accessor(TextTrackCue.getEndTime, TextTrackCue.setEndTime, .{});
     pub const pauseOnExit = bridge.accessor(TextTrackCue.getPauseOnExit, TextTrackCue.setPauseOnExit, .{});
-    pub const onenter = bridge.accessor(TextTrackCue.getOnEnter, TextTrackCue.setOnEnter, .{});
-    pub const onexit = bridge.accessor(TextTrackCue.getOnExit, TextTrackCue.setOnExit, .{});
+    pub const onenter = bridge.accessor(handlerProperty(TextTrackCue, .onenter).get, handlerProperty(TextTrackCue, .onenter).set, .{});
+    pub const onexit = bridge.accessor(handlerProperty(TextTrackCue, .onexit).get, handlerProperty(TextTrackCue, .onexit).set, .{});
 };

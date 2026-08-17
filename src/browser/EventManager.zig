@@ -101,36 +101,11 @@ pub fn dispatch(self: *EventManager, target: *EventTarget, event: *Event) Dispat
 
     switch (target._type) {
         .node => |node| try self.dispatchNode(node, event),
-        .xhr => |xhr| try self.dispatchDirect(target, event, xhr.inlineHandler(event._type_string), .{ .context = "dispatch" }),
-        // Every other handler property is backed by the frame's
-        // attribute-listener store, and so already sits in the target's
-        // listener list as a listener of its own (see
-        // EventManagerBase.registerHandler). The Window's six dedicated slots
-        // are the exception and still run ahead of the list.
-        .window => try self.dispatchDirect(target, event, windowInlineHandler(target, event._type_string), .{ .context = "dispatch" }),
+        // Every handler property is backed by the handler store, and so
+        // already sits in the target's listener list as a listener of its own
+        // (see EventManagerBase.registerHandler).
         else => try self.dispatchDirect(target, event, null, .{ .context = "dispatch" }),
     }
-}
-
-// Resolves one of the Window's six dedicated handler slots. The rest of its
-// handler properties live in the frame's attribute-listener store.
-fn windowInlineHandler(target: *EventTarget, typ: lp.String) ?js.Function.Global {
-    const global_event_handlers = @import("webapi/global_event_handlers.zig");
-    const handler_type = global_event_handlers.fromEventType(typ.str()) orelse return null;
-    const window = switch (target._type) {
-        .window => |w| w,
-        else => return null,
-    };
-
-    return switch (handler_type) {
-        .onerror => window._on_error,
-        .onload => window._on_load,
-        .onblur => window._on_blur,
-        .onfocus => window._on_focus,
-        .onresize => window._on_resize,
-        .onscroll => window._on_scroll,
-        else => null,
-    };
 }
 
 // There are a lot of events that can be attached via addEventListener or as
@@ -364,56 +339,10 @@ fn dispatchNode(self: *EventManager, target: *Node, event: *Event) !void {
         for (path[1..]) |current_target| {
             if (event._stop_propagation) break;
 
-            // Only the Window's six dedicated handler slots are still resolved
-            // here; every other ancestor handler is a listener in the list
-            // below, which is where its ordering comes from.
-            if (windowInlineHandler(current_target, event._type_string)) |inline_handler| {
-                was_handled = true;
-                event._current_target = current_target;
-
-                const prev_current_event = window._current_event;
-                window._current_event = currentEventForTarget(current_target, event);
-                defer window._current_event = prev_current_event;
-
-                const original_target = event._target;
-                if (event._needs_retargeting) {
-                    event._target = getAdjustedTarget(original_target, current_target);
-                }
-
-                var caught: js.TryCatch.Caught = undefined;
-                const handler_return: ?js.Value = ls.toLocal(inline_handler).tryCallWithThis(js.Value, current_target, .{event}, &caught) catch |err| ret: {
-                    if (err == error.ExecutionTerminated) {
-                        return error.ExecutionTerminated;
-                    }
-                    frame._page.recordJsError(err);
-                    log.warn(.event, "inline handler", .{ .err = err, .caught = caught });
-                    break :ret null;
-                };
-                processHandlerReturnValue(event, handler_return);
-
-                if (event._needs_retargeting) {
-                    event._target = original_target;
-                }
-
-                if (event._stop_propagation) {
-                    break;
-                }
-                if (event._stop_immediate_propagation) {
-                    continue;
-                }
-            }
-
             if (self.base.getListeners(current_target, event._type_string)) |list| {
                 try self.dispatchPhase(list, current_target, event, &was_handled, &ls.local, false);
             }
         }
-    }
-}
-
-fn processHandlerReturnValue(event: *Event, handler_return: ?js.Value) void {
-    const ret = handler_return orelse return;
-    if (ret.isFalse() and !event._type_string.eql(comptime .wrap("error"))) {
-        event.preventDefault();
     }
 }
 

@@ -52,6 +52,15 @@ const SpeechSynthesisEvent = @import("SpeechSynthesisEvent.zig");
 const SpeechSynthesisUtterance = @import("SpeechSynthesisUtterance.zig");
 const SpeechSynthesisVoice = @import("SpeechSynthesisVoice.zig");
 const voices = @import("voices.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -62,7 +71,6 @@ pub const Proto = EventTarget;
 _proto: *EventTarget,
 _paused: bool = false,
 _speaking: bool = false,
-_on_voices_changed: ?js.Function.Global = null,
 
 // getVoices() answers empty until the list "arrives". The task that flips this
 // is scheduled by the first getVoices() call, matching Chrome, where the list is
@@ -142,11 +150,11 @@ const VoicesReadyTask = struct {
         synthesis._voices_ready = true;
 
         const target = synthesis.asEventTarget();
-        if (!self.exec.hasDirectListeners(target, "voiceschanged", synthesis._on_voices_changed)) {
+        if (!self.exec.hasDirectListeners(target, "voiceschanged", null)) {
             return null;
         }
         const event = try Event.initTrusted(.wrap("voiceschanged"), .{}, self.exec.page);
-        try self.exec.dispatch(target, event, synthesis._on_voices_changed, .{ .context = "speechSynthesis.voiceschanged" });
+        try self.exec.dispatch(target, event, null, .{ .context = "speechSynthesis.voiceschanged" });
         return null;
     }
 };
@@ -178,18 +186,6 @@ pub fn @"resume"(self: *SpeechSynthesis) void {
     self._paused = false;
 }
 
-pub fn getOnVoicesChanged(self: *const SpeechSynthesis) ?js.Function.Global {
-    return self._on_voices_changed;
-}
-
-pub fn setOnVoicesChanged(self: *SpeechSynthesis, cb: ?js.Function) !void {
-    if (cb) |listener| {
-        self._on_voices_changed = try listener.persistWithThis(self);
-    } else {
-        self._on_voices_changed = null;
-    }
-}
-
 // Delivers Chrome's start-then-end pair for one utterance. `cancel()` between
 // the speak() call and this task running suppresses both, like Chrome.
 const SpeakTask = struct {
@@ -210,12 +206,9 @@ const SpeakTask = struct {
             return null;
         }
 
-        const exec = self.exec;
-        const utterance = self.utterance;
-        try self.dispatch(comptime .wrap("start"), utterance._on_start);
+        try self.dispatch(comptime .wrap("start"), null);
         self.synthesis._speaking = false;
-        try self.dispatch(comptime .wrap("end"), utterance._on_end);
-        _ = exec;
+        try self.dispatch(comptime .wrap("end"), null);
         return null;
     }
 
@@ -241,7 +234,7 @@ pub const JsApi = struct {
     pub const pending = bridge.accessor(SpeechSynthesis.getPending, null, .{});
     pub const speaking = bridge.accessor(SpeechSynthesis.getSpeaking, null, .{});
     pub const paused = bridge.accessor(SpeechSynthesis.getPaused, null, .{});
-    pub const onvoiceschanged = bridge.accessor(SpeechSynthesis.getOnVoicesChanged, SpeechSynthesis.setOnVoicesChanged, .{});
+    pub const onvoiceschanged = bridge.accessor(handlerProperty(SpeechSynthesis, .onvoiceschanged).get, handlerProperty(SpeechSynthesis, .onvoiceschanged).set, .{});
 
     pub const getVoices = bridge.function(SpeechSynthesis.getVoices, .{});
     pub const speak = bridge.function(SpeechSynthesis.speak, .{});

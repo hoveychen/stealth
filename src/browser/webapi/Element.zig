@@ -961,7 +961,7 @@ pub fn getAttributeFunction(
     listener_type: global_event_handlers.Handler,
     frame: *Frame,
 ) !?js.Function.Global {
-    if (frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = listener_type })) |cached| {
+    if (frame.getEventHandler(self.asEventTarget(), listener_type)) |cached| {
         return cached;
     }
 
@@ -979,15 +979,12 @@ pub fn getAttributeFunction(
     // this runs from inside a dispatch, where the handler's listener is already
     // in the list (it was registered when the attribute was set) and touching
     // the list mid-iteration would be a mistake.
-    try frame._event_target_attr_listeners.put(frame.arena, .{
-        .target = self.asEventTarget(),
-        .handler = listener_type,
-    }, function);
+    try frame._event_manager.base.cacheHandlerFunction(self.asEventTarget(), listener_type, function);
     return function;
 }
 
 pub fn hasAttributeFunction(self: *Element, listener_type: global_event_handlers.Handler, frame: *const Frame) bool {
-    return frame._event_target_attr_listeners.contains(.{ .target = self.asEventTarget(), .handler = listener_type });
+    return frame._event_manager.base.hasHandlerFunction(self.asEventTarget(), listener_type);
 }
 
 pub fn setAttributeListener(

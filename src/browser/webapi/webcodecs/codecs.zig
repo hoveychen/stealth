@@ -50,6 +50,21 @@ const chunks = @import("chunks.zig");
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const DOMException = @import("../DOMException.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
+
+/// As `handlerProperty`, for a property whose setter takes a non-callable and
+/// stores null rather than refusing it: `ondequeue = 7` reads back null (measured).
+fn handlerPropertyLenient(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.lenientAccessors(T, which);
+}
 
 const log = lp.log;
 const Execution = js.Execution;
@@ -322,7 +337,6 @@ fn Codec(comptime role: Role) type {
         _error: js.Function.Global,
         _state: State = .unconfigured,
         _queue: u32 = 0,
-        _on_dequeue: ?js.Function.Global = null,
         /// Set by a configure() that accepted an unsupported codec; the error
         /// callback fires on a later task. Held rather than fired immediately
         /// so a second configure() with the same bad codec still produces
@@ -373,22 +387,6 @@ fn Codec(comptime role: Role) type {
 
         pub fn getQueueSize(self: *const Self) u32 {
             return self._queue;
-        }
-
-        pub fn getOnDequeue(self: *const Self) ?js.Function.Global {
-            return self._on_dequeue;
-        }
-
-        /// A non-callable clears the slot instead of throwing: `ondequeue = 7`
-        /// reads back null (measured). Taking a js.Value rather than a
-        /// `?js.Function` is what makes that possible -- the bridge's own
-        /// conversion refuses anything else with "invalid argument".
-        pub fn setOnDequeue(self: *Self, value: js.Value) !void {
-            if (!value.isFunction()) {
-                self._on_dequeue = null;
-                return;
-            }
-            self._on_dequeue = try (try value.toZig(js.Function)).persistWithThis(self);
         }
 
         // -- configure / reset / close -------------------------------------
@@ -827,7 +825,7 @@ fn Codec(comptime role: Role) type {
             switch (exec.js.global) {
                 inline else => |g| {
                     const event = try Event.initTrusted(comptime .wrap("dequeue"), .{}, g._page);
-                    try g.dispatch(target, event, self._on_dequeue, .{ .context = "codec dequeue" });
+                    try g.dispatch(target, event, null, .{ .context = "codec dequeue" });
                 },
             }
             return null;
@@ -846,7 +844,7 @@ fn Codec(comptime role: Role) type {
 
             pub const constructor = bridge.constructor(Self.constructor, .{ .arity = 1 });
             pub const decodeQueueSize = bridge.accessor(Self.getQueueSize, null, .{});
-            pub const ondequeue = bridge.accessor(Self.getOnDequeue, Self.setOnDequeue, .{});
+            pub const ondequeue = bridge.accessor(handlerPropertyLenient(Self, .ondequeue).get, handlerPropertyLenient(Self, .ondequeue).set, .{});
             pub const state = bridge.accessor(Self.getState, null, .{});
             pub const close = bridge.function(Self.close, .{});
             pub const configure = bridge.function(Self.configure, .{ .arity = 1 });
@@ -867,7 +865,7 @@ fn Codec(comptime role: Role) type {
 
             pub const constructor = bridge.constructor(Self.constructor, .{ .arity = 1 });
             pub const encodeQueueSize = bridge.accessor(Self.getQueueSize, null, .{});
-            pub const ondequeue = bridge.accessor(Self.getOnDequeue, Self.setOnDequeue, .{});
+            pub const ondequeue = bridge.accessor(handlerPropertyLenient(Self, .ondequeue).get, handlerPropertyLenient(Self, .ondequeue).set, .{});
             pub const state = bridge.accessor(Self.getState, null, .{});
             pub const close = bridge.function(Self.close, .{});
             pub const configure = bridge.function(Self.configure, .{ .arity = 1 });

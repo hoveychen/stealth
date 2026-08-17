@@ -113,7 +113,7 @@ pub fn setHTMLUnsafe(self: *ShadowRoot, html: []const u8, frame: *Frame) !void {
 }
 
 pub fn getOnSlotChange(self: *ShadowRoot, frame: *Frame) ?js.Function.Global {
-    return frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = .onslotchange });
+    return frame.getEventHandler(self.asEventTarget(), .onslotchange);
 }
 
 pub fn setOnSlotChange(self: *ShadowRoot, callback: ?js.Function.Global, frame: *Frame) !void {

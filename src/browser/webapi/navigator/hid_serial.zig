@@ -38,6 +38,15 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -77,7 +86,6 @@ pub const HIDDevice = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_input_report: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *HIDDevice) *EventTarget {
         return self._proto;
@@ -111,8 +119,6 @@ pub const HIDDevice = struct {
         return notOpen(exec);
     }
 
-    const input_report = handlerAccessors(HIDDevice, "_on_input_report");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(HIDDevice);
 
@@ -127,7 +133,7 @@ pub const HIDDevice = struct {
         const D = HIDDevice;
 
         // Chrome's own prototype order.
-        pub const oninputreport = bridge.accessor(input_report.get, input_report.set, .{});
+        pub const oninputreport = bridge.accessor(handlerProperty(HIDDevice, .oninputreport).get, handlerProperty(HIDDevice, .oninputreport).set, .{});
         pub const opened = bridge.accessor(D.getOpened, null, .{});
         pub const vendorId = bridge.accessor(D.zero, null, .{});
         pub const productId = bridge.accessor(D.zero, null, .{});
@@ -240,8 +246,6 @@ pub const SerialPort = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_connect: ?js.Function.Global = null,
-    _on_disconnect: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *SerialPort) *EventTarget {
         return self._proto;
@@ -267,9 +271,6 @@ pub const SerialPort = struct {
         return notOpen(exec);
     }
 
-    const connect = handlerAccessors(SerialPort, "_on_connect");
-    const disconnect = handlerAccessors(SerialPort, "_on_disconnect");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(SerialPort);
 
@@ -285,8 +286,8 @@ pub const SerialPort = struct {
 
         // Chrome's own prototype order, `connected` included -- it comes after
         // setSignals rather than beside readable and writable.
-        pub const onconnect = bridge.accessor(connect.get, connect.set, .{});
-        pub const ondisconnect = bridge.accessor(disconnect.get, disconnect.set, .{});
+        pub const onconnect = bridge.accessor(handlerProperty(SerialPort, .onconnect).get, handlerProperty(SerialPort, .onconnect).set, .{});
+        pub const ondisconnect = bridge.accessor(handlerProperty(SerialPort, .ondisconnect).get, handlerProperty(SerialPort, .ondisconnect).set, .{});
         pub const readable = bridge.accessor(P.getReadable, null, .{});
         pub const writable = bridge.accessor(P.getWritable, null, .{});
         pub const close = bridge.function(P.refuse, .{ .arity = 0 });

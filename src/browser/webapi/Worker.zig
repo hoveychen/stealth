@@ -60,11 +60,6 @@ _script_arena: ?*lp.Arena = null,
 _script_buffer: std.ArrayList(u8) = .empty,
 _http_transfer: ?*Transfer = null,
 
-// Event handlers
-_on_error: ?js.Function.Global = null,
-_on_message: ?js.Function.Global = null,
-_on_messageerror: ?js.Function.Global = null,
-
 const WorkerOptions = struct {
     type: WorkerType = .classic,
 };
@@ -307,10 +302,9 @@ fn fireErrorEvent(self: *Worker, message: []const u8, error_value: ?js.Value.Glo
 fn _fireErrorEvent(self: *Worker, message: []const u8, error_value: ?js.Value.Global) !void {
     const frame = self._frame;
     const target = self.asEventTarget();
-    const on_error = self._on_error;
 
     // Check if there are any listeners
-    if (!frame._event_manager.hasDirectListeners(target, "error", on_error)) {
+    if (!frame._event_manager.hasDirectListeners(target, "error", null)) {
         if (error_value) |ev| ev.release();
         return;
     }
@@ -323,7 +317,7 @@ fn _fireErrorEvent(self: *Worker, message: []const u8, error_value: ?js.Value.Gl
         .cancelable = true,
     }, frame._page);
 
-    try frame._event_manager.dispatchDirect(target, error_event.asEvent(), on_error, .{
+    try frame._event_manager.dispatchDirect(target, error_event.asEvent(), null, .{
         .context = "Worker.onerror",
     });
 }
@@ -371,30 +365,6 @@ pub fn receiveMessage(self: *Worker, data: js.Value) !void {
     });
 }
 
-pub fn getOnMessage(self: *const Worker) ?js.Function.Global {
-    return self._on_message;
-}
-
-pub fn setOnMessage(self: *Worker, setter: ?FunctionSetter) void {
-    self._on_message = getFunctionFromSetter(setter);
-}
-
-pub fn getOnMessageError(self: *const Worker) ?js.Function.Global {
-    return self._on_messageerror;
-}
-
-pub fn setOnMessageError(self: *Worker, setter: ?FunctionSetter) void {
-    self._on_messageerror = getFunctionFromSetter(setter);
-}
-
-pub fn getOnError(self: *const Worker) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *Worker, setter: ?FunctionSetter) void {
-    self._on_error = getFunctionFromSetter(setter);
-}
-
 const FunctionSetter = union(enum) {
     func: js.Function.Global,
     anything: js.Value,
@@ -435,8 +405,7 @@ const ReceiveMessageCallback = struct {
 
         // If data is null, structured clone failed - fire messageerror
         const data = self.data catch |err| {
-            const on_messageerror = worker._on_messageerror;
-            if (!frame._event_manager.hasDirectListeners(target, "messageerror", on_messageerror)) {
+            if (!frame._event_manager.hasDirectListeners(target, "messageerror", null)) {
                 return null;
             }
             const event = (try MessageEvent.initTrusted(comptime .wrap("messageerror"), .{
@@ -444,14 +413,12 @@ const ReceiveMessageCallback = struct {
                 .bubbles = false,
                 .cancelable = false,
             }, frame._page)).asEvent();
-            try frame._event_manager.dispatchDirect(target, event, on_messageerror, .{ .context = "Worker.messageerror" });
+            try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "Worker.messageerror" });
             return null;
         };
 
-        const on_message = worker._on_message;
-
         // Check if there are any listeners before creating the event
-        if (!frame._event_manager.hasDirectListeners(target, "message", on_message)) {
+        if (!frame._event_manager.hasDirectListeners(target, "message", null)) {
             data.release();
             return null;
         }
@@ -462,7 +429,7 @@ const ReceiveMessageCallback = struct {
             .cancelable = false,
         }, frame._page)).asEvent();
 
-        try frame._event_manager.dispatchDirect(target, event, on_message, .{ .context = "Worker.receiveMessage" });
+        try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "Worker.receiveMessage" });
 
         return null;
     }
@@ -482,9 +449,13 @@ pub const JsApi = struct {
     pub const terminate = bridge.function(Worker.terminate, .{});
     pub const postMessage = bridge.function(Worker.postMessage, .{});
 
-    pub const onmessage = bridge.accessor(Worker.getOnMessage, Worker.setOnMessage, .{});
-    pub const onmessageerror = bridge.accessor(Worker.getOnMessageError, Worker.setOnMessageError, .{});
-    pub const onerror = bridge.accessor(Worker.getOnError, Worker.setOnError, .{});
+    fn handler(comptime which: @import("global_event_handlers.zig").Handler) type {
+        return @import("handler_property.zig").accessors(Worker, which);
+    }
+
+    pub const onmessage = bridge.accessor(handler(.onmessage).get, handler(.onmessage).set, .{});
+    pub const onmessageerror = bridge.accessor(handler(.onmessageerror).get, handler(.onmessageerror).set, .{});
+    pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
 };
 
 const testing = @import("../../testing.zig");

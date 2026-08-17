@@ -27,16 +27,21 @@ const std = @import("std");
 
 const js = @import("../js/js.zig");
 const EventTarget = @import("EventTarget.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const BatteryManager = @This();
 
 pub const Proto = EventTarget;
 
 _proto: *EventTarget,
-_on_charging_change: ?js.Function.Global = null,
-_on_charging_time_change: ?js.Function.Global = null,
-_on_discharging_time_change: ?js.Function.Global = null,
-_on_level_change: ?js.Function.Global = null,
 
 pub fn asEventTarget(self: *BatteryManager) *EventTarget {
     return self._proto;
@@ -59,40 +64,6 @@ pub fn getLevel(_: *const BatteryManager) f64 {
     return 1;
 }
 
-// None of the four ever fires: the values are constant. They exist because
-// they're on Chrome's prototype.
-pub fn getOnChargingChange(self: *BatteryManager) ?js.Function.Global {
-    return self._on_charging_change;
-}
-
-pub fn setOnChargingChange(self: *BatteryManager, listener: ?js.Function) !void {
-    self._on_charging_change = if (listener) |l| try l.persistWithThis(self) else null;
-}
-
-pub fn getOnChargingTimeChange(self: *BatteryManager) ?js.Function.Global {
-    return self._on_charging_time_change;
-}
-
-pub fn setOnChargingTimeChange(self: *BatteryManager, listener: ?js.Function) !void {
-    self._on_charging_time_change = if (listener) |l| try l.persistWithThis(self) else null;
-}
-
-pub fn getOnDischargingTimeChange(self: *BatteryManager) ?js.Function.Global {
-    return self._on_discharging_time_change;
-}
-
-pub fn setOnDischargingTimeChange(self: *BatteryManager, listener: ?js.Function) !void {
-    self._on_discharging_time_change = if (listener) |l| try l.persistWithThis(self) else null;
-}
-
-pub fn getOnLevelChange(self: *BatteryManager) ?js.Function.Global {
-    return self._on_level_change;
-}
-
-pub fn setOnLevelChange(self: *BatteryManager, listener: ?js.Function) !void {
-    self._on_level_change = if (listener) |l| try l.persistWithThis(self) else null;
-}
-
 pub const JsApi = struct {
     pub const bridge = js.Bridge(BatteryManager);
 
@@ -106,8 +77,8 @@ pub const JsApi = struct {
     pub const chargingTime = bridge.accessor(BatteryManager.getChargingTime, null, .{});
     pub const dischargingTime = bridge.accessor(BatteryManager.getDischargingTime, null, .{});
     pub const level = bridge.accessor(BatteryManager.getLevel, null, .{});
-    pub const onchargingchange = bridge.accessor(BatteryManager.getOnChargingChange, BatteryManager.setOnChargingChange, .{});
-    pub const onchargingtimechange = bridge.accessor(BatteryManager.getOnChargingTimeChange, BatteryManager.setOnChargingTimeChange, .{});
-    pub const ondischargingtimechange = bridge.accessor(BatteryManager.getOnDischargingTimeChange, BatteryManager.setOnDischargingTimeChange, .{});
-    pub const onlevelchange = bridge.accessor(BatteryManager.getOnLevelChange, BatteryManager.setOnLevelChange, .{});
+    pub const onchargingchange = bridge.accessor(handlerProperty(BatteryManager, .onchargingchange).get, handlerProperty(BatteryManager, .onchargingchange).set, .{});
+    pub const onchargingtimechange = bridge.accessor(handlerProperty(BatteryManager, .onchargingtimechange).get, handlerProperty(BatteryManager, .onchargingtimechange).set, .{});
+    pub const ondischargingtimechange = bridge.accessor(handlerProperty(BatteryManager, .ondischargingtimechange).get, handlerProperty(BatteryManager, .ondischargingtimechange).set, .{});
+    pub const onlevelchange = bridge.accessor(handlerProperty(BatteryManager, .onlevelchange).get, handlerProperty(BatteryManager, .onlevelchange).set, .{});
 };

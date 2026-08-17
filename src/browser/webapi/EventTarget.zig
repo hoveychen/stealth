@@ -485,3 +485,13 @@ test "WebApi: EventTarget" {
     try testing.expectEqual(16, @sizeOf(EventTarget));
     try testing.htmlRunner("events.html", .{});
 }
+
+test "WebApi: EventTarget handler order" {
+    testing.silenceLog(&.{.event});
+    try testing.htmlRunner("event/handler_order.html", .{});
+}
+
+test "WebApi: EventTarget handler order on stub targets" {
+    testing.silenceLog(&.{.event});
+    try testing.htmlRunner("event/handler_order_stubs.html", .{});
+}

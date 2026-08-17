@@ -46,7 +46,6 @@ pub const Proto = EventTarget;
 
 _proto: *EventTarget,
 _port: *MessagePort,
-_on_error: ?js.Function.Global = null,
 
 const NameOrOpts = union(enum) {
     name: []const u8,
@@ -101,14 +100,6 @@ pub fn getPort(self: *const SharedWorker) *MessagePort {
     return self._port;
 }
 
-pub fn getOnError(self: *const SharedWorker) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *SharedWorker, setter: ?FunctionSetter) void {
-    self._on_error = getFunctionFromSetter(setter);
-}
-
 const FunctionSetter = union(enum) {
     func: js.Function.Global,
     anything: js.Value,
@@ -134,10 +125,21 @@ pub const JsApi = struct {
     pub const constructor = bridge.constructor(SharedWorker.init, .{});
 
     pub const port = bridge.accessor(SharedWorker.getPort, null, .{});
-    pub const onerror = bridge.accessor(SharedWorker.getOnError, SharedWorker.setOnError, .{});
+    pub const onerror = bridge.accessor(handlerPropertyLenient(SharedWorker, .onerror).get, handlerPropertyLenient(SharedWorker, .onerror).set, .{});
 };
 
 const testing = @import("../../testing.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+/// As `handlerProperty` elsewhere, but these setters take a non-callable and
+/// store null rather than refusing it, which is what the worker scopes measured.
+fn handlerPropertyLenient(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.lenientAccessors(T, which);
+}
 test "WebApi: SharedWorker" {
     testing.silenceLog(&.{.http});
     try testing.htmlRunner("shared_worker", .{ .timeout_ms = 8000 });

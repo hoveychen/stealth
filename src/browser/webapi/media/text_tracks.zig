@@ -33,6 +33,15 @@ const js = @import("../../js/js.zig");
 const Page = @import("../../Page.zig");
 const EventTarget = @import("../EventTarget.zig");
 const TextTrackCue = @import("TextTrackCue.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 pub fn registerTypes() []const type {
     return &.{
@@ -73,7 +82,6 @@ pub const TextTrack = struct {
     _mode: Mode = .hidden,
     _cues: *TextTrackCueList,
     _active_cues: *TextTrackCueList,
-    _on_cue_change: ?js.Function.Global = null,
 
     /// The five values HTMLMediaElement.addTextTrack accepts; anything else is
     /// a TypeError from the caller, with Chrome's enum wording.
@@ -199,8 +207,6 @@ pub const TextTrack = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        const on_cue_change = handlerAccessors(TextTrack, "_on_cue_change");
-
         pub const kind = bridge.accessor(TextTrack.getKind, null, .{});
         pub const label = bridge.accessor(TextTrack.getLabel, null, .{});
         pub const language = bridge.accessor(TextTrack.getLanguage, null, .{});
@@ -208,7 +214,7 @@ pub const TextTrack = struct {
         pub const mode = bridge.accessor(TextTrack.getMode, TextTrack.setMode, .{});
         pub const cues = bridge.accessor(TextTrack.getCues, null, .{});
         pub const activeCues = bridge.accessor(TextTrack.getActiveCues, null, .{});
-        pub const oncuechange = bridge.accessor(on_cue_change.get, on_cue_change.set, .{});
+        pub const oncuechange = bridge.accessor(handlerProperty(TextTrack, .oncuechange).get, handlerProperty(TextTrack, .oncuechange).set, .{});
         pub const addCue = bridge.function(TextTrack.addCue, .{ .arity = 1 });
         pub const removeCue = bridge.function(TextTrack.removeCue, .{ .arity = 1 });
     };
@@ -221,9 +227,6 @@ pub const TextTrackList = struct {
 
     _proto: *EventTarget,
     _items: std.ArrayListUnmanaged(*TextTrack) = .empty,
-    _on_change: ?js.Function.Global = null,
-    _on_add_track: ?js.Function.Global = null,
-    _on_remove_track: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *TextTrackList) *EventTarget {
         return self._proto;
@@ -277,14 +280,10 @@ pub const TextTrackList = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        const on_change = handlerAccessors(TextTrackList, "_on_change");
-        const on_add_track = handlerAccessors(TextTrackList, "_on_add_track");
-        const on_remove_track = handlerAccessors(TextTrackList, "_on_remove_track");
-
         pub const length = bridge.accessor(TextTrackList.getLength, null, .{});
-        pub const onchange = bridge.accessor(on_change.get, on_change.set, .{});
-        pub const onaddtrack = bridge.accessor(on_add_track.get, on_add_track.set, .{});
-        pub const onremovetrack = bridge.accessor(on_remove_track.get, on_remove_track.set, .{});
+        pub const onchange = bridge.accessor(handlerProperty(TextTrackList, .onchange).get, handlerProperty(TextTrackList, .onchange).set, .{});
+        pub const onaddtrack = bridge.accessor(handlerProperty(TextTrackList, .onaddtrack).get, handlerProperty(TextTrackList, .onaddtrack).set, .{});
+        pub const onremovetrack = bridge.accessor(handlerProperty(TextTrackList, .onremovetrack).get, handlerProperty(TextTrackList, .onremovetrack).set, .{});
         pub const getTrackById = bridge.function(TextTrackList.getTrackById, .{});
         pub const @"[]" = bridge.indexed(TextTrackList.item, getIndexes, .{ .null_as_undefined = true });
         pub const symbol_iterator = bridge.iterator(TextTrackList.iterator, .{ .js_name = "values" });

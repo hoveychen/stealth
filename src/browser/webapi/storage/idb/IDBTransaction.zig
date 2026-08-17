@@ -96,10 +96,6 @@ _active_turn: u64 = 0,
 // a pin (parked) or the drain task does (owner).
 _parked: bool = false,
 
-_on_complete: ?js.Function.Global = null,
-_on_error: ?js.Function.Global = null,
-_on_abort: ?js.Function.Global = null,
-
 pub const Mode = enum {
     readonly,
     readwrite,
@@ -283,7 +279,7 @@ pub fn abortWith(self: *IDBTransaction, exec: *Execution, reason: ?anyerror) err
             };
         }
     }
-    self.fire(exec, comptime .wrap("abort"), self._on_abort);
+    self.fire(exec, comptime .wrap("abort"));
 }
 
 pub fn settle(self: *IDBTransaction, exec: *Execution) void {
@@ -327,13 +323,13 @@ fn commitAndComplete(self: *IDBTransaction, exec: *Execution) void {
             self._engine.rollback();
             self._begun = false;
             _ = self._engine.releaseGate(&self._gate_waiter);
-            self.fire(exec, comptime .wrap("abort"), self._on_abort);
+            self.fire(exec, comptime .wrap("abort"));
             return;
         };
         self._begun = false;
     }
     _ = self._engine.releaseGate(&self._gate_waiter);
-    self.fire(exec, comptime .wrap("complete"), self._on_complete);
+    self.fire(exec, comptime .wrap("complete"));
 }
 
 // "is this transaction still usable". Once settled or explicitly committing, it
@@ -452,28 +448,28 @@ pub fn getError(self: *const IDBTransaction) ?DOMException {
     return DOMException.fromError(mapped) orelse DOMException.init(null, "UnknownError");
 }
 
-pub fn getOnComplete(self: *const IDBTransaction) ?js.Function.Global {
-    return self._on_complete;
+pub fn getOnComplete(self: *IDBTransaction, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .oncomplete);
 }
 
-pub fn setOnComplete(self: *IDBTransaction, setter: ?FunctionSetter) void {
-    self._on_complete = getFunctionFromSetter(setter);
+pub fn setOnComplete(self: *IDBTransaction, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return exec.setEventHandler(self.asEventTarget(), .oncomplete, getFunctionFromSetter(setter));
 }
 
-pub fn getOnError(self: *const IDBTransaction) ?js.Function.Global {
-    return self._on_error;
+pub fn getOnError(self: *IDBTransaction, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .onerror);
 }
 
-pub fn setOnError(self: *IDBTransaction, setter: ?FunctionSetter) void {
-    self._on_error = getFunctionFromSetter(setter);
+pub fn setOnError(self: *IDBTransaction, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return exec.setEventHandler(self.asEventTarget(), .onerror, getFunctionFromSetter(setter));
 }
 
-pub fn getOnAbort(self: *const IDBTransaction) ?js.Function.Global {
-    return self._on_abort;
+pub fn getOnAbort(self: *IDBTransaction, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .onabort);
 }
 
-pub fn setOnAbort(self: *IDBTransaction, setter: ?FunctionSetter) void {
-    self._on_abort = getFunctionFromSetter(setter);
+pub fn setOnAbort(self: *IDBTransaction, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return exec.setEventHandler(self.asEventTarget(), .onabort, getFunctionFromSetter(setter));
 }
 
 fn getFunctionFromSetter(setter: ?FunctionSetter) ?js.Function.Global {
@@ -484,13 +480,14 @@ fn getFunctionFromSetter(setter: ?FunctionSetter) ?js.Function.Global {
     };
 }
 
-fn fire(self: *IDBTransaction, exec: *Execution, typ: lp.String, handler: ?js.Function.Global) void {
+// The handler is a listener in the list now, so nothing is passed by hand.
+fn fire(self: *IDBTransaction, exec: *Execution, typ: lp.String) void {
     self._settled = true;
     const event = Event.initTrusted(typ, null, exec.page) catch |err| {
         log.warn(.storage, "idb transaction event", .{ .err = err });
         return;
     };
-    exec.dispatch(self.asEventTarget(), event, handler, .{ .context = "IDBTransaction" }) catch |err| {
+    exec.dispatch(self.asEventTarget(), event, null, .{ .context = "IDBTransaction" }) catch |err| {
         log.warn(.storage, "idb transaction dispatch", .{ .err = err });
     };
 }

@@ -31,6 +31,15 @@
 const js = @import("../../js/js.zig");
 
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 pub fn registerTypes() []const type {
     return &.{ RTCDtlsTransport, RTCIceTransport, RTCSctpTransport, RTCDTMFSender };
@@ -40,8 +49,6 @@ pub const RTCDtlsTransport = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_statechange: ?js.Function.Global = null,
-    _on_error: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *RTCDtlsTransport) *EventTarget {
         return self._proto;
@@ -59,22 +66,6 @@ pub const RTCDtlsTransport = struct {
         return &.{};
     }
 
-    pub fn getOnStateChange(self: *const RTCDtlsTransport) ?js.Function.Global {
-        return self._on_statechange;
-    }
-
-    pub fn setOnStateChange(self: *RTCDtlsTransport, cb: ?js.Function) !void {
-        self._on_statechange = if (cb) |c| try c.persistWithThis(self) else null;
-    }
-
-    pub fn getOnError(self: *const RTCDtlsTransport) ?js.Function.Global {
-        return self._on_error;
-    }
-
-    pub fn setOnError(self: *RTCDtlsTransport, cb: ?js.Function) !void {
-        self._on_error = if (cb) |c| try c.persistWithThis(self) else null;
-    }
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(RTCDtlsTransport);
 
@@ -86,8 +77,8 @@ pub const RTCDtlsTransport = struct {
 
         pub const iceTransport = bridge.accessor(RTCDtlsTransport.getIceTransport, null, .{});
         pub const state = bridge.accessor(RTCDtlsTransport.getState, null, .{});
-        pub const onstatechange = bridge.accessor(RTCDtlsTransport.getOnStateChange, RTCDtlsTransport.setOnStateChange, .{});
-        pub const onerror = bridge.accessor(RTCDtlsTransport.getOnError, RTCDtlsTransport.setOnError, .{});
+        pub const onstatechange = bridge.accessor(handlerProperty(RTCDtlsTransport, .onstatechange).get, handlerProperty(RTCDtlsTransport, .onstatechange).set, .{});
+        pub const onerror = bridge.accessor(handlerProperty(RTCDtlsTransport, .onerror).get, handlerProperty(RTCDtlsTransport, .onerror).set, .{});
         pub const getRemoteCertificates = bridge.function(RTCDtlsTransport.getRemoteCertificates, .{});
     };
 };
@@ -96,9 +87,6 @@ pub const RTCIceTransport = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_statechange: ?js.Function.Global = null,
-    _on_gatheringstatechange: ?js.Function.Global = null,
-    _on_selectedcandidatepairchange: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *RTCIceTransport) *EventTarget {
         return self._proto;
@@ -136,30 +124,6 @@ pub const RTCIceTransport = struct {
         return null;
     }
 
-    pub fn getOnStateChange(self: *const RTCIceTransport) ?js.Function.Global {
-        return self._on_statechange;
-    }
-
-    pub fn setOnStateChange(self: *RTCIceTransport, cb: ?js.Function) !void {
-        self._on_statechange = if (cb) |c| try c.persistWithThis(self) else null;
-    }
-
-    pub fn getOnGatheringStateChange(self: *const RTCIceTransport) ?js.Function.Global {
-        return self._on_gatheringstatechange;
-    }
-
-    pub fn setOnGatheringStateChange(self: *RTCIceTransport, cb: ?js.Function) !void {
-        self._on_gatheringstatechange = if (cb) |c| try c.persistWithThis(self) else null;
-    }
-
-    pub fn getOnSelectedCandidatePairChange(self: *const RTCIceTransport) ?js.Function.Global {
-        return self._on_selectedcandidatepairchange;
-    }
-
-    pub fn setOnSelectedCandidatePairChange(self: *RTCIceTransport, cb: ?js.Function) !void {
-        self._on_selectedcandidatepairchange = if (cb) |c| try c.persistWithThis(self) else null;
-    }
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(RTCIceTransport);
 
@@ -172,9 +136,9 @@ pub const RTCIceTransport = struct {
         pub const role = bridge.accessor(RTCIceTransport.getRole, null, .{});
         pub const state = bridge.accessor(RTCIceTransport.getState, null, .{});
         pub const gatheringState = bridge.accessor(RTCIceTransport.getGatheringState, null, .{});
-        pub const onstatechange = bridge.accessor(RTCIceTransport.getOnStateChange, RTCIceTransport.setOnStateChange, .{});
-        pub const ongatheringstatechange = bridge.accessor(RTCIceTransport.getOnGatheringStateChange, RTCIceTransport.setOnGatheringStateChange, .{});
-        pub const onselectedcandidatepairchange = bridge.accessor(RTCIceTransport.getOnSelectedCandidatePairChange, RTCIceTransport.setOnSelectedCandidatePairChange, .{});
+        pub const onstatechange = bridge.accessor(handlerProperty(RTCIceTransport, .onstatechange).get, handlerProperty(RTCIceTransport, .onstatechange).set, .{});
+        pub const ongatheringstatechange = bridge.accessor(handlerProperty(RTCIceTransport, .ongatheringstatechange).get, handlerProperty(RTCIceTransport, .ongatheringstatechange).set, .{});
+        pub const onselectedcandidatepairchange = bridge.accessor(handlerProperty(RTCIceTransport, .onselectedcandidatepairchange).get, handlerProperty(RTCIceTransport, .onselectedcandidatepairchange).set, .{});
         pub const getLocalCandidates = bridge.function(RTCIceTransport.getLocalCandidates, .{});
         pub const getLocalParameters = bridge.function(RTCIceTransport.getLocalParameters, .{});
         pub const getRemoteCandidates = bridge.function(RTCIceTransport.getRemoteCandidates, .{});
@@ -187,7 +151,6 @@ pub const RTCSctpTransport = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_statechange: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *RTCSctpTransport) *EventTarget {
         return self._proto;
@@ -211,14 +174,6 @@ pub const RTCSctpTransport = struct {
         return null;
     }
 
-    pub fn getOnStateChange(self: *const RTCSctpTransport) ?js.Function.Global {
-        return self._on_statechange;
-    }
-
-    pub fn setOnStateChange(self: *RTCSctpTransport, cb: ?js.Function) !void {
-        self._on_statechange = if (cb) |c| try c.persistWithThis(self) else null;
-    }
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(RTCSctpTransport);
 
@@ -232,7 +187,7 @@ pub const RTCSctpTransport = struct {
         pub const state = bridge.accessor(RTCSctpTransport.getState, null, .{});
         pub const maxMessageSize = bridge.accessor(RTCSctpTransport.getMaxMessageSize, null, .{});
         pub const maxChannels = bridge.accessor(RTCSctpTransport.getMaxChannels, null, .{});
-        pub const onstatechange = bridge.accessor(RTCSctpTransport.getOnStateChange, RTCSctpTransport.setOnStateChange, .{});
+        pub const onstatechange = bridge.accessor(handlerProperty(RTCSctpTransport, .onstatechange).get, handlerProperty(RTCSctpTransport, .onstatechange).set, .{});
     };
 };
 
@@ -240,7 +195,6 @@ pub const RTCDTMFSender = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_tonechange: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *RTCDTMFSender) *EventTarget {
         return self._proto;
@@ -258,14 +212,6 @@ pub const RTCDTMFSender = struct {
         return error.InvalidStateError;
     }
 
-    pub fn getOnToneChange(self: *const RTCDTMFSender) ?js.Function.Global {
-        return self._on_tonechange;
-    }
-
-    pub fn setOnToneChange(self: *RTCDTMFSender, cb: ?js.Function) !void {
-        self._on_tonechange = if (cb) |c| try c.persistWithThis(self) else null;
-    }
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(RTCDTMFSender);
 
@@ -277,7 +223,7 @@ pub const RTCDTMFSender = struct {
 
         // Declaration order is the order Object.getOwnPropertyNames() reports,
         // and Chrome's is ontonechange first (measured).
-        pub const ontonechange = bridge.accessor(RTCDTMFSender.getOnToneChange, RTCDTMFSender.setOnToneChange, .{});
+        pub const ontonechange = bridge.accessor(handlerProperty(RTCDTMFSender, .ontonechange).get, handlerProperty(RTCDTMFSender, .ontonechange).set, .{});
         pub const canInsertDTMF = bridge.accessor(RTCDTMFSender.getCanInsertDTMF, null, .{});
         pub const toneBuffer = bridge.accessor(RTCDTMFSender.getToneBuffer, null, .{});
         pub const insertDTMF = bridge.function(RTCDTMFSender.insertDTMF, .{});

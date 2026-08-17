@@ -563,3 +563,96 @@
     await state2.done(() => testing.expectEqual(200, req.status));
   }
 </script>
+
+<script id=xhr_handler_order type=module>
+  {
+    // A handler property is an event listener: it takes its place in the
+    // target's listener list when first set. Measured on a headed Chrome 150
+    // (probe-g22e): every one of these is "al1,on,al2". Ours ran the handler
+    // ahead of the list, and onreadystatechange -- read only on the internal
+    // dispatch path -- did not run on a dispatchEvent at all.
+    const order = (make, name, type) => {
+      const log = [];
+      const t = make();
+      t.addEventListener(type, () => log.push('al1'));
+      t[name] = () => log.push('on');
+      t.addEventListener(type, () => log.push('al2'));
+      t.dispatchEvent(new Event(type));
+      return log.join(',');
+    };
+
+    for (const [name, type] of [
+      ['onloadstart', 'loadstart'], ['onprogress', 'progress'], ['onabort', 'abort'],
+      ['onerror', 'error'], ['onload', 'load'], ['ontimeout', 'timeout'],
+      ['onloadend', 'loadend'], ['onreadystatechange', 'readystatechange'],
+    ]) {
+      testing.expectEqual('al1,on,al2', order(() => new XMLHttpRequest(), name, type), { desc: 'xhr.' + name });
+    }
+    for (const [name, type] of [['onprogress', 'progress'], ['onload', 'load']]) {
+      testing.expectEqual('al1,on,al2', order(() => new XMLHttpRequest().upload, name, type), { desc: 'upload.' + name });
+    }
+  }
+</script>
+
+<script id=xhr_handler_this type=module>
+  {
+    // `this` inside a handler is the target it was set on, request or upload.
+    const x = new XMLHttpRequest();
+    let same = null;
+    x.onload = function () { same = (this === x); };
+    x.dispatchEvent(new Event('load'));
+    testing.expectEqual(true, same, { desc: 'this is the request' });
+
+    const u = x.upload;
+    let sameUpload = null;
+    u.onload = function () { sameUpload = (this === u); };
+    u.dispatchEvent(new Event('load'));
+    testing.expectEqual(true, sameUpload, { desc: 'this is the upload' });
+  }
+</script>
+
+<script id=xhr_handler_reassignment type=module>
+  {
+    // Re-assigning swaps the function in place; clearing and setting again
+    // appends at the end.
+    const build = (clear) => {
+      const log = [];
+      const x = new XMLHttpRequest();
+      x.addEventListener('load', () => log.push('al1'));
+      x.onload = () => log.push('on-first');
+      x.addEventListener('load', () => log.push('al2'));
+      if (clear) x.onload = null;
+      x.onload = () => log.push('on-second');
+      x.dispatchEvent(new Event('load'));
+      return log.join(',');
+    };
+    testing.expectEqual('al1,on-second,al2', build(false), { desc: 'reassign keeps the slot' });
+    testing.expectEqual('al1,al2,on-second', build(true), { desc: 'clear then set appends' });
+  }
+</script>
+
+<script id=xhr_handler_order_on_a_real_request type=module>
+  {
+    // The same ordering on the internal dispatch path, which used to pass the
+    // handler by hand ahead of the list.
+    const state = await testing.async();
+    const log = [];
+    const req = new XMLHttpRequest();
+    req.addEventListener('readystatechange', () => log.push('rsc-al'));
+    req.onreadystatechange = () => log.push('rsc-on');
+    req.addEventListener('load', () => log.push('al1'));
+    req.onload = () => log.push('on');
+    req.addEventListener('load', () => log.push('al2'));
+    req.addEventListener('loadend', () => state.resolve());
+    req.open('GET', 'http://127.0.0.1:9582/xhr');
+    req.send();
+
+    await state.done(() => {
+      // Collapse the readystatechange repeats: how many there are is a
+      // different question from what order each pair runs in.
+      const collapsed = log.filter((v, i) => v !== log[i - 1]);
+      testing.expectEqual('rsc-al,rsc-on', collapsed.slice(0, 2).join(','), { desc: 'readystatechange pair' });
+      testing.expectEqual('al1,on,al2', collapsed.slice(-3).join(','), { desc: 'load triple' });
+    });
+  }
+</script>

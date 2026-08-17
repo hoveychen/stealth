@@ -295,7 +295,7 @@ pub const JsApi = struct {
     fn handler(comptime which: GlobalEventHandler) type {
         return struct {
             fn get(self: *EditContext, frame: *Frame) ?js.Function.Global {
-                return frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = which });
+                return frame.getEventHandler(self.asEventTarget(), which);
             }
             fn set(self: *EditContext, callback: ?js.Function.Global, frame: *Frame) !void {
                 return frame.setEventHandler(self.asEventTarget(), which, callback);

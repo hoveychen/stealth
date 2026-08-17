@@ -42,6 +42,15 @@ const Page = @import("../Page.zig");
 const URL = @import("../URL.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -270,7 +279,10 @@ pub const PermissionStatus = struct {
     _proto: *EventTarget,
     _name: []const u8,
     _state: State,
-    _on_change: ?js.Function.Global = null,
+
+    pub fn asEventTarget(self: *PermissionStatus) *EventTarget {
+        return self._proto;
+    }
 
     pub fn deinit(self: *PermissionStatus, _: *Page) void {
         self._arena.release();
@@ -292,14 +304,6 @@ pub const PermissionStatus = struct {
         return @tagName(self._state);
     }
 
-    fn getOnChange(self: *const PermissionStatus) ?js.Function.Global {
-        return self._on_change;
-    }
-
-    fn setOnChange(self: *PermissionStatus, callback: ?js.Function.Global) void {
-        self._on_change = callback;
-    }
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PermissionStatus);
         pub const Meta = struct {
@@ -312,7 +316,7 @@ pub const PermissionStatus = struct {
 
         pub const name = bridge.accessor(getName, null, .{});
         pub const state = bridge.accessor(getState, null, .{});
-        pub const onchange = bridge.accessor(getOnChange, setOnChange, .{});
+        pub const onchange = bridge.accessor(handlerProperty(PermissionStatus, .onchange).get, handlerProperty(PermissionStatus, .onchange).set, .{});
     };
 };
 

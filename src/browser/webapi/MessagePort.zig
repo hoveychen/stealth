@@ -38,8 +38,6 @@ _proto: *EventTarget,
 _exec: *Execution,
 _enabled: bool = false,
 _closed: bool = false,
-_on_message: ?js.Function.Global = null,
-_on_message_error: ?js.Function.Global = null,
 _entangled_port: ?*MessagePort = null,
 
 // queued message received before the port is started.
@@ -142,23 +140,16 @@ pub fn close(self: *MessagePort) void {
     self._entangled_port = null;
 }
 
-pub fn getOnMessage(self: *const MessagePort) ?js.Function.Global {
-    return self._on_message;
+pub fn getOnMessage(self: *MessagePort) ?js.Function.Global {
+    return self._exec.getEventHandler(self.asEventTarget(), .onmessage);
 }
 
+// Per spec, setting onmessage implicitly starts the port.
 pub fn setOnMessage(self: *MessagePort, cb: ?js.Function.Global) !void {
-    self._on_message = cb;
+    try self._exec.setEventHandler(self.asEventTarget(), .onmessage, cb);
     if (cb != null) {
         self.start();
     }
-}
-
-pub fn getOnMessageError(self: *const MessagePort) ?js.Function.Global {
-    return self._on_message_error;
-}
-
-pub fn setOnMessageError(self: *MessagePort, cb: ?js.Function.Global) !void {
-    self._on_message_error = cb;
 }
 
 // Queues delivery of `message` (a clone already living in this port's
@@ -209,7 +200,7 @@ const DeliverCallback = struct {
         }
 
         const target = port.asEventTarget();
-        if (!exec.hasDirectListeners(target, "message", port._on_message)) {
+        if (!exec.hasDirectListeners(target, "message", null)) {
             self.message.release();
             return null;
         }
@@ -224,7 +215,7 @@ const DeliverCallback = struct {
             return null;
         }).asEvent();
 
-        exec.dispatch(target, event, port._on_message, .{ .context = "MessagePort message" }) catch |err| {
+        exec.dispatch(target, event, null, .{ .context = "MessagePort message" }) catch |err| {
             log.err(.dom, "MessagePort.postMessage", .{ .err = err });
         };
 
@@ -246,5 +237,9 @@ pub const JsApi = struct {
     pub const close = bridge.function(MessagePort.close, .{});
 
     pub const onmessage = bridge.accessor(MessagePort.getOnMessage, MessagePort.setOnMessage, .{});
-    pub const onmessageerror = bridge.accessor(MessagePort.getOnMessageError, MessagePort.setOnMessageError, .{});
+    pub const onmessageerror = bridge.accessor(
+        @import("handler_property.zig").accessors(MessagePort, .onmessageerror).get,
+        @import("handler_property.zig").accessors(MessagePort, .onmessageerror).set,
+        .{},
+    );
 };

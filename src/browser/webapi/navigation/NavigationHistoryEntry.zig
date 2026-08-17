@@ -23,6 +23,15 @@ const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const Frame = @import("../../Frame.zig");
 const js = @import("../../js/js.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const NavigationHistoryEntry = @This();
 
@@ -35,9 +44,7 @@ _key: []const u8,
 _url: ?[:0]const u8,
 _state: NavigationState,
 
-_on_dispose: ?js.Function.Global = null,
-
-fn asEventTarget(self: *NavigationHistoryEntry) *EventTarget {
+pub fn asEventTarget(self: *NavigationHistoryEntry) *EventTarget {
     return self._proto;
 }
 
@@ -83,14 +90,10 @@ pub fn getState(self: *const NavigationHistoryEntry, frame: *Frame) !StateReturn
 }
 
 pub fn fireDispose(self: *NavigationHistoryEntry, frame: *Frame) !void {
-    if (!frame.hasDirectListeners(self.asEventTarget(), "dispose", self._on_dispose)) return;
+    if (!frame.hasDirectListeners(self.asEventTarget(), "dispose", null)) return;
 
     const event = try Event.initTrusted(comptime .wrap("dispose"), .{}, frame._page);
-    try frame.dispatch(self.asEventTarget(), event, self._on_dispose, .{ .context = "NavigationHistoryEntry" });
-}
-
-fn getOnDispose(self: *const NavigationHistoryEntry) ?js.Function.Global {
-    return self._on_dispose;
+    try frame.dispatch(self.asEventTarget(), event, null, .{ .context = "NavigationHistoryEntry" });
 }
 
 pub fn setOnDispose(self: *NavigationHistoryEntry, cb_: ?js.Function) !void {
@@ -117,9 +120,5 @@ pub const JsApi = struct {
     pub const sameDocument = bridge.accessor(NavigationHistoryEntry.sameDocument, null, .{});
     pub const url = bridge.accessor(NavigationHistoryEntry.url, null, .{});
     pub const getState = bridge.function(NavigationHistoryEntry.getState, .{});
-    pub const ondispose = bridge.accessor(
-        NavigationHistoryEntry.getOnDispose,
-        NavigationHistoryEntry.setOnDispose,
-        .{},
-    );
+    pub const ondispose = bridge.accessor(handlerProperty(NavigationHistoryEntry, .ondispose).get, handlerProperty(NavigationHistoryEntry, .ondispose).set, .{});
 };

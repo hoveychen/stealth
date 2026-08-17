@@ -66,6 +66,13 @@ lookup: std.HashMapUnmanaged(
 ),
 dispatch_depth: usize,
 deferred_removals: std.ArrayList(struct { list: *std.DoublyLinkedList, listener: *Listener }),
+// Where an `on*` handler's function lives. The listener standing for it in
+// `lookup` carries only the handler kind, so re-assigning the property swaps
+// the entry here without moving the listener. It sits on the manager rather
+// than on the Frame because a worker's targets need it too -- XMLHttpRequest,
+// MessagePort and BroadcastChannel all exist inside a worker, which has an
+// EventManagerBase but no frame.
+attr_listeners: global_event_handlers.Lookup,
 
 pub fn init(arena: Allocator) EventManagerBase {
     return .{
@@ -75,6 +82,7 @@ pub fn init(arena: Allocator) EventManagerBase {
         .listener_pool = .empty,
         .dispatch_depth = 0,
         .deferred_removals = .empty,
+        .attr_listeners = .empty,
     };
 }
 
@@ -215,6 +223,50 @@ pub fn registerHandler(self: *EventManagerBase, target: *EventTarget, handler: g
     gop.value_ptr.*.append(&listener.node);
 }
 
+// The single entry point for `target.onX = f` and `target.onX = null`: the
+// function goes in the store, and a listener standing for the handler joins
+// (or leaves) the target's listener list, which is where its place in the
+// dispatch order comes from.
+pub fn setHandler(
+    self: *EventManagerBase,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+    callback: ?js.Function.Global,
+) !void {
+    if (callback) |cb| {
+        try self.attr_listeners.put(self.arena, .{ .target = target, .handler = handler }, cb);
+        return self.registerHandler(target, handler);
+    }
+    _ = self.attr_listeners.remove(.{ .target = target, .handler = handler });
+    self.removeHandler(target, handler);
+}
+
+pub fn getHandler(self: *const EventManagerBase, target: *EventTarget, handler: global_event_handlers.Handler) ?js.Function.Global {
+    return self.attr_listeners.get(.{ .target = target, .handler = handler });
+}
+
+pub fn hasHandlerFunction(self: *const EventManagerBase, target: *EventTarget, handler: global_event_handlers.Handler) bool {
+    return self.attr_listeners.contains(.{ .target = target, .handler = handler });
+}
+
+/// Cache a function against a handler slot *without* touching the listener
+/// list. Only for the content-attribute path, where the listener was already
+/// claimed when the attribute was set and the expression is compiled later.
+pub fn cacheHandlerFunction(
+    self: *EventManagerBase,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+    function: js.Function.Global,
+) !void {
+    return self.attr_listeners.put(self.arena, .{ .target = target, .handler = handler }, function);
+}
+
+/// Forget the cached function, leaving the listener in place -- the next
+/// dispatch recompiles from the content attribute.
+pub fn dropHandlerFunction(self: *EventManagerBase, target: *EventTarget, handler: global_event_handlers.Handler) void {
+    _ = self.attr_listeners.remove(.{ .target = target, .handler = handler });
+}
+
 pub fn removeHandler(self: *EventManagerBase, target: *EventTarget, handler: global_event_handlers.Handler) void {
     const list = self.lookup.get(.{
         .type_string = .wrap(global_event_handlers.toEventType(handler)),
@@ -256,11 +308,27 @@ pub fn removeListener(self: *EventManagerBase, list: *std.DoublyLinkedList, list
 }
 
 /// Check if there are any listeners registered for a target/type combination.
+///
+/// The list has to be walked rather than merely found: `removeListener` unlinks
+/// the node but leaves the (now empty) list in `lookup`, and during a dispatch
+/// it only marks the listener removed. A target that once had a listener would
+/// otherwise read as still having one forever -- which matters most for the
+/// handler properties, where `target.onx = f; target.onx = null` goes through
+/// this same list.
 pub fn hasListeners(self: *EventManagerBase, target: *EventTarget, typ: []const u8) bool {
-    return self.lookup.get(.{
+    const list = self.lookup.get(.{
         .event_target = @intFromPtr(target),
         .type_string = .wrap(typ),
-    }) != null;
+    }) orelse return false;
+
+    var node = list.first;
+    while (node) |n| : (node = n.next) {
+        const listener: *Listener = @alignCast(@fieldParentPtr("node", n));
+        if (!listener.removed) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// Get the listener list for a target/type, if any exist.
@@ -486,21 +554,21 @@ fn findListener(list: *const std.DoublyLinkedList, callback: Callback, capture: 
     return null;
 }
 
-// Where an `on*` handler's function comes from at dispatch time: the frame's
-// attribute-listener store, or -- when a content attribute has been set but
+// Where an `on*` handler's function comes from at dispatch time: the store on
+// the global's event manager, or -- when a content attribute has been set but
 // never read back through the property -- the attribute, compiled on the spot
-// and cached in that same store.
+// and cached in that same store. Only a frame has content attributes; a
+// worker's targets only ever get here through the property.
 fn resolveHandler(local: *const js.Local, target: *EventTarget, handler: global_event_handlers.Handler) ?js.Function.Global {
-    const frame = switch (local.ctx.global) {
-        .frame => |f| f,
-        // Workers have no attribute-listener store, so nothing ever registers
-        // one of these listeners on one of their targets.
-        .worker => return null,
-    };
-
-    if (frame._event_target_attr_listeners.get(.{ .target = target, .handler = handler })) |cached| {
+    const manager = local.ctx.global.eventManagerBase();
+    if (manager.getHandler(target, handler)) |cached| {
         return cached;
     }
+
+    const frame = switch (local.ctx.global) {
+        .frame => |f| f,
+        .worker => return null,
+    };
 
     const Element = @import("webapi/Element.zig");
     const element = switch (target._type) {
@@ -617,20 +685,48 @@ pub const Listener = struct {
                 // doesn't carry one.
                 const target = event._current_target.?;
                 const func = resolveHandler(local, target, handler) orelse return;
+                const local_func = local.toLocal(func);
+
+                // `window.onerror` is an OnErrorEventHandler: it takes the
+                // ErrorEvent apart into five arguments and cancels on `return
+                // true`, the inverse of every other handler. Measured on a
+                // headed Chrome 150 (probe-g22c), what selects that convention
+                // is the event's *interface* plus the target being a Window --
+                // a plain Event("error") at window.onerror and an ErrorEvent at
+                // document.onerror both get the ordinary treatment.
+                const special_error = handler == .onerror and
+                    target._type == .window and
+                    event.is(@import("webapi/event/ErrorEvent.zig")) != null;
 
                 var caught: js.TryCatch.Caught = undefined;
-                const handler_return: ?js.Value = local.toLocal(func).tryCallWithThis(js.Value, target, .{event}, &caught) catch |err| ret: {
-                    if (err == error.ExecutionTerminated) {
-                        return error.ExecutionTerminated;
-                    }
-                    local.ctx.page.recordJsError(err);
-                    log.warn(.event, "inline handler", .{ .err = err, .caught = caught });
-                    break :ret null;
+                const handler_return: ?js.Value = blk: {
+                    const result = if (special_error) res: {
+                        const error_event = event.is(@import("webapi/event/ErrorEvent.zig")).?;
+                        break :res local_func.tryCallWithThis(js.Value, target, .{
+                            error_event._message,
+                            error_event._filename,
+                            error_event._line_number,
+                            error_event._column_number,
+                            error_event._error,
+                        }, &caught);
+                    } else local_func.tryCallWithThis(js.Value, target, .{event}, &caught);
+
+                    break :blk result catch |err| {
+                        if (err == error.ExecutionTerminated) {
+                            return error.ExecutionTerminated;
+                        }
+                        local.ctx.page.recordJsError(err);
+                        log.warn(.event, "inline handler", .{ .err = err, .caught = caught });
+                        break :blk null;
+                    };
                 };
+
                 // Unlike an addEventListener listener, an event handler that
-                // returns false cancels the event.
+                // returns false cancels the event -- except under the
+                // OnErrorEventHandler convention, where it is `true`.
                 if (handler_return) |ret| {
-                    if (ret.isFalse() and !event._type_string.eql(comptime .wrap("error"))) {
+                    const cancels = if (special_error) ret.isTrue() else ret.isFalse();
+                    if (cancels) {
                         event.preventDefault();
                     }
                 }

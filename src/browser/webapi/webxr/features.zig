@@ -53,6 +53,15 @@ const XRInputSource = input.XRInputSource;
 const Execution = js.Execution;
 const Float32Array = js.ArrayBufferRef(.float32);
 const GenericIterator = @import("../collections/iterator.zig").Entry;
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 pub fn registerTypes() []const type {
     return &.{
@@ -411,7 +420,6 @@ pub const XRLightProbe = struct {
 
     _proto: *EventTarget,
     _probe_space: *XRSpace,
-    _on_reflection_change: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *XRLightProbe) *EventTarget {
         return self._proto;
@@ -419,14 +427,6 @@ pub const XRLightProbe = struct {
 
     pub fn getProbeSpace(self: *const XRLightProbe) *XRSpace {
         return self._probe_space;
-    }
-
-    pub fn getOnreflectionchange(self: *const XRLightProbe) ?js.Function.Global {
-        return self._on_reflection_change;
-    }
-
-    pub fn setOnreflectionchange(self: *XRLightProbe, listener: ?js.Function) !void {
-        self._on_reflection_change = if (listener) |l| try l.persistWithThis(self) else null;
     }
 
     pub const JsApi = struct {
@@ -441,11 +441,7 @@ pub const XRLightProbe = struct {
         pub const Prototype = EventTarget;
 
         pub const probeSpace = bridge.accessor(XRLightProbe.getProbeSpace, null, .{});
-        pub const onreflectionchange = bridge.accessor(
-            XRLightProbe.getOnreflectionchange,
-            XRLightProbe.setOnreflectionchange,
-            .{},
-        );
+        pub const onreflectionchange = bridge.accessor(handlerProperty(XRLightProbe, .onreflectionchange).get, handlerProperty(XRLightProbe, .onreflectionchange).set, .{});
     };
 };
 

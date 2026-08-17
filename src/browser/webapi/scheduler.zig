@@ -33,6 +33,15 @@ const Event = @import("Event.zig");
 const EventTarget = @import("EventTarget.zig");
 const AbortSignal = @import("AbortSignal.zig");
 const AbortController = @import("AbortController.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const String = lp.String;
 const Execution = js.Execution;
@@ -414,7 +423,6 @@ pub const TaskSignal = struct {
 
     _proto: *AbortSignal,
     _priority: Priority,
-    _on_priority_change: ?js.Function.Global = null,
 
     pub fn init(priority: Priority, exec: *const Execution) !*TaskSignal {
         const signal = try exec._factory.chained(.{
@@ -435,14 +443,6 @@ pub const TaskSignal = struct {
         return self._priority.toString();
     }
 
-    pub fn getOnPriorityChange(self: *const TaskSignal) ?js.Function.Global {
-        return self._on_priority_change;
-    }
-
-    pub fn setOnPriorityChange(self: *TaskSignal, callback: ?js.Function.Global) void {
-        self._on_priority_change = callback;
-    }
-
     // TaskSignal.any() takes no priority source, so the signal it returns is
     // always user-visible even when a source signal is not (measured).
     pub fn any(signals_: ?js.Value, exec: *const Execution) !*TaskSignal {
@@ -454,6 +454,10 @@ pub const TaskSignal = struct {
         const result = try TaskSignal.init(.user_visible, exec);
         try AbortSignal.linkAny(result._proto, signals, exec);
         return result;
+    }
+
+    pub fn asEventTarget(self: *TaskSignal) *EventTarget {
+        return self._proto.asEventTarget();
     }
 
     pub const JsApi = struct {
@@ -468,11 +472,7 @@ pub const TaskSignal = struct {
         pub const Prototype = AbortSignal;
 
         pub const priority = bridge.accessor(TaskSignal.getPriority, null, .{});
-        pub const onprioritychange = bridge.accessor(
-            TaskSignal.getOnPriorityChange,
-            TaskSignal.setOnPriorityChange,
-            .{},
-        );
+        pub const onprioritychange = bridge.accessor(handlerProperty(TaskSignal, .onprioritychange).get, handlerProperty(TaskSignal, .onprioritychange).set, .{});
 
         pub const any = bridge.function(TaskSignal.any, .{ .static = true, .arity = 1 });
     };
@@ -524,7 +524,7 @@ pub const TaskController = struct {
         signal._priority = priority;
 
         const target = signal._proto.asEventTarget();
-        const handler = signal._on_priority_change;
+        const handler = null;
         switch (exec.js.global) {
             inline else => |g| {
                 if (!g._event_manager.hasDirectListeners(target, "prioritychange", handler)) {

@@ -64,7 +64,7 @@ pub fn removeListener(_: *const MediaQueryList, _: js.Function) void {}
 fn handlerAccessor(comptime handler: @import("../global_event_handlers.zig").Handler) type {
     return struct {
         pub fn get(self: *MediaQueryList, frame: *Frame) ?js.Function.Global {
-            return frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = handler });
+            return frame.getEventHandler(self.asEventTarget(), handler);
         }
 
         pub fn set(self: *MediaQueryList, setter: ?Window.FunctionSetter, frame: *Frame) !void {

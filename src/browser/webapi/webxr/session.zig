@@ -54,6 +54,15 @@ const spaces = @import("spaces.zig");
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const Page = @import("../../Page.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const XRInputSourceArray = input.XRInputSourceArray;
 const XRPose = geometry.XRPose;
@@ -221,17 +230,6 @@ pub const XRSession = struct {
     _input_sources: *XRInputSourceArray,
     _callbacks: std.ArrayListUnmanaged(RafEntry) = .empty,
     _exec: *Execution,
-
-    _on_end: ?js.Function.Global = null,
-    _on_select: ?js.Function.Global = null,
-    _on_input_sources_change: ?js.Function.Global = null,
-    _on_select_start: ?js.Function.Global = null,
-    _on_select_end: ?js.Function.Global = null,
-    _on_visibility_change: ?js.Function.Global = null,
-    _on_squeeze: ?js.Function.Global = null,
-    _on_squeeze_start: ?js.Function.Global = null,
-    _on_squeeze_end: ?js.Function.Global = null,
-    _on_visibility_mask_change: ?js.Function.Global = null,
 
     const ENDED_PREFIX = "Failed to execute '";
     const DEPTH_UNSUPPORTED = "Depth sensing feature is not supported by the session.";
@@ -622,39 +620,15 @@ pub const XRSession = struct {
             null,
             .{},
         );
-        pub const onend = bridge.accessor(Handler("_on_end").get, Handler("_on_end").set, .{});
-        pub const onselect = bridge.accessor(Handler("_on_select").get, Handler("_on_select").set, .{});
-        pub const oninputsourceschange = bridge.accessor(
-            Handler("_on_input_sources_change").get,
-            Handler("_on_input_sources_change").set,
-            .{},
-        );
-        pub const onselectstart = bridge.accessor(
-            Handler("_on_select_start").get,
-            Handler("_on_select_start").set,
-            .{},
-        );
-        pub const onselectend = bridge.accessor(
-            Handler("_on_select_end").get,
-            Handler("_on_select_end").set,
-            .{},
-        );
-        pub const onvisibilitychange = bridge.accessor(
-            Handler("_on_visibility_change").get,
-            Handler("_on_visibility_change").set,
-            .{},
-        );
-        pub const onsqueeze = bridge.accessor(Handler("_on_squeeze").get, Handler("_on_squeeze").set, .{});
-        pub const onsqueezestart = bridge.accessor(
-            Handler("_on_squeeze_start").get,
-            Handler("_on_squeeze_start").set,
-            .{},
-        );
-        pub const onsqueezeend = bridge.accessor(
-            Handler("_on_squeeze_end").get,
-            Handler("_on_squeeze_end").set,
-            .{},
-        );
+        pub const onend = bridge.accessor(handlerProperty(XRSession, .onend).get, handlerProperty(XRSession, .onend).set, .{});
+        pub const onselect = bridge.accessor(handlerProperty(XRSession, .onselect).get, handlerProperty(XRSession, .onselect).set, .{});
+        pub const oninputsourceschange = bridge.accessor(handlerProperty(XRSession, .oninputsourceschange).get, handlerProperty(XRSession, .oninputsourceschange).set, .{});
+        pub const onselectstart = bridge.accessor(handlerProperty(XRSession, .onselectstart).get, handlerProperty(XRSession, .onselectstart).set, .{});
+        pub const onselectend = bridge.accessor(handlerProperty(XRSession, .onselectend).get, handlerProperty(XRSession, .onselectend).set, .{});
+        pub const onvisibilitychange = bridge.accessor(handlerProperty(XRSession, .onvisibilitychange).get, handlerProperty(XRSession, .onvisibilitychange).set, .{});
+        pub const onsqueeze = bridge.accessor(handlerProperty(XRSession, .onsqueeze).get, handlerProperty(XRSession, .onsqueeze).set, .{});
+        pub const onsqueezestart = bridge.accessor(handlerProperty(XRSession, .onsqueezestart).get, handlerProperty(XRSession, .onsqueezestart).set, .{});
+        pub const onsqueezeend = bridge.accessor(handlerProperty(XRSession, .onsqueezeend).get, handlerProperty(XRSession, .onsqueezeend).set, .{});
         pub const depthUsage = bridge.accessor(XRSession.getDepthUsage, null, .{});
         pub const depthDataFormat = bridge.accessor(XRSession.getDepthDataFormat, null, .{});
         pub const depthType = bridge.accessor(XRSession.getDepthType, null, .{});
@@ -677,11 +651,7 @@ pub const XRSession = struct {
         pub const updateRenderState = bridge.function(XRSession.updateRenderState, .{});
         pub const enabledFeatures = bridge.accessor(XRSession.getEnabledFeatures, null, .{});
         pub const maxRenderLayers = bridge.accessor(XRSession.getMaxRenderLayers, null, .{});
-        pub const onvisibilitymaskchange = bridge.accessor(
-            Handler("_on_visibility_mask_change").get,
-            Handler("_on_visibility_mask_change").set,
-            .{},
-        );
+        pub const onvisibilitymaskchange = bridge.accessor(handlerProperty(XRSession, .onvisibilitymaskchange).get, handlerProperty(XRSession, .onvisibilitymaskchange).set, .{});
         pub const initiateRoomCapture = bridge.function(XRSession.initiateRoomCapture, .{});
     };
 };

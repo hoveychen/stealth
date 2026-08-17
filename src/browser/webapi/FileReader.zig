@@ -44,13 +44,6 @@ _ready_state: ReadyState = .empty,
 _result: ?Result = null,
 _error: ?[]const u8 = null,
 
-_on_abort: ?js.Function.Global = null,
-_on_error: ?js.Function.Global = null,
-_on_load: ?js.Function.Global = null,
-_on_load_end: ?js.Function.Global = null,
-_on_load_start: ?js.Function.Global = null,
-_on_progress: ?js.Function.Global = null,
-
 _aborted: bool = false,
 
 const ReadyState = enum(u8) {
@@ -77,13 +70,6 @@ pub fn init(exec: *Execution) !*FileReader {
 }
 
 pub fn deinit(self: *FileReader, _: *Page) void {
-    if (self._on_abort) |func| func.release();
-    if (self._on_error) |func| func.release();
-    if (self._on_load) |func| func.release();
-    if (self._on_load_end) |func| func.release();
-    if (self._on_load_start) |func| func.release();
-    if (self._on_progress) |func| func.release();
-
     self._arena.release();
 }
 
@@ -95,56 +81,8 @@ pub fn acquireRef(self: *FileReader) void {
     self._rc.acquire();
 }
 
-fn asEventTarget(self: *FileReader) *EventTarget {
+pub fn asEventTarget(self: *FileReader) *EventTarget {
     return self._proto;
-}
-
-pub fn getOnAbort(self: *const FileReader) ?js.Function.Global {
-    return self._on_abort;
-}
-
-pub fn setOnAbort(self: *FileReader, cb: ?js.Function.Global) !void {
-    self._on_abort = cb;
-}
-
-pub fn getOnError(self: *const FileReader) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *FileReader, cb: ?js.Function.Global) !void {
-    self._on_error = cb;
-}
-
-pub fn getOnLoad(self: *const FileReader) ?js.Function.Global {
-    return self._on_load;
-}
-
-pub fn setOnLoad(self: *FileReader, cb: ?js.Function.Global) !void {
-    self._on_load = cb;
-}
-
-pub fn getOnLoadEnd(self: *const FileReader) ?js.Function.Global {
-    return self._on_load_end;
-}
-
-pub fn setOnLoadEnd(self: *FileReader, cb: ?js.Function.Global) !void {
-    self._on_load_end = cb;
-}
-
-pub fn getOnLoadStart(self: *const FileReader) ?js.Function.Global {
-    return self._on_load_start;
-}
-
-pub fn setOnLoadStart(self: *FileReader, cb: ?js.Function.Global) !void {
-    self._on_load_start = cb;
-}
-
-pub fn getOnProgress(self: *const FileReader) ?js.Function.Global {
-    return self._on_progress;
-}
-
-pub fn setOnProgress(self: *FileReader, cb: ?js.Function.Global) !void {
-    self._on_progress = cb;
 }
 
 pub fn getReadyState(self: *const FileReader) u8 {
@@ -245,15 +183,13 @@ pub fn abort(self: *FileReader) !void {
 }
 
 fn dispatch(self: *FileReader, comptime event_type: DispatchType, progress_: ?Progress, exec: *Execution) !void {
-    const field, const typ = comptime blk: {
-        break :blk switch (event_type) {
-            .abort => .{ "_on_abort", "abort" },
-            .err => .{ "_on_error", "error" },
-            .load => .{ "_on_load", "load" },
-            .load_end => .{ "_on_load_end", "loadend" },
-            .load_start => .{ "_on_load_start", "loadstart" },
-            .progress => .{ "_on_progress", "progress" },
-        };
+    const typ = comptime switch (event_type) {
+        .abort => "abort",
+        .err => "error",
+        .load => "load",
+        .load_end => "loadend",
+        .load_start => "loadstart",
+        .progress => "progress",
     };
 
     const progress = progress_ orelse Progress{};
@@ -263,10 +199,11 @@ fn dispatch(self: *FileReader, comptime event_type: DispatchType, progress_: ?Pr
         exec.page,
     )).asEvent();
 
+    // The handler is a listener in the list now; nothing is passed by hand.
     return exec.dispatch(
         self.asEventTarget(),
         event,
-        @field(self, field),
+        null,
         .{ .context = "FileReader " ++ typ },
     );
 }
@@ -338,12 +275,16 @@ pub const JsApi = struct {
     pub const @"error" = bridge.accessor(FileReader.getError, null, .{});
 
     // Event handlers
-    pub const onabort = bridge.accessor(FileReader.getOnAbort, FileReader.setOnAbort, .{});
-    pub const onerror = bridge.accessor(FileReader.getOnError, FileReader.setOnError, .{});
-    pub const onload = bridge.accessor(FileReader.getOnLoad, FileReader.setOnLoad, .{});
-    pub const onloadend = bridge.accessor(FileReader.getOnLoadEnd, FileReader.setOnLoadEnd, .{});
-    pub const onloadstart = bridge.accessor(FileReader.getOnLoadStart, FileReader.setOnLoadStart, .{});
-    pub const onprogress = bridge.accessor(FileReader.getOnProgress, FileReader.setOnProgress, .{});
+    fn handler(comptime which: @import("global_event_handlers.zig").Handler) type {
+        return @import("handler_property.zig").accessors(FileReader, which);
+    }
+
+    pub const onabort = bridge.accessor(handler(.onabort).get, handler(.onabort).set, .{});
+    pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
+    pub const onload = bridge.accessor(handler(.onload).get, handler(.onload).set, .{});
+    pub const onloadend = bridge.accessor(handler(.onloadend).get, handler(.onloadend).set, .{});
+    pub const onloadstart = bridge.accessor(handler(.onloadstart).get, handler(.onloadstart).set, .{});
+    pub const onprogress = bridge.accessor(handler(.onprogress).get, handler(.onprogress).set, .{});
 
     // Methods
     pub const readAsArrayBuffer = bridge.function(FileReader.readAsArrayBuffer, .{});
