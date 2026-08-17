@@ -2360,3 +2360,81 @@ pins:
 * The custom names a computed style enumerates now match Chrome's set exactly
   (the same ten on the probe page); the order within that tail is Blink's
   internal one and is not reproduced.
+
+## G22: the handler properties that lived in a field
+
+G9 moved the store-backed handlers into the listener list and left a table of
+what still ran in the wrong order — "the handlers that live in a dedicated
+field", ~30 classes plus the Window's own slots. G22 is that table, closed.
+
+A handler kept in a field on its owner has two problems at once. It has no
+place in the listener list, so it cannot be ordered against `addEventListener`;
+and it is only read on whatever internal dispatch path its owner happens to
+have, so a scripted `dispatchEvent` skips it entirely. Which of the two a page
+sees depends on the class, which is why the row for `window.onscroll` measured
+`on,al1,al2` and the row for `FileReader.onload` measured `al1,al2`.
+
+Both are the same fix: the function goes in the event manager's handler store,
+and a `Listener` standing for the handler joins the target's list at the moment
+the property is first set. Re-assigning swaps the stored function and leaves
+the list node alone; assigning `null` removes the node, so assigning again
+appends at the end. The owner's own dispatch path stops passing the handler by
+hand and passes `null` — the list already has it.
+
+| step | what moved | properties |
+|---|---|---|
+| P1 | the store itself, from `Frame` to `EventManagerBase`, so workers reach it too; `BroadcastChannel` as the first class through it | 2 |
+| P2 | the Window's dedicated slots, including `onerror`'s five-argument / `return true` convention | 12 |
+| P3 | `XMLHttpRequestEventTarget` + `XMLHttpRequest.onreadystatechange` | 8 |
+| P4 | the classes with a real internal dispatch path: `FileReader`, `MessagePort`, `AbortSignal`, `WebSocket`, `EventSource`, `Worker`, `Animation`, the IDB four | 32 |
+| P5 | the wide G17 stub surface — webxr, webgpu, webcodecs, sensor, midi, presentation, payment, speech, media, webrtc, the navigator singletons | 168 |
+
+### What P5 had to change underneath
+
+* **`Handler` outgrew a `u8`.** The stub surface needed 95 names it did not
+  have, for 261. `Key` used to fuse the target pointer and the tag into a
+  single `u64` and compare *that*, which is where the 256 cap came from.
+  Hashing the pair and comparing the two fields instead lifts the cap and drops
+  the pointer-alignment assumption the fusion carried.
+* **`hasListeners` answered from the wrong thing.** It returned true when the
+  lookup *entry* existed, and `removeListener` leaves the emptied list behind.
+  Harmless while handlers lived in fields; once `target.onx = f; target.onx =
+  null` goes through that list, it left the target looking permanently
+  subscribed — caught by `cookie_store.html`, which asserts that a change
+  enqueued with nobody listening is not delivered to a listener that registers
+  later.
+* **The lenient setters were four copies of one union.** An IDL `EventHandler`
+  takes anything: `rec.onend = 5` reads back null on Chrome rather than
+  throwing. `FileWriter`, `SpeechRecognition`, `CookieStore`, the codecs and the
+  worker scopes each had their own two-variant union for that; they share
+  `handler_property.lenientAccessors` now.
+
+### Where it landed
+
+`probe-g22g` covers 100 rows across 60 interfaces. Against a headed Chrome 150:
+**97 of 100 identical**, 94 of them the `al1,on,al2` that every handler property
+owes. `probe-g9`, `probe-g9b` and `probe-g9c` — the probes that opened G9 — now
+diff clean at 9/9, 14/14 and 8/8, so the table G9 left open has no rows in it.
+
+What the last three rows are, both of them structural rather than ordering:
+
+* **`Performance` is not an `EventTarget` here and is one in Chrome**
+  (measured: `performance.addEventListener` is undefined for us and runs
+  there). The store is keyed by EventTarget, so
+  `onresourcetimingbufferfull` is the one handler property still in a field.
+  Giving `Performance` that prototype is a separate change — it adds a link to
+  a prototype chain, which is its own observable.
+* **`ScreenOrientation.prototype.onchange` is missing entirely.** Chrome has it;
+  we never declared it. Not an ordering gap — there is nothing to order.
+
+Adjacent, measured while probing, and deliberately left alone: an uncaught
+exception thrown from a `setTimeout` callback never reaches the Window's error
+listeners (Chrome runs them with the five-argument convention), our error
+messages lack Chrome's `Uncaught ` prefix, `Worker.prototype.onmessageerror`
+exists here and does not in Chrome, `IDBDatabase.prototype` is missing
+`onabort` / `onclose` / `onversionchange`, `FileReader.prototype`'s six `on*`
+are in alphabetical order where Chrome's are in spec order, and
+`WorkerGlobalScope`'s own `onerror` / `onrejectionhandled` /
+`onunhandledrejection` are still field-backed — `onerror` there wants the same
+five-argument treatment P2 gave the Window's, which is what makes it its own
+task rather than part of the sweep.
