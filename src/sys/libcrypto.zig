@@ -235,6 +235,8 @@ pub extern fn EVP_PKEY_free(pkey: ?*EVP_PKEY) void;
 
 pub extern fn EVP_DigestSignInit(ctx: ?*EVP_MD_CTX, pctx: ?*?*EVP_PKEY_CTX, typ: ?*const EVP_MD, e: ?*ENGINE, pkey: ?*EVP_PKEY) c_int;
 pub extern fn EVP_DigestSign(ctx: ?*EVP_MD_CTX, sig: [*c]u8, sig_len: *usize, data: [*c]const u8, data_len: usize) c_int;
+pub extern fn EVP_DigestVerifyInit(ctx: ?*EVP_MD_CTX, pctx: ?*?*EVP_PKEY_CTX, typ: ?*const EVP_MD, e: ?*ENGINE, pkey: ?*EVP_PKEY) c_int;
+pub extern fn EVP_DigestVerify(ctx: ?*EVP_MD_CTX, sig: [*c]const u8, sig_len: usize, data: [*c]const u8, data_len: usize) c_int;
 pub extern fn EVP_Digest(data: ?*const anyopaque, len: usize, md_out: [*c]u8, md_out_size: [*c]c_uint, @"type": ?*const EVP_MD, impl: ?*ENGINE) c_int;
 pub extern fn EVP_MD_CTX_new() ?*EVP_MD_CTX;
 pub extern fn EVP_MD_CTX_free(ctx: ?*EVP_MD_CTX) void;

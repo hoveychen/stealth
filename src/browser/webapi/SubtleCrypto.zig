@@ -524,12 +524,20 @@ pub fn sign(
     data: []const u8, // ArrayBuffer.
     exec: *const Execution,
 ) !js.Promise {
+    const local = exec.js.local.?;
     return switch (key._type) {
         // Call sign for HMAC.
-        .hmac => return HMAC.sign(algo, key, data, exec),
+        .hmac => HMAC.sign(algo, key, data, exec),
+        .rsa => {
+            const signature = RSA.sign(algo, key, data, exec) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+            };
+            return local.resolvePromise(js.ArrayBuffer{ .values = signature });
+        },
         else => {
             log.warn(.not_implemented, "SubtleCrypto.sign", .{ .key_type = key._type });
-            return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } });
+            return local.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } });
         },
     };
 }
@@ -544,6 +552,14 @@ pub fn verify(
     exec: *const Execution,
 ) !js.Promise {
     const local = exec.js.local.?;
+    if (key._type == .rsa) {
+        const ok = RSA.verify(algo, key, signature, data) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+        };
+        return local.resolvePromise(ok);
+    }
+
     if (!algo.isHMAC()) {
         return local.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } });
     }

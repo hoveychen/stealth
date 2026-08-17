@@ -154,6 +154,93 @@ pub fn generate(
     return local.resolvePromise(CryptoKey.Pair{ .privateKey = private, .publicKey = public });
 }
 
+/// Signs `data` with RSASSA-PKCS1-v1_5 or RSA-PSS. PKCS1 padding is
+/// deterministic and PSS salts each signature, so the same message signs twice
+/// to the same bytes under the first and different bytes under the second --
+/// probe-g25 confirms Chrome behaves that way.
+pub fn sign(
+    algo: algorithm.Sign,
+    key: *const CryptoKey,
+    data: []const u8,
+    exec: *const Execution,
+) Error![]const u8 {
+    const ctx = try signContext(algo, key, true);
+    defer crypto.EVP_MD_CTX_free(ctx);
+
+    // The first call with a null buffer reports the space the signature needs.
+    var len: usize = 0;
+    if (crypto.EVP_DigestSign(ctx, null, &len, data.ptr, data.len) != 1) {
+        return error.OperationError;
+    }
+    const out = try exec.local_arena.alloc(u8, len);
+    if (crypto.EVP_DigestSign(ctx, out.ptr, &len, data.ptr, data.len) != 1) {
+        return error.OperationError;
+    }
+    return out[0..len];
+}
+
+/// Whether `signature` is `data` signed by the private half of `key`. A
+/// signature that simply doesn't match is `false`, not an error.
+pub fn verify(
+    algo: algorithm.Sign,
+    key: *const CryptoKey,
+    signature: []const u8,
+    data: []const u8,
+) Error!bool {
+    const ctx = try signContext(algo, key, false);
+    defer crypto.EVP_MD_CTX_free(ctx);
+    return crypto.EVP_DigestVerify(ctx, signature.ptr, signature.len, data.ptr, data.len) == 1;
+}
+
+/// The shared setup for sign and verify: check the key belongs to the requested
+/// scheme and has the usage, then build a digest context bound to it.
+fn signContext(algo: algorithm.Sign, key: *const CryptoKey, signing: bool) Error!*crypto.EVP_MD_CTX {
+    const name = algo.algoName();
+    if (!eql(name, "RSASSA-PKCS1-v1_5") and !eql(name, "RSA-PSS")) {
+        return error.InvalidAccessError;
+    }
+    // A PSS key is not a PKCS1 key, whatever the call asks for.
+    if (!eql(key._algorithm.name, name)) {
+        return error.InvalidAccessError;
+    }
+    if ((signing and !key.canSign()) or (!signing and !key.canVerify())) {
+        return error.InvalidAccessError;
+    }
+
+    // The hash is the key's, not the call's: neither scheme's parameters name
+    // one.
+    const md = crypto.findDigest(key._algorithm.hash orelse "") catch return error.OperationError;
+
+    const ctx = crypto.EVP_MD_CTX_new() orelse return error.OutOfMemory;
+    errdefer crypto.EVP_MD_CTX_free(ctx);
+
+    var pctx: ?*crypto.EVP_PKEY_CTX = null;
+    const started = if (signing)
+        crypto.EVP_DigestSignInit(ctx, &pctx, md, null, key.getKeyObject())
+    else
+        crypto.EVP_DigestVerifyInit(ctx, &pctx, md, null, key.getKeyObject());
+    if (started != 1) {
+        return error.OperationError;
+    }
+
+    if (eql(name, "RSA-PSS")) {
+        const p = pctx orelse return error.OperationError;
+        if (crypto.EVP_PKEY_CTX_set_rsa_padding(p, crypto.RSA_PKCS1_PSS_PADDING) != 1) {
+            return error.OperationError;
+        }
+        // A call that named no salt length keeps libcrypto's default, which is
+        // a salt as long as the digest.
+        if (algo.saltLength()) |salt| {
+            if (crypto.EVP_PKEY_CTX_set_rsa_pss_saltlen(p, @intCast(salt)) != 1) {
+                return error.OperationError;
+            }
+        }
+    }
+    // PKCS1 needs nothing set: RSA_PKCS1_PADDING is the default.
+
+    return ctx;
+}
+
 /// RSA-OAEP encrypt/decrypt. The result is one modulus-wide block whatever the
 /// plaintext length, and OAEP seeds each block randomly, so encrypting the same
 /// plaintext twice gives two different blocks (probe-g25 confirms Chrome does).

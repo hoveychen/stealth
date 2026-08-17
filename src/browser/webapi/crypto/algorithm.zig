@@ -232,17 +232,32 @@ pub const Encrypt = union(enum) {
     }
 };
 
-/// For `sign()` functionality.
+/// For `sign()` functionality. RSA-PSS is the only scheme carrying a parameter,
+/// so it needs its own variant; the plain string is the final fallback (any JS
+/// value coerces to a string).
 pub const Sign = union(enum) {
-    string: []const u8,
+    pss: struct { name: []const u8, saltLength: u32 },
     object: struct { name: []const u8 },
+    string: []const u8,
+
+    pub fn algoName(self: Sign) []const u8 {
+        return switch (self) {
+            .pss => |p| p.name,
+            .object => |object| object.name,
+            .string => |string| string,
+        };
+    }
+
+    /// The PSS salt length in bytes, or null when the call didn't carry one.
+    pub fn saltLength(self: Sign) ?u32 {
+        return switch (self) {
+            .pss => |p| p.saltLength,
+            else => null,
+        };
+    }
 
     pub fn isHMAC(self: Sign) bool {
-        const name = switch (self) {
-            .string => |string| string,
-            .object => |object| object.name,
-        };
-
+        const name = self.algoName();
         if (name.len < 4) return false;
         const hmac: u32 = @bitCast([4]u8{ 'H', 'M', 'A', 'C' });
         return @as(u32, @bitCast(name[0..4].*)) == hmac;

@@ -859,3 +859,81 @@
     });
   }
 </script>
+
+<script id=sign-rsa type=module>
+  // RSASSA-PKCS1-v1_5 and RSA-PSS sign/verify, measured against a headed
+  // Chrome 150 (probe-g25). PKCS1 padding is deterministic; PSS salts each
+  // signature, so the same message signs twice to two different signatures.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const enc = new TextEncoder();
+    const msg = enc.encode("msg");
+    const gen = (name, hash, usages) => crypto.subtle.generateKey(
+      { name, hash, modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+    const out = {};
+    try {
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", "SHA-256", ["sign", "verify"]);
+      const p1 = { name: "RSASSA-PKCS1-v1_5" };
+
+      const sig = await crypto.subtle.sign(p1, pkcs1.privateKey, msg);
+      out.pkcs1_length = sig.byteLength;
+      out.pkcs1_deterministic = b64(sig) === b64(await crypto.subtle.sign(p1, pkcs1.privateKey, msg));
+      out.pkcs1_verify = await crypto.subtle.verify(p1, pkcs1.publicKey, sig, msg);
+      out.pkcs1_tampered = await crypto.subtle.verify(p1, pkcs1.publicKey, sig, enc.encode("msh"));
+
+      const pss = await gen("RSA-PSS", "SHA-256", ["sign", "verify"]);
+      const ps = { name: "RSA-PSS", saltLength: 32 };
+      const pss_sig = await crypto.subtle.sign(ps, pss.privateKey, msg);
+      out.pss_length = pss_sig.byteLength;
+      out.pss_verify = await crypto.subtle.verify(ps, pss.publicKey, pss_sig, msg);
+      out.pss_tampered = await crypto.subtle.verify(ps, pss.publicKey, pss_sig, enc.encode("msh"));
+      out.pss_randomised = b64(pss_sig) !== b64(await crypto.subtle.sign(ps, pss.privateKey, msg));
+
+      // The hash comes from the key, not the call, so a key made for SHA-384
+      // signs and verifies under SHA-384.
+      const sha384 = await gen("RSASSA-PKCS1-v1_5", "SHA-384", ["sign", "verify"]);
+      const sha384_sig = await crypto.subtle.sign(p1, sha384.privateKey, msg);
+      out.sha384_verify = await crypto.subtle.verify(p1, sha384.publicKey, sha384_sig, msg);
+      // ...and a signature made under one hash does not verify under another.
+      out.cross_hash = await crypto.subtle.verify(p1, pkcs1.publicKey, sha384_sig, msg);
+
+      // Each half of the pair keeps only its own usage.
+      out.sign_with_public = await rejectsWith(() => crypto.subtle.sign(p1, pkcs1.publicKey, msg));
+      out.verify_with_private = await rejectsWith(() => crypto.subtle.verify(p1, pkcs1.privateKey, sig, msg));
+      // A PSS key is not a PKCS1 key, whatever the call asks for.
+      out.wrong_algorithm = await rejectsWith(() => crypto.subtle.sign(p1, pss.privateKey, msg));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual(256, o.pkcs1_length);
+      testing.expectEqual(true, o.pkcs1_deterministic);
+      testing.expectEqual(true, o.pkcs1_verify);
+      testing.expectEqual(false, o.pkcs1_tampered);
+      testing.expectEqual(256, o.pss_length);
+      testing.expectEqual(true, o.pss_verify);
+      testing.expectEqual(false, o.pss_tampered);
+      testing.expectEqual(true, o.pss_randomised);
+      testing.expectEqual(true, o.sha384_verify);
+      testing.expectEqual(false, o.cross_hash);
+      testing.expectEqual("InvalidAccessError", o.sign_with_public);
+      testing.expectEqual("InvalidAccessError", o.verify_with_private);
+      testing.expectEqual("InvalidAccessError", o.wrong_algorithm);
+    });
+  }
+</script>
