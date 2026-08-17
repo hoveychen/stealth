@@ -1199,3 +1199,142 @@
   });
 }
 </script>
+
+<script id=audio_canonical_render type=module>
+{
+  // The one graph that gets rendered rather than left silent: a 10 kHz triangle
+  // through a compressor with fingerprintjs's five settings, which is what every
+  // clone of that library builds. It cannot be computed (G10) so it is recorded
+  // per platform (G21, chrome_audio.zig), and the recording is keyed to what the
+  // engine *claims* to be — so the buffer and navigator.platform have to agree,
+  // which is what this test pins.
+  const state = await testing.async();
+
+  // fingerprintjs reads exactly this window and sums the magnitudes.
+  const tail = (data) => {
+    let sum = 0;
+    for (let i = 4500; i < 5000; i++) sum += Math.abs(data[i]);
+    return sum;
+  };
+  // The two platforms with a recorded render. Anywhere else there is nothing to
+  // replay and the render stays silent, which is what 0 means here.
+  const expected = {
+    'MacIntel': 124.04347624466754,
+    'Linux x86_64': 124.04347527516074,
+  }[navigator.platform] ?? 0;
+
+  // `frames` and the five compressor settings are the canonical ones unless a
+  // case below says otherwise; every deviation is a near-miss that must NOT
+  // replay, because a detector that probes the shape instead of hashing one
+  // render would read a loose match as an outright lie.
+  const render = async (frames, rate, tweak) => {
+    const ctx = new OfflineAudioContext(1, frames, rate);
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = 10000;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -50;
+    comp.knee.value = 40;
+    comp.ratio.value = 12;
+    comp.attack.value = 0;
+    comp.release.value = 0.25;
+    let start = 0;
+    let wired = true;
+    if (tweak) ({ start = 0, wired = true } = tweak(ctx, osc, comp) ?? {});
+    if (wired) {
+      osc.connect(comp);
+      comp.connect(ctx.destination);
+    }
+    if (start !== null) osc.start(start);
+    return (await ctx.startRendering()).getChannelData(0);
+  };
+
+  const canonical = await render(5000, 44100, null);
+  // Any length is a prefix of the same render (measured: a 44100-frame render is
+  // frame-for-frame identical to a 5000-frame one), so a shorter ask replays a
+  // prefix and a longer one replays what was recorded and stops -- 5000 frames
+  // is all there is.
+  const short = await render(1000, 44100, null);
+  const long = await render(6000, 44100, null);
+
+  // The match is on what actually feeds the destination, so a node hanging off
+  // the side of the graph changes nothing -- in Chrome either, which is why this
+  // one has to keep replaying rather than fall back to silence.
+  const harmless = await render(5000, 44100, (ctx, osc, comp) => {
+    ctx.createGain();
+    comp.connect(ctx.createGain());
+    osc.connect(comp); // a duplicate connect() is a no-op in Chrome
+  });
+
+  const nearMisses = {
+    threshold: await render(5000, 44100, (ctx, osc, comp) => { comp.threshold.value = -40; }),
+    knee: await render(5000, 44100, (ctx, osc, comp) => { comp.knee.value = 30; }),
+    attack: await render(5000, 44100, (ctx, osc, comp) => { comp.attack.value = 0.003; }),
+    rate: await render(5000, 48000, null),
+    frequency: await render(5000, 44100, (ctx, osc) => { osc.frequency.value = 1000; }),
+    detune: await render(5000, 44100, (ctx, osc) => { osc.detune.value = 100; }),
+    type: await render(5000, 44100, (ctx, osc) => { osc.type = 'sine'; }),
+    // A source that was never started renders nothing in Chrome either.
+    unstarted: await render(5000, 44100, () => ({ start: null })),
+    // Nor does one whose signal begins after the render ends.
+    late: await render(5000, 44100, () => ({ start: 1 })),
+    // Connected to nothing, so the destination sees no input.
+    unwired: await render(5000, 44100, () => ({ wired: false })),
+    // Two sources mixing into the compressor is a different signal.
+    second: await render(5000, 44100, (ctx, osc, comp) => {
+      const other = ctx.createOscillator();
+      other.connect(comp);
+      other.start(0);
+    }),
+    // The oscillator reaching the destination as well as through the compressor.
+    bypass: await render(5000, 44100, (ctx, osc) => { osc.connect(ctx.destination); }),
+    // Modulating a parameter: the engine records nothing about param edges, so
+    // the only safe answer is to stop claiming the recorded render.
+    modulated: await render(5000, 44100, (ctx, osc, comp) => {
+      const lfo = ctx.createOscillator();
+      lfo.connect(comp.threshold);
+      lfo.start(0);
+    }),
+    // Stereo: only the mono render was recorded.
+    stereo: await (async () => {
+      const ctx = new OfflineAudioContext(2, 5000, 44100);
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = 10000;
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -50;
+      comp.knee.value = 40;
+      comp.ratio.value = 12;
+      comp.attack.value = 0;
+      comp.release.value = 0.25;
+      osc.connect(comp);
+      comp.connect(ctx.destination);
+      osc.start(0);
+      return (await ctx.startRendering()).getChannelData(0);
+    })(),
+  };
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(5000, canonical.length);
+    testing.expectEqual(expected, tail(canonical));
+    // The compressor's 6 ms pre-delay: exactly 265 zero samples, then signal.
+    testing.expectEqual(true, canonical.slice(0, 265).every((v) => v === 0));
+    testing.expectEqual(expected !== 0, canonical[265] !== 0);
+
+    testing.expectEqual(1000, short.length);
+    testing.expectEqual(true, short.every((v, i) => v === canonical[i]));
+
+    testing.expectEqual(6000, long.length);
+    testing.expectEqual(expected, tail(long));
+    // The recorded gap: past frame 5000 there is nothing to replay.
+    testing.expectEqual(true, long.slice(5000).every((v) => v === 0));
+
+    testing.expectEqual(expected, tail(harmless));
+
+    for (const [which, data] of Object.entries(nearMisses)) {
+      testing.expectEqual(`${which}:silent`, `${which}:${data.every((v) => v === 0) ? 'silent' : 'replayed'}`);
+    }
+  });
+}
+</script>

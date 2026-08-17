@@ -2507,3 +2507,81 @@ Deliberately not in scope: EC and OKP keys still export no DER at all
 only RSA was measured), and `SubtleCrypto` declares no `wrapKey` / `unwrapKey`
 at all, for any algorithm, even though an RSA-OAEP pair splits those usages
 across its halves correctly.
+
+## G21: replaying the canonical audio render, per platform
+
+G10 answered "can the audio fingerprint be computed?" with a firm **no** — the
+oscillator's wavetable comes from 36 inverse FFTs backed by vDSP on macOS and
+PFFFT everywhere else, and the compressor calls the platform's libm per sample,
+so there is no "Chrome" answer to reproduce. G21 takes the other road: record
+what real Chrome renders on each platform we claim to be, and replay it for the
+one graph a detector actually builds.
+
+### The recording (P1)
+
+`tools/fingerprint/dump-audio-buffer.mjs` drives two Chromes and writes
+`src/browser/webapi/audio/chrome_audio_{macos,linux}.bin` — 5000 little-endian
+f32 each, the destination channel of the canonical graph. macOS comes from the
+Chrome on this machine; Linux comes from the official amd64 package in a
+container (`tools/fingerprint/linux-chrome.mjs`, reusable for any Linux
+measurement).
+
+Four things measured alongside the buffers, all of which the design leans on:
+
+| measured | value |
+|---|---|
+| canonical tail sum, macOS/arm64 | `124.04347624466754` |
+| canonical tail sum, Linux/x86_64 | `124.04347527516074` |
+| Rosetta-emulated container vs a native x86-64 Xeon (avx512f) | byte-identical buffer |
+| the same graph on Chrome 150 vs Chrome 151 | byte-identical buffer |
+
+The container being trustworthy as a Linux baseline is established **for audio
+only** — it is a CPU-bound render with no device behind it. It says nothing
+about WebGL or speech, which G21's P4 measures separately.
+
+Stored as raw bytes rather than Zig float literals on purpose: the tail sum a
+detector hashes moves with one ULP, and a decimal round-trip through source text
+is exactly where a ULP goes missing.
+
+### The replay, and why it is fussy (P2)
+
+`src/browser/webapi/audio/canonical_render.zig` fills the render buffer only
+when the graph is the canonical one, and leaves it silent otherwise. Two
+decisions shape that predicate.
+
+**Exact on the signal, indifferent to the rest.** A detector that probes the
+graph's *shape* instead of hashing one render is the obvious next move against
+this trick, and a stored buffer handed back for a graph that would render
+something else is a much louder tell than silence — every deviation measured
+lands somewhere completely different (threshold -50 → -40 gives `141.40542197437026`,
+44100 → 48000 Hz gives `122.60269225055163`). But "exact" has to mean the signal
+reaching the destination, not the context containing nothing else: a gain node
+hanging off the side changes nothing in Chrome, so refusing to replay for one
+would invent a divergence rather than avoid one. So the match is on *incoming*
+edges — exactly one node feeds the destination and it is the canonical
+compressor, exactly one feeds the compressor and it is the canonical oscillator
+— and everything else in the context is ignored, the way Chrome ignores it.
+`BaseAudioContext._nodes` exists for this: `AudioNode._outputs` records only
+forward edges, so there is no walking back from the destination without it.
+
+**A longer render replays a prefix rather than falling back to silence.** Only
+5000 frames were recorded — what fingerprintjs asks for — and a 44100-frame
+render is frame-for-frame identical to a 5000-frame one over the frames they
+share (measured, `first_diff = -1`). So a longer ask gets the recorded 5000
+frames and zeros after. This is strictly closer to the truth than all-zero at
+every frame a detector might read, and full silence over the canonical window is
+itself a known signature (CreepJS's `hasFakeAudio()` reads it as blocked audio).
+
+Gaps left open, all of them silence where Chrome renders something, all of them
+deliberate rather than overlooked:
+
+* **past frame 5000** — nothing recorded, see above.
+* **a stereo destination** — only the mono render was recorded. Whether Chrome
+  up-mixes it into identical channels was never measured, and a wrong guess
+  costs more than the silence does.
+* **a source that was stopped** — `stop()` records that it happened but not
+  when, so a stop past the end of the render (which changes nothing in Chrome)
+  cannot be told from one that truncates.
+* **a graph that modulates an AudioParam** — param edges are not recorded at
+  all, only counted (`BaseAudioContext._param_edges`), so a modulated graph
+  declines rather than replaying a render that no longer applies.

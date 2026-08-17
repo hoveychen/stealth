@@ -24,12 +24,15 @@
 //   Chrome 150 (win18/win19-chrome.json).
 //
 // So for the graph this engine can actually render -- an empty one -- silence is
-// not a fabrication, it is Chrome's own answer. What this cannot reproduce is a
-// graph with a source in it: an oscillator through a compressor renders real
-// samples in Chrome and silence here, so a fingerprint that hashes the rendered
-// buffer gets a constant where Chrome gives a machine-specific number. That is a
-// known, deliberate divergence, and the alternative -- a startRendering() that
-// never settles, which no Chrome does -- trades it for a different tell.
+// not a fabrication, it is Chrome's own answer.
+//
+// A graph with a source in it cannot be computed at all (G10: the wavetable
+// comes from 36 inverse FFTs backed by a different library per platform, and the
+// compressor calls the platform's libm per sample). One such graph is worth
+// answering anyway, because every fingerprintjs clone builds the same one, so
+// G21 replays a render recorded off real Chrome for exactly it and leaves every
+// other graph silent -- canonical_render.zig has the match and the gaps it
+// leaves.
 //
 // The rest is measured shape: no `baseLatency` and no `close` (both absent
 // here), the three createMedia* factories absent because they are AudioContext's,
@@ -48,6 +51,7 @@ const AudioBuffer = @import("AudioBuffer.zig");
 const AudioListener = @import("AudioListener.zig");
 const BaseAudioContext = @import("BaseAudioContext.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
+const canonical_render = @import("canonical_render.zig");
 const handler_property = @import("../handler_property.zig");
 const EventTarget = @import("../EventTarget.zig");
 
@@ -167,7 +171,7 @@ fn create(channels: u32, length: u32, sample_rate: f64, exec: *Execution) !*Offl
         ._proto = undefined,
         ._max_channel_count = channels,
     });
-    destination._proto._context = base;
+    try base.register(destination._proto, exec);
     destination._proto._channel_count = channels;
     destination._proto._number_of_outputs = 0;
     destination._proto._channel_count_mode = .explicit;
@@ -223,6 +227,11 @@ pub fn startRendering(self: *OfflineAudioContext, exec: *Execution) !js.Promise 
         base._sample_rate,
         exec,
     );
+    // Silent unless the graph is the canonical one, in which case the recorded
+    // render goes in here — where Chrome captures the graph too, rather than in
+    // the completion task below, so a graph edited after startRendering() has no
+    // effect on what was rendered.
+    canonical_render.apply(base, buffer, exec);
 
     try base.transition(.running, exec);
 

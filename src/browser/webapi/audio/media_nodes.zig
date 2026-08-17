@@ -109,7 +109,7 @@ pub const MediaStreamAudioDestinationNode = struct {
             ._proto = undefined,
             ._stream = stream,
         });
-        node._proto._context = base;
+        try base.register(node._proto, exec);
         // Like context.destination: input only, and an explicit channel count.
         node._proto._number_of_outputs = 0;
         node._proto._channel_count_mode = .explicit;
@@ -199,7 +199,7 @@ pub const MediaElementAudioSourceNode = struct {
             ._proto = undefined,
             ._element = element,
         });
-        node._proto._context = ctx.asBaseAudioContext();
+        try ctx.asBaseAudioContext().register(node._proto, exec);
         node._proto._number_of_inputs = 0;
         return node;
     }
@@ -285,7 +285,7 @@ pub const MediaStreamAudioSourceNode = struct {
             ._proto = undefined,
             ._stream = stream,
         });
-        node._proto._context = ctx.asBaseAudioContext();
+        try ctx.asBaseAudioContext().register(node._proto, exec);
         node._proto._number_of_inputs = 0;
         return node;
     }
