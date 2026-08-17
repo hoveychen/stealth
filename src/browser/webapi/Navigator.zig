@@ -17,9 +17,10 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-const builtin = @import("builtin");
 
 const Allocator = std.mem.Allocator;
+
+const claimed_platform = @import("../../claimed_platform.zig");
 
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
@@ -215,14 +216,11 @@ pub fn getWebdriver(_: *const Navigator) bool {
 // this keeps the behaviour that made upstream stop returning true, without the
 // extra name for a fingerprinter to enumerate.
 
+// Constant, not the build host: this is one of five surfaces naming the
+// platform, and the recorded tables the other four come from do not move with
+// the machine. See src/claimed_platform.zig.
 pub fn getPlatform(_: *const Navigator) []const u8 {
-    return switch (builtin.os.tag) {
-        .macos => "MacIntel",
-        .windows => "Win32",
-        .linux => "Linux x86_64",
-        .freebsd => "FreeBSD",
-        else => "Unknown",
-    };
+    return claimed_platform.navigator_platform;
 }
 
 /// Returns whether Java is enabled (always false)

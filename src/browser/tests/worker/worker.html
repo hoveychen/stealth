@@ -272,7 +272,8 @@
       testing.expectEqual(true, r.has_navigator);
       testing.expectEqual(true, r.user_agent_matches_page);
       testing.expectEqual('Netscape', r.app_name);
-      testing.expectTrue(r.platform.length > 0);
+      // The worker realm has to claim what the page claims.
+      testing.expectEqual(navigator.platform, r.platform);
       testing.expectEqual(true, r.on_line);
       testing.expectEqual(true, r.identity_stable);
 

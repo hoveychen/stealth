@@ -17,9 +17,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-const builtin = @import("builtin");
 
 const Config = @import("../../Config.zig");
+const claimed_platform = @import("../../claimed_platform.zig");
 const js = @import("../js/js.zig");
 const Execution = js.Execution;
 
@@ -119,19 +119,16 @@ fn uaPlatform(exec: *const Execution) []const u8 {
     return exec.session.browser.http_client.getPlatform();
 }
 
+// The CPU the *claim* names, not the one this was built for. Deriving these
+// from builtin.cpu.arch read as the more honest choice and was not: an
+// architecture of "arm" sitting beside a user-agent that says Linux x86_64 is a
+// contradiction one getHighEntropyValues() call away.
 fn uaArchitecture() []const u8 {
-    return switch (builtin.cpu.arch) {
-        .x86, .x86_64 => "x86",
-        .aarch64, .aarch64_be, .arm, .armeb => "arm",
-        else => "",
-    };
+    return claimed_platform.architecture;
 }
 
 fn uaBitness() []const u8 {
-    return switch (builtin.cpu.arch) {
-        .x86_64, .aarch64, .aarch64_be, .powerpc64, .powerpc64le, .riscv64 => "64",
-        else => "32",
-    };
+    return claimed_platform.bitness;
 }
 
 pub const JsApi = struct {

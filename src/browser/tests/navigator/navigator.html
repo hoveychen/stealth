@@ -12,11 +12,9 @@
   testing.expectEqual('Netscape', navigator.appName);
   // appVersion is the user-agent minus "Mozilla/", not a version of its own.
   testing.expectEqual(navigator.userAgent.slice('Mozilla/'.length), navigator.appVersion);
-  testing.expectEqual(true, navigator.platform.length > 0);
-
-  // Platform should be one of the known values
-  const validPlatforms = ['MacIntel', 'Win32', 'Linux x86_64', 'FreeBSD', 'Unknown'];
-  testing.expectEqual(true, validPlatforms.includes(navigator.platform));
+  // One value, not one of a set: the claim is a constant and does not follow the
+  // machine this binary was built on. See src/claimed_platform.zig.
+  testing.expectEqual('Linux x86_64', navigator.platform);
   testing.expectEqual('en-US', navigator.language);
   testing.expectEqual(true, Array.isArray(navigator.languages));
   testing.expectEqual(2, navigator.languages.length);
@@ -118,10 +116,8 @@
 <script id=userAgentData>
   testing.expectEqual(true, navigator.userAgentData !== undefined);
   testing.expectEqual(false, navigator.userAgentData.mobile);
-  testing.expectEqual(true, navigator.userAgentData.platform.length > 0);
-
-  const validUAPlatforms = ['macOS', 'Windows', 'Linux', 'FreeBSD', 'Unknown'];
-  testing.expectEqual(true, validUAPlatforms.includes(navigator.userAgentData.platform));
+  // The hint's spelling of the same constant claim navigator.platform carries.
+  testing.expectEqual('Linux', navigator.userAgentData.platform);
 
   // Chrome's own brand list, GREASE entry first. Derived from the same value
   // the Sec-Ch-Ua header carries, so the two cannot disagree.
@@ -159,7 +155,10 @@
       testing.expectEqual(false, v.mobile);
       testing.expectEqual(navigator.userAgentData.platform, v.platform);
       testing.expectEqual(true, Array.isArray(v.brands));
-      testing.expectEqual('arm', v.architecture === 'arm' ? 'arm' : v.architecture);
+      // The CPU the claim names, not the one this was built for: a UA reading
+      // "Linux x86_64" beside an architecture of "arm" is a contradiction that
+      // costs one call to find.
+      testing.expectEqual('x86', v.architecture);
       testing.expectEqual('', v.platformVersion);
 
       // The high-entropy list carries four-part versions; uaFullVersion is the
@@ -182,6 +181,29 @@
       testing.expectEqual(undefined, asked.nope);
 
       testing.expectEqual(['brands', 'mobile', 'platform'], Object.keys(none).sort());
+    });
+  }
+</script>
+
+<script id=claimed_platform type=module>
+  {
+    // Five surfaces name the platform, and a detector reads them together: the
+    // user-agent token, navigator.platform, the Sec-Ch-Ua-Platform hint, the
+    // architecture/bitness hints, and (in audio.html) which recorded audio
+    // render comes back. Any two of them disagreeing is a cheaper tell than the
+    // platform itself, so they all come from one constant.
+    const state = await testing.async();
+    const v = await navigator.userAgentData.getHighEntropyValues(['architecture', 'bitness']);
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual(true, navigator.userAgent.includes('(X11; Linux x86_64)'));
+      testing.expectEqual('Linux x86_64', navigator.platform);
+      testing.expectEqual('Linux', navigator.userAgentData.platform);
+      testing.expectEqual('x86', v.architecture);
+      testing.expectEqual('64', v.bitness);
+      // appVersion is the user-agent minus "Mozilla/", so it carries the token too.
+      testing.expectEqual(true, navigator.appVersion.includes('(X11; Linux x86_64)'));
     });
   }
 </script>

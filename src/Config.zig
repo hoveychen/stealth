@@ -23,6 +23,7 @@ const builtin = @import("builtin");
 
 const cli = @import("cli.zig");
 const dump = @import("browser/dump.zig");
+const claimed_platform = @import("claimed_platform.zig");
 
 const Storage = @import("storage/Storage.zig");
 const WebBotAuthConfig = @import("network/WebBotAuth.zig").Config;
@@ -841,19 +842,14 @@ pub const HttpHeaders = struct {
     /// frozen apart from the major version and a platform token from a closed
     /// set, so this is a complete Chrome UA rather than an approximation of one.
     ///
-    /// The macOS line is byte-for-byte what the Chrome 150 install on the
-    /// reference machine sent (tools/fingerprint/results/reference-chrome-headed.json).
-    /// The other three carry that same frozen string with their platform's
-    /// token substituted; those tokens are from Chrome's reduction rules and are
-    /// NOT measured here, because there is no Windows, Linux or FreeBSD Chrome
-    /// on this machine to measure.
-    const user_agent_base: [:0]const u8 = "Mozilla/5.0 (" ++ switch (builtin.os.tag) {
-        .macos => "Macintosh; Intel Mac OS X 10_15_7",
-        .windows => "Windows NT 10.0; Win64; x64",
-        .linux => "X11; Linux x86_64",
-        .freebsd => "X11; FreeBSD amd64",
-        else => "X11; Linux x86_64",
-    } ++ ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" ++ chrome_reduced_version ++ " Safari/537.36";
+    /// The token comes from claimed_platform, which is a constant rather than
+    /// the build host — a UA that moves with the machine while the recorded
+    /// fingerprint tables beside it do not is a contradiction, not a courtesy.
+    /// Everything around the token is Chrome's frozen string, byte-for-byte what
+    /// the Chrome 150 install on the reference machine sent
+    /// (tools/fingerprint/results/reference-chrome-headed.json).
+    const user_agent_base: [:0]const u8 = "Mozilla/5.0 (" ++ claimed_platform.user_agent_token ++
+        ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" ++ chrome_reduced_version ++ " Safari/537.36";
 
     pub const Brand = struct {
         brand: []const u8,
@@ -924,15 +920,10 @@ pub const HttpHeaders = struct {
 
     proxy_bearer_header: ?[:0]const u8,
 
-    /// Host OS, in the spelling the Sec-Ch-Ua-Platform hint and
-    /// navigator.userAgentData.platform use.
-    const default_platform = switch (builtin.os.tag) {
-        .macos => "macOS",
-        .windows => "Windows",
-        .linux => "Linux",
-        .freebsd => "FreeBSD",
-        else => "Unknown",
-    };
+    /// The claimed OS, in the spelling the Sec-Ch-Ua-Platform hint and
+    /// navigator.userAgentData.platform use. Same source as the user-agent's
+    /// token, so the header and the string cannot name different systems.
+    const default_platform = claimed_platform.hint;
     const default_languages = "en-US,en;q=0.9";
 
     pub fn init(allocator: Allocator, config: *const Config) !HttpHeaders {

@@ -58,9 +58,9 @@
 //!     all, only counted (BaseAudioContext._param_edges).
 
 const std = @import("std");
-const builtin = @import("builtin");
 
 const js = @import("../../js/js.zig");
+const claimed_platform = @import("../../../claimed_platform.zig");
 
 const nodes = @import("nodes.zig");
 const AudioNode = @import("AudioNode.zig");
@@ -70,16 +70,17 @@ const BaseAudioContext = @import("BaseAudioContext.zig");
 
 const Execution = js.Execution;
 
-/// The recorded render for the platform this engine claims to be, or null when
-/// there is none for it. Tied to the build target for now; G21's P3 moves the
-/// claim off the build host, and this is the seam it moves through — the
-/// user-agent, navigator.platform and the audio buffer have to name the same
-/// platform or the disagreement is itself the fingerprint.
-fn platform() ?chrome_audio.Platform {
-    return switch (builtin.os.tag) {
+/// The recorded render belonging to the platform this engine claims to be —
+/// not the one it was built on. A buffer recorded on macOS handed to a page
+/// that was just told `navigator.platform` is `Linux x86_64` is a contradiction
+/// costing one render to find, so both come from claimed_platform.
+///
+/// Exhaustive on purpose: a new claim with no recorded render of its own fails
+/// to compile here rather than silently replaying someone else's machine.
+fn platform() chrome_audio.Platform {
+    return switch (claimed_platform.claimed) {
         .macos => .macos,
         .linux => .linux,
-        else => null,
     };
 }
 
@@ -87,11 +88,10 @@ fn platform() ?chrome_audio.Platform {
 /// canonical one, and leaves it silent otherwise. Called from
 /// startRendering(), which is where Chrome captures the graph too.
 pub fn apply(context: *BaseAudioContext, buffer: *AudioBuffer, exec: *const Execution) void {
-    const recorded = platform() orelse return;
     if (buffer._channels.len != 1) return;
     if (!matches(context)) return;
 
-    const samples = chrome_audio.samples(recorded);
+    const samples = chrome_audio.samples(platform());
     const channel = buffer._channels[0].local(exec.js.local.?).slice();
     const count = @min(channel.len, samples.len);
     @memcpy(channel[0..count], samples[0..count]);
