@@ -699,7 +699,7 @@ pub fn setOnScroll(self: *Window, setter: ?FunctionSetter) void {
 // property handlers), which the dispatch propagation path consults for any
 // event target.
 pub fn getOnClick(self: *Window) ?js.Function.Global {
-    return self._frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = .onclick });
+    return self._frame.getEventHandler(self.asEventTarget(), .onclick);
 }
 
 pub fn setOnClick(self: *Window, setter: ?FunctionSetter) !void {
@@ -747,7 +747,7 @@ pub fn getReflectedHandler(self: *Window, handler: global_event_handlers.Handler
     if (self.dedicatedSlot(handler)) |slot| {
         return slot.*;
     }
-    return self._frame._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = handler });
+    return self._frame.getEventHandler(self.asEventTarget(), handler);
 }
 
 /// Write it. Passing null clears, which is what `window.onX = null` does too.
@@ -1579,7 +1579,7 @@ pub const JsApi = struct {
             // `win`, not `self`: JsApi declares a `self` member (window.self)
             // and a parameter of that name would shadow it.
             pub fn get(win: *Window) ?js.Function.Global {
-                return win._frame._event_target_attr_listeners.get(.{ .target = win.asEventTarget(), .handler = handler });
+                return win._frame.getEventHandler(win.asEventTarget(), handler);
             }
 
             pub fn set(win: *Window, setter: ?FunctionSetter) !void {

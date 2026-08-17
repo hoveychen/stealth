@@ -39,6 +39,8 @@ const EventManagerBase = @import("../EventManagerBase.zig");
 const Event = @import("../webapi/Event.zig");
 const EventTarget = @import("../webapi/EventTarget.zig");
 const Performance = @import("../webapi/Performance.zig");
+const global_event_handlers = @import("../webapi/global_event_handlers.zig");
+const Function = @import("Function.zig");
 
 const String = lp.String;
 const Allocator = std.mem.Allocator;
@@ -157,6 +159,27 @@ pub fn hasDirectListeners(self: *const Execution, target: *EventTarget, typ: []c
     return switch (self.js.global) {
         inline else => |g| g.hasDirectListeners(target, typ, handler),
     };
+}
+
+// `target.onX = f` / `target.onX = null` for any target reachable from either
+// kind of global. The function goes in the store and a listener standing for
+// the handler joins the target's list, which is where the handler's place in
+// the dispatch order comes from.
+pub fn setEventHandler(
+    self: *const Execution,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+    callback: ?Function.Global,
+) !void {
+    return self.js.global.eventManagerBase().setHandler(target, handler, callback);
+}
+
+pub fn getEventHandler(
+    self: *const Execution,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+) ?Function.Global {
+    return self.js.global.eventManagerBase().getHandler(target, handler);
 }
 
 pub fn performance(self: *const Execution) *Performance {

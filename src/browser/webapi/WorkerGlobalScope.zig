@@ -34,6 +34,7 @@ const EventManagerBase = @import("../EventManagerBase.zig");
 const ScriptManagerBase = @import("../ScriptManagerBase.zig");
 
 const Event = @import("Event.zig");
+const global_event_handlers = @import("global_event_handlers.zig");
 const Crypto = @import("Crypto.zig");
 const Console = @import("Console.zig");
 const Navigator = @import("Navigator.zig");
@@ -253,6 +254,29 @@ pub fn dispatch(
 
 pub fn hasDirectListeners(self: *WorkerGlobalScope, target: *EventTarget, typ: []const u8, handler: anytype) bool {
     return self._event_manager.hasDirectListeners(target, typ, handler);
+}
+
+/// The listener lists and the `on*` handler store this scope dispatches
+/// against. Mirrors Frame.eventManagerBase.
+pub fn eventManagerBase(self: *WorkerGlobalScope) *EventManagerBase {
+    return &self._event_manager;
+}
+
+pub fn setEventHandler(
+    self: *WorkerGlobalScope,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+    callback: ?JS.Function.Global,
+) !void {
+    return self._event_manager.setHandler(target, handler, callback);
+}
+
+pub fn getEventHandler(
+    self: *WorkerGlobalScope,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+) ?JS.Function.Global {
+    return self._event_manager.getHandler(target, handler);
 }
 
 // Workers don't have their own Referer; per spec, dedicated worker requests

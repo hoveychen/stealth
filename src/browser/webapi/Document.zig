@@ -2343,7 +2343,7 @@ pub const JsApi = struct {
         return struct {
             pub fn get(self: *Document, frame: *Frame) ?js.Function.Global {
                 const owner = self._frame orelse frame;
-                return owner._event_target_attr_listeners.get(.{ .target = self.asEventTarget(), .handler = handler });
+                return owner.getEventHandler(self.asEventTarget(), handler);
             }
 
             pub fn set(self: *Document, setter: ?Window.FunctionSetter, frame: *Frame) !void {

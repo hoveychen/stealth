@@ -63,6 +63,16 @@ pub const GlobalScope = union(enum) {
             .worker => |worker| worker.js = ctx,
         }
     }
+
+    /// The listener lists and the `on*` handler store this scope dispatches
+    /// against. A frame wraps its base in the DOM-aware EventManager; a worker
+    /// holds one directly.
+    pub fn eventManagerBase(self: GlobalScope) *@import("../EventManagerBase.zig") {
+        return switch (self) {
+            .frame => |frame| &frame._event_manager.base,
+            .worker => |worker| &worker._event_manager,
+        };
+    }
 };
 
 id: usize,

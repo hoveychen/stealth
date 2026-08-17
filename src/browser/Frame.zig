@@ -86,7 +86,7 @@ const sys_url = @import("../sys/url.zig");
 const HttpClient = @import("../network/HttpClient.zig");
 
 const global_event_handlers = @import("webapi/global_event_handlers.zig");
-const GlobalEventHandlersLookup = global_event_handlers.Lookup;
+const EventManagerBase = @import("EventManagerBase.zig");
 
 pub const parse = @import("frame/parse.zig");
 pub const preload = @import("frame/preload.zig");
@@ -189,26 +189,6 @@ _svg_string_lists: StringList.Lookup = .empty,
 // Text nodes)
 _assigned_slots: Node.AssignedSlotLookup = .empty,
 _manual_slot_assignments: Node.AssignedSlotLookup = .empty,
-
-/// Lazily-created inline event listeners (or listeners provided as attributes).
-/// Avoids bloating all elements with extra function fields for rare usage.
-///
-/// Use this when a listener provided like this:
-///
-/// ```js
-/// img.onload = () => { ... };
-/// ```
-///
-/// Its also used as cache for such cases after lazy evaluation:
-///
-/// ```html
-/// <img onload="(() => { ... })()" />
-/// ```
-///
-/// ```js
-/// img.setAttribute("onload", "(() => { ... })()");
-/// ```
-_event_target_attr_listeners: GlobalEventHandlersLookup = .empty,
 
 // FileLists owned by `<input type=file>` elements. Each holds refs on its
 // File objects (reference counted via their Blob proto); released at teardown.
@@ -3066,24 +3046,30 @@ fn notifyChildInserted(self: *Frame, parent: *Node, child: *Node) void {
     observers.notifyChildListChange(self, parent, &added, &.{}, previous_sibling, next_sibling);
 }
 
-// The single entry point for `target.onX = f` and `target.onX = null`. The
-// function goes in the attribute-listener store, and a listener standing for
-// the handler joins (or leaves) the target's listener list -- which is where
-// the handler's place in the dispatch order comes from. Handlers that live in
-// a dedicated field instead (the Window's six, XMLHttpRequest's, ...) don't go
-// through here and still run ahead of the list.
+/// The listener lists and the `on*` handler store this frame dispatches
+/// against. Mirrors WorkerGlobalScope.eventManagerBase, so code that only has
+/// an Execution can reach either.
+pub fn eventManagerBase(self: *Frame) *EventManagerBase {
+    return &self._event_manager.base;
+}
+
+// The frame-side entry point for `target.onX = f` and `target.onX = null`; the
+// store itself lives on the event manager, which a worker has too.
 pub fn setEventHandler(
     self: *Frame,
     target: *EventTarget,
     handler: global_event_handlers.Handler,
     callback: ?JS.Function.Global,
 ) !void {
-    if (callback) |cb| {
-        try self._event_target_attr_listeners.put(self.arena, .{ .target = target, .handler = handler }, cb);
-        return self._event_manager.registerHandler(target, handler);
-    }
-    _ = self._event_target_attr_listeners.remove(.{ .target = target, .handler = handler });
-    self._event_manager.removeHandler(target, handler);
+    return self._event_manager.base.setHandler(target, handler, callback);
+}
+
+pub fn getEventHandler(
+    self: *const Frame,
+    target: *EventTarget,
+    handler: global_event_handlers.Handler,
+) ?JS.Function.Global {
+    return self._event_manager.base.getHandler(target, handler);
 }
 
 // A content attribute (`onclick="..."`) fills the same slot as the property.
@@ -3108,7 +3094,7 @@ fn setEventHandlerAttribute(self: *Frame, element: *Element, name: String, prese
 
     // Drop whatever was compiled from the previous value; the next dispatch
     // recompiles from the attribute.
-    _ = self._event_target_attr_listeners.remove(.{ .target = target, .handler = handler });
+    self._event_manager.base.dropHandlerFunction(target, handler);
     if (!present) {
         self._event_manager.removeHandler(target, handler);
         return;
