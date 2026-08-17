@@ -148,6 +148,27 @@ pub extern fn RSAPublicKey_dup(rsa: *const RSA) ?*RSA;
 pub extern fn RSA_bits(rsa: *const RSA) c_uint;
 pub extern fn RSA_get0_n(rsa: *const RSA) ?*const BIGNUM;
 pub extern fn RSA_get0_e(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_d(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_p(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_q(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_dmp1(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_dmq1(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_iqmp(rsa: *const RSA) ?*const BIGNUM;
+
+// Building an RSA back out of its JWK components. The CRT variant is what a
+// complete JWK describes; `no_crt` covers one that carries only n, e and d.
+pub extern fn RSA_new_public_key(n: *const BIGNUM, e: *const BIGNUM) ?*RSA;
+pub extern fn RSA_new_private_key(
+    n: *const BIGNUM,
+    e: *const BIGNUM,
+    d: *const BIGNUM,
+    p: *const BIGNUM,
+    q: *const BIGNUM,
+    dmp1: *const BIGNUM,
+    dmq1: *const BIGNUM,
+    iqmp: *const BIGNUM,
+) ?*RSA;
+pub extern fn RSA_new_private_key_no_crt(n: *const BIGNUM, e: *const BIGNUM, d: *const BIGNUM) ?*RSA;
 
 pub extern fn EVP_PKEY_set1_RSA(pkey: *EVP_PKEY, key: *RSA) c_int;
 pub extern fn EVP_PKEY_get0_RSA(pkey: *const EVP_PKEY) ?*RSA;

@@ -684,3 +684,97 @@
     });
   }
 </script>
+
+<script id=jwk-rsa type=module>
+  // JSON Web Key export/import for the RSA family. The public field values are
+  // what a headed Chrome 150 answers (probe-g25: `RSA/RSA-OAEP-256/AQAB/true/342`);
+  // the private key set is Chrome's too. The public key set is that private set
+  // minus the six private components.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const gen = (name, hash, usages) => crypto.subtle.generateKey(
+      { name, hash, modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+    const keys = (o) => Object.keys(o).sort().join(",");
+
+    const out = {};
+    try {
+      const oaep = await gen("RSA-OAEP", "SHA-256", ["encrypt", "decrypt"]);
+
+      const pub_jwk = await crypto.subtle.exportKey("jwk", oaep.publicKey);
+      out.public_shape = [pub_jwk.kty, pub_jwk.alg, pub_jwk.e, String(pub_jwk.ext), (pub_jwk.n || "").length].join("/");
+      out.public_keys = keys(pub_jwk);
+      out.public_key_ops = (pub_jwk.key_ops || []).join(",");
+
+      const priv_jwk = await crypto.subtle.exportKey("jwk", oaep.privateKey);
+      out.private_keys = keys(priv_jwk);
+      // The private half carries the same modulus as the public one.
+      out.same_modulus = priv_jwk.n === pub_jwk.n;
+
+      // `alg` is a JWA name that tracks both the algorithm and the hash.
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", "SHA-256", ["sign", "verify"]);
+      out.pkcs1_alg = (await crypto.subtle.exportKey("jwk", pkcs1.publicKey)).alg;
+      const pss = await gen("RSA-PSS", "SHA-384", ["sign", "verify"]);
+      out.pss_alg = (await crypto.subtle.exportKey("jwk", pss.publicKey)).alg;
+      const sha1 = await gen("RSA-OAEP", "SHA-1", ["encrypt", "decrypt"]);
+      out.sha1_alg = (await crypto.subtle.exportKey("jwk", sha1.publicKey)).alg;
+
+      const back_pub = await crypto.subtle.importKey(
+        "jwk", pub_jwk, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      );
+      out.public_round_trip = [back_pub.type, back_pub.algorithm.name, back_pub.algorithm.modulusLength].join("/");
+      out.public_reexports = keys(await crypto.subtle.exportKey("jwk", back_pub)) === out.public_keys;
+      // An imported public key marshals to the same SPKI as the original.
+      const a = await crypto.subtle.exportKey("spki", oaep.publicKey);
+      const b = await crypto.subtle.exportKey("spki", back_pub);
+      out.spki_matches = new Uint8Array(a).join(",") === new Uint8Array(b).join(",");
+
+      const back_priv = await crypto.subtle.importKey(
+        "jwk", priv_jwk, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"],
+      );
+      out.private_round_trip = [back_priv.type, back_priv.algorithm.name].join("/");
+      const c = await crypto.subtle.exportKey("pkcs8", oaep.privateKey);
+      const d = await crypto.subtle.exportKey("pkcs8", back_priv);
+      out.pkcs8_matches = new Uint8Array(c).join(",") === new Uint8Array(d).join(",");
+
+      out.bad_kty = await rejectsWith(() => crypto.subtle.importKey(
+        "jwk", { kty: "EC", n: pub_jwk.n, e: pub_jwk.e },
+        { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      ));
+      out.missing_n = await rejectsWith(() => crypto.subtle.importKey(
+        "jwk", { kty: "RSA", e: pub_jwk.e }, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      ));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual("RSA/RSA-OAEP-256/AQAB/true/342", o.public_shape);
+      testing.expectEqual("alg,e,ext,key_ops,kty,n", o.public_keys);
+      testing.expectEqual("encrypt", o.public_key_ops);
+      testing.expectEqual("alg,d,dp,dq,e,ext,key_ops,kty,n,p,q,qi", o.private_keys);
+      testing.expectEqual(true, o.same_modulus);
+      testing.expectEqual("RS256", o.pkcs1_alg);
+      testing.expectEqual("PS384", o.pss_alg);
+      testing.expectEqual("RSA-OAEP", o.sha1_alg);
+      testing.expectEqual("public/RSA-OAEP/2048", o.public_round_trip);
+      testing.expectEqual(true, o.public_reexports);
+      testing.expectEqual(true, o.spki_matches);
+      testing.expectEqual("private/RSA-OAEP", o.private_round_trip);
+      testing.expectEqual(true, o.pkcs8_matches);
+      testing.expectEqual("DataError", o.bad_kty);
+      testing.expectEqual("DataError", o.missing_n);
+    });
+  }
+</script>

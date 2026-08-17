@@ -188,7 +188,8 @@ pub const KeyData = union(enum) {
     jwk: Jwk,
 
     /// Minimal JWK fields we read on import. Symmetric ("oct") keys only need
-    /// `kty` and `k`; `d` marks an asymmetric private key. The rest are accepted
+    /// `kty` and `k`; `d` marks an asymmetric private key. `n`/`e` and the six
+    /// private components are the RSA ("RSA") members. The rest are accepted
     /// for forward-compatibility.
     pub const Jwk = struct {
         kty: []const u8,
@@ -197,6 +198,13 @@ pub const KeyData = union(enum) {
         alg: ?[]const u8 = null,
         use: ?[]const u8 = null,
         ext: ?bool = null,
+        n: ?[]const u8 = null,
+        e: ?[]const u8 = null,
+        p: ?[]const u8 = null,
+        q: ?[]const u8 = null,
+        dp: ?[]const u8 = null,
+        dq: ?[]const u8 = null,
+        qi: ?[]const u8 = null,
     };
 };
 

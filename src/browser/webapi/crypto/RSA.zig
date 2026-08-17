@@ -247,6 +247,214 @@ pub fn exportDer(key: *const CryptoKey, format: []const u8, exec: *const Executi
     return exec.local_arena.dupe(u8, buf[0..@intCast(len)]);
 }
 
+/// The public half of a JSON Web Key: the modulus and exponent plus the
+/// bookkeeping members. Chrome answers `RSA/RSA-OAEP-256/AQAB/true/342` for
+/// (kty, alg, e, ext, n.length) on a 2048-bit RSA-OAEP key (probe-g25).
+const JwkPublic = struct {
+    kty: []const u8 = "RSA",
+    n: []const u8,
+    e: []const u8,
+    alg: []const u8,
+    ext: bool,
+    key_ops: []const []const u8,
+};
+
+/// The private half adds the private exponent and the CRT components. Chrome's
+/// member set is exactly `alg,d,dp,dq,e,ext,key_ops,kty,n,p,q,qi`.
+const JwkPrivate = struct {
+    kty: []const u8 = "RSA",
+    n: []const u8,
+    e: []const u8,
+    d: []const u8,
+    p: []const u8,
+    q: []const u8,
+    dp: []const u8,
+    dq: []const u8,
+    qi: []const u8,
+    alg: []const u8,
+    ext: bool,
+    key_ops: []const []const u8,
+};
+
+/// The JWA `alg` name, which encodes the algorithm and the hash together --
+/// RSA-OAEP with SHA-256 is "RSA-OAEP-256", the same pair under PSS is "PS256".
+/// SHA-1 is the odd one out: it is the unsuffixed form.
+fn jwkAlg(name: []const u8, hash: []const u8) ?[]const u8 {
+    //                                 SHA-1        SHA-256          SHA-384          SHA-512
+    const row: [4][]const u8 = blk: {
+        if (eql(name, "RSA-OAEP")) break :blk .{ "RSA-OAEP", "RSA-OAEP-256", "RSA-OAEP-384", "RSA-OAEP-512" };
+        if (eql(name, "RSA-PSS")) break :blk .{ "PS1", "PS256", "PS384", "PS512" };
+        break :blk .{ "RS1", "RS256", "RS384", "RS512" };
+    };
+
+    if (eql(hash, "SHA-1")) return row[0];
+    if (eql(hash, "SHA-256")) return row[1];
+    if (eql(hash, "SHA-384")) return row[2];
+    if (eql(hash, "SHA-512")) return row[3];
+    return null;
+}
+
+/// Exports the key as a JSON Web Key. The private half is the public one plus
+/// the six private components; both carry the same `alg`, `ext` and `key_ops`.
+pub fn exportJwk(key: *const CryptoKey, exec: *const Execution) !js.Promise {
+    const local = exec.js.local.?;
+
+    const alg = jwkAlg(key._algorithm.name, key._algorithm.hash orelse "") orelse {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
+    };
+    const rsa = crypto.EVP_PKEY_get0_RSA(key.getKeyObject()) orelse {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.OperationError } });
+    };
+
+    const n = try bnBase64(exec, crypto.RSA_get0_n(rsa));
+    const e = try bnBase64(exec, crypto.RSA_get0_e(rsa));
+    const key_ops = try key.getUsages(exec);
+
+    if (key._kind == .public) {
+        return local.resolvePromise(JwkPublic{
+            .n = n,
+            .e = e,
+            .alg = alg,
+            .ext = key._extractable,
+            .key_ops = key_ops,
+        });
+    }
+
+    return local.resolvePromise(JwkPrivate{
+        .n = n,
+        .e = e,
+        .d = try bnBase64(exec, crypto.RSA_get0_d(rsa)),
+        .p = try bnBase64(exec, crypto.RSA_get0_p(rsa)),
+        .q = try bnBase64(exec, crypto.RSA_get0_q(rsa)),
+        .dp = try bnBase64(exec, crypto.RSA_get0_dmp1(rsa)),
+        .dq = try bnBase64(exec, crypto.RSA_get0_dmq1(rsa)),
+        .qi = try bnBase64(exec, crypto.RSA_get0_iqmp(rsa)),
+        .alg = alg,
+        .ext = key._extractable,
+        .key_ops = key_ops,
+    });
+}
+
+/// Imports a key from a JSON Web Key. `d` marks the private form, which the
+/// caller has already used to pick the usage set; a JWK missing the members its
+/// form requires is DataError, the same answer malformed DER gets.
+pub fn importJwk(
+    name: []const u8,
+    hash_name: []const u8,
+    jwk: algorithm.KeyData.Jwk,
+    extractable: bool,
+    usages_mask: u8,
+    exec: *const Execution,
+) !js.Promise {
+    const local = exec.js.local.?;
+
+    const canonical = canonicalName(name).?;
+    const hash = canonicalHash(hash_name) orelse {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
+    };
+    if (!std.mem.eql(u8, jwk.kty, "RSA")) {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+    }
+
+    // Every RSA JWK carries the modulus and the public exponent, whichever
+    // half it describes.
+    var bignums: BigNums = .{};
+    defer bignums.deinit();
+    const n = bignums.add(exec, jwk.n) catch {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+    };
+    const e = bignums.add(exec, jwk.e) catch {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+    };
+
+    const rsa: *crypto.RSA = blk: {
+        if (jwk.d == null) {
+            break :blk crypto.RSA_new_public_key(n, e) orelse {
+                return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+            };
+        }
+        const d = bignums.add(exec, jwk.d) catch {
+            return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+        };
+        // A JWK may carry only (n, e, d); the CRT members are an optimisation
+        // the spec lets a producer leave out.
+        const crt = jwk.p != null and jwk.q != null and jwk.dp != null and jwk.dq != null and jwk.qi != null;
+        if (!crt) {
+            break :blk crypto.RSA_new_private_key_no_crt(n, e, d) orelse {
+                return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+            };
+        }
+        const made = crypto.RSA_new_private_key(
+            n,
+            e,
+            d,
+            bignums.add(exec, jwk.p) catch return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } }),
+            bignums.add(exec, jwk.q) catch return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } }),
+            bignums.add(exec, jwk.dp) catch return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } }),
+            bignums.add(exec, jwk.dq) catch return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } }),
+            bignums.add(exec, jwk.qi) catch return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } }),
+        );
+        break :blk made orelse {
+            return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+        };
+    };
+    defer crypto.RSA_free(rsa);
+
+    const pkey = crypto.EVP_PKEY_new() orelse return error.OutOfMemory;
+    errdefer crypto.EVP_PKEY_free(pkey);
+    if (crypto.EVP_PKEY_set1_RSA(pkey, rsa) != 1) return error.OutOfMemory;
+
+    const crypto_key = try CryptoKey.init(exec, .{
+        ._type = .rsa,
+        ._kind = if (jwk.d == null) .public else .private,
+        ._extractable = extractable,
+        ._usages = usages_mask,
+        ._key = &.{},
+        ._algorithm = .{
+            .name = canonical,
+            .hash = hash,
+            .modulus_length = crypto.RSA_bits(rsa),
+            .public_exponent = try exponentBytes(exec, rsa),
+        },
+        ._vary = .{ .pkey = pkey },
+    });
+
+    return local.resolvePromise(crypto_key);
+}
+
+/// The BIGNUMs decoded from one JWK. They have to outlive the `RSA_new_*` call
+/// that consumes them, and freeing them one by one across eight fallible steps
+/// is what this saves.
+const BigNums = struct {
+    items: [8]?*crypto.BIGNUM = @splat(null),
+    len: usize = 0,
+
+    /// Decodes one base64url member into a BIGNUM. A missing or malformed
+    /// member is an error, which the caller turns into DataError.
+    fn add(self: *BigNums, exec: *const Execution, member: ?[]const u8) !*crypto.BIGNUM {
+        const encoded = member orelse return error.DataError;
+        const bytes = try common.base64Decode(exec.local_arena, encoded);
+        const bn = crypto.BN_bin2bn(bytes.ptr, bytes.len, null) orelse return error.OutOfMemory;
+        self.items[self.len] = bn;
+        self.len += 1;
+        return bn;
+    }
+
+    fn deinit(self: *BigNums) void {
+        for (self.items[0..self.len]) |bn| {
+            crypto.BN_free(bn);
+        }
+    }
+};
+
+/// A BIGNUM as the base64url string a JWK member holds.
+fn bnBase64(exec: *const Execution, bn: ?*const crypto.BIGNUM) ![]const u8 {
+    const value = bn orelse return error.OperationError;
+    const buf = try exec.local_arena.alloc(u8, crypto.BN_num_bytes(value));
+    const written = crypto.BN_bn2bin(value, buf.ptr);
+    return common.base64Encode(exec.local_arena, buf[0..written]);
+}
+
 /// The public exponent as big-endian bytes, which is how `algorithm`
 /// reports it.
 fn exponentBytes(exec: *const Execution, rsa: *const crypto.RSA) ![]const u8 {

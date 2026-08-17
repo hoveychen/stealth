@@ -156,10 +156,15 @@ pub fn importKey(
             return EC.import(name, algo.namedCurve(), format, der, is_private, extractable, mask, exec);
         }
         if (RSA.canonicalName(name) != null) {
+            if (std.mem.eql(u8, format, "jwk")) {
+                return switch (key_data) {
+                    .jwk => |j| RSA.importJwk(name, algo.hashName(), j, extractable, mask, exec),
+                    .bytes => local.rejectPromise(.{ .type_error = "jwk format expects an object" }),
+                };
+            }
             const der = switch (key_data) {
                 .bytes => |b| b.values,
-                // jwk isn't wired up for RSA yet.
-                .jwk => return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } }),
+                .jwk => return local.rejectPromise(.{ .type_error = "spki/pkcs8 format expects a BufferSource" }),
             };
             return RSA.import(name, algo.hashName(), format, der, is_private, extractable, mask, exec);
         }
@@ -322,6 +327,11 @@ const JwkSecret = struct {
 
 fn exportJwk(key: *CryptoKey, exec: *const Execution) !js.Promise {
     const local = exec.js.local.?;
+
+    // RSA's JWK is a different shape entirely: key components, not a `k`.
+    if (key._type == .rsa) {
+        return RSA.exportJwk(key, exec);
+    }
 
     // The `alg` registry value depends on the algorithm and key length.
     const alg: []const u8 = switch (key._type) {
