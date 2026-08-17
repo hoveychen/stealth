@@ -58,12 +58,7 @@ pub fn generateKey(
         .hmac_key_gen => |params| return HMAC.init(params, extractable, key_usages, exec),
         .aes_key_gen => |params| return AES.generate(params, extractable, key_usages, exec),
         .ec_key_gen => |params| return EC.generate(params, extractable, key_usages, exec),
-        .rsa_hashed_key_gen => |params| {
-            RSA.validate(params, key_usages) catch |err| {
-                return local.rejectPromise(.{ .dom_exception = .{ .err = err } });
-            };
-            log.warn(.not_implemented, "generateKey", .{ .name = params.name });
-        },
+        .rsa_hashed_key_gen => |params| return RSA.generate(params, extractable, key_usages, exec),
         .name => |js_name| return generateKeyFromName(try js_name.toSSO(false), extractable, key_usages, exec),
         .object => |object| return generateKeyFromName(try object.name.toSSO(false), extractable, key_usages, exec),
         .invalid => return local.rejectPromise(.{ .type_error = "invalid algorithm" }),
@@ -160,6 +155,19 @@ pub fn importKey(
             };
             return EC.import(name, algo.namedCurve(), format, der, is_private, extractable, mask, exec);
         }
+        if (RSA.canonicalName(name) != null) {
+            if (std.mem.eql(u8, format, "jwk")) {
+                return switch (key_data) {
+                    .jwk => |j| RSA.importJwk(name, algo.hashName(), j, extractable, mask, exec),
+                    .bytes => local.rejectPromise(.{ .type_error = "jwk format expects an object" }),
+                };
+            }
+            const der = switch (key_data) {
+                .bytes => |b| b.values,
+                .jwk => return local.rejectPromise(.{ .type_error = "spki/pkcs8 format expects a BufferSource" }),
+            };
+            return RSA.import(name, algo.hashName(), format, der, is_private, extractable, mask, exec);
+        }
         log.warn(.not_implemented, "SubtleCrypto.importKey", .{ .name = name });
         return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
     }
@@ -218,7 +226,7 @@ pub fn importKey(
     }
     if (eqlIgnoreCase(name, "HMAC")) {
         const hash_name = switch (algo) {
-            .hmac => |h| switch (h.hash) {
+            .hashed => |h| switch (h.hash) {
                 .string => |s| s,
                 .object => |o| o.name,
             },
@@ -257,6 +265,12 @@ fn asymmetricAllowedUsages(name: []const u8, is_private: bool) ?[]const []const 
     if (eqlIgnoreCase(name, "ECDH") or eqlIgnoreCase(name, "X25519") or eqlIgnoreCase(name, "X448")) {
         return if (is_private) &.{ "deriveKey", "deriveBits" } else &.{};
     }
+    if (eqlIgnoreCase(name, "RSASSA-PKCS1-v1_5") or eqlIgnoreCase(name, "RSA-PSS")) {
+        return if (is_private) &.{"sign"} else &.{"verify"};
+    }
+    if (eqlIgnoreCase(name, "RSA-OAEP")) {
+        return if (is_private) &.{ "decrypt", "unwrapKey" } else &.{ "encrypt", "wrapKey" };
+    }
     return null;
 }
 
@@ -285,8 +299,16 @@ pub fn exportKey(
         return exportJwk(key, exec);
     }
 
-    const is_unsupported = std.mem.eql(u8, format, "pkcs8") or std.mem.eql(u8, format, "spki");
-    if (is_unsupported) {
+    const is_der = std.mem.eql(u8, format, "pkcs8") or std.mem.eql(u8, format, "spki");
+    if (is_der) {
+        // Only RSA marshals DER so far; EC/OKP keys still take the old path.
+        if (key._type == .rsa) {
+            const der = RSA.exportDer(key, format, exec) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+            };
+            return local.resolvePromise(js.ArrayBuffer{ .values = der });
+        }
         log.warn(.not_implemented, "SubtleCrypto.exportKey", .{ .format = format });
         return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
     }
@@ -305,6 +327,11 @@ const JwkSecret = struct {
 
 fn exportJwk(key: *CryptoKey, exec: *const Execution) !js.Promise {
     const local = exec.js.local.?;
+
+    // RSA's JWK is a different shape entirely: key components, not a `k`.
+    if (key._type == .rsa) {
+        return RSA.exportJwk(key, exec);
+    }
 
     // The `alg` registry value depends on the algorithm and key length.
     const alg: []const u8 = switch (key._type) {
@@ -472,11 +499,18 @@ fn cryptOp(
         .name => return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } }),
     };
 
-    const out = AES.crypt(params, key, data, encrypting, exec) catch |err| switch (err) {
-        error.InvalidAccessError => return local.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } }),
-        error.OperationError => return local.rejectPromise(.{ .dom_exception = .{ .err = error.OperationError } }),
-        error.NotSupported => return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } }),
-        error.OutOfMemory => return error.OutOfMemory,
+    // RSA-OAEP and the AES modes share the entry point but nothing else.
+    const out = blk: {
+        if (key._type == .rsa) {
+            break :blk RSA.crypt(params, key, data, encrypting, exec) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+            };
+        }
+        break :blk AES.crypt(params, key, data, encrypting, exec) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+        };
     };
     return local.resolvePromise(js.ArrayBuffer{ .values = out });
 }
@@ -490,12 +524,20 @@ pub fn sign(
     data: []const u8, // ArrayBuffer.
     exec: *const Execution,
 ) !js.Promise {
+    const local = exec.js.local.?;
     return switch (key._type) {
         // Call sign for HMAC.
-        .hmac => return HMAC.sign(algo, key, data, exec),
+        .hmac => HMAC.sign(algo, key, data, exec),
+        .rsa => {
+            const signature = RSA.sign(algo, key, data, exec) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+            };
+            return local.resolvePromise(js.ArrayBuffer{ .values = signature });
+        },
         else => {
             log.warn(.not_implemented, "SubtleCrypto.sign", .{ .key_type = key._type });
-            return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } });
+            return local.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } });
         },
     };
 }
@@ -510,6 +552,14 @@ pub fn verify(
     exec: *const Execution,
 ) !js.Promise {
     const local = exec.js.local.?;
+    if (key._type == .rsa) {
+        const ok = RSA.verify(algo, key, signature, data) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+        };
+        return local.resolvePromise(ok);
+    }
+
     if (!algo.isHMAC()) {
         return local.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } });
     }

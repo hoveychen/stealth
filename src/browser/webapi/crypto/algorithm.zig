@@ -135,11 +135,11 @@ pub const DerivedKey = union(enum) {
     name: []const u8,
 };
 
-/// Algorithm passed to `importKey()`. HMAC carries a hash, so it must be probed
-/// before the bare-`{name}` object; the plain string is the final fallback (any
-/// JS value coerces to a string).
+/// Algorithm passed to `importKey()`. HMAC and the RSA family carry a hash, so
+/// that shape must be probed before the bare-`{name}` object; the plain string
+/// is the final fallback (any JS value coerces to a string).
 pub const Import = union(enum) {
-    hmac: struct {
+    hashed: struct {
         name: []const u8,
         hash: union(enum) {
             string: []const u8,
@@ -153,7 +153,7 @@ pub const Import = union(enum) {
 
     pub fn algoName(self: Import) []const u8 {
         return switch (self) {
-            .hmac => |h| h.name,
+            .hashed => |h| h.name,
             .ec => |e| e.name,
             .object => |o| o.name,
             .name => |n| n,
@@ -167,6 +167,17 @@ pub const Import = union(enum) {
             else => "",
         };
     }
+
+    /// The hash if the import carries one, else empty.
+    pub fn hashName(self: Import) []const u8 {
+        return switch (self) {
+            .hashed => |h| switch (h.hash) {
+                .string => |s| s,
+                .object => |o| o.name,
+            },
+            else => "",
+        };
+    }
 };
 
 /// Key material handed to `importKey()`: either a BufferSource (raw/spki/pkcs8)
@@ -177,7 +188,8 @@ pub const KeyData = union(enum) {
     jwk: Jwk,
 
     /// Minimal JWK fields we read on import. Symmetric ("oct") keys only need
-    /// `kty` and `k`; `d` marks an asymmetric private key. The rest are accepted
+    /// `kty` and `k`; `d` marks an asymmetric private key. `n`/`e` and the six
+    /// private components are the RSA ("RSA") members. The rest are accepted
     /// for forward-compatibility.
     pub const Jwk = struct {
         kty: []const u8,
@@ -186,6 +198,13 @@ pub const KeyData = union(enum) {
         alg: ?[]const u8 = null,
         use: ?[]const u8 = null,
         ext: ?bool = null,
+        n: ?[]const u8 = null,
+        e: ?[]const u8 = null,
+        p: ?[]const u8 = null,
+        q: ?[]const u8 = null,
+        dp: ?[]const u8 = null,
+        dq: ?[]const u8 = null,
+        qi: ?[]const u8 = null,
     };
 };
 
@@ -200,6 +219,8 @@ pub const Encrypt = union(enum) {
         length: ?u32 = null,
         additionalData: ?js.TypedArray(u8) = null,
         tagLength: ?u32 = null,
+        /// RSA-OAEP only: the label bound into the padding.
+        label: ?js.TypedArray(u8) = null,
     },
     name: []const u8,
 
@@ -211,17 +232,32 @@ pub const Encrypt = union(enum) {
     }
 };
 
-/// For `sign()` functionality.
+/// For `sign()` functionality. RSA-PSS is the only scheme carrying a parameter,
+/// so it needs its own variant; the plain string is the final fallback (any JS
+/// value coerces to a string).
 pub const Sign = union(enum) {
-    string: []const u8,
+    pss: struct { name: []const u8, saltLength: u32 },
     object: struct { name: []const u8 },
+    string: []const u8,
+
+    pub fn algoName(self: Sign) []const u8 {
+        return switch (self) {
+            .pss => |p| p.name,
+            .object => |object| object.name,
+            .string => |string| string,
+        };
+    }
+
+    /// The PSS salt length in bytes, or null when the call didn't carry one.
+    pub fn saltLength(self: Sign) ?u32 {
+        return switch (self) {
+            .pss => |p| p.saltLength,
+            else => null,
+        };
+    }
 
     pub fn isHMAC(self: Sign) bool {
-        const name = switch (self) {
-            .string => |string| string,
-            .object => |object| object.name,
-        };
-
+        const name = self.algoName();
         if (name.len < 4) return false;
         const hmac: u32 = @bitCast([4]u8{ 'H', 'M', 'A', 'C' });
         return @as(u32, @bitCast(name[0..4].*)) == hmac;

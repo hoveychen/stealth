@@ -30,6 +30,10 @@ pub const struct_evp_pkey_st = opaque {};
 pub const EVP_PKEY = struct_evp_pkey_st;
 pub const struct_evp_pkey_ctx_st = opaque {};
 pub const EVP_PKEY_CTX = struct_evp_pkey_ctx_st;
+pub const struct_rsa_st = opaque {};
+pub const RSA = struct_rsa_st;
+pub const struct_bignum_st = opaque {};
+pub const BIGNUM = struct_bignum_st;
 
 pub extern fn RAND_bytes(buf: [*]u8, len: usize) c_int;
 
@@ -133,9 +137,87 @@ pub extern fn EC_KEY_free(key: ?*EC_KEY) void;
 pub extern fn EC_KEY_get0_public_key(key: *const EC_KEY) ?*const EC_POINT;
 pub extern fn EC_KEY_set_public_key(key: *EC_KEY, point: *const EC_POINT) c_int;
 
+// RSA. `RSA_generate_key_ex` wants the public exponent as a BIGNUM, and the
+// JWK export needs the individual components back out, hence the BN pair.
+pub const EVP_PKEY_RSA = 6; // NID_rsaEncryption
+
+pub extern fn RSA_new() ?*RSA;
+pub extern fn RSA_free(rsa: ?*RSA) void;
+pub extern fn RSA_generate_key_ex(rsa: *RSA, bits: c_int, e: *const BIGNUM, cb: ?*anyopaque) c_int;
+pub extern fn RSAPublicKey_dup(rsa: *const RSA) ?*RSA;
+pub extern fn RSA_bits(rsa: *const RSA) c_uint;
+pub extern fn RSA_get0_n(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_e(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_d(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_p(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_q(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_dmp1(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_dmq1(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_iqmp(rsa: *const RSA) ?*const BIGNUM;
+
+// Building an RSA back out of its JWK components. The CRT variant is what a
+// complete JWK describes; `no_crt` covers one that carries only n, e and d.
+pub extern fn RSA_new_public_key(n: *const BIGNUM, e: *const BIGNUM) ?*RSA;
+pub extern fn RSA_new_private_key(
+    n: *const BIGNUM,
+    e: *const BIGNUM,
+    d: *const BIGNUM,
+    p: *const BIGNUM,
+    q: *const BIGNUM,
+    dmp1: *const BIGNUM,
+    dmq1: *const BIGNUM,
+    iqmp: *const BIGNUM,
+) ?*RSA;
+pub extern fn RSA_new_private_key_no_crt(n: *const BIGNUM, e: *const BIGNUM, d: *const BIGNUM) ?*RSA;
+
+pub extern fn EVP_PKEY_set1_RSA(pkey: *EVP_PKEY, key: *RSA) c_int;
+pub extern fn EVP_PKEY_get0_RSA(pkey: *const EVP_PKEY) ?*RSA;
+
+pub extern fn BN_new() ?*BIGNUM;
+pub extern fn BN_free(bn: ?*BIGNUM) void;
+pub extern fn BN_bin2bn(in: [*]const u8, len: usize, ret: ?*BIGNUM) ?*BIGNUM;
+pub extern fn BN_bn2bin(bn: *const BIGNUM, out: [*]u8) usize;
+pub extern fn BN_num_bytes(bn: *const BIGNUM) c_uint;
+
 // DER decoders (advance `inp` past the parsed structure).
 pub extern fn d2i_PUBKEY(out: ?*?*EVP_PKEY, inp: *[*c]const u8, len: c_long) ?*EVP_PKEY;
 pub extern fn d2i_AutoPrivateKey(out: ?*?*EVP_PKEY, inp: *[*c]const u8, len: c_long) ?*EVP_PKEY;
+
+// DER encoders. Called with a null-initialised `outp`, each allocates the
+// buffer itself and the caller releases it with `OPENSSL_free`. `spki` comes
+// straight off the EVP_PKEY; `pkcs8` needs the PrivateKeyInfo wrapper first,
+// since `i2d_PrivateKey` would emit the bare PKCS#1 RSAPrivateKey instead.
+pub const struct_pkcs8_priv_key_info_st = opaque {};
+pub const PKCS8_PRIV_KEY_INFO = struct_pkcs8_priv_key_info_st;
+
+pub extern fn i2d_PUBKEY(pkey: *const EVP_PKEY, outp: *?[*]u8) c_int;
+pub extern fn EVP_PKEY2PKCS8(pkey: *const EVP_PKEY) ?*PKCS8_PRIV_KEY_INFO;
+pub extern fn i2d_PKCS8_PRIV_KEY_INFO(key: *const PKCS8_PRIV_KEY_INFO, outp: *?[*]u8) c_int;
+pub extern fn PKCS8_PRIV_KEY_INFO_free(key: ?*PKCS8_PRIV_KEY_INFO) void;
+
+pub extern fn OPENSSL_malloc(size: usize) ?*anyopaque;
+pub extern fn OPENSSL_free(ptr: ?*anyopaque) void;
+
+// RSA padding schemes, and the EVP_PKEY_CTX knobs that configure them. The
+// `RSA_*` entry points can't set the OAEP or MGF-1 digest -- they are always
+// SHA-1 there -- so every RSA operation goes through an EVP_PKEY_CTX.
+pub const RSA_PKCS1_PADDING = 1;
+pub const RSA_PKCS1_OAEP_PADDING = 4;
+pub const RSA_PKCS1_PSS_PADDING = 6;
+/// A PSS salt as long as the digest, which is what WebCrypto's default is.
+pub const RSA_PSS_SALTLEN_DIGEST = -1;
+
+pub extern fn EVP_PKEY_encrypt_init(ctx: *EVP_PKEY_CTX) c_int;
+pub extern fn EVP_PKEY_encrypt(ctx: *EVP_PKEY_CTX, out: ?[*]u8, out_len: *usize, in: [*]const u8, in_len: usize) c_int;
+pub extern fn EVP_PKEY_decrypt_init(ctx: *EVP_PKEY_CTX) c_int;
+pub extern fn EVP_PKEY_decrypt(ctx: *EVP_PKEY_CTX, out: ?[*]u8, out_len: *usize, in: [*]const u8, in_len: usize) c_int;
+
+pub extern fn EVP_PKEY_CTX_set_rsa_padding(ctx: *EVP_PKEY_CTX, padding: c_int) c_int;
+pub extern fn EVP_PKEY_CTX_set_rsa_oaep_md(ctx: *EVP_PKEY_CTX, md: *const EVP_MD) c_int;
+/// DANGER: takes ownership of `label` and frees it with `OPENSSL_free`, so the
+/// buffer has to come from `OPENSSL_malloc`.
+pub extern fn EVP_PKEY_CTX_set0_rsa_oaep_label(ctx: *EVP_PKEY_CTX, label: ?[*]u8, label_len: usize) c_int;
+pub extern fn EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: *EVP_PKEY_CTX, salt_len: c_int) c_int;
 
 pub const NID_X25519 = @as(c_int, 948);
 pub const EVP_PKEY_X25519 = NID_X25519;
@@ -153,6 +235,8 @@ pub extern fn EVP_PKEY_free(pkey: ?*EVP_PKEY) void;
 
 pub extern fn EVP_DigestSignInit(ctx: ?*EVP_MD_CTX, pctx: ?*?*EVP_PKEY_CTX, typ: ?*const EVP_MD, e: ?*ENGINE, pkey: ?*EVP_PKEY) c_int;
 pub extern fn EVP_DigestSign(ctx: ?*EVP_MD_CTX, sig: [*c]u8, sig_len: *usize, data: [*c]const u8, data_len: usize) c_int;
+pub extern fn EVP_DigestVerifyInit(ctx: ?*EVP_MD_CTX, pctx: ?*?*EVP_PKEY_CTX, typ: ?*const EVP_MD, e: ?*ENGINE, pkey: ?*EVP_PKEY) c_int;
+pub extern fn EVP_DigestVerify(ctx: ?*EVP_MD_CTX, sig: [*c]const u8, sig_len: usize, data: [*c]const u8, data_len: usize) c_int;
 pub extern fn EVP_Digest(data: ?*const anyopaque, len: usize, md_out: [*c]u8, md_out_size: [*c]c_uint, @"type": ?*const EVP_MD, impl: ?*ENGINE) c_int;
 pub extern fn EVP_MD_CTX_new() ?*EVP_MD_CTX;
 pub extern fn EVP_MD_CTX_free(ctx: ?*EVP_MD_CTX) void;

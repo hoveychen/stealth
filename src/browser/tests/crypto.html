@@ -468,3 +468,472 @@
     });
   }
 </script>
+
+<script id=generateKey-rsa-pairs type=module>
+  // Every value below is what a headed Chrome 150 answers (probe-g25). The RSA
+  // family used to reject NotSupportedError outright, which is what left
+  // browserscan's value cards empty (README `## G23`).
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const gen = (name, usages) => crypto.subtle.generateKey(
+      { name, hash: "SHA-256", modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+
+    // Recorded rather than awaited bare: a rejection here has to reach the
+    // assertions as a value, not tear the block down before they run.
+    const out = {};
+    try {
+    const oaep = await gen("RSA-OAEP", ["encrypt", "decrypt"]);
+    out.oaep_public_type = oaep.publicKey.type;
+    out.oaep_private_type = oaep.privateKey.type;
+    out.oaep_name = oaep.publicKey.algorithm.name;
+    out.oaep_modulus = oaep.publicKey.algorithm.modulusLength;
+    out.oaep_hash = oaep.publicKey.algorithm.hash.name;
+    out.oaep_exponent = Array.from(oaep.publicKey.algorithm.publicExponent).join(",");
+    // The pair splits the requested usages: each key keeps only its own.
+    out.oaep_public_usages = oaep.publicKey.usages.join(",");
+    out.oaep_private_usages = oaep.privateKey.usages.join(",");
+    out.oaep_public_extractable = oaep.publicKey.extractable;
+    out.oaep_private_extractable = oaep.privateKey.extractable;
+    // A pair is two distinct keys, not one object handed back twice.
+    out.oaep_distinct = oaep.publicKey !== oaep.privateKey;
+
+    const pkcs1 = await gen("RSASSA-PKCS1-v1_5", ["sign", "verify"]);
+    out.pkcs1_name = pkcs1.privateKey.algorithm.name;
+    out.pkcs1_private_usages = pkcs1.privateKey.usages.join(",");
+    out.pkcs1_public_usages = pkcs1.publicKey.usages.join(",");
+
+    const pss = await gen("RSA-PSS", ["sign", "verify"]);
+    out.pss_name = pss.privateKey.algorithm.name;
+    out.pss_private_type = pss.privateKey.type;
+
+    // A non-extractable pair still reports its public half as extractable.
+    const sealed = await crypto.subtle.generateKey(
+      { name: "RSA-OAEP", hash: "SHA-256", modulusLength: 2048, publicExponent: exp },
+      false, ["encrypt", "decrypt"],
+    );
+    out.sealed_public_extractable = sealed.publicKey.extractable;
+    out.sealed_private_extractable = sealed.privateKey.extractable;
+    } catch (e) { out.threw = `${e.name}: ${e.message}`; }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual("public", o.oaep_public_type);
+      testing.expectEqual("private", o.oaep_private_type);
+      testing.expectEqual("RSA-OAEP", o.oaep_name);
+      testing.expectEqual(2048, o.oaep_modulus);
+      testing.expectEqual("SHA-256", o.oaep_hash);
+      testing.expectEqual("1,0,1", o.oaep_exponent);
+      testing.expectEqual("encrypt", o.oaep_public_usages);
+      testing.expectEqual("decrypt", o.oaep_private_usages);
+      testing.expectEqual(true, o.oaep_public_extractable);
+      testing.expectEqual(true, o.oaep_private_extractable);
+      testing.expectEqual(true, o.oaep_distinct);
+      testing.expectEqual("RSASSA-PKCS1-v1_5", o.pkcs1_name);
+      testing.expectEqual("sign", o.pkcs1_private_usages);
+      testing.expectEqual("verify", o.pkcs1_public_usages);
+      testing.expectEqual("RSA-PSS", o.pss_name);
+      testing.expectEqual("private", o.pss_private_type);
+      testing.expectEqual(true, o.sealed_public_extractable);
+      testing.expectEqual(false, o.sealed_private_extractable);
+    });
+  }
+</script>
+
+<script id=exportKey-rsa-der type=module>
+  // The DER export formats, measured against a headed Chrome 150 (probe-g25).
+  // browserscan exports the public half as `spki` before it POSTs, so a
+  // rejection here is as fatal to the value cards as a failed generateKey.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+    const gen = (extractable) => crypto.subtle.generateKey(
+      { name: "RSA-OAEP", hash: "SHA-256", modulusLength: 2048, publicExponent: exp },
+      extractable, ["encrypt", "decrypt"],
+    );
+    // A rejection has to arrive at the assertions as a value; awaiting it bare
+    // would tear the block down before they run.
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+
+    const out = {};
+    try {
+      const pair = await gen(true);
+
+      const spki = await crypto.subtle.exportKey("spki", pair.publicKey);
+      out.spki_length = spki.byteLength;
+      out.spki_prefix = b64(spki.slice(0, 12));
+
+      const pkcs8 = await crypto.subtle.exportKey("pkcs8", pair.privateKey);
+      // Chrome reports ~1218 bytes; assert the shape, not an exact DER length.
+      out.pkcs8_plausible = pkcs8.byteLength > 1000;
+
+      // Each DER format names one half of the pair. Chrome refuses the other
+      // half rather than deriving it.
+      out.spki_of_private = await rejectsWith(() => crypto.subtle.exportKey("spki", pair.privateKey));
+      out.pkcs8_of_public = await rejectsWith(() => crypto.subtle.exportKey("pkcs8", pair.publicKey));
+
+      const sealed = await gen(false);
+      out.sealed_pkcs8 = await rejectsWith(() => crypto.subtle.exportKey("pkcs8", sealed.privateKey));
+      // ...but the public half of a sealed pair is extractable, so it exports.
+      const sealed_spki = await crypto.subtle.exportKey("spki", sealed.publicKey);
+      out.sealed_spki_length = sealed_spki.byteLength;
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual(294, o.spki_length);
+      testing.expectEqual("MIIBIjANBgkqhkiG", o.spki_prefix);
+      testing.expectEqual(true, o.pkcs8_plausible);
+      testing.expectEqual("InvalidAccessError", o.spki_of_private);
+      testing.expectEqual("InvalidAccessError", o.pkcs8_of_public);
+      testing.expectEqual("InvalidAccessError", o.sealed_pkcs8);
+      testing.expectEqual(294, o.sealed_spki_length);
+    });
+  }
+</script>
+
+<script id=importKey-rsa-der type=module>
+  // DER import, measured against a headed Chrome 150 (probe-g25). The round
+  // trip is generate -> export -> import, so a failure here is the import and
+  // not a stale test vector.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const gen = (name, usages) => crypto.subtle.generateKey(
+      { name, hash: "SHA-256", modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+
+    const out = {};
+    try {
+      const oaep = await gen("RSA-OAEP", ["encrypt", "decrypt"]);
+
+      const spki = await crypto.subtle.exportKey("spki", oaep.publicKey);
+      const pub_key = await crypto.subtle.importKey(
+        "spki", spki, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      );
+      // The modulus is read off the parsed key, not echoed from the request.
+      out.spki_round_trip = [pub_key.type, pub_key.algorithm.name, pub_key.algorithm.modulusLength].join("/");
+      out.spki_hash = pub_key.algorithm.hash.name;
+      out.spki_usages = pub_key.usages.join(",");
+      // An imported key re-exports to the same DER it came from.
+      const reexported = await crypto.subtle.exportKey("spki", pub_key);
+      out.spki_stable = new Uint8Array(reexported).join(",") === new Uint8Array(spki).join(",");
+
+      const pkcs8 = await crypto.subtle.exportKey("pkcs8", oaep.privateKey);
+      const priv_key = await crypto.subtle.importKey(
+        "pkcs8", pkcs8, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"],
+      );
+      out.pkcs8_round_trip = [priv_key.type, priv_key.algorithm.name].join("/");
+
+      // The algorithm comes from the caller, not the DER: the same SPKI reads
+      // back as whichever RSA algorithm was asked for.
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", ["sign", "verify"]);
+      const pkcs1_spki = await crypto.subtle.exportKey("spki", pkcs1.publicKey);
+      const pkcs1_key = await crypto.subtle.importKey(
+        "spki", pkcs1_spki, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, true, ["verify"],
+      );
+      out.pkcs1_round_trip = [pkcs1_key.type, pkcs1_key.algorithm.name].join("/");
+
+      out.garbage_spki = await rejectsWith(() => crypto.subtle.importKey(
+        "spki", new Uint8Array([1, 2, 3, 4]), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      ));
+      out.garbage_pkcs8 = await rejectsWith(() => crypto.subtle.importKey(
+        "pkcs8", new Uint8Array([1, 2, 3, 4]), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"],
+      ));
+      // A usage the algorithm doesn't own is still a SyntaxError on import.
+      out.bad_usage = await rejectsWith(() => crypto.subtle.importKey(
+        "spki", spki, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["sign"],
+      ));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual("public/RSA-OAEP/2048", o.spki_round_trip);
+      testing.expectEqual("SHA-256", o.spki_hash);
+      testing.expectEqual("encrypt", o.spki_usages);
+      testing.expectEqual(true, o.spki_stable);
+      testing.expectEqual("private/RSA-OAEP", o.pkcs8_round_trip);
+      testing.expectEqual("public/RSASSA-PKCS1-v1_5", o.pkcs1_round_trip);
+      testing.expectEqual("DataError", o.garbage_spki);
+      testing.expectEqual("DataError", o.garbage_pkcs8);
+      testing.expectEqual("SyntaxError", o.bad_usage);
+    });
+  }
+</script>
+
+<script id=jwk-rsa type=module>
+  // JSON Web Key export/import for the RSA family. The public field values are
+  // what a headed Chrome 150 answers (probe-g25: `RSA/RSA-OAEP-256/AQAB/true/342`);
+  // the private key set is Chrome's too. The public key set is that private set
+  // minus the six private components.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const gen = (name, hash, usages) => crypto.subtle.generateKey(
+      { name, hash, modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+    const keys = (o) => Object.keys(o).sort().join(",");
+
+    const out = {};
+    try {
+      const oaep = await gen("RSA-OAEP", "SHA-256", ["encrypt", "decrypt"]);
+
+      const pub_jwk = await crypto.subtle.exportKey("jwk", oaep.publicKey);
+      out.public_shape = [pub_jwk.kty, pub_jwk.alg, pub_jwk.e, String(pub_jwk.ext), (pub_jwk.n || "").length].join("/");
+      out.public_keys = keys(pub_jwk);
+      out.public_key_ops = (pub_jwk.key_ops || []).join(",");
+
+      const priv_jwk = await crypto.subtle.exportKey("jwk", oaep.privateKey);
+      out.private_keys = keys(priv_jwk);
+      // The private half carries the same modulus as the public one.
+      out.same_modulus = priv_jwk.n === pub_jwk.n;
+
+      // `alg` is a JWA name that tracks both the algorithm and the hash.
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", "SHA-256", ["sign", "verify"]);
+      out.pkcs1_alg = (await crypto.subtle.exportKey("jwk", pkcs1.publicKey)).alg;
+      const pss = await gen("RSA-PSS", "SHA-384", ["sign", "verify"]);
+      out.pss_alg = (await crypto.subtle.exportKey("jwk", pss.publicKey)).alg;
+      const sha1 = await gen("RSA-OAEP", "SHA-1", ["encrypt", "decrypt"]);
+      out.sha1_alg = (await crypto.subtle.exportKey("jwk", sha1.publicKey)).alg;
+
+      const back_pub = await crypto.subtle.importKey(
+        "jwk", pub_jwk, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      );
+      out.public_round_trip = [back_pub.type, back_pub.algorithm.name, back_pub.algorithm.modulusLength].join("/");
+      out.public_reexports = keys(await crypto.subtle.exportKey("jwk", back_pub)) === out.public_keys;
+      // An imported public key marshals to the same SPKI as the original.
+      const a = await crypto.subtle.exportKey("spki", oaep.publicKey);
+      const b = await crypto.subtle.exportKey("spki", back_pub);
+      out.spki_matches = new Uint8Array(a).join(",") === new Uint8Array(b).join(",");
+
+      const back_priv = await crypto.subtle.importKey(
+        "jwk", priv_jwk, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"],
+      );
+      out.private_round_trip = [back_priv.type, back_priv.algorithm.name].join("/");
+      const c = await crypto.subtle.exportKey("pkcs8", oaep.privateKey);
+      const d = await crypto.subtle.exportKey("pkcs8", back_priv);
+      out.pkcs8_matches = new Uint8Array(c).join(",") === new Uint8Array(d).join(",");
+
+      out.bad_kty = await rejectsWith(() => crypto.subtle.importKey(
+        "jwk", { kty: "EC", n: pub_jwk.n, e: pub_jwk.e },
+        { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      ));
+      out.missing_n = await rejectsWith(() => crypto.subtle.importKey(
+        "jwk", { kty: "RSA", e: pub_jwk.e }, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      ));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual("RSA/RSA-OAEP-256/AQAB/true/342", o.public_shape);
+      testing.expectEqual("alg,e,ext,key_ops,kty,n", o.public_keys);
+      testing.expectEqual("encrypt", o.public_key_ops);
+      testing.expectEqual("alg,d,dp,dq,e,ext,key_ops,kty,n,p,q,qi", o.private_keys);
+      testing.expectEqual(true, o.same_modulus);
+      testing.expectEqual("RS256", o.pkcs1_alg);
+      testing.expectEqual("PS384", o.pss_alg);
+      testing.expectEqual("RSA-OAEP", o.sha1_alg);
+      testing.expectEqual("public/RSA-OAEP/2048", o.public_round_trip);
+      testing.expectEqual(true, o.public_reexports);
+      testing.expectEqual(true, o.spki_matches);
+      testing.expectEqual("private/RSA-OAEP", o.private_round_trip);
+      testing.expectEqual(true, o.pkcs8_matches);
+      testing.expectEqual("DataError", o.bad_kty);
+      testing.expectEqual("DataError", o.missing_n);
+    });
+  }
+</script>
+
+<script id=encrypt-rsa-oaep type=module>
+  // RSA-OAEP encrypt/decrypt, measured against a headed Chrome 150 (probe-g25).
+  // browserscan wraps its fingerprint payload with exactly this before it POSTs.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const enc = new TextEncoder();
+    const gen = (name, usages) => crypto.subtle.generateKey(
+      { name, hash: "SHA-256", modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+    const out = {};
+    try {
+      const oaep = await gen("RSA-OAEP", ["encrypt", "decrypt"]);
+      const algo = { name: "RSA-OAEP" };
+
+      const ct = await crypto.subtle.encrypt(algo, oaep.publicKey, enc.encode("hello"));
+      // One RSA block, whatever the plaintext length.
+      out.ct_length = ct.byteLength;
+
+      const round = await crypto.subtle.decrypt(
+        algo, oaep.privateKey, await crypto.subtle.encrypt(algo, oaep.publicKey, enc.encode("hello g25")),
+      );
+      out.round_trip = new TextDecoder().decode(round);
+
+      // OAEP seeds each block randomly, so the same plaintext encrypts twice
+      // to two different ciphertexts.
+      const same = enc.encode("same");
+      out.randomised = b64(await crypto.subtle.encrypt(algo, oaep.publicKey, same)) !==
+        b64(await crypto.subtle.encrypt(algo, oaep.publicKey, same));
+
+      const label = enc.encode("lbl");
+      const labelled = { name: "RSA-OAEP", label };
+      const with_label = await crypto.subtle.decrypt(
+        labelled, oaep.privateKey, await crypto.subtle.encrypt(labelled, oaep.publicKey, enc.encode("x")),
+      );
+      out.label_round_trip = new TextDecoder().decode(with_label);
+      // The label is authenticated: decrypting without it fails.
+      out.label_mismatch = await rejectsWith(async () => crypto.subtle.decrypt(
+        algo, oaep.privateKey, await crypto.subtle.encrypt(labelled, oaep.publicKey, enc.encode("x")),
+      ));
+
+      // 2048-bit OAEP-SHA-256 holds 190 bytes; 500 does not fit in one block.
+      out.too_long = await rejectsWith(() => crypto.subtle.encrypt(algo, oaep.publicKey, new Uint8Array(500)));
+
+      // Each half of the pair keeps only its own usage.
+      out.encrypt_with_private = await rejectsWith(() => crypto.subtle.encrypt(algo, oaep.privateKey, enc.encode("x")));
+      out.decrypt_with_public = await rejectsWith(() => crypto.subtle.decrypt(algo, oaep.publicKey, ct));
+
+      // A key generated for a different RSA algorithm is not an OAEP key.
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", ["sign", "verify"]);
+      out.wrong_algorithm = await rejectsWith(() => crypto.subtle.encrypt(algo, pkcs1.publicKey, enc.encode("x")));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual(256, o.ct_length);
+      testing.expectEqual("hello g25", o.round_trip);
+      testing.expectEqual(true, o.randomised);
+      testing.expectEqual("x", o.label_round_trip);
+      testing.expectEqual("OperationError", o.label_mismatch);
+      testing.expectEqual("OperationError", o.too_long);
+      testing.expectEqual("InvalidAccessError", o.encrypt_with_private);
+      testing.expectEqual("InvalidAccessError", o.decrypt_with_public);
+      testing.expectEqual("InvalidAccessError", o.wrong_algorithm);
+    });
+  }
+</script>
+
+<script id=sign-rsa type=module>
+  // RSASSA-PKCS1-v1_5 and RSA-PSS sign/verify, measured against a headed
+  // Chrome 150 (probe-g25). PKCS1 padding is deterministic; PSS salts each
+  // signature, so the same message signs twice to two different signatures.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const enc = new TextEncoder();
+    const msg = enc.encode("msg");
+    const gen = (name, hash, usages) => crypto.subtle.generateKey(
+      { name, hash, modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+    const out = {};
+    try {
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", "SHA-256", ["sign", "verify"]);
+      const p1 = { name: "RSASSA-PKCS1-v1_5" };
+
+      const sig = await crypto.subtle.sign(p1, pkcs1.privateKey, msg);
+      out.pkcs1_length = sig.byteLength;
+      out.pkcs1_deterministic = b64(sig) === b64(await crypto.subtle.sign(p1, pkcs1.privateKey, msg));
+      out.pkcs1_verify = await crypto.subtle.verify(p1, pkcs1.publicKey, sig, msg);
+      out.pkcs1_tampered = await crypto.subtle.verify(p1, pkcs1.publicKey, sig, enc.encode("msh"));
+
+      const pss = await gen("RSA-PSS", "SHA-256", ["sign", "verify"]);
+      const ps = { name: "RSA-PSS", saltLength: 32 };
+      const pss_sig = await crypto.subtle.sign(ps, pss.privateKey, msg);
+      out.pss_length = pss_sig.byteLength;
+      out.pss_verify = await crypto.subtle.verify(ps, pss.publicKey, pss_sig, msg);
+      out.pss_tampered = await crypto.subtle.verify(ps, pss.publicKey, pss_sig, enc.encode("msh"));
+      out.pss_randomised = b64(pss_sig) !== b64(await crypto.subtle.sign(ps, pss.privateKey, msg));
+
+      // The hash comes from the key, not the call, so a key made for SHA-384
+      // signs and verifies under SHA-384.
+      const sha384 = await gen("RSASSA-PKCS1-v1_5", "SHA-384", ["sign", "verify"]);
+      const sha384_sig = await crypto.subtle.sign(p1, sha384.privateKey, msg);
+      out.sha384_verify = await crypto.subtle.verify(p1, sha384.publicKey, sha384_sig, msg);
+      // ...and a signature made under one hash does not verify under another.
+      out.cross_hash = await crypto.subtle.verify(p1, pkcs1.publicKey, sha384_sig, msg);
+
+      // Each half of the pair keeps only its own usage.
+      out.sign_with_public = await rejectsWith(() => crypto.subtle.sign(p1, pkcs1.publicKey, msg));
+      out.verify_with_private = await rejectsWith(() => crypto.subtle.verify(p1, pkcs1.privateKey, sig, msg));
+      // A PSS key is not a PKCS1 key, whatever the call asks for.
+      out.wrong_algorithm = await rejectsWith(() => crypto.subtle.sign(p1, pss.privateKey, msg));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual(256, o.pkcs1_length);
+      testing.expectEqual(true, o.pkcs1_deterministic);
+      testing.expectEqual(true, o.pkcs1_verify);
+      testing.expectEqual(false, o.pkcs1_tampered);
+      testing.expectEqual(256, o.pss_length);
+      testing.expectEqual(true, o.pss_verify);
+      testing.expectEqual(false, o.pss_tampered);
+      testing.expectEqual(true, o.pss_randomised);
+      testing.expectEqual(true, o.sha384_verify);
+      testing.expectEqual(false, o.cross_hash);
+      testing.expectEqual("InvalidAccessError", o.sign_with_public);
+      testing.expectEqual("InvalidAccessError", o.verify_with_private);
+      testing.expectEqual("InvalidAccessError", o.wrong_algorithm);
+    });
+  }
+</script>

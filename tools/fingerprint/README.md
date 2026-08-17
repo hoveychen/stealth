@@ -2438,3 +2438,72 @@ are in alphabetical order where Chrome's are in spec order, and
 `onunhandledrejection` are still field-backed — `onerror` there wants the same
 five-argument treatment P2 gave the Window's, which is what makes it its own
 task rather than part of the sweep.
+
+## G25: SubtleCrypto's RSA family
+
+G23 attributed browserscan's empty value cards: it wraps its fingerprint
+payload with RSA-OAEP before it POSTs, and every RSA algorithm here answered
+`NotSupportedError` — `generateKey` never got as far as producing a key, so
+nothing downstream ran. G25 is that family, implemented.
+
+`probe-g25` generates its own key for every row and round-trips it, so a row
+that fails fails on the operation rather than on a stale test vector. The one
+hardcoded SPKI in the output is a key the probe generated in Chrome, which
+makes it real DER by construction.
+
+| step | what it added |
+|---|---|
+| P1 | `generateKey` for RSA-OAEP / RSASSA-PKCS1-v1_5 / RSA-PSS: a real `EVP_PKEY` pair, the usages split across the two halves, `publicExponent` read back off the generated key |
+| P2 | `exportKey` `spki` / `pkcs8` |
+| P3 | `importKey` `spki` / `pkcs8` |
+| P4 | `exportKey` / `importKey` `jwk`, both halves |
+| P5 | `encrypt` / `decrypt` under RSA-OAEP, label included |
+| P6 | `sign` / `verify` under both signature schemes |
+
+### What the implementation had to get right
+
+* **Every RSA operation goes through an `EVP_PKEY_CTX`, never the `RSA_*`
+  entry points.** Those cannot set the OAEP or MGF-1 digest — BoringSSL
+  documents them as always SHA-1 — so a `RSA_encrypt` shortcut would have
+  produced blocks that are valid RSA and wrong WebCrypto. MGF-1 itself is left
+  unset, because its default *is* the OAEP digest, which is what the spec asks
+  for.
+* **`pkcs8` is not `i2d_PrivateKey`.** That emits the bare PKCS#1
+  `RSAPrivateKey`; the format names the PKCS#8 `PrivateKeyInfo` wrapper, which
+  is `EVP_PKEY2PKCS8` + `i2d_PKCS8_PRIV_KEY_INFO`.
+* **The OAEP label has to be a libcrypto allocation.**
+  `EVP_PKEY_CTX_set0_rsa_oaep_label` takes ownership of the buffer and frees it
+  with `OPENSSL_free`, so an arena slice would have been freed twice.
+* **`alg` in a JWK tracks the hash, not just the algorithm.** RSA-OAEP under
+  SHA-256 is `RSA-OAEP-256`, the same pair under PSS is `PS256`, and SHA-1 is
+  the unsuffixed form.
+* **The hash for a signature comes from the key.** Neither `RSASSA-PKCS1-v1_5`
+  nor `RSA-PSS` carries one in its call parameters; only PSS's `saltLength` is
+  a call parameter.
+* **A JWK may omit the CRT members.** A key carrying only `n`, `e` and `d` is
+  legal, and `RSA_new_private_key_no_crt` is what takes it.
+
+### Where it landed
+
+`probe-g25` covers 31 rows. Against a headed Chrome 150: **31 of 31 agree on
+the value and on the `DOMException` name** — the 294-byte SPKI opening
+`MIIBIjANBgkqhkiG`, the JWK member set `alg,d,dp,dq,e,ext,key_ops,kty,n,p,q,qi`,
+the 256-byte ciphertext that differs between two encryptions of the same
+plaintext, the deterministic PKCS1 signature against the randomised PSS one,
+and the six refusals (`InvalidAccessError` on exporting a private key as
+`spki`, on a non-extractable export and on signing with a public key;
+`OperationError` on a 500-byte OAEP plaintext; `DataError` on garbage SPKI;
+`SyntaxError` on a bad usage list).
+
+Six of those rows differ in the `DOMException` *message* only: ours are the
+fixed per-code strings (`The object does not support the operation or
+argument`), Chrome's are written per call site (`Failed to execute 'exportKey'
+on 'SubtleCrypto': key is not extractable`). That is engine-wide rather than
+anything about RSA — `DOMException.fromError` maps an error to a code and the
+code owns the message — so it is left alone here.
+
+Deliberately not in scope: EC and OKP keys still export no DER at all
+(`exportKey('spki', ecPublicKey)` stays on the old `NotSupportedError` path —
+only RSA was measured), and `SubtleCrypto` declares no `wrapKey` / `unwrapKey`
+at all, for any algorithm, even though an RSA-OAEP pair splits those usages
+across its halves correctly.

@@ -61,6 +61,9 @@ pub const Algorithm = struct {
     name: []const u8,
     hash: ?[]const u8 = null,
     named_curve: ?[]const u8 = null,
+    /// RSA only. `public_exponent` is duped into the key's arena by init.
+    modulus_length: ?u32 = null,
+    public_exponent: ?[]const u8 = null,
 };
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CryptoKeyPair
@@ -111,6 +114,9 @@ pub fn init(exec: *const Execution, key: CryptoKey) !*CryptoKey {
     self._key = try arena.dupe(u8, key._key);
     if (key._algorithm.hash) |hash| {
         self._algorithm.hash = try arena.dupe(u8, hash);
+    }
+    if (key._algorithm.public_exponent) |exponent| {
+        self._algorithm.public_exponent = try arena.dupe(u8, exponent);
     }
     return self;
 }
@@ -184,6 +190,14 @@ const AlgorithmReport = union(enum) {
     keyed: struct { name: []const u8, length: u32 },
     hmac: struct { name: []const u8, length: u32, hash: struct { name: []const u8 } },
     ec: struct { name: []const u8, namedCurve: []const u8 },
+    /// Chrome hands `publicExponent` back as a Uint8Array, not an array of
+    /// numbers -- `probe-g25` reads it with `Array.from`.
+    rsa: struct {
+        name: []const u8,
+        modulusLength: u32,
+        publicExponent: js.TypedArray(u8),
+        hash: struct { name: []const u8 },
+    },
     named: struct { name: []const u8 },
 };
 
@@ -199,6 +213,12 @@ pub fn getAlgorithm(self: *const CryptoKey) AlgorithmReport {
         .ec => .{ .ec = .{
             .name = self._algorithm.name,
             .namedCurve = self._algorithm.named_curve orelse "",
+        } },
+        .rsa => .{ .rsa = .{
+            .name = self._algorithm.name,
+            .modulusLength = self._algorithm.modulus_length orelse 0,
+            .publicExponent = .{ .values = self._algorithm.public_exponent orelse &.{} },
+            .hash = .{ .name = self._algorithm.hash orelse "" },
         } },
         else => .{ .named = .{ .name = self._algorithm.name } },
     };
