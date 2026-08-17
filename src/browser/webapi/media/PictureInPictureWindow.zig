@@ -24,6 +24,15 @@
 
 const js = @import("../../js/js.zig");
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const PictureInPictureWindow = @This();
 
@@ -32,7 +41,6 @@ pub const Proto = EventTarget;
 _proto: *EventTarget,
 _width: u32 = 0,
 _height: u32 = 0,
-_on_resize: ?js.Function.Global = null,
 
 pub fn asEventTarget(self: *PictureInPictureWindow) *EventTarget {
     return self._proto;
@@ -46,14 +54,6 @@ pub fn getHeight(self: *const PictureInPictureWindow) u32 {
     return self._height;
 }
 
-pub fn getOnResize(self: *PictureInPictureWindow) ?js.Function.Global {
-    return self._on_resize;
-}
-
-pub fn setOnResize(self: *PictureInPictureWindow, listener: ?js.Function) !void {
-    self._on_resize = if (listener) |l| try l.persistWithThis(self) else null;
-}
-
 pub const JsApi = struct {
     pub const bridge = js.Bridge(PictureInPictureWindow);
 
@@ -65,5 +65,5 @@ pub const JsApi = struct {
 
     pub const width = bridge.accessor(PictureInPictureWindow.getWidth, null, .{});
     pub const height = bridge.accessor(PictureInPictureWindow.getHeight, null, .{});
-    pub const onresize = bridge.accessor(PictureInPictureWindow.getOnResize, PictureInPictureWindow.setOnResize, .{});
+    pub const onresize = bridge.accessor(handlerProperty(PictureInPictureWindow, .onresize).get, handlerProperty(PictureInPictureWindow, .onresize).set, .{});
 };

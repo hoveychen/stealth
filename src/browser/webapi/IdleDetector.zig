@@ -39,7 +39,6 @@ const IdleDetector = @This();
 pub const Proto = EventTarget;
 
 _proto: *EventTarget,
-_on_change: ?js.Function.Global = null,
 /// Set by the first start(), even though that start fails: a second one reports
 /// "already started" rather than the permission error again.
 _started: bool = false,
@@ -98,23 +97,24 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    fn getOnChange(self: *IdleDetector) ?js.Function.Global {
-        return self._on_change;
-    }
-
-    fn setOnChange(self: *IdleDetector, listener: ?js.Function) !void {
-        self._on_change = if (listener) |l| try l.persistWithThis(self) else null;
-    }
-
     pub const constructor = bridge.constructor(IdleDetector.constructor, .{});
     pub const requestPermission = bridge.function(IdleDetector.requestPermission, .{ .static = true });
     pub const userState = bridge.accessor(IdleDetector.getUserState, null, .{});
     pub const screenState = bridge.accessor(IdleDetector.getScreenState, null, .{});
-    pub const onchange = bridge.accessor(getOnChange, setOnChange, .{});
+    pub const onchange = bridge.accessor(handlerProperty(IdleDetector, .onchange).get, handlerProperty(IdleDetector, .onchange).set, .{});
     pub const start = bridge.function(IdleDetector.start, .{ .arity = 0 });
 };
 
 const testing = @import("../../testing.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 test "WebApi: IdleDetector" {
     try testing.htmlRunner("idle_detector.html", .{});
 }

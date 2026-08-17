@@ -308,11 +308,27 @@ pub fn removeListener(self: *EventManagerBase, list: *std.DoublyLinkedList, list
 }
 
 /// Check if there are any listeners registered for a target/type combination.
+///
+/// The list has to be walked rather than merely found: `removeListener` unlinks
+/// the node but leaves the (now empty) list in `lookup`, and during a dispatch
+/// it only marks the listener removed. A target that once had a listener would
+/// otherwise read as still having one forever -- which matters most for the
+/// handler properties, where `target.onx = f; target.onx = null` goes through
+/// this same list.
 pub fn hasListeners(self: *EventManagerBase, target: *EventTarget, typ: []const u8) bool {
-    return self.lookup.get(.{
+    const list = self.lookup.get(.{
         .event_target = @intFromPtr(target),
         .type_string = .wrap(typ),
-    }) != null;
+    }) orelse return false;
+
+    var node = list.first;
+    while (node) |n| : (node = n.next) {
+        const listener: *Listener = @alignCast(@fieldParentPtr("node", n));
+        if (!listener.removed) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// Get the listener list for a target/type, if any exist.

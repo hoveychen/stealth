@@ -51,6 +51,15 @@ const BaseAudioContext = @import("BaseAudioContext.zig");
 const worklet = @import("worklet.zig");
 const AudioListener = @import("AudioListener.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -64,8 +73,6 @@ const OUTPUT_BUFFER_FRAMES: f64 = 256;
 
 _proto: *BaseAudioContext,
 _sink_id: lp.String = .empty,
-_on_error: ?js.Function.Global = null,
-_on_sink_change: ?js.Function.Global = null,
 _playback_stats: ?*worklet.AudioPlaybackStats = null,
 
 pub fn init(options: ?Options, exec: *Execution) !*AudioContext {
@@ -225,28 +232,8 @@ pub fn getPlaybackStats(self: *AudioContext, exec: *Execution) !*worklet.AudioPl
     return created;
 }
 
-pub fn getOnError(self: *const AudioContext) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *AudioContext, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_error = try listen.persistWithThis(self);
-    } else {
-        self._on_error = null;
-    }
-}
-
-pub fn getOnSinkChange(self: *const AudioContext) ?js.Function.Global {
-    return self._on_sink_change;
-}
-
-pub fn setOnSinkChange(self: *AudioContext, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_sink_change = try listen.persistWithThis(self);
-    } else {
-        self._on_sink_change = null;
-    }
+pub fn asEventTarget(self: *AudioContext) *EventTarget {
+    return self._proto.asEventTarget();
 }
 
 pub const JsApi = struct {
@@ -264,7 +251,7 @@ pub const JsApi = struct {
     // `constructor` there, which V8 cannot reproduce, so they land last here.
     pub const baseLatency = bridge.accessor(AudioContext.getBaseLatency, null, .{});
     pub const outputLatency = bridge.accessor(AudioContext.getOutputLatency, null, .{});
-    pub const onerror = bridge.accessor(AudioContext.getOnError, AudioContext.setOnError, .{});
+    pub const onerror = bridge.accessor(handlerProperty(AudioContext, .onerror).get, handlerProperty(AudioContext, .onerror).set, .{});
     pub const close = bridge.function(AudioContext.close, .{ .arity = 0 });
     pub const createMediaElementSource = bridge.function(AudioContext.createMediaElementSource, .{ .arity = 1 });
     pub const createMediaStreamDestination = bridge.function(AudioContext.createMediaStreamDestination, .{ .arity = 0 });
@@ -275,11 +262,12 @@ pub const JsApi = struct {
     pub const playbackStats = bridge.accessor(AudioContext.getPlaybackStats, null, .{});
 
     pub const sinkId = bridge.accessor(AudioContext.getSinkId, null, .{});
-    pub const onsinkchange = bridge.accessor(AudioContext.getOnSinkChange, AudioContext.setOnSinkChange, .{});
+    pub const onsinkchange = bridge.accessor(handlerProperty(AudioContext, .onsinkchange).get, handlerProperty(AudioContext, .onsinkchange).set, .{});
     pub const setSinkId = bridge.function(AudioContext.setSinkId, .{ .arity = 1 });
 };
 
 const testing = @import("../../../testing.zig");
+const EventTarget = @import("../EventTarget.zig");
 test "WebApi: AudioContext" {
     try testing.htmlRunner("audio.html", .{});
 }

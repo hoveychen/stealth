@@ -48,6 +48,15 @@ const Event = @import("Event.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
 const String = @import("../../lightpanda.zig").String;
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -108,9 +117,6 @@ pub const PaymentRequest = struct {
     _method: []const u8,
     _shipping_type: ?ShippingType = null,
     _shown: bool = false,
-    _on_shipping_address_change: ?js.Function.Global = null,
-    _on_shipping_option_change: ?js.Function.Global = null,
-    _on_payment_method_change: ?js.Function.Global = null,
 
     const ShippingType = enum { shipping, delivery, pickup };
 
@@ -342,10 +348,6 @@ pub const PaymentRequest = struct {
         return exec.js.local.?.resolvePromise(Capabilities{});
     }
 
-    const shipping_address_change = handlerAccessors(PaymentRequest, "_on_shipping_address_change");
-    const shipping_option_change = handlerAccessors(PaymentRequest, "_on_shipping_option_change");
-    const payment_method_change = handlerAccessors(PaymentRequest, "_on_payment_method_change");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PaymentRequest);
 
@@ -364,13 +366,13 @@ pub const PaymentRequest = struct {
         pub const shippingAddress = bridge.accessor(R.getShippingAddress, null, .{});
         pub const shippingOption = bridge.accessor(R.getShippingOption, null, .{});
         pub const shippingType = bridge.accessor(R.getShippingType, null, .{});
-        pub const onshippingaddresschange = bridge.accessor(shipping_address_change.get, shipping_address_change.set, .{});
-        pub const onshippingoptionchange = bridge.accessor(shipping_option_change.get, shipping_option_change.set, .{});
+        pub const onshippingaddresschange = bridge.accessor(handlerProperty(PaymentRequest, .onshippingaddresschange).get, handlerProperty(PaymentRequest, .onshippingaddresschange).set, .{});
+        pub const onshippingoptionchange = bridge.accessor(handlerProperty(PaymentRequest, .onshippingoptionchange).get, handlerProperty(PaymentRequest, .onshippingoptionchange).set, .{});
         pub const abort = bridge.function(R.abort, .{});
         pub const canMakePayment = bridge.function(R.canMakePayment, .{});
         pub const hasEnrolledInstrument = bridge.function(R.hasEnrolledInstrument, .{});
         pub const show = bridge.function(R.show, .{ .arity = 0 });
-        pub const onpaymentmethodchange = bridge.accessor(payment_method_change.get, payment_method_change.set, .{});
+        pub const onpaymentmethodchange = bridge.accessor(handlerProperty(PaymentRequest, .onpaymentmethodchange).get, handlerProperty(PaymentRequest, .onpaymentmethodchange).set, .{});
 
         pub const getSecurePaymentConfirmationCapabilities = bridge.function(R.getSecurePaymentConfirmationCapabilities, .{ .static = true });
         pub const securePaymentConfirmationAvailability = bridge.function(R.securePaymentConfirmationAvailability, .{ .static = true });
@@ -382,7 +384,6 @@ pub const PaymentResponse = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_payer_detail_change: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *PaymentResponse) *EventTarget {
         return self._proto;
@@ -424,8 +425,6 @@ pub const PaymentResponse = struct {
         return .{};
     }
 
-    const payer_detail_change = handlerAccessors(PaymentResponse, "_on_payer_detail_change");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PaymentResponse);
 
@@ -447,7 +446,7 @@ pub const PaymentResponse = struct {
         pub const payerName = bridge.accessor(R.none, null, .{});
         pub const payerEmail = bridge.accessor(R.none, null, .{});
         pub const payerPhone = bridge.accessor(R.none, null, .{});
-        pub const onpayerdetailchange = bridge.accessor(payer_detail_change.get, payer_detail_change.set, .{});
+        pub const onpayerdetailchange = bridge.accessor(handlerProperty(PaymentResponse, .onpayerdetailchange).get, handlerProperty(PaymentResponse, .onpayerdetailchange).set, .{});
         pub const complete = bridge.function(R.refuse, .{ .arity = 0 });
         pub const retry = bridge.function(R.refuse1, .{ .arity = 0 });
         pub const toJSON = bridge.function(R.toJSON, .{});

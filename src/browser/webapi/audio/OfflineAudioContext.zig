@@ -48,6 +48,16 @@ const AudioBuffer = @import("AudioBuffer.zig");
 const AudioListener = @import("AudioListener.zig");
 const BaseAudioContext = @import("BaseAudioContext.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
+const handler_property = @import("../handler_property.zig");
+const EventTarget = @import("../EventTarget.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -61,7 +71,6 @@ const MAX_CHANNELS: u32 = 32;
 
 _proto: *BaseAudioContext,
 _length: u32,
-_on_complete: ?js.Function.Global = null,
 
 // Set the moment startRendering() is called: a second call is refused for being
 // in a "stopped state" even while the first is still in flight (measured).
@@ -176,18 +185,6 @@ pub fn getLength(self: *const OfflineAudioContext) u32 {
     return self._length;
 }
 
-pub fn getOnComplete(self: *const OfflineAudioContext) ?js.Function.Global {
-    return self._on_complete;
-}
-
-pub fn setOnComplete(self: *OfflineAudioContext, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_complete = try listen.persistWithThis(self);
-    } else {
-        self._on_complete = null;
-    }
-}
-
 // The render quantum. Chrome renders whole quanta, so a context asked for 100
 // frames still advances its clock by 128 -- measured across 1/100/128/129/5000
 // frames at 44100 and 256/300 at 48000, which all land on
@@ -275,9 +272,9 @@ const Completion = struct {
         try base.transition(.closed, exec);
 
         const target = base.asEventTarget();
-        if (exec.hasDirectListeners(target, "complete", offline._on_complete)) {
+        if (exec.hasDirectListeners(target, "complete", null)) {
             const event = try events.OfflineAudioCompletionEvent.initTrusted(self.buffer, exec);
-            try exec.dispatch(target, event.asEvent(), offline._on_complete, .{ .context = "audio complete" });
+            try exec.dispatch(target, event.asEvent(), null, .{ .context = "audio complete" });
         }
 
         // Settles after the event, matching Chrome: a `complete` handler sees
@@ -352,6 +349,10 @@ fn reject(message: []const u8, exec: *const Execution) !js.Promise {
     return resolver.promise();
 }
 
+pub fn asEventTarget(self: *OfflineAudioContext) *EventTarget {
+    return self._proto.asEventTarget();
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(OfflineAudioContext);
 
@@ -364,7 +365,7 @@ pub const JsApi = struct {
     pub const constructor = bridge.constructor(OfflineAudioContext.constructor, .{ .arity = 1 });
 
     // Chrome's order.
-    pub const oncomplete = bridge.accessor(OfflineAudioContext.getOnComplete, OfflineAudioContext.setOnComplete, .{});
+    pub const oncomplete = bridge.accessor(handlerProperty(OfflineAudioContext, .oncomplete).get, handlerProperty(OfflineAudioContext, .oncomplete).set, .{});
     pub const length = bridge.accessor(OfflineAudioContext.getLength, null, .{});
     pub const @"resume" = bridge.function(OfflineAudioContext.@"resume", .{ .arity = 0 });
     pub const startRendering = bridge.function(OfflineAudioContext.startRendering, .{ .arity = 0 });

@@ -50,6 +50,15 @@ pub const HTMLDocument = @import("HTMLDocument.zig");
 const log = lp.log;
 const String = lp.String;
 const IS_DEBUG = @import("builtin").mode == .Debug;
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Document = @This();
 
@@ -86,7 +95,6 @@ _open_popovers: std.ArrayList(*Element) = .empty,
 // document.open/close/write/writeln must throw InvalidStateError.
 _throw_on_dynamic_markup_insertion_counter: u32 = 0,
 
-_on_selectionchange: ?js.Function.Global = null,
 _design_mode: bool = false,
 // Chrome keeps whatever a script assigns to these, even on an HTML document
 // where they start out null/false.
@@ -95,18 +103,6 @@ _xml_standalone: bool = false,
 _timeline: ?*services.DocumentTimeline = null,
 _feature_policy: ?*services.FeaturePolicy = null,
 _fragment_directive: ?*services.FragmentDirective = null,
-
-pub fn getOnSelectionChange(self: *Document) ?js.Function.Global {
-    return self._on_selectionchange;
-}
-
-pub fn setOnSelectionChange(self: *Document, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_selectionchange = try listen.persistWithThis(self);
-    } else {
-        self._on_selectionchange = null;
-    }
-}
 
 pub const Type = union(enum) {
     generic,
@@ -2201,7 +2197,7 @@ pub const JsApi = struct {
     pub const onpointerenter = bridge.accessor(handlerAccessor(.onpointerenter).get, handlerAccessor(.onpointerenter).set, .{});
     pub const onpointerleave = bridge.accessor(handlerAccessor(.onpointerleave).get, handlerAccessor(.onpointerleave).set, .{});
     pub const onselectstart = bridge.accessor(handlerAccessor(.onselectstart).get, handlerAccessor(.onselectstart).set, .{});
-    pub const onselectionchange = bridge.accessor(Document.getOnSelectionChange, Document.setOnSelectionChange, .{});
+    pub const onselectionchange = bridge.accessor(handlerProperty(Document, .onselectionchange).get, handlerProperty(Document, .onselectionchange).set, .{});
     pub const onanimationcancel = bridge.accessor(handlerAccessor(.onanimationcancel).get, handlerAccessor(.onanimationcancel).set, .{});
     pub const onanimationend = bridge.accessor(handlerAccessor(.onanimationend).get, handlerAccessor(.onanimationend).set, .{});
     pub const onanimationiteration = bridge.accessor(handlerAccessor(.onanimationiteration).get, handlerAccessor(.onanimationiteration).set, .{});

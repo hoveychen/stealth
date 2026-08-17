@@ -27,6 +27,15 @@ const js = @import("../../js/js.zig");
 
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -56,13 +65,6 @@ _id: ?u32 = null,
 _ready_state: ReadyState = .connecting,
 _buffered_amount_low_threshold: u32 = 0,
 _binary_type: []const u8 = "arraybuffer",
-
-_on_open: ?js.Function.Global = null,
-_on_bufferedamountlow: ?js.Function.Global = null,
-_on_error: ?js.Function.Global = null,
-_on_closing: ?js.Function.Global = null,
-_on_close: ?js.Function.Global = null,
-_on_message: ?js.Function.Global = null,
 
 pub const Options = struct {
     ordered: bool = true,
@@ -199,62 +201,14 @@ const CloseTask = struct {
         channel._ready_state = .closed;
 
         const target = channel.asEventTarget();
-        if (!self.exec.hasDirectListeners(target, "close", channel._on_close)) {
+        if (!self.exec.hasDirectListeners(target, "close", null)) {
             return null;
         }
         const event = try Event.initTrusted(comptime .wrap("close"), .{}, self.exec.page);
-        try self.exec.dispatch(target, event, channel._on_close, .{ .context = "RTCDataChannel.close" });
+        try self.exec.dispatch(target, event, null, .{ .context = "RTCDataChannel.close" });
         return null;
     }
 };
-
-pub fn getOnOpen(self: *const RTCDataChannel) ?js.Function.Global {
-    return self._on_open;
-}
-
-pub fn setOnOpen(self: *RTCDataChannel, cb: ?js.Function) !void {
-    self._on_open = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
-pub fn getOnBufferedAmountLow(self: *const RTCDataChannel) ?js.Function.Global {
-    return self._on_bufferedamountlow;
-}
-
-pub fn setOnBufferedAmountLow(self: *RTCDataChannel, cb: ?js.Function) !void {
-    self._on_bufferedamountlow = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
-pub fn getOnError(self: *const RTCDataChannel) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *RTCDataChannel, cb: ?js.Function) !void {
-    self._on_error = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
-pub fn getOnClosing(self: *const RTCDataChannel) ?js.Function.Global {
-    return self._on_closing;
-}
-
-pub fn setOnClosing(self: *RTCDataChannel, cb: ?js.Function) !void {
-    self._on_closing = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
-pub fn getOnClose(self: *const RTCDataChannel) ?js.Function.Global {
-    return self._on_close;
-}
-
-pub fn setOnClose(self: *RTCDataChannel, cb: ?js.Function) !void {
-    self._on_close = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
-pub fn getOnMessage(self: *const RTCDataChannel) ?js.Function.Global {
-    return self._on_message;
-}
-
-pub fn setOnMessage(self: *RTCDataChannel, cb: ?js.Function) !void {
-    self._on_message = if (cb) |c| try c.persistWithThis(self) else null;
-}
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(RTCDataChannel);
@@ -276,12 +230,12 @@ pub const JsApi = struct {
     pub const readyState = bridge.accessor(RTCDataChannel.getReadyState, null, .{});
     pub const bufferedAmount = bridge.accessor(RTCDataChannel.getBufferedAmount, null, .{});
     pub const bufferedAmountLowThreshold = bridge.accessor(RTCDataChannel.getBufferedAmountLowThreshold, RTCDataChannel.setBufferedAmountLowThreshold, .{});
-    pub const onopen = bridge.accessor(RTCDataChannel.getOnOpen, RTCDataChannel.setOnOpen, .{});
-    pub const onbufferedamountlow = bridge.accessor(RTCDataChannel.getOnBufferedAmountLow, RTCDataChannel.setOnBufferedAmountLow, .{});
-    pub const onerror = bridge.accessor(RTCDataChannel.getOnError, RTCDataChannel.setOnError, .{});
-    pub const onclosing = bridge.accessor(RTCDataChannel.getOnClosing, RTCDataChannel.setOnClosing, .{});
-    pub const onclose = bridge.accessor(RTCDataChannel.getOnClose, RTCDataChannel.setOnClose, .{});
-    pub const onmessage = bridge.accessor(RTCDataChannel.getOnMessage, RTCDataChannel.setOnMessage, .{});
+    pub const onopen = bridge.accessor(handlerProperty(RTCDataChannel, .onopen).get, handlerProperty(RTCDataChannel, .onopen).set, .{});
+    pub const onbufferedamountlow = bridge.accessor(handlerProperty(RTCDataChannel, .onbufferedamountlow).get, handlerProperty(RTCDataChannel, .onbufferedamountlow).set, .{});
+    pub const onerror = bridge.accessor(handlerProperty(RTCDataChannel, .onerror).get, handlerProperty(RTCDataChannel, .onerror).set, .{});
+    pub const onclosing = bridge.accessor(handlerProperty(RTCDataChannel, .onclosing).get, handlerProperty(RTCDataChannel, .onclosing).set, .{});
+    pub const onclose = bridge.accessor(handlerProperty(RTCDataChannel, .onclose).get, handlerProperty(RTCDataChannel, .onclose).set, .{});
+    pub const onmessage = bridge.accessor(handlerProperty(RTCDataChannel, .onmessage).get, handlerProperty(RTCDataChannel, .onmessage).set, .{});
     pub const binaryType = bridge.accessor(RTCDataChannel.getBinaryType, RTCDataChannel.setBinaryType, .{});
     pub const reliable = bridge.accessor(RTCDataChannel.getReliable, null, .{});
     pub const close = bridge.function(RTCDataChannel.close, .{});

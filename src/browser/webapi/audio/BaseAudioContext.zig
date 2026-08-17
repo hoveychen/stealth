@@ -40,6 +40,15 @@ const AudioListener = @import("AudioListener.zig");
 const PeriodicWave = @import("PeriodicWave.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
 const worklet = @import("worklet.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -56,7 +65,6 @@ _sample_rate: f64 = 48000,
 _state: State = .suspended,
 _destination: ?*AudioDestinationNode = null,
 _listener: ?*AudioListener = null,
-_on_state_change: ?js.Function.Global = null,
 
 // Zero on a real-time context, which never starts; an offline one lands on
 // length/sampleRate once it has rendered (measured).
@@ -112,18 +120,6 @@ pub fn getAudioWorklet(self: *BaseAudioContext, exec: *Execution) !*worklet.Audi
     const created = try exec._factory.audioWorklet(worklet.AudioWorklet{ ._proto = undefined });
     self._audio_worklet = created;
     return created;
-}
-
-pub fn getOnStateChange(self: *const BaseAudioContext) ?js.Function.Global {
-    return self._on_state_change;
-}
-
-pub fn setOnStateChange(self: *BaseAudioContext, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_state_change = try listen.persistWithThis(self);
-    } else {
-        self._on_state_change = null;
-    }
 }
 
 // Deliberately no closed-state check on any factory: Chrome still hands back a
@@ -278,11 +274,11 @@ pub fn transition(self: *BaseAudioContext, to: State, exec: *const Execution) !v
     self._state = to;
 
     const target = self.asEventTarget();
-    if (!exec.hasDirectListeners(target, "statechange", self._on_state_change)) {
+    if (!exec.hasDirectListeners(target, "statechange", null)) {
         return;
     }
     const event = try Event.initTrusted(comptime .wrap("statechange"), .{}, exec.page);
-    return exec.dispatch(target, event, self._on_state_change, .{ .context = "audio statechange" });
+    return exec.dispatch(target, event, null, .{ .context = "audio statechange" });
 }
 
 pub const JsApi = struct {
@@ -303,7 +299,7 @@ pub const JsApi = struct {
     pub const currentTime = bridge.accessor(BaseAudioContext.getCurrentTime, null, .{});
     pub const listener = bridge.accessor(BaseAudioContext.getListener, null, .{});
     pub const state = bridge.accessor(BaseAudioContext.getState, null, .{});
-    pub const onstatechange = bridge.accessor(BaseAudioContext.getOnStateChange, BaseAudioContext.setOnStateChange, .{});
+    pub const onstatechange = bridge.accessor(handlerProperty(BaseAudioContext, .onstatechange).get, handlerProperty(BaseAudioContext, .onstatechange).set, .{});
 
     pub const createAnalyser = bridge.function(BaseAudioContext.createAnalyser, .{ .arity = 0 });
     pub const createBiquadFilter = bridge.function(BaseAudioContext.createBiquadFilter, .{ .arity = 0 });

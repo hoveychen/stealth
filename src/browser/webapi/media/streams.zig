@@ -45,6 +45,15 @@ const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const DOMException = @import("../DOMException.zig");
 const Page = @import("../../Page.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const String = lp.String;
 const Execution = js.Execution;
@@ -93,11 +102,6 @@ pub const MediaStream = struct {
 
     // In insertion order, which is the order getTracks() reports.
     _tracks: std.ArrayListUnmanaged(*MediaStreamTrack) = .empty,
-
-    _on_add_track: ?js.Function.Global = null,
-    _on_remove_track: ?js.Function.Global = null,
-    _on_active: ?js.Function.Global = null,
-    _on_inactive: ?js.Function.Global = null,
 
     // `new MediaStream()`, `new MediaStream(tracks)` and `new MediaStream(other)`
     // are three WebIDL overloads. Anything else — including an explicit `null`
@@ -223,11 +227,6 @@ pub const MediaStream = struct {
         return copy;
     }
 
-    const add_track = handlerAccessors(MediaStream, "_on_add_track");
-    const remove_track = handlerAccessors(MediaStream, "_on_remove_track");
-    const active = handlerAccessors(MediaStream, "_on_active");
-    const inactive = handlerAccessors(MediaStream, "_on_inactive");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(MediaStream);
 
@@ -245,10 +244,10 @@ pub const MediaStream = struct {
         // Chrome's prototype order.
         pub const id = bridge.accessor(MediaStream.getId, null, .{});
         pub const active = bridge.accessor(MediaStream.getActive, null, .{});
-        pub const onaddtrack = bridge.accessor(MediaStream.add_track.get, MediaStream.add_track.set, .{});
-        pub const onremovetrack = bridge.accessor(MediaStream.remove_track.get, MediaStream.remove_track.set, .{});
-        pub const onactive = bridge.accessor(MediaStream.active.get, MediaStream.active.set, .{});
-        pub const oninactive = bridge.accessor(MediaStream.inactive.get, MediaStream.inactive.set, .{});
+        pub const onaddtrack = bridge.accessor(handlerProperty(MediaStream, .onaddtrack).get, handlerProperty(MediaStream, .onaddtrack).set, .{});
+        pub const onremovetrack = bridge.accessor(handlerProperty(MediaStream, .onremovetrack).get, handlerProperty(MediaStream, .onremovetrack).set, .{});
+        pub const onactive = bridge.accessor(handlerProperty(MediaStream, .onactive).get, handlerProperty(MediaStream, .onactive).set, .{});
+        pub const oninactive = bridge.accessor(handlerProperty(MediaStream, .oninactive).get, handlerProperty(MediaStream, .oninactive).set, .{});
         pub const addTrack = bridge.function(MediaStream.addTrack, .{ .arity = 1 });
         pub const clone = bridge.function(MediaStream.clone, .{ .arity = 0 });
         pub const getAudioTracks = bridge.function(MediaStream.getAudioTracks, .{ .arity = 0 });
@@ -295,11 +294,6 @@ pub const MediaStreamTrack = struct {
     _content_hint: ContentHint = .none,
     _channel_count: u32 = 2,
     _sample_rate: f64 = 48000,
-
-    _on_mute: ?js.Function.Global = null,
-    _on_unmute: ?js.Function.Global = null,
-    _on_ended: ?js.Function.Global = null,
-    _on_capture_handle_change: ?js.Function.Global = null,
 
     _stats: ?*MediaStreamTrackAudioStats = null,
 
@@ -721,11 +715,6 @@ pub const MediaStreamTrack = struct {
         return null;
     }
 
-    const mute = handlerAccessors(MediaStreamTrack, "_on_mute");
-    const unmute = handlerAccessors(MediaStreamTrack, "_on_unmute");
-    const ended = handlerAccessors(MediaStreamTrack, "_on_ended");
-    const capture_handle_change = handlerAccessors(MediaStreamTrack, "_on_capture_handle_change");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(MediaStreamTrack);
 
@@ -742,10 +731,10 @@ pub const MediaStreamTrack = struct {
         pub const label = bridge.accessor(MediaStreamTrack.getLabel, null, .{});
         pub const enabled = bridge.accessor(MediaStreamTrack.getEnabled, MediaStreamTrack.setEnabled, .{});
         pub const muted = bridge.accessor(MediaStreamTrack.getMuted, null, .{});
-        pub const onmute = bridge.accessor(MediaStreamTrack.mute.get, MediaStreamTrack.mute.set, .{});
-        pub const onunmute = bridge.accessor(MediaStreamTrack.unmute.get, MediaStreamTrack.unmute.set, .{});
+        pub const onmute = bridge.accessor(handlerProperty(MediaStreamTrack, .onmute).get, handlerProperty(MediaStreamTrack, .onmute).set, .{});
+        pub const onunmute = bridge.accessor(handlerProperty(MediaStreamTrack, .onunmute).get, handlerProperty(MediaStreamTrack, .onunmute).set, .{});
         pub const readyState = bridge.accessor(MediaStreamTrack.getReadyState, null, .{});
-        pub const onended = bridge.accessor(MediaStreamTrack.ended.get, MediaStreamTrack.ended.set, .{});
+        pub const onended = bridge.accessor(handlerProperty(MediaStreamTrack, .onended).get, handlerProperty(MediaStreamTrack, .onended).set, .{});
         pub const stats = bridge.accessor(MediaStreamTrack.getStats, null, .{ .null_as_undefined = false });
         pub const contentHint = bridge.accessor(MediaStreamTrack.getContentHint, MediaStreamTrack.setContentHint, .{});
         pub const applyConstraints = bridge.function(MediaStreamTrack.applyConstraints, .{ .arity = 0 });
@@ -754,7 +743,7 @@ pub const MediaStreamTrack = struct {
         pub const getConstraints = bridge.function(MediaStreamTrack.getConstraints, .{ .arity = 0 });
         pub const getSettings = bridge.function(MediaStreamTrack.getSettings, .{ .arity = 0 });
         pub const stop = bridge.function(MediaStreamTrack.stop, .{ .arity = 0 });
-        pub const oncapturehandlechange = bridge.accessor(MediaStreamTrack.capture_handle_change.get, MediaStreamTrack.capture_handle_change.set, .{});
+        pub const oncapturehandlechange = bridge.accessor(handlerProperty(MediaStreamTrack, .oncapturehandlechange).get, handlerProperty(MediaStreamTrack, .oncapturehandlechange).set, .{});
         pub const getCaptureHandle = bridge.function(MediaStreamTrack.getCaptureHandle, .{ .arity = 0, .null_as_undefined = false });
     };
 };

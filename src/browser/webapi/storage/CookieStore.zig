@@ -26,6 +26,17 @@ const Notification = @import("../../../Notification.zig");
 const Cookie = @import("Cookie.zig");
 const EventTarget = @import("../EventTarget.zig");
 const CookieChangeEvent = @import("../event/CookieChangeEvent.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+/// As `handlerProperty` elsewhere, but `cookieStore.onchange` takes a
+/// non-callable and stores null rather than refusing it.
+fn handlerPropertyLenient(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.lenientAccessors(T, which);
+}
 
 const Execution = js.Execution;
 const String = lp.String;
@@ -36,7 +47,6 @@ const CookieStore = @This();
 pub const Proto = EventTarget;
 
 _proto: *EventTarget,
-_on_change: ?js.Function.Global = null,
 _exec: ?*Execution = null,
 
 pub fn asEventTarget(self: *CookieStore) *EventTarget {
@@ -91,7 +101,7 @@ fn onCookieChanged(ctx: *anyopaque, data: *const Notification.CookieChanged) !vo
     // Rechecked in ChangeCallback.run, but between now and then, a listener
     // could be added which should NOT get this event (because it wasn't addded
     // at this point).
-    if (!exec.hasDirectListeners(self.asEventTarget(), "change", self._on_change)) {
+    if (!exec.hasDirectListeners(self.asEventTarget(), "change", null)) {
         return;
     }
 
@@ -158,7 +168,7 @@ const ChangeCallback = struct {
         const target = cs.asEventTarget();
 
         // Skip event construction when nobody is listening.
-        if (!exec.hasDirectListeners(target, "change", cs._on_change)) {
+        if (!exec.hasDirectListeners(target, "change", null)) {
             return null;
         }
 
@@ -173,32 +183,12 @@ const ChangeCallback = struct {
             .same_site = self.same_site,
         }, exec);
 
-        try exec.dispatch(target, event.asEvent(), cs._on_change, .{
+        try exec.dispatch(target, event.asEvent(), null, .{
             .context = "CookieStore.change",
         });
 
         return null;
     }
-};
-
-pub fn getOnChange(self: *const CookieStore) ?js.Function.Global {
-    return self._on_change;
-}
-
-pub fn setOnChange(self: *CookieStore, setter: ?FunctionSetter) void {
-    const s = setter orelse {
-        self._on_change = null;
-        return;
-    };
-    self._on_change = switch (s) {
-        .func => |f| f,
-        .anything => null,
-    };
-}
-
-const FunctionSetter = union(enum) {
-    func: js.Function.Global,
-    anything: js.Value,
 };
 
 // https://developer.mozilla.org/en-US/docs/Web/API/CookieStore/get
@@ -586,7 +576,7 @@ pub const JsApi = struct {
     pub const getAll = bridge.function(CookieStore.getAll, .{});
     pub const set = bridge.function(CookieStore.set, .{});
     pub const delete = bridge.function(CookieStore.delete, .{});
-    pub const onchange = bridge.accessor(CookieStore.getOnChange, CookieStore.setOnChange, .{});
+    pub const onchange = bridge.accessor(handlerPropertyLenient(CookieStore, .onchange).get, handlerPropertyLenient(CookieStore, .onchange).set, .{});
 };
 
 // CookieListItem is an plain JavaScript object, not an interface. The bridge

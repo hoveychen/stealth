@@ -29,6 +29,15 @@ const js = @import("../js/js.zig");
 
 const Screen = @import("Screen.zig");
 const EventTarget = @import("EventTarget.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 pub fn registerTypes() []const type {
     return &.{
@@ -41,8 +50,6 @@ pub const ScreenDetails = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_screens_change: ?js.Function.Global = null,
-    _on_current_screen_change: ?js.Function.Global = null,
 
     pub fn getScreens(_: *const ScreenDetails) []const *ScreenDetailed {
         return &.{};
@@ -52,20 +59,8 @@ pub const ScreenDetails = struct {
         return null;
     }
 
-    pub fn getOnScreensChange(self: *const ScreenDetails) ?js.Function.Global {
-        return self._on_screens_change;
-    }
-
-    pub fn setOnScreensChange(self: *ScreenDetails, listener: ?js.Function) !void {
-        self._on_screens_change = if (listener) |l| try l.persistWithThis(self) else null;
-    }
-
-    pub fn getOnCurrentScreenChange(self: *const ScreenDetails) ?js.Function.Global {
-        return self._on_current_screen_change;
-    }
-
-    pub fn setOnCurrentScreenChange(self: *ScreenDetails, listener: ?js.Function) !void {
-        self._on_current_screen_change = if (listener) |l| try l.persistWithThis(self) else null;
+    pub fn asEventTarget(self: *ScreenDetails) *EventTarget {
+        return self._proto;
     }
 
     pub const JsApi = struct {
@@ -79,8 +74,8 @@ pub const ScreenDetails = struct {
 
         pub const screens = bridge.accessor(ScreenDetails.getScreens, null, .{});
         pub const currentScreen = bridge.accessor(ScreenDetails.getCurrentScreen, null, .{});
-        pub const onscreenschange = bridge.accessor(ScreenDetails.getOnScreensChange, ScreenDetails.setOnScreensChange, .{});
-        pub const oncurrentscreenchange = bridge.accessor(ScreenDetails.getOnCurrentScreenChange, ScreenDetails.setOnCurrentScreenChange, .{});
+        pub const onscreenschange = bridge.accessor(handlerProperty(ScreenDetails, .onscreenschange).get, handlerProperty(ScreenDetails, .onscreenschange).set, .{});
+        pub const oncurrentscreenchange = bridge.accessor(handlerProperty(ScreenDetails, .oncurrentscreenchange).get, handlerProperty(ScreenDetails, .oncurrentscreenchange).set, .{});
     };
 };
 

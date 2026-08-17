@@ -45,6 +45,15 @@ const js = @import("../../js/js.zig");
 const DOMException = @import("../DOMException.zig");
 const EventTarget = @import("../EventTarget.zig");
 const Media = @import("../element/html/Media.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -77,10 +86,6 @@ pub const RemotePlayback = struct {
     /// even though the counter they come from is per-window: cancelling an id
     /// on the RemotePlayback that did not mint it is a NotFoundError (measured).
     _watch_ids: std.ArrayListUnmanaged(u32) = .empty,
-
-    _on_connecting: ?js.Function.Global = null,
-    _on_connect: ?js.Function.Global = null,
-    _on_disconnect: ?js.Function.Global = null,
 
     const WATCH = "Failed to execute 'watchAvailability' on 'RemotePlayback': ";
     const CANCEL = "Failed to execute 'cancelWatchAvailability' on 'RemotePlayback': ";
@@ -181,10 +186,6 @@ pub const RemotePlayback = struct {
         };
     }
 
-    const connecting = handlerAccessors("_on_connecting");
-    const connect = handlerAccessors("_on_connect");
-    const disconnect = handlerAccessors("_on_disconnect");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(RemotePlayback);
 
@@ -197,9 +198,9 @@ pub const RemotePlayback = struct {
         // Chrome's prototype order: the three handlers sit between `state` and
         // the methods, and the methods are alphabetical after that.
         pub const state = bridge.accessor(RemotePlayback.getState, null, .{});
-        pub const onconnecting = bridge.accessor(RemotePlayback.connecting.get, RemotePlayback.connecting.set, .{});
-        pub const onconnect = bridge.accessor(RemotePlayback.connect.get, RemotePlayback.connect.set, .{});
-        pub const ondisconnect = bridge.accessor(RemotePlayback.disconnect.get, RemotePlayback.disconnect.set, .{});
+        pub const onconnecting = bridge.accessor(handlerProperty(RemotePlayback, .onconnecting).get, handlerProperty(RemotePlayback, .onconnecting).set, .{});
+        pub const onconnect = bridge.accessor(handlerProperty(RemotePlayback, .onconnect).get, handlerProperty(RemotePlayback, .onconnect).set, .{});
+        pub const ondisconnect = bridge.accessor(handlerProperty(RemotePlayback, .ondisconnect).get, handlerProperty(RemotePlayback, .ondisconnect).set, .{});
         pub const cancelWatchAvailability = bridge.function(RemotePlayback.cancelWatchAvailability, .{ .arity = 0 });
         pub const prompt = bridge.function(RemotePlayback.prompt, .{ .arity = 0 });
         pub const watchAvailability = bridge.function(RemotePlayback.watchAvailability, .{ .arity = 1 });

@@ -54,6 +54,15 @@ const Page = @import("../../Page.zig");
 const Frame = @import("../../Frame.zig");
 const TimeRanges = @import("TimeRanges.zig");
 const mime = @import("mime.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -93,9 +102,6 @@ _proto: *EventTarget,
 // true on Chrome, and the two lists are distinct objects (measured).
 _source_buffers: ?*SourceBufferList = null,
 _active_source_buffers: ?*SourceBufferList = null,
-_on_sourceopen: ?js.Function.Global = null,
-_on_sourceended: ?js.Function.Global = null,
-_on_sourceclose: ?js.Function.Global = null,
 
 pub fn constructor(exec: *Execution) !*MediaSource {
     return exec._factory.eventTarget(MediaSource{ ._proto = undefined });
@@ -223,30 +229,6 @@ pub fn canConstructInDedicatedWorker() bool {
     return true;
 }
 
-pub fn getOnSourceOpen(self: *const MediaSource) ?js.Function.Global {
-    return self._on_sourceopen;
-}
-
-pub fn setOnSourceOpen(self: *MediaSource, cb: ?js.Function) !void {
-    self._on_sourceopen = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
-pub fn getOnSourceEnded(self: *const MediaSource) ?js.Function.Global {
-    return self._on_sourceended;
-}
-
-pub fn setOnSourceEnded(self: *MediaSource, cb: ?js.Function) !void {
-    self._on_sourceended = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
-pub fn getOnSourceClose(self: *const MediaSource) ?js.Function.Global {
-    return self._on_sourceclose;
-}
-
-pub fn setOnSourceClose(self: *MediaSource, cb: ?js.Function) !void {
-    self._on_sourceclose = if (cb) |c| try c.persistWithThis(self) else null;
-}
-
 pub const JsApi = struct {
     pub const bridge = js.Bridge(MediaSource);
 
@@ -266,9 +248,9 @@ pub const JsApi = struct {
     pub const sourceBuffers = bridge.accessor(MediaSource.getSourceBuffers, null, .{});
     pub const activeSourceBuffers = bridge.accessor(MediaSource.getActiveSourceBuffers, null, .{});
     pub const duration = bridge.accessor(MediaSource.getDuration, MediaSource.setDuration, .{});
-    pub const onsourceopen = bridge.accessor(MediaSource.getOnSourceOpen, MediaSource.setOnSourceOpen, .{});
-    pub const onsourceended = bridge.accessor(MediaSource.getOnSourceEnded, MediaSource.setOnSourceEnded, .{});
-    pub const onsourceclose = bridge.accessor(MediaSource.getOnSourceClose, MediaSource.setOnSourceClose, .{});
+    pub const onsourceopen = bridge.accessor(handlerProperty(MediaSource, .onsourceopen).get, handlerProperty(MediaSource, .onsourceopen).set, .{});
+    pub const onsourceended = bridge.accessor(handlerProperty(MediaSource, .onsourceended).get, handlerProperty(MediaSource, .onsourceended).set, .{});
+    pub const onsourceclose = bridge.accessor(handlerProperty(MediaSource, .onsourceclose).get, handlerProperty(MediaSource, .onsourceclose).set, .{});
     pub const readyState = bridge.accessor(MediaSource.getReadyState, null, .{});
     pub const addSourceBuffer = bridge.function(MediaSource.addSourceBuffer, .{ .arity = 1 });
     pub const clearLiveSeekableRange = bridge.function(MediaSource.clearLiveSeekableRange, .{});
@@ -290,11 +272,6 @@ pub const SourceBuffer = struct {
     _timestamp_offset: f64 = 0,
     _append_window_start: f64 = 0,
     _append_window_end: f64 = std.math.inf(f64),
-    _on_updatestart: ?js.Function.Global = null,
-    _on_update: ?js.Function.Global = null,
-    _on_updateend: ?js.Function.Global = null,
-    _on_error: ?js.Function.Global = null,
-    _on_abort: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *SourceBuffer) *EventTarget {
         return self._proto;
@@ -396,11 +373,11 @@ pub const SourceBuffer = struct {
         pub const timestampOffset = bridge.accessor(SourceBuffer.getTimestampOffset, SourceBuffer.setTimestampOffset, .{});
         pub const appendWindowStart = bridge.accessor(SourceBuffer.getAppendWindowStart, SourceBuffer.setAppendWindowStart, .{});
         pub const appendWindowEnd = bridge.accessor(SourceBuffer.getAppendWindowEnd, SourceBuffer.setAppendWindowEnd, .{});
-        pub const onupdatestart = bridge.accessor(handler("_on_updatestart").get, handler("_on_updatestart").set, .{});
-        pub const onupdate = bridge.accessor(handler("_on_update").get, handler("_on_update").set, .{});
-        pub const onupdateend = bridge.accessor(handler("_on_updateend").get, handler("_on_updateend").set, .{});
-        pub const onerror = bridge.accessor(handler("_on_error").get, handler("_on_error").set, .{});
-        pub const onabort = bridge.accessor(handler("_on_abort").get, handler("_on_abort").set, .{});
+        pub const onupdatestart = bridge.accessor(handlerProperty(SourceBuffer, .onupdatestart).get, handlerProperty(SourceBuffer, .onupdatestart).set, .{});
+        pub const onupdate = bridge.accessor(handlerProperty(SourceBuffer, .onupdate).get, handlerProperty(SourceBuffer, .onupdate).set, .{});
+        pub const onupdateend = bridge.accessor(handlerProperty(SourceBuffer, .onupdateend).get, handlerProperty(SourceBuffer, .onupdateend).set, .{});
+        pub const onerror = bridge.accessor(handlerProperty(SourceBuffer, .onerror).get, handlerProperty(SourceBuffer, .onerror).set, .{});
+        pub const onabort = bridge.accessor(handlerProperty(SourceBuffer, .onabort).get, handlerProperty(SourceBuffer, .onabort).set, .{});
         pub const abort = bridge.function(SourceBuffer.abort, .{});
         pub const appendBuffer = bridge.function(SourceBuffer.appendBuffer, .{ .arity = 1 });
         pub const changeType = bridge.function(SourceBuffer.changeType, .{ .arity = 1 });
@@ -417,8 +394,6 @@ pub const SourceBufferList = struct {
 
     _proto: *EventTarget,
     _items: []const *SourceBuffer = &.{},
-    _on_add_source_buffer: ?js.Function.Global = null,
-    _on_remove_source_buffer: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *SourceBufferList) *EventTarget {
         return self._proto;
@@ -472,8 +447,8 @@ pub const SourceBufferList = struct {
 
         pub const length = bridge.accessor(SourceBufferList.getLength, null, .{});
         pub const @"[]" = bridge.indexed(SourceBufferList.indexedGet, getIndexes, .{ .null_as_undefined = true });
-        pub const onaddsourcebuffer = bridge.accessor(handler("_on_add_source_buffer").get, handler("_on_add_source_buffer").set, .{});
-        pub const onremovesourcebuffer = bridge.accessor(handler("_on_remove_source_buffer").get, handler("_on_remove_source_buffer").set, .{});
+        pub const onaddsourcebuffer = bridge.accessor(handlerProperty(SourceBufferList, .onaddsourcebuffer).get, handlerProperty(SourceBufferList, .onaddsourcebuffer).set, .{});
+        pub const onremovesourcebuffer = bridge.accessor(handlerProperty(SourceBufferList, .onremovesourcebuffer).get, handlerProperty(SourceBufferList, .onremovesourcebuffer).set, .{});
         pub const symbol_iterator = bridge.iterator(SourceBufferList.values, .{});
     };
 };

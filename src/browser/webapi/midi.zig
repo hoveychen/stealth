@@ -41,6 +41,15 @@ const js = @import("../js/js.zig");
 const Event = @import("Event.zig");
 const Frame = @import("../Frame.zig");
 const EventTarget = @import("EventTarget.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const log = lp.log;
 const String = lp.String;
@@ -79,7 +88,6 @@ pub const MIDIAccess = struct {
     _proto: *EventTarget,
     _inputs: MIDIInputMap = .{},
     _outputs: MIDIOutputMap = .{},
-    _on_state_change: ?js.Function.Global = null,
 
     pub fn getInputs(self: *MIDIAccess) *MIDIInputMap {
         return &self._inputs;
@@ -93,12 +101,8 @@ pub const MIDIAccess = struct {
         return false;
     }
 
-    pub fn getOnStateChange(self: *const MIDIAccess) ?js.Function.Global {
-        return self._on_state_change;
-    }
-
-    pub fn setOnStateChange(self: *MIDIAccess, callback: ?js.Function.Global) void {
-        self._on_state_change = callback;
+    pub fn asEventTarget(self: *MIDIAccess) *EventTarget {
+        return self._proto;
     }
 
     pub const JsApi = struct {
@@ -116,7 +120,7 @@ pub const MIDIAccess = struct {
         pub const inputs = bridge.accessor(MIDIAccess.getInputs, null, .{});
         pub const outputs = bridge.accessor(MIDIAccess.getOutputs, null, .{});
         pub const sysexEnabled = bridge.accessor(MIDIAccess.getSysexEnabled, null, .{});
-        pub const onstatechange = bridge.accessor(MIDIAccess.getOnStateChange, MIDIAccess.setOnStateChange, .{});
+        pub const onstatechange = bridge.accessor(handlerProperty(MIDIAccess, .onstatechange).get, handlerProperty(MIDIAccess, .onstatechange).set, .{});
     };
 };
 
@@ -133,7 +137,6 @@ pub const MIDIPort = struct {
     _type: []const u8 = "input",
     _state: []const u8 = "disconnected",
     _connection: []const u8 = "closed",
-    _on_state_change: ?js.Function.Global = null,
 
     pub fn getConnection(self: *const MIDIPort) []const u8 {
         return self._connection;
@@ -163,14 +166,6 @@ pub const MIDIPort = struct {
         return self._version;
     }
 
-    pub fn getOnStateChange(self: *const MIDIPort) ?js.Function.Global {
-        return self._on_state_change;
-    }
-
-    pub fn setOnStateChange(self: *MIDIPort, callback: ?js.Function.Global) void {
-        self._on_state_change = callback;
-    }
-
     // A port that does not exist cannot be opened or closed, and there is no
     // device to wait on, so both settle at once with the port itself.
     pub fn close(self: *MIDIPort, exec: *const Execution) !js.Promise {
@@ -179,6 +174,10 @@ pub const MIDIPort = struct {
 
     pub fn open(self: *MIDIPort, exec: *const Execution) !js.Promise {
         return exec.js.local.?.resolvePromise(self);
+    }
+
+    pub fn asEventTarget(self: *MIDIPort) *EventTarget {
+        return self._proto;
     }
 
     pub const JsApi = struct {
@@ -199,7 +198,7 @@ pub const MIDIPort = struct {
         pub const state = bridge.accessor(MIDIPort.getState, null, .{});
         pub const @"type" = bridge.accessor(MIDIPort.getType, null, .{});
         pub const version = bridge.accessor(MIDIPort.getVersion, null, .{});
-        pub const onstatechange = bridge.accessor(MIDIPort.getOnStateChange, MIDIPort.setOnStateChange, .{});
+        pub const onstatechange = bridge.accessor(handlerProperty(MIDIPort, .onstatechange).get, handlerProperty(MIDIPort, .onstatechange).set, .{});
         pub const close = bridge.function(MIDIPort.close, .{});
         pub const open = bridge.function(MIDIPort.open, .{});
     };
@@ -209,14 +208,9 @@ pub const MIDIInput = struct {
     pub const Proto = MIDIPort;
 
     _proto: *MIDIPort,
-    _on_midi_message: ?js.Function.Global = null,
 
-    pub fn getOnMidiMessage(self: *const MIDIInput) ?js.Function.Global {
-        return self._on_midi_message;
-    }
-
-    pub fn setOnMidiMessage(self: *MIDIInput, callback: ?js.Function.Global) void {
-        self._on_midi_message = callback;
+    pub fn asEventTarget(self: *MIDIInput) *EventTarget {
+        return self._proto.asEventTarget();
     }
 
     pub const JsApi = struct {
@@ -230,7 +224,7 @@ pub const MIDIInput = struct {
 
         pub const Prototype = MIDIPort;
 
-        pub const onmidimessage = bridge.accessor(MIDIInput.getOnMidiMessage, MIDIInput.setOnMidiMessage, .{});
+        pub const onmidimessage = bridge.accessor(handlerProperty(MIDIInput, .onmidimessage).get, handlerProperty(MIDIInput, .onmidimessage).set, .{});
     };
 };
 

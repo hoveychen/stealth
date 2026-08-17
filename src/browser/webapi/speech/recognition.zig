@@ -54,6 +54,21 @@ const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const DOMException = @import("../DOMException.zig");
 const dictionary = @import("../dictionary.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
+
+/// As `handlerProperty`, for the properties whose setter takes a non-callable
+/// and stores null rather than refusing it.
+fn handlerPropertyLenient(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.lenientAccessors(T, which);
+}
 
 const Execution = js.Execution;
 const String = lp.String;
@@ -520,18 +535,6 @@ pub const SpeechRecognition = struct {
     _started: bool = false,
     _run: u32 = 0,
 
-    _on_audio_start: ?js.Function.Global = null,
-    _on_sound_start: ?js.Function.Global = null,
-    _on_speech_start: ?js.Function.Global = null,
-    _on_speech_end: ?js.Function.Global = null,
-    _on_sound_end: ?js.Function.Global = null,
-    _on_audio_end: ?js.Function.Global = null,
-    _on_result: ?js.Function.Global = null,
-    _on_no_match: ?js.Function.Global = null,
-    _on_error: ?js.Function.Global = null,
-    _on_start: ?js.Function.Global = null,
-    _on_end: ?js.Function.Global = null,
-
     pub fn constructor(exec: *Execution) !*SpeechRecognition {
         const grammars = try exec._factory.create(SpeechGrammarList{});
         return exec._factory.eventTarget(SpeechRecognition{
@@ -711,7 +714,7 @@ pub const SpeechRecognition = struct {
 
     fn dispatchEnd(self: *SpeechRecognition, exec: *Execution) !void {
         const event = try Event.initTrusted(comptime String.wrap("end"), .{}, exec.page);
-        return exec.dispatch(self.asEventTarget(), event, self._on_end, .{ .context = "SpeechRecognition.end" });
+        return exec.dispatch(self.asEventTarget(), event, null, .{ .context = "SpeechRecognition.end" });
     }
 
     /// The permission check landing. It is skipped when the run it belongs to
@@ -742,7 +745,7 @@ pub const SpeechRecognition = struct {
             try exec.dispatch(
                 recognition.asEventTarget(),
                 error_event.asEvent(),
-                recognition._on_error,
+                null,
                 .{ .context = "SpeechRecognition.error" },
             );
             try recognition.dispatchEnd(exec);
@@ -767,113 +770,6 @@ pub const SpeechRecognition = struct {
         }
     };
 
-    /// An IDL `EventHandler` takes anything: a non-callable is stored as null
-    /// rather than refused (measured -- `rec.onend = 5` reads back null on
-    /// Chrome). The union is the same shape Window.zig uses for its own
-    /// handlers; the bespoke `?js.Function` accessors elsewhere in this engine
-    /// throw "invalid argument" instead, which is a louder difference than any
-    /// shape mismatch.
-    const HandlerSetter = union(enum) {
-        func: js.Function,
-        anything: js.Value,
-    };
-
-    fn persist(self: *SpeechRecognition, setter_: ?HandlerSetter) !?js.Function.Global {
-        const setter = setter_ orelse return null;
-        return switch (setter) {
-            .func => |listener| try listener.persistWithThis(self),
-            .anything => null,
-        };
-    }
-
-    pub fn getOnAudioStart(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_audio_start;
-    }
-
-    pub fn setOnAudioStart(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_audio_start = try persist(self, cb);
-    }
-
-    pub fn getOnSoundStart(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_sound_start;
-    }
-
-    pub fn setOnSoundStart(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_sound_start = try persist(self, cb);
-    }
-
-    pub fn getOnSpeechStart(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_speech_start;
-    }
-
-    pub fn setOnSpeechStart(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_speech_start = try persist(self, cb);
-    }
-
-    pub fn getOnSpeechEnd(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_speech_end;
-    }
-
-    pub fn setOnSpeechEnd(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_speech_end = try persist(self, cb);
-    }
-
-    pub fn getOnSoundEnd(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_sound_end;
-    }
-
-    pub fn setOnSoundEnd(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_sound_end = try persist(self, cb);
-    }
-
-    pub fn getOnAudioEnd(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_audio_end;
-    }
-
-    pub fn setOnAudioEnd(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_audio_end = try persist(self, cb);
-    }
-
-    pub fn getOnResult(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_result;
-    }
-
-    pub fn setOnResult(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_result = try persist(self, cb);
-    }
-
-    pub fn getOnNoMatch(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_no_match;
-    }
-
-    pub fn setOnNoMatch(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_no_match = try persist(self, cb);
-    }
-
-    pub fn getOnError(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_error;
-    }
-
-    pub fn setOnError(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_error = try persist(self, cb);
-    }
-
-    pub fn getOnStart(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_start;
-    }
-
-    pub fn setOnStart(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_start = try persist(self, cb);
-    }
-
-    pub fn getOnEnd(self: *const SpeechRecognition) ?js.Function.Global {
-        return self._on_end;
-    }
-
-    pub fn setOnEnd(self: *SpeechRecognition, cb: ?HandlerSetter) !void {
-        self._on_end = try persist(self, cb);
-    }
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(SpeechRecognition);
 
@@ -892,17 +788,17 @@ pub const SpeechRecognition = struct {
         pub const continuous = bridge.accessor(SpeechRecognition.getContinuous, SpeechRecognition.setContinuous, .{});
         pub const interimResults = bridge.accessor(SpeechRecognition.getInterimResults, SpeechRecognition.setInterimResults, .{});
         pub const maxAlternatives = bridge.accessor(SpeechRecognition.getMaxAlternatives, SpeechRecognition.setMaxAlternatives, .{});
-        pub const onaudiostart = bridge.accessor(SpeechRecognition.getOnAudioStart, SpeechRecognition.setOnAudioStart, .{});
-        pub const onsoundstart = bridge.accessor(SpeechRecognition.getOnSoundStart, SpeechRecognition.setOnSoundStart, .{});
-        pub const onspeechstart = bridge.accessor(SpeechRecognition.getOnSpeechStart, SpeechRecognition.setOnSpeechStart, .{});
-        pub const onspeechend = bridge.accessor(SpeechRecognition.getOnSpeechEnd, SpeechRecognition.setOnSpeechEnd, .{});
-        pub const onsoundend = bridge.accessor(SpeechRecognition.getOnSoundEnd, SpeechRecognition.setOnSoundEnd, .{});
-        pub const onaudioend = bridge.accessor(SpeechRecognition.getOnAudioEnd, SpeechRecognition.setOnAudioEnd, .{});
-        pub const onresult = bridge.accessor(SpeechRecognition.getOnResult, SpeechRecognition.setOnResult, .{});
-        pub const onnomatch = bridge.accessor(SpeechRecognition.getOnNoMatch, SpeechRecognition.setOnNoMatch, .{});
-        pub const onerror = bridge.accessor(SpeechRecognition.getOnError, SpeechRecognition.setOnError, .{});
-        pub const onstart = bridge.accessor(SpeechRecognition.getOnStart, SpeechRecognition.setOnStart, .{});
-        pub const onend = bridge.accessor(SpeechRecognition.getOnEnd, SpeechRecognition.setOnEnd, .{});
+        pub const onaudiostart = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onaudiostart).get, handlerPropertyLenient(SpeechRecognition, .onaudiostart).set, .{});
+        pub const onsoundstart = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onsoundstart).get, handlerPropertyLenient(SpeechRecognition, .onsoundstart).set, .{});
+        pub const onspeechstart = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onspeechstart).get, handlerPropertyLenient(SpeechRecognition, .onspeechstart).set, .{});
+        pub const onspeechend = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onspeechend).get, handlerPropertyLenient(SpeechRecognition, .onspeechend).set, .{});
+        pub const onsoundend = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onsoundend).get, handlerPropertyLenient(SpeechRecognition, .onsoundend).set, .{});
+        pub const onaudioend = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onaudioend).get, handlerPropertyLenient(SpeechRecognition, .onaudioend).set, .{});
+        pub const onresult = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onresult).get, handlerPropertyLenient(SpeechRecognition, .onresult).set, .{});
+        pub const onnomatch = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onnomatch).get, handlerPropertyLenient(SpeechRecognition, .onnomatch).set, .{});
+        pub const onerror = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onerror).get, handlerPropertyLenient(SpeechRecognition, .onerror).set, .{});
+        pub const onstart = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onstart).get, handlerPropertyLenient(SpeechRecognition, .onstart).set, .{});
+        pub const onend = bridge.accessor(handlerPropertyLenient(SpeechRecognition, .onend).get, handlerPropertyLenient(SpeechRecognition, .onend).set, .{});
         pub const abort = bridge.function(SpeechRecognition.abort, .{});
         pub const start = bridge.function(SpeechRecognition.start, .{});
         pub const stop = bridge.function(SpeechRecognition.stop, .{});

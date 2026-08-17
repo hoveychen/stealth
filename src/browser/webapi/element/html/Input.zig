@@ -33,6 +33,15 @@ const ValidityState = @import("ValidityState.zig");
 const popover = @import("../popover.zig");
 const File = @import("../../File.zig");
 const FileList = @import("../../FileList.zig");
+const handler_property = @import("../../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const String = lp.String;
 
@@ -97,20 +106,6 @@ _selection_start: u32 = 0,
 _selection_end: u32 = 0,
 _selection_direction: Selection.SelectionDirection = .none,
 
-_on_selectionchange: ?js.Function.Global = null,
-
-pub fn getOnSelectionChange(self: *Input) ?js.Function.Global {
-    return self._on_selectionchange;
-}
-
-pub fn setOnSelectionChange(self: *Input, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_selectionchange = try listen.persistWithThis(self);
-    } else {
-        self._on_selectionchange = null;
-    }
-}
-
 fn dispatchSelectionChangeEvent(self: *Input, frame: *Frame) !void {
     const event = try Event.init("selectionchange", .{ .bubbles = true }, frame._page);
     try frame._event_manager.dispatch(self.asElement().asEventTarget(), event);
@@ -119,6 +114,10 @@ fn dispatchSelectionChangeEvent(self: *Input, frame: *Frame) !void {
 fn dispatchInputEvent(self: *Input, data: ?[]const u8, input_type: []const u8, frame: *Frame) !void {
     const event = try InputEvent.initTrusted(comptime .wrap("input"), .{ .data = data, .inputType = input_type }, frame);
     try frame._event_manager.dispatch(self.asElement().asEventTarget(), event.asEvent());
+}
+
+pub fn asEventTarget(self: *Input) *EventTarget {
+    return self.asElement().asEventTarget();
 }
 
 pub fn asElement(self: *Input) *Element {
@@ -1384,7 +1383,7 @@ pub const JsApi = struct {
         return self.setValue(try js_value.toZig([]const u8), frame);
     }
 
-    pub const onselectionchange = bridge.accessor(Input.getOnSelectionChange, Input.setOnSelectionChange, .{});
+    pub const onselectionchange = bridge.accessor(handlerProperty(Input, .onselectionchange).get, handlerProperty(Input, .onselectionchange).set, .{});
     pub const @"type" = bridge.accessor(Input.getType, Input.setType, .{ .ce_reactions = true });
     pub const value = bridge.accessor(Input.getValueForJS, setValueFromJS, .{ .ce_reactions = true });
     pub const files = bridge.accessor(Input.getFiles, null, .{});
@@ -1524,6 +1523,7 @@ pub const Build = struct {
 };
 
 const testing = @import("../../../../testing.zig");
+const EventTarget = @import("../../EventTarget.zig");
 test "WebApi: HTML.Input" {
     try testing.htmlRunner("element/html/input.html", .{});
     try testing.htmlRunner("element/html/input_click.html", .{});

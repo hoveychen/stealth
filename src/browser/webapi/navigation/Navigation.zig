@@ -41,9 +41,17 @@ const NavigationState = @import("root.zig").NavigationState;
 
 const NavigationHistoryEntry = @import("NavigationHistoryEntry.zig");
 const NavigationCurrentEntryChangeEvent = @import("../event/NavigationCurrentEntryChangeEvent.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 _proto: *EventTarget,
-_on_currententrychange: ?js.Function.Global = null,
 
 _current_navigation_kind: ?NavigationKind = null,
 
@@ -53,19 +61,14 @@ _entries: std.ArrayList(*NavigationHistoryEntry) = .empty,
 _next_entry_id: usize = 0,
 _activation: ?NavigationActivation = null,
 
-fn asEventTarget(self: *Navigation) *EventTarget {
+pub fn asEventTarget(self: *Navigation) *EventTarget {
     return self._proto;
 }
 
-pub fn onRemoveFrame(self: *Navigation) void {
-    if (self._on_currententrychange) |cb| cb.release();
-    self._on_currententrychange = null;
-
-    for (self._entries.items) |entry| {
-        if (entry._on_dispose) |cb| cb.release();
-        entry._on_dispose = null;
-    }
-}
+// The `currententrychange` and `dispose` handlers live in the event manager's
+// handler store, which the frame's arena owns, so tearing the frame down needs
+// nothing from here.
+pub fn onRemoveFrame(_: *Navigation) void {}
 
 pub fn getActivation(self: *const Navigation) ?NavigationActivation {
     return self._activation;
@@ -233,13 +236,13 @@ pub fn pushEntry(
     self._index = index;
 
     if (previous != null and should_dispatch) {
-        if (self._on_currententrychange) |cec| {
+        if (frame.hasDirectListeners(self.asEventTarget(), "currententrychange", null)) {
             const event = (try NavigationCurrentEntryChangeEvent.initTrusted(
                 .wrap("currententrychange"),
                 .{ .from = previous.?, .navigationType = @tagName(.push) },
                 frame,
             )).asEvent();
-            try self.dispatch(cec, event, frame);
+            try self.dispatch(event, frame);
         }
     }
 
@@ -284,13 +287,13 @@ pub fn replaceEntry(
     };
 
     if (should_dispatch) {
-        if (self._on_currententrychange) |cec| {
+        if (frame.hasDirectListeners(self.asEventTarget(), "currententrychange", null)) {
             const event = (try NavigationCurrentEntryChangeEvent.initTrusted(
                 .wrap("currententrychange"),
                 .{ .from = previous, .navigationType = @tagName(.replace) },
                 frame,
             )).asEvent();
-            try self.dispatch(cec, event, frame);
+            try self.dispatch(event, frame);
         }
     }
 
@@ -385,14 +388,14 @@ pub fn navigateInner(
         try frame.queueHashChange(old_url, new_url);
     }
 
-    if (self._on_currententrychange) |cec| {
+    if (frame.hasDirectListeners(self.asEventTarget(), "currententrychange", null)) {
         // If we haven't navigated off, let us fire off an a currententrychange.
         const event = (try NavigationCurrentEntryChangeEvent.initTrusted(
             .wrap("currententrychange"),
             .{ .from = previous, .navigationType = @tagName(kind) },
             frame,
         )).asEvent();
-        try self.dispatch(cec, event, frame);
+        try self.dispatch(event, frame);
     }
 
     _ = try committed.persist();
@@ -472,36 +475,18 @@ pub fn updateCurrentEntry(self: *Navigation, options: UpdateCurrentEntryOptions,
         .value = options.state.toJson(arena.allocator()) catch return error.DataClone,
     };
 
-    if (self._on_currententrychange) |cec| {
+    if (frame.hasDirectListeners(self.asEventTarget(), "currententrychange", null)) {
         const event = (try NavigationCurrentEntryChangeEvent.initTrusted(
             .wrap("currententrychange"),
             .{ .from = previous, .navigationType = null },
             frame,
         )).asEvent();
-        try self.dispatch(cec, event, frame);
+        try self.dispatch(event, frame);
     }
 }
 
-pub fn dispatch(self: *Navigation, func: js.Function.Global, event: *Event, frame: *Frame) !void {
-    return frame._event_manager.dispatchDirect(
-        self.asEventTarget(),
-        event,
-        func,
-        .{ .context = "Navigation" },
-    );
-}
-
-fn getOnCurrentEntryChange(self: *Navigation) ?js.Function.Global {
-    return self._on_currententrychange;
-}
-
-pub fn setOnCurrentEntryChange(self: *Navigation, listener: ?js.Function) !void {
-    if (self._on_currententrychange) |old| old.release();
-    if (listener) |listen| {
-        self._on_currententrychange = try listen.persistWithThis(self);
-    } else {
-        self._on_currententrychange = null;
-    }
+pub fn dispatch(self: *Navigation, event: *Event, frame: *Frame) !void {
+    return frame.dispatch(self.asEventTarget(), event, null, .{ .context = "Navigation" });
 }
 
 pub const JsApi = struct {
@@ -525,11 +510,7 @@ pub const JsApi = struct {
     pub const traverseTo = bridge.function(Navigation.traverseTo, .{});
     pub const updateCurrentEntry = bridge.function(Navigation.updateCurrentEntry, .{});
 
-    pub const oncurrententrychange = bridge.accessor(
-        Navigation.getOnCurrentEntryChange,
-        Navigation.setOnCurrentEntryChange,
-        .{},
-    );
+    pub const oncurrententrychange = bridge.accessor(handlerProperty(Navigation, .oncurrententrychange).get, handlerProperty(Navigation, .oncurrententrychange).set, .{});
 };
 
 const testing = @import("../../../testing.zig");

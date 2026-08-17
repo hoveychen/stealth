@@ -58,6 +58,15 @@ const RTCPeerConnectionIceEvent = @import("RTCPeerConnectionIceEvent.zig");
 const RTCSessionDescription = @import("RTCSessionDescription.zig");
 const RTCStatsReport = @import("RTCStatsReport.zig");
 const chrome_sdp = @import("chrome_sdp.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Allocator = std.mem.Allocator;
 const Execution = js.Execution;
@@ -98,18 +107,6 @@ _closed: bool = false,
 
 _local_description: ?*RTCSessionDescription = null,
 _gathering_started: bool = false,
-
-_on_negotiationneeded: ?js.Function.Global = null,
-_on_icecandidate: ?js.Function.Global = null,
-_on_signalingstatechange: ?js.Function.Global = null,
-_on_iceconnectionstatechange: ?js.Function.Global = null,
-_on_connectionstatechange: ?js.Function.Global = null,
-_on_icegatheringstatechange: ?js.Function.Global = null,
-_on_icecandidateerror: ?js.Function.Global = null,
-_on_track: ?js.Function.Global = null,
-_on_datachannel: ?js.Function.Global = null,
-_on_addstream: ?js.Function.Global = null,
-_on_removestream: ?js.Function.Global = null,
 
 const SignalingState = enum {
     stable,
@@ -443,7 +440,7 @@ const GatherTask = struct {
 
 fn dispatchIceCandidate(self: *RTCPeerConnection, candidate: ?*RTCIceCandidate, exec: *Execution) !void {
     const target = self.asEventTarget();
-    if (!exec.hasDirectListeners(target, "icecandidate", self._on_icecandidate)) {
+    if (!exec.hasDirectListeners(target, "icecandidate", null)) {
         return;
     }
     const event = try RTCPeerConnectionIceEvent.initTrusted(
@@ -451,7 +448,7 @@ fn dispatchIceCandidate(self: *RTCPeerConnection, candidate: ?*RTCIceCandidate, 
         .{ .candidate = candidate },
         exec.page,
     );
-    return exec.dispatch(target, event.asEvent(), self._on_icecandidate, .{ .context = "RTCPeerConnection.icecandidate" });
+    return exec.dispatch(target, event.asEvent(), null, .{ .context = "RTCPeerConnection.icecandidate" });
 }
 
 fn setGatheringState(self: *RTCPeerConnection, state: IceGatheringState, exec: *Execution) !void {
@@ -461,11 +458,11 @@ fn setGatheringState(self: *RTCPeerConnection, state: IceGatheringState, exec: *
     self._ice_gathering_state = state;
 
     const target = self.asEventTarget();
-    if (!exec.hasDirectListeners(target, "icegatheringstatechange", self._on_icegatheringstatechange)) {
+    if (!exec.hasDirectListeners(target, "icegatheringstatechange", null)) {
         return;
     }
     const event = try Event.initTrusted(.wrap("icegatheringstatechange"), .{}, exec.page);
-    return exec.dispatch(target, event, self._on_icegatheringstatechange, .{ .context = "RTCPeerConnection.icegatheringstatechange" });
+    return exec.dispatch(target, event, null, .{ .context = "RTCPeerConnection.icegatheringstatechange" });
 }
 
 // == data channels ==
@@ -742,18 +739,18 @@ pub const JsApi = struct {
     pub const iceConnectionState = bridge.accessor(RTCPeerConnection.getIceConnectionState, null, .{});
     pub const connectionState = bridge.accessor(RTCPeerConnection.getConnectionState, null, .{});
     pub const canTrickleIceCandidates = bridge.accessor(RTCPeerConnection.getCanTrickleIceCandidates, null, .{});
-    pub const onnegotiationneeded = bridge.accessor(Handler("_on_negotiationneeded").get, Handler("_on_negotiationneeded").setter, .{});
-    pub const onicecandidate = bridge.accessor(Handler("_on_icecandidate").get, Handler("_on_icecandidate").setter, .{});
-    pub const onsignalingstatechange = bridge.accessor(Handler("_on_signalingstatechange").get, Handler("_on_signalingstatechange").setter, .{});
-    pub const oniceconnectionstatechange = bridge.accessor(Handler("_on_iceconnectionstatechange").get, Handler("_on_iceconnectionstatechange").setter, .{});
-    pub const onconnectionstatechange = bridge.accessor(Handler("_on_connectionstatechange").get, Handler("_on_connectionstatechange").setter, .{});
-    pub const onicegatheringstatechange = bridge.accessor(Handler("_on_icegatheringstatechange").get, Handler("_on_icegatheringstatechange").setter, .{});
-    pub const onicecandidateerror = bridge.accessor(Handler("_on_icecandidateerror").get, Handler("_on_icecandidateerror").setter, .{});
-    pub const ontrack = bridge.accessor(Handler("_on_track").get, Handler("_on_track").setter, .{});
+    pub const onnegotiationneeded = bridge.accessor(handlerProperty(RTCPeerConnection, .onnegotiationneeded).get, handlerProperty(RTCPeerConnection, .onnegotiationneeded).set, .{});
+    pub const onicecandidate = bridge.accessor(handlerProperty(RTCPeerConnection, .onicecandidate).get, handlerProperty(RTCPeerConnection, .onicecandidate).set, .{});
+    pub const onsignalingstatechange = bridge.accessor(handlerProperty(RTCPeerConnection, .onsignalingstatechange).get, handlerProperty(RTCPeerConnection, .onsignalingstatechange).set, .{});
+    pub const oniceconnectionstatechange = bridge.accessor(handlerProperty(RTCPeerConnection, .oniceconnectionstatechange).get, handlerProperty(RTCPeerConnection, .oniceconnectionstatechange).set, .{});
+    pub const onconnectionstatechange = bridge.accessor(handlerProperty(RTCPeerConnection, .onconnectionstatechange).get, handlerProperty(RTCPeerConnection, .onconnectionstatechange).set, .{});
+    pub const onicegatheringstatechange = bridge.accessor(handlerProperty(RTCPeerConnection, .onicegatheringstatechange).get, handlerProperty(RTCPeerConnection, .onicegatheringstatechange).set, .{});
+    pub const onicecandidateerror = bridge.accessor(handlerProperty(RTCPeerConnection, .onicecandidateerror).get, handlerProperty(RTCPeerConnection, .onicecandidateerror).set, .{});
+    pub const ontrack = bridge.accessor(handlerProperty(RTCPeerConnection, .ontrack).get, handlerProperty(RTCPeerConnection, .ontrack).set, .{});
     pub const sctp = bridge.accessor(RTCPeerConnection.getSctp, null, .{});
-    pub const ondatachannel = bridge.accessor(Handler("_on_datachannel").get, Handler("_on_datachannel").setter, .{});
-    pub const onaddstream = bridge.accessor(Handler("_on_addstream").get, Handler("_on_addstream").setter, .{});
-    pub const onremovestream = bridge.accessor(Handler("_on_removestream").get, Handler("_on_removestream").setter, .{});
+    pub const ondatachannel = bridge.accessor(handlerProperty(RTCPeerConnection, .ondatachannel).get, handlerProperty(RTCPeerConnection, .ondatachannel).set, .{});
+    pub const onaddstream = bridge.accessor(handlerProperty(RTCPeerConnection, .onaddstream).get, handlerProperty(RTCPeerConnection, .onaddstream).set, .{});
+    pub const onremovestream = bridge.accessor(handlerProperty(RTCPeerConnection, .onremovestream).get, handlerProperty(RTCPeerConnection, .onremovestream).set, .{});
     pub const addIceCandidate = bridge.function(RTCPeerConnection.addIceCandidate, .{});
     pub const addStream = bridge.function(RTCPeerConnection.addStream, .{});
     pub const addTrack = bridge.function(RTCPeerConnection.addTrack, .{});

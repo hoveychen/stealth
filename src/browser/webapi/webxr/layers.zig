@@ -45,6 +45,15 @@ const EventTarget = @import("../EventTarget.zig");
 const WebGLRenderingContext = @import("../canvas/WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("../canvas/WebGL2RenderingContext.zig");
 const WebGLTexture = @import("../canvas/webgl_objects.zig").WebGLTexture;
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const XRRigidTransform = geometry.XRRigidTransform;
 const XRViewport = geometry.XRViewport;
@@ -327,6 +336,10 @@ pub const XRCompositionLayer = struct {
         self._needs_redraw = false;
     }
 
+    pub fn asEventTarget(self: *XRCompositionLayer) *EventTarget {
+        return self._proto.asEventTarget();
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(XRCompositionLayer);
 
@@ -373,14 +386,6 @@ fn LayerState(comptime T: type) type {
         fn setSpace(self: *T, value: ?*XRSpace) void {
             self._space = value;
         }
-
-        fn getOnredraw(self: *const T) ?js.Function.Global {
-            return self._on_redraw;
-        }
-
-        fn setOnredraw(self: *T, listener: ?js.Function) !void {
-            self._on_redraw = if (listener) |l| try l.persistWithThis(self) else null;
-        }
     };
 }
 
@@ -390,9 +395,6 @@ pub const XRCubeLayer = struct {
     _proto: *XRCompositionLayer,
     _space: ?*XRSpace = null,
     _orientation: ?*DOMPointReadOnly = null,
-    _on_redraw: ?js.Function.Global = null,
-
-    const state = LayerState(XRCubeLayer);
 
     pub fn asXRCompositionLayer(self: *XRCubeLayer) *XRCompositionLayer {
         return self._proto;
@@ -404,6 +406,12 @@ pub const XRCubeLayer = struct {
 
     pub fn setOrientation(self: *XRCubeLayer, value: ?*DOMPointReadOnly) void {
         self._orientation = value;
+    }
+
+    const state = LayerState(XRCubeLayer);
+
+    pub fn asEventTarget(self: *XRCubeLayer) *EventTarget {
+        return self._proto.asEventTarget();
     }
 
     pub const JsApi = struct {
@@ -423,7 +431,7 @@ pub const XRCubeLayer = struct {
             XRCubeLayer.setOrientation,
             .{},
         );
-        pub const onredraw = bridge.accessor(state.getOnredraw, state.setOnredraw, .{});
+        pub const onredraw = bridge.accessor(handlerProperty(XRCubeLayer, .onredraw).get, handlerProperty(XRCubeLayer, .onredraw).set, .{});
     };
 };
 
@@ -436,9 +444,6 @@ pub const XRCylinderLayer = struct {
     _radius: f64 = 2,
     _central_angle: f64 = 0.7853981633974483,
     _aspect_ratio: f64 = 2,
-    _on_redraw: ?js.Function.Global = null,
-
-    const state = LayerState(XRCylinderLayer);
 
     pub fn asXRCompositionLayer(self: *XRCylinderLayer) *XRCompositionLayer {
         return self._proto;
@@ -476,6 +481,12 @@ pub const XRCylinderLayer = struct {
         self._aspect_ratio = value;
     }
 
+    const state = LayerState(XRCylinderLayer);
+
+    pub fn asEventTarget(self: *XRCylinderLayer) *EventTarget {
+        return self._proto.asEventTarget();
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(XRCylinderLayer);
 
@@ -504,7 +515,7 @@ pub const XRCylinderLayer = struct {
             XRCylinderLayer.setAspectRatio,
             .{},
         );
-        pub const onredraw = bridge.accessor(state.getOnredraw, state.setOnredraw, .{});
+        pub const onredraw = bridge.accessor(handlerProperty(XRCylinderLayer, .onredraw).get, handlerProperty(XRCylinderLayer, .onredraw).set, .{});
     };
 };
 
@@ -518,9 +529,6 @@ pub const XREquirectLayer = struct {
     _central_horizontal_angle: f64 = 6.283185307179586,
     _upper_vertical_angle: f64 = 1.5707963267948966,
     _lower_vertical_angle: f64 = -1.5707963267948966,
-    _on_redraw: ?js.Function.Global = null,
-
-    const state = LayerState(XREquirectLayer);
 
     pub fn asXRCompositionLayer(self: *XREquirectLayer) *XRCompositionLayer {
         return self._proto;
@@ -566,6 +574,12 @@ pub const XREquirectLayer = struct {
         self._lower_vertical_angle = value;
     }
 
+    const state = LayerState(XREquirectLayer);
+
+    pub fn asEventTarget(self: *XREquirectLayer) *EventTarget {
+        return self._proto.asEventTarget();
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(XREquirectLayer);
 
@@ -599,7 +613,7 @@ pub const XREquirectLayer = struct {
             XREquirectLayer.setLowerVerticalAngle,
             .{},
         );
-        pub const onredraw = bridge.accessor(state.getOnredraw, state.setOnredraw, .{});
+        pub const onredraw = bridge.accessor(handlerProperty(XREquirectLayer, .onredraw).get, handlerProperty(XREquirectLayer, .onredraw).set, .{});
     };
 };
 
@@ -686,9 +700,6 @@ pub const XRQuadLayer = struct {
     _transform: ?*XRRigidTransform = null,
     _width: f64 = 1,
     _height: f64 = 1,
-    _on_redraw: ?js.Function.Global = null,
-
-    const state = LayerState(XRQuadLayer);
 
     pub fn asXRCompositionLayer(self: *XRQuadLayer) *XRCompositionLayer {
         return self._proto;
@@ -718,6 +729,12 @@ pub const XRQuadLayer = struct {
         self._height = value;
     }
 
+    const state = LayerState(XRQuadLayer);
+
+    pub fn asEventTarget(self: *XRQuadLayer) *EventTarget {
+        return self._proto.asEventTarget();
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(XRQuadLayer);
 
@@ -733,7 +750,7 @@ pub const XRQuadLayer = struct {
         pub const transform = bridge.accessor(XRQuadLayer.getTransform, XRQuadLayer.setTransform, .{});
         pub const width = bridge.accessor(XRQuadLayer.getWidth, XRQuadLayer.setWidth, .{});
         pub const height = bridge.accessor(XRQuadLayer.getHeight, XRQuadLayer.setHeight, .{});
-        pub const onredraw = bridge.accessor(state.getOnredraw, state.setOnredraw, .{});
+        pub const onredraw = bridge.accessor(handlerProperty(XRQuadLayer, .onredraw).get, handlerProperty(XRQuadLayer, .onredraw).set, .{});
     };
 };
 

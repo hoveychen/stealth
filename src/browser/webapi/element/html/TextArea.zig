@@ -28,6 +28,15 @@ const Selection = @import("../../Selection.zig");
 const Event = @import("../../Event.zig");
 const InputEvent = @import("../../event/InputEvent.zig");
 const ValidityState = @import("ValidityState.zig");
+const handler_property = @import("../../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const TextArea = @This();
 
@@ -40,21 +49,8 @@ _selection_start: u32 = 0,
 _selection_end: u32 = 0,
 _selection_direction: Selection.SelectionDirection = .none,
 
-_on_selectionchange: ?js.Function.Global = null,
 _custom_validity: ?[]const u8 = null,
 _validity: ?*ValidityState = null,
-
-pub fn getOnSelectionChange(self: *TextArea) ?js.Function.Global {
-    return self._on_selectionchange;
-}
-
-pub fn setOnSelectionChange(self: *TextArea, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_selectionchange = try listen.persistWithThis(self);
-    } else {
-        self._on_selectionchange = null;
-    }
-}
 
 fn dispatchSelectionChangeEvent(self: *TextArea, frame: *Frame) !void {
     const event = try Event.init("selectionchange", .{ .bubbles = true }, frame._page);
@@ -64,6 +60,10 @@ fn dispatchSelectionChangeEvent(self: *TextArea, frame: *Frame) !void {
 fn dispatchInputEvent(self: *TextArea, data: ?[]const u8, input_type: []const u8, frame: *Frame) !void {
     const event = try InputEvent.initTrusted(comptime .wrap("input"), .{ .data = data, .inputType = input_type }, frame);
     try frame._event_manager.dispatch(self.asElement().asEventTarget(), event.asEvent());
+}
+
+pub fn asEventTarget(self: *TextArea) *EventTarget {
+    return self.asElement().asEventTarget();
 }
 
 pub fn asElement(self: *TextArea) *Element {
@@ -385,7 +385,7 @@ pub const JsApi = struct {
     pub const checkValidity = bridge.function(TextArea.checkValidity, .{});
     pub const reportValidity = bridge.function(TextArea.reportValidity, .{});
     pub const setCustomValidity = bridge.function(TextArea.setCustomValidity, .{});
-    pub const onselectionchange = bridge.accessor(TextArea.getOnSelectionChange, TextArea.setOnSelectionChange, .{});
+    pub const onselectionchange = bridge.accessor(handlerProperty(TextArea, .onselectionchange).get, handlerProperty(TextArea, .onselectionchange).set, .{});
     pub const value = bridge.accessor(TextArea.getValue, TextArea.setValue, .{});
     pub const defaultValue = bridge.accessor(TextArea.getDefaultValue, TextArea.setDefaultValue, .{ .ce_reactions = true });
     pub const disabled = bridge.accessor(TextArea.getDisabled, TextArea.setDisabled, .{ .ce_reactions = true });
@@ -412,6 +412,7 @@ pub const Build = struct {
 };
 
 const testing = @import("../../../../testing.zig");
+const EventTarget = @import("../../EventTarget.zig");
 test "WebApi: HTML.TextArea" {
     try testing.htmlRunner("element/html/textarea.html", .{});
     try testing.htmlRunner("element/html/textarea-validity.html", .{});

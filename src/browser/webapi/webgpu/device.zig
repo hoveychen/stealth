@@ -36,6 +36,15 @@ const DOMException = @import("../DOMException.zig");
 const pipeline = @import("pipeline.zig");
 const resources = @import("resources.zig");
 const EventTarget = @import("../EventTarget.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -50,7 +59,6 @@ pub const GPUDevice = struct {
 
     _proto: *EventTarget,
     _label: []const u8 = "",
-    _on_uncaptured_error: ?js.Function.Global = null,
     // What requestDevice settled on: the default single feature, plus whatever
     // requiredFeatures the adapter accepted.
     _feature_names: []const []const u8 = &adapter.GPUSupportedFeatures.device_default,
@@ -164,14 +172,6 @@ pub const GPUDevice = struct {
 
     pub fn setLabel(self: *GPUDevice, value: []const u8, exec: *const Execution) !void {
         self._label = try exec.arena.dupe(u8, value);
-    }
-
-    pub fn getOnUncapturedError(self: *GPUDevice) ?js.Function.Global {
-        return self._on_uncaptured_error;
-    }
-
-    pub fn setOnUncapturedError(self: *GPUDevice, listener: ?js.Function) !void {
-        self._on_uncaptured_error = if (listener) |l| try l.persistWithThis(self) else null;
     }
 
     // The create* family. Each one reads its descriptor the way Chrome does --
@@ -306,7 +306,7 @@ pub const GPUDevice = struct {
         pub const adapterInfo = bridge.accessor(D.getAdapterInfo, null, .{});
         pub const lost = bridge.accessor(D.getLost, null, .{});
         pub const queue = bridge.accessor(D.getQueue, null, .{});
-        pub const onuncapturederror = bridge.accessor(D.getOnUncapturedError, D.setOnUncapturedError, .{});
+        pub const onuncapturederror = bridge.accessor(handlerProperty(GPUDevice, .onuncapturederror).get, handlerProperty(GPUDevice, .onuncapturederror).set, .{});
         pub const label = bridge.accessor(D.getLabel, D.setLabel, .{});
         pub const createBindGroup = bridge.function(D.createBindGroup, .{ .arity = 1 });
         pub const createBindGroupLayout = bridge.function(D.createBindGroupLayout, .{ .arity = 1 });

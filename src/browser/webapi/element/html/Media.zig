@@ -339,10 +339,10 @@ pub fn addTextTrack(
     // addtrack listener sees a TrackEvent carrying the new track, then onchange
     // runs).
     const add_track = try misc_events.TrackEvent.initTrusted("addtrack", track, exec);
-    try exec.dispatch(list.asEventTarget(), add_track.asEvent(), list._on_add_track, .{ .context = "TextTrackList addtrack" });
+    try exec.dispatch(list.asEventTarget(), add_track.asEvent(), null, .{ .context = "TextTrackList addtrack" });
 
     const change = try Event.initTrusted(try String.init(page.frame_arena, "change", .{}), null, page);
-    try exec.dispatch(list.asEventTarget(), change, list._on_change, .{ .context = "TextTrackList change" });
+    try exec.dispatch(list.asEventTarget(), change, null, .{ .context = "TextTrackList change" });
     return track;
 }
 

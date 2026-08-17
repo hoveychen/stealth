@@ -38,6 +38,15 @@ const dictionary = @import("../dictionary.zig");
 const Event = @import("../Event.zig");
 const EventTarget = @import("../EventTarget.zig");
 const geometry = @import("geometry.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const XRRigidTransform = geometry.XRRigidTransform;
 const Execution = js.Execution;
@@ -160,7 +169,6 @@ pub const XRReferenceSpace = struct {
     _type: Type = .generic,
     _kind: []const u8,
     _offset: Rigid = .{},
-    _on_reset: ?js.Function.Global = null,
 
     const ARITY = "Failed to execute 'getOffsetReferenceSpace' on 'XRReferenceSpace': " ++
         "1 argument required, but only 0 present.";
@@ -182,14 +190,6 @@ pub const XRReferenceSpace = struct {
         return self._proto;
     }
 
-    pub fn getOnreset(self: *const XRReferenceSpace) ?js.Function.Global {
-        return self._on_reset;
-    }
-
-    pub fn setOnreset(self: *XRReferenceSpace, listener: ?js.Function) !void {
-        self._on_reset = if (listener) |l| try l.persistWithThis(self) else null;
-    }
-
     /// A *new* space with the given offset folded in -- measured: the result is
     /// never the space it was asked of, even for an identity transform.
     pub fn getOffsetReferenceSpace(
@@ -203,6 +203,10 @@ pub const XRReferenceSpace = struct {
         return create(self._kind, self._offset.compose(Rigid.fromTransform(transform)), exec);
     }
 
+    pub fn asEventTarget(self: *XRReferenceSpace) *EventTarget {
+        return self._proto.asEventTarget();
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(XRReferenceSpace);
 
@@ -214,11 +218,7 @@ pub const XRReferenceSpace = struct {
 
         pub const Prototype = XRSpace;
 
-        pub const onreset = bridge.accessor(
-            XRReferenceSpace.getOnreset,
-            XRReferenceSpace.setOnreset,
-            .{},
-        );
+        pub const onreset = bridge.accessor(handlerProperty(XRReferenceSpace, .onreset).get, handlerProperty(XRReferenceSpace, .onreset).set, .{});
         pub const getOffsetReferenceSpace = bridge.function(
             XRReferenceSpace.getOffsetReferenceSpace,
             .{ .arity = 1 },

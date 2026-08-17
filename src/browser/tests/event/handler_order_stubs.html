@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!-- The same rule as handler_order.html, over the wide set of interfaces that
+     only ever *carry* their `on*` properties: nothing in the engine fires the
+     events, but a script can still set a handler and dispatch by hand, and the
+     handler has to take its place in the listener list. Every row below is
+     "al1,on,al2" on a headed Chrome 150 (probe-g22recon, probe-g22recon2);
+     each one used to read back the stored function while the dispatch skipped
+     it, because the owner kept it in a field of its own. -->
+
+<script id=handler_order_stub_targets type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    check('Screen', screen, [['onchange', 'change']]);
+    check('Navigation', navigation, [['oncurrententrychange', 'currententrychange']]);
+    check('NavigationHistoryEntry', navigation.currentEntry, [['ondispose', 'dispose']]);
+    check('CookieStore', cookieStore, [['onchange', 'change']]);
+    check('Document', document, [['onselectionchange', 'selectionchange']]);
+    check('HTMLInputElement', document.createElement('input'), [['onselectionchange', 'selectionchange']]);
+    check('HTMLTextAreaElement', document.createElement('textarea'), [['onselectionchange', 'selectionchange']]);
+    check('TaskSignal', new TaskController().signal, [['onprioritychange', 'prioritychange']]);
+    check('IdleDetector', new IdleDetector(), [['onchange', 'change']]);
+  }
+</script>
+
+<script id=handler_order_stub_navigator type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    check('NetworkInformation', navigator.connection, [['onchange', 'change']]);
+    check('MediaDevices', navigator.mediaDevices, [['ondevicechange', 'devicechange']]);
+    check('ServiceWorkerContainer', navigator.serviceWorker, [
+      ['oncontrollerchange', 'controllerchange'],
+      ['onmessage', 'message'],
+      ['onmessageerror', 'messageerror'],
+    ]);
+    check('HID', navigator.hid, [['onconnect', 'connect'], ['ondisconnect', 'disconnect']]);
+    check('Serial', navigator.serial, [['onconnect', 'connect'], ['ondisconnect', 'disconnect']]);
+    check('USB', navigator.usb, [['onconnect', 'connect'], ['ondisconnect', 'disconnect']]);
+    check('XRSystem', navigator.xr, [['ondevicechange', 'devicechange']]);
+  }
+</script>
+
+<script id=handler_order_stub_speech type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    check('SpeechSynthesis', speechSynthesis, [['onvoiceschanged', 'voiceschanged']]);
+    check('SpeechSynthesisUtterance', new SpeechSynthesisUtterance('x'), [
+      ['onstart', 'start'], ['onend', 'end'], ['onerror', 'error'], ['onpause', 'pause'],
+      ['onresume', 'resume'], ['onmark', 'mark'], ['onboundary', 'boundary'],
+    ]);
+    check('SpeechRecognition', new SpeechRecognition(), [
+      ['onaudiostart', 'audiostart'], ['onaudioend', 'audioend'], ['onsoundstart', 'soundstart'],
+      ['onsoundend', 'soundend'], ['onspeechstart', 'speechstart'], ['onspeechend', 'speechend'],
+      ['onresult', 'result'], ['onnomatch', 'nomatch'], ['onerror', 'error'],
+      ['onstart', 'start'], ['onend', 'end'],
+    ]);
+  }
+</script>
+
+<script id=handler_order_stub_media type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    check('MediaSource', new MediaSource(), [
+      ['onsourceopen', 'sourceopen'], ['onsourceended', 'sourceended'], ['onsourceclose', 'sourceclose'],
+    ]);
+    check('MediaStream', new MediaStream(), [['onaddtrack', 'addtrack'], ['onremovetrack', 'removetrack']]);
+    check('MediaStreamTrack', document.createElement('canvas').captureStream().getTracks()[0], [
+      ['onended', 'ended'], ['onmute', 'mute'], ['onunmute', 'unmute'],
+    ]);
+    check('TextTrack', document.createElement('video').addTextTrack('subtitles'), [['oncuechange', 'cuechange']]);
+    check('TextTrackList', document.createElement('video').textTracks, [
+      ['onaddtrack', 'addtrack'], ['onremovetrack', 'removetrack'], ['onchange', 'change'],
+    ]);
+    check('VTTCue', new VTTCue(0, 1, 'x'), [['onenter', 'enter'], ['onexit', 'exit']]);
+    check('RemotePlayback', document.createElement('video').remote, [
+      ['onconnect', 'connect'], ['ondisconnect', 'disconnect'], ['onconnecting', 'connecting'],
+    ]);
+  }
+</script>
+
+<script id=handler_order_stub_audio type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    const ctx = new AudioContext();
+    check('AudioContext', ctx, [['onstatechange', 'statechange']]);
+    check('OscillatorNode', ctx.createOscillator(), [['onended', 'ended']]);
+    check('ScriptProcessorNode', ctx.createScriptProcessor(), [['onaudioprocess', 'audioprocess']]);
+    check('OfflineAudioContext', new OfflineAudioContext(1, 1, 8000), [['oncomplete', 'complete']]);
+  }
+</script>
+
+<script id=handler_order_stub_webrtc type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    const pc = new RTCPeerConnection();
+    check('RTCPeerConnection', pc, [
+      ['onicecandidate', 'icecandidate'], ['ontrack', 'track'], ['ondatachannel', 'datachannel'],
+      ['onnegotiationneeded', 'negotiationneeded'], ['onconnectionstatechange', 'connectionstatechange'],
+      ['oniceconnectionstatechange', 'iceconnectionstatechange'],
+      ['onicegatheringstatechange', 'icegatheringstatechange'],
+      ['onsignalingstatechange', 'signalingstatechange'],
+      ['onicecandidateerror', 'icecandidateerror'],
+    ]);
+    check('RTCDataChannel', pc.createDataChannel('x'), [
+      ['onopen', 'open'], ['onclose', 'close'], ['onerror', 'error'], ['onmessage', 'message'],
+      ['onbufferedamountlow', 'bufferedamountlow'], ['onclosing', 'closing'],
+    ]);
+  }
+</script>
+
+<script id=handler_order_stub_misc type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    check('Accelerometer', new Accelerometer(), [
+      ['onerror', 'error'], ['onreading', 'reading'], ['onactivate', 'activate'],
+    ]);
+    check('PaymentRequest', new PaymentRequest(
+      [{ supportedMethods: 'basic-card' }],
+      { total: { label: 'x', amount: { currency: 'USD', value: '1' } } },
+    ), [
+      ['onshippingaddresschange', 'shippingaddresschange'],
+      ['onshippingoptionchange', 'shippingoptionchange'],
+      ['onpaymentmethodchange', 'paymentmethodchange'],
+    ]);
+    check('PresentationRequest', new PresentationRequest('https://example.com/'), [
+      ['onconnectionavailable', 'connectionavailable'],
+    ]);
+  }
+</script>
+
+<script id=handler_order_stub_async type=module>
+  {
+    const state = await testing.async();
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+
+    (async () => {
+      const rows = [];
+      const record = (label, target, pairs) => {
+        for (const [name, type] of pairs) {
+          rows.push([label + '.' + name, order(target, name, type)]);
+        }
+      };
+
+      record('BatteryManager', await navigator.getBattery(), [
+        ['onchargingchange', 'chargingchange'], ['onchargingtimechange', 'chargingtimechange'],
+        ['ondischargingtimechange', 'dischargingtimechange'], ['onlevelchange', 'levelchange'],
+      ]);
+      record('WakeLockSentinel', await navigator.wakeLock.request('screen'), [['onrelease', 'release']]);
+      record('PresentationAvailability',
+        await new PresentationRequest('https://example.com/').getAvailability(),
+        [['onchange', 'change']]);
+
+      const access = await navigator.requestMediaKeySystemAccess('org.w3.clearkey', [{
+        initDataTypes: ['cenc'],
+        videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }],
+      }]);
+      record('MediaKeySession', (await access.createMediaKeys()).createSession(), [
+        ['onkeystatuseschange', 'keystatuseschange'], ['onmessage', 'message'],
+      ]);
+
+      const device = await (await navigator.gpu.requestAdapter()).requestDevice();
+      record('GPUDevice', device, [['onuncapturederror', 'uncapturederror']]);
+
+      state.resolve(rows);
+    })();
+
+    await state.done((rows) => {
+      for (const [desc, got] of rows) {
+        testing.expectEqual('al1,on,al2', got, { desc: desc });
+      }
+    });
+  }
+</script>
+</body>

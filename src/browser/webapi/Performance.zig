@@ -65,6 +65,12 @@ _paint_entries: bool = false,
 // Nothing fires it — the resource buffer never fills because nothing fills it
 // — but the accessor pair is on Chrome's Performance.prototype and reads back
 // what a script sets.
+//
+// This is the one handler property still kept in a field. The rest went to the
+// event manager's handler store, which is keyed by EventTarget -- and Chrome's
+// Performance *is* an EventTarget while this one is not (measured: our
+// `performance.addEventListener` is undefined, Chrome's runs). Giving
+// Performance that prototype is its own change, with its own measurement.
 _on_resource_timing_buffer_full: ?js.Function.Global = null,
 
 /// How far the current navigation has got. Level 2 can read an unreached

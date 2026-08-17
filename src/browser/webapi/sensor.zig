@@ -39,6 +39,15 @@ const Event = @import("Event.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
 const DOMMatrix = @import("DOMMatrix.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const log = lp.log;
 const String = lp.String;
@@ -139,9 +148,6 @@ pub const Sensor = struct {
     // Bumped by every start(), so a queued failure from an earlier start()
     // cannot fire against a later one.
     _generation: u32 = 0,
-    _on_error: ?js.Function.Global = null,
-    _on_reading: ?js.Function.Global = null,
-    _on_activate: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *Sensor) *EventTarget {
         return self._proto;
@@ -159,30 +165,6 @@ pub const Sensor = struct {
 
     pub fn getTimestamp(_: *const Sensor) ?f64 {
         return null;
-    }
-
-    pub fn getOnError(self: *const Sensor) ?js.Function.Global {
-        return self._on_error;
-    }
-
-    pub fn setOnError(self: *Sensor, callback: ?js.Function.Global) void {
-        self._on_error = callback;
-    }
-
-    pub fn getOnReading(self: *const Sensor) ?js.Function.Global {
-        return self._on_reading;
-    }
-
-    pub fn setOnReading(self: *Sensor, callback: ?js.Function.Global) void {
-        self._on_reading = callback;
-    }
-
-    pub fn getOnActivate(self: *const Sensor) ?js.Function.Global {
-        return self._on_activate;
-    }
-
-    pub fn setOnActivate(self: *Sensor, callback: ?js.Function.Global) void {
-        self._on_activate = callback;
     }
 
     // start() answers nothing and never throws, even when called twice
@@ -214,7 +196,7 @@ pub const Sensor = struct {
         self._running = false;
 
         const target = self.asEventTarget();
-        const on_error = self._on_error;
+        const on_error = null;
         switch (exec.js.global) {
             inline else => |g| {
                 if (!g._event_manager.hasDirectListeners(target, "error", on_error)) {
@@ -243,9 +225,9 @@ pub const Sensor = struct {
         pub const activated = bridge.accessor(Sensor.getActivated, null, .{});
         pub const hasReading = bridge.accessor(Sensor.getHasReading, null, .{});
         pub const timestamp = bridge.accessor(Sensor.getTimestamp, null, .{});
-        pub const onerror = bridge.accessor(Sensor.getOnError, Sensor.setOnError, .{});
-        pub const onreading = bridge.accessor(Sensor.getOnReading, Sensor.setOnReading, .{});
-        pub const onactivate = bridge.accessor(Sensor.getOnActivate, Sensor.setOnActivate, .{});
+        pub const onerror = bridge.accessor(handlerProperty(Sensor, .onerror).get, handlerProperty(Sensor, .onerror).set, .{});
+        pub const onreading = bridge.accessor(handlerProperty(Sensor, .onreading).get, handlerProperty(Sensor, .onreading).set, .{});
+        pub const onactivate = bridge.accessor(handlerProperty(Sensor, .onactivate).get, handlerProperty(Sensor, .onactivate).set, .{});
         pub const start = bridge.function(Sensor.start, .{});
         pub const stop = bridge.function(Sensor.stop, .{});
     };

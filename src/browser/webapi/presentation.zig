@@ -49,6 +49,15 @@ const Event = @import("Event.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
 const String = @import("../../lightpanda.zig").String;
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -151,7 +160,6 @@ pub const PresentationRequest = struct {
     _proto: *EventTarget,
     _urls: []const []const u8,
     _availability: ?*PresentationAvailability = null,
-    _on_connection_available: ?js.Function.Global = null,
 
     // Chrome's own list of the schemes a presentation URL may use. `https` and
     // `http` were measured directly; `cast:` was measured as accepted in a mixed
@@ -242,8 +250,6 @@ pub const PresentationRequest = struct {
         return rejectDom("NotFoundError", "Route not found", exec);
     }
 
-    const connection_available = handlerAccessors(PresentationRequest, "_on_connection_available");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PresentationRequest);
 
@@ -258,7 +264,7 @@ pub const PresentationRequest = struct {
         const R = PresentationRequest;
 
         pub const constructor = bridge.constructor(R.constructor, .{ .arity = 1 });
-        pub const onconnectionavailable = bridge.accessor(connection_available.get, connection_available.set, .{});
+        pub const onconnectionavailable = bridge.accessor(handlerProperty(PresentationRequest, .onconnectionavailable).get, handlerProperty(PresentationRequest, .onconnectionavailable).set, .{});
         pub const getAvailability = bridge.function(R.getAvailability, .{});
         pub const reconnect = bridge.function(R.reconnect, .{ .arity = 1 });
         pub const start = bridge.function(R.start, .{});
@@ -270,7 +276,6 @@ pub const PresentationAvailability = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_change: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *PresentationAvailability) *EventTarget {
         return self._proto;
@@ -279,8 +284,6 @@ pub const PresentationAvailability = struct {
     pub fn getValue(_: *const PresentationAvailability) bool {
         return false;
     }
-
-    const change = handlerAccessors(PresentationAvailability, "_on_change");
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PresentationAvailability);
@@ -294,7 +297,7 @@ pub const PresentationAvailability = struct {
         pub const Prototype = EventTarget;
 
         pub const value = bridge.accessor(PresentationAvailability.getValue, null, .{});
-        pub const onchange = bridge.accessor(change.get, change.set, .{});
+        pub const onchange = bridge.accessor(handlerProperty(PresentationAvailability, .onchange).get, handlerProperty(PresentationAvailability, .onchange).set, .{});
     };
 };
 
@@ -305,10 +308,6 @@ pub const PresentationConnection = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_connect: ?js.Function.Global = null,
-    _on_close: ?js.Function.Global = null,
-    _on_terminate: ?js.Function.Global = null,
-    _on_message: ?js.Function.Global = null,
     _binary_type: BinaryType = .arraybuffer,
 
     const BinaryType = enum { blob, arraybuffer };
@@ -337,11 +336,6 @@ pub const PresentationConnection = struct {
 
     fn noop1(_: *PresentationConnection, _: ?js.Value) void {}
 
-    const connect = handlerAccessors(PresentationConnection, "_on_connect");
-    const close_handler = handlerAccessors(PresentationConnection, "_on_close");
-    const terminate_handler = handlerAccessors(PresentationConnection, "_on_terminate");
-    const message = handlerAccessors(PresentationConnection, "_on_message");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PresentationConnection);
 
@@ -358,11 +352,11 @@ pub const PresentationConnection = struct {
         pub const id = bridge.accessor(C.empty, null, .{});
         pub const url = bridge.accessor(C.empty, null, .{});
         pub const state = bridge.accessor(C.getState, null, .{});
-        pub const onconnect = bridge.accessor(connect.get, connect.set, .{});
-        pub const onclose = bridge.accessor(close_handler.get, close_handler.set, .{});
-        pub const onterminate = bridge.accessor(terminate_handler.get, terminate_handler.set, .{});
+        pub const onconnect = bridge.accessor(handlerProperty(PresentationConnection, .onconnect).get, handlerProperty(PresentationConnection, .onconnect).set, .{});
+        pub const onclose = bridge.accessor(handlerProperty(PresentationConnection, .onclose).get, handlerProperty(PresentationConnection, .onclose).set, .{});
+        pub const onterminate = bridge.accessor(handlerProperty(PresentationConnection, .onterminate).get, handlerProperty(PresentationConnection, .onterminate).set, .{});
         pub const binaryType = bridge.accessor(C.getBinaryType, C.setBinaryType, .{});
-        pub const onmessage = bridge.accessor(message.get, message.set, .{});
+        pub const onmessage = bridge.accessor(handlerProperty(PresentationConnection, .onmessage).get, handlerProperty(PresentationConnection, .onmessage).set, .{});
         pub const close = bridge.function(C.noop, .{});
         pub const send = bridge.function(C.noop1, .{ .arity = 1 });
         pub const terminate = bridge.function(C.noop, .{});
@@ -374,7 +368,6 @@ pub const PresentationConnectionList = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_connection_available: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *PresentationConnectionList) *EventTarget {
         return self._proto;
@@ -383,8 +376,6 @@ pub const PresentationConnectionList = struct {
     pub fn getConnections(_: *const PresentationConnectionList) []const *PresentationConnection {
         return &.{};
     }
-
-    const connection_available = handlerAccessors(PresentationConnectionList, "_on_connection_available");
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(PresentationConnectionList);
@@ -398,7 +389,7 @@ pub const PresentationConnectionList = struct {
         pub const Prototype = EventTarget;
 
         pub const connections = bridge.accessor(PresentationConnectionList.getConnections, null, .{});
-        pub const onconnectionavailable = bridge.accessor(connection_available.get, connection_available.set, .{});
+        pub const onconnectionavailable = bridge.accessor(handlerProperty(PresentationConnectionList, .onconnectionavailable).get, handlerProperty(PresentationConnectionList, .onconnectionavailable).set, .{});
     };
 };
 

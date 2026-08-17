@@ -31,6 +31,9 @@ const global_event_handlers = @import("global_event_handlers.zig");
 
 const Execution = js.Execution;
 
+/// Re-exported so a type that owns handler properties needs this import alone.
+pub const Handler = global_event_handlers.Handler;
+
 /// The getter/setter pair for `T`'s `on*` property named by `handler`.
 /// `T` must expose `asEventTarget`.
 pub fn accessors(comptime T: type, comptime handler: global_event_handlers.Handler) type {
@@ -41,6 +44,36 @@ pub fn accessors(comptime T: type, comptime handler: global_event_handlers.Handl
 
         pub fn set(self: *T, callback: ?js.Function.Global, exec: *const Execution) !void {
             return exec.setEventHandler(self.asEventTarget(), handler, callback);
+        }
+    };
+}
+
+/// What a *lenient* handler setter takes. An IDL `EventHandler` accepts
+/// anything: a non-callable is stored as null rather than refused -- measured,
+/// `rec.onend = 5` reads back null on Chrome. The `?js.Function.Global` setter
+/// `accessors` hands out throws "invalid argument" there instead, which is the
+/// louder difference, so the properties that were measured lenient use this.
+pub const AnyValue = union(enum) {
+    func: js.Function.Global,
+    anything: js.Value,
+};
+
+pub fn functionFrom(setter: ?AnyValue) ?js.Function.Global {
+    return switch (setter orelse return null) {
+        .func => |func| func,
+        .anything => null,
+    };
+}
+
+/// `accessors` for a property whose setter swallows a non-callable.
+pub fn lenientAccessors(comptime T: type, comptime handler: global_event_handlers.Handler) type {
+    return struct {
+        pub fn get(self: *T, exec: *const Execution) ?js.Function.Global {
+            return exec.getEventHandler(self.asEventTarget(), handler);
+        }
+
+        pub fn set(self: *T, setter: ?AnyValue, exec: *const Execution) !void {
+            return exec.setEventHandler(self.asEventTarget(), handler, functionFrom(setter));
         }
     };
 }

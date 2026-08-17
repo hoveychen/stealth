@@ -41,9 +41,18 @@ _proto: *AudioNode,
 
 _started: bool = false,
 _stopped: bool = false,
-_on_ended: ?js.Function.Global = null,
 
 const nodes = @import("nodes.zig");
+const handler_property = @import("../handler_property.zig");
+const EventTarget = @import("../EventTarget.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 pub const Type = union(enum) {
     audio_buffer_source: *nodes.AudioBufferSourceNode,
@@ -53,18 +62,6 @@ pub const Type = union(enum) {
 
 pub fn asAudioNode(self: *AudioScheduledSourceNode) *AudioNode {
     return self._proto;
-}
-
-pub fn getOnEnded(self: *const AudioScheduledSourceNode) ?js.Function.Global {
-    return self._on_ended;
-}
-
-pub fn setOnEnded(self: *AudioScheduledSourceNode, listener: ?js.Function) !void {
-    if (listener) |listen| {
-        self._on_ended = try listen.persistWithThis(self);
-    } else {
-        self._on_ended = null;
-    }
 }
 
 pub fn start(self: *AudioScheduledSourceNode, when: ?f64, exec: *const Execution) !void {
@@ -103,6 +100,10 @@ fn validate(comptime which: []const u8, when: f64, exec: *const Execution) !void
     ), exec);
 }
 
+pub fn asEventTarget(self: *AudioScheduledSourceNode) *EventTarget {
+    return self._proto.asEventTarget();
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(AudioScheduledSourceNode);
 
@@ -112,7 +113,7 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const onended = bridge.accessor(AudioScheduledSourceNode.getOnEnded, AudioScheduledSourceNode.setOnEnded, .{});
+    pub const onended = bridge.accessor(handlerProperty(AudioScheduledSourceNode, .onended).get, handlerProperty(AudioScheduledSourceNode, .onended).set, .{});
     pub const start = bridge.function(AudioScheduledSourceNode.start, .{ .arity = 0 });
     pub const stop = bridge.function(AudioScheduledSourceNode.stop, .{ .arity = 0 });
 };

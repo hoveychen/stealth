@@ -42,6 +42,15 @@
 const js = @import("../js/js.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
+const handler_property = @import("handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -90,8 +99,6 @@ pub const ServiceWorker = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_state_change: ?js.Function.Global = null,
-    _on_error: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *ServiceWorker) *EventTarget {
         return self._proto;
@@ -106,9 +113,6 @@ pub const ServiceWorker = struct {
     }
 
     fn postMessage(_: *ServiceWorker, _: ?js.Value, _: ?js.Value) void {}
-
-    const state_change = handlerAccessors(ServiceWorker, "_on_state_change");
-    const error_handler = handlerAccessors(ServiceWorker, "_on_error");
 
     pub const JsApi = struct {
         pub const bridge = js.Bridge(ServiceWorker);
@@ -125,9 +129,9 @@ pub const ServiceWorker = struct {
 
         pub const scriptURL = bridge.accessor(W.scriptURL, null, .{});
         pub const state = bridge.accessor(W.state, null, .{});
-        pub const onstatechange = bridge.accessor(state_change.get, state_change.set, .{});
+        pub const onstatechange = bridge.accessor(handlerProperty(ServiceWorker, .onstatechange).get, handlerProperty(ServiceWorker, .onstatechange).set, .{});
         pub const postMessage = bridge.function(W.postMessage, .{ .arity = 1 });
-        pub const onerror = bridge.accessor(error_handler.get, error_handler.set, .{});
+        pub const onerror = bridge.accessor(handlerProperty(ServiceWorker, .onerror).get, handlerProperty(ServiceWorker, .onerror).set, .{});
     };
 };
 
@@ -135,7 +139,6 @@ pub const ServiceWorkerRegistration = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_update_found: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *ServiceWorkerRegistration) *EventTarget {
         return self._proto;
@@ -189,8 +192,6 @@ pub const ServiceWorkerRegistration = struct {
         return null;
     }
 
-    const update_found = handlerAccessors(ServiceWorkerRegistration, "_on_update_found");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(ServiceWorkerRegistration);
 
@@ -210,7 +211,7 @@ pub const ServiceWorkerRegistration = struct {
         pub const navigationPreload = bridge.accessor(R.navigationPreload, null, .{});
         pub const scope = bridge.accessor(R.scope, null, .{});
         pub const updateViaCache = bridge.accessor(R.updateViaCache, null, .{});
-        pub const onupdatefound = bridge.accessor(update_found.get, update_found.set, .{});
+        pub const onupdatefound = bridge.accessor(handlerProperty(ServiceWorkerRegistration, .onupdatefound).get, handlerProperty(ServiceWorkerRegistration, .onupdatefound).set, .{});
         pub const unregister = bridge.function(R.refuse, .{});
         pub const update = bridge.function(R.refuse, .{});
         pub const paymentManager = bridge.accessor(R.paymentManager, null, .{});
@@ -396,7 +397,6 @@ pub const BackgroundFetchRegistration = struct {
     pub const Proto = EventTarget;
 
     _proto: *EventTarget,
-    _on_progress: ?js.Function.Global = null,
 
     pub fn asEventTarget(self: *BackgroundFetchRegistration) *EventTarget {
         return self._proto;
@@ -430,8 +430,6 @@ pub const BackgroundFetchRegistration = struct {
         return noRegistration(exec);
     }
 
-    const progress = handlerAccessors(BackgroundFetchRegistration, "_on_progress");
-
     pub const JsApi = struct {
         pub const bridge = js.Bridge(BackgroundFetchRegistration);
 
@@ -453,7 +451,7 @@ pub const BackgroundFetchRegistration = struct {
         pub const result = bridge.accessor(R.result, null, .{});
         pub const failureReason = bridge.accessor(R.failureReason, null, .{});
         pub const recordsAvailable = bridge.accessor(R.recordsAvailable, null, .{});
-        pub const onprogress = bridge.accessor(progress.get, progress.set, .{});
+        pub const onprogress = bridge.accessor(handlerProperty(BackgroundFetchRegistration, .onprogress).get, handlerProperty(BackgroundFetchRegistration, .onprogress).set, .{});
         pub const abort = bridge.function(R.abort, .{});
         pub const match = bridge.function(R.match, .{ .arity = 1 });
         pub const matchAll = bridge.function(R.match, .{ .arity = 0 });

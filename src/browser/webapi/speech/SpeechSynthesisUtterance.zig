@@ -21,6 +21,15 @@ const js = @import("../../js/js.zig");
 
 const EventTarget = @import("../EventTarget.zig");
 const SpeechSynthesisVoice = @import("SpeechSynthesisVoice.zig");
+const handler_property = @import("../handler_property.zig");
+
+/// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
+/// function is a listener like any other, so it lives in the event manager's
+/// handler store -- where the listener list can put it in dispatch order --
+/// rather than in a field here.
+fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) type {
+    return handler_property.accessors(T, which);
+}
 
 const Execution = js.Execution;
 
@@ -37,14 +46,6 @@ _voice: ?*SpeechSynthesisVoice = null,
 _volume: f64 = 1,
 _rate: f64 = 1,
 _pitch: f64 = 1,
-
-_on_start: ?js.Function.Global = null,
-_on_end: ?js.Function.Global = null,
-_on_error: ?js.Function.Global = null,
-_on_pause: ?js.Function.Global = null,
-_on_resume: ?js.Function.Global = null,
-_on_mark: ?js.Function.Global = null,
-_on_boundary: ?js.Function.Global = null,
 
 // `text` is optional so the reported arity is 0, matching Chrome's
 // SpeechSynthesisUtterance.length (measured); omitting it gives text "".
@@ -107,62 +108,6 @@ pub fn setPitch(self: *SpeechSynthesisUtterance, pitch: f64) void {
     self._pitch = pitch;
 }
 
-pub fn getOnStart(self: *const SpeechSynthesisUtterance) ?js.Function.Global {
-    return self._on_start;
-}
-
-pub fn setOnStart(self: *SpeechSynthesisUtterance, cb: ?js.Function) !void {
-    self._on_start = try persist(self, cb);
-}
-
-pub fn getOnEnd(self: *const SpeechSynthesisUtterance) ?js.Function.Global {
-    return self._on_end;
-}
-
-pub fn setOnEnd(self: *SpeechSynthesisUtterance, cb: ?js.Function) !void {
-    self._on_end = try persist(self, cb);
-}
-
-pub fn getOnError(self: *const SpeechSynthesisUtterance) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *SpeechSynthesisUtterance, cb: ?js.Function) !void {
-    self._on_error = try persist(self, cb);
-}
-
-pub fn getOnPause(self: *const SpeechSynthesisUtterance) ?js.Function.Global {
-    return self._on_pause;
-}
-
-pub fn setOnPause(self: *SpeechSynthesisUtterance, cb: ?js.Function) !void {
-    self._on_pause = try persist(self, cb);
-}
-
-pub fn getOnResume(self: *const SpeechSynthesisUtterance) ?js.Function.Global {
-    return self._on_resume;
-}
-
-pub fn setOnResume(self: *SpeechSynthesisUtterance, cb: ?js.Function) !void {
-    self._on_resume = try persist(self, cb);
-}
-
-pub fn getOnMark(self: *const SpeechSynthesisUtterance) ?js.Function.Global {
-    return self._on_mark;
-}
-
-pub fn setOnMark(self: *SpeechSynthesisUtterance, cb: ?js.Function) !void {
-    self._on_mark = try persist(self, cb);
-}
-
-pub fn getOnBoundary(self: *const SpeechSynthesisUtterance) ?js.Function.Global {
-    return self._on_boundary;
-}
-
-pub fn setOnBoundary(self: *SpeechSynthesisUtterance, cb: ?js.Function) !void {
-    self._on_boundary = try persist(self, cb);
-}
-
 fn persist(self: *SpeechSynthesisUtterance, cb: ?js.Function) !?js.Function.Global {
     const listener = cb orelse return null;
     return try listener.persistWithThis(self);
@@ -186,11 +131,11 @@ pub const JsApi = struct {
     pub const rate = bridge.accessor(SpeechSynthesisUtterance.getRate, SpeechSynthesisUtterance.setRate, .{});
     pub const pitch = bridge.accessor(SpeechSynthesisUtterance.getPitch, SpeechSynthesisUtterance.setPitch, .{});
 
-    pub const onstart = bridge.accessor(SpeechSynthesisUtterance.getOnStart, SpeechSynthesisUtterance.setOnStart, .{});
-    pub const onend = bridge.accessor(SpeechSynthesisUtterance.getOnEnd, SpeechSynthesisUtterance.setOnEnd, .{});
-    pub const onerror = bridge.accessor(SpeechSynthesisUtterance.getOnError, SpeechSynthesisUtterance.setOnError, .{});
-    pub const onpause = bridge.accessor(SpeechSynthesisUtterance.getOnPause, SpeechSynthesisUtterance.setOnPause, .{});
-    pub const onresume = bridge.accessor(SpeechSynthesisUtterance.getOnResume, SpeechSynthesisUtterance.setOnResume, .{});
-    pub const onmark = bridge.accessor(SpeechSynthesisUtterance.getOnMark, SpeechSynthesisUtterance.setOnMark, .{});
-    pub const onboundary = bridge.accessor(SpeechSynthesisUtterance.getOnBoundary, SpeechSynthesisUtterance.setOnBoundary, .{});
+    pub const onstart = bridge.accessor(handlerProperty(SpeechSynthesisUtterance, .onstart).get, handlerProperty(SpeechSynthesisUtterance, .onstart).set, .{});
+    pub const onend = bridge.accessor(handlerProperty(SpeechSynthesisUtterance, .onend).get, handlerProperty(SpeechSynthesisUtterance, .onend).set, .{});
+    pub const onerror = bridge.accessor(handlerProperty(SpeechSynthesisUtterance, .onerror).get, handlerProperty(SpeechSynthesisUtterance, .onerror).set, .{});
+    pub const onpause = bridge.accessor(handlerProperty(SpeechSynthesisUtterance, .onpause).get, handlerProperty(SpeechSynthesisUtterance, .onpause).set, .{});
+    pub const onresume = bridge.accessor(handlerProperty(SpeechSynthesisUtterance, .onresume).get, handlerProperty(SpeechSynthesisUtterance, .onresume).set, .{});
+    pub const onmark = bridge.accessor(handlerProperty(SpeechSynthesisUtterance, .onmark).get, handlerProperty(SpeechSynthesisUtterance, .onmark).set, .{});
+    pub const onboundary = bridge.accessor(handlerProperty(SpeechSynthesisUtterance, .onboundary).get, handlerProperty(SpeechSynthesisUtterance, .onboundary).set, .{});
 };

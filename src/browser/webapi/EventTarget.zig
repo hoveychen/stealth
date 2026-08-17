@@ -490,3 +490,8 @@ test "WebApi: EventTarget handler order" {
     testing.silenceLog(&.{.event});
     try testing.htmlRunner("event/handler_order.html", .{});
 }
+
+test "WebApi: EventTarget handler order on stub targets" {
+    testing.silenceLog(&.{.event});
+    try testing.htmlRunner("event/handler_order_stubs.html", .{});
+}

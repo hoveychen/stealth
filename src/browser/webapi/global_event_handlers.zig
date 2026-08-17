@@ -28,33 +28,25 @@ const IS_DEBUG = @import("builtin").mode == .Debug;
 const Key = struct {
     target: *EventTarget,
     handler: Handler,
-
-    /// Fuses `target` pointer and `handler` enum; used at hashing.
-    /// NEVER use a fusion to retrieve a pointer back. Portability is not guaranteed.
-    /// See `Context.hash`.
-    fn fuse(self: *const Key) u64 {
-        // Check if we have 3 bits available from alignment of 8.
-        if (comptime IS_DEBUG) {
-            lp.assert(@alignOf(EventTarget) == 8, "Key.fuse: incorrect alignment", .{
-                .event_target_alignment = @alignOf(EventTarget),
-            });
-        }
-
-        const ptr = @intFromPtr(self.target) >> 3;
-        if (comptime IS_DEBUG) {
-            lp.assert(ptr < (1 << 56), "Key.fuse: pointer overflow", .{ .ptr = ptr });
-        }
-        return ptr | (@as(u64, @intFromEnum(self.handler)) << 56);
-    }
 };
 
 const Context = struct {
+    /// Mixes the target pointer with the handler tag. The tag rides in the top
+    /// bits, which a user-space pointer never reaches, but nothing depends on
+    /// that being injective: `eql` compares the two fields, so a collision here
+    /// costs a probe and never a wrong answer. (An earlier version fused the
+    /// pair into one u64 and compared *that*, which capped `Handler` at the 256
+    /// tags a u8 can hold -- the enum has since outgrown it.)
     pub fn hash(_: @This(), key: Key) u64 {
-        return std.hash.int(key.fuse());
+        const ptr = @intFromPtr(key.target);
+        if (comptime IS_DEBUG) {
+            lp.assert(ptr < (1 << 48), "Key.hash: pointer overflow", .{ .ptr = ptr });
+        }
+        return std.hash.int(ptr ^ (@as(u64, @intFromEnum(key.handler)) << 48));
     }
 
     pub fn eql(_: @This(), a: Key, b: Key) bool {
-        return a.fuse() == b.fuse();
+        return a.target == b.target and a.handler == b.handler;
     }
 };
 
@@ -65,23 +57,31 @@ pub const Lookup = std.HashMapUnmanaged(
     std.hash_map.default_max_load_percentage,
 );
 
-/// Enum of known event listeners; increasing the size of it (u8)
-/// can cause `Key` to behave incorrectly. `Key.fuse` packs the tag into the
-/// top 8 bits, so the shift there must move in step with this.
-pub const Handler = enum(u8) {
+/// Enum of known event listeners. `Context.hash` mixes the tag in above a
+/// pointer's 48 significant bits, so the tag has 16 bits to grow into; the
+/// hash map stays correct past that anyway, because `Context.eql` compares the
+/// fields rather than the mix.
+pub const Handler = enum(u16) {
     onabort,
+    onactivate,
+    onactive,
+    onaddsourcebuffer,
+    onaddstream,
+    onaddtrack,
     onafterprint,
     onanimationcancel,
     onanimationend,
     onanimationiteration,
     onanimationstart,
     onappinstalled,
+    onaudioend,
+    onaudioprocess,
+    onaudiostart,
     onauxclick,
     onbeforecopy,
     onbeforecut,
     onbeforeinput,
     onbeforeinstallprompt,
-    onblocked,
     onbeforematch,
     onbeforepaste,
     onbeforeprint,
@@ -89,29 +89,51 @@ pub const Handler = enum(u8) {
     onbeforeunload,
     onbeforexrselect,
     onbegin,
+    onblocked,
     onblur,
+    onboundary,
+    onbufferedamountlow,
     oncancel,
     oncanplay,
     oncanplaythrough,
+    oncapturehandlechange,
     onchange,
     oncharacterboundsupdate,
+    oncharacteristicvaluechanged,
+    onchargingchange,
+    onchargingtimechange,
     onclick,
+    onclipboardchange,
     onclose,
+    onclosing,
     oncommand,
     oncomplete,
     oncompositionend,
     oncompositionstart,
+    onconnect,
+    onconnecting,
+    onconnectionavailable,
+    onconnectionstatechange,
     oncontentvisibilityautostatechange,
     oncontextlost,
     oncontextmenu,
     oncontextrestored,
+    oncontrollerchange,
     oncopy,
     oncuechange,
+    oncurrententrychange,
+    oncurrentscreenchange,
     oncut,
+    ondatachannel,
     ondblclick,
+    ondequeue,
+    ondevicechange,
     ondevicemotion,
     ondeviceorientation,
     ondeviceorientationabsolute,
+    ondischargingtimechange,
+    ondisconnect,
+    ondispose,
     ondrag,
     ondragend,
     ondragenter,
@@ -125,31 +147,48 @@ pub const Handler = enum(u8) {
     onencrypted,
     onend,
     onended,
+    onenter,
     onerror,
-    onfocus,
+    onexit,
     onfinish,
+    onfocus,
     onformdata,
     onfreeze,
     onfullscreenchange,
     onfullscreenerror,
     ongamepadconnected,
     ongamepaddisconnected,
+    ongatheringstatechange,
+    ongattserverdisconnected,
+    ongeometrychange,
     ongotpointercapture,
     onhashchange,
+    onicecandidate,
+    onicecandidateerror,
+    oniceconnectionstatechange,
+    onicegatheringstatechange,
+    oninactive,
     oninput,
+    oninputreport,
+    oninputsourceschange,
     oninvalid,
     onkeydown,
     onkeypress,
+    onkeystatuseschange,
     onkeyup,
     onlanguagechange,
+    onlevelchange,
     onload,
     onloadeddata,
     onloadedmetadata,
     onloadend,
     onloadstart,
     onlostpointercapture,
+    onmanagedconfigurationchange,
+    onmark,
     onmessage,
     onmessageerror,
+    onmidimessage,
     onmousedown,
     onmouseenter,
     onmouseleave,
@@ -158,6 +197,9 @@ pub const Handler = enum(u8) {
     onmouseover,
     onmouseup,
     onmousewheel,
+    onmute,
+    onnegotiationneeded,
+    onnomatch,
     onoffline,
     ononline,
     onopen,
@@ -167,6 +209,8 @@ pub const Handler = enum(u8) {
     onpageswap,
     onpaste,
     onpause,
+    onpayerdetailchange,
+    onpaymentmethodchange,
     onplay,
     onplaying,
     onpointercancel,
@@ -182,15 +226,26 @@ pub const Handler = enum(u8) {
     onpointerup,
     onpopstate,
     onprerenderingchange,
+    onprioritychange,
     onprogress,
     onratechange,
+    onreading,
     onreadystatechange,
+    onredraw,
+    onreflectionchange,
     onrejectionhandled,
-    onrepeat,
+    onrelease,
     onremove,
+    onremovesourcebuffer,
+    onremovestream,
+    onremovetrack,
+    onrepeat,
     onreset,
     onresize,
+    onresourcetimingbufferfull,
+    onresult,
     onresume,
+    onscreenschange,
     onscroll,
     onscrollend,
     onscrollsnapchange,
@@ -200,31 +255,60 @@ pub const Handler = enum(u8) {
     onseeked,
     onseeking,
     onselect,
+    onselectedcandidatepairchange,
+    onselectend,
     onselectionchange,
     onselectstart,
+    onshippingaddresschange,
+    onshippingoptionchange,
+    onsignalingstatechange,
+    onsinkchange,
     onslotchange,
+    onsoundend,
+    onsoundstart,
+    onsourceclose,
+    onsourceended,
+    onsourceopen,
+    onspeechend,
+    onspeechstart,
+    onsqueeze,
+    onsqueezeend,
+    onsqueezestart,
     onstalled,
+    onstart,
+    onstatechange,
     onstorage,
     onsubmit,
     onsuccess,
     onsuspend,
+    onterminate,
     ontextformatupdate,
     ontextupdate,
     ontimeout,
     ontimeupdate,
     ontoggle,
+    ontonechange,
     ontouchcancel,
     ontouchend,
     ontouchmove,
     ontouchstart,
+    ontrack,
     ontransitioncancel,
     ontransitionend,
     ontransitionrun,
     ontransitionstart,
+    onuncapturederror,
     onunhandledrejection,
-    onupgradeneeded,
     onunload,
+    onunmute,
+    onupdate,
+    onupdateend,
+    onupdatefound,
+    onupdatestart,
+    onupgradeneeded,
     onvisibilitychange,
+    onvisibilitymaskchange,
+    onvoiceschanged,
     onvolumechange,
     onwaiting,
     onwaitingforkey,
@@ -235,6 +319,10 @@ pub const Handler = enum(u8) {
     onwebkitfullscreenerror,
     onwebkittransitionend,
     onwheel,
+    onwrite,
+    onwriteend,
+    onwritestart,
+    onzoomlevelchange,
 };
 
 /// The handlers whose event type is not the property name with `on` stripped.
@@ -272,6 +360,7 @@ fn derivedType(comptime name: []const u8, comptime handler: Handler) []const u8 
 }
 
 const handlerToType = blk: {
+    @setEvalBranchQuota(10_000);
     const fields = std.meta.fields(Handler);
     var entries: [fields.len][]const u8 = undefined;
     for (fields) |field| {
