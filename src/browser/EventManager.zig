@@ -101,8 +101,7 @@ pub fn dispatch(self: *EventManager, target: *EventTarget, event: *Event) Dispat
 
     switch (target._type) {
         .node => |node| try self.dispatchNode(node, event),
-        .xhr => |xhr| try self.dispatchDirect(target, event, xhr.inlineHandler(event._type_string), .{ .context = "dispatch" }),
-        // Every other handler property is backed by the handler store, and so
+        // Every handler property is backed by the handler store, and so
         // already sits in the target's listener list as a listener of its own
         // (see EventManagerBase.registerHandler).
         else => try self.dispatchDirect(target, event, null, .{ .context = "dispatch" }),

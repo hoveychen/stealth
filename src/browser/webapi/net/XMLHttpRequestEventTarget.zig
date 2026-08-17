@@ -30,13 +30,6 @@ pub const Proto = EventTarget;
 
 _type: Type,
 _proto: *EventTarget,
-_on_abort: ?js.Function.Global = null,
-_on_error: ?js.Function.Global = null,
-_on_load: ?js.Function.Global = null,
-_on_load_end: ?js.Function.Global = null,
-_on_load_start: ?js.Function.Global = null,
-_on_progress: ?js.Function.Global = null,
-_on_timeout: ?js.Function.Global = null,
 
 pub const Type = union(enum) {
     request: *@import("XMLHttpRequest.zig"),
@@ -47,28 +40,15 @@ pub fn asEventTarget(self: *XMLHttpRequestEventTarget) *EventTarget {
     return self._proto;
 }
 
-pub fn releaseListeners(self: *XMLHttpRequestEventTarget) void {
-    inline for (.{
-        "_on_abort",      "_on_error",    "_on_load",    "_on_load_end",
-        "_on_load_start", "_on_progress", "_on_timeout",
-    }) |field| {
-        if (@field(self, field)) |func| {
-            func.release();
-        }
-    }
-}
-
 pub fn dispatch(self: *XMLHttpRequestEventTarget, comptime event_type: DispatchType, progress_: ?Progress, exec: *const Execution) !void {
-    const field, const typ = comptime blk: {
-        break :blk switch (event_type) {
-            .abort => .{ "_on_abort", "abort" },
-            .err => .{ "_on_error", "error" },
-            .load => .{ "_on_load", "load" },
-            .load_end => .{ "_on_load_end", "loadend" },
-            .load_start => .{ "_on_load_start", "loadstart" },
-            .progress => .{ "_on_progress", "progress" },
-            .timeout => .{ "_on_timeout", "timeout" },
-        };
+    const typ = comptime switch (event_type) {
+        .abort => "abort",
+        .err => "error",
+        .load => "load",
+        .load_end => "loadend",
+        .load_start => "loadstart",
+        .progress => "progress",
+        .timeout => "timeout",
     };
 
     const progress = progress_ orelse Progress{};
@@ -78,86 +58,14 @@ pub fn dispatch(self: *XMLHttpRequestEventTarget, comptime event_type: DispatchT
         exec.page,
     )).asEvent();
 
+    // No handler is passed by hand: `onload` and friends sit in the listener
+    // list, in the place each was set (see handler_property).
     return exec.dispatch(
         self.asEventTarget(),
         event,
-        @field(self, field),
+        null,
         .{ .context = "XHR " ++ typ },
     );
-}
-
-// Resolves the property event handler for the given event type, so that a
-// script-dispatched event (target.dispatchEvent) fires it like the internal
-// dispatch path does.
-pub fn inlineHandler(self: *const XMLHttpRequestEventTarget, typ: lp.String) ?js.Function.Global {
-    if (typ.eql(comptime .wrap("abort"))) return self._on_abort;
-    if (typ.eql(comptime .wrap("error"))) return self._on_error;
-    if (typ.eql(comptime .wrap("load"))) return self._on_load;
-    if (typ.eql(comptime .wrap("loadend"))) return self._on_load_end;
-    if (typ.eql(comptime .wrap("loadstart"))) return self._on_load_start;
-    if (typ.eql(comptime .wrap("progress"))) return self._on_progress;
-    if (typ.eql(comptime .wrap("timeout"))) return self._on_timeout;
-    return null;
-}
-
-pub fn getOnAbort(self: *const XMLHttpRequestEventTarget) ?js.Function.Global {
-    return self._on_abort;
-}
-
-pub fn setOnAbort(self: *XMLHttpRequestEventTarget, cb: ?js.Function.Global) !void {
-    self._on_abort = cb;
-}
-
-pub fn getOnError(self: *const XMLHttpRequestEventTarget) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *XMLHttpRequestEventTarget, cb: ?js.Function.Global) !void {
-    self._on_error = cb;
-}
-
-pub fn getOnLoad(self: *const XMLHttpRequestEventTarget) ?js.Function.Global {
-    return self._on_load;
-}
-
-pub fn setOnLoad(self: *XMLHttpRequestEventTarget, cb: ?js.Function.Global) !void {
-    self._on_load = cb;
-}
-
-pub fn getOnLoadEnd(self: *const XMLHttpRequestEventTarget) ?js.Function.Global {
-    return self._on_load_end;
-}
-
-pub fn setOnLoadEnd(self: *XMLHttpRequestEventTarget, cb: ?js.Function.Global) !void {
-    self._on_load_end = cb;
-}
-
-pub fn getOnLoadStart(self: *const XMLHttpRequestEventTarget) ?js.Function.Global {
-    return self._on_load_start;
-}
-
-pub fn setOnLoadStart(self: *XMLHttpRequestEventTarget, cb: ?js.Function.Global) !void {
-    self._on_load_start = cb;
-}
-
-pub fn getOnProgress(self: *const XMLHttpRequestEventTarget) ?js.Function.Global {
-    return self._on_progress;
-}
-
-pub fn setOnProgress(self: *XMLHttpRequestEventTarget, cb: ?js.Function.Global) !void {
-    self._on_progress = cb;
-}
-
-pub fn getOnTimeout(self: *const XMLHttpRequestEventTarget) ?js.Function.Global {
-    return self._on_timeout;
-}
-
-pub fn setOnTimeout(self: *XMLHttpRequestEventTarget, cb_: ?js.Function) !void {
-    if (cb_) |cb| {
-        self._on_timeout = try cb.persistWithThis(self);
-    } else {
-        self._on_timeout = null;
-    }
 }
 
 const DispatchType = enum {
@@ -184,11 +92,15 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const onloadstart = bridge.accessor(XMLHttpRequestEventTarget.getOnLoadStart, XMLHttpRequestEventTarget.setOnLoadStart, .{});
-    pub const onprogress = bridge.accessor(XMLHttpRequestEventTarget.getOnProgress, XMLHttpRequestEventTarget.setOnProgress, .{});
-    pub const onabort = bridge.accessor(XMLHttpRequestEventTarget.getOnAbort, XMLHttpRequestEventTarget.setOnAbort, .{});
-    pub const onerror = bridge.accessor(XMLHttpRequestEventTarget.getOnError, XMLHttpRequestEventTarget.setOnError, .{});
-    pub const onload = bridge.accessor(XMLHttpRequestEventTarget.getOnLoad, XMLHttpRequestEventTarget.setOnLoad, .{});
-    pub const ontimeout = bridge.accessor(XMLHttpRequestEventTarget.getOnTimeout, XMLHttpRequestEventTarget.setOnTimeout, .{});
-    pub const onloadend = bridge.accessor(XMLHttpRequestEventTarget.getOnLoadEnd, XMLHttpRequestEventTarget.setOnLoadEnd, .{});
+    fn handler(comptime which: @import("../global_event_handlers.zig").Handler) type {
+        return @import("../handler_property.zig").accessors(XMLHttpRequestEventTarget, which);
+    }
+
+    pub const onloadstart = bridge.accessor(handler(.onloadstart).get, handler(.onloadstart).set, .{});
+    pub const onprogress = bridge.accessor(handler(.onprogress).get, handler(.onprogress).set, .{});
+    pub const onabort = bridge.accessor(handler(.onabort).get, handler(.onabort).set, .{});
+    pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
+    pub const onload = bridge.accessor(handler(.onload).get, handler(.onload).set, .{});
+    pub const ontimeout = bridge.accessor(handler(.ontimeout).get, handler(.ontimeout).set, .{});
+    pub const onloadend = bridge.accessor(handler(.onloadend).get, handler(.onloadend).set, .{});
 };

@@ -73,7 +73,6 @@ _response_headers: std.ArrayList([]const u8) = .empty,
 _response_type: ResponseType = .default,
 
 _ready_state: ReadyState = .unsent,
-_on_ready_state_change: ?js.Function.Global = null,
 _with_credentials: bool = false,
 _timeout: u32 = 0,
 
@@ -125,14 +124,6 @@ pub fn deinit(self: *XMLHttpRequest, _: *Page) void {
         self._http_transfer = null;
     }
 
-    if (self._on_ready_state_change) |func| {
-        func.release();
-    }
-
-    self._proto.releaseListeners();
-    if (self._upload) |upload| {
-        upload._proto.releaseListeners();
-    }
     self._arena.release();
 }
 
@@ -159,16 +150,12 @@ fn asEventTarget(self: *XMLHttpRequest) *EventTarget {
     return self._proto._proto;
 }
 
-pub fn getOnReadyStateChange(self: *const XMLHttpRequest) ?js.Function.Global {
-    return self._on_ready_state_change;
+pub fn getOnReadyStateChange(self: *XMLHttpRequest) ?js.Function.Global {
+    return self._exec.getEventHandler(self.asEventTarget(), .onreadystatechange);
 }
 
-pub fn setOnReadyStateChange(self: *XMLHttpRequest, cb_: ?js.Function) !void {
-    if (cb_) |cb| {
-        self._on_ready_state_change = try cb.persistWithThis(self);
-    } else {
-        self._on_ready_state_change = null;
-    }
+pub fn setOnReadyStateChange(self: *XMLHttpRequest, cb: ?js.Function.Global) !void {
+    return self._exec.setEventHandler(self.asEventTarget(), .onreadystatechange, cb);
 }
 
 pub fn getWithCredentials(self: *const XMLHttpRequest) bool {
@@ -673,9 +660,9 @@ fn stateChanged(self: *XMLHttpRequest, state: ReadyState, exec: *const Execution
     self._ready_state = state;
 
     const target = self.asEventTarget();
-    if (exec.hasDirectListeners(target, "readystatechange", self._on_ready_state_change)) {
+    if (exec.hasDirectListeners(target, "readystatechange", null)) {
         const event = try Event.initTrusted(.wrap("readystatechange"), .{}, exec.page);
-        try exec.dispatch(target, event, self._on_ready_state_change, .{ .context = "XHR state change" });
+        try exec.dispatch(target, event, null, .{ .context = "XHR state change" });
     }
 }
 
