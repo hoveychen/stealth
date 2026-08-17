@@ -371,3 +371,32 @@ pub const JsApi = struct {
     pub const startRendering = bridge.function(OfflineAudioContext.startRendering, .{ .arity = 0 });
     pub const @"suspend" = bridge.function(OfflineAudioContext.@"suspend", .{ .arity = 1 });
 };
+
+// The recorded renders are the whole substance of the replay, so they are
+// checked against the tail sums Chrome itself reported for the very same
+// buffers -- a decode, ordering or endianness slip would show up here long
+// before a page could see it. The sums are what `probe-g21` read out of
+// Chrome; summing the stored samples has to reproduce them exactly, because
+// one ULP anywhere in the tail changes the string a detector hashes.
+test "WebApi: recorded canonical audio renders" {
+    const chrome_audio = @import("chrome_audio.zig");
+
+    const tail = struct {
+        fn sum(platform: chrome_audio.Platform) f64 {
+            var total: f64 = 0;
+            for (chrome_audio.samples(platform)[4500..5000]) |sample| {
+                total += @abs(@as(f64, sample));
+            }
+            return total;
+        }
+    };
+
+    try std.testing.expectEqual(@as(f64, 124.04347624466754), tail.sum(.macos));
+    try std.testing.expectEqual(@as(f64, 124.04347527516074), tail.sum(.linux));
+
+    // The compressor's 6 ms pre-delay, measured identical on both platforms.
+    for (chrome_audio.samples(.macos)[0..265]) |sample| {
+        try std.testing.expectEqual(@as(f32, 0), sample);
+    }
+    try std.testing.expect(chrome_audio.samples(.macos)[265] != 0);
+}
