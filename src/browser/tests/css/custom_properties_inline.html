@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<script id=parsed_from_the_style_attribute>
+{
+  // Measured on Chrome 150 (probe-g12b). A custom property survives the style
+  // attribute parser with its name case intact and its value kept verbatim
+  // apart from the surrounding whitespace: no lowercasing, no unit or
+  // leading-zero normalisation.
+  const el = document.createElement('div');
+  el.setAttribute('style',
+    '--a:  0  ; --B: 1PX; --c: 01.50; --e: a  b   c; --Case: upper; --case: lower; color:RED; --f: "q"; --g: var(--a)');
+  const s = el.style;
+
+  testing.expectEqual('0', s.getPropertyValue('--a'));
+  testing.expectEqual('1PX', s.getPropertyValue('--B'));
+  testing.expectEqual('', s.getPropertyValue('--b'));
+  testing.expectEqual('01.50', s.getPropertyValue('--c'));
+  testing.expectEqual('a  b   c', s.getPropertyValue('--e'));
+  testing.expectEqual('upper', s.getPropertyValue('--Case'));
+  testing.expectEqual('lower', s.getPropertyValue('--case'));
+  testing.expectEqual('"q"', s.getPropertyValue('--f'));
+  testing.expectEqual('var(--a)', s.getPropertyValue('--g'));
+  // A normal property alongside them is still parsed. (Chrome lowercases a
+  // keyword value here -- `color:RED` reads back as "red" -- and we do not;
+  // that is a pre-existing divergence for normal properties, unrelated to
+  // custom ones.)
+  testing.expectEqual(true, s.getPropertyValue('color').length > 0);
+}
+</script>
+
+<script id=enumeration>
+{
+  const el = document.createElement('div');
+  el.setAttribute('style', '--a: 1; color: red; --B: 2');
+  const s = el.style;
+  testing.expectEqual(3, s.length);
+  const names = [];
+  for (let i = 0; i < s.length; i++) names.push(s[i]);
+  testing.expectEqual('["--a","color","--B"]', JSON.stringify(names));
+  testing.expectEqual('--a: 1; color: red; --B: 2;', s.cssText);
+}
+</script>
+
+<script id=empty_value_is_kept>
+{
+  // A custom property accepts an empty value from a declaration block, where a
+  // normal property with no value is dropped.
+  const el = document.createElement('div');
+  el.setAttribute('style', '--d:; color:;');
+  const s = el.style;
+  testing.expectEqual('', s.getPropertyValue('--d'));
+  testing.expectEqual(1, s.length);
+  testing.expectEqual('--d', s[0]);
+}
+</script>
+
+<script id=imperative_api>
+{
+  const el = document.createElement('div');
+  const s = el.style;
+  s.setProperty('--MiXeD', ' spaced value ');
+  testing.expectEqual('spaced value', s.getPropertyValue('--MiXeD'));
+  testing.expectEqual('', s.getPropertyValue('--mixed'));
+  testing.expectEqual('--MiXeD: spaced value;', el.getAttribute('style'));
+  testing.expectEqual('spaced value', s.removeProperty('--MiXeD'));
+  testing.expectEqual('', s.getPropertyValue('--MiXeD'));
+}
+</script>
+
+<script id=important>
+{
+  const el = document.createElement('div');
+  el.setAttribute('style', '--imp: 1 !important; --norm: 2');
+  const s = el.style;
+  testing.expectEqual('important', s.getPropertyPriority('--imp'));
+  testing.expectEqual('1', s.getPropertyValue('--imp'));
+  testing.expectEqual('', s.getPropertyPriority('--norm'));
+  testing.expectEqual('2', s.getPropertyValue('--norm'));
+}
+</script>

@@ -460,6 +460,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
     if (selector_text.len == 0) return;
 
     var props = RuleProperties{};
+    var custom: std.ArrayList(CustomDeclaration) = .empty;
     var it = CssParser.parseDeclarationsList(block_text);
     while (it.next()) |decl| {
         const name = decl.name;
@@ -476,8 +477,15 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             props.font_size = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "font-family")) {
             props.font_family = .{ .value = val, .important = decl.important };
+        } else if (CSSStyleDeclaration.isCustomProperty(name)) {
+            try custom.append(self.arena.allocator(), .{
+                .name = try self.arena.allocator().dupe(u8, name),
+                .value = try self.arena.allocator().dupe(u8, val),
+                .important = decl.important,
+            });
         }
     }
+    props.custom = custom.items;
 
     if (!props.isRelevant()) return;
 
@@ -1086,6 +1094,22 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
         props.pointer_events_none = property._value.eql(comptime .wrap("none"));
     }
 
+    var custom: std.ArrayList(CustomDeclaration) = .empty;
+    var node = decl._properties.first;
+    while (node) |n| : (node = n.next) {
+        const property = CSSStyleProperty.fromNodeLink(n);
+        const name = property._name.str();
+        if (!CSSStyleDeclaration.isCustomProperty(name)) {
+            continue;
+        }
+        try custom.append(arena, .{
+            .name = try arena.dupe(u8, name),
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        });
+    }
+    props.custom = custom.items;
+
     return props;
 }
 
@@ -1160,6 +1184,10 @@ const RuleProperties = struct {
     pointer_events_none: ?bool = null,
     font_size: ?Declaration = null,
     font_family: ?Declaration = null,
+    // Every custom property the rule declares, in declaration order. Unlike
+    // the fields above there is no fixed set of names to pick from, and a page
+    // can read any of them back through getComputedStyle.
+    custom: []const CustomDeclaration = &.{},
 
     // return true if any field in RuleProperties is not null
     fn isRelevant(self: RuleProperties) bool {
@@ -1168,8 +1196,15 @@ const RuleProperties = struct {
             self.opacity_zero != null or
             self.pointer_events_none != null or
             self.font_size != null or
-            self.font_family != null;
+            self.font_family != null or
+            self.custom.len > 0;
     }
+};
+
+pub const CustomDeclaration = struct {
+    name: []const u8,
+    value: []const u8,
+    important: bool,
 };
 
 const Rule = struct {
@@ -1386,6 +1421,266 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
     }
 
     checkRules(&self.other_rules, property, &best, &best_priority, &best_important, el, self.frame);
+
+    return best;
+}
+
+/// The cascaded value of a custom property on `element`, or null when nothing
+/// up the tree declares it. Custom properties inherit, so a miss walks to the
+/// parent -- which is also why this is a tree walk rather than a lookup.
+pub fn customPropertyValue(self: *StyleManager, element: *Element, name: []const u8) ?[]const u8 {
+    return self.customPropertyValueAt(element, name, 0);
+}
+
+fn customPropertyValueAt(self: *StyleManager, element: ?*Element, name: []const u8, depth: u8) ?[]const u8 {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+        return null;
+    }
+    const current = element orelse return null;
+
+    const inline_property = getInlineStyleProperty(current, .wrap(name), self.frame);
+    const rule = self.cascadedCustomDeclaration(current, name);
+
+    // Same order as computedFontFamily: an `!important` rule beats the style
+    // attribute unless that one is `!important` too.
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            return declaration.value;
+        }
+    }
+    if (inline_property) |property| {
+        return property._value.str();
+    }
+    if (rule) |declaration| {
+        return declaration.value;
+    }
+    return self.customPropertyValueAt(current.parentElement(), name, depth + 1);
+}
+
+/// Every custom property name in effect on `element`: the ones it declares
+/// itself, inline or through a matching rule, then the ones it inherits, each
+/// name once. Chrome's computed style enumerates these alongside the standard
+/// longhands (the order within them is Blink's own and is not reproduced).
+pub fn collectCustomPropertyNames(self: *StyleManager, element: *Element, out: *std.ArrayList([]const u8)) !void {
+    self.rebuildIfDirty() catch return;
+
+    var current: ?*Element = element;
+    var depth: u8 = 0;
+    while (current) |el| : ({
+        current = el.parentElement();
+        depth += 1;
+    }) {
+        if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+            return;
+        }
+        if (self.frame._element_styles.get(el) orelse blk: {
+            if (el.getAttributeSafe(comptime .wrap("style")) == null) break :blk null;
+            break :blk el.getOrCreateStyle(self.frame) catch null;
+        }) |style| {
+            var node = style._properties.first;
+            while (node) |n| : (node = n.next) {
+                const property = CSSStyleProperty.fromNodeLink(n);
+                try appendUnique(self.frame.local_arena, out, property._name.str());
+            }
+        }
+
+        try self.appendMatchingCustomNames(el, out);
+    }
+}
+
+fn appendMatchingCustomNames(self: *StyleManager, el: *Element, out: *std.ArrayList([]const u8)) !void {
+    const collect = struct {
+        fn run(manager: *StyleManager, rules: *const RuleList, elem: *Element, sink: *std.ArrayList([]const u8)) !void {
+            for (rules.items(.props), rules.items(.selector)) |props, selector| {
+                if (props.custom.len == 0) continue;
+                if (!matchesSelector(elem, selector, manager.frame)) continue;
+                for (props.custom) |declaration| {
+                    try appendUnique(manager.frame.local_arena, sink, declaration.name);
+                }
+            }
+        }
+    }.run;
+
+    if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
+        if (self.id_rules.get(id)) |rules| {
+            try collect(self, &rules, el, out);
+        }
+    }
+    if (el.getAttributeSafe(comptime .wrap("class"))) |class_attr| {
+        var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
+        while (it.next()) |class| {
+            if (self.class_rules.get(class)) |rules| {
+                try collect(self, &rules, el, out);
+            }
+        }
+    }
+    if (self.tag_rules.get(el.getTag())) |rules| {
+        try collect(self, &rules, el, out);
+    }
+    try collect(self, &self.other_rules, el, out);
+}
+
+fn appendUnique(allocator: Allocator, out: *std.ArrayList([]const u8), name: []const u8) !void {
+    if (!CSSStyleDeclaration.isCustomProperty(name)) {
+        return;
+    }
+    for (out.items) |seen| {
+        if (std.mem.eql(u8, seen, name)) return;
+    }
+    try out.append(allocator, name);
+}
+
+/// Bounds the var() substitution recursion. A reference cycle
+/// (`--a: var(--b); --b: var(--a)`) is only visible as depth here, and Chrome
+/// makes a cycle invalid at computed-value time -- which is what returning
+/// null means to the caller.
+const MAX_VAR_DEPTH = 16;
+
+/// `raw` with every `var()` replaced by the custom property it names, or by
+/// that reference's fallback when the name is not declared anywhere up the
+/// tree. Returns null when the value is invalid at computed-value time: an
+/// undeclared name with no fallback, or a reference cycle.
+///
+/// Only computed values are substituted; a specified value keeps its var()
+/// text, which is why this is applied at read time rather than when a
+/// declaration is stored.
+pub fn substituteVars(self: *StyleManager, element: *Element, raw: []const u8) ?[]const u8 {
+    if (std.mem.indexOf(u8, raw, "var(") == null and std.mem.indexOf(u8, raw, "VAR(") == null) {
+        return raw;
+    }
+    return self.substituteVarsAt(element, raw, 0);
+}
+
+fn substituteVarsAt(self: *StyleManager, element: *Element, raw: []const u8, depth: u8) ?[]const u8 {
+    if (depth >= MAX_VAR_DEPTH) {
+        return null;
+    }
+
+    const allocator = self.frame.local_arena;
+    var out: std.ArrayList(u8) = .empty;
+    var rest = raw;
+    while (findVarReference(rest)) |reference| {
+        out.appendSlice(allocator, rest[0..reference.start]) catch return null;
+
+        const name = std.mem.trim(u8, reference.name, &std.ascii.whitespace);
+        if (self.customPropertyValue(element, name)) |value| {
+            // A property declared empty is still declared: the fallback does
+            // not apply, and the reference contributes nothing.
+            const substituted = self.substituteVarsAt(element, value, depth + 1) orelse return null;
+            out.appendSlice(allocator, substituted) catch return null;
+        } else {
+            const fallback = reference.fallback orelse return null;
+            const trimmed = std.mem.trim(u8, fallback, &std.ascii.whitespace);
+            const substituted = self.substituteVarsAt(element, trimmed, depth + 1) orelse return null;
+            out.appendSlice(allocator, substituted) catch return null;
+        }
+
+        rest = rest[reference.end..];
+    }
+    out.appendSlice(allocator, rest) catch return null;
+    return std.mem.trim(u8, out.items, &std.ascii.whitespace);
+}
+
+const VarReference = struct {
+    // Offsets into the slice searched: `start` is the `v` of `var(`, `end` is
+    // one past the closing paren.
+    start: usize,
+    end: usize,
+    name: []const u8,
+    // Everything after the first top-level comma, verbatim: Chrome keeps the
+    // commas of `var(--nope, a, b)` and answers "a, b".
+    fallback: ?[]const u8,
+};
+
+fn findVarReference(input: []const u8) ?VarReference {
+    var i: usize = 0;
+    const start = while (i + 4 <= input.len) : (i += 1) {
+        if (std.ascii.eqlIgnoreCase(input[i .. i + 4], "var(")) break i;
+    } else return null;
+
+    var depth: usize = 1;
+    var comma: ?usize = null;
+    var j = start + 4;
+    while (j < input.len) : (j += 1) {
+        switch (input[j]) {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if (depth == 0) break;
+            },
+            ',' => if (depth == 1 and comma == null) {
+                comma = j;
+            },
+            else => {},
+        }
+    }
+    if (depth != 0) {
+        // Unclosed reference: treat the rest as the name, the way a token
+        // stream that ends mid-function does.
+        return .{ .start = start, .end = input.len, .name = input[start + 4 ..], .fallback = null };
+    }
+
+    const close = j;
+    const inner_end = comma orelse close;
+    return .{
+        .start = start,
+        .end = close + 1,
+        .name = input[start + 4 .. inner_end],
+        .fallback = if (comma) |c| input[c + 1 .. close] else null,
+    };
+}
+
+/// The winning declaration of custom property `name` among the stylesheet
+/// rules matching `el`. Custom property names are case-sensitive.
+fn cascadedCustomDeclaration(self: *StyleManager, el: *Element, name: []const u8) ?Declaration {
+    self.rebuildIfDirty() catch return null;
+
+    var best: ?Declaration = null;
+    var best_priority: u64 = 0;
+    var best_important = false;
+
+    const checkRules = struct {
+        fn check(rules: *const RuleList, wanted: []const u8, winner: *?Declaration, priority: *u64, important: *bool, elem: *Element, frame: *Frame) void {
+            for (rules.items(.priority), rules.items(.props), rules.items(.selector)) |p, props, selector| {
+                if (props.custom.len == 0) continue;
+                var matched: ?CustomDeclaration = null;
+                // Within one rule the last declaration of a name wins.
+                for (props.custom) |declaration| {
+                    if (std.mem.eql(u8, declaration.name, wanted)) {
+                        matched = declaration;
+                    }
+                }
+                const declaration = matched orelse continue;
+                if (important.* and !declaration.important) continue;
+                if (declaration.important == important.* and p <= priority.*) continue;
+                if (!matchesSelector(elem, selector, frame)) continue;
+                winner.* = .{ .value = declaration.value, .important = declaration.important };
+                priority.* = p;
+                important.* = declaration.important;
+            }
+        }
+    }.check;
+
+    if (el.getAttributeSafe(comptime .wrap("id"))) |id| {
+        if (self.id_rules.get(id)) |rules| {
+            checkRules(&rules, name, &best, &best_priority, &best_important, el, self.frame);
+        }
+    }
+
+    if (el.getAttributeSafe(comptime .wrap("class"))) |class_attr| {
+        var it = std.mem.tokenizeAny(u8, class_attr, &std.ascii.whitespace);
+        while (it.next()) |class| {
+            if (self.class_rules.get(class)) |rules| {
+                checkRules(&rules, name, &best, &best_priority, &best_important, el, self.frame);
+            }
+        }
+    }
+
+    if (self.tag_rules.get(el.getTag())) |rules| {
+        checkRules(&rules, name, &best, &best_priority, &best_important, el, self.frame);
+    }
+
+    checkRules(&self.other_rules, name, &best, &best_priority, &best_important, el, self.frame);
 
     return best;
 }

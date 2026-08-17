@@ -284,6 +284,10 @@ fn isIdentStart(self: *Tokenizer) bool {
     var b = self.nextByteUnchecked();
     if (b == '-') {
         b = if (self.hasAtLeast(1)) self.byteAt(1) else return false;
+        // https://drafts.csswg.org/css-syntax/#would-start-an-identifier:
+        // a second '-' ends the check on its own. That is what makes
+        // `--custom-property` an ident token rather than two delims.
+        if (b == '-') return true;
     }
 
     return switch (b) {

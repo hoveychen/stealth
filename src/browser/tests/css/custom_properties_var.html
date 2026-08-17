@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<style>
+  #v { --defined: dv; --with-var: var(--defined); --chain: var(--with-var);
+       --fallback-used: var(--nope, fb); --fallback-unused: var(--defined, fb);
+       --empty: ; --from-empty: var(--empty, fb);
+       --cycle-a: var(--cycle-b); --cycle-b: var(--cycle-a);
+       --self: var(--self);
+       --spacey: var( --defined );
+       --two-args: var(--nope, a, b);
+       --nested-fb: var(--nope, var(--defined));
+       --with-text: pre var(--defined) post; }
+</style>
+
+<div id=v style="color: var(--nope2, rgb(1, 2, 3)); --inline-var: var(--defined)"></div>
+
+<script id=substitution>
+{
+  // Measured on Chrome 150 (probe-g12d). Substitution happens at
+  // computed-value time; the specified value stays literal.
+  const el = document.getElementById('v');
+  const cs = getComputedStyle(el);
+  const c = (n) => cs.getPropertyValue(n).trim();
+
+  testing.expectEqual('dv', c('--with-var'));
+  testing.expectEqual('dv', c('--chain'));
+  testing.expectEqual('dv', c('--spacey'));
+  testing.expectEqual('pre dv post', c('--with-text'));
+  testing.expectEqual('dv', c('--inline-var'));
+
+  // The specified value keeps the var() text.
+  testing.expectEqual('var(--defined)', el.style.getPropertyValue('--inline-var'));
+  testing.expectEqual('var(--nope2, rgb(1, 2, 3))', el.style.getPropertyValue('color'));
+}
+</script>
+
+<script id=fallbacks>
+{
+  const cs = getComputedStyle(document.getElementById('v'));
+  const c = (n) => cs.getPropertyValue(n).trim();
+
+  testing.expectEqual('fb', c('--fallback-used'));
+  testing.expectEqual('dv', c('--fallback-unused'));
+  // Everything after the first comma is the fallback, commas included.
+  testing.expectEqual('a, b', c('--two-args'));
+  testing.expectEqual('dv', c('--nested-fb'));
+  // A custom property declared empty counts as declared, so the fallback is
+  // not used and the result is empty.
+  testing.expectEqual('', c('--empty'));
+  testing.expectEqual('', c('--from-empty'));
+}
+</script>
+
+<script id=cycles>
+{
+  const cs = getComputedStyle(document.getElementById('v'));
+  testing.expectEqual('', cs.getPropertyValue('--cycle-a').trim());
+  testing.expectEqual('', cs.getPropertyValue('--cycle-b').trim());
+  testing.expectEqual('', cs.getPropertyValue('--self').trim());
+}
+</script>
+
+<script id=normal_property_from_inline>
+{
+  // A normal property whose inline value is a var() resolves at computed time.
+  const el = document.getElementById('v');
+  testing.expectEqual('rgb(1, 2, 3)', getComputedStyle(el).getPropertyValue('color').trim());
+
+  const other = document.createElement('div');
+  other.setAttribute('style', '--c: rgb(7, 8, 9); color: var(--c, rgb(4, 5, 6))');
+  document.body.appendChild(other);
+  testing.expectEqual('rgb(7, 8, 9)', getComputedStyle(other).getPropertyValue('color').trim());
+  other.remove();
+}
+</script>

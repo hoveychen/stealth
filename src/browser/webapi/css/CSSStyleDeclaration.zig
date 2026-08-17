@@ -37,6 +37,11 @@ const CSSStyleDeclaration = @This();
 _element: ?*Element = null,
 _properties: std.DoublyLinkedList = .{},
 _is_computed: bool = false,
+/// The frame this declaration belongs to. A computed view's indexed list has
+/// to resolve the element's custom properties through the style manager, and
+/// the accessors behind it (`cs.length`, `cs[0]`, the iterator) are not all
+/// handed a frame.
+_frame: *Frame = undefined,
 /// The Typed OM view of this declaration, created on first use. Measured:
 /// `el.attributeStyleMap` and `rule.styleMap` are stable objects, so the map
 /// has to be cached rather than rebuilt per access.
@@ -52,6 +57,7 @@ pub fn init(element: ?*Element, is_computed: bool, frame: *Frame) !*CSSStyleDecl
     const self = try frame._factory.create(CSSStyleDeclaration{
         ._element = element,
         ._is_computed = is_computed,
+        ._frame = frame,
     });
     try self.parseInlineStyle(frame);
     return self;
@@ -100,6 +106,39 @@ pub fn length(self: *const CSSStyleDeclaration) u32 {
     return @intCast(self._properties.len());
 }
 
+/// What the indexed surface reports, which for a computed view is the standard
+/// longhands plus the custom properties in effect on the element -- Chrome
+/// lists those alongside them. The Typed OM views keep to `length`, whose
+/// measured size is the standard count alone.
+pub fn indexedLength(self: *const CSSStyleDeclaration) u32 {
+    if (!self._is_computed) {
+        return self.length();
+    }
+    return self.length() + @as(u32, @intCast(self.computedCustomNames().len));
+}
+
+/// The custom property names a computed view enumerates. Recomputed per call:
+/// the declaration object is cached per element for the frame's lifetime, so a
+/// stored list would go stale the moment the page declares another one.
+fn computedCustomNames(self: *const CSSStyleDeclaration) [][]const u8 {
+    const element = self._element orelse return &.{};
+    var names: std.ArrayList([]const u8) = .empty;
+    self._frame._style_manager.collectCustomPropertyNames(element, &names) catch return &.{};
+    return names.items;
+}
+
+pub fn indexedItem(self: *const CSSStyleDeclaration, index: u32) []const u8 {
+    if (self._is_computed and index >= chrome_properties.computed.len) {
+        const names = self.computedCustomNames();
+        const custom_index = index - chrome_properties.computed.len;
+        if (custom_index >= names.len) {
+            return "";
+        }
+        return names[custom_index];
+    }
+    return self.item(index);
+}
+
 pub fn item(self: *const CSSStyleDeclaration, index: u32) []const u8 {
     if (self._is_computed) {
         if (index >= chrome_properties.computed.len) {
@@ -134,6 +173,17 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
     // Computed styles must reflect stylesheet rules, not just the element's
     // inline `style=` attribute. Limited to display/visibility — what aria
     // tree builders (Playwright ariaSnapshot) consult on every element.
+    // A custom property is resolved by the cascade rather than stored on the
+    // computed declaration: it can come from a stylesheet rule, from the style
+    // attribute, or from an ancestor, and nothing precomputes the set.
+    if (self._is_computed and isCustomProperty(normalized)) {
+        const element = self._element orelse return "";
+        const value = frame._style_manager.customPropertyValue(element, normalized) orelse return "";
+        // var() is substituted at computed-value time; the specified value
+        // that `el.style` hands out keeps its var() text.
+        return frame._style_manager.substituteVars(element, value) orelse "";
+    }
+
     if (self._is_computed) {
         if (self._element) |element| {
             if (wrapped.eql(comptime .wrap("display"))) {
@@ -151,7 +201,7 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
                 // Resolve inline `style=` declarations through the element's
                 // parsed inline style, so computed values match `el.style`.
                 if (frame._style_manager.inlineStyleValue(element, wrapped)) |value| {
-                    return value;
+                    return frame._style_manager.substituteVars(element, value) orelse "";
                 }
 
                 // Computed width/height must agree with the synthetic layout
@@ -215,6 +265,12 @@ fn applyParsedDeclaration(self: *CSSStyleDeclaration, declaration: CssParser.Dec
             if (existing._important) return;
         }
     }
+    // A custom property's value may be empty (`--d:;`), and Chrome keeps the
+    // declaration; an empty value for a normal property drops it, and so does
+    // an explicit `setProperty(name, "")` for either kind.
+    if (isCustomProperty(declaration.name) and declaration.value.len == 0) {
+        return self.storeProperty(declaration.name, "", declaration.important, frame);
+    }
     try self.setPropertyImpl(declaration.name, declaration.value, declaration.important, frame);
 }
 
@@ -224,6 +280,10 @@ fn setPropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, value:
         return;
     }
 
+    return self.storeProperty(property_name, value, important, frame);
+}
+
+fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !void {
     const normalized = normalizePropertyName(property_name, &frame.buf);
 
     // Normalize the value for canonical serialization
@@ -331,6 +391,11 @@ pub fn findProperty(self: *const CSSStyleDeclaration, name: String) ?*Property {
 }
 
 fn normalizePropertyName(name: []const u8, buf: []u8) []const u8 {
+    // Custom property names are case-sensitive: Chrome answers `--Case` and
+    // `--case` as two different properties.
+    if (isCustomProperty(name)) {
+        return name;
+    }
     if (name.len > buf.len) {
         log.info(.dom, "css.long.name", .{ .name = name });
         return name;
@@ -338,8 +403,20 @@ fn normalizePropertyName(name: []const u8, buf: []u8) []const u8 {
     return std.ascii.lowerString(buf, name);
 }
 
+/// A property name starting with two dashes is a custom property, whose name
+/// and value the CSSOM stores as written.
+pub fn isCustomProperty(name: []const u8) bool {
+    return std.mem.startsWith(u8, name, "--");
+}
+
 // Normalize CSS property values for canonical serialization
 fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value: []const u8) ![]const u8 {
+    // A custom property's value is an arbitrary token stream: Chrome stores it
+    // as written, minus the surrounding whitespace (`--c: 01.50` stays
+    // "01.50", `--e: a  b   c` keeps its inner runs).
+    if (isCustomProperty(property_name)) {
+        return std.mem.trim(u8, raw_value, &std.ascii.whitespace);
+    }
     const value = try normalizeLeadingZeros(arena, raw_value);
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
@@ -912,7 +989,7 @@ pub const Property = struct {
     _important: bool = false,
     _node: std.DoublyLinkedList.Node,
 
-    fn fromNodeLink(n: *std.DoublyLinkedList.Node) *Property {
+    pub fn fromNodeLink(n: *std.DoublyLinkedList.Node) *Property {
         return @alignCast(@fieldParentPtr("_node", n));
     }
 
@@ -1117,7 +1194,7 @@ fn queryAlias(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame)
 }
 
 fn indexes(self: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Array {
-    const len = self.length();
+    const len = self.indexedLength();
     var arr = exec.js.local.?.newArray(len);
     for (0..len) |i| {
         _ = try arr.set(@intCast(i), i, .{});
@@ -1126,10 +1203,10 @@ fn indexes(self: *const CSSStyleDeclaration, exec: *const js.Execution) !js.Arra
 }
 
 fn getAtIndex(self: *const CSSStyleDeclaration, index: u32) ?[]const u8 {
-    if (index >= self.length()) {
+    if (index >= self.indexedLength()) {
         return null;
     }
-    return self.item(index);
+    return self.indexedItem(index);
 }
 
 /// Chrome puts Symbol.iterator on CSSStyleDeclaration.prototype and it walks
@@ -1147,11 +1224,11 @@ const Iterator = struct {
 
     pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
         const index = self.index;
-        if (index >= self.declaration.length()) {
+        if (index >= self.declaration.indexedLength()) {
             return null;
         }
         self.index = index + 1;
-        return .{ index, self.declaration.item(index) };
+        return .{ index, self.declaration.indexedItem(index) };
     }
 };
 
@@ -1172,7 +1249,7 @@ pub const JsApi = struct {
     // Measured off a headed Chrome 150 and asserted in
     // tests/css/declaration_surface.html, so reordering these renames the engine.
     pub const cssText = bridge.accessor(CSSStyleDeclaration.getCssText, CSSStyleDeclaration.setCssText, .{});
-    pub const length = bridge.accessor(CSSStyleDeclaration.length, null, .{});
+    pub const length = bridge.accessor(CSSStyleDeclaration.indexedLength, null, .{});
     pub const parentRule = bridge.accessor(CSSStyleDeclaration.getParentRule, null, .{});
     pub const cssFloat = bridge.accessor(CSSStyleDeclaration.getFloat, CSSStyleDeclaration.setFloat, .{});
     pub const getPropertyPriority = bridge.function(CSSStyleDeclaration.getPropertyPriority, .{});
@@ -1186,7 +1263,7 @@ pub const JsApi = struct {
         if (index < 0) {
             return "";
         }
-        return self.item(@intCast(index));
+        return self.indexedItem(@intCast(index));
     }
 
     // The indexed half is the property list -- Chrome's 474 computed longhands
@@ -1277,4 +1354,16 @@ test "normalizePropertyValue: anchor() canonical order" {
 
 test "WebApi: CSSStyleDeclaration surface" {
     try testing.htmlRunner("css/declaration_surface.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration custom properties" {
+    try testing.htmlRunner("css/custom_properties_inline.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration custom property cascade" {
+    try testing.htmlRunner("css/custom_properties_cascade.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration custom property var substitution" {
+    try testing.htmlRunner("css/custom_properties_var.html", .{});
 }
