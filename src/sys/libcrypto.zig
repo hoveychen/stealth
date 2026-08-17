@@ -30,6 +30,10 @@ pub const struct_evp_pkey_st = opaque {};
 pub const EVP_PKEY = struct_evp_pkey_st;
 pub const struct_evp_pkey_ctx_st = opaque {};
 pub const EVP_PKEY_CTX = struct_evp_pkey_ctx_st;
+pub const struct_rsa_st = opaque {};
+pub const RSA = struct_rsa_st;
+pub const struct_bignum_st = opaque {};
+pub const BIGNUM = struct_bignum_st;
 
 pub extern fn RAND_bytes(buf: [*]u8, len: usize) c_int;
 
@@ -132,6 +136,27 @@ pub extern fn EC_KEY_generate_key(key: *EC_KEY) c_int;
 pub extern fn EC_KEY_free(key: ?*EC_KEY) void;
 pub extern fn EC_KEY_get0_public_key(key: *const EC_KEY) ?*const EC_POINT;
 pub extern fn EC_KEY_set_public_key(key: *EC_KEY, point: *const EC_POINT) c_int;
+
+// RSA. `RSA_generate_key_ex` wants the public exponent as a BIGNUM, and the
+// JWK export needs the individual components back out, hence the BN pair.
+pub const EVP_PKEY_RSA = 6; // NID_rsaEncryption
+
+pub extern fn RSA_new() ?*RSA;
+pub extern fn RSA_free(rsa: ?*RSA) void;
+pub extern fn RSA_generate_key_ex(rsa: *RSA, bits: c_int, e: *const BIGNUM, cb: ?*anyopaque) c_int;
+pub extern fn RSAPublicKey_dup(rsa: *const RSA) ?*RSA;
+pub extern fn RSA_bits(rsa: *const RSA) c_uint;
+pub extern fn RSA_get0_n(rsa: *const RSA) ?*const BIGNUM;
+pub extern fn RSA_get0_e(rsa: *const RSA) ?*const BIGNUM;
+
+pub extern fn EVP_PKEY_set1_RSA(pkey: *EVP_PKEY, key: *RSA) c_int;
+pub extern fn EVP_PKEY_get0_RSA(pkey: *const EVP_PKEY) ?*RSA;
+
+pub extern fn BN_new() ?*BIGNUM;
+pub extern fn BN_free(bn: ?*BIGNUM) void;
+pub extern fn BN_bin2bn(in: [*]const u8, len: usize, ret: ?*BIGNUM) ?*BIGNUM;
+pub extern fn BN_bn2bin(bn: *const BIGNUM, out: [*]u8) usize;
+pub extern fn BN_num_bytes(bn: *const BIGNUM) c_uint;
 
 // DER decoders (advance `inp` past the parsed structure).
 pub extern fn d2i_PUBKEY(out: ?*?*EVP_PKEY, inp: *[*c]const u8, len: c_long) ?*EVP_PKEY;

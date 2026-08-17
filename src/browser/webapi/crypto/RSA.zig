@@ -16,11 +16,163 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-//! RSA generateKey parameter validation. See AES.zig for the rationale.
+//! RSA key generation for RSA-OAEP, RSASSA-PKCS1-v1_5 and RSA-PSS. The key
+//! material is a libcrypto RSA behind an EVP_PKEY in `CryptoKey._vary.pkey`,
+//! the same place EC.zig keeps its keys.
+//!
+//! Every observable here was measured against a headed Chrome 150
+//! (`probe-g25`): the pair splits the requested usages, the public half is
+//! extractable even when the pair is not, and `algorithm.publicExponent`
+//! reads back as a Uint8Array.
 
 const std = @import("std");
+const crypto = @import("../../../sys/libcrypto.zig");
 
+const js = @import("../../js/js.zig");
+
+const CryptoKey = @import("../CryptoKey.zig");
 const algorithm = @import("algorithm.zig");
+const common = @import("common.zig");
+
+const Execution = js.Execution;
+
+/// Which usages each half of the pair may keep. `validate` has already
+/// rejected any usage that belongs to neither.
+fn usageSets(name: []const u8) struct { private: []const []const u8, public: []const []const u8 } {
+    if (eql(name, "RSA-OAEP")) {
+        return .{ .private = &.{ "decrypt", "unwrapKey" }, .public = &.{ "encrypt", "wrapKey" } };
+    }
+    // RSASSA-PKCS1-v1_5 and RSA-PSS
+    return .{ .private = &.{"sign"}, .public = &.{"verify"} };
+}
+
+/// The spelling Chrome reports back from `key.algorithm.name`, which is the
+/// registered casing rather than whatever the caller passed.
+pub fn canonicalName(name: []const u8) ?[]const u8 {
+    if (eql(name, "RSA-OAEP")) return "RSA-OAEP";
+    if (eql(name, "RSASSA-PKCS1-v1_5")) return "RSASSA-PKCS1-v1_5";
+    if (eql(name, "RSA-PSS")) return "RSA-PSS";
+    return null;
+}
+
+/// Likewise for the hash: `hash: "sha-256"` reads back as "SHA-256".
+pub fn canonicalHash(name: []const u8) ?[]const u8 {
+    if (eql(name, "SHA-1")) return "SHA-1";
+    if (eql(name, "SHA-256")) return "SHA-256";
+    if (eql(name, "SHA-384")) return "SHA-384";
+    if (eql(name, "SHA-512")) return "SHA-512";
+    return null;
+}
+
+/// Generates an RSA key pair and hands back the two `CryptoKey`s.
+pub fn generate(
+    params: algorithm.Init.RsaHashedKeyGen,
+    extractable: bool,
+    key_usages: []const []const u8,
+    exec: *const Execution,
+) !js.Promise {
+    const local = exec.js.local.?;
+    validate(params, key_usages) catch |err| {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = err } });
+    };
+
+    const name = canonicalName(params.name).?;
+    const hash = canonicalHash(switch (params.hash) {
+        .string => |s| s,
+        .object => |o| o.name,
+    }).?;
+    const sets = usageSets(name);
+    const private_mask = maskOf(sets.private, key_usages);
+    const public_mask = maskOf(sets.public, key_usages);
+
+    // Chrome refuses a modulus it cannot generate rather than silently
+    // rounding; anything under 512 bits is not a key it will make.
+    if (params.modulusLength < 512 or params.modulusLength > 16384) {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.OperationError } });
+    }
+
+    const exponent = crypto.BN_new() orelse return error.OutOfMemory;
+    defer crypto.BN_free(exponent);
+    const raw = params.publicExponent.values;
+    if (crypto.BN_bin2bn(raw.ptr, raw.len, exponent) == null) return error.OutOfMemory;
+
+    const rsa = crypto.RSA_new() orelse return error.OutOfMemory;
+    defer crypto.RSA_free(rsa);
+    if (crypto.RSA_generate_key_ex(rsa, @intCast(params.modulusLength), exponent, null) != 1) {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.OperationError } });
+    }
+
+    const private_pkey = crypto.EVP_PKEY_new() orelse return error.OutOfMemory;
+    errdefer crypto.EVP_PKEY_free(private_pkey);
+    if (crypto.EVP_PKEY_set1_RSA(private_pkey, rsa) != 1) return error.OutOfMemory;
+
+    // The public half is a copy holding only (n, e) -- handing out the private
+    // key with a narrower usage mask would leak the private components to
+    // anything that exported it.
+    const pub_rsa = crypto.RSAPublicKey_dup(rsa) orelse return error.OutOfMemory;
+    defer crypto.RSA_free(pub_rsa);
+    const public_pkey = crypto.EVP_PKEY_new() orelse return error.OutOfMemory;
+    errdefer crypto.EVP_PKEY_free(public_pkey);
+    if (crypto.EVP_PKEY_set1_RSA(public_pkey, pub_rsa) != 1) return error.OutOfMemory;
+
+    // Read the modulus and exponent back off the generated key rather than
+    // echoing the request: they are what the key actually has.
+    const modulus_length = crypto.RSA_bits(rsa);
+    const exponent_bytes = try exponentBytes(exec, rsa);
+
+    const meta: CryptoKey.Algorithm = .{
+        .name = name,
+        .hash = hash,
+        .modulus_length = modulus_length,
+        .public_exponent = exponent_bytes,
+    };
+
+    const private = try CryptoKey.init(exec, .{
+        ._type = .rsa,
+        ._kind = .private,
+        ._extractable = extractable,
+        ._usages = private_mask,
+        ._key = &.{},
+        ._algorithm = meta,
+        ._vary = .{ .pkey = private_pkey },
+    });
+
+    const public = try CryptoKey.init(exec, .{
+        ._type = .rsa,
+        ._kind = .public,
+        // A public key is always extractable, even out of a sealed pair.
+        ._extractable = true,
+        ._usages = public_mask,
+        ._key = &.{},
+        ._algorithm = meta,
+        ._vary = .{ .pkey = public_pkey },
+    });
+
+    return local.resolvePromise(CryptoKey.Pair{ .privateKey = private, .publicKey = public });
+}
+
+/// The public exponent as big-endian bytes, which is how `algorithm`
+/// reports it.
+fn exponentBytes(exec: *const Execution, rsa: *const crypto.RSA) ![]const u8 {
+    const e = crypto.RSA_get0_e(rsa) orelse return error.OperationError;
+    const len = crypto.BN_num_bytes(e);
+    const buf = try exec.local_arena.alloc(u8, len);
+    const written = crypto.BN_bn2bin(e, buf.ptr);
+    return buf[0..written];
+}
+
+fn maskOf(set: []const []const u8, usages: []const []const u8) u8 {
+    var mask: u8 = 0;
+    for (usages) |u| {
+        for (set) |s| {
+            if (std.mem.eql(u8, s, u)) {
+                mask |= common.usageBit(u).?;
+                break;
+            }
+        }
+    }
+    return mask;
+}
 
 pub fn validate(params: algorithm.Init.RsaHashedKeyGen, key_usages: []const []const u8) !void {
     const allowed: []const []const u8 = blk: {

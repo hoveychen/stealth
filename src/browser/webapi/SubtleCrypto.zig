@@ -58,12 +58,7 @@ pub fn generateKey(
         .hmac_key_gen => |params| return HMAC.init(params, extractable, key_usages, exec),
         .aes_key_gen => |params| return AES.generate(params, extractable, key_usages, exec),
         .ec_key_gen => |params| return EC.generate(params, extractable, key_usages, exec),
-        .rsa_hashed_key_gen => |params| {
-            RSA.validate(params, key_usages) catch |err| {
-                return local.rejectPromise(.{ .dom_exception = .{ .err = err } });
-            };
-            log.warn(.not_implemented, "generateKey", .{ .name = params.name });
-        },
+        .rsa_hashed_key_gen => |params| return RSA.generate(params, extractable, key_usages, exec),
         .name => |js_name| return generateKeyFromName(try js_name.toSSO(false), extractable, key_usages, exec),
         .object => |object| return generateKeyFromName(try object.name.toSSO(false), extractable, key_usages, exec),
         .invalid => return local.rejectPromise(.{ .type_error = "invalid algorithm" }),

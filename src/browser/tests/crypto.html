@@ -468,3 +468,76 @@
     });
   }
 </script>
+
+<script id=generateKey-rsa-pairs type=module>
+  // Every value below is what a headed Chrome 150 answers (probe-g25). The RSA
+  // family used to reject NotSupportedError outright, which is what left
+  // browserscan's value cards empty (README `## G23`).
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const gen = (name, usages) => crypto.subtle.generateKey(
+      { name, hash: "SHA-256", modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+
+    // Recorded rather than awaited bare: a rejection here has to reach the
+    // assertions as a value, not tear the block down before they run.
+    const out = {};
+    try {
+    const oaep = await gen("RSA-OAEP", ["encrypt", "decrypt"]);
+    out.oaep_public_type = oaep.publicKey.type;
+    out.oaep_private_type = oaep.privateKey.type;
+    out.oaep_name = oaep.publicKey.algorithm.name;
+    out.oaep_modulus = oaep.publicKey.algorithm.modulusLength;
+    out.oaep_hash = oaep.publicKey.algorithm.hash.name;
+    out.oaep_exponent = Array.from(oaep.publicKey.algorithm.publicExponent).join(",");
+    // The pair splits the requested usages: each key keeps only its own.
+    out.oaep_public_usages = oaep.publicKey.usages.join(",");
+    out.oaep_private_usages = oaep.privateKey.usages.join(",");
+    out.oaep_public_extractable = oaep.publicKey.extractable;
+    out.oaep_private_extractable = oaep.privateKey.extractable;
+    // A pair is two distinct keys, not one object handed back twice.
+    out.oaep_distinct = oaep.publicKey !== oaep.privateKey;
+
+    const pkcs1 = await gen("RSASSA-PKCS1-v1_5", ["sign", "verify"]);
+    out.pkcs1_name = pkcs1.privateKey.algorithm.name;
+    out.pkcs1_private_usages = pkcs1.privateKey.usages.join(",");
+    out.pkcs1_public_usages = pkcs1.publicKey.usages.join(",");
+
+    const pss = await gen("RSA-PSS", ["sign", "verify"]);
+    out.pss_name = pss.privateKey.algorithm.name;
+    out.pss_private_type = pss.privateKey.type;
+
+    // A non-extractable pair still reports its public half as extractable.
+    const sealed = await crypto.subtle.generateKey(
+      { name: "RSA-OAEP", hash: "SHA-256", modulusLength: 2048, publicExponent: exp },
+      false, ["encrypt", "decrypt"],
+    );
+    out.sealed_public_extractable = sealed.publicKey.extractable;
+    out.sealed_private_extractable = sealed.privateKey.extractable;
+    } catch (e) { out.threw = `${e.name}: ${e.message}`; }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual("public", o.oaep_public_type);
+      testing.expectEqual("private", o.oaep_private_type);
+      testing.expectEqual("RSA-OAEP", o.oaep_name);
+      testing.expectEqual(2048, o.oaep_modulus);
+      testing.expectEqual("SHA-256", o.oaep_hash);
+      testing.expectEqual("1,0,1", o.oaep_exponent);
+      testing.expectEqual("encrypt", o.oaep_public_usages);
+      testing.expectEqual("decrypt", o.oaep_private_usages);
+      testing.expectEqual(true, o.oaep_public_extractable);
+      testing.expectEqual(true, o.oaep_private_extractable);
+      testing.expectEqual(true, o.oaep_distinct);
+      testing.expectEqual("RSASSA-PKCS1-v1_5", o.pkcs1_name);
+      testing.expectEqual("sign", o.pkcs1_private_usages);
+      testing.expectEqual("verify", o.pkcs1_public_usages);
+      testing.expectEqual("RSA-PSS", o.pss_name);
+      testing.expectEqual("private", o.pss_private_type);
+      testing.expectEqual(true, o.sealed_public_extractable);
+      testing.expectEqual(false, o.sealed_private_extractable);
+    });
+  }
+</script>
