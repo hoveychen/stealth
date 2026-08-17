@@ -109,9 +109,9 @@ fn goInner(delta: i32, frame: *Frame) !void {
     if (entry._url) |url| {
         if (frame.isSameOrigin(url)) {
             const target = frame.window.asEventTarget();
-            if (frame._event_manager.hasDirectListeners(target, "popstate", frame.window._on_popstate)) {
+            if (frame._event_manager.hasDirectListeners(target, "popstate", null)) {
                 const event = (try PopStateEvent.initTrusted(comptime .wrap("popstate"), .{ .state = entry._state.value }, frame)).asEvent();
-                try frame._event_manager.dispatchDirect(target, event, frame.window._on_popstate, .{ .context = "Pop State" });
+                try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "Pop State" });
             }
             // hashchange is queued by navigateInner.
         }

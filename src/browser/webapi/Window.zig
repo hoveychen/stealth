@@ -142,18 +142,6 @@ _performance: Performance,
 _load_epoch_ms: i64 = 0,
 _cookie_store: ?*CookieStore = null,
 _idb_factory: ?*idb.IDBFactory = null,
-_on_load: ?js.Function.Global = null,
-_on_pageshow: ?js.Function.Global = null,
-_on_popstate: ?js.Function.Global = null,
-_on_hashchange: ?js.Function.Global = null,
-_on_error: ?js.Function.Global = null,
-_on_blur: ?js.Function.Global = null,
-_on_focus: ?js.Function.Global = null,
-_on_resize: ?js.Function.Global = null,
-_on_scroll: ?js.Function.Global = null,
-_on_message: ?js.Function.Global = null,
-_on_rejection_handled: ?js.Function.Global = null,
-_on_unhandled_rejection: ?js.Function.Global = null,
 _reporting_error: bool = false,
 _current_event: ?*Event = null,
 _location: *Location,
@@ -623,78 +611,6 @@ pub fn getCustomElements(self: *Window) *CustomElementRegistry {
     return &self._custom_elements;
 }
 
-pub fn getOnLoad(self: *const Window) ?js.Function.Global {
-    return self._on_load;
-}
-
-pub fn setOnLoad(self: *Window, setter: ?FunctionSetter) void {
-    self._on_load = getFunctionFromSetter(setter);
-}
-
-pub fn getOnPageShow(self: *const Window) ?js.Function.Global {
-    return self._on_pageshow;
-}
-
-pub fn setOnPageShow(self: *Window, setter: ?FunctionSetter) void {
-    self._on_pageshow = getFunctionFromSetter(setter);
-}
-
-pub fn getOnPopState(self: *const Window) ?js.Function.Global {
-    return self._on_popstate;
-}
-
-pub fn setOnPopState(self: *Window, setter: ?FunctionSetter) void {
-    self._on_popstate = getFunctionFromSetter(setter);
-}
-
-pub fn getOnHashChange(self: *const Window) ?js.Function.Global {
-    return self._on_hashchange;
-}
-
-pub fn setOnHashChange(self: *Window, setter: ?FunctionSetter) void {
-    self._on_hashchange = getFunctionFromSetter(setter);
-}
-
-pub fn getOnError(self: *const Window) ?js.Function.Global {
-    return self._on_error;
-}
-
-pub fn setOnError(self: *Window, setter: ?FunctionSetter) void {
-    self._on_error = getFunctionFromSetter(setter);
-}
-
-pub fn getOnBlur(self: *const Window) ?js.Function.Global {
-    return self._on_blur;
-}
-
-pub fn setOnBlur(self: *Window, setter: ?FunctionSetter) void {
-    self._on_blur = getFunctionFromSetter(setter);
-}
-
-pub fn getOnFocus(self: *const Window) ?js.Function.Global {
-    return self._on_focus;
-}
-
-pub fn setOnFocus(self: *Window, setter: ?FunctionSetter) void {
-    self._on_focus = getFunctionFromSetter(setter);
-}
-
-pub fn getOnResize(self: *const Window) ?js.Function.Global {
-    return self._on_resize;
-}
-
-pub fn setOnResize(self: *Window, setter: ?FunctionSetter) void {
-    self._on_resize = getFunctionFromSetter(setter);
-}
-
-pub fn getOnScroll(self: *const Window) ?js.Function.Global {
-    return self._on_scroll;
-}
-
-pub fn setOnScroll(self: *Window, setter: ?FunctionSetter) void {
-    self._on_scroll = getFunctionFromSetter(setter);
-}
-
 // Stored in the frame's attribute-listener map (like element and ShadowRoot
 // property handlers), which the dispatch propagation path consults for any
 // event target.
@@ -721,41 +637,13 @@ pub const WINDOW_REFLECTING = [_]global_event_handlers.Handler{
     .onunhandledrejection, .onunload,
 };
 
-/// The Window's dedicated field for a handler, when it has one. The rest live
-/// in the frame's attribute-listener store, which is also where Window's own
-/// accessors put them.
-fn dedicatedSlot(self: *Window, handler: global_event_handlers.Handler) ?*?js.Function.Global {
-    return switch (handler) {
-        .onblur => &self._on_blur,
-        .onerror => &self._on_error,
-        .onfocus => &self._on_focus,
-        .onload => &self._on_load,
-        .onresize => &self._on_resize,
-        .onscroll => &self._on_scroll,
-        .onhashchange => &self._on_hashchange,
-        .onmessage => &self._on_message,
-        .onpageshow => &self._on_pageshow,
-        .onpopstate => &self._on_popstate,
-        .onrejectionhandled => &self._on_rejection_handled,
-        .onunhandledrejection => &self._on_unhandled_rejection,
-        else => null,
-    };
-}
-
 /// Read the Window slot a body/frameset handler alias points at.
 pub fn getReflectedHandler(self: *Window, handler: global_event_handlers.Handler) ?js.Function.Global {
-    if (self.dedicatedSlot(handler)) |slot| {
-        return slot.*;
-    }
     return self._frame.getEventHandler(self.asEventTarget(), handler);
 }
 
 /// Write it. Passing null clears, which is what `window.onX = null` does too.
 pub fn setReflectedHandler(self: *Window, handler: global_event_handlers.Handler, callback: ?js.Function.Global) !void {
-    if (self.dedicatedSlot(handler)) |slot| {
-        slot.* = callback;
-        return;
-    }
     return self._frame.setEventHandler(self.asEventTarget(), handler, callback);
 }
 
@@ -782,30 +670,6 @@ pub fn setWindowReflectingHandlerFromAttribute(self: *Window, name: lp.String, v
     self.setReflectedHandler(handler, func) catch |err| {
         log.err(.js, "window reflecting handler", .{ .err = err, .str = name.str() });
     };
-}
-
-pub fn getOnMessage(self: *const Window) ?js.Function.Global {
-    return self._on_message;
-}
-
-pub fn setOnMessage(self: *Window, setter: ?FunctionSetter) void {
-    self._on_message = getFunctionFromSetter(setter);
-}
-
-pub fn getOnRejectionHandled(self: *const Window) ?js.Function.Global {
-    return self._on_rejection_handled;
-}
-
-pub fn setOnRejectionHandled(self: *Window, setter: ?FunctionSetter) void {
-    self._on_rejection_handled = getFunctionFromSetter(setter);
-}
-
-pub fn getOnUnhandledRejection(self: *const Window) ?js.Function.Global {
-    return self._on_unhandled_rejection;
-}
-
-pub fn setOnUnhandledRejection(self: *Window, setter: ?FunctionSetter) void {
-    self._on_unhandled_rejection = getFunctionFromSetter(setter);
 }
 
 pub fn fetch(_: *const Window, input: Fetch.Input, options: ?Fetch.InitOpts, exec: *const js.Execution) !js.Promise {
@@ -896,7 +760,7 @@ pub fn reportError(self: *Window, err: js.Value, frame: *Frame) !void {
     frame._page.recordJsError(error.JsException);
 
     const target = self.asEventTarget();
-    if (!frame._event_manager.hasDirectListeners(target, "error", self._on_error)) {
+    if (!frame._event_manager.hasDirectListeners(target, "error", null)) {
         if (comptime builtin.is_test == false) {
             log.warn(.js, "window.reportError", .{
                 .message = err.toStringSlice() catch "Unknown error",
@@ -915,37 +779,15 @@ pub fn reportError(self: *Window, err: js.Value, frame: *Frame) !void {
         .cancelable = true,
     }, frame._page);
 
-    // Invoke window.onerror callback if set (per WHATWG spec, this is called
-    // with 5 arguments: message, source, lineno, colno, error)
-    // If it returns true, the event is cancelled.
-    var prevent_default = false;
-    if (self._on_error) |on_error| {
-        var ls: js.Local.Scope = undefined;
-        frame.js.localScope(&ls);
-        defer ls.deinit();
-
-        const local_func = ls.toLocal(on_error);
-        const result = local_func.call(js.Value, .{
-            error_event._message,
-            error_event._filename,
-            error_event._line_number,
-            error_event._column_number,
-            err,
-        }) catch null;
-
-        // Per spec: returning true from onerror cancels the event
-        if (result) |r| {
-            prevent_default = r.isTrue();
-        }
-    }
-
     const event = error_event.asEvent();
     event.acquireRef();
     defer event.releaseRef(frame._page);
 
-    event._prevent_default = prevent_default;
-    // Pass null as handler: onerror was already called above with 5 args.
-    // We still dispatch so that addEventListener('error', ...) listeners fire.
+    // `window.onerror` is a listener like any other now, and runs in the place
+    // it was set. Its two peculiarities -- five arguments instead of the event,
+    // and `return true` cancelling -- are applied by the listener itself, which
+    // is the only place that knows an ErrorEvent is reaching a Window's
+    // onerror (EventManagerBase.Listener.run).
     try frame._event_manager.dispatchDirect(target, event, null, .{
         .context = "window.reportError",
     });
@@ -1434,24 +1276,19 @@ pub fn unhandledPromiseRejection(self: *Window, no_handler: bool, rejection: js.
         });
     }
 
-    const event_name, const attribute_callback = blk: {
-        if (no_handler) {
-            break :blk .{ "unhandledrejection", self._on_unhandled_rejection };
-        }
-        break :blk .{ "rejectionhandled", self._on_rejection_handled };
-    };
+    const event_name = if (no_handler) "unhandledrejection" else "rejectionhandled";
 
     if (no_handler) {
         frame._page.recordJsError(error.JsException);
     }
 
     const target = self.asEventTarget();
-    if (frame._event_manager.hasDirectListeners(target, event_name, attribute_callback)) {
+    if (frame._event_manager.hasDirectListeners(target, event_name, null)) {
         const event = (try @import("event/PromiseRejectionEvent.zig").init(event_name, .{
             .reason = if (rejection.reason()) |r| try r.persist() else null,
             .promise = try rejection.promise().persist(),
         }, frame._page)).asEvent();
-        try frame._event_manager.dispatchDirect(target, event, attribute_callback, .{ .context = "window.unhandledrejection" });
+        try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "window.unhandledrejection" });
     }
 }
 
@@ -1513,7 +1350,7 @@ const PostMessageCallback = struct {
 
         // The MessageEvent takes ownership of the cloned temp and releases it on
         // teardown; if there are no listeners, release it here so it doesn't leak.
-        if (!frame._event_manager.hasDirectListeners(event_target, "message", window._on_message)) {
+        if (!frame._event_manager.hasDirectListeners(event_target, "message", null)) {
             self.message.release();
             return null;
         }
@@ -1526,7 +1363,7 @@ const PostMessageCallback = struct {
             .bubbles = false,
             .cancelable = false,
         }, frame._page)).asEvent();
-        try frame._event_manager.dispatchDirect(event_target, event, window._on_message, .{ .context = "window.postMessage" });
+        try frame._event_manager.dispatchDirect(event_target, event, null, .{ .context = "window.postMessage" });
 
         return null;
     }
@@ -1617,9 +1454,9 @@ pub const JsApi = struct {
     // emits them per IDL interface -- the Window-specific ones first, then
     // GlobalEventHandlers, then the pointer/animation/transition mixins, then
     // WindowEventHandlers -- so this block is deliberately not alphabetical.
-    // The thirteen with a named getter/setter pair have dispatch wiring of
-    // their own; the rest share the frame's attribute-listener store, which
-    // the propagation path already consults for any event target.
+    // All of them share the handler store on the event manager, which the
+    // propagation path consults for any event target; none has a dedicated
+    // field any more.
     pub const onsearch = bridge.accessor(handlerAccessor(.onsearch).get, handlerAccessor(.onsearch).set, .{});
     pub const onappinstalled = bridge.accessor(handlerAccessor(.onappinstalled).get, handlerAccessor(.onappinstalled).set, .{});
     pub const onbeforeinstallprompt = bridge.accessor(handlerAccessor(.onbeforeinstallprompt).get, handlerAccessor(.onbeforeinstallprompt).set, .{});
@@ -1627,7 +1464,7 @@ pub const JsApi = struct {
     pub const onbeforeinput = bridge.accessor(handlerAccessor(.onbeforeinput).get, handlerAccessor(.onbeforeinput).set, .{});
     pub const onbeforematch = bridge.accessor(handlerAccessor(.onbeforematch).get, handlerAccessor(.onbeforematch).set, .{});
     pub const onbeforetoggle = bridge.accessor(handlerAccessor(.onbeforetoggle).get, handlerAccessor(.onbeforetoggle).set, .{});
-    pub const onblur = bridge.accessor(Window.getOnBlur, Window.setOnBlur, .{});
+    pub const onblur = bridge.accessor(handlerAccessor(.onblur).get, handlerAccessor(.onblur).set, .{});
     pub const oncancel = bridge.accessor(handlerAccessor(.oncancel).get, handlerAccessor(.oncancel).set, .{});
     pub const oncanplay = bridge.accessor(handlerAccessor(.oncanplay).get, handlerAccessor(.oncanplay).set, .{});
     pub const oncanplaythrough = bridge.accessor(handlerAccessor(.oncanplaythrough).get, handlerAccessor(.oncanplaythrough).set, .{});
@@ -1651,15 +1488,15 @@ pub const JsApi = struct {
     pub const ondurationchange = bridge.accessor(handlerAccessor(.ondurationchange).get, handlerAccessor(.ondurationchange).set, .{});
     pub const onemptied = bridge.accessor(handlerAccessor(.onemptied).get, handlerAccessor(.onemptied).set, .{});
     pub const onended = bridge.accessor(handlerAccessor(.onended).get, handlerAccessor(.onended).set, .{});
-    pub const onerror = bridge.accessor(Window.getOnError, Window.setOnError, .{});
-    pub const onfocus = bridge.accessor(Window.getOnFocus, Window.setOnFocus, .{});
+    pub const onerror = bridge.accessor(handlerAccessor(.onerror).get, handlerAccessor(.onerror).set, .{});
+    pub const onfocus = bridge.accessor(handlerAccessor(.onfocus).get, handlerAccessor(.onfocus).set, .{});
     pub const onformdata = bridge.accessor(handlerAccessor(.onformdata).get, handlerAccessor(.onformdata).set, .{});
     pub const oninput = bridge.accessor(handlerAccessor(.oninput).get, handlerAccessor(.oninput).set, .{});
     pub const oninvalid = bridge.accessor(handlerAccessor(.oninvalid).get, handlerAccessor(.oninvalid).set, .{});
     pub const onkeydown = bridge.accessor(handlerAccessor(.onkeydown).get, handlerAccessor(.onkeydown).set, .{});
     pub const onkeypress = bridge.accessor(handlerAccessor(.onkeypress).get, handlerAccessor(.onkeypress).set, .{});
     pub const onkeyup = bridge.accessor(handlerAccessor(.onkeyup).get, handlerAccessor(.onkeyup).set, .{});
-    pub const onload = bridge.accessor(Window.getOnLoad, Window.setOnLoad, .{});
+    pub const onload = bridge.accessor(handlerAccessor(.onload).get, handlerAccessor(.onload).set, .{});
     pub const onloadeddata = bridge.accessor(handlerAccessor(.onloadeddata).get, handlerAccessor(.onloadeddata).set, .{});
     pub const onloadedmetadata = bridge.accessor(handlerAccessor(.onloadedmetadata).get, handlerAccessor(.onloadedmetadata).set, .{});
     pub const onloadstart = bridge.accessor(handlerAccessor(.onloadstart).get, handlerAccessor(.onloadstart).set, .{});
@@ -1677,8 +1514,8 @@ pub const JsApi = struct {
     pub const onprogress = bridge.accessor(handlerAccessor(.onprogress).get, handlerAccessor(.onprogress).set, .{});
     pub const onratechange = bridge.accessor(handlerAccessor(.onratechange).get, handlerAccessor(.onratechange).set, .{});
     pub const onreset = bridge.accessor(handlerAccessor(.onreset).get, handlerAccessor(.onreset).set, .{});
-    pub const onresize = bridge.accessor(Window.getOnResize, Window.setOnResize, .{});
-    pub const onscroll = bridge.accessor(Window.getOnScroll, Window.setOnScroll, .{});
+    pub const onresize = bridge.accessor(handlerAccessor(.onresize).get, handlerAccessor(.onresize).set, .{});
+    pub const onscroll = bridge.accessor(handlerAccessor(.onscroll).get, handlerAccessor(.onscroll).set, .{});
     pub const onscrollend = bridge.accessor(handlerAccessor(.onscrollend).get, handlerAccessor(.onscrollend).set, .{});
     pub const onsecuritypolicyviolation = bridge.accessor(handlerAccessor(.onsecuritypolicyviolation).get, handlerAccessor(.onsecuritypolicyviolation).set, .{});
     pub const onseeked = bridge.accessor(handlerAccessor(.onseeked).get, handlerAccessor(.onseeked).set, .{});
@@ -1722,18 +1559,18 @@ pub const JsApi = struct {
     pub const onafterprint = bridge.accessor(handlerAccessor(.onafterprint).get, handlerAccessor(.onafterprint).set, .{});
     pub const onbeforeprint = bridge.accessor(handlerAccessor(.onbeforeprint).get, handlerAccessor(.onbeforeprint).set, .{});
     pub const onbeforeunload = bridge.accessor(handlerAccessor(.onbeforeunload).get, handlerAccessor(.onbeforeunload).set, .{});
-    pub const onhashchange = bridge.accessor(Window.getOnHashChange, Window.setOnHashChange, .{});
+    pub const onhashchange = bridge.accessor(handlerAccessor(.onhashchange).get, handlerAccessor(.onhashchange).set, .{});
     pub const onlanguagechange = bridge.accessor(handlerAccessor(.onlanguagechange).get, handlerAccessor(.onlanguagechange).set, .{});
-    pub const onmessage = bridge.accessor(Window.getOnMessage, Window.setOnMessage, .{});
+    pub const onmessage = bridge.accessor(handlerAccessor(.onmessage).get, handlerAccessor(.onmessage).set, .{});
     pub const onmessageerror = bridge.accessor(handlerAccessor(.onmessageerror).get, handlerAccessor(.onmessageerror).set, .{});
     pub const onoffline = bridge.accessor(handlerAccessor(.onoffline).get, handlerAccessor(.onoffline).set, .{});
     pub const ononline = bridge.accessor(handlerAccessor(.ononline).get, handlerAccessor(.ononline).set, .{});
     pub const onpagehide = bridge.accessor(handlerAccessor(.onpagehide).get, handlerAccessor(.onpagehide).set, .{});
-    pub const onpageshow = bridge.accessor(Window.getOnPageShow, Window.setOnPageShow, .{});
-    pub const onpopstate = bridge.accessor(Window.getOnPopState, Window.setOnPopState, .{});
-    pub const onrejectionhandled = bridge.accessor(Window.getOnRejectionHandled, Window.setOnRejectionHandled, .{});
+    pub const onpageshow = bridge.accessor(handlerAccessor(.onpageshow).get, handlerAccessor(.onpageshow).set, .{});
+    pub const onpopstate = bridge.accessor(handlerAccessor(.onpopstate).get, handlerAccessor(.onpopstate).set, .{});
+    pub const onrejectionhandled = bridge.accessor(handlerAccessor(.onrejectionhandled).get, handlerAccessor(.onrejectionhandled).set, .{});
     pub const onstorage = bridge.accessor(handlerAccessor(.onstorage).get, handlerAccessor(.onstorage).set, .{});
-    pub const onunhandledrejection = bridge.accessor(Window.getOnUnhandledRejection, Window.setOnUnhandledRejection, .{});
+    pub const onunhandledrejection = bridge.accessor(handlerAccessor(.onunhandledrejection).get, handlerAccessor(.onunhandledrejection).set, .{});
     pub const onunload = bridge.accessor(handlerAccessor(.onunload).get, handlerAccessor(.onunload).set, .{});
     pub const ondevicemotion = bridge.accessor(handlerAccessor(.ondevicemotion).get, handlerAccessor(.ondevicemotion).set, .{});
     pub const ondeviceorientation = bridge.accessor(handlerAccessor(.ondeviceorientation).get, handlerAccessor(.ondeviceorientation).set, .{});

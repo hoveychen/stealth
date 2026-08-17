@@ -669,20 +669,48 @@ pub const Listener = struct {
                 // doesn't carry one.
                 const target = event._current_target.?;
                 const func = resolveHandler(local, target, handler) orelse return;
+                const local_func = local.toLocal(func);
+
+                // `window.onerror` is an OnErrorEventHandler: it takes the
+                // ErrorEvent apart into five arguments and cancels on `return
+                // true`, the inverse of every other handler. Measured on a
+                // headed Chrome 150 (probe-g22c), what selects that convention
+                // is the event's *interface* plus the target being a Window --
+                // a plain Event("error") at window.onerror and an ErrorEvent at
+                // document.onerror both get the ordinary treatment.
+                const special_error = handler == .onerror and
+                    target._type == .window and
+                    event.is(@import("webapi/event/ErrorEvent.zig")) != null;
 
                 var caught: js.TryCatch.Caught = undefined;
-                const handler_return: ?js.Value = local.toLocal(func).tryCallWithThis(js.Value, target, .{event}, &caught) catch |err| ret: {
-                    if (err == error.ExecutionTerminated) {
-                        return error.ExecutionTerminated;
-                    }
-                    local.ctx.page.recordJsError(err);
-                    log.warn(.event, "inline handler", .{ .err = err, .caught = caught });
-                    break :ret null;
+                const handler_return: ?js.Value = blk: {
+                    const result = if (special_error) res: {
+                        const error_event = event.is(@import("webapi/event/ErrorEvent.zig")).?;
+                        break :res local_func.tryCallWithThis(js.Value, target, .{
+                            error_event._message,
+                            error_event._filename,
+                            error_event._line_number,
+                            error_event._column_number,
+                            error_event._error,
+                        }, &caught);
+                    } else local_func.tryCallWithThis(js.Value, target, .{event}, &caught);
+
+                    break :blk result catch |err| {
+                        if (err == error.ExecutionTerminated) {
+                            return error.ExecutionTerminated;
+                        }
+                        local.ctx.page.recordJsError(err);
+                        log.warn(.event, "inline handler", .{ .err = err, .caught = caught });
+                        break :blk null;
+                    };
                 };
+
                 // Unlike an addEventListener listener, an event handler that
-                // returns false cancels the event.
+                // returns false cancels the event -- except under the
+                // OnErrorEventHandler convention, where it is `true`.
                 if (handler_return) |ret| {
-                    if (ret.isFalse() and !event._type_string.eql(comptime .wrap("error"))) {
+                    const cancels = if (special_error) ret.isTrue() else ret.isFalse();
+                    if (cancels) {
                         event.preventDefault();
                     }
                 }

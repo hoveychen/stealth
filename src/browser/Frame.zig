@@ -1302,12 +1302,12 @@ fn _documentIsComplete(self: *Frame) !void {
 
     // Dispatch window.load event.
     const window_target = self.window.asEventTarget();
-    if (self._event_manager.hasDirectListeners(window_target, "load", self.window._on_load)) {
+    if (self._event_manager.hasDirectListeners(window_target, "load", null)) {
         const event = try Event.initTrusted(comptime .wrap("load"), .{}, self._page);
         // This event is weird, it's dispatched directly on the window, but
         // with the document as the target.
         event._target = self.document.asEventTarget();
-        try self._event_manager.dispatchDirect(window_target, event, self.window._on_load, .{ .inject_target = false, .context = "page load" });
+        try self._event_manager.dispatchDirect(window_target, event, null, .{ .inject_target = false, .context = "page load" });
     }
 
     self._session.notification.dispatch(.frame_loaded, &.{
@@ -1317,9 +1317,9 @@ fn _documentIsComplete(self: *Frame) !void {
         .timestamp = lp.datetime.timestamp(.boot),
     });
 
-    if (self._event_manager.hasDirectListeners(window_target, "pageshow", self.window._on_pageshow)) {
+    if (self._event_manager.hasDirectListeners(window_target, "pageshow", null)) {
         const pageshow_event = (try PageTransitionEvent.initTrusted(comptime .wrap("pageshow"), .{}, self)).asEvent();
-        try self._event_manager.dispatchDirect(window_target, pageshow_event, self.window._on_pageshow, .{ .context = "page show" });
+        try self._event_manager.dispatchDirect(window_target, pageshow_event, null, .{ .context = "page show" });
     }
 
     if (comptime IS_DEBUG) {
@@ -2259,7 +2259,7 @@ const HashChangeCallback = struct {
 
         const frame = self.frame;
         const target = frame.window.asEventTarget();
-        if (!frame._event_manager.hasDirectListeners(target, "hashchange", frame.window._on_hashchange)) {
+        if (!frame._event_manager.hasDirectListeners(target, "hashchange", null)) {
             return null;
         }
 
@@ -2267,7 +2267,7 @@ const HashChangeCallback = struct {
             .oldURL = self.old_url,
             .newURL = self.new_url,
         }, frame)).asEvent();
-        try frame._event_manager.dispatchDirect(target, event, frame.window._on_hashchange, .{ .context = "Hash Change" });
+        try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "Hash Change" });
         return null;
     }
 };
