@@ -280,8 +280,16 @@ pub fn exportKey(
         return exportJwk(key, exec);
     }
 
-    const is_unsupported = std.mem.eql(u8, format, "pkcs8") or std.mem.eql(u8, format, "spki");
-    if (is_unsupported) {
+    const is_der = std.mem.eql(u8, format, "pkcs8") or std.mem.eql(u8, format, "spki");
+    if (is_der) {
+        // Only RSA marshals DER so far; EC/OKP keys still take the old path.
+        if (key._type == .rsa) {
+            const der = RSA.exportDer(key, format, exec) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+            };
+            return local.resolvePromise(js.ArrayBuffer{ .values = der });
+        }
         log.warn(.not_implemented, "SubtleCrypto.exportKey", .{ .format = format });
         return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
     }

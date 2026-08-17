@@ -162,6 +162,20 @@ pub extern fn BN_num_bytes(bn: *const BIGNUM) c_uint;
 pub extern fn d2i_PUBKEY(out: ?*?*EVP_PKEY, inp: *[*c]const u8, len: c_long) ?*EVP_PKEY;
 pub extern fn d2i_AutoPrivateKey(out: ?*?*EVP_PKEY, inp: *[*c]const u8, len: c_long) ?*EVP_PKEY;
 
+// DER encoders. Called with a null-initialised `outp`, each allocates the
+// buffer itself and the caller releases it with `OPENSSL_free`. `spki` comes
+// straight off the EVP_PKEY; `pkcs8` needs the PrivateKeyInfo wrapper first,
+// since `i2d_PrivateKey` would emit the bare PKCS#1 RSAPrivateKey instead.
+pub const struct_pkcs8_priv_key_info_st = opaque {};
+pub const PKCS8_PRIV_KEY_INFO = struct_pkcs8_priv_key_info_st;
+
+pub extern fn i2d_PUBKEY(pkey: *const EVP_PKEY, outp: *?[*]u8) c_int;
+pub extern fn EVP_PKEY2PKCS8(pkey: *const EVP_PKEY) ?*PKCS8_PRIV_KEY_INFO;
+pub extern fn i2d_PKCS8_PRIV_KEY_INFO(key: *const PKCS8_PRIV_KEY_INFO, outp: *?[*]u8) c_int;
+pub extern fn PKCS8_PRIV_KEY_INFO_free(key: ?*PKCS8_PRIV_KEY_INFO) void;
+
+pub extern fn OPENSSL_free(ptr: ?*anyopaque) void;
+
 pub const NID_X25519 = @as(c_int, 948);
 pub const EVP_PKEY_X25519 = NID_X25519;
 pub const NID_ED25519 = 949;

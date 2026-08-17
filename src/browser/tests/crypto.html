@@ -541,3 +541,66 @@
     });
   }
 </script>
+
+<script id=exportKey-rsa-der type=module>
+  // The DER export formats, measured against a headed Chrome 150 (probe-g25).
+  // browserscan exports the public half as `spki` before it POSTs, so a
+  // rejection here is as fatal to the value cards as a failed generateKey.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+    const gen = (extractable) => crypto.subtle.generateKey(
+      { name: "RSA-OAEP", hash: "SHA-256", modulusLength: 2048, publicExponent: exp },
+      extractable, ["encrypt", "decrypt"],
+    );
+    // A rejection has to arrive at the assertions as a value; awaiting it bare
+    // would tear the block down before they run.
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+
+    const out = {};
+    try {
+      const pair = await gen(true);
+
+      const spki = await crypto.subtle.exportKey("spki", pair.publicKey);
+      out.spki_length = spki.byteLength;
+      out.spki_prefix = b64(spki.slice(0, 12));
+
+      const pkcs8 = await crypto.subtle.exportKey("pkcs8", pair.privateKey);
+      // Chrome reports ~1218 bytes; assert the shape, not an exact DER length.
+      out.pkcs8_plausible = pkcs8.byteLength > 1000;
+
+      // Each DER format names one half of the pair. Chrome refuses the other
+      // half rather than deriving it.
+      out.spki_of_private = await rejectsWith(() => crypto.subtle.exportKey("spki", pair.privateKey));
+      out.pkcs8_of_public = await rejectsWith(() => crypto.subtle.exportKey("pkcs8", pair.publicKey));
+
+      const sealed = await gen(false);
+      out.sealed_pkcs8 = await rejectsWith(() => crypto.subtle.exportKey("pkcs8", sealed.privateKey));
+      // ...but the public half of a sealed pair is extractable, so it exports.
+      const sealed_spki = await crypto.subtle.exportKey("spki", sealed.publicKey);
+      out.sealed_spki_length = sealed_spki.byteLength;
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual(294, o.spki_length);
+      testing.expectEqual("MIIBIjANBgkqhkiG", o.spki_prefix);
+      testing.expectEqual(true, o.pkcs8_plausible);
+      testing.expectEqual("InvalidAccessError", o.spki_of_private);
+      testing.expectEqual("InvalidAccessError", o.pkcs8_of_public);
+      testing.expectEqual("InvalidAccessError", o.sealed_pkcs8);
+      testing.expectEqual(294, o.sealed_spki_length);
+    });
+  }
+</script>

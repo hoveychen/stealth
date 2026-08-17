@@ -36,6 +36,9 @@ const common = @import("common.zig");
 
 const Execution = js.Execution;
 
+/// Errors mapped to DOMException names by the caller.
+pub const Error = error{ InvalidAccessError, DataError, NotSupported, OperationError, OutOfMemory };
+
 /// Which usages each half of the pair may keep. `validate` has already
 /// rejected any usage that belongs to neither.
 fn usageSets(name: []const u8) struct { private: []const []const u8, public: []const []const u8 } {
@@ -149,6 +152,35 @@ pub fn generate(
     });
 
     return local.resolvePromise(CryptoKey.Pair{ .privateKey = private, .publicKey = public });
+}
+
+/// Marshals the key as DER: `spki` for the public half, `pkcs8` for the
+/// private one. Each format names one half of the pair, and Chrome refuses the
+/// other half rather than deriving it -- `exportKey('spki', privateKey)` is
+/// InvalidAccessError there (probe-g25), not a public-key export.
+pub fn exportDer(key: *const CryptoKey, format: []const u8, exec: *const Execution) Error![]const u8 {
+    const want_public = std.mem.eql(u8, format, "spki");
+    if (key._kind != (if (want_public) CryptoKey.Kind.public else CryptoKey.Kind.private)) {
+        return error.InvalidAccessError;
+    }
+
+    // Both encoders allocate the buffer themselves when handed a null pointer.
+    var out: ?[*]u8 = null;
+    const len = blk: {
+        if (want_public) {
+            break :blk crypto.i2d_PUBKEY(key.getKeyObject(), &out);
+        }
+        const info = crypto.EVP_PKEY2PKCS8(key.getKeyObject()) orelse return error.OperationError;
+        defer crypto.PKCS8_PRIV_KEY_INFO_free(info);
+        break :blk crypto.i2d_PKCS8_PRIV_KEY_INFO(info, &out);
+    };
+
+    const buf = out orelse return error.OperationError;
+    defer crypto.OPENSSL_free(buf);
+    if (len <= 0) {
+        return error.OperationError;
+    }
+    return exec.local_arena.dupe(u8, buf[0..@intCast(len)]);
 }
 
 /// The public exponent as big-endian bytes, which is how `algorithm`
