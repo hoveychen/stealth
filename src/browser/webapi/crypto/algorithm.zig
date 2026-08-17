@@ -135,11 +135,11 @@ pub const DerivedKey = union(enum) {
     name: []const u8,
 };
 
-/// Algorithm passed to `importKey()`. HMAC carries a hash, so it must be probed
-/// before the bare-`{name}` object; the plain string is the final fallback (any
-/// JS value coerces to a string).
+/// Algorithm passed to `importKey()`. HMAC and the RSA family carry a hash, so
+/// that shape must be probed before the bare-`{name}` object; the plain string
+/// is the final fallback (any JS value coerces to a string).
 pub const Import = union(enum) {
-    hmac: struct {
+    hashed: struct {
         name: []const u8,
         hash: union(enum) {
             string: []const u8,
@@ -153,7 +153,7 @@ pub const Import = union(enum) {
 
     pub fn algoName(self: Import) []const u8 {
         return switch (self) {
-            .hmac => |h| h.name,
+            .hashed => |h| h.name,
             .ec => |e| e.name,
             .object => |o| o.name,
             .name => |n| n,
@@ -164,6 +164,17 @@ pub const Import = union(enum) {
     pub fn namedCurve(self: Import) []const u8 {
         return switch (self) {
             .ec => |e| e.namedCurve,
+            else => "",
+        };
+    }
+
+    /// The hash if the import carries one, else empty.
+    pub fn hashName(self: Import) []const u8 {
+        return switch (self) {
+            .hashed => |h| switch (h.hash) {
+                .string => |s| s,
+                .object => |o| o.name,
+            },
             else => "",
         };
     }

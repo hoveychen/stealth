@@ -154,6 +154,70 @@ pub fn generate(
     return local.resolvePromise(CryptoKey.Pair{ .privateKey = private, .publicKey = public });
 }
 
+/// Imports an RSA key from DER (`spki` public / `pkcs8` private). The DER says
+/// nothing about which RSA algorithm or hash the key is for, so both come from
+/// the caller; the modulus and exponent are read back off the parsed key.
+/// libcrypto does the parsing, so malformed DER is DataError.
+pub fn import(
+    name: []const u8,
+    hash_name: []const u8,
+    format: []const u8,
+    der: []const u8,
+    is_private: bool,
+    extractable: bool,
+    usages_mask: u8,
+    exec: *const Execution,
+) !js.Promise {
+    const local = exec.js.local.?;
+
+    const canonical = canonicalName(name).?;
+    const hash = canonicalHash(hash_name) orelse {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
+    };
+
+    var ptr: [*c]const u8 = der.ptr;
+    const pkey: *crypto.EVP_PKEY = blk: {
+        if (std.mem.eql(u8, format, "spki")) {
+            break :blk crypto.d2i_PUBKEY(null, &ptr, @intCast(der.len)) orelse {
+                return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+            };
+        }
+        if (std.mem.eql(u8, format, "pkcs8")) {
+            break :blk crypto.d2i_AutoPrivateKey(null, &ptr, @intCast(der.len)) orelse {
+                return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+            };
+        }
+        // jwk / raw not handled here.
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
+    };
+    errdefer crypto.EVP_PKEY_free(pkey);
+
+    // An EC key in a well-formed SPKI parses fine; it just isn't an RSA key.
+    if (crypto.EVP_PKEY_id(pkey) != crypto.EVP_PKEY_RSA) {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+    }
+    const rsa = crypto.EVP_PKEY_get0_RSA(pkey) orelse {
+        return local.rejectPromise(.{ .dom_exception = .{ .err = error.DataError } });
+    };
+
+    const crypto_key = try CryptoKey.init(exec, .{
+        ._type = .rsa,
+        ._kind = if (is_private) .private else .public,
+        ._extractable = extractable,
+        ._usages = usages_mask,
+        ._key = &.{},
+        ._algorithm = .{
+            .name = canonical,
+            .hash = hash,
+            .modulus_length = crypto.RSA_bits(rsa),
+            .public_exponent = try exponentBytes(exec, rsa),
+        },
+        ._vary = .{ .pkey = pkey },
+    });
+
+    return local.resolvePromise(crypto_key);
+}
+
 /// Marshals the key as DER: `spki` for the public half, `pkcs8` for the
 /// private one. Each format names one half of the pair, and Chrome refuses the
 /// other half rather than deriving it -- `exportKey('spki', privateKey)` is

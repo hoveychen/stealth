@@ -604,3 +604,83 @@
     });
   }
 </script>
+
+<script id=importKey-rsa-der type=module>
+  // DER import, measured against a headed Chrome 150 (probe-g25). The round
+  // trip is generate -> export -> import, so a failure here is the import and
+  // not a stale test vector.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const gen = (name, usages) => crypto.subtle.generateKey(
+      { name, hash: "SHA-256", modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+
+    const out = {};
+    try {
+      const oaep = await gen("RSA-OAEP", ["encrypt", "decrypt"]);
+
+      const spki = await crypto.subtle.exportKey("spki", oaep.publicKey);
+      const pub_key = await crypto.subtle.importKey(
+        "spki", spki, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      );
+      // The modulus is read off the parsed key, not echoed from the request.
+      out.spki_round_trip = [pub_key.type, pub_key.algorithm.name, pub_key.algorithm.modulusLength].join("/");
+      out.spki_hash = pub_key.algorithm.hash.name;
+      out.spki_usages = pub_key.usages.join(",");
+      // An imported key re-exports to the same DER it came from.
+      const reexported = await crypto.subtle.exportKey("spki", pub_key);
+      out.spki_stable = new Uint8Array(reexported).join(",") === new Uint8Array(spki).join(",");
+
+      const pkcs8 = await crypto.subtle.exportKey("pkcs8", oaep.privateKey);
+      const priv_key = await crypto.subtle.importKey(
+        "pkcs8", pkcs8, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"],
+      );
+      out.pkcs8_round_trip = [priv_key.type, priv_key.algorithm.name].join("/");
+
+      // The algorithm comes from the caller, not the DER: the same SPKI reads
+      // back as whichever RSA algorithm was asked for.
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", ["sign", "verify"]);
+      const pkcs1_spki = await crypto.subtle.exportKey("spki", pkcs1.publicKey);
+      const pkcs1_key = await crypto.subtle.importKey(
+        "spki", pkcs1_spki, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, true, ["verify"],
+      );
+      out.pkcs1_round_trip = [pkcs1_key.type, pkcs1_key.algorithm.name].join("/");
+
+      out.garbage_spki = await rejectsWith(() => crypto.subtle.importKey(
+        "spki", new Uint8Array([1, 2, 3, 4]), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"],
+      ));
+      out.garbage_pkcs8 = await rejectsWith(() => crypto.subtle.importKey(
+        "pkcs8", new Uint8Array([1, 2, 3, 4]), { name: "RSA-OAEP", hash: "SHA-256" }, true, ["decrypt"],
+      ));
+      // A usage the algorithm doesn't own is still a SyntaxError on import.
+      out.bad_usage = await rejectsWith(() => crypto.subtle.importKey(
+        "spki", spki, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["sign"],
+      ));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual("public/RSA-OAEP/2048", o.spki_round_trip);
+      testing.expectEqual("SHA-256", o.spki_hash);
+      testing.expectEqual("encrypt", o.spki_usages);
+      testing.expectEqual(true, o.spki_stable);
+      testing.expectEqual("private/RSA-OAEP", o.pkcs8_round_trip);
+      testing.expectEqual("public/RSASSA-PKCS1-v1_5", o.pkcs1_round_trip);
+      testing.expectEqual("DataError", o.garbage_spki);
+      testing.expectEqual("DataError", o.garbage_pkcs8);
+      testing.expectEqual("SyntaxError", o.bad_usage);
+    });
+  }
+</script>

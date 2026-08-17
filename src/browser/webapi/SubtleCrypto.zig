@@ -155,6 +155,14 @@ pub fn importKey(
             };
             return EC.import(name, algo.namedCurve(), format, der, is_private, extractable, mask, exec);
         }
+        if (RSA.canonicalName(name) != null) {
+            const der = switch (key_data) {
+                .bytes => |b| b.values,
+                // jwk isn't wired up for RSA yet.
+                .jwk => return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } }),
+            };
+            return RSA.import(name, algo.hashName(), format, der, is_private, extractable, mask, exec);
+        }
         log.warn(.not_implemented, "SubtleCrypto.importKey", .{ .name = name });
         return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } });
     }
@@ -213,7 +221,7 @@ pub fn importKey(
     }
     if (eqlIgnoreCase(name, "HMAC")) {
         const hash_name = switch (algo) {
-            .hmac => |h| switch (h.hash) {
+            .hashed => |h| switch (h.hash) {
                 .string => |s| s,
                 .object => |o| o.name,
             },
@@ -251,6 +259,12 @@ fn asymmetricAllowedUsages(name: []const u8, is_private: bool) ?[]const []const 
     }
     if (eqlIgnoreCase(name, "ECDH") or eqlIgnoreCase(name, "X25519") or eqlIgnoreCase(name, "X448")) {
         return if (is_private) &.{ "deriveKey", "deriveBits" } else &.{};
+    }
+    if (eqlIgnoreCase(name, "RSASSA-PKCS1-v1_5") or eqlIgnoreCase(name, "RSA-PSS")) {
+        return if (is_private) &.{"sign"} else &.{"verify"};
+    }
+    if (eqlIgnoreCase(name, "RSA-OAEP")) {
+        return if (is_private) &.{ "decrypt", "unwrapKey" } else &.{ "encrypt", "wrapKey" };
     }
     return null;
 }
