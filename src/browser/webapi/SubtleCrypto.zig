@@ -499,11 +499,18 @@ fn cryptOp(
         .name => return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } }),
     };
 
-    const out = AES.crypt(params, key, data, encrypting, exec) catch |err| switch (err) {
-        error.InvalidAccessError => return local.rejectPromise(.{ .dom_exception = .{ .err = error.InvalidAccessError } }),
-        error.OperationError => return local.rejectPromise(.{ .dom_exception = .{ .err = error.OperationError } }),
-        error.NotSupported => return local.rejectPromise(.{ .dom_exception = .{ .err = error.NotSupported } }),
-        error.OutOfMemory => return error.OutOfMemory,
+    // RSA-OAEP and the AES modes share the entry point but nothing else.
+    const out = blk: {
+        if (key._type == .rsa) {
+            break :blk RSA.crypt(params, key, data, encrypting, exec) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+            };
+        }
+        break :blk AES.crypt(params, key, data, encrypting, exec) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return local.rejectPromise(.{ .dom_exception = .{ .err = err } }),
+        };
     };
     return local.resolvePromise(js.ArrayBuffer{ .values = out });
 }

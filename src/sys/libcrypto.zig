@@ -195,7 +195,29 @@ pub extern fn EVP_PKEY2PKCS8(pkey: *const EVP_PKEY) ?*PKCS8_PRIV_KEY_INFO;
 pub extern fn i2d_PKCS8_PRIV_KEY_INFO(key: *const PKCS8_PRIV_KEY_INFO, outp: *?[*]u8) c_int;
 pub extern fn PKCS8_PRIV_KEY_INFO_free(key: ?*PKCS8_PRIV_KEY_INFO) void;
 
+pub extern fn OPENSSL_malloc(size: usize) ?*anyopaque;
 pub extern fn OPENSSL_free(ptr: ?*anyopaque) void;
+
+// RSA padding schemes, and the EVP_PKEY_CTX knobs that configure them. The
+// `RSA_*` entry points can't set the OAEP or MGF-1 digest -- they are always
+// SHA-1 there -- so every RSA operation goes through an EVP_PKEY_CTX.
+pub const RSA_PKCS1_PADDING = 1;
+pub const RSA_PKCS1_OAEP_PADDING = 4;
+pub const RSA_PKCS1_PSS_PADDING = 6;
+/// A PSS salt as long as the digest, which is what WebCrypto's default is.
+pub const RSA_PSS_SALTLEN_DIGEST = -1;
+
+pub extern fn EVP_PKEY_encrypt_init(ctx: *EVP_PKEY_CTX) c_int;
+pub extern fn EVP_PKEY_encrypt(ctx: *EVP_PKEY_CTX, out: ?[*]u8, out_len: *usize, in: [*]const u8, in_len: usize) c_int;
+pub extern fn EVP_PKEY_decrypt_init(ctx: *EVP_PKEY_CTX) c_int;
+pub extern fn EVP_PKEY_decrypt(ctx: *EVP_PKEY_CTX, out: ?[*]u8, out_len: *usize, in: [*]const u8, in_len: usize) c_int;
+
+pub extern fn EVP_PKEY_CTX_set_rsa_padding(ctx: *EVP_PKEY_CTX, padding: c_int) c_int;
+pub extern fn EVP_PKEY_CTX_set_rsa_oaep_md(ctx: *EVP_PKEY_CTX, md: *const EVP_MD) c_int;
+/// DANGER: takes ownership of `label` and frees it with `OPENSSL_free`, so the
+/// buffer has to come from `OPENSSL_malloc`.
+pub extern fn EVP_PKEY_CTX_set0_rsa_oaep_label(ctx: *EVP_PKEY_CTX, label: ?[*]u8, label_len: usize) c_int;
+pub extern fn EVP_PKEY_CTX_set_rsa_pss_saltlen(ctx: *EVP_PKEY_CTX, salt_len: c_int) c_int;
 
 pub const NID_X25519 = @as(c_int, 948);
 pub const EVP_PKEY_X25519 = NID_X25519;

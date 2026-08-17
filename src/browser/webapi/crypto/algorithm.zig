@@ -219,6 +219,8 @@ pub const Encrypt = union(enum) {
         length: ?u32 = null,
         additionalData: ?js.TypedArray(u8) = null,
         tagLength: ?u32 = null,
+        /// RSA-OAEP only: the label bound into the padding.
+        label: ?js.TypedArray(u8) = null,
     },
     name: []const u8,
 

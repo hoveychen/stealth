@@ -154,6 +154,72 @@ pub fn generate(
     return local.resolvePromise(CryptoKey.Pair{ .privateKey = private, .publicKey = public });
 }
 
+/// RSA-OAEP encrypt/decrypt. The result is one modulus-wide block whatever the
+/// plaintext length, and OAEP seeds each block randomly, so encrypting the same
+/// plaintext twice gives two different blocks (probe-g25 confirms Chrome does).
+pub fn crypt(
+    params: anytype, // algorithm.Encrypt.params
+    key: *const CryptoKey,
+    data: []const u8,
+    encrypting: bool,
+    exec: *const Execution,
+) Error![]const u8 {
+    // OAEP is the only RSA encryption scheme WebCrypto exposes, and the key
+    // has to have been made for it.
+    if (!eql(params.name, "RSA-OAEP") or !eql(key._algorithm.name, "RSA-OAEP")) {
+        return error.InvalidAccessError;
+    }
+    if ((encrypting and !key.canEncrypt()) or (!encrypting and !key.canDecrypt())) {
+        return error.InvalidAccessError;
+    }
+
+    const md = crypto.findDigest(key._algorithm.hash orelse "") catch return error.OperationError;
+
+    const ctx = crypto.EVP_PKEY_CTX_new(key.getKeyObject(), null) orelse return error.OperationError;
+    defer crypto.EVP_PKEY_CTX_free(ctx);
+
+    const started = if (encrypting) crypto.EVP_PKEY_encrypt_init(ctx) else crypto.EVP_PKEY_decrypt_init(ctx);
+    if (started != 1) {
+        return error.OperationError;
+    }
+    if (crypto.EVP_PKEY_CTX_set_rsa_padding(ctx, crypto.RSA_PKCS1_OAEP_PADDING) != 1) {
+        return error.OperationError;
+    }
+    // MGF-1 is left alone: it defaults to the OAEP digest, which is what
+    // WebCrypto specifies.
+    if (crypto.EVP_PKEY_CTX_set_rsa_oaep_md(ctx, md) != 1) {
+        return error.OperationError;
+    }
+    if (params.label) |label| {
+        if (label.values.len > 0) {
+            // The context takes ownership of the label and frees it itself, so
+            // it has to be a libcrypto allocation rather than an arena slice.
+            const owned: [*]u8 = @ptrCast(crypto.OPENSSL_malloc(label.values.len) orelse return error.OutOfMemory);
+            @memcpy(owned[0..label.values.len], label.values);
+            if (crypto.EVP_PKEY_CTX_set0_rsa_oaep_label(ctx, owned, label.values.len) != 1) {
+                crypto.OPENSSL_free(owned);
+                return error.OperationError;
+            }
+        }
+    }
+
+    const op: *const @TypeOf(crypto.EVP_PKEY_encrypt) =
+        if (encrypting) &crypto.EVP_PKEY_encrypt else &crypto.EVP_PKEY_decrypt;
+
+    // The first call with a null buffer reports the space the result needs.
+    var len: usize = 0;
+    if (op(ctx, null, &len, data.ptr, data.len) != 1) {
+        // A plaintext too long for one block fails here, which is the
+        // OperationError Chrome answers for 500 bytes under a 2048-bit key.
+        return error.OperationError;
+    }
+    const out = try exec.local_arena.alloc(u8, len);
+    if (op(ctx, out.ptr, &len, data.ptr, data.len) != 1) {
+        return error.OperationError;
+    }
+    return out[0..len];
+}
+
 /// Imports an RSA key from DER (`spki` public / `pkcs8` private). The DER says
 /// nothing about which RSA algorithm or hash the key is for, so both come from
 /// the caller; the modulus and exponent are read back off the parsed key.

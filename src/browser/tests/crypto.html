@@ -778,3 +778,84 @@
     });
   }
 </script>
+
+<script id=encrypt-rsa-oaep type=module>
+  // RSA-OAEP encrypt/decrypt, measured against a headed Chrome 150 (probe-g25).
+  // browserscan wraps its fingerprint payload with exactly this before it POSTs.
+  {
+    const state = await testing.async();
+    const exp = new Uint8Array([1, 0, 1]);
+    const enc = new TextEncoder();
+    const gen = (name, usages) => crypto.subtle.generateKey(
+      { name, hash: "SHA-256", modulusLength: 2048, publicExponent: exp }, true, usages,
+    );
+    const rejectsWith = async (fn) => {
+      try {
+        await fn();
+        return "RESOLVED";
+      } catch (e) {
+        return e.name;
+      }
+    };
+    const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+    const out = {};
+    try {
+      const oaep = await gen("RSA-OAEP", ["encrypt", "decrypt"]);
+      const algo = { name: "RSA-OAEP" };
+
+      const ct = await crypto.subtle.encrypt(algo, oaep.publicKey, enc.encode("hello"));
+      // One RSA block, whatever the plaintext length.
+      out.ct_length = ct.byteLength;
+
+      const round = await crypto.subtle.decrypt(
+        algo, oaep.privateKey, await crypto.subtle.encrypt(algo, oaep.publicKey, enc.encode("hello g25")),
+      );
+      out.round_trip = new TextDecoder().decode(round);
+
+      // OAEP seeds each block randomly, so the same plaintext encrypts twice
+      // to two different ciphertexts.
+      const same = enc.encode("same");
+      out.randomised = b64(await crypto.subtle.encrypt(algo, oaep.publicKey, same)) !==
+        b64(await crypto.subtle.encrypt(algo, oaep.publicKey, same));
+
+      const label = enc.encode("lbl");
+      const labelled = { name: "RSA-OAEP", label };
+      const with_label = await crypto.subtle.decrypt(
+        labelled, oaep.privateKey, await crypto.subtle.encrypt(labelled, oaep.publicKey, enc.encode("x")),
+      );
+      out.label_round_trip = new TextDecoder().decode(with_label);
+      // The label is authenticated: decrypting without it fails.
+      out.label_mismatch = await rejectsWith(async () => crypto.subtle.decrypt(
+        algo, oaep.privateKey, await crypto.subtle.encrypt(labelled, oaep.publicKey, enc.encode("x")),
+      ));
+
+      // 2048-bit OAEP-SHA-256 holds 190 bytes; 500 does not fit in one block.
+      out.too_long = await rejectsWith(() => crypto.subtle.encrypt(algo, oaep.publicKey, new Uint8Array(500)));
+
+      // Each half of the pair keeps only its own usage.
+      out.encrypt_with_private = await rejectsWith(() => crypto.subtle.encrypt(algo, oaep.privateKey, enc.encode("x")));
+      out.decrypt_with_public = await rejectsWith(() => crypto.subtle.decrypt(algo, oaep.publicKey, ct));
+
+      // A key generated for a different RSA algorithm is not an OAEP key.
+      const pkcs1 = await gen("RSASSA-PKCS1-v1_5", ["sign", "verify"]);
+      out.wrong_algorithm = await rejectsWith(() => crypto.subtle.encrypt(algo, pkcs1.publicKey, enc.encode("x")));
+    } catch (e) {
+      out.threw = `${e.name}: ${e.message}`;
+    }
+
+    state.resolve(out);
+    await state.done((o) => {
+      testing.expectEqual(undefined, o.threw);
+      testing.expectEqual(256, o.ct_length);
+      testing.expectEqual("hello g25", o.round_trip);
+      testing.expectEqual(true, o.randomised);
+      testing.expectEqual("x", o.label_round_trip);
+      testing.expectEqual("OperationError", o.label_mismatch);
+      testing.expectEqual("OperationError", o.too_long);
+      testing.expectEqual("InvalidAccessError", o.encrypt_with_private);
+      testing.expectEqual("InvalidAccessError", o.decrypt_with_public);
+      testing.expectEqual("InvalidAccessError", o.wrong_algorithm);
+    });
+  }
+</script>
