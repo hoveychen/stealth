@@ -2585,3 +2585,70 @@ deliberate rather than overlooked:
 * **a graph that modulates an AudioParam** — param edges are not recorded at
   all, only counted (`BaseAudioContext._param_edges`), so a modulated graph
   declines rather than replaying a render that no longer applies.
+
+### Can a container stand in for the Linux machine we claim to be? (P4)
+
+Four of the recorded tables in `src/` were captured on this macOS machine, and
+claiming Linux makes each of them a contradiction until it is re-recorded. The
+container from P1 is the only Linux Chrome reachable from here, so the question
+is which of those tables it can legitimately supply — and the answer is not the
+same for all of them.
+
+Measured with `probe-g21b.js` (in the probe workspace) on **three** browsers, not
+two: `mac150-headless`, `mac151-headed` / `mac151-headless`, and
+`linux151-headless` in the container. The third run is what makes the table
+below possible — a plain mac-vs-Linux diff cannot tell a platform difference
+from a Chrome 150 → 151 one, and it turns out several of the loudest differences
+are the version.
+
+> A trap worth knowing about: the first attempt at this measured a *stale*
+> headless Chrome 150 left listening on the probe port by an earlier session,
+> for both "mac" runs. `run-probe.mjs` now refuses to start when the port is
+> already serving CDP instead of silently attaching to whatever answers.
+
+| table | container usable as the Linux baseline? | what the measurement says |
+|---|---|---|
+| CSS property list (`css/chrome_properties.zig`) | **yes, entirely** | `mac151` and `linux151` agree on all 475 computed longhands and all 745 alias names, *including order*. Every difference from the checked-in table is the version, not the platform. |
+| media MIME answers (`media/chrome_mimes.zig`) | **yes, except the HEVC rows** | 30 of 34 probed types identical. Linux answers `""/false/false` for `hvc1`/`hev1` where macOS says `probably/true/true`, and `MediaRecorder` refuses AAC-in-MP4 where macOS takes it. |
+| WebRTC SDP + RTP capabilities (`webrtc/chrome_sdp.zig`) | **the scaffolding yes, the hardware codecs no** | Audio capabilities are identical. Video loses H264 High profile (`profile-level-id=64001f`, `640034`) and H265 entirely. |
+| WebGL identity and limits (`canvas/WebGLRenderingContext.zig`) | **no** | The container renders through SwiftShader, which is the no-GPU signature detectors already look for. |
+| speech voices (`speech/voices.zig`) | **no** | 19 voices, every one of them `localService: false`. |
+
+The split is not per-table, it is per-*dependency*: the container is a faithful
+Linux Chrome for anything that is pure software inside the browser build, and no
+Linux machine at all for anything backed by a device.
+
+**WebGL.** `unmasked_renderer` reads `ANGLE (Google, Vulkan 1.3.0 (SwiftShader
+Device (Subzero) (0x0000C0DE)), SwiftShader driver)` against macOS's `ANGLE
+(Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)`, and every numeric
+limit that moved moved with it: `MAX_TEXTURE_SIZE` and `MAX_RENDERBUFFER_SIZE`
+16384 → 8192, `MAX_VIEWPORT_DIMS` likewise, `ALIASED_POINT_SIZE_RANGE` [1,511] →
+[1,1023], `MAX_VARYING_VECTORS` 30 → 31, four WebGL1 and eight WebGL2 extensions
+gone (`OVR_multiview2` gained). Those are SwiftShader's numbers, not a Linux
+GPU's, so taking them would trade a macOS-string contradiction for a
+software-rasteriser one — the second is worse, because it is the exact string a
+detector uses to decide it is talking to a headless browser. Getting this table
+honestly needs a Linux box with a GPU; the container cannot provide it.
+
+**Voices.** The suspicion going in was that the container would report an empty
+list. It does not — it reports the 19 Google *network* voices, `localService:
+false` on every one. That is worse than it sounds: what CreepJS renders as
+"local (0): blocked" is a count of *local* voices, so nineteen remote ones read
+the same as none. A real Linux desktop with speech-dispatcher installed would
+report local voices beside them, and that is what this table would need.
+
+**MIME and WebRTC, and the part that is inference.** That Linux Chrome ships no
+HEVC decoder and no H264 High profile *in this container* is measured. Whether a
+Linux desktop with VAAPI hardware decoding would answer differently is **not**
+measured here — Chrome routes HEVC and H264 High through platform decoders, so it
+plausibly would. Treat those specific rows as device-dependent like WebGL rather
+than as settled Linux facts.
+
+**A finding that outgrows P4.** The checked-in tables were all captured from
+Chrome 150 and the reference Chrome is now 151, which is not a cosmetic gap: 151
+adds the `ruby-overhang` longhand (474 → 475 computed) and rewrites a large part
+of the offer SDP (`a=rtcp-xr:rcvr-rtt=all` plus an `a=rtcp-fb:<pt> rrtr` line per
+payload type, and a renumbered video payload list). So bumping `chrome_major` to
+151 cannot be done on its own — the CSS and SDP tables have to be re-recorded in
+the same change, or the version the engine claims contradicts the tables beside
+it.
