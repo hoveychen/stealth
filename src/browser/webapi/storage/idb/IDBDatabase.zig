@@ -45,7 +45,6 @@ _database_id: i64,
 _name: []const u8,
 _version: i64,
 _txn: ?*IDBTransaction = null, // only set during upgradeneeded
-_on_error: ?js.Function.Global = null,
 
 pub fn init(exec: *Execution, engine: *Engine, database_id: i64, name: []const u8, version: i64) !*IDBDatabase {
     return exec._factory.eventTarget(IDBDatabase{
@@ -221,15 +220,16 @@ pub fn getObjectStoreNames(self: *IDBDatabase, exec: *Execution) !*DOMStringList
     return list;
 }
 
-pub fn getOnError(self: *const IDBDatabase) ?js.Function.Global {
-    return self._on_error;
+pub fn getOnError(self: *IDBDatabase, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .onerror);
 }
 
-pub fn setOnError(self: *IDBDatabase, setter: ?FunctionSetter) void {
-    self._on_error = if (setter) |s| switch (s) {
+pub fn setOnError(self: *IDBDatabase, setter: ?FunctionSetter, exec: *const Execution) !void {
+    const func: ?js.Function.Global = if (setter) |s| switch (s) {
         .func => |f| f,
         .anything => null,
     } else null;
+    return exec.setEventHandler(self.asEventTarget(), .onerror, func);
 }
 
 pub const JsApi = struct {

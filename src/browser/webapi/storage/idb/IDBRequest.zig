@@ -58,10 +58,6 @@ _result: Result = .{ .none = js.Undefined{} },
 // it cannot be used
 _result_owned: bool = false,
 
-_on_success: ?js.Function.Global = null,
-_on_error: ?js.Function.Global = null,
-_on_upgrade_needed: ?js.Function.Global = null,
-
 const ReadyState = enum {
     pending,
     done,
@@ -201,7 +197,7 @@ pub fn deliver(self: *IDBRequest, exec: *Execution) !void {
 pub fn fireUpgradeNeeded(self: *IDBRequest, exec: *Execution, old_version: u64, new_version: u64) !void {
     self._ready_state = .done;
     const event = try IDBVersionChangeEvent.initTrusted(.wrap("upgradeneeded"), old_version, new_version, exec);
-    try exec.dispatch(self.asEventTarget(), event.asEvent(), self._on_upgrade_needed, .{ .context = "IDBRequest.upgradeneeded" });
+    try exec.dispatch(self.asEventTarget(), event.asEvent(), null, .{ .context = "IDBRequest.upgradeneeded" });
 }
 
 pub fn fireSuccess(self: *IDBRequest, exec: *Execution) !void {
@@ -211,7 +207,7 @@ pub fn fireSuccess(self: *IDBRequest, exec: *Execution) !void {
     event.acquireRef();
     defer _ = event.releaseRef(exec.page);
 
-    try exec.dispatch(self.asEventTarget(), event, self._on_success, .{ .context = "IDBRequest.success" });
+    try exec.dispatch(self.asEventTarget(), event, null, .{ .context = "IDBRequest.success" });
 
     if (event._listeners_did_throw) blk: {
         // if the event threw, we must abort
@@ -244,14 +240,14 @@ fn fireError(self: *IDBRequest, exec: *Execution) !void {
     event._target = et;
     event._dispatch_target = et;
 
-    try exec.dispatch(et, event, self._on_error, .{ .context = "IDBRequest.error", .inject_target = false });
+    try exec.dispatch(et, event, null, .{ .context = "IDBRequest.error", .inject_target = false });
     if (txn) |tx| {
         if (!event._stop_propagation) {
-            try exec.dispatch(tx.asEventTarget(), event, tx._on_error, .{ .context = "IDBTransaction.error", .inject_target = false });
+            try exec.dispatch(tx.asEventTarget(), event, null, .{ .context = "IDBTransaction.error", .inject_target = false });
         }
         if (!event._stop_propagation) {
             const db = tx._db;
-            try exec.dispatch(db.asEventTarget(), event, db._on_error, .{ .context = "IDBDatabase.error", .inject_target = false });
+            try exec.dispatch(db.asEventTarget(), event, null, .{ .context = "IDBDatabase.error", .inject_target = false });
         }
 
         // Don't re-abort a transaction that's already finishing — the AbortError
@@ -320,28 +316,31 @@ pub fn getError(self: *const IDBRequest) ?DOMException {
     return DOMException.fromError(mapped) orelse DOMException.init(null, "UnknownError");
 }
 
-pub fn getOnSuccess(self: *const IDBRequest) ?js.Function.Global {
-    return self._on_success;
+// The three handler properties live in the handler store, so each also takes
+// its place in the target's listener list -- which is why the fire* paths
+// above pass null instead of the function.
+pub fn getOnSuccess(self: *IDBRequest, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .onsuccess);
 }
 
-pub fn setOnSuccess(self: *IDBRequest, setter: ?FunctionSetter) void {
-    self._on_success = idb.functionFromSetter(setter);
+pub fn setOnSuccess(self: *IDBRequest, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return exec.setEventHandler(self.asEventTarget(), .onsuccess, idb.functionFromSetter(setter));
 }
 
-pub fn getOnError(self: *const IDBRequest) ?js.Function.Global {
-    return self._on_error;
+pub fn getOnError(self: *IDBRequest, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .onerror);
 }
 
-pub fn setOnError(self: *IDBRequest, setter: ?FunctionSetter) void {
-    self._on_error = idb.functionFromSetter(setter);
+pub fn setOnError(self: *IDBRequest, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return exec.setEventHandler(self.asEventTarget(), .onerror, idb.functionFromSetter(setter));
 }
 
-pub fn getOnUpgradeNeeded(self: *const IDBRequest) ?js.Function.Global {
-    return self._on_upgrade_needed;
+pub fn getOnUpgradeNeeded(self: *IDBRequest, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .onupgradeneeded);
 }
 
-pub fn setOnUpgradeNeeded(self: *IDBRequest, setter: ?FunctionSetter) void {
-    self._on_upgrade_needed = idb.functionFromSetter(setter);
+pub fn setOnUpgradeNeeded(self: *IDBRequest, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return exec.setEventHandler(self.asEventTarget(), .onupgradeneeded, idb.functionFromSetter(setter));
 }
 
 // A database operation, captured when a request method is called and run later.

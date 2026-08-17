@@ -57,9 +57,6 @@ _timeline: ?*services.DocumentTimeline = null,
 _ready_resolver: ?js.PromiseResolver.Global = null,
 _finished_resolver: ?js.PromiseResolver.Global = null,
 _startTime: ?f64 = null,
-_onFinish: ?js.Function.Global = null,
-_onCancel: ?js.Function.Global = null,
-_onRemove: ?js.Function.Global = null,
 _playState: PlayState = .idle,
 _current_time: ?f64 = null,
 _playback_rate: f64 = 1,
@@ -96,9 +93,6 @@ pub fn construct(effect: ?js.Object.Global, timeline: ?*services.DocumentTimelin
 }
 
 pub fn deinit(self: *Animation, _: *Page) void {
-    if (self._onFinish) |func| func.release();
-    if (self._onCancel) |func| func.release();
-    if (self._onRemove) |func| func.release();
     self._arena.release();
 }
 
@@ -151,9 +145,9 @@ pub fn finish(self: *Animation, frame: *Frame) void {
         frame.js.local.?.toLocal(resolver).resolve("Animation.getFinished", self);
     }
     // call onfinish
-    if (self._onFinish) |func| {
+    if (self.getOnFinish()) |func| {
         frame.js.local.?.toLocal(func).call(void, .{}) catch |err| {
-            log.warn(.js, "Animation._onFinish", .{ .err = err });
+            log.warn(.js, "Animation.onfinish", .{ .err = err });
         };
     }
 }
@@ -220,8 +214,11 @@ pub fn setStartTime(self: *Animation, value: ?f64, frame: *Frame) !void {
     return self.play(frame);
 }
 
-pub fn getOnFinish(self: *const Animation) ?js.Function.Global {
-    return self._onFinish;
+// The property lives in the handler store, so it also takes its place in the
+// listener list; `update` and `finish` still call it directly rather than
+// dispatching an AnimationPlaybackEvent, which is a separate gap.
+pub fn getOnFinish(self: *Animation) ?js.Function.Global {
+    return self._frame.getEventHandler(self.asEventTarget(), .onfinish);
 }
 
 // callback function transitioning from a state to another
@@ -242,9 +239,9 @@ fn update(ctx: *anyopaque) !?u32 {
                 ls.toLocal(resolver).resolve("Animation.getFinished", self);
             }
             // call onfinish
-            if (self._onFinish) |func| {
+            if (self.getOnFinish()) |func| {
                 ls.toLocal(func).call(void, .{}) catch |err| {
-                    log.warn(.js, "Animation._onFinish", .{ .err = err });
+                    log.warn(.js, "Animation.onfinish", .{ .err = err });
                 };
             }
         },
@@ -257,7 +254,7 @@ fn update(ctx: *anyopaque) !?u32 {
 }
 
 pub fn setOnFinish(self: *Animation, cb: ?js.Function.Global) !void {
-    self._onFinish = cb;
+    return self._frame.setEventHandler(self.asEventTarget(), .onfinish, cb);
 }
 
 pub fn playState(self: *const Animation) []const u8 {
@@ -335,20 +332,20 @@ pub fn commitStyles(_: *Animation) !void {
     return error.NoModificationAllowed;
 }
 
-pub fn getOnCancel(self: *const Animation) ?js.Function.Global {
-    return self._onCancel;
+pub fn getOnCancel(self: *Animation) ?js.Function.Global {
+    return self._frame.getEventHandler(self.asEventTarget(), .oncancel);
 }
 
 pub fn setOnCancel(self: *Animation, cb: ?js.Function.Global) !void {
-    self._onCancel = cb;
+    return self._frame.setEventHandler(self.asEventTarget(), .oncancel, cb);
 }
 
-pub fn getOnRemove(self: *const Animation) ?js.Function.Global {
-    return self._onRemove;
+pub fn getOnRemove(self: *Animation) ?js.Function.Global {
+    return self._frame.getEventHandler(self.asEventTarget(), .onremove);
 }
 
 pub fn setOnRemove(self: *Animation, cb: ?js.Function.Global) !void {
-    self._onRemove = cb;
+    return self._frame.setEventHandler(self.asEventTarget(), .onremove, cb);
 }
 
 pub const JsApi = struct {

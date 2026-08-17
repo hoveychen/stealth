@@ -45,7 +45,6 @@ const IDBOpenDBRequest = @This();
 pub const Proto = IDBRequest;
 
 _proto: *IDBRequest,
-_on_blocked: ?js.Function.Global = null,
 
 pub fn init(exec: *Execution) !*IDBOpenDBRequest {
     return exec._factory.idbOpenRequest(IDBOpenDBRequest{ ._proto = undefined });
@@ -69,20 +68,20 @@ pub fn releaseRef(self: *IDBOpenDBRequest, page: *@import("../../../Page.zig")) 
     self._proto.releaseRef(page);
 }
 
-pub fn getOnBlocked(self: *const IDBOpenDBRequest) ?js.Function.Global {
-    return self._on_blocked;
+pub fn getOnBlocked(self: *IDBOpenDBRequest, exec: *const Execution) ?js.Function.Global {
+    return exec.getEventHandler(self.asEventTarget(), .onblocked);
 }
 
-pub fn setOnBlocked(self: *IDBOpenDBRequest, setter: ?FunctionSetter) void {
-    self._on_blocked = idb.functionFromSetter(setter);
+pub fn setOnBlocked(self: *IDBOpenDBRequest, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return exec.setEventHandler(self.asEventTarget(), .onblocked, idb.functionFromSetter(setter));
 }
 
-pub fn getOnUpgradeNeeded(self: *const IDBOpenDBRequest) ?js.Function.Global {
-    return self._proto.getOnUpgradeNeeded();
+pub fn getOnUpgradeNeeded(self: *IDBOpenDBRequest, exec: *const Execution) ?js.Function.Global {
+    return self._proto.getOnUpgradeNeeded(exec);
 }
 
-pub fn setOnUpgradeNeeded(self: *IDBOpenDBRequest, setter: ?FunctionSetter) void {
-    self._proto.setOnUpgradeNeeded(setter);
+pub fn setOnUpgradeNeeded(self: *IDBOpenDBRequest, setter: ?FunctionSetter, exec: *const Execution) !void {
+    return self._proto.setOnUpgradeNeeded(setter, exec);
 }
 
 pub const JsApi = struct {

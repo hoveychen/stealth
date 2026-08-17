@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!-- Per DOM, an event handler *is* an event listener: it joins its target's
+     listener list the moment the property is first set and runs from there.
+     Every row below is "al1,on,al2" on a headed Chrome 150 (probe-g22f). The
+     targets here used to keep the function in a field on the owner, read only
+     on that owner's internal dispatch path, so a scripted dispatchEvent ran
+     the two listeners and skipped the handler entirely. -->
+
+<script id=handler_order_across_targets type=module>
+  {
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      return log.join(',');
+    };
+    const check = (label, target, pairs) => {
+      for (const [name, type] of pairs) {
+        testing.expectEqual('al1,on,al2', order(target, name, type), { desc: label + '.' + name });
+      }
+    };
+
+    check('FileReader', new FileReader(), [
+      ['onabort', 'abort'], ['onerror', 'error'], ['onload', 'load'],
+      ['onloadend', 'loadend'], ['onloadstart', 'loadstart'], ['onprogress', 'progress'],
+    ]);
+
+    check('MessagePort', new MessageChannel().port1, [
+      ['onmessage', 'message'], ['onmessageerror', 'messageerror'],
+    ]);
+
+    check('AbortSignal', new AbortController().signal, [['onabort', 'abort']]);
+
+    check('WebSocket', new WebSocket('ws://127.0.0.1:9584/'), [
+      ['onopen', 'open'], ['onerror', 'error'], ['onclose', 'close'], ['onmessage', 'message'],
+    ]);
+
+    check('EventSource', new EventSource('http://127.0.0.1:9582/sse/simple'), [
+      ['onopen', 'open'], ['onmessage', 'message'], ['onerror', 'error'],
+    ]);
+
+    check('Animation', document.createElement('div').animate([{ opacity: 0 }, { opacity: 1 }], 10), [
+      ['onfinish', 'finish'], ['oncancel', 'cancel'], ['onremove', 'remove'],
+    ]);
+  }
+</script>
+
+<script id=handler_order_worker_handle type=module>
+  {
+    const blob = new Blob(['0'], { type: 'text/javascript' });
+    const w = new Worker(URL.createObjectURL(blob));
+    for (const [name, type] of [['onmessage', 'message'], ['onerror', 'error']]) {
+      const log = [];
+      w.addEventListener(type, () => log.push('al1'));
+      w[name] = () => log.push('on');
+      w.addEventListener(type, () => log.push('al2'));
+      w.dispatchEvent(new Event(type));
+      w[name] = null;
+      testing.expectEqual('al1,on,al2', log.join(','), { desc: 'Worker.' + name });
+    }
+    w.terminate();
+  }
+</script>
+
+<script id=handler_order_indexeddb type=module>
+  {
+    const state = await testing.async();
+    const order = (target, name, type) => {
+      const log = [];
+      target.addEventListener(type, () => log.push('al1'));
+      target[name] = () => log.push('on');
+      target.addEventListener(type, () => log.push('al2'));
+      target.dispatchEvent(new Event(type));
+      target[name] = null;
+      return log.join(',');
+    };
+
+    const openReq = indexedDB.open('g22-order-db', 1);
+    for (const [name, type] of [
+      ['onsuccess', 'success'], ['onerror', 'error'],
+      ['onblocked', 'blocked'], ['onupgradeneeded', 'upgradeneeded'],
+    ]) {
+      testing.expectEqual('al1,on,al2', order(openReq, name, type), { desc: 'IDBOpenDBRequest.' + name });
+    }
+
+    openReq.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('s')) d.createObjectStore('s');
+    };
+    openReq.onsuccess = (e) => state.resolve(e.target.result);
+    openReq.onerror = () => state.resolve(null);
+
+    await state.done((db) => {
+      testing.expectEqual(true, db !== null, { desc: 'database opened' });
+      testing.expectEqual('al1,on,al2', order(db, 'onerror', 'error'), { desc: 'IDBDatabase.onerror' });
+
+      const tx = db.transaction('s', 'readwrite');
+      for (const [name, type] of [['oncomplete', 'complete'], ['onerror', 'error'], ['onabort', 'abort']]) {
+        testing.expectEqual('al1,on,al2', order(tx, name, type), { desc: 'IDBTransaction.' + name });
+      }
+
+      const req = tx.objectStore('s').put(1, 'k');
+      for (const [name, type] of [['onsuccess', 'success'], ['onerror', 'error']]) {
+        testing.expectEqual('al1,on,al2', order(req, name, type), { desc: 'IDBRequest.' + name });
+      }
+      db.close();
+    });
+  }
+</script>
+
+<script id=handler_order_on_the_abort_path type=module>
+  {
+    // The same ordering on each owner's own dispatch path, which used to pass
+    // the handler by hand ahead of the list.
+    const log = [];
+    const ctrl = new AbortController();
+    ctrl.signal.addEventListener('abort', () => log.push('al1'));
+    ctrl.signal.onabort = () => log.push('on');
+    ctrl.signal.addEventListener('abort', () => log.push('al2'));
+    ctrl.abort();
+    testing.expectEqual('al1,on,al2', log.join(','));
+  }
+</script>
+
+<script id=handler_order_on_the_messageport_path type=module>
+  {
+    const state = await testing.async();
+    const log = [];
+    const chan = new MessageChannel();
+    chan.port1.addEventListener('message', () => log.push('al1'));
+    chan.port1.onmessage = () => log.push('on');
+    chan.port1.addEventListener('message', () => { log.push('al2'); state.resolve(); });
+    chan.port2.postMessage('x');
+
+    await state.done(() => {
+      testing.expectEqual('al1,on,al2', log.join(','));
+    });
+  }
+</script>
+
+<script id=handler_order_on_the_filereader_path type=module>
+  {
+    const state = await testing.async();
+    const log = [];
+    const reader = new FileReader();
+    reader.addEventListener('load', () => log.push('al1'));
+    reader.onload = () => log.push('on');
+    reader.addEventListener('load', () => log.push('al2'));
+    reader.addEventListener('loadend', () => state.resolve());
+    reader.readAsText(new Blob(['hi']));
+
+    await state.done(() => {
+      testing.expectEqual('al1,on,al2', log.join(','));
+    });
+  }
+</script>
+</body>

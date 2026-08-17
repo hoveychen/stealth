@@ -81,6 +81,7 @@ pub const Handler = enum(u8) {
     onbeforecut,
     onbeforeinput,
     onbeforeinstallprompt,
+    onblocked,
     onbeforematch,
     onbeforepaste,
     onbeforeprint,
@@ -97,6 +98,7 @@ pub const Handler = enum(u8) {
     onclick,
     onclose,
     oncommand,
+    oncomplete,
     oncompositionend,
     oncompositionstart,
     oncontentvisibilityautostatechange,
@@ -125,6 +127,7 @@ pub const Handler = enum(u8) {
     onended,
     onerror,
     onfocus,
+    onfinish,
     onformdata,
     onfreeze,
     onfullscreenchange,
@@ -157,6 +160,7 @@ pub const Handler = enum(u8) {
     onmousewheel,
     onoffline,
     ononline,
+    onopen,
     onpagehide,
     onpagereveal,
     onpageshow,
@@ -183,6 +187,7 @@ pub const Handler = enum(u8) {
     onreadystatechange,
     onrejectionhandled,
     onrepeat,
+    onremove,
     onreset,
     onresize,
     onresume,
@@ -201,6 +206,7 @@ pub const Handler = enum(u8) {
     onstalled,
     onstorage,
     onsubmit,
+    onsuccess,
     onsuspend,
     ontextformatupdate,
     ontextupdate,
@@ -216,6 +222,7 @@ pub const Handler = enum(u8) {
     ontransitionrun,
     ontransitionstart,
     onunhandledrejection,
+    onupgradeneeded,
     onunload,
     onvisibilitychange,
     onvolumechange,
@@ -244,6 +251,7 @@ const CAMEL_CASE_TYPES = [_]struct { []const u8, Handler }{
 };
 
 const typeToHandler = std.StaticStringMap(Handler).initComptime(blk: {
+    @setEvalBranchQuota(10_000);
     const fields = std.meta.fields(Handler);
     var entries: [fields.len]struct { []const u8, Handler } = undefined;
     for (fields, 0..) |field, i| {
