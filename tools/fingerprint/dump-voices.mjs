@@ -44,9 +44,14 @@ const PROBE = `(async () => {
 const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-voices-'));
 const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, '--no-first-run', '--no-default-browser-check'];
 if (!headed) flags.push('--headless=new');
-const proc = spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
-proc.stdout.resume();
-proc.stderr.resume();
+// CDP_ENDPOINT points this at a Chrome we did not spawn -- the Linux container
+// from linux-chrome.mjs, whose tables are the ones that belong in the tree now
+// that the engine claims Linux. Without it, the only measurable Chrome is the
+// macOS one on this machine.
+const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
+const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
+proc?.stdout.resume();
+proc?.stderr.resume();
 
 const pending = new Map();
 let id = 1, ws;
@@ -62,7 +67,7 @@ const zigString = (s) => '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '
 
 try {
     let ver = null;
-    for (let i = 0; i < 100; i++) { try { ver = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json(); break; } catch { await sleep(200); } }
+    for (let i = 0; i < 100; i++) { try { ver = await (await fetch(`${ENDPOINT ?? `http://127.0.0.1:${PORT}`}/json/version`)).json(); break; } catch { await sleep(200); } }
     if (!ver) throw new Error('Chrome CDP never came up');
     ws = new WebSocket(ver.webSocketDebuggerUrl);
     await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); });
@@ -102,6 +107,6 @@ try {
     console.log(`wrote ${path.relative(repo, outPath)} — ${voices.length} voices`);
 } finally {
     try { ws && ws.close(); } catch {}
-    proc.kill('SIGKILL');
+    proc?.kill('SIGKILL');
     await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
 }

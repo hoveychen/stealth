@@ -92,7 +92,7 @@ pub fn init(options: ?Options, exec: *Execution) !*AudioContext {
     // A stereo output: numberOfOutputs 0 and channelCountMode "explicit" are
     // what set the destination apart from every other node (measured).
     const destination = try exec._factory.audioNode(AudioDestinationNode{ ._proto = undefined });
-    destination._proto._context = base;
+    try base.register(destination._proto, exec);
     destination._proto._number_of_outputs = 0;
     destination._proto._channel_count_mode = .explicit;
     destination._proto._pinned = .destination;

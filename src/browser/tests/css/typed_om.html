@@ -683,10 +683,10 @@ function attach(el) {
 <script id="typedom_computed_style_map">
 {
     const el = attach(document.createElement('div'));
-    // Measured: computedStyleMap() stays read-only and enumerates the same 474
+    // Measured: computedStyleMap() stays read-only and enumerates the same 475
     // longhands getComputedStyle does.
     testing.expectEqual('StylePropertyMapReadOnly', el.computedStyleMap().constructor.name);
-    testing.expectEqual(474, el.computedStyleMap().size);
+    testing.expectEqual(475, el.computedStyleMap().size);
     testing.expectEqual('undefined', String(el.computedStyleMap().set));
     // The dispatch runs over computed values too.
     testing.expectEqual('CSSKeywordValue|block', brand(el.computedStyleMap().get('display')));

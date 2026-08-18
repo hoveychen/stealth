@@ -60,7 +60,11 @@ _number_of_outputs: u32 = 1,
 // no other node kind pins anything.
 _pinned: Pinned = .none,
 
-// The outgoing edges, in connect() order. Only disconnect() reads them.
+// The outgoing edges, in connect() order. Read by disconnect(), which has to
+// name a destination that was never connected, and by the canonical-render
+// match (canonical_render.zig), which walks every node in the context to find
+// what feeds the destination — these are the only edges there are, so it
+// cannot walk backwards.
 _outputs: std.ArrayListUnmanaged(*AudioNode) = .empty,
 
 pub const Pinned = enum {
@@ -243,6 +247,12 @@ pub fn connect(
 
     if (target.toZig(*AudioParam)) |_| {
         if (out >= self._number_of_outputs) return outOfRange("output", out, self._number_of_outputs, exec);
+        // Which param, and from where, is not recorded — nothing reads it back.
+        // The count is: a graph that modulates a parameter renders differently,
+        // and this is the only trace canonical_render.zig has to go on.
+        if (self._context) |context| {
+            context._param_edges += 1;
+        }
         return null;
     } else |_| {}
 

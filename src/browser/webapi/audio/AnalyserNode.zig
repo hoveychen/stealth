@@ -73,7 +73,7 @@ pub fn constructor(context: ?js.Value, options: ?js.Value, exec: *Execution) !*A
 // Shared with BaseAudioContext.createAnalyser.
 pub fn create(ctx: *BaseAudioContext, exec: *Execution) !*AnalyserNode {
     const node = try exec._factory.audioNode(AnalyserNode{ ._proto = undefined });
-    node._proto._context = ctx;
+    try ctx.register(node._proto, exec);
     return node;
 }
 

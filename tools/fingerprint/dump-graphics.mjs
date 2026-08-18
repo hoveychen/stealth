@@ -369,7 +369,11 @@ const flags = [
 ];
 if (!headed) flags.push('--headless=new');
 
-const proc = spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
+// CDP_ENDPOINT points this at a Chrome we did not spawn -- the Linux container
+// from linux-chrome.mjs. The renderer strings and every driver limit below are
+// the whole reason this file exists, and they belong to the platform we claim.
+const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
+const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
 const snapshot = {
     note:
         'Graphics-surface ground truth, measured from the real Google Chrome on the reference host. ' +
@@ -386,7 +390,7 @@ try {
         } catch {}
         await sleep(100);
     }
-    const cdp = await Cdp.connect(`http://127.0.0.1:${PORT}`);
+    const cdp = await Cdp.connect(ENDPOINT ?? `http://127.0.0.1:${PORT}`);
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
     await cdp.send('Runtime.enable', {}, sessionId);
@@ -403,7 +407,7 @@ try {
         }
     }
 } finally {
-    proc.kill('SIGKILL');
+    proc?.kill('SIGKILL');
 }
 
 await fs.writeFile(outPath, JSON.stringify(snapshot, null, 1));

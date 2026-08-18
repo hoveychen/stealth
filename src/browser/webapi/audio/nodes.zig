@@ -113,7 +113,7 @@ fn applyNodeOptions(base: *AudioNode, dict: ?js.Object) !void {
 fn plain(comptime T: type, leaf: T, context: *BaseAudioContext, dict: ?js.Object, exec: *Execution) !*T {
     const node = try exec._factory.audioNode(leaf);
     const base = node._proto;
-    base._context = context;
+    try context.register(base, exec);
     try applyNodeOptions(base, dict);
     return node;
 }
@@ -123,7 +123,7 @@ fn plain(comptime T: type, leaf: T, context: *BaseAudioContext, dict: ?js.Object
 fn source(comptime T: type, leaf: T, context: *BaseAudioContext, dict: ?js.Object, exec: *Execution) !*T {
     const node = try exec._factory.audioNode(leaf);
     const base = node._proto._proto;
-    base._context = context;
+    try context.register(base, exec);
     base._number_of_inputs = 0;
     try applyNodeOptions(base, dict);
     return node;

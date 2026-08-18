@@ -74,6 +74,20 @@ _current_time: f64 = 0,
 // time (measured: ctx.audioWorklet === ctx.audioWorklet).
 _audio_worklet: ?*worklet.AudioWorklet = null,
 
+// Every node built for this context, its destination included, in creation
+// order. Nothing renders from it -- there is no audio thread. What needs it is
+// the canonical-render match (canonical_render.zig), which has to know what
+// feeds the destination: `AudioNode._outputs` records only forward edges, so
+// walking back from the destination is impossible without this list.
+_nodes: std.ArrayListUnmanaged(*AudioNode) = .empty,
+
+// How many times something in this context was connected to an AudioParam.
+// Those edges are deliberately not recorded (connect() answers undefined and
+// keeps nothing), so the count is all there is -- and a graph that modulates a
+// parameter renders differently, which is why canonical_render.zig refuses to
+// claim a recorded render once this is nonzero.
+_param_edges: u32 = 0,
+
 pub const Type = union(enum) {
     audio_context: *@import("AudioContext.zig"),
     offline_audio_context: *@import("OfflineAudioContext.zig"),
@@ -87,6 +101,15 @@ pub const State = enum {
 
 pub fn asEventTarget(self: *BaseAudioContext) *EventTarget {
     return self._proto;
+}
+
+/// Attaches a freshly allocated node to this context. Every node kind goes
+/// through here — it is the only place `_context` is assigned — so `_nodes`
+/// cannot quietly miss one and leave the canonical-render match reading a
+/// graph that is smaller than the real one.
+pub fn register(self: *BaseAudioContext, node: *AudioNode, exec: *const Execution) !void {
+    node._context = self;
+    try self._nodes.append(exec.arena, node);
 }
 
 pub fn getSampleRate(self: *const BaseAudioContext) f64 {

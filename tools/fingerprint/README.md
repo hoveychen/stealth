@@ -2507,3 +2507,236 @@ Deliberately not in scope: EC and OKP keys still export no DER at all
 only RSA was measured), and `SubtleCrypto` declares no `wrapKey` / `unwrapKey`
 at all, for any algorithm, even though an RSA-OAEP pair splits those usages
 across its halves correctly.
+
+## G21: replaying the canonical audio render, per platform
+
+G10 answered "can the audio fingerprint be computed?" with a firm **no** — the
+oscillator's wavetable comes from 36 inverse FFTs backed by vDSP on macOS and
+PFFFT everywhere else, and the compressor calls the platform's libm per sample,
+so there is no "Chrome" answer to reproduce. G21 takes the other road: record
+what real Chrome renders on each platform we claim to be, and replay it for the
+one graph a detector actually builds.
+
+### The recording (P1)
+
+`tools/fingerprint/dump-audio-buffer.mjs` drives two Chromes and writes
+`src/browser/webapi/audio/chrome_audio_{macos,linux}.bin` — 5000 little-endian
+f32 each, the destination channel of the canonical graph. macOS comes from the
+Chrome on this machine; Linux comes from the official amd64 package in a
+container (`tools/fingerprint/linux-chrome.mjs`, reusable for any Linux
+measurement).
+
+Four things measured alongside the buffers, all of which the design leans on:
+
+| measured | value |
+|---|---|
+| canonical tail sum, macOS/arm64 | `124.04347624466754` |
+| canonical tail sum, Linux/x86_64 | `124.04347527516074` |
+| Rosetta-emulated container vs a native x86-64 Xeon (avx512f) | byte-identical buffer |
+| the same graph on Chrome 150 vs Chrome 151 | byte-identical buffer |
+
+The container being trustworthy as a Linux baseline is established **for audio
+only** — it is a CPU-bound render with no device behind it. It says nothing
+about WebGL or speech, which G21's P4 measures separately.
+
+Stored as raw bytes rather than Zig float literals on purpose: the tail sum a
+detector hashes moves with one ULP, and a decimal round-trip through source text
+is exactly where a ULP goes missing.
+
+### The replay, and why it is fussy (P2)
+
+`src/browser/webapi/audio/canonical_render.zig` fills the render buffer only
+when the graph is the canonical one, and leaves it silent otherwise. Two
+decisions shape that predicate.
+
+**Exact on the signal, indifferent to the rest.** A detector that probes the
+graph's *shape* instead of hashing one render is the obvious next move against
+this trick, and a stored buffer handed back for a graph that would render
+something else is a much louder tell than silence — every deviation measured
+lands somewhere completely different (threshold -50 → -40 gives `141.40542197437026`,
+44100 → 48000 Hz gives `122.60269225055163`). But "exact" has to mean the signal
+reaching the destination, not the context containing nothing else: a gain node
+hanging off the side changes nothing in Chrome, so refusing to replay for one
+would invent a divergence rather than avoid one. So the match is on *incoming*
+edges — exactly one node feeds the destination and it is the canonical
+compressor, exactly one feeds the compressor and it is the canonical oscillator
+— and everything else in the context is ignored, the way Chrome ignores it.
+`BaseAudioContext._nodes` exists for this: `AudioNode._outputs` records only
+forward edges, so there is no walking back from the destination without it.
+
+**A longer render replays a prefix rather than falling back to silence.** Only
+5000 frames were recorded — what fingerprintjs asks for — and a 44100-frame
+render is frame-for-frame identical to a 5000-frame one over the frames they
+share (measured, `first_diff = -1`). So a longer ask gets the recorded 5000
+frames and zeros after. This is strictly closer to the truth than all-zero at
+every frame a detector might read, and full silence over the canonical window is
+itself a known signature (CreepJS's `hasFakeAudio()` reads it as blocked audio).
+
+Gaps left open, all of them silence where Chrome renders something, all of them
+deliberate rather than overlooked:
+
+* **past frame 5000** — nothing recorded, see above.
+* **a stereo destination** — only the mono render was recorded. Whether Chrome
+  up-mixes it into identical channels was never measured, and a wrong guess
+  costs more than the silence does.
+* **a source that was stopped** — `stop()` records that it happened but not
+  when, so a stop past the end of the render (which changes nothing in Chrome)
+  cannot be told from one that truncates.
+* **a graph that modulates an AudioParam** — param edges are not recorded at
+  all, only counted (`BaseAudioContext._param_edges`), so a modulated graph
+  declines rather than replaying a render that no longer applies.
+
+### Can a container stand in for the Linux machine we claim to be? (P4)
+
+Four of the recorded tables in `src/` were captured on this macOS machine, and
+claiming Linux makes each of them a contradiction until it is re-recorded. The
+container from P1 is the only Linux Chrome reachable from here, so the question
+is which of those tables it can legitimately supply — and the answer is not the
+same for all of them.
+
+Measured with `probe-g21b.js` (in the probe workspace) on **three** browsers, not
+two: `mac150-headless`, `mac151-headed` / `mac151-headless`, and
+`linux151-headless` in the container. The third run is what makes the table
+below possible — a plain mac-vs-Linux diff cannot tell a platform difference
+from a Chrome 150 → 151 one, and it turns out several of the loudest differences
+are the version.
+
+> A trap worth knowing about: the first attempt at this measured a *stale*
+> headless Chrome 150 left listening on the probe port by an earlier session,
+> for both "mac" runs. `run-probe.mjs` now refuses to start when the port is
+> already serving CDP instead of silently attaching to whatever answers.
+
+| table | container usable as the Linux baseline? | what the measurement says |
+|---|---|---|
+| CSS property list (`css/chrome_properties.zig`) | **yes, entirely** | `mac151` and `linux151` agree on all 475 computed longhands and all 745 alias names, *including order*. Every difference from the checked-in table is the version, not the platform. |
+| media MIME answers (`media/chrome_mimes.zig`) | **yes, except the HEVC rows** | 30 of 34 probed types identical. Linux answers `""/false/false` for `hvc1`/`hev1` where macOS says `probably/true/true`, and `MediaRecorder` refuses AAC-in-MP4 where macOS takes it. |
+| WebRTC SDP + RTP capabilities (`webrtc/chrome_sdp.zig`) | **the scaffolding yes, the hardware codecs no** | Audio capabilities are identical. Video loses H264 High profile (`profile-level-id=64001f`, `640034`) and H265 entirely. |
+| WebGL identity and limits (`canvas/WebGLRenderingContext.zig`) | **no** | The container renders through SwiftShader, which is the no-GPU signature detectors already look for. |
+| speech voices (`speech/voices.zig`) | **no** | 19 voices, every one of them `localService: false`. |
+
+The split is not per-table, it is per-*dependency*: the container is a faithful
+Linux Chrome for anything that is pure software inside the browser build, and no
+Linux machine at all for anything backed by a device.
+
+**WebGL.** `unmasked_renderer` reads `ANGLE (Google, Vulkan 1.3.0 (SwiftShader
+Device (Subzero) (0x0000C0DE)), SwiftShader driver)` against macOS's `ANGLE
+(Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)`, and every numeric
+limit that moved moved with it: `MAX_TEXTURE_SIZE` and `MAX_RENDERBUFFER_SIZE`
+16384 → 8192, `MAX_VIEWPORT_DIMS` likewise, `ALIASED_POINT_SIZE_RANGE` [1,511] →
+[1,1023], `MAX_VARYING_VECTORS` 30 → 31, four WebGL1 and eight WebGL2 extensions
+gone (`OVR_multiview2` gained). Those are SwiftShader's numbers, not a Linux
+GPU's, so taking them would trade a macOS-string contradiction for a
+software-rasteriser one — the second is worse, because it is the exact string a
+detector uses to decide it is talking to a headless browser. Getting this table
+honestly needs a Linux box with a GPU; the container cannot provide it.
+
+**Voices.** The suspicion going in was that the container would report an empty
+list. It does not — it reports the 19 Google *network* voices, `localService:
+false` on every one. That is worse than it sounds: what CreepJS renders as
+"local (0): blocked" is a count of *local* voices, so nineteen remote ones read
+the same as none. A real Linux desktop with speech-dispatcher installed would
+report local voices beside them, and that is what this table would need.
+
+**MIME and WebRTC, and the part that is inference.** That Linux Chrome ships no
+HEVC decoder and no H264 High profile *in this container* is measured. Whether a
+Linux desktop with VAAPI hardware decoding would answer differently is **not**
+measured here — Chrome routes HEVC and H264 High through platform decoders, so it
+plausibly would. Treat those specific rows as device-dependent like WebGL rather
+than as settled Linux facts.
+
+**A finding that outgrows P4.** The checked-in tables were all captured from
+Chrome 150 and the reference Chrome is now 151, which is not a cosmetic gap: 151
+adds the `ruby-overhang` longhand (474 → 475 computed) and rewrites a large part
+of the offer SDP (`a=rtcp-xr:rcvr-rtt=all` plus an `a=rtcp-fb:<pt> rrtr` line per
+payload type, and a renumbered video payload list). So bumping `chrome_major` to
+151 cannot be done on its own — the CSS and SDP tables have to be re-recorded in
+the same change, or the version the engine claims contradicts the tables beside
+it.
+
+### What got replaced, and what is still macOS (P5)
+
+Re-recorded from the container (`CDP_ENDPOINT` now points any of the generators
+at a Chrome it did not spawn, which is how a Linux table gets measured from a
+macOS host at all):
+
+| table | before | after |
+|---|---|---|
+| `css/chrome_properties.zig` | 474 computed / 735 aliases, Chrome 150 macOS | 475 / 736, Chrome 151 Linux |
+| `media/chrome_mimes.zig` | 21 containers, Chrome 150 macOS | 21 containers, Chrome 151 Linux — HEVC gone, `MediaRecorder` no longer takes AAC-in-MP4 |
+| `webrtc/chrome_sdp.zig` | 15 send / 23 receive video codecs, Chrome 150 macOS | 13 / 19, Chrome 151 Linux — no H264 High profile, no H265, video payload types renumbered, `rrtr` feedback and `a=rtcp-xr:rcvr-rtt=all` added by 151 |
+
+The CSS numbers moving is the version, not the platform: `mac151` and
+`linux151` agree exactly (P4), so this refresh would have been due anyway.
+
+Nine assertions across four test files pinned the old counts and had to move
+with the tables — `cs.length`, the last computed longhand's index, the alias
+count, `computedStyleMap().size`, the video payload-type count, the H264 payload
+number, the receive-codec count and the per-codec feedback set. They are the
+tables' regression net, so each one moving is a table that changed, not a test
+that was wrong.
+
+**The other two tables, and the trade that was made deliberately.** WebGL and
+the voice list had no honest option, only two dishonest ones: keep the macOS
+values beside a Linux user-agent, or take the container's — SwiftShader and a
+voice list with no local voices in it, both of which are signatures a detector
+already looks for. The call was to take the container's, on the grounds that
+those at least describe a machine that exists (a Linux server with no GPU and no
+speech-dispatcher, which is what most headless deployments are), where the
+macOS-values-on-Linux combination describes nothing at all and fails on the
+first cross-check.
+
+So both are now measured Linux values, and both carry a cost worth writing down
+rather than forgetting:
+
+* `canvas/WebGL*.zig` reports `Google Inc. (Google)` / `ANGLE (Google, Vulkan
+  1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)` with
+  SwiftShader's limits — `MAX_TEXTURE_SIZE` 8192, `MAX_VIEWPORT_DIMS`
+  [8192, 8192], `ALIASED_POINT_SIZE_RANGE` [1, 1023], `MAX_DRAW_BUFFERS` 6 (so
+  `DRAW_BUFFER6`/`DRAW_BUFFER7` answer null rather than a slot), 35 WebGL1 and
+  29 WebGL2 extensions. **SwiftShader is a headless signal.** Replacing it needs
+  a Linux box with a GPU, not a change of mind.
+* `speech/voices.zig` lists the 19 Google network voices, `localService: false`
+  on all of them — the 180 macOS system voices are gone and nothing local
+  replaces them. **Zero local voices reads to CreepJS the same as an empty
+  list.** Replacing it needs speech-dispatcher on that same box.
+
+Not touched, and out of scope here: the font metric tables behind
+`measureText` (G5) were also measured on macOS, and Linux ships entirely
+different default families. That is a bigger surface than the five above and has
+not been measured on Linux at all yet.
+
+### The version bump, and what the probe caught (P6)
+
+`chrome_major` is 151 and `chrome_full_version` is `151.0.7922.137` — the Linux
+build's, because that is the platform being claimed and the build every table
+above was recorded from. The bump is deliberately last: P4 established that 151
+is not a cosmetic difference from 150 (a new CSS longhand, a rewritten offer
+SDP), so the number could only move once the tables had.
+
+Re-running the end-to-end probe against the rebuilt engine caught one thing the
+test suite could not, because nothing pinned it: **the Sec-Ch-Ua brand list was
+still Chrome 150's.** Not the versions — those track `chrome_major` — but the
+GREASE entry and the order:
+
+| | Chrome 150 | Chrome 151 |
+|---|---|---|
+| GREASE brand | `"Not;A=Brand";v="8"` | `"Not=A?Brand";v="99"` |
+| order | Chromium, then Google Chrome | Google Chrome, then Chromium |
+
+Both move between builds *by design* — GREASE exists so servers cannot hardcode
+the list — which is exactly why neither survives a version bump and why a
+150-era list beside a 151 user-agent is a mismatch rather than a harmless
+default. Measured twice in separate container runs before being written down, so
+it is this build's answer and not one roll of the die.
+
+Final parity run, engine vs the Linux Chrome 151 in the container, same probe on
+both (`probe-g21e.js`): **14 of 14 comparable rows identical** — user-agent,
+`navigator.platform`, the brand list, `architecture`/`bitness`/`uaFullVersion`,
+the WebGL renderer strings and limits, the extension counts (35 / 29), the
+computed-property count (475), the canonical audio tail sum
+(`124.04347527516074`, the Linux recording), the voice counts (19 / 0 local),
+HEVC (`""`) and the video RTP codec count (13). The two rows not compared are
+`navigator.userAgentData.platform` and the brand list, which are
+`[SecureContext]` and so absent on the container's `about:blank`; both were
+verified separately against `https://example.com` in the container, where Chrome
+answers `Linux` and the same three brands.

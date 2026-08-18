@@ -42,6 +42,11 @@ _proto: *AudioNode,
 _started: bool = false,
 _stopped: bool = false,
 
+// The time start() was handed. Nothing is scheduled with it — but the canonical
+// audio render (canonical_render.zig) was recorded from a source started at 0,
+// and one started later is a different render.
+_start_when: f64 = 0,
+
 const nodes = @import("nodes.zig");
 const handler_property = @import("../handler_property.zig");
 const EventTarget = @import("../EventTarget.zig");
@@ -76,8 +81,10 @@ pub fn begin(self: *AudioScheduledSourceNode, when: ?f64, exec: *const Execution
         "Failed to execute 'start' on 'AudioScheduledSourceNode': cannot call start more than once.",
         exec,
     );
-    try validate("start", when orelse 0, exec);
+    const at = when orelse 0;
+    try validate("start", at, exec);
     self._started = true;
+    self._start_when = at;
 }
 
 pub fn stop(self: *AudioScheduledSourceNode, when: ?f64, exec: *const Execution) !void {
