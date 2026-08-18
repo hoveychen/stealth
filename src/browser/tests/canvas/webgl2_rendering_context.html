@@ -36,21 +36,26 @@
     gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
   );
 
-  testing.expectEqual(16384, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+  testing.expectEqual(8192, gl.getParameter(gl.MAX_TEXTURE_SIZE));
   testing.expectEqual(16, gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 
   // 2.0-only limits.
   testing.expectEqual(2048, gl.getParameter(gl.MAX_3D_TEXTURE_SIZE));
-  testing.expectEqual(8, gl.getParameter(gl.MAX_DRAW_BUFFERS));
-  testing.expectEqual(8, gl.getParameter(gl.MAX_COLOR_ATTACHMENTS));
+  testing.expectEqual(6, gl.getParameter(gl.MAX_DRAW_BUFFERS));
+  testing.expectEqual(6, gl.getParameter(gl.MAX_COLOR_ATTACHMENTS));
+  // Six draw buffers means DRAW_BUFFER6 and DRAW_BUFFER7 are not valid enums
+  // to query, and Chrome answers null rather than a slot value.
+  testing.expectEqual(1029, gl.getParameter(gl.DRAW_BUFFER5));
+  testing.expectEqual(null, gl.getParameter(gl.DRAW_BUFFER6));
+  testing.expectEqual(null, gl.getParameter(gl.DRAW_BUFFER7));
 
   testing.expectEqual(true, gl.getParameter(gl.DITHER));
   testing.expectEqual(false, gl.getParameter(gl.RASTERIZER_DISCARD));
 
   const dbg = gl.getExtension("WEBGL_debug_renderer_info");
-  testing.expectEqual("Google Inc. (Apple)", gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
+  testing.expectEqual("Google Inc. (Google)", gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
   testing.expectEqual(
-    "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+    "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
     gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL),
   );
 
@@ -68,7 +73,7 @@
 
   // 2.0 advertises a different set than 1.0: some names became core and
   // dropped off, others only exist here.
-  testing.expectEqual(36, extensions.length);
+  testing.expectEqual(29, extensions.length);
   testing.expectEqual("EXT_clip_control", extensions[0]);
   testing.expectEqual(true, extensions.includes("EXT_color_buffer_float"));
   testing.expectEqual(true, extensions.includes("WEBGL_clip_cull_distance"));

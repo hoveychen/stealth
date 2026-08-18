@@ -2675,16 +2675,32 @@ number, the receive-codec count and the per-codec feedback set. They are the
 tables' regression net, so each one moving is a table that changed, not a test
 that was wrong.
 
-**Still macOS, deliberately, because the container cannot supply them:**
+**The other two tables, and the trade that was made deliberately.** WebGL and
+the voice list had no honest option, only two dishonest ones: keep the macOS
+values beside a Linux user-agent, or take the container's — SwiftShader and a
+voice list with no local voices in it, both of which are signatures a detector
+already looks for. The call was to take the container's, on the grounds that
+those at least describe a machine that exists (a Linux server with no GPU and no
+speech-dispatcher, which is what most headless deployments are), where the
+macOS-values-on-Linux combination describes nothing at all and fails on the
+first cross-check.
 
-* `canvas/WebGLRenderingContext.zig` still reports `Google Inc. (Apple)` /
-  `ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)` and the
-  Metal limits, beside a user-agent that now says Linux. This is a live
-  contradiction and the worst single row in the engine right now. The container's
-  answer is SwiftShader, which is the headless signature — so this is a choice
-  between two tells, not a fix waiting to be applied. See P4.
-* `speech/voices.zig` still lists the 199 macOS system voices. Same shape of
-  problem: the container offers 19 Google network voices and zero local ones,
-  which reads as "local (0): blocked".
+So both are now measured Linux values, and both carry a cost worth writing down
+rather than forgetting:
 
-Both need a Linux machine with a GPU and speech-dispatcher to resolve honestly.
+* `canvas/WebGL*.zig` reports `Google Inc. (Google)` / `ANGLE (Google, Vulkan
+  1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)` with
+  SwiftShader's limits — `MAX_TEXTURE_SIZE` 8192, `MAX_VIEWPORT_DIMS`
+  [8192, 8192], `ALIASED_POINT_SIZE_RANGE` [1, 1023], `MAX_DRAW_BUFFERS` 6 (so
+  `DRAW_BUFFER6`/`DRAW_BUFFER7` answer null rather than a slot), 35 WebGL1 and
+  29 WebGL2 extensions. **SwiftShader is a headless signal.** Replacing it needs
+  a Linux box with a GPU, not a change of mind.
+* `speech/voices.zig` lists the 19 Google network voices, `localService: false`
+  on all of them — the 180 macOS system voices are gone and nothing local
+  replaces them. **Zero local voices reads to CreepJS the same as an empty
+  list.** Replacing it needs speech-dispatcher on that same box.
+
+Not touched, and out of scope here: the font metric tables behind
+`measureText` (G5) were also measured on macOS, and Linux ships entirely
+different default families. That is a bigger surface than the five above and has
+not been measured on Linux at all yet.

@@ -15,7 +15,6 @@
       "EXT_clip_control",
       "EXT_color_buffer_half_float",
       "EXT_depth_clamp",
-      "EXT_disjoint_timer_query",
       "EXT_float_blend",
       "EXT_frag_depth",
       "EXT_polygon_offset_clamp",
@@ -25,7 +24,6 @@
       "EXT_texture_filter_anisotropic",
       "EXT_texture_mirror_clamp_to_edge",
       "EXT_sRGB",
-      "KHR_parallel_shader_compile",
       "OES_element_index_uint",
       "OES_fbo_render_mipmap",
       "OES_standard_derivatives",
@@ -34,12 +32,10 @@
       "OES_texture_half_float",
       "OES_texture_half_float_linear",
       "OES_vertex_array_object",
-      "WEBGL_blend_func_extended",
       "WEBGL_color_buffer_float",
       "WEBGL_compressed_texture_astc",
       "WEBGL_compressed_texture_etc",
       "WEBGL_compressed_texture_etc1",
-      "WEBGL_compressed_texture_pvrtc",
       "WEBGL_compressed_texture_s3tc",
       "WEBGL_compressed_texture_s3tc_srgb",
       "WEBGL_debug_renderer_info",
@@ -70,8 +66,11 @@
   testing.expectEqual(UNMASKED_VENDOR_WEBGL, 0x9245);
   testing.expectEqual(UNMASKED_RENDERER_WEBGL, 0x9246);
 
-  testing.expectEqual("Google Inc. (Apple)", ctx.getParameter(UNMASKED_VENDOR_WEBGL));
-  testing.expectEqual("ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)", ctx.getParameter(UNMASKED_RENDERER_WEBGL));
+  testing.expectEqual("Google Inc. (Google)", ctx.getParameter(UNMASKED_VENDOR_WEBGL));
+  testing.expectEqual(
+    "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    ctx.getParameter(UNMASKED_RENDERER_WEBGL),
+  );
 }
 
 // WEBGL_lose_context
@@ -114,7 +113,7 @@
   );
 
   // Numeric limits.
-  testing.expectEqual(16384, ctx.getParameter(ctx.MAX_TEXTURE_SIZE));
+  testing.expectEqual(8192, ctx.getParameter(ctx.MAX_TEXTURE_SIZE));
   testing.expectEqual(16, ctx.getParameter(ctx.MAX_VERTEX_ATTRIBS));
   testing.expectEqual(4, ctx.getParameter(ctx.SAMPLES));
   testing.expectEqual(24, ctx.getParameter(ctx.DEPTH_BITS));
@@ -129,11 +128,11 @@
   testing.expectEqual(true, range instanceof Float32Array);
   testing.expectEqual(2, range.length);
   testing.expectEqual(1, range[0]);
-  testing.expectEqual(511, range[1]);
+  testing.expectEqual(1023, range[1]);
 
   const dims = ctx.getParameter(ctx.MAX_VIEWPORT_DIMS);
   testing.expectEqual(true, dims instanceof Int32Array);
-  testing.expectEqual(16384, dims[0]);
+  testing.expectEqual(8192, dims[0]);
 
   // The viewport defaults to the whole drawing buffer.
   const viewport = ctx.getParameter(ctx.VIEWPORT);

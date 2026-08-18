@@ -63,8 +63,12 @@ pub const Surface = union(enum) {
     }
 };
 
-/// On Chrome and Safari, a call to `getSupportedExtensions` returns total of 39.
-/// The reference for it lists lesser number of extensions:
+/// What `getSupportedExtensions` answers, in Chrome's order — 35 names on the
+/// Linux build this engine claims to be, against 39 on macOS. The four that are
+/// absent here (EXT_disjoint_timer_query, KHR_parallel_shader_compile,
+/// WEBGL_blend_func_extended, WEBGL_compressed_texture_pvrtc) are the driver's
+/// to advertise, not the browser's, so the list has to be measured per platform
+/// rather than taken from a spec page. MDN's list is shorter still:
 /// https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Using_Extensions#extension_list
 pub const Extension = union(enum) {
     ANGLE_instanced_arrays: void,
@@ -72,7 +76,6 @@ pub const Extension = union(enum) {
     EXT_clip_control: void,
     EXT_color_buffer_half_float: void,
     EXT_depth_clamp: void,
-    EXT_disjoint_timer_query: void,
     EXT_float_blend: void,
     EXT_frag_depth: void,
     EXT_polygon_offset_clamp: void,
@@ -82,7 +85,6 @@ pub const Extension = union(enum) {
     EXT_texture_filter_anisotropic: void,
     EXT_texture_mirror_clamp_to_edge: void,
     EXT_sRGB: void,
-    KHR_parallel_shader_compile: void,
     OES_element_index_uint: void,
     OES_fbo_render_mipmap: void,
     OES_standard_derivatives: void,
@@ -91,12 +93,10 @@ pub const Extension = union(enum) {
     OES_texture_half_float: void,
     OES_texture_half_float_linear: void,
     OES_vertex_array_object: void,
-    WEBGL_blend_func_extended: void,
     WEBGL_color_buffer_float: void,
     WEBGL_compressed_texture_astc: void,
     WEBGL_compressed_texture_etc: void,
     WEBGL_compressed_texture_etc1: void,
-    WEBGL_compressed_texture_pvrtc: void,
     WEBGL_compressed_texture_s3tc: void,
     WEBGL_compressed_texture_s3tc_srgb: void,
     WEBGL_debug_renderer_info: *Type.WEBGL_debug_renderer_info,
@@ -574,7 +574,7 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
         STENCIL_BACK_WRITEMASK => .{ .number = 4294967295 },
         UNPACK_ALIGNMENT => .{ .number = 4 },
         PACK_ALIGNMENT => .{ .number = 4 },
-        MAX_TEXTURE_SIZE => .{ .number = 16384 },
+        MAX_TEXTURE_SIZE => .{ .number = 8192 },
         SUBPIXEL_BITS => .{ .number = 4 },
         RED_BITS => .{ .number = 8 },
         GREEN_BITS => .{ .number = 8 },
@@ -589,17 +589,17 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
         SAMPLE_COVERAGE_VALUE => .{ .number = 1 },
         GENERATE_MIPMAP_HINT => .{ .number = 4352 },
         MAX_VERTEX_ATTRIBS => .{ .number = 16 },
-        MAX_VERTEX_UNIFORM_VECTORS => .{ .number = 1024 },
-        MAX_VARYING_VECTORS => .{ .number = 30 },
-        MAX_COMBINED_TEXTURE_IMAGE_UNITS => .{ .number = 32 },
-        MAX_VERTEX_TEXTURE_IMAGE_UNITS => .{ .number = 16 },
-        MAX_TEXTURE_IMAGE_UNITS => .{ .number = 16 },
-        MAX_FRAGMENT_UNIFORM_VECTORS => .{ .number = 1024 },
+        MAX_VERTEX_UNIFORM_VECTORS => .{ .number = 4096 },
+        MAX_VARYING_VECTORS => .{ .number = 31 },
+        MAX_COMBINED_TEXTURE_IMAGE_UNITS => .{ .number = 64 },
+        MAX_VERTEX_TEXTURE_IMAGE_UNITS => .{ .number = 32 },
+        MAX_TEXTURE_IMAGE_UNITS => .{ .number = 32 },
+        MAX_FRAGMENT_UNIFORM_VECTORS => .{ .number = 4096 },
         MAX_CUBE_MAP_TEXTURE_SIZE => .{ .number = 16384 },
         ACTIVE_TEXTURE => .{ .number = 33984 },
         IMPLEMENTATION_COLOR_READ_TYPE => .{ .number = 5121 },
         IMPLEMENTATION_COLOR_READ_FORMAT => .{ .number = 6408 },
-        MAX_RENDERBUFFER_SIZE => .{ .number = 16384 },
+        MAX_RENDERBUFFER_SIZE => .{ .number = 8192 },
         UNPACK_COLORSPACE_CONVERSION_WEBGL => .{ .number = 37444 },
         // --- strings ---
         SHADING_LANGUAGE_VERSION => .{ .string = "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)" },
@@ -622,13 +622,13 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
         UNPACK_PREMULTIPLY_ALPHA_WEBGL => .{ .boolean = false },
         // --- float32 arrays ---
         BLEND_COLOR => floatArray(exec, &.{ 0, 0, 0, 0 }),
-        ALIASED_POINT_SIZE_RANGE => floatArray(exec, &.{ 1, 511 }),
+        ALIASED_POINT_SIZE_RANGE => floatArray(exec, &.{ 1, 1023 }),
         ALIASED_LINE_WIDTH_RANGE => floatArray(exec, &.{ 1, 1 }),
         DEPTH_RANGE => floatArray(exec, &.{ 0, 1 }),
         COLOR_CLEAR_VALUE => floatArray(exec, &.{ 0, 0, 0, 0 }),
         // --- int32 arrays ---
         VIEWPORT, SCISSOR_BOX => intArray(exec, &.{ 0, 0, @intCast(self._canvas.width()), @intCast(self._canvas.height()) }),
-        MAX_VIEWPORT_DIMS => intArray(exec, &.{ 16384, 16384 }),
+        MAX_VIEWPORT_DIMS => intArray(exec, &.{ 8192, 8192 }),
         // --- uint32 arrays ---
         COMPRESSED_TEXTURE_FORMATS => uintArray(exec, &.{}),
         // --- bool vectors ---
@@ -636,8 +636,8 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
         // WEBGL_debug_renderer_info. Chrome exposes the true GPU behind ANGLE
         // here, which is the single most identifying pair of strings on the
         // whole WebGL surface, so it has to come from the reference snapshot.
-        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => .{ .string = "Google Inc. (Apple)" },
-        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)" },
+        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => .{ .string = "Google Inc. (Google)" },
+        Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)" },
         else => null,
     };
 }
