@@ -2740,3 +2740,77 @@ HEVC (`""`) and the video RTP codec count (13). The two rows not compared are
 `[SecureContext]` and so absent on the container's `about:blank`; both were
 verified separately against `https://example.com` in the container, where Chrome
 answers `Linux` and the same three brands.
+
+## G21 re-sweep: all twelve detectors, and why the baseline itself is now wrong
+
+The last full sweep was G11's. Six plans shipped after it — G12, G22, G23, G24,
+G25, G21 — and none of them re-measured the detectors, so "the plans are done"
+was not the same claim as "the engine got better". This run closes that.
+
+Both engines, same day, matched 1920 viewport, route checked first (system
+proxies off, default route a plain LAN gateway on `en0`, no `utun`). Chrome is
+the headed 151.0.7922.138 on this machine; lightpanda is `dev.250+126f2dae3`.
+
+| site | Chrome 151 | lightpanda | delta | G11 delta | moved |
+|---|---|---|---|---|---|
+| pixelscan | 1828 | 1828 | 0 | 0 | — |
+| deviceinfo | 264 | 264 | 0 | 0 | — |
+| rebrowser | 98 | 98 | 0 | +7 | **closed** |
+| sannysoft | 290 | 291 | +1 | +1 | — |
+| iphey | 487 | 490 | +3 | −2 | overshoots by 3 |
+| amiunique | 1565 | 1560 | −5 | **−980** | **closed (G23)** |
+| browserleaks-tls | 7 | 5 | −2 | −2 | — |
+| browserscan | 2021 | 1870 | −151 | **−687** | mostly closed (G23+G25) |
+| browserleaks-js | 1180 | 1004 | −176 | +4 | see below — not a regression |
+| creepjs | 4066 | 3589 | −477 | −151 | see below — mostly the baseline |
+| areyouheadless / fpscanner | 8 | 8 | 0 | 0 | host still 502 |
+
+### browserleaks-js: −176 is the voice list, and the baseline is macOS
+
+This looked like the worst news in the run — a row that was closed at G11 (+4)
+reading −176. It is neither a regression nor a surprise once measured instead of
+guessed. Per-`<tbody>` row counts are identical to Chrome's across all fifteen
+tables (we are +1 on two of them, the same +4 as G11). The entire gap is `<br>`
+elements: 28 against 208. All of it in one place:
+
+| | `<br>` in `#speech-tbody` | voices |
+|---|---|---|
+| Chrome (macOS) | 198 | 199 |
+| lightpanda | 18 | 19 |
+
+browserleaks prints one voice per line, so 199 → 19 voices is exactly −180
+nodes, and −180 + 4 is the −176 on the table. This is the cost of the Linux voice
+table, priced: **one detector, 180 nodes, all of it one row.**
+
+**The structural finding matters more than the number.** Every detector baseline
+in `results/` is a *macOS* Chrome, and as of G21 the engine claims Linux. So any
+platform-specific row now reads as a gap against a browser we are deliberately
+no longer imitating — the voice list is simply the first one big enough to see.
+Against the Linux Chrome in the container the same row matches (19 voices, same
+names). Two consequences for whoever sweeps next:
+
+* **Do not chase a platform-specific gap against the macOS baseline.** Check it
+  against the container first; `run-linux-probe.mjs` in the probe workspace does
+  this for a single surface, and `CDP_ENDPOINT` points any generator at it.
+* **A container Chrome is not a full substitute either** (P4): it has no GPU and
+  no speech-dispatcher, so it cannot be the reference for WebGL, hardware video
+  codecs, or what a Linux *desktop* would list for voices. The honest reference
+  for the whole sweep is a Linux box with a GPU, which is the same thing the two
+  open gaps from P5 need.
+
+### creepjs: −477, of which −18 is ours
+
+Chrome moved from 3758 nodes to 4066 between the G11 sweep and this one — the
+same browser upgrading 150 → 151, measured, not assumed. Over the same period
+lightpanda went 3607 → 3589. So of the −477, **−308 is the baseline growing and
+−18 is us**; the −151 in the G11 table was against a Chrome that no longer
+exists. The −18 is small, unattributed, and not investigated here.
+
+### Still open, and honestly unattributed
+
+* **browserscan −151.** G23 attributed the then −178 as ~75–80 third-party ad
+  and consent nodes plus the value cards blocked on RSA. RSA landed in G25, and
+  the number moved to −151 — but the sections were not re-diffed, so which part
+  of the −178 the +27 came out of is unknown.
+* **iphey +3, sannysoft +1, browserleaks-tls −2.** Unchanged from G11 and never
+  attributed.
