@@ -1128,12 +1128,16 @@ test "cdp.dom: getBoxModel" {
         .method = "DOM.getBoxModel",
         .params = .{ .nodeId = 3 },
     });
+    // The <p> holds the single character "2", and an element with no width of
+    // its own is as wide as its text: one digit of the default 16px font, so 8
+    // rather than the 5 the placeholder box used to report. Height is still the
+    // placeholder.
     try ctx.expectSentResult(.{ .model = BoxModel{
-        .content = Quad{ 25.0, 25.0, 30.0, 25.0, 30.0, 30.0, 25.0, 30.0 },
+        .content = Quad{ 25.0, 25.0, 33.0, 25.0, 33.0, 30.0, 25.0, 30.0 },
         .padding = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .border = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
         .margin = Quad{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 },
-        .width = 5,
+        .width = 8,
         .height = 5,
     } }, .{ .id = 5 });
 }

@@ -919,6 +919,28 @@ pub fn find(name: []const u8) ?Family {
     return null;
 }
 
+/// The table for the first name in a comma-separated CSS family list we have
+/// measurements for, falling back the way Chrome does when none resolves.
+///
+/// This is the whole of font enumeration. A probe asks for `"Some Font",
+/// monospace` and compares the result against `monospace` alone: skipping the
+/// names we have no table for is what makes a font we do have measure
+/// differently, and a font we do not measure identically to its base.
+pub fn findInList(list: []const u8) Family {
+    var it = std.mem.splitScalar(u8, list, ',');
+    while (it.next()) |raw| {
+        const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        const unquoted = if (name.len >= 2 and (name[0] == '"' or name[0] == '\'') and name[name.len - 1] == name[0])
+            name[1 .. name.len - 1]
+        else
+            name;
+        if (find(unquoted)) |family| {
+            return family;
+        }
+    }
+    return fallback;
+}
+
 /// The glyph for a codepoint at the table's 100px basis. Outside the
 /// tabulated ASCII range we have no measurement, so this returns null and the
 /// caller decides what to do with an unknown glyph.
