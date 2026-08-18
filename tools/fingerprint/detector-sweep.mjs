@@ -50,8 +50,25 @@ const headed = process.argv.includes('--headed');
 const PORT = engine === 'chrome' ? 9334 : 9224;
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
+// CDP_ENDPOINT drives a Chrome this script did not start -- in practice the
+// headed Linux Chrome in the container (tools/fingerprint/linux-chrome.mjs, and
+// sweep-linux-baseline.mjs which wires the two together).
+//
+// The reference column has to be that browser now. The engine claims Linux as of
+// G21, so every platform-specific row measured against the macOS Chrome on this
+// machine reads as a gap against a browser we deliberately no longer imitate --
+// the G21 re-sweep spent its largest single finding, browserleaks-js at -176, on
+// exactly that: 199 macOS voices against 19 Linux ones, one <br> apiece.
+const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
+if (ENDPOINT && engine !== 'chrome') {
+    console.error('CDP_ENDPOINT only makes sense with the chrome engine');
+    process.exit(2);
+}
+
 let proc, profile;
-if (engine === 'chrome') {
+if (ENDPOINT) {
+    // Nothing to spawn; the viewport is still pinned below, per site.
+} else if (engine === 'chrome') {
     profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-sweep-'));
     proc = spawn(CHROME, [
         `--remote-debugging-port=${PORT}`,
@@ -84,15 +101,15 @@ const keep = (d) => {
     engineLog.push(String(d));
     if (engineLog.length > 4000) engineLog.splice(0, 2000);
 };
-proc.stdout.on('data', keep);
-proc.stderr.on('data', keep);
+proc?.stdout.on('data', keep);
+proc?.stderr.on('data', keep);
 
-const snapshot = { headed, engine, windowSize, version: null, sites: [] };
+const snapshot = { headed: ENDPOINT ? 'remote' : headed, engine, endpoint: ENDPOINT, windowSize, version: null, sites: [] };
 
 try {
     for (let i = 0; i < 120; i++) {
         try {
-            snapshot.version = await (await fetch(`http://127.0.0.1:${PORT}/json/version`)).json();
+            snapshot.version = await (await fetch(`${ENDPOINT ?? `http://127.0.0.1:${PORT}`}/json/version`)).json();
             break;
         } catch {
             await sleep(200);
@@ -100,7 +117,7 @@ try {
     }
     if (!snapshot.version) throw new Error(`${engine} CDP never came up`);
 
-    const cdp = await Cdp.connect(`http://127.0.0.1:${PORT}`);
+    const cdp = await Cdp.connect(ENDPOINT ?? `http://127.0.0.1:${PORT}`);
     let sessionId;
     if (engine === 'chrome') {
         const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
@@ -148,7 +165,7 @@ try {
     }
     cdp.close();
 } finally {
-    proc.kill('SIGKILL');
+    proc?.kill('SIGKILL');
     snapshot.engineLog = engineLog.join('').split('\n').filter(Boolean).slice(-40);
     await fs.mkdir(path.dirname(outPath), { recursive: true });
     await fs.writeFile(outPath, JSON.stringify(snapshot, null, 2) + '\n');
