@@ -2889,3 +2889,48 @@ reads SwiftShader and there are no local voices, so those rows agree with the
 engine only because the engine took the container's values too — neither side is
 standing in for a Linux desktop. That is the same machine the two open P5 gaps
 need, and it is now also what a fully trustworthy baseline needs.
+
+### browserscan's remainder, re-attributed against the Linux reference
+
+The sweep reads −162; a separate structural run the same evening read −113. The
+number moves run to run because most of it is advertising, which is the first
+half of the answer. Structural dump of both engines at 1920, lightpanda
+`dev.250+126f2dae3` against the headed Linux Chrome 151 in the container:
+
+| block | lightpanda | Linux Chrome | note |
+|---|---|---|---|
+| `div.fc-ccpa-root` | absent | 20 | funding-choices consent root |
+| `div.fc-dialog-container` | absent | 19 | its dialog |
+| `div.google-auto-placed` | absent | 3 | AdSense |
+| `ins.adsbygoogle` | 1 | 2 | AdSense |
+| `div#aswift_0_host` | 0 | 1 | AdSense |
+| body-level `<iframe>` | absent | 7 | ad frames |
+| `main._v2yk82` | 844 | 898 | **the real content gap, −54** |
+| `footer._1d8svxj` | 90 | 93 | −3 |
+
+So roughly **half the gap is third-party** — consent dialog plus AdSense, ~50
+nodes, carrying no detection signal — and the remaining **~54 nodes are inside
+`main`**, where the largest tag deltas are `SPAN` −23 and `DIV` −39 (the DIV
+figure spans both halves).
+
+**G23's blocker is gone.** That section found every Hardware-card label rendered
+with `<div class="skeleton">` where the value should be, because browserscan
+could not import an RSA-OAEP key. Both engines now report **zero** skeleton
+nodes, and lightpanda logs no exception on the page at all. G25's RSA family did
+what it was scoped to do.
+
+Two smaller observations from the same run, neither chased:
+
+* The Linux Chrome logs two failed WebSocket attempts that lightpanda does not —
+  `wss://localhost:22` (blocked as an unsafe port) and `wss://localhost:3389`
+  (connection refused). browserscan port-scans localhost over WebSocket; we
+  neither connect nor produce the same failures, which is a behavioural
+  difference worth a look on its own.
+* `div#c21op6sf` against `div#y5i9tfn7`: both engines render one two-node div
+  under a randomised id, so that pair is the same thing named differently, not a
+  difference.
+
+**Next step for whoever picks this up:** diff inside `main._v2yk82` card by card.
+The ~54 nodes there are the only part of browserscan still worth chasing; the
+~50 third-party nodes are not, and should be excluded from the target rather than
+counted against the engine.
