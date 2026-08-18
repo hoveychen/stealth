@@ -32,7 +32,7 @@ const CONTAINER_PORT = 9363;
 
 const DOCKERFILE = `FROM --platform=linux/amd64 debian:bookworm-slim
 RUN apt-get update \\
-    && apt-get install -y --no-install-recommends ca-certificates wget gnupg socat xvfb \\
+    && apt-get install -y --no-install-recommends ca-certificates wget gnupg socat xvfb xauth \\
     && wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \\
     && apt-get install -y --no-install-recommends /tmp/chrome.deb \\
     && rm -f /tmp/chrome.deb \\
