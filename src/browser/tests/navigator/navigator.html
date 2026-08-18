@@ -104,7 +104,50 @@
 
     await state.done(() =>{
       testing.expectEqual(0, estimate.usage);
-      testing.expectEqual(1024 * 1024 * 1024, estimate.quota);
+      testing.expectEqual(10 * 1024 * 1024 * 1024, estimate.quota);
+    });
+  }
+</script>
+
+<script id=storage_quota_reads_as_a_normal_window type=module>
+  {
+    // The private-window probe every detector library uses reads the temporary
+    // pool's quota and calls the browser incognito when it comes back under
+    // twice the JS heap limit. A real Chrome's quota tracks free disk and
+    // clears that bar by a wide margin; a small constant here reads as an
+    // incognito window, which is what browserscan reported against us
+    // ("Incognito mode -10%", the largest single deduction on that site).
+    //
+    // Measured on the reference headed Linux Chrome 151: all three quota
+    // surfaces answer the same 10 GiB, and estimate() resolves with a plain
+    // dictionary carrying quota, usage and usageDetails.
+    const state = await testing.async();
+
+    const estimate = await navigator.storage.estimate();
+    const temporary = await new Promise((resolve, reject) => {
+      navigator.webkitTemporaryStorage.queryUsageAndQuota((_, q) => resolve(q), reject);
+    });
+    const persistent = await new Promise((resolve, reject) => {
+      navigator.webkitPersistentStorage.queryUsageAndQuota((_, q) => resolve(q), reject);
+    });
+    state.resolve();
+
+    await state.done(() => {
+      const quota = 10 * 1024 * 1024 * 1024;
+      // One pool size, reported identically everywhere Chrome reports it.
+      // Disagreeing with itself is its own signal.
+      testing.expectEqual(quota, estimate.quota);
+      testing.expectEqual(quota, temporary);
+      testing.expectEqual(quota, persistent);
+      // and over the bar the private-mode probe actually sets.
+      testing.expectTrue(temporary > 2 * performance.memory.jsHeapSizeLimit);
+      // A class instance with the values on its prototype JSON.stringify()s to
+      // "{}", which is the same tell by another route.
+      testing.expectEqual(
+        ['quota', 'usage', 'usageDetails'],
+        Object.getOwnPropertyNames(estimate),
+      );
+      testing.expectEqual(Object.prototype, Object.getPrototypeOf(estimate));
     });
   }
 </script>

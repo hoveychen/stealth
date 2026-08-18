@@ -381,14 +381,17 @@ pub fn getStorageBuckets(self: *Navigator, frame: *Frame) !*services.StorageBuck
     return service(services.StorageBucketManager, &self._storage_buckets, frame);
 }
 
-// Two distinct objects, one per quota pool, as on Chrome. 4 GiB is what the
-// reference Chrome reported for the temporary pool; the persistent pool grants
-// whatever a page asks for, so its own quota is never read.
+// Two distinct objects, one per quota pool, as on Chrome — but both quoting the
+// one pool size, which is what the reference Chrome does: temporary and
+// persistent answered the same 10 GiB as navigator.storage.estimate()
+// (measured). A pool that disagrees with itself across the three surfaces is
+// its own signal, and the temporary figure specifically is what the private-
+// window probe reads; see StorageManager.quota_bytes.
 pub fn getWebkitTemporaryStorage(self: *Navigator, frame: *Frame) !*services.DeprecatedStorageQuota {
     if (self._temporary_storage) |existing| {
         return existing;
     }
-    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = 4 * 1024 * 1024 * 1024 });
+    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = StorageManager.quota_bytes });
     self._temporary_storage = created;
     return created;
 }
@@ -397,7 +400,7 @@ pub fn getWebkitPersistentStorage(self: *Navigator, frame: *Frame) !*services.De
     if (self._persistent_storage) |existing| {
         return existing;
     }
-    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = 0 });
+    const created = try frame._factory.create(services.DeprecatedStorageQuota{ ._quota = StorageManager.quota_bytes });
     self._persistent_storage = created;
     return created;
 }
