@@ -29,8 +29,9 @@
   testing.expectTrue(test1.scrollWidth >= test1.clientWidth);
   testing.expectTrue(test1.scrollHeight >= test1.clientHeight);
 
-  // test1 holds only a text node, and text is not measured on either axis, so
-  // both still match the element's own box.
+  // test1 holds only a text node and no element children, so its own box is
+  // already exactly as wide as its text and there is nothing to overflow it.
+  // Height is still the placeholder on both sides, so that axis agrees too.
   testing.expectEqual(test1.clientWidth, test1.scrollWidth);
   testing.expectEqual(test1.clientHeight, test1.scrollHeight);
 }
@@ -55,9 +56,13 @@
   testing.expectTrue(box.scrollWidth > oneChild);
   testing.expectTrue(box.scrollWidth > box.clientWidth);
 
-  // Text contributes nothing, however long. Estimating a run from its length
-  // would need a per-character advance that tracks font-size, and would report
-  // overflow for practically every element containing text.
+  // Text is measured, so a longer run is wider. The per-glyph advances come
+  // from the same tables canvas measureText reads, so this is a measurement
+  // rather than the per-character estimate that would have reported overflow
+  // for practically every element containing text.
+  //
+  // Neither overflows its own box: an element with no element children is
+  // exactly as wide as its text, so content and box agree.
   const short = document.createElement('div');
   const long = document.createElement('div');
   short.textContent = 'ab';
@@ -66,7 +71,7 @@
   document.body.appendChild(long);
   testing.expectEqual(short.clientWidth, short.scrollWidth);
   testing.expectEqual(long.clientWidth, long.scrollWidth);
-  testing.expectEqual(short.scrollWidth, long.scrollWidth);
+  testing.expectTrue(long.scrollWidth > short.scrollWidth);
 
   // Comments are not rendered, so they contribute nothing.
   const commented = document.createElement('div');

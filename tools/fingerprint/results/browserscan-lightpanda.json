@@ -22,7 +22,7 @@
   },
   {
    "label": "IP Count (7 days)",
-   "val": "29 12:36",
+   "val": "34 13:39",
    "flagged": false
   },
   {
@@ -67,7 +67,7 @@
   },
   {
    "label": "visitor ID",
-   "val": "DF982E6D",
+   "val": "BE2606F7",
    "flagged": false
   },
   {
@@ -102,7 +102,7 @@
   },
   {
    "label": "Client Rects",
-   "val": "873619F8",
+   "val": "5C7B5AA9",
    "flagged": false
   },
   {
@@ -212,12 +212,12 @@
   },
   {
    "label": "Time From IP",
-   "val": "Tue Aug 18 2026 12:38:43 GMT-0700",
+   "val": "Tue Aug 18 2026 13:51:24 GMT-0700",
    "flagged": false
   },
   {
    "label": "Time From Javascript",
-   "val": "Tue Aug 18 2026 12:38:43 GMT-0700 (Pacific Daylight Time)",
+   "val": "Tue Aug 18 2026 13:51:24 GMT-0700 (Pacific Daylight Time)",
    "flagged": false
   },
   {
@@ -277,12 +277,12 @@
   },
   {
    "label": "Fonts",
-   "val": "DA39A3EE",
+   "val": "8533CA74",
    "flagged": false
   },
   {
-   "label": "Fonts listHide all fonts(0)",
-   "val": "",
+   "label": "Fonts listShow all fonts(10)",
+   "val": "Helveticaarialsans-serifserifmonospace",
    "flagged": false
   }
  ],
@@ -5188,6 +5188,14 @@
    "count": 0
   },
   {
+   "path": "/INS.adsbygoogle.adsbygoogle-noablate",
+   "count": 1
+  },
+  {
+   "path": "/INS.adsbygoogle.adsbygoogle-noablate/DIV",
+   "count": 0
+  },
+  {
    "path": "/DIV.tooltip-dark.tooltip-popper.tooltip-transfer[28]",
    "count": 3
   },
@@ -5201,14 +5209,6 @@
   },
   {
    "path": "/DIV.tooltip-dark.tooltip-popper.tooltip-transfer[28]/DIV.tooltip-content/DIV.tooltip-inner.tooltip-inner-with-width",
-   "count": 0
-  },
-  {
-   "path": "/INS.adsbygoogle.adsbygoogle-noablate",
-   "count": 1
-  },
-  {
-   "path": "/INS.adsbygoogle.adsbygoogle-noablate/DIV",
    "count": 0
   },
   {

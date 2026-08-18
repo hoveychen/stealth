@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="UTF-8">
+</head>
+<body>
+</body>
+<script src="../testing.js"></script>
+
+<script id="offset_width_follows_the_text">
+{
+  // A text-bearing element with no width of its own is as wide as its text.
+  // Every font-enumeration probe in the wild works by laying one of these out
+  // twice and comparing, so an element whose width ignores its contents makes
+  // the whole family of probes report nothing at all.
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;font-family:monospace;white-space:nowrap;';
+  document.body.appendChild(span);
+
+  span.textContent = 'm';
+  const one = span.offsetWidth;
+  span.textContent = 'mmmmmmmmmmlli';
+  const thirteen = span.offsetWidth;
+  span.textContent = 'mmmmmmmmmmlli'.repeat(4);
+  const fiftytwo = span.offsetWidth;
+
+  testing.expectTrue(one > 0);
+  testing.expectTrue(thirteen > one);
+  testing.expectTrue(fiftytwo > thirteen);
+  // Monospace, so four copies of a string are four times as wide. offsetWidth
+  // is an integer, and rounding the long run is not the same as rounding the
+  // short one and multiplying, so the two can differ by up to 2 — the same
+  // slack the reference Chrome shows (562 against 2247).
+  testing.expectEqual(true, Math.abs(fiftytwo - 4 * thirteen) <= 2);
+}
+</script>
+
+<script id="offset_width_follows_the_font_size">
+{
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-family:monospace;white-space:nowrap;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+
+  span.style.fontSize = '16px';
+  const small = span.offsetWidth;
+  span.style.fontSize = '72px';
+  const large = span.offsetWidth;
+
+  testing.expectTrue(small > 0);
+  // Advances are linear in size, so the ratio is the ratio of the sizes.
+  testing.expectEqual(true, Math.abs(large / small - 72 / 16) < 0.05);
+}
+</script>
+
+<script id="offset_width_follows_the_font_family">
+{
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;white-space:nowrap;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+
+  const widthOf = (family) => { span.style.fontFamily = family; return span.offsetWidth; };
+
+  const monospace = widthOf('monospace');
+  const sansSerif = widthOf('sans-serif');
+  const serif = widthOf('serif');
+  testing.expectTrue(monospace > 0 && sansSerif > 0 && serif > 0);
+  testing.expectTrue(monospace !== sansSerif);
+  testing.expectTrue(sansSerif !== serif);
+
+  // The probe itself: a family we have metrics for shifts the width away from
+  // the base it is listed against; one we do not falls through to the base and
+  // measures exactly the same. Both halves matter -- a probe that reports every
+  // font as present is as wrong as one that reports none.
+  testing.expectTrue(widthOf('"Courier New", monospace') !== monospace);
+  testing.expectEqual(monospace, widthOf('"Bogus Not A Font", monospace'));
+  testing.expectEqual(sansSerif, widthOf('"Bogus Not A Font", sans-serif'));
+}
+</script>
+
+<script id="offset_width_agrees_with_measure_text">
+{
+  // Both routes resolve the family through the same measured tables, so a
+  // fingerprint that cross-checks them sees one browser rather than two.
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;white-space:nowrap;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  for (const family of ['monospace', 'sans-serif', 'serif', 'Arial', '"Courier New"']) {
+    span.style.fontFamily = family;
+    ctx.font = '72px ' + family;
+    testing.expectEqual(Math.round(ctx.measureText('mmmmmmmmmmlli').width), span.offsetWidth);
+  }
+}
+</script>
+
+<script id="offset_height_follows_the_font">
+{
+  // Height comes from the font's own box. It is not Chrome's line box -- that
+  // adds a line gap we have no table for -- but a 72px line reporting the same
+  // 5 pixels as an 8px one is not a rounding difference, it is a placeholder.
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-family:serif;white-space:nowrap;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+
+  const heightAt = (size) => { span.style.fontSize = size; return span.offsetHeight; };
+  const small = heightAt('16px');
+  const large = heightAt('72px');
+
+  testing.expectTrue(small > 0);
+  testing.expectTrue(large > small);
+  // Ascent and descent are linear in size, so the ratio tracks the sizes.
+  testing.expectEqual(true, Math.abs(large / small - 72 / 16) < 0.2);
+
+  // Height is a property of the font, not of how much text there is: one line
+  // of one character is as tall as one line of fifty.
+  span.style.fontSize = '72px';
+  const one = span.offsetHeight;
+  span.textContent = 'mmmmmmmmmmlli'.repeat(4);
+  testing.expectEqual(one, span.offsetHeight);
+}
+</script>
+
+<script id="an_explicit_height_still_wins">
+{
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;font-family:serif;height:11px;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+  testing.expectEqual(11, span.offsetHeight);
+}
+</script>
+
+<script id="an_explicit_width_still_wins">
+{
+  // Text measurement is the fallback for an element that has no width of its
+  // own, not an override of one that has.
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;font-family:monospace;width:37px;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+  testing.expectEqual(37, span.offsetWidth);
+}
+</script>

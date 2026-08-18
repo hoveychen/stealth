@@ -3011,18 +3011,72 @@ shortcut around it.
 
 ### Three unscored differences found along the way, none chased
 
-* **Fonts: we detect zero.** browserscan lists 13 fonts for the reference and
-  `(0)` for us, and hashes our empty list to `DA39A3EE` — the front of
-  SHA-1(""). Both font-probing routes are dead: `document.fonts.size` is 0
-  against the reference's 428, and a span's `offsetWidth` is 5 for every
-  `font-family` including the generics, so nothing is laid out with font
-  metrics at all. `measureText` does vary by family, but into only three
-  buckets, so `Arial` measures exactly `sans-serif` and reads as absent. This is
-  the sixth surface for the `## G21` P4 table and a real signal; it is also the
-  measureText width table from `## G5`, still the macOS recording, never
-  measured on Linux.
+* **Fonts: we detect zero.** *Fixed — see the next section.* browserscan listed
+  13 fonts for the reference and `(0)` for us, hashing our empty list to
+  `DA39A3EE`, the front of SHA-1("").
 * **WebGPU.** We report a `WebGPU Report` hash where the reference reports `not
   support`. Overshooting a surface the browser we claim to be does not have.
 * **`Available Screen Size` 1920×1040 against 1920×1080.** Ours is the more
   plausible of the two — a Linux desktop has a panel — but it is a difference
   against the reference and nobody has checked which value a real one gives.
+
+## Zero fonts was not a font problem
+
+The engine has real measured tables for seven families, and canvas font
+enumeration already worked with them: probe `"Courier New", monospace` against
+`monospace` through `measureText` and the width moves, probe a name we have no
+table for and it does not. Six of eight candidates detected, the two fakes
+correctly rejected — the same six the reference Linux Chrome finds.
+
+The DOM route found nothing, because there was no DOM route. `offsetWidth` came
+from `Element.getElementDimensions`, which answered a placeholder `5 × 5` for
+any element without an explicit CSS width. Not five per character — five, flat,
+for an empty span and for fifty-two characters alike, at every size and in every
+family:
+
+| | reference Chrome 151 | before | after |
+|---|---|---|---|
+| `offsetWidth` of 1 char at 72px | 43 | 5 | 43 |
+| …13 chars | 562 | 5 | 564 |
+| …52 chars | 2247 | 5 | 2254 |
+| …13 chars at 8px | 62 | 5 | 63 |
+| …at 200px | 1560 | 5 | 1565 |
+| `offsetHeight` at 8 / 16 / 72px | 9 / 18 / 82 | 5 / 5 / 5 | 9 / 19 / 84 |
+| base widths, mono / sans / serif | 562 / 648 / 620 | 5 / 5 / 5 | 564 / 648 / 620 |
+| **fonts detected via the DOM** | **6** | **0** | **6** |
+
+Every font-enumeration probe in the wild is that comparison, so a width that
+ignores its contents makes all of them report an empty font list. That is what
+browserscan was reading.
+
+Width now comes from `text_measure` — the same tables and the same code path
+`measureText` uses, so the two routes agree with each other and a fingerprint
+that cross-checks them sees one browser. Height is the font's own box, ascent
+plus descent. Both apply only to an element with no element children that does
+hold text, and only when CSS gives no explicit dimension.
+
+browserscan now lists **10 fonts** and hashes them to `8533CA74`, against the
+reference's 13 and `6C722935`. Not the same set — the container's font
+packages are not ours to match, and a font list that differed from every real
+machine would be no worse than one that matched this particular container — but
+a plausible list rather than the empty-string hash.
+
+### What this is not
+
+* **Not a layout engine.** There is no cascade to read: `getStyle` hands back
+  the element's own inline declaration, so the font is resolved by walking to
+  the nearest ancestor that names `font-size` or `font-family`. An element
+  styled from a stylesheet still measures at the default 16px, and the `font`
+  shorthand is not expanded — an element set with `font: 72px monospace`
+  measures as 16px serif. Both were true before too; neither is now hidden.
+* **Not Chrome's line box.** Chrome adds a line gap these tables do not carry —
+  83 for 72px serif where ascent and descent sum to 80 — so heights run one to
+  five pixels short.
+* **Not applied to empty elements.** An element holding no text keeps the `5 × 5`
+  placeholder where Chrome collapses it to `0 × 0`. The position and
+  element-from-point machinery is built on that box; collapsing it is a change
+  to those, not to text metrics.
+* **Not measured on Linux.** The tables are still the macOS recording from
+  `## G5`. They land within a few pixels of the container's Chrome, which is
+  reassuring and not the same as being right — the sans-serif and serif base
+  widths match it exactly, monospace is two pixels wide.

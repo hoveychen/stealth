@@ -26,7 +26,10 @@ const StyleManager = @import("../StyleManager.zig");
 const reflect = @import("../reflect.zig");
 
 const CSS = @import("CSS.zig");
+const CData = @import("CData.zig");
 const Node = @import("Node.zig");
+const font_metrics = @import("../font_metrics.zig");
+const text_measure = @import("../text_measure.zig");
 const ShadowRoot = @import("ShadowRoot.zig");
 const EventTarget = @import("EventTarget.zig");
 const collections = @import("collections.zig");
@@ -1513,6 +1516,93 @@ pub fn checkVisibility(self: *Element, opts_: ?CheckVisibilityOpts, frame: *Fram
     });
 }
 
+/// Chrome's default font size, and what text inherits when nothing on the
+/// ancestor chain sets one.
+const default_font_size = 16.0;
+
+/// The font an element's text is laid out in.
+///
+/// There is no cascade in this engine — `getStyle` hands back the element's
+/// own inline declaration and nothing else — so inheritance is done here, by
+/// walking to the nearest ancestor that names each property. That covers the
+/// pages that set a font at all; anything relying on a stylesheet's cascade
+/// gets the default, which is what it got before this existed too.
+fn resolveFont(self: *Element, frame: *Frame) struct { family: font_metrics.Family, size: f64 } {
+    var size: ?f64 = null;
+    var family: ?font_metrics.Family = null;
+
+    var node: ?*Node = self.asNode();
+    while (node) |current| : (node = current._parent) {
+        const el = current.is(Element) orelse continue;
+        const style = el.getStyle(frame) orelse continue;
+
+        if (size == null) {
+            const declared = style.getPropertyValue("font-size", frame);
+            if (declared.len != 0) {
+                size = CSS.parseDimensionViewport(declared, frame);
+            }
+        }
+        if (family == null) {
+            const declared = style.getPropertyValue("font-family", frame);
+            if (declared.len != 0) {
+                family = font_metrics.findInList(declared);
+            }
+        }
+        if (size != null and family != null) {
+            break;
+        }
+    }
+
+    return .{
+        .family = family orelse font_metrics.fallback,
+        .size = size orelse default_font_size,
+    };
+}
+
+/// How an element's own text lays out, or null when the element is not one
+/// whose box its text decides — it has element children of its own, or it
+/// holds no text.
+///
+/// Advances are additive and we model no kerning (see `text_measure`), so the
+/// runs are summed rather than concatenated into a buffer: this sits under
+/// `offsetWidth`, which pages read in loops.
+///
+/// Height is the font's own box, ascent plus descent. Chrome's line box is a
+/// little taller — it adds the font's line gap, which these tables do not
+/// carry (the reference reports 83 for 72px serif where ascent and descent sum
+/// to 80). Close and derived from a measurement, rather than exact; still the
+/// difference between a line that scales with its font and one that does not.
+fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 } {
+    var total_text: usize = 0;
+    var child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(Element) != null) {
+            return null;
+        }
+        if (node.is(CData.Text)) |text| {
+            total_text += text._proto._data.str().len;
+        }
+    }
+    if (total_text == 0) {
+        return null;
+    }
+
+    const font = self.resolveFont(frame);
+    var width: f64 = 0;
+    child = self.asNode().firstChild();
+    while (child) |node| : (child = node.nextSibling()) {
+        if (node.is(CData.Text)) |text| {
+            width += text_measure.measure(font.family, text._proto._data.str(), font.size).width;
+        }
+    }
+
+    const box = font_metrics.boundingBox(font.family, font.size);
+
+    // offsetWidth is an integer; getBoundingClientRect keeps the fraction, but
+    // this engine has one dimension model behind both.
+    return .{ .width = @round(width), .height = @round(box.ascent + box.descent) };
+}
+
 pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, height: f64 } {
     var width: f64 = 5.0;
     var height: f64 = 5.0;
@@ -1540,6 +1630,17 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, 
             if (self.getAttributeSafe(comptime .wrap("height"))) |h| {
                 height = std.fmt.parseFloat(f64, h) catch height;
             }
+        }
+    }
+
+    // An element with no box of its own gets one from its text. Without this
+    // every font-enumeration probe — all of which lay out one of these twice
+    // and compare — reports that no font is installed, which no real browser
+    // does.
+    if (width == 5.0 or height == 5.0) {
+        if (self.textLayout(frame)) |text| {
+            if (width == 5.0) width = text.width;
+            if (height == 5.0) height = text.height;
         }
     }
 
