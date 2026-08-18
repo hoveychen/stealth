@@ -96,6 +96,44 @@
 }
 </script>
 
+<script id="offset_height_follows_the_font">
+{
+  // Height comes from the font's own box. It is not Chrome's line box -- that
+  // adds a line gap we have no table for -- but a 72px line reporting the same
+  // 5 pixels as an 8px one is not a rounding difference, it is a placeholder.
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-family:serif;white-space:nowrap;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+
+  const heightAt = (size) => { span.style.fontSize = size; return span.offsetHeight; };
+  const small = heightAt('16px');
+  const large = heightAt('72px');
+
+  testing.expectTrue(small > 0);
+  testing.expectTrue(large > small);
+  // Ascent and descent are linear in size, so the ratio tracks the sizes.
+  testing.expectEqual(true, Math.abs(large / small - 72 / 16) < 0.2);
+
+  // Height is a property of the font, not of how much text there is: one line
+  // of one character is as tall as one line of fifty.
+  span.style.fontSize = '72px';
+  const one = span.offsetHeight;
+  span.textContent = 'mmmmmmmmmmlli'.repeat(4);
+  testing.expectEqual(one, span.offsetHeight);
+}
+</script>
+
+<script id="an_explicit_height_still_wins">
+{
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;font-family:serif;height:11px;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+  testing.expectEqual(11, span.offsetHeight);
+}
+</script>
+
 <script id="an_explicit_width_still_wins">
 {
   // Text measurement is the fallback for an element that has no width of its

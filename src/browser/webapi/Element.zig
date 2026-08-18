@@ -1559,14 +1559,20 @@ fn resolveFont(self: *Element, frame: *Frame) struct { family: font_metrics.Fami
     };
 }
 
-/// How wide an element's own text lays out, or null when the element is not
-/// one whose width its text decides — it has element children of its own, or
-/// it holds no text.
+/// How an element's own text lays out, or null when the element is not one
+/// whose box its text decides — it has element children of its own, or it
+/// holds no text.
 ///
 /// Advances are additive and we model no kerning (see `text_measure`), so the
 /// runs are summed rather than concatenated into a buffer: this sits under
 /// `offsetWidth`, which pages read in loops.
-fn textLayoutWidth(self: *Element, frame: *Frame) ?f64 {
+///
+/// Height is the font's own box, ascent plus descent. Chrome's line box is a
+/// little taller — it adds the font's line gap, which these tables do not
+/// carry (the reference reports 83 for 72px serif where ascent and descent sum
+/// to 80). Close and derived from a measurement, rather than exact; still the
+/// difference between a line that scales with its font and one that does not.
+fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 } {
     var total_text: usize = 0;
     var child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
@@ -1590,9 +1596,11 @@ fn textLayoutWidth(self: *Element, frame: *Frame) ?f64 {
         }
     }
 
+    const box = font_metrics.boundingBox(font.family, font.size);
+
     // offsetWidth is an integer; getBoundingClientRect keeps the fraction, but
     // this engine has one dimension model behind both.
-    return @round(width);
+    return .{ .width = @round(width), .height = @round(box.ascent + box.descent) };
 }
 
 pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, height: f64 } {
@@ -1625,13 +1633,14 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, 
         }
     }
 
-    // An element with no width of its own is as wide as its text. Without
-    // this every font-enumeration probe — all of which lay out one of these
-    // twice and compare — reports that no font is installed, which no real
-    // browser does.
-    if (width == 5.0) {
-        if (self.textLayoutWidth(frame)) |text_width| {
-            width = text_width;
+    // An element with no box of its own gets one from its text. Without this
+    // every font-enumeration probe — all of which lay out one of these twice
+    // and compare — reports that no font is installed, which no real browser
+    // does.
+    if (width == 5.0 or height == 5.0) {
+        if (self.textLayout(frame)) |text| {
+            if (width == 5.0) width = text.width;
+            if (height == 5.0) height = text.height;
         }
     }
 
