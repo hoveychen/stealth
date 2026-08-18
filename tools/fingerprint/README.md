@@ -2704,3 +2704,39 @@ Not touched, and out of scope here: the font metric tables behind
 `measureText` (G5) were also measured on macOS, and Linux ships entirely
 different default families. That is a bigger surface than the five above and has
 not been measured on Linux at all yet.
+
+### The version bump, and what the probe caught (P6)
+
+`chrome_major` is 151 and `chrome_full_version` is `151.0.7922.137` — the Linux
+build's, because that is the platform being claimed and the build every table
+above was recorded from. The bump is deliberately last: P4 established that 151
+is not a cosmetic difference from 150 (a new CSS longhand, a rewritten offer
+SDP), so the number could only move once the tables had.
+
+Re-running the end-to-end probe against the rebuilt engine caught one thing the
+test suite could not, because nothing pinned it: **the Sec-Ch-Ua brand list was
+still Chrome 150's.** Not the versions — those track `chrome_major` — but the
+GREASE entry and the order:
+
+| | Chrome 150 | Chrome 151 |
+|---|---|---|
+| GREASE brand | `"Not;A=Brand";v="8"` | `"Not=A?Brand";v="99"` |
+| order | Chromium, then Google Chrome | Google Chrome, then Chromium |
+
+Both move between builds *by design* — GREASE exists so servers cannot hardcode
+the list — which is exactly why neither survives a version bump and why a
+150-era list beside a 151 user-agent is a mismatch rather than a harmless
+default. Measured twice in separate container runs before being written down, so
+it is this build's answer and not one roll of the die.
+
+Final parity run, engine vs the Linux Chrome 151 in the container, same probe on
+both (`probe-g21e.js`): **14 of 14 comparable rows identical** — user-agent,
+`navigator.platform`, the brand list, `architecture`/`bitness`/`uaFullVersion`,
+the WebGL renderer strings and limits, the extension counts (35 / 29), the
+computed-property count (475), the canonical audio tail sum
+(`124.04347527516074`, the Linux recording), the voice counts (19 / 0 local),
+HEVC (`""`) and the video RTP codec count (13). The two rows not compared are
+`navigator.userAgentData.platform` and the brand list, which are
+`[SecureContext]` and so absent on the container's `about:blank`; both were
+verified separately against `https://example.com` in the container, where Chrome
+answers `Linux` and the same three brands.
