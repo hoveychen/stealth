@@ -439,8 +439,9 @@
     state.resolve();
 
     await state.done(() => {
-      // Measured on Chrome: nothing stored, and a 4 GiB temporary quota.
-      testing.expectEqual([0, 4294967296], usage);
+      // Measured on Chrome: nothing stored, and a 10 GiB temporary quota — the
+      // same pool size navigator.storage.estimate() reports.
+      testing.expectEqual([0, 10 * 1024 * 1024 * 1024], usage);
       // requestQuota echoes back what was asked for (measured).
       testing.expectEqual(1024, granted);
     });

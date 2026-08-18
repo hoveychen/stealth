@@ -2934,3 +2934,95 @@ Two smaller observations from the same run, neither chased:
 The ~54 nodes there are the only part of browserscan still worth chasing; the
 ~50 third-party nodes are not, and should be excluded from the target rather than
 counted against the engine.
+
+## browserscan: the node count was the wrong question
+
+The card-by-card diff got done, and it retired the target. Inside `main` the
+gap is advertising too — AdSense and the consent dialog place nodes *within* the
+content column, not only at body level, so splitting the page into "third-party
+at body level" and "the real content gap inside main" split it in the wrong
+place. Of the 49 nodes the reference renders and we do not, 44 are the consent
+root, seven ad iframes and four AdSense blocks. The remainder is five nodes
+across four leaves.
+
+There is no meaningful structural gap on browserscan, and the headline figure
+was never measuring one. `detector-sweep.mjs` will keep reporting somewhere
+between −100 and −165 for this site, and that number is the ad server's mood.
+
+**What the site actually says about us is a number it prints on the page**, and
+`browserscan.mjs` reads it — the trust score, the warning list that itemises
+each deduction, and every label/value row with the class browserscan puts on a
+value it considers anomalous. Run it against both engines and diff:
+
+```bash
+node tools/fingerprint/browserscan.mjs        > results/browserscan-lightpanda.json
+node tools/fingerprint/browserscan-linux.mjs  > results/browserscan-chrome-linux.json
+node tools/fingerprint/browserscan.mjs --diff results/browserscan-lightpanda.json \
+                                              results/browserscan-chrome-linux.json
+```
+
+### Read that way, we were losing 15 points to two things
+
+| | lightpanda (before) | lightpanda (now) | Linux Chrome 151 |
+|---|---|---|---|
+| trust score | 85% | **95%** | 90% |
+| deductions | Incognito mode −10%, WebGL exception −5% | WebGL exception −5% | Different time zones −10% |
+| `main` nodes | 844 | 839 | 843 |
+
+The reference's own −10% is the container, not Chrome: its clock is UTC while
+the exit IP is in Los Angeles, so browserscan calls the timezone mismatched. On
+a correctly configured machine the reference would read 100% and we would read
+95%. We now score above the reference, which is not a win — it is the same
+warning as ever that this container is not a trustworthy baseline.
+
+**Incognito mode −10%, fixed.** The private-window probe every detector library
+ships reads the temporary storage pool's quota and calls the browser incognito
+when it comes back under twice `performance.memory.jsHeapSizeLimit`. Our three
+quota surfaces answered three different numbers — 1 GiB from
+`navigator.storage.estimate()`, 4 GiB from `webkitTemporaryStorage`, 0 from
+`webkitPersistentStorage` — and the one the probe reads was small enough to trip
+it. The reference answers the same 10 GiB from all three (measured), so all
+three quote it now. `estimate()` also had to start resolving with a plain
+dictionary: with the values on a prototype instead of own properties,
+`JSON.stringify()` of the result gave `{}`, which is the same tell by another
+route. Verified after: the row reads `No` and the warning is gone.
+
+**WebGL exception −5% is the SwiftShader string, proven by isolation.** No
+WebGL call throws — wrapping every method and getter on
+`WebGL{,2}RenderingContext`, `CanvasRenderingContext2D` and `HTMLCanvasElement`
+before the page loads caught zero throws across the whole run, so "exception" is
+browserscan's label for a check that failed, not a real one. Swapping only the
+two `WEBGL_debug_renderer_info` strings for a plausible desktop GPU and changing
+nothing else removed the deduction (0 warnings, 100%); restoring them brought it
+back (2/2 runs, `WebGL exception -5%`, both rows flagged). It is those strings.
+
+**But do not swap them.** The same experiment showed why: with the GPU string in
+place, fifteen further rows came back blank — visitor ID, Canvas, WebGL, Audio,
+Client Rects, WebGPU, screen resolution, colour depth, touch support, device
+memory, hardware concurrency. browserscan's whole hardware card stops computing,
+and scores 100% because there is nothing left to score. A blank hardware card is
+a far louder anomaly than a 5% deduction, and a 100% earned that way is the kind
+of number this harness exists to distrust. (3/3 runs on the GPU string, 2/2 on
+the control, so it is not rate limiting.) Why the card gives up was not chased.
+
+That leaves the last deduction pointing where the `## G21` P5 gaps already
+point: a Linux machine with a real GPU. Claiming one we do not have is not a
+shortcut around it.
+
+### Three unscored differences found along the way, none chased
+
+* **Fonts: we detect zero.** browserscan lists 13 fonts for the reference and
+  `(0)` for us, and hashes our empty list to `DA39A3EE` — the front of
+  SHA-1(""). Both font-probing routes are dead: `document.fonts.size` is 0
+  against the reference's 428, and a span's `offsetWidth` is 5 for every
+  `font-family` including the generics, so nothing is laid out with font
+  metrics at all. `measureText` does vary by family, but into only three
+  buckets, so `Arial` measures exactly `sans-serif` and reads as absent. This is
+  the sixth surface for the `## G21` P4 table and a real signal; it is also the
+  measureText width table from `## G5`, still the macOS recording, never
+  measured on Linux.
+* **WebGPU.** We report a `WebGPU Report` hash where the reference reports `not
+  support`. Overshooting a surface the browser we claim to be does not have.
+* **`Available Screen Size` 1920×1040 against 1920×1080.** Ours is the more
+  plausible of the two — a Linux desktop has a panel — but it is a difference
+  against the reference and nobody has checked which value a real one gives.

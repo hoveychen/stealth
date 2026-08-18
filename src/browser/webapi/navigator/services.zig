@@ -38,6 +38,7 @@ const mime = @import("../media/mime.zig");
 const MediaMetadata = @import("../media/MediaMetadata.zig").MediaMetadata;
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
 const Frame = @import("../../Frame.zig");
+const StorageManager = @import("../StorageManager.zig");
 const idb = @import("../storage/idb/idb.zig");
 const webgpu_adapter = @import("../webgpu/adapter.zig");
 const cache_storage = @import("../storage/cache_storage.zig");
@@ -798,9 +799,15 @@ pub const StorageBucket = struct {
     // window.caches and stable across reads (measured).
     _caches: cache_storage.CacheStorage = .init,
 
+    // A bucket is a slice of the same origin pool, so it quotes the same size
+    // the other three surfaces do. Inferred rather than measured: the reference
+    // run covered navigator.storage and the two webkit pools, not this one —
+    // but a bucket answering a different pool size than navigator.storage would
+    // be the engine disagreeing with itself, which is the tell being closed
+    // here. Key order is Chrome's for this object (measured).
     const Estimate = struct {
-        usage: u64 = 0,
-        quota: u64 = 1024 * 1024 * 1024,
+        usage: f64 = 0,
+        quota: f64 = StorageManager.quota_bytes,
     };
 
     pub fn getName(self: *const StorageBucket) []const u8 {
@@ -871,9 +878,10 @@ pub const StorageBucket = struct {
 // `constructor` on the prototype: the interface is [LegacyNoInterfaceObject]
 // (measured — globalThis.DeprecatedStorageQuota is undefined there).
 pub const DeprecatedStorageQuota = struct {
-    // 4 GiB on the reference Chrome's temporary pool, with nothing stored. An
-    // f64 rather than a u64: quotas past 2^32 come back from a u64 as a BigInt,
-    // and Chrome reports a plain Number.
+    // The pool size, with nothing stored — see StorageManager.quota_bytes for
+    // where the figure comes from and why it matters. An f64 rather than a u64:
+    // quotas past 2^32 come back from a u64 as a BigInt, and Chrome reports a
+    // plain Number.
     _quota: f64,
 
     pub fn queryUsageAndQuota(

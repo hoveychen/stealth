@@ -20,44 +20,41 @@ const js = @import("../js/js.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
-    return &.{ StorageManager, StorageEstimate };
+    return &.{StorageManager};
 }
 
 const StorageManager = @This();
 
 _pad: bool = false,
 
-pub fn estimate(_: *const StorageManager, exec: *const Execution) !js.Promise {
-    const est = try exec._factory.create(StorageEstimate{
-        ._usage = 0,
-        ._quota = 1024 * 1024 * 1024, // 1 GiB
-    });
-    return exec.js.local.?.resolvePromise(est);
-}
+// The size of the origin's storage pool, reported by every surface that
+// reports one. Chrome derives it from free disk; the reference headed Linux
+// Chrome 151 answered 10 GiB from navigator.storage.estimate(), from
+// webkitTemporaryStorage and from webkitPersistentStorage alike (measured).
+//
+// The number matters beyond looking plausible. The private-window probe every
+// detector library ships reads this quota and calls the browser incognito when
+// it comes back under twice performance.memory.jsHeapSizeLimit — so a quota
+// picked small enough reports the engine as an incognito window. browserscan
+// docked us 10% for exactly that.
+// f64 rather than u64: past 2^32 a u64 marshals as a BigInt, and Chrome
+// reports a plain Number — JSON.stringify() throws on the BigInt, which would
+// trade one tell for a louder one.
+pub const quota_bytes: f64 = 10 * 1024 * 1024 * 1024;
 
+// Chrome resolves estimate() with a plain dictionary, not an interface object:
+// its three keys are own properties, so JSON.stringify() of the result carries
+// the values. Handing back a class instance with the values on a prototype
+// stringifies to "{}", which is the same tell by another route (measured).
 const StorageEstimate = struct {
-    _quota: u64,
-    _usage: u64,
-
-    fn getUsage(self: *const StorageEstimate) u64 {
-        return self._usage;
-    }
-
-    fn getQuota(self: *const StorageEstimate) u64 {
-        return self._quota;
-    }
-
-    pub const JsApi = struct {
-        pub const bridge = js.Bridge(StorageEstimate);
-        pub const Meta = struct {
-            pub const name = "StorageEstimate";
-            pub const prototype_chain = bridge.prototypeChain();
-            pub var class_id: bridge.ClassId = undefined;
-        };
-        pub const quota = bridge.accessor(getQuota, null, .{});
-        pub const usage = bridge.accessor(getUsage, null, .{});
-    };
+    quota: f64 = quota_bytes,
+    usage: f64 = 0,
+    usageDetails: struct {} = .{},
 };
+
+pub fn estimate(_: *const StorageManager, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise(StorageEstimate{});
+}
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(StorageManager);
