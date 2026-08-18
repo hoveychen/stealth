@@ -2814,3 +2814,78 @@ exists. The −18 is small, unattributed, and not investigated here.
   of the −178 the +27 came out of is unknown.
 * **iphey +3, sannysoft +1, browserleaks-tls −2.** Unchanged from G11 and never
   attributed.
+
+## Switching the reference to a headed Linux Chrome
+
+The G21 re-sweep ended on a structural complaint about itself: every baseline in
+`results/` is a macOS Chrome, and the engine claims Linux, so any
+platform-specific row reads as a gap against a browser we deliberately no longer
+imitate. This replaces the reference.
+
+`detectors-linux-chrome-headed.json` is the reference column from now on.
+`detectors-g21-chrome-headed.json` and its older siblings stay as historical
+macOS columns — useful for reading old sections, not for judging the engine.
+
+### The reference has to be headed, which is why there is an X server in the image
+
+`linux-chrome.mjs` now runs Chrome under `xvfb-run` instead of `--headless=new`.
+Not neatness: several of these detectors treat headless differently on purpose,
+so a headless Linux reference would trade the macOS-vs-Linux confound for a
+headed-vs-headless one and the sweep would still be measuring two things at once.
+`sweep-linux-baseline.mjs` refuses to run if the reference's user-agent says
+`HeadlessChrome`, so that cannot regress quietly.
+
+Two things this cost, both worth knowing before reusing the image:
+
+* `xvfb-run` will not start without `xauth` — it exits with `xauth command not
+  found` and the Chrome behind it never reaches CDP.
+* the image tag is now a hash of the Dockerfile and `start.sh`. It used to be a
+  fixed name checked with "does an image by this name exist", which makes editing
+  the recipe a silent no-op: the switch to headed would have kept handing back the
+  cached headless image and the sweep would have reported a headed baseline it
+  never ran. Adding `xauth` produced a new tag immediately, which is the
+  behaviour wanted.
+
+### What the engine looks like against the browser it claims to be
+
+Same lightpanda run (`dev.250+126f2dae3`), scored against both references:
+
+| site | Linux Chrome 151 (new) | lightpanda | vs Linux | vs macOS |
+|---|---|---|---|---|
+| areyouheadless / fpscanner | 8 | 8 | 0 | 0 |
+| rebrowser | 98 | 98 | 0 | 0 |
+| deviceinfo | 264 | 264 | 0 | 0 |
+| browserleaks-tls | 7 | 5 | −2 | −2 |
+| sannysoft | 287 | 291 | +4 | +1 |
+| iphey | 484 | 490 | +6 | +3 |
+| browserleaks-js | 995 | 1004 | **+9** | −176 |
+| pixelscan | 1838 | 1828 | −10 | 0 |
+| amiunique | 1528 | 1560 | +32 | −5 |
+| creepjs | 3546 | 3589 | **+43** | −477 |
+| browserscan | 2032 | 1870 | **−162** | −151 |
+| | | **total \|gap\|** | **268** | **815** |
+
+**The two large gaps were the baseline, not the engine.** creepjs goes from −477
+to +43 and browserleaks-js from −176 to +9 — the latter is the voice-list
+artefact the G21 section priced at 180 nodes, now confirmed to have been an
+artefact of comparing against macOS rather than a cost the engine pays. Against
+the browser we claim to be, eleven of twelve sites are within a few dozen nodes.
+
+Rows that read *worse* against the new reference are not regressions either; they
+are the first honest measurement of surfaces where we overshoot a Linux Chrome —
+amiunique +32, pixelscan −10, iphey +6, sannysoft +4. Small, and none of them
+attributed yet.
+
+**browserscan −162 is the one real remaining gap**, and it barely moved between
+references (−151 macOS, −162 Linux), which is itself informative: whatever it is,
+it is not platform-specific. G23 attributed the then −178 as ~75–80 third-party
+ad and consent nodes plus value cards blocked on RSA; RSA landed in G25 and the
+sections have not been re-diffed since.
+
+### What this reference still is not
+
+The container has no GPU and no speech daemon (measured, `## G21` P4). WebGL
+reads SwiftShader and there are no local voices, so those rows agree with the
+engine only because the engine took the container's values too — neither side is
+standing in for a Linux desktop. That is the same machine the two open P5 gaps
+need, and it is now also what a fully trustworthy baseline needs.
