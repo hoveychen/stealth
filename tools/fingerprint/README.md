@@ -3191,3 +3191,28 @@ was exactly those two assertions, and nothing else.
   platform claim.
 * **The font metrics.** Still the macOS recording, on both claims (see
   `## Zero fonts was not a font problem`). That is M5's subject.
+
+## Voices: 19 remote becomes 180 local plus 19 remote
+
+`speechSynthesis.getVoices()` was the clearest case of the split claim. The table
+in the tree was recorded from the Linux container — its own header said so — and
+carried 19 voices, every one of them a remote Google voice with
+`localService: false`, because a container with no speech-dispatcher has no local
+voices to list. The line above that in the same file claimed it was "the macOS
+system voice list", left over from before the switch to a Linux reference.
+
+Re-recorded from the local Chrome with `--headed`:
+
+| | Linux container | macOS reference host |
+|---|---|---|
+| voices | 19 | **199** |
+| local (`localService: true`) | 0 | **180** |
+| remote | 19 | 19 |
+| distinct languages | 18 | **51** |
+| default voice | `Google Deutsch` (remote) | `Samantha` (local) |
+
+The order is the system's local voices first, then Chrome's remote block, and the
+default is the first entry either way. Zero local voices is a documented tell —
+CreepJS reads it much as it reads an empty list — so this is the one table where
+the macOS recording is not merely more specific but strictly more plausible: no
+real desktop has zero local voices.

@@ -45,9 +45,10 @@ const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-voices-'));
 const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${tmp}`, '--no-first-run', '--no-default-browser-check'];
 if (!headed) flags.push('--headless=new');
 // CDP_ENDPOINT points this at a Chrome we did not spawn -- the Linux container
-// from linux-chrome.mjs, whose tables are the ones that belong in the tree now
-// that the engine claims Linux. Without it, the only measurable Chrome is the
-// macOS one on this machine.
+// from linux-chrome.mjs. The claim is macOS, so the table that belongs in the
+// tree is the local Chrome's (run with --headed: a headless one fills the list
+// too late), and the container is now only useful for reading what the other
+// claim would have to carry -- 19 remote voices and no local ones.
 const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
 const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
 proc?.stdout.resume();
