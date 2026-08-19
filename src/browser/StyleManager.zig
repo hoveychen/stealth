@@ -467,12 +467,15 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
         const val = decl.value;
         if (std.ascii.eqlIgnoreCase(name, "display")) {
             props.display_none = std.ascii.eqlIgnoreCase(val, "none");
+            props.display_none_important = decl.important;
             props.display = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "visibility")) {
             props.visibility_hidden = std.ascii.eqlIgnoreCase(val, "hidden") or std.ascii.eqlIgnoreCase(val, "collapse");
+            props.visibility_hidden_important = decl.important;
             props.visibility = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "opacity")) {
             props.opacity_zero = std.ascii.eqlIgnoreCase(val, "0");
+            props.opacity_zero_important = decl.important;
         } else if (std.ascii.eqlIgnoreCase(name, "pointer-events")) {
             props.pointer_events_none = std.ascii.eqlIgnoreCase(val, "none");
         } else if (std.ascii.eqlIgnoreCase(name, "font-size")) {
@@ -712,81 +715,98 @@ pub fn hasVisibilityHiddenInherited(self: *StyleManager, el: *Element) bool {
     return false;
 }
 
+/// The winning declaration for one of the three hiding properties, as a hides /
+/// does-not-hide boolean plus what it took to win. Importance is tracked apart
+/// from `priority` for two reasons: the packed priority has no bits left, and
+/// CSS Cascade 4 §6.9 compares importance *before* specificity -- including the
+/// style attribute's, which is ordinary specificity and not a tier of its own.
+/// So an `!important` rule beats the style attribute and an `!important` style
+/// attribute beats that (Chrome 151, probe t4-important).
+const HidingWinner = struct {
+    hides: ?bool = null,
+    priority: u64 = 0,
+    important: bool = false,
+
+    // Pinned so that nothing can win it: for a property the caller did not ask
+    // about, which keeps the rule loop from having to re-check the options.
+    const unbeatable: HidingWinner = .{ .priority = INLINE_PRIORITY, .important = true };
+
+    fn isUnbeatable(self: HidingWinner) bool {
+        return self.important and self.priority == INLINE_PRIORITY;
+    }
+
+    fn beatenBy(self: HidingWinner, priority: u64, important: bool) bool {
+        if (important != self.important) {
+            return important;
+        }
+        return priority > self.priority;
+    }
+
+    fn set(self: *HidingWinner, hides: bool, priority: u64, important: bool) void {
+        self.hides = hides;
+        self.priority = priority;
+        self.important = important;
+    }
+};
+
 /// Check if a single element (not ancestors) is hidden.
 fn isElementHidden(self: *StyleManager, el: *Element, options: CheckVisibilityOptions) bool {
-    // Track best match per property (value + priority)
-    // Initialize priority to INLINE_PRIORITY for properties we don't care about - this makes
-    // the loop naturally skip them since no stylesheet rule can have priority >= INLINE_PRIORITY
-    var display_none: ?bool = null;
-    var display_priority: u64 = 0;
+    var display: HidingWinner = .{};
+    var visibility: HidingWinner = .{};
+    var opacity: HidingWinner = .{};
 
-    var visibility_hidden: ?bool = null;
-    var visibility_priority: u64 = 0;
-
-    var opacity_zero: ?bool = null;
-    var opacity_priority: u64 = 0;
-
-    // Check inline styles FIRST - they use INLINE_PRIORITY so no stylesheet can beat them
+    // The style attribute first: it outranks every rule of equal importance, so
+    // recording it up front lets the rule loop compare against one value.
     if (options.check_display) {
         if (getInlineStyleProperty(el, comptime .wrap("display"), self.frame)) |property| {
-            if (property._value.eql(comptime .wrap("none"))) {
-                return true; // Early exit for hiding value
+            const hides = property._value.eql(comptime .wrap("none"));
+            if (hides and property._important) {
+                return true; // nothing outranks an important style attribute
             }
-            display_none = false;
-            display_priority = INLINE_PRIORITY;
+            display.set(hides, INLINE_PRIORITY, property._important);
         }
     } else {
-        // Pin to INLINE_PRIORITY so rule-matching skips display entirely.
-        display_priority = INLINE_PRIORITY;
+        display = HidingWinner.unbeatable;
     }
 
     if (options.check_visibility) {
         if (getInlineStyleProperty(el, comptime .wrap("visibility"), self.frame)) |property| {
-            if (property._value.eql(comptime .wrap("hidden")) or property._value.eql(comptime .wrap("collapse"))) {
+            const hides = property._value.eql(comptime .wrap("hidden")) or property._value.eql(comptime .wrap("collapse"));
+            if (hides and property._important) {
                 return true;
             }
-            visibility_hidden = false;
-            visibility_priority = INLINE_PRIORITY;
+            visibility.set(hides, INLINE_PRIORITY, property._important);
         }
     } else {
-        // This can't be beat. Setting this means that, when checking rules
-        // we no longer have to check if options.check_visibility is enabled.
-        // We can just compare the priority.
-        visibility_priority = INLINE_PRIORITY;
+        visibility = HidingWinner.unbeatable;
     }
 
     if (options.check_opacity) {
         if (getInlineStyleProperty(el, comptime .wrap("opacity"), self.frame)) |property| {
-            if (property._value.eql(comptime .wrap("0"))) {
+            const hides = property._value.eql(comptime .wrap("0"));
+            if (hides and property._important) {
                 return true;
             }
-            opacity_zero = false;
-            opacity_priority = INLINE_PRIORITY;
+            opacity.set(hides, INLINE_PRIORITY, property._important);
         }
     } else {
-        opacity_priority = INLINE_PRIORITY;
+        opacity = HidingWinner.unbeatable;
     }
 
-    if (display_priority == INLINE_PRIORITY and visibility_priority == INLINE_PRIORITY and opacity_priority == INLINE_PRIORITY) {
-        return false;
+    if (display.isUnbeatable() and visibility.isUnbeatable() and opacity.isUnbeatable()) {
+        return (display.hides orelse false) or (visibility.hides orelse false) or (opacity.hides orelse false);
     }
 
     // Helper to check a single rule
     const Ctx = struct {
-        display_none: *?bool,
-        display_priority: *u64,
-        visibility_hidden: *?bool,
-        visibility_priority: *u64,
-        opacity_zero: *?bool,
-        opacity_priority: *u64,
+        display: *HidingWinner,
+        visibility: *HidingWinner,
+        opacity: *HidingWinner,
         el: *Element,
         frame: *Frame,
 
         fn checkRules(ctx: @This(), rules: *const RuleList) void {
-            if (ctx.display_priority.* == INLINE_PRIORITY and
-                ctx.visibility_priority.* == INLINE_PRIORITY and
-                ctx.opacity_priority.* == INLINE_PRIORITY)
-            {
+            if (ctx.display.isUnbeatable() and ctx.visibility.isUnbeatable() and ctx.opacity.isUnbeatable()) {
                 return;
             }
 
@@ -795,43 +815,38 @@ fn isElementHidden(self: *StyleManager, el: *Element, options: CheckVisibilityOp
             const selectors = rules.items(.selector);
 
             for (priorities, props_list, selectors) |p, props, selector| {
-                // Fast skip using packed priority
-                if (p <= ctx.display_priority.* and p <= ctx.visibility_priority.* and p <= ctx.opacity_priority.*) {
-                    continue;
-                }
+                // Would any of the three declarations this rule carries win?
+                // Cheaper than matchesSelector, so it runs first.
+                const wins = (props.display_none != null and ctx.display.beatenBy(p, props.display_none_important)) or
+                    (props.visibility_hidden != null and ctx.visibility.beatenBy(p, props.visibility_hidden_important)) or
+                    (props.opacity_zero != null and ctx.opacity.beatenBy(p, props.opacity_zero_important));
 
-                // Logic for property dominance
-                const dominated = (props.display_none == null or p <= ctx.display_priority.*) and
-                    (props.visibility_hidden == null or p <= ctx.visibility_priority.*) and
-                    (props.opacity_zero == null or p <= ctx.opacity_priority.*);
-
-                if (dominated) continue;
+                if (!wins) continue;
 
                 if (matchesSelector(ctx.el, selector, ctx.frame)) {
-                    // Update best priorities
-                    if (props.display_none != null and p > ctx.display_priority.*) {
-                        ctx.display_none.* = props.display_none;
-                        ctx.display_priority.* = p;
+                    if (props.display_none) |hides| {
+                        if (ctx.display.beatenBy(p, props.display_none_important)) {
+                            ctx.display.set(hides, p, props.display_none_important);
+                        }
                     }
-                    if (props.visibility_hidden != null and p > ctx.visibility_priority.*) {
-                        ctx.visibility_hidden.* = props.visibility_hidden;
-                        ctx.visibility_priority.* = p;
+                    if (props.visibility_hidden) |hides| {
+                        if (ctx.visibility.beatenBy(p, props.visibility_hidden_important)) {
+                            ctx.visibility.set(hides, p, props.visibility_hidden_important);
+                        }
                     }
-                    if (props.opacity_zero != null and p > ctx.opacity_priority.*) {
-                        ctx.opacity_zero.* = props.opacity_zero;
-                        ctx.opacity_priority.* = p;
+                    if (props.opacity_zero) |hides| {
+                        if (ctx.opacity.beatenBy(p, props.opacity_zero_important)) {
+                            ctx.opacity.set(hides, p, props.opacity_zero_important);
+                        }
                     }
                 }
             }
         }
     };
     const ctx = Ctx{
-        .display_none = &display_none,
-        .display_priority = &display_priority,
-        .visibility_hidden = &visibility_hidden,
-        .visibility_priority = &visibility_priority,
-        .opacity_zero = &opacity_zero,
-        .opacity_priority = &opacity_priority,
+        .display = &display,
+        .visibility = &visibility,
+        .opacity = &opacity,
         .el = el,
         .frame = self.frame,
     };
@@ -858,17 +873,17 @@ fn isElementHidden(self: *StyleManager, el: *Element, options: CheckVisibilityOp
     ctx.checkRules(&self.other_rules);
 
     // UA stylesheet display:none fallback (HTML Rendering §15.3.1 "Hidden
-    // elements"). Applied only when no author rule for `display` matched the
+    // elements"). Applied only when nothing authored a `display` for the
     // element — per CSS Cascade §6.1 any normal-origin author rule beats UA
     // origin regardless of specificity, so `.x { display: flex }` on a
     // `<div class="x" hidden>` must report visible.
-    if (options.check_display and options.ua_display_none and display_priority == 0) {
+    if (options.check_display and options.ua_display_none and display.hides == null) {
         if (matchesUaDisplayNoneRule(el)) {
-            display_none = true;
+            display.hides = true;
         }
     }
 
-    return (display_none orelse false) or (visibility_hidden orelse false) or (opacity_zero orelse false);
+    return (display.hides orelse false) or (visibility.hides orelse false) or (opacity.hides orelse false);
 }
 
 /// Check if an element has pointer-events:none.
@@ -1110,6 +1125,7 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
 
     if (decl.findProperty(comptime .wrap("display"))) |property| {
         props.display_none = property._value.eql(comptime .wrap("none"));
+        props.display_none_important = property._important;
         props.display = .{
             .value = try arena.dupe(u8, property._value.str()),
             .important = property._important,
@@ -1118,6 +1134,7 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
 
     if (decl.findProperty(comptime .wrap("visibility"))) |property| {
         props.visibility_hidden = property._value.eql(comptime .wrap("hidden")) or property._value.eql(comptime .wrap("collapse"));
+        props.visibility_hidden_important = property._important;
         props.visibility = .{
             .value = try arena.dupe(u8, property._value.str()),
             .important = property._important,
@@ -1126,6 +1143,7 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
 
     if (decl.findProperty(comptime .wrap("opacity"))) |property| {
         props.opacity_zero = property._value.eql(comptime .wrap("0"));
+        props.opacity_zero_important = property._important;
     }
 
     if (decl.findProperty(.wrap("pointer-events"))) |property| {
@@ -1223,6 +1241,14 @@ const RuleProperties = struct {
     // hidden-element path predates the value and must keep its exact semantics.
     display_none: ?bool = null,
     display: ?Declaration = null,
+    // Importance of the declaration each reduced boolean came from. It cannot be
+    // folded into the packed `priority`, which is full, and importance outranks
+    // specificity anyway -- including the style attribute's, which is why
+    // isElementHidden has to carry it per property (a rule can declare
+    // `display:none!important; visibility:hidden` and mean both).
+    display_none_important: bool = false,
+    visibility_hidden_important: bool = false,
+    opacity_zero_important: bool = false,
     // Same split as display, and for the same reason: `visibility_hidden` is
     // what isElementHidden reduces the declaration to, `visibility` is the
     // keyword itself, which innerText needs because `visibility` inherits and a
@@ -1451,58 +1477,79 @@ pub fn computedDisplay(self: *StyleManager, element: *Element) ?[]const u8 {
     return null;
 }
 
-/// The element's *own* cascaded `visibility` keyword, or null when neither a
-/// stylesheet rule nor the inline style declares one. Same source order as
-/// computedDisplay. `visibility` inherits, so a null here means "whatever the
-/// parent computes to": computedVisibilityHides does that walk, and innerText
-/// threads the answer down its own top-down walk instead, which is the same
-/// answer for one lookup per element rather than one per ancestor.
-pub fn declaredVisibility(self: *StyleManager, element: *Element) ?[]const u8 {
+/// The `visibility` keywords, canonicalised. Null from `of` means the declared
+/// value is not one of them, and an unrecognised value is not a declaration at
+/// all: it is dropped and inheritance carries on past it.
+pub const Visibility = enum {
+    visible,
+    hidden,
+    collapse,
+
+    pub fn of(value: []const u8) ?Visibility {
+        const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+        if (std.ascii.eqlIgnoreCase(trimmed, "visible")) return .visible;
+        if (std.ascii.eqlIgnoreCase(trimmed, "hidden")) return .hidden;
+        if (std.ascii.eqlIgnoreCase(trimmed, "collapse")) return .collapse;
+        return null;
+    }
+
+    /// `hidden` and `collapse` both render nothing (Chrome 151 reads `""` from
+    /// innerText for either, probe w1-visibility).
+    pub fn hides(self: Visibility) bool {
+        return self != .visible;
+    }
+
+    pub fn keyword(self: Visibility) []const u8 {
+        return @tagName(self);
+    }
+};
+
+/// The element's *own* cascaded `visibility`, or null when neither a stylesheet
+/// rule nor the inline style declares one (or declares one this engine knows).
+/// Same source order as computedDisplay. `visibility` inherits, so a null here
+/// means "whatever the parent computes to": computedVisibility does that walk,
+/// and innerText threads the answer down its own top-down walk instead, which is
+/// the same answer for one lookup per element rather than one per ancestor.
+pub fn declaredVisibility(self: *StyleManager, element: *Element) ?Visibility {
     const inline_property = getInlineStyleProperty(element, comptime .wrap("visibility"), self.frame);
     const rule = self.cascadedDeclaration(element, .visibility);
 
     if (rule) |declaration| {
         if (declaration.important and !(inline_property != null and inline_property.?._important)) {
-            return declaration.value;
+            return Visibility.of(declaration.value);
         }
     }
     if (inline_property) |property| {
-        return property._value.str();
+        if (Visibility.of(property._value.str())) |value| {
+            return value;
+        }
     }
     if (rule) |declaration| {
-        return declaration.value;
+        return Visibility.of(declaration.value);
     }
     return null;
 }
 
-/// Does `element`'s computed `visibility` hide it? Walks ancestors because
-/// `visibility` inherits, and stops at the nearest one that declares a value.
-/// That is what makes it a different question from hasVisibilityHiddenInherited,
-/// which answers "does anything up the chain hide" and so cannot see a
-/// descendant turning visibility back on. Chrome 151 renders the text of such a
-/// descendant (probe w1-visibility), which is why innerText asks this one.
-pub fn computedVisibilityHides(self: *StyleManager, element: *Element) bool {
+/// Computed `visibility` for `element`, walking ancestors because `visibility`
+/// inherits, and stopping at the nearest one that declares a value. That is what
+/// makes it a different question from hasVisibilityHiddenInherited, which answers
+/// "does anything up the chain hide" and so cannot see a descendant turning
+/// visibility back on. Chrome 151 renders the text of such a descendant (probe
+/// w1-visibility), which is why innerText and getComputedStyle ask this one.
+pub fn computedVisibility(self: *StyleManager, element: *Element) ?Visibility {
     var current: ?*Element = element;
     var depth: u8 = 0;
     while (current) |elem| : (depth += 1) {
         if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
-            return false;
+            return null;
         }
         if (self.declaredVisibility(elem)) |value| {
-            return visibilityHides(value);
+            return value;
         }
         current = elem.parentElement();
     }
     // Nothing up the chain declares one, so the initial value `visible` stands.
-    return false;
-}
-
-/// `hidden` and `collapse` are the two hiding keywords -- Chrome 151 reads `""`
-/// for either (probe w1-visibility). Anything else, an unrecognised keyword
-/// included, leaves the element visible.
-pub fn visibilityHides(value: []const u8) bool {
-    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
-    return std.ascii.eqlIgnoreCase(trimmed, "hidden") or std.ascii.eqlIgnoreCase(trimmed, "collapse");
+    return null;
 }
 
 /// Does `element` lay its children out as flex or grid items? Those are exactly
