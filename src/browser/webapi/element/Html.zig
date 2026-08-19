@@ -254,7 +254,7 @@ pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !
         // is `""` in Chrome 151 (probe w1-visibility) even though the hiding
         // declaration may sit on an ancestor. Every element below is resolved
         // against this value instead of walking again.
-        .visible = !frame._style_manager.computedVisibilityHides(self.asElement()),
+        .visible = !(frame._style_manager.computedVisibility(self.asElement()) orelse StyleManager.Visibility.visible).hides(),
     };
     try self.collectInnerText(&state);
 }
@@ -1938,7 +1938,7 @@ fn handleChildElement(
     const outer_visible = state.visible;
     defer state.visible = outer_visible;
     if (state.frame._style_manager.declaredVisibility(he.asElement())) |declared| {
-        state.visible = !StyleManager.visibilityHides(declared);
+        state.visible = !declared.hides();
     }
     const visible = state.visible;
 

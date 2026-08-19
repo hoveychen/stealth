@@ -397,6 +397,12 @@ pub fn notifyAttributeChange(frame: *Frame, element: *Element, name: String, old
 }
 
 pub fn notifyCharacterDataChange(frame: *Frame, target: *Node, old_value: String) void {
+    // Every rewrite of a text node's data funnels through here -- setData,
+    // appendData, insertData, deleteData, replaceData -- which makes it the one
+    // place a <style> element's text can change under us without a node being
+    // inserted or removed. Its rules are parsed from that text and cached.
+    frame.styleTextChanged(target._parent);
+
     var it: ?*std.DoublyLinkedList.Node = frame._mutation.observers.first;
     while (it) |node| : (it = node.next) {
         const observer: *MutationObserver = @fieldParentPtr("node", node);

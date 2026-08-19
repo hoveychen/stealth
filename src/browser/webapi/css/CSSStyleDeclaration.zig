@@ -191,7 +191,15 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
                 if (frame._style_manager.hasDisplayNone(element)) return "none";
                 return resolvedDisplay(element, frame);
             } else if (wrapped.eql(comptime .wrap("visibility"))) {
-                if (frame._style_manager.hasVisibilityHiddenInherited(element)) return "hidden";
+                // The cascade, not the style attribute: an `!important` rule
+                // outranks it (Chrome 151, probe t4-important -- an inline
+                // `visibility:hidden` under `.tv{visibility:visible!important}`
+                // computes to `visible`). This is the same answer innerText
+                // reads, so the two cannot disagree, and it keeps `collapse`
+                // distinct from `hidden` the way Chrome reports it.
+                const value = frame._style_manager.computedVisibility(element) orelse
+                    StyleManager.Visibility.visible;
+                return value.keyword();
             }
         }
     }
@@ -1387,4 +1395,8 @@ test "WebApi: CSSStyleDeclaration custom property var substitution" {
 
 test "WebApi: CSSStyleDeclaration display cascade" {
     try testing.htmlRunner("css/display_cascade.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration important beats the style attribute" {
+    try testing.htmlRunner("css/important_vs_inline.html", .{});
 }

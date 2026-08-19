@@ -104,6 +104,33 @@ pub fn getSheet(self: *Style, frame: *Frame) !?*CSSStyleSheet {
     return sheet;
 }
 
+/// The element's text changed, so the rules parsed from it are stale. Re-parses
+/// in place, which also marks the StyleManager dirty. Nothing to do while no
+/// sheet has been handed out or nothing has read its rules yet: that parse is
+/// lazy, so it will read the text as it stands when it first runs -- which is
+/// why this only ever went wrong after something had read the cascade.
+///
+/// Chrome hands out a *new* CSSStyleSheet here and leaves the old object holding
+/// the old rules. We keep the object and swap its rules instead, because
+/// document.styleSheets is insertion-ordered: re-registering the sheet would move
+/// it to the end of the cascade, past sheets that come after it in the document.
+pub fn textContentChanged(self: *Style, frame: *Frame) void {
+    const sheet = self._sheet orelse return;
+    if (sheet._css_rules != null) {
+        // Once the CSSOM view exists, StyleManager.parseSheet reads the rules from
+        // it rather than from this element's text, so it is the copy that has to be
+        // re-parsed. replaceSync marks the manager dirty itself. On failure the
+        // sheet keeps the rules it had -- stale is the status quo this fixes, and
+        // there is no caller to hand an error to.
+        const text = self.asNode().getTextContentAlloc(frame.local_arena) catch return;
+        sheet.replaceSync(text, frame) catch return;
+        return;
+    }
+    // No CSSOM view yet: the manager re-reads this element's text on its next
+    // rebuild, so all it needs is to be told the rules changed.
+    frame._style_manager.sheetModified();
+}
+
 pub fn styleAddedCallback(self: *Style, frame: *Frame) !void {
     // Force stylesheet initialization so rules are parsed immediately
     if (self.getSheet(frame) catch null) |_| {
@@ -138,4 +165,8 @@ pub const JsApi = struct {
 const testing = @import("../../../../testing.zig");
 test "WebApi: Style" {
     try testing.htmlRunner("element/html/style.html", .{});
+}
+
+test "WebApi: Style text mutation re-cascades" {
+    try testing.htmlRunner("css/style_text_mutation.html", .{});
 }

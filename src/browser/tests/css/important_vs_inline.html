@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<script id=importantVsInline>
+  // CSS Cascade 4 §6.9: importance is compared before specificity, and the style
+  // attribute is the highest specificity rather than a tier of its own. So an
+  // `!important` rule beats the style attribute, and an `!important` style
+  // attribute beats that. The hidden-element check used to treat the style
+  // attribute as unbeatable, which made getComputedStyle and innerText disagree
+  // about the same element. Every reading is Chrome 151 (probe t4-important).
+  const probe = (rule, inline) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<span class=tv>M</span>';
+    document.body.appendChild(host);
+    const el = host.querySelector('.tv');
+    if (inline) el.setAttribute('style', inline);
+    const style = document.createElement('style');
+    style.textContent = '.tv{' + rule + '}';
+    document.head.appendChild(style);
+    const cs = getComputedStyle(el);
+    const got = [
+      cs.display,
+      cs.visibility,
+      el.checkVisibility({ visibilityProperty: true, opacityProperty: true }),
+      JSON.stringify(host.innerText),
+    ].join(' | ');
+    host.remove();
+    style.remove();
+    return got;
+  };
+
+  // visibility. The middle two rows are the ones that moved.
+  testing.expectEqual('inline | hidden | false | ""', probe('visibility:hidden', ''));
+  testing.expectEqual('inline | visible | true | "M"', probe('visibility:hidden', 'visibility:visible'));
+  testing.expectEqual('inline | hidden | false | ""', probe('visibility:hidden!important', 'visibility:visible'));
+  testing.expectEqual('inline | visible | true | "M"',
+    probe('visibility:hidden!important', 'visibility:visible!important'));
+  // And the other direction: an important rule turning visibility back on.
+  testing.expectEqual('inline | visible | true | "M"', probe('visibility:visible!important', 'visibility:hidden'));
+
+  // display, same shape.
+  testing.expectEqual('block | visible | true | "M"', probe('display:none', 'display:block'));
+  testing.expectEqual('none | visible | false | ""', probe('display:none!important', 'display:block'));
+  testing.expectEqual('block | visible | true | "M"', probe('display:none!important', 'display:block!important'));
+  testing.expectEqual('block | visible | true | "M"', probe('display:block!important', 'display:none'));
+
+  // opacity. Only checkVisibility reads it -- innerText does not, and the
+  // computed *value* of opacity is not cascaded here at all (Chrome reads 0 for
+  // the second row where we read 1), so this asserts the verdict, not the value.
+  testing.expectEqual('inline | visible | true | "M"', probe('opacity:0', 'opacity:1'));
+  testing.expectEqual('inline | visible | false | "M"', probe('opacity:0!important', 'opacity:1'));
+
+  // A UA-hidden element with an important author rule: the author rule wins, as
+  // any normal author rule already did.
+  {
+    const host = document.createElement('div');
+    host.innerHTML = '<span class=tv hidden>M</span>';
+    document.body.appendChild(host);
+    const style = document.createElement('style');
+    style.textContent = '.tv{display:inline!important}';
+    document.head.appendChild(style);
+    testing.expectEqual('inline', getComputedStyle(host.querySelector('.tv')).display);
+    testing.expectEqual('M', host.innerText);
+    host.remove();
+    style.remove();
+  }
+</script>
