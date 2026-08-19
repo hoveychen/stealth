@@ -116,15 +116,21 @@ fn createBrowserContext(cmd: *CDP.Command) !void {
     }
 
     const bc = cmd.createBrowserContext() catch |err| switch (err) {
-        // The only context around may be the one setAutoAttach opened on this
-        // driver's behalf. Asking for a context of its own is the driver
-        // claiming that one, not a second concurrent context.
+        // The only context around may be the placeholder setAutoAttach opened
+        // so that the driver had something to attach to. A driver asking for a
+        // context of its own expects a fresh, empty one; handing the
+        // placeholder back leaves it holding two handles on a single context
+        // whose page is already spoken for. Retract the placeholder instead.
         error.AlreadyExists => blk: {
             const existing = cmd.browser_context.?;
             if (existing.provisional == false) {
                 return cmd.sendError(-32000, "Cannot have more than one browser context at a time", .{});
             }
-            break :blk existing;
+            try retractProvisionalContext(cmd, existing);
+            break :blk cmd.createBrowserContext() catch |e| switch (e) {
+                error.AlreadyExists => unreachable,
+                else => return e,
+            };
         },
         else => return err,
     };
@@ -140,6 +146,25 @@ fn createBrowserContext(cmd: *CDP.Command) !void {
     return cmd.sendResult(.{
         .browserContextId = bc.id,
     }, .{});
+}
+
+// Withdraws the placeholder context setAutoAttach opened, telling the driver
+// its target and session are gone before the context goes away. Both ids are
+// slices into the id generators' reused buffers, so the events have to go out
+// before anything generates a replacement id.
+fn retractProvisionalContext(cmd: *CDP.Command, bc: *CDP.BrowserContext) !void {
+    if (bc.target_id) |*target_id| {
+        if (bc.session_id) |session_id| {
+            try cmd.sendEvent("Target.detachedFromTarget", .{
+                .sessionId = session_id,
+                .targetId = target_id,
+            }, .{});
+        }
+        try cmd.sendEvent("Target.targetDestroyed", .{ .targetId = target_id }, .{});
+    }
+
+    _ = cmd.cdp.disposeBrowserContext(bc.id);
+    cmd.browser_context = null;
 }
 
 fn disposeBrowserContext(cmd: *CDP.Command) !void {
