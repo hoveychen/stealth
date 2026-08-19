@@ -25,6 +25,7 @@ const global_event_handlers = @import("../global_event_handlers.zig");
 const GlobalEventHandler = global_event_handlers.Handler;
 
 const Frame = @import("../../Frame.zig");
+const StyleManager = @import("../../StyleManager.zig");
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const popover = @import("popover.zig");
@@ -238,7 +239,7 @@ pub fn asEventTarget(self: *HtmlElement) *@import("../EventTarget.zig") {
 
 pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !void {
     const tag = self.asElement().getTag();
-    switch (innerTextDisplay(self, tag)) {
+    switch (innerTextDisplay(self, tag, frame)) {
         .skip, .replaced => return,
         else => {},
     }
@@ -1765,6 +1766,14 @@ const InnerTextState = struct {
     // Trim leading whitespace of the next text run.
     trim_left: bool = true,
 
+    // The pending breaks came from inside an atomic inline box rather than from
+    // a block boundary of this run. Such a box is its own formatting context, so
+    // its break does not collapse the whitespace of the run around it. Measured
+    // on Chrome 151 (probe d4-space):
+    //   `a <span style="display:inline-flex"><span>M</span></span> b`
+    // reads "a \nM\n b", where the same shape with a plain block reads "a\nM\nb".
+    breaks_inside_atomic: bool = false,
+
     // preserve whitespace (pre tag, in the future white-space: pre)
     preserve: bool = false,
 
@@ -1784,21 +1793,32 @@ const InnerTextState = struct {
         if (n > self.pending_breaks) {
             self.pending_breaks = n;
         }
+        // A boundary of this run's own, so it collapses this run's whitespace
+        // even if an atomic inline box just handed us a break that would not.
+        self.breaks_inside_atomic = false;
     }
 
     fn flushBreaks(self: *InnerTextState) !void {
         if (self.pending_breaks == 0) {
             return;
         }
+        const atomic = self.breaks_inside_atomic;
         if (self.wrote_any) {
+            if (atomic and self.pre_w) {
+                // The space belongs to the run outside the box, which the box's
+                // own break does not reach into.
+                try self.writer.writeByte(' ');
+            }
             for (0..self.pending_breaks) |_| {
                 try self.writer.writeByte('\n');
             }
         }
         self.pending_breaks = 0;
-        // A block boundary trims the whitespace on either side of it.
+        self.breaks_inside_atomic = false;
         self.pre_w = false;
-        self.trim_left = true;
+        // A block boundary trims the whitespace on either side of it; a break
+        // that only escaped an atomic inline box does not.
+        self.trim_left = !atomic;
     }
 
     // Emit a literal separator (table cell tab / row newline).
@@ -1868,7 +1888,7 @@ fn collectInnerText(self: *HtmlElement, state: *InnerTextState) std.Io.Writer.Er
     }
 }
 
-const Display = enum { skip, replaced, @"inline", block, block_p, transparent, table_cell, table_row };
+const Display = enum { skip, replaced, @"inline", atomic_inline, block, block_p, transparent, table_cell, table_row };
 
 fn handleChildElement(
     he: *HtmlElement,
@@ -1900,12 +1920,30 @@ fn handleChildElement(
     defer state.transform = outer_transform;
     state.transform = TextTransform.of(state.frame._style_manager.computedTextTransform(he.asElement()));
 
-    switch (innerTextDisplay(he, tag)) {
+    switch (innerTextDisplay(he, tag, state.frame)) {
         // Not rendered: skip the subtree entirely (script/style/metadata/...).
         .skip => {},
         // Replaced/embedded content: the subtree is not rendered.
         .replaced => {},
         .@"inline", .transparent => try he.collectInnerText(state),
+        // An atomic inline box is content in the run around it, and its own
+        // formatting context inside. So a space pending before it is written
+        // rather than collapsed by whatever the box contains; the box's own
+        // leading whitespace is trimmed; and the run resuming after it keeps
+        // its leading space. Chrome 151 (probe d4-space3) is emphatic about
+        // this: an empty `a <span style="display:inline-block"></span> b`
+        // reads "a  b", with both spaces intact.
+        .atomic_inline => {
+            if (state.pre_w) {
+                try state.writer.writeByte(' ');
+                state.pre_w = false;
+            }
+            state.trim_left = true;
+            try he.collectInnerText(state);
+            state.breaks_inside_atomic = true;
+            state.pre_w = false;
+            state.trim_left = false;
+        },
         .block => {
             state.requireBreaks(1);
             try enterBlock(he, tag, state);
@@ -1943,7 +1981,80 @@ fn enterBlock(he: *HtmlElement, tag: Element.Tag, state: *InnerTextState) std.Io
     return he.collectInnerText(state);
 }
 
-fn innerTextDisplay(he: *HtmlElement, tag: Element.Tag) Display {
+/// Which of innerText's categories `he` falls into. innerText is defined in
+/// terms of layout, so the computed `display` decides -- the per-tag default is
+/// only what stands when nothing declares one.
+fn innerTextDisplay(he: *HtmlElement, tag: Element.Tag, frame: *Frame) Display {
+    const fallback = innerTextTagDisplay(he, tag);
+    switch (fallback) {
+        // Never rendered, or replaced content whose subtree is not text: no
+        // author `display` brings either into innerText.
+        .skip, .replaced => return fallback,
+        // <p> is the measured exception. Its blank line comes from the UA
+        // margin rather than from its display, so it survives display:inline
+        // (Chrome 151, probe d4-cases: `a<p style="display:inline">M</p>b`
+        // reads "a\n\nM\n\nb", not "aMb").
+        .block_p => return fallback,
+        else => {},
+    }
+
+    const element = he.asElement();
+    const style_manager = &frame._style_manager;
+    const blockified = if (element.parentElement()) |parent|
+        style_manager.blockifiesChildren(parent)
+    else
+        false;
+
+    const declared = style_manager.computedDisplay(element) orelse {
+        // Nothing declares one, so the per-tag default stands -- unless a flex
+        // or grid parent has turned it block-level. Every default reaching here
+        // is a real box, and blockify turns all of those block-level.
+        return if (blockified) .block else fallback;
+    };
+
+    const resolved = if (blockified) StyleManager.blockify(declared) else declared;
+    return innerTextDisplayOf(resolved) orelse fallback;
+}
+
+/// Where a `display` keyword puts an element for innerText's purposes. Measured
+/// on Chrome 151 (probes d1-matrix and d4-cases): a block-level outer display
+/// breaks a line, an inline-level one does not, and `contents` generates no box
+/// of its own so its children are walked in place. Null for a keyword not listed
+/// here, which leaves the caller's per-tag default standing rather than guessing.
+fn innerTextDisplayOf(value: []const u8) ?Display {
+    const map = .{
+        .{ "block", Display.block },
+        .{ "flex", Display.block },
+        .{ "grid", Display.block },
+        .{ "table", Display.block },
+        .{ "list-item", Display.block },
+        .{ "flow-root", Display.block },
+        .{ "table-caption", Display.block },
+        .{ "block ruby", Display.block },
+        .{ "inline", Display.@"inline" },
+        .{ "inline-block", Display.atomic_inline },
+        .{ "inline-flex", Display.atomic_inline },
+        .{ "inline-grid", Display.atomic_inline },
+        .{ "inline-table", Display.atomic_inline },
+        .{ "ruby", Display.@"inline" },
+        .{ "ruby-text", Display.@"inline" },
+        .{ "ruby-base", Display.@"inline" },
+        .{ "table-cell", Display.table_cell },
+        .{ "table-row", Display.table_row },
+        .{ "table-row-group", Display.transparent },
+        .{ "table-header-group", Display.transparent },
+        .{ "table-footer-group", Display.transparent },
+        .{ "contents", Display.transparent },
+    };
+    inline for (map) |entry| {
+        if (std.ascii.eqlIgnoreCase(value, entry[0])) {
+            return entry[1];
+        }
+    }
+    return null;
+}
+
+fn innerTextTagDisplay(he: *HtmlElement, tag: Element.Tag) Display {
     return switch (he._type) {
         .br => .@"inline", // handled before this point
         .p => .block_p,

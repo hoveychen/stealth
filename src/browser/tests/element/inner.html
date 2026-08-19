@@ -341,3 +341,92 @@
 
   ws.remove();
 </script>
+
+<script id=innerTextComputedDisplay>
+  // innerText breaks a line for a block-level *computed* display, not for a
+  // block-level tag. Chrome's reading is in the comment on every line; all of
+  // them were measured on Chrome 151 against about:blank (probe d4-cases).
+  const cd = document.createElement('div');
+  document.body.appendChild(cd);
+  const read = (html) => { cd.innerHTML = html; return cd.innerText; };
+
+  // An inline tag turned block-level by CSS breaks.
+  testing.expectEqual('a\nM\nb', read('a<span style="display:block">M</span>b'));
+  testing.expectEqual('a\nM\nb', read('a<span style="display:flex">M</span>b'));
+  testing.expectEqual('a\nM\nb', read('a<span style="display:grid">M</span>b'));
+  testing.expectEqual('a\nM\nb', read('a<span style="display:list-item">M</span>b'));
+  testing.expectEqual('a\nM\nb', read('a<span style="display:table">M</span>b'));
+  testing.expectEqual('a\nM\nb', read('a<span style="display:flow-root">M</span>b'));
+  testing.expectEqual('a\nM\nb', read('a<span style="display:table-caption">M</span>b'));
+
+  // Every inline-level value does not -- inline-flex included, which is the
+  // reading that ruled the container out as the cause of iphey's line break.
+  testing.expectEqual('aMb', read('a<span style="display:inline-block">M</span>b'));
+  testing.expectEqual('aMb', read('a<span style="display:inline-flex">M</span>b'));
+  testing.expectEqual('aMb', read('a<span style="display:inline-grid">M</span>b'));
+  testing.expectEqual('aMb', read('a<span style="display:inline-table">M</span>b'));
+  testing.expectEqual('aMb', read('a<span style="display:table-cell">M</span>b'));
+  testing.expectEqual('aMb', read('a<span style="display:table-row">M</span>b'));
+  testing.expectEqual('aMb', read('a<span style="display:contents">M</span>b'));
+  testing.expectEqual('aMb', read('a<span style="display:ruby">M</span>b'));
+  testing.expectEqual('ab', read('a<span style="display:none">M</span>b'));
+
+  // And the override goes the other way: a block tag turned inline-level does
+  // not break, where the same tag with no declaration does.
+  testing.expectEqual('a\nM\nb', read('a<div>M</div>b'));
+  testing.expectEqual('aMb', read('a<div style="display:inline">M</div>b'));
+  testing.expectEqual('aMb', read('a<div style="display:inline-block">M</div>b'));
+  testing.expectEqual('aMb', read('a<li style="display:inline">M</li>b'));
+  // <p> is the exception, and a measured one: its blank line comes from the UA
+  // margin rather than from its display, and survives display:inline.
+  testing.expectEqual('a\n\nM\n\nb', read('a<p style="display:inline">M</p>b'));
+
+  // Blockification: a flex or grid container turns its child *elements*
+  // block-level, so they break even though the container does not.
+  testing.expectEqual('a\nM\nb', read('a<span style="display:inline-flex"><span>M</span></span>b'));
+  testing.expectEqual('a\nM\nN\nb', read('a<span style="display:inline-flex"><span>M</span><span>N</span></span>b'));
+  testing.expectEqual('a\nM\nN\nb', read('a<div style="display:grid"><span>M</span><span>N</span></div>b'));
+  // Bare text in the same container does not: it gets an anonymous flex item,
+  // and innerText has no node to break at. This is the row that says the break
+  // belongs to the child and not to the container.
+  testing.expectEqual('aMb', read('a<span style="display:inline-flex">M</span>b'));
+  // Only a direct child is a flex item.
+  testing.expectEqual('a\nM\nb', read('a<span style="display:inline-flex"><span><span>M</span></span></span>b'));
+  // display:contents generates no box, so it is exempt from blockification.
+  testing.expectEqual('aMb', read('a<span style="display:inline-flex"><span style="display:contents">M</span></span>b'));
+  // An inline-block container blockifies nothing.
+  testing.expectEqual('aMb', read('a<span style="display:inline-block"><span>M</span></span>b'));
+
+  // An atomic inline box is its own formatting context, so a break inside it
+  // does not collapse the whitespace of the run around it -- where a real block
+  // boundary collapses both sides. Chrome 151, probes d4-space{,2,3}.
+  testing.expectEqual('a\nM\nb', read('a <span style="display:block">M</span> b'));
+  testing.expectEqual('a\nM\nb', read('a <span><span style="display:block">M</span></span> b'));
+  testing.expectEqual('a \nM\n b', read('a <span style="display:inline-flex"><span>M</span></span> b'));
+  testing.expectEqual('a\nM\n b', read('a<span style="display:inline-flex"><span>M</span></span> b'));
+  testing.expectEqual('a \nM\nb', read('a <span style="display:inline-flex"><span>M</span></span>b'));
+  testing.expectEqual('a \nM\n b',
+    read('a <span style="display:inline-block"><span style="display:block">M</span></span> b'));
+  testing.expectEqual('a \nM\nN\n b',
+    read('a <span style="display:inline-flex"><span>M</span></span><span style="display:inline-flex"><span>N</span></span> b'));
+  // A real block after the box asserts its own boundary again.
+  testing.expectEqual('a \nM\nN\nc',
+    read('a <span style="display:inline-flex"><span>M</span></span> <div>N</div> c'));
+  // Even an empty box keeps both spaces -- Chrome reads two, not one.
+  testing.expectEqual('a  b', read('a <span style="display:inline-block"></span> b'));
+  testing.expectEqual('a  b', read('a <span style="display:inline-block"> </span> b'));
+  testing.expectEqual('a \n b', read('a <span style="display:inline-flex"><span></span></span> b'));
+  // The box's own leading and trailing whitespace still collapses inside it.
+  testing.expectEqual('a x b', read('a <span style="display:inline-block">x</span> b'));
+  testing.expectEqual('a x b', read('a <span style="display:inline-block">x </span> b'));
+  testing.expectEqual('a x b', read('a <span style="display:inline-block"> x</span> b'));
+  testing.expectEqual('a x\nM\ny b', read('a <span style="display:inline-block">x<div>M</div>y</span> b'));
+  // inline-table is an atomic inline too, but it blockifies nothing.
+  testing.expectEqual('a M b', read('a <span style="display:inline-table"><span>M</span></span> b'));
+
+  // iphey's headline, verbatim. It read "Looks Trustworthy" on one line before.
+  testing.expectEqual('Looks \nTrustworthy',
+    read('Looks <span style="display:inline-flex"> <span>Trustworthy</span> </span>'));
+
+  cd.remove();
+</script>
