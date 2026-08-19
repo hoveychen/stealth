@@ -3430,5 +3430,26 @@ The cap is not a substitute for draining. 26KB is under one pipe's capacity for
 this page, not for a page that logs thousands of short lines, and the harness
 that does not read is still the harness that wedges. Both ends were fixed.
 
+### The regression check the cap needed
+
+A log cap cannot change what a detector concludes, but it is one line away from
+every log site, so it was checked against the binary it was built from — both
+harnesses run the same day, same machine, same site list:
+
+| station | main `97104bfbb` | this branch |
+|---|---|---|
+| sannysoft | | identical |
+| creepjs | `31% like headless:da88474c`, `0% headless`, `0% stealth` | identical |
+| iphey | `Bot Check / Not detected / BOT` | identical |
+| pixelscan | | identical |
+| rebrowser | 5 rows, all 🟢 | same rows, all 🟢 — only the milliseconds each row prints differ (`2.9 ms` / `3 ms`), byte-identical once those are stripped |
+| areyouheadless | | identical |
+| deviceinfo | | identical |
+
+browserscan re-read alongside it: 100%, `skeletons=0`, no warnings, 0 of 58 rows
+flagged, no empty values — unchanged. And the canonical iphey probe, the one that
+timed out 2 of 2 before, now answers on its first attempt: 487 nodes,
+`Trustworthy`, zero `Temporary value`, all five cards present.
+
 Read the engine's own log volume before trusting any harness reading: `wc -c` on
 the captured stderr is the cheap version of this whole section.
