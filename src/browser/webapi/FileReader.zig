@@ -121,6 +121,13 @@ const ReadType = enum {
     data_url,
 };
 
+/// The bytes are in memory, so the read itself costs nothing -- but it still
+/// answers on a task, because that is the only part of it a page can observe.
+/// Chrome returns from `readAsDataURL` with `readyState` at LOADING and a null
+/// result, and pages are written to that: browserscan.net registers its `load`
+/// listener on the line after the call, so a read that dispatched before
+/// returning would fire into an empty listener list and the page would wait on
+/// its promise forever (measured -- the whole hardware card never resolved).
 fn readInternal(self: *FileReader, blob: *Blob, read_type: ReadType) !void {
     if (self._ready_state == .loading) {
         return error.InvalidStateError;
@@ -134,39 +141,87 @@ fn readInternal(self: *FileReader, blob: *Blob, read_type: ReadType) !void {
 
     const exec = self._exec;
 
-    try self.dispatch(.load_start, .{ .loaded = 0, .total = blob.getSize() }, exec);
-    if (self._aborted) {
-        return;
-    }
+    // _result outlives this call and the blob can be GC'd before the task
+    // runs, let alone before JS reads the result, so neither the bytes nor the
+    // mime type may be borrowed from it.
+    const task = try exec._factory.create(ReadTask{
+        .reader = self,
+        .exec = exec,
+        .read_type = read_type,
+        .data = try self._arena.dupe(u8, blob._slice),
+        .mime = try self._arena.dupe(u8, blob._mime),
+    });
+    errdefer exec._factory.destroy(task);
 
-    // Perform the read (synchronous since data is in memory). _result
-    // outlives this call and the blob can be GC'd before JS reads it,
-    // so the result must not borrow the blob's memory.
-    const data = try self._arena.dupe(u8, blob._slice);
-    const size = data.len;
-    try self.dispatch(.progress, .{ .loaded = size, .total = size }, exec);
-    if (self._aborted) {
-        return;
-    }
+    // The reader has to outlive the task even if JS drops its last reference
+    // in between, the same way an in-flight XMLHttpRequest holds itself.
+    self.acquireRef();
+    errdefer self.releaseRef(exec.page);
 
-    // Process the data based on read type
-    self._result = switch (read_type) {
-        .arraybuffer => .{ .arraybuffer = .{ .values = data } },
-        .binary_string => .{ .binary_string = .{ .bytes = data } },
-        .text => .{ .string = data },
-        .data_url => blk: {
-            // Create data URL with base64 encoding
-            const mime = if (blob._mime.len > 0) blob._mime else "application/octet-stream";
-            const data_url = try encodeDataURL(self._arena.allocator(), mime, data);
-            break :blk .{ .string = data_url };
-        },
-    };
-
-    self._ready_state = .done;
-
-    try self.dispatch(.load, .{ .loaded = size, .total = size }, exec);
-    try self.dispatch(.load_end, .{ .loaded = size, .total = size }, exec);
+    try exec.js.scheduler.add(task, ReadTask.run, 0, .{
+        .name = "FileReader.read",
+        .finalizer = ReadTask.cancelled,
+    });
 }
+
+const ReadTask = struct {
+    reader: *FileReader,
+    exec: *Execution,
+    read_type: ReadType,
+    data: []const u8,
+    mime: []const u8,
+
+    fn cancelled(ctx: *anyopaque) void {
+        const self: *ReadTask = @ptrCast(@alignCast(ctx));
+        const exec = self.exec;
+        self.reader.releaseRef(exec.page);
+        exec._factory.destroy(self);
+    }
+
+    fn run(ctx: *anyopaque) !?u32 {
+        const self: *ReadTask = @ptrCast(@alignCast(ctx));
+        const exec = self.exec;
+        const reader = self.reader;
+        defer {
+            reader.releaseRef(exec.page);
+            exec._factory.destroy(self);
+        }
+
+        // abort() ran between the call and this task: it has already moved the
+        // reader to done and fired abort/loadend, and nothing is left to do.
+        if (reader._aborted) {
+            return null;
+        }
+
+        const size = self.data.len;
+        try reader.dispatch(.load_start, .{ .loaded = 0, .total = size }, exec);
+        if (reader._aborted) {
+            return null;
+        }
+
+        try reader.dispatch(.progress, .{ .loaded = size, .total = size }, exec);
+        if (reader._aborted) {
+            return null;
+        }
+
+        reader._result = switch (self.read_type) {
+            .arraybuffer => .{ .arraybuffer = .{ .values = self.data } },
+            .binary_string => .{ .binary_string = .{ .bytes = self.data } },
+            .text => .{ .string = self.data },
+            .data_url => blk: {
+                const mime = if (self.mime.len > 0) self.mime else "application/octet-stream";
+                const data_url = try encodeDataURL(reader._arena.allocator(), mime, self.data);
+                break :blk .{ .string = data_url };
+            },
+        };
+
+        reader._ready_state = .done;
+
+        try reader.dispatch(.load, .{ .loaded = size, .total = size }, exec);
+        try reader.dispatch(.load_end, .{ .loaded = size, .total = size }, exec);
+        return null;
+    }
+};
 
 pub fn abort(self: *FileReader) !void {
     if (self._ready_state != .loading) {

@@ -1,0 +1,3004 @@
+{
+ "what": "browserscan.net traced four ways with tools/fingerprint/stall-trace.mjs, to find what the hardware card waits on.",
+ "rootCause": "FileReader dispatched its load event synchronously, from inside readAsDataURL. browserscan's canvas-vs-OffscreenCanvas check (dist/Dd65eSZK.js, function Q) registers that listener on the line AFTER the read, inside a promise only that listener resolves -- so the listener was attached to an event that had already fired, the promise never settled, and every card downstream of it stayed a placeholder. Nothing threw, which is why earlier error hooks found nothing.",
+ "whyTheGpuStringMattered": "Q runs only when the renderer string is not a software renderer, so claiming a real GPU is what put the engine on that path for the first time. The Apple strings were innocent; see browserscan-apple-gpu-b1-renderer-sweep.json.",
+ "theSiteCode": "function Q(){...const t=new OffscreenCanvas(240,60)...const c=n.toDataURL();return yield new Promise(_=>{t.convertToBlob().then(r=>{const d=new FileReader;d.readAsDataURL(r),d.addEventListener(\"load\",function(i){_(i.target.result===c)},!1)})})}",
+ "measuredEventTiming": {
+  "note": "Both engines read the same blob and end with the same result; only the timing differs. Measured directly, not inferred from the trace.",
+  "lightpandaBeforeFix": {
+   "readyStateAfterCall": 2,
+   "resultAfterCall": "string, already complete",
+   "listenerRegisteredAfterCall": "never fired"
+  },
+  "chrome": {
+   "readyStateAfterCall": 1,
+   "resultAfterCall": null,
+   "listenerRegisteredAfterCall": "fired"
+  }
+ },
+ "pendingPromisesInSiteCode": {
+  "note": "The 5P8G9WMc.js:2:678 promises are pending in every run, including the ones that finish -- ip-api retry timers, not the stall. Chrome's six are all bare then() links with no site frame left in the stack.",
+  "stallBeforeFix": [
+   {
+    "t": 3489,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at K (https://www.browserscan.net/dist/CTG-mXWl.js:1:463) <- at te (https://www.browserscan.net/dist/CTG-mXWl.js:17:2628) <- at https://www.browserscan.net/dist/CTG-mXWl.js:17:1654"
+   },
+   {
+    "t": 3578,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at K (https://www.browserscan.net/dist/CTG-mXWl.js:1:463) <- at $ (https://www.browserscan.net/dist/CTG-mXWl.js:3:54904) <- at https://www.browserscan.net/dist/CTG-mXWl.js:17:4080"
+   },
+   {
+    "t": 3579,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at g (https://www.browserscan.net/dist/Dd65eSZK.js:1:16) <- at Q (https://www.browserscan.net/dist/Dd65eSZK.js:1:16533) <- at https://www.browserscan.net/dist/CTG-mXWl.js:3:55201"
+   },
+   {
+    "t": 3579,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at TracedPromise.then (<anonymous>) <- at m (https://www.browserscan.net/dist/CTG-mXWl.js:1:614) <- at https://www.browserscan.net/dist/CTG-mXWl.js:1:624"
+   },
+   {
+    "t": 3579,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at TracedPromise.then (<anonymous>) <- at m (https://www.browserscan.net/dist/CTG-mXWl.js:1:614) <- at x (https://www.browserscan.net/dist/CTG-mXWl.js:1:497)"
+   },
+   {
+    "t": 3594,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at https://www.browserscan.net/dist/Dd65eSZK.js:1:16739 <- at Generator.next (<anonymous>) <- at c (https://www.browserscan.net/dist/Dd65eSZK.js:1:54)"
+   },
+   {
+    "t": 3596,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at TracedPromise.then (<anonymous>) <- at a (https://www.browserscan.net/dist/Dd65eSZK.js:1:167) <- at c (https://www.browserscan.net/dist/Dd65eSZK.js:1:50)"
+   },
+   {
+    "t": 4315,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   },
+   {
+    "t": 5370,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   },
+   {
+    "t": 6429,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   }
+  ],
+  "okBeforeFix": [
+   {
+    "t": 4779,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   },
+   {
+    "t": 6099,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   },
+   {
+    "t": 7143,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   }
+  ],
+  "chrome": [
+   {
+    "t": 3803,
+    "stack": " at new TracedPromise (<anonymous>:34:43) <- at TracedPromise.then (<anonymous>)"
+   },
+   {
+    "t": 3803,
+    "stack": " at new TracedPromise (<anonymous>:34:43) <- at TracedPromise.then (<anonymous>)"
+   },
+   {
+    "t": 3803,
+    "stack": " at new TracedPromise (<anonymous>:34:43) <- at TracedPromise.then (<anonymous>)"
+   },
+   {
+    "t": 3803,
+    "stack": " at new TracedPromise (<anonymous>:34:43) <- at TracedPromise.then (<anonymous>)"
+   },
+   {
+    "t": 4340,
+    "stack": " at new TracedPromise (<anonymous>:34:43) <- at TracedPromise.then (<anonymous>)"
+   },
+   {
+    "t": 4340,
+    "stack": " at new TracedPromise (<anonymous>:34:43) <- at TracedPromise.then (<anonymous>)"
+   }
+  ],
+  "fixed": [
+   {
+    "t": 3150,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   },
+   {
+    "t": 4258,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   },
+   {
+    "t": 5343,
+    "stack": " at new TracedPromise (anonymous:34:43) <- at x (https://www.browserscan.net/dist/5P8G9WMc.js:2:678) <- at o (https://www.browserscan.net/dist/5P8G9WMc.js:2:4857) <- at https://www.browserscan.net/dist/5P8G9WMc.js:2:7630"
+   }
+  ]
+ },
+ "skeletons": {
+  "stallBeforeFix": 45,
+  "okBeforeFix": 0,
+  "chrome": 0,
+  "fixed": 0
+ },
+ "callSequence": {
+  "stallBeforeFix": [
+   {
+    "t": 1,
+    "call": "document.fonts.ready",
+    "done": "resolved undefined"
+   },
+   {
+    "t": 6,
+    "call": "serviceWorker.ready",
+    "done": null
+   },
+   {
+    "t": 1005,
+    "call": "setTimeout 2147483647ms",
+    "done": null
+   },
+   {
+    "t": 1149,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1177,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1177,
+    "call": "img.src=https://www.browserscan.net/dist/banner_bg_tiny.D5W9SIMm.jpg",
+    "done": "load event"
+   },
+   {
+    "t": 1255,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1255,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1255,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1277,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1277,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1299,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1402,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 1402,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 1433,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 1493,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1494,
+    "call": "setTimeout 3600000ms",
+    "done": null
+   },
+   {
+    "t": 1506,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 1507,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1508,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1539,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 1567,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1570,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1576,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1608,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1611,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1611,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1852,
+    "call": "gpu.requestAdapter []",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1852,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"high-performance\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1852,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1852,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\",\"forceFallbackAdapter\":true}]",
+    "done": "resolved null"
+   },
+   {
+    "t": 1852,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":true}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1857,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":false}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1857,
+    "call": "canvas.getContext [\"webgpu\"]",
+    "done": "sync GPUCanvasContext"
+   },
+   {
+    "t": 1859,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1859,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1859,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1860,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1863,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1863,
+    "call": "img.src=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABUAAAB4CAYAAA",
+    "done": "load event"
+   },
+   {
+    "t": 1940,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1970,
+    "call": "speechSynthesis.getVoices []",
+    "done": "sync Array"
+   },
+   {
+    "t": 1970,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2156,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 2156,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2157,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2159,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2161,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2244,
+    "call": "canvas.getContext [\"webgl\"]",
+    "done": "sync WebGLRenderingContext"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync WEBGL_debug_renderer_info"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getSupportedExtensions []",
+    "done": "sync Array"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"ANGLE_instanced_arrays\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_blend_minmax\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_clip_control\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_color_buffer_half_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_depth_clamp\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_disjoint_timer_query\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_float_blend\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_frag_depth\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_polygon_offset_clamp\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_shader_texture_lod\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_texture_compression_bptc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_texture_compression_rgtc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_texture_filter_anisotropic\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_texture_mirror_clamp_to_edge\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"EXT_sRGB\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"KHR_parallel_shader_compile\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_element_index_uint\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_fbo_render_mipmap\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_standard_derivatives\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_texture_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_texture_float_linear\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_texture_half_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_texture_half_float_linear\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"OES_vertex_array_object\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_blend_func_extended\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_color_buffer_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_astc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc1\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_pvrtc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc_srgb\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync WEBGL_debug_renderer_info"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_debug_shaders\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_depth_texture\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_draw_buffers\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_lose_context\"]",
+    "done": "sync WEBGL_lose_context"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getExtension [\"WEBGL_multi_draw\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35632,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35632,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35632,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35632,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35632,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35632,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35633,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35633,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35633,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2244,
+    "call": "gl.getShaderPrecisionFormat [35633,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2245,
+    "call": "gl.getShaderPrecisionFormat [35633,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2245,
+    "call": "gl.getShaderPrecisionFormat [35633,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 2245,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 2506,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2657,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 2684,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 2702,
+    "call": "speechSynthesis.getVoices []",
+    "done": "sync Array"
+   },
+   {
+    "t": 2714,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2719,
+    "call": "img.src=/assets/flags/us.svg",
+    "done": "load event"
+   },
+   {
+    "t": 2745,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2756,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3499,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3510,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3519,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3577,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3579,
+    "call": "offscreen.getContext [\"2d\"]",
+    "done": "sync OffscreenCanvasRenderingContext2D"
+   },
+   {
+    "t": 3579,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3592,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 3594,
+    "call": "offscreen.convertToBlob []",
+    "done": "resolved Blob(267,image/png)"
+   },
+   {
+    "t": 3596,
+    "call": "FileReader.readAsDataURL",
+    "done": "load event"
+   },
+   {
+    "t": 3832,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 4316,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 5371,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 6431,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 11151,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 11434,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 21153,
+    "call": "setTimeout 10000ms",
+    "done": null
+   }
+  ],
+  "okBeforeFix": [
+   {
+    "t": 0,
+    "call": "document.fonts.ready",
+    "done": "resolved undefined"
+   },
+   {
+    "t": 0,
+    "call": "serviceWorker.ready",
+    "done": null
+   },
+   {
+    "t": 1829,
+    "call": "setTimeout 2147483647ms",
+    "done": null
+   },
+   {
+    "t": 2047,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2096,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2096,
+    "call": "img.src=https://www.browserscan.net/dist/banner_bg_tiny.D5W9SIMm.jpg",
+    "done": "load event"
+   },
+   {
+    "t": 2216,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 2216,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 2216,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 2240,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2240,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2267,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 2385,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 2387,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 2426,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2550,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2550,
+    "call": "setTimeout 3600000ms",
+    "done": null
+   },
+   {
+    "t": 2558,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 2559,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2559,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2561,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 2562,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 2562,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2601,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 2621,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2623,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2629,
+    "call": "gpu.requestAdapter []",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 2630,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2630,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2630,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2631,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 2634,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2635,
+    "call": "img.src=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABUAAAB4CAYAAA",
+    "done": "load event"
+   },
+   {
+    "t": 2640,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"high-performance\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 2640,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 2640,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\",\"forceFallbackAdapter\":true}]",
+    "done": "resolved null"
+   },
+   {
+    "t": 2640,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":true}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 2646,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":false}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 2646,
+    "call": "canvas.getContext [\"webgpu\"]",
+    "done": "sync GPUCanvasContext"
+   },
+   {
+    "t": 2664,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2771,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 2924,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 2925,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2925,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2927,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2929,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2932,
+    "call": "canvas.getContext [\"webgl\"]",
+    "done": "sync WebGLRenderingContext"
+   },
+   {
+    "t": 2932,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync WEBGL_debug_renderer_info"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getSupportedExtensions []",
+    "done": "sync Array"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"ANGLE_instanced_arrays\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_blend_minmax\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_clip_control\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_color_buffer_half_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_depth_clamp\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_disjoint_timer_query\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_float_blend\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_frag_depth\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_polygon_offset_clamp\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_shader_texture_lod\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_texture_compression_bptc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_texture_compression_rgtc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_texture_filter_anisotropic\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_texture_mirror_clamp_to_edge\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"EXT_sRGB\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"KHR_parallel_shader_compile\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_element_index_uint\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_fbo_render_mipmap\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_standard_derivatives\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_texture_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_texture_float_linear\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_texture_half_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_texture_half_float_linear\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"OES_vertex_array_object\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_blend_func_extended\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_color_buffer_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_astc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc1\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_pvrtc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc_srgb\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync WEBGL_debug_renderer_info"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_debug_shaders\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_depth_texture\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_draw_buffers\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_lose_context\"]",
+    "done": "sync WEBGL_lose_context"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getExtension [\"WEBGL_multi_draw\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35632,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35632,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35632,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35632,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35632,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35632,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35633,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35633,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35633,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35633,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35633,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3002,
+    "call": "gl.getShaderPrecisionFormat [35633,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 3003,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 3124,
+    "call": "speechSynthesis.getVoices []",
+    "done": "sync Array"
+   },
+   {
+    "t": 3124,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 3364,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 3379,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 3529,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 3560,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3565,
+    "call": "img.src=/assets/flags/us.svg",
+    "done": "load event"
+   },
+   {
+    "t": 3601,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3610,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3809,
+    "call": "speechSynthesis.getVoices []",
+    "done": "sync Array"
+   },
+   {
+    "t": 4624,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 4637,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 4646,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 4698,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 4699,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 4700,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 4700,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 4706,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 4708,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 4710,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 4710,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 4710,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 4732,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 4734,
+    "call": "img.src=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAA8CAYAAA",
+    "done": "load event"
+   },
+   {
+    "t": 4740,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 4740,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 4759,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 4780,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 4953,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 5136,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 6100,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 7145,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 7261,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 7286,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 7296,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 12049,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 22050,
+    "call": "setTimeout 10000ms",
+    "done": null
+   }
+  ],
+  "chrome": [
+   {
+    "t": 3,
+    "call": "document.fonts.ready",
+    "done": "resolved FontFaceSet"
+   },
+   {
+    "t": 5,
+    "call": "serviceWorker.ready",
+    "done": null
+   },
+   {
+    "t": 308,
+    "call": "setTimeout 2147483647ms",
+    "done": null
+   },
+   {
+    "t": 338,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 339,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 340,
+    "call": "img.src=https://www.browserscan.net/dist/banner_bg_tiny.D5W9SIMm.jpg",
+    "done": "load event"
+   },
+   {
+    "t": 349,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 349,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 349,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1019,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 1027,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 1056,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1121,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 1121,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 1138,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 1143,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1193,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 1200,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 1235,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1236,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1236,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1251,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1260,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1288,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1321,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1342,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1361,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1377,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 1377,
+    "call": "setTimeout 2500ms",
+    "done": "fired"
+   },
+   {
+    "t": 1377,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1377,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1380,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1383,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1492,
+    "call": "speechSynthesis.getVoices []",
+    "done": "sync Array"
+   },
+   {
+    "t": 1492,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1500,
+    "call": "canvas.getContext [\"webgl\"]",
+    "done": "sync WebGLRenderingContext"
+   },
+   {
+    "t": 1503,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1507,
+    "call": "gpu.requestAdapter []",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1510,
+    "call": "gl.getSupportedExtensions []",
+    "done": "sync Array"
+   },
+   {
+    "t": 1514,
+    "call": "gl.getExtension [\"ANGLE_instanced_arrays\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1514,
+    "call": "gl.getExtension [\"EXT_blend_minmax\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1514,
+    "call": "gl.getExtension [\"EXT_clip_control\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1514,
+    "call": "gl.getExtension [\"EXT_color_buffer_half_float\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1515,
+    "call": "gl.getExtension [\"EXT_depth_clamp\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1515,
+    "call": "gl.getExtension [\"EXT_disjoint_timer_query\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1515,
+    "call": "gl.getExtension [\"EXT_float_blend\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1515,
+    "call": "gl.getExtension [\"EXT_frag_depth\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1515,
+    "call": "gl.getExtension [\"EXT_polygon_offset_clamp\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1515,
+    "call": "gl.getExtension [\"EXT_shader_texture_lod\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1516,
+    "call": "gl.getExtension [\"EXT_texture_compression_bptc\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1516,
+    "call": "gl.getExtension [\"EXT_texture_compression_rgtc\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1516,
+    "call": "gl.getExtension [\"EXT_texture_filter_anisotropic\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1516,
+    "call": "gl.getExtension [\"EXT_texture_mirror_clamp_to_edge\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1516,
+    "call": "gl.getExtension [\"EXT_sRGB\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1516,
+    "call": "gl.getExtension [\"KHR_parallel_shader_compile\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1516,
+    "call": "gl.getExtension [\"OES_element_index_uint\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1517,
+    "call": "gl.getExtension [\"OES_fbo_render_mipmap\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1517,
+    "call": "gl.getExtension [\"OES_standard_derivatives\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1517,
+    "call": "gl.getExtension [\"OES_texture_float\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1517,
+    "call": "gl.getExtension [\"OES_texture_float_linear\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1518,
+    "call": "gl.getExtension [\"OES_texture_half_float\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1518,
+    "call": "gl.getExtension [\"OES_texture_half_float_linear\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1518,
+    "call": "gl.getExtension [\"OES_vertex_array_object\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1518,
+    "call": "gl.getExtension [\"WEBGL_blend_func_extended\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1518,
+    "call": "gl.getExtension [\"WEBGL_color_buffer_float\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1518,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_astc\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1518,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc1\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_pvrtc\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc_srgb\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_debug_shaders\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_depth_texture\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1519,
+    "call": "gl.getExtension [\"WEBGL_draw_buffers\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getExtension [\"WEBGL_lose_context\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getExtension [\"WEBGL_multi_draw\"]",
+    "done": "sync Object"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35632,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35632,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35632,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35632,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35632,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35632,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35633,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35633,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35633,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35633,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35633,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1520,
+    "call": "gl.getShaderPrecisionFormat [35633,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1529,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"high-performance\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1529,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 1533,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1533,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1533,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1534,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1538,
+    "call": "img.src=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABUAAAB4CAYAAA",
+    "done": "load event"
+   },
+   {
+    "t": 1575,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1587,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1622,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\",\"forceFallbackAdapter\":true}]",
+    "done": "resolved null"
+   },
+   {
+    "t": 1690,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":true}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1843,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":false}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1878,
+    "call": "canvas.getContext [\"webgpu\"]",
+    "done": "sync GPUCanvasContext"
+   },
+   {
+    "t": 2012,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2017,
+    "call": "img.src=/assets/flags/us.svg",
+    "done": "load event"
+   },
+   {
+    "t": 2028,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2036,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2306,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2312,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2319,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2322,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2322,
+    "call": "offscreen.getContext [\"2d\"]",
+    "done": "sync OffscreenCanvasRenderingContext2D"
+   },
+   {
+    "t": 2323,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2369,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2371,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2374,
+    "call": "offscreen.convertToBlob []",
+    "done": "resolved Blob(10062,image/png)"
+   },
+   {
+    "t": 2403,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2403,
+    "call": "setTimeout 3600000ms",
+    "done": null
+   },
+   {
+    "t": 2404,
+    "call": "FileReader.readAsDataURL",
+    "done": "load event"
+   },
+   {
+    "t": 2405,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2405,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2405,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2409,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2448,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2453,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2453,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 2453,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2455,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 2461,
+    "call": "img.src=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAA8CAYAAA",
+    "done": "load event"
+   },
+   {
+    "t": 2476,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 2476,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 2483,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2589,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2739,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 3722,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3727,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3728,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3737,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 3747,
+    "call": "setTimeout 8000ms",
+    "done": "fired"
+   },
+   {
+    "t": 4217,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 4217,
+    "call": "setTimeout 500ms",
+    "done": null
+   },
+   {
+    "t": 4217,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 4217,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 4217,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 4217,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 4321,
+    "call": "setTimeout 2000ms",
+    "done": "fired"
+   },
+   {
+    "t": 4621,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 4743,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 4743,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 4747,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 5121,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 5132,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 5299,
+    "call": "setTimeout 500ms",
+    "done": null
+   },
+   {
+    "t": 5541,
+    "call": "img.src=https://ep1.adtrafficquality.google/pagead/sodar?id=sodar2&v",
+    "done": "error event"
+   },
+   {
+    "t": 10339,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 11755,
+    "call": "setTimeout 45000ms",
+    "done": null
+   },
+   {
+    "t": 12346,
+    "call": "setTimeout 1500ms",
+    "done": "fired"
+   },
+   {
+    "t": 13848,
+    "call": "setTimeout 996ms",
+    "done": "fired"
+   },
+   {
+    "t": 15344,
+    "call": "setTimeout 2001ms",
+    "done": "fired"
+   },
+   {
+    "t": 15344,
+    "call": "setTimeout 1500ms",
+    "done": "fired"
+   },
+   {
+    "t": 18345,
+    "call": "setTimeout 1501ms",
+    "done": "fired"
+   },
+   {
+    "t": 18345,
+    "call": "setTimeout 1500ms",
+    "done": "fired"
+   },
+   {
+    "t": 20341,
+    "call": "setTimeout 10000ms",
+    "done": null
+   },
+   {
+    "t": 21345,
+    "call": "setTimeout 1001ms",
+    "done": "fired"
+   },
+   {
+    "t": 21345,
+    "call": "setTimeout 1500ms",
+    "done": "fired"
+   },
+   {
+    "t": 22847,
+    "call": "setTimeout 1999ms",
+    "done": "fired"
+   },
+   {
+    "t": 24345,
+    "call": "setTimeout 1500ms",
+    "done": "fired"
+   },
+   {
+    "t": 25847,
+    "call": "setTimeout 1500ms",
+    "done": "fired"
+   },
+   {
+    "t": 27345,
+    "call": "setTimeout 1500ms",
+    "done": "fired"
+   },
+   {
+    "t": 28847,
+    "call": "setTimeout 1002ms",
+    "done": "fired"
+   }
+  ],
+  "fixed": [
+   {
+    "t": 5,
+    "call": "document.fonts.ready",
+    "done": "resolved undefined"
+   },
+   {
+    "t": 9,
+    "call": "serviceWorker.ready",
+    "done": null
+   },
+   {
+    "t": 956,
+    "call": "setTimeout 2147483647ms",
+    "done": null
+   },
+   {
+    "t": 1022,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1044,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1045,
+    "call": "img.src=https://www.browserscan.net/dist/banner_bg_tiny.D5W9SIMm.jpg",
+    "done": "load event"
+   },
+   {
+    "t": 1105,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1105,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1105,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1136,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1137,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1166,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1259,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 1259,
+    "call": "setTimeout 1200ms",
+    "done": "fired"
+   },
+   {
+    "t": 1277,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 1355,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 1355,
+    "call": "setTimeout 3600000ms",
+    "done": null
+   },
+   {
+    "t": 1365,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 1367,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1368,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1391,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 1410,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1412,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1432,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1444,
+    "call": "requestIdleCallback",
+    "done": "fired"
+   },
+   {
+    "t": 1520,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1522,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1523,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1568,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 1568,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1568,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1570,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1571,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1575,
+    "call": "canvas.getContext [\"webgl\"]",
+    "done": "sync WebGLRenderingContext"
+   },
+   {
+    "t": 1575,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync WEBGL_debug_renderer_info"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getSupportedExtensions []",
+    "done": "sync Array"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"ANGLE_instanced_arrays\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_blend_minmax\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_clip_control\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_color_buffer_half_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_depth_clamp\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_disjoint_timer_query\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_float_blend\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_frag_depth\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_polygon_offset_clamp\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_shader_texture_lod\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_texture_compression_bptc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_texture_compression_rgtc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_texture_filter_anisotropic\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_texture_mirror_clamp_to_edge\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"EXT_sRGB\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1645,
+    "call": "gl.getExtension [\"KHR_parallel_shader_compile\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_element_index_uint\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_fbo_render_mipmap\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_standard_derivatives\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_texture_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_texture_float_linear\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_texture_half_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_texture_half_float_linear\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"OES_vertex_array_object\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_blend_func_extended\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_color_buffer_float\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_astc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_etc1\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_pvrtc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_compressed_texture_s3tc_srgb\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_debug_renderer_info\"]",
+    "done": "sync WEBGL_debug_renderer_info"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_debug_shaders\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_depth_texture\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_draw_buffers\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_lose_context\"]",
+    "done": "sync WEBGL_lose_context"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getExtension [\"WEBGL_multi_draw\"]",
+    "done": "sync undefined"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35632,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35632,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35632,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35632,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35632,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35632,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35633,36336]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35633,36337]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35633,36338]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35633,36339]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35633,36340]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1646,
+    "call": "gl.getShaderPrecisionFormat [35633,36341]",
+    "done": "sync WebGLShaderPrecisionFormat"
+   },
+   {
+    "t": 1647,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 1685,
+    "call": "gpu.requestAdapter []",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1686,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"high-performance\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1686,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\"}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1686,
+    "call": "gpu.requestAdapter [{\"powerPreference\":\"low-power\",\"forceFallbackAdapter\":true}]",
+    "done": "resolved null"
+   },
+   {
+    "t": 1686,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":true}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1690,
+    "call": "gpu.requestAdapter [{\"compatibilityMode\":false}]",
+    "done": "resolved GPUAdapter"
+   },
+   {
+    "t": 1690,
+    "call": "canvas.getContext [\"webgpu\"]",
+    "done": "sync GPUCanvasContext"
+   },
+   {
+    "t": 1708,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1708,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 1708,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1709,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 1709,
+    "call": "img.src=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABUAAAB4CAYAAA",
+    "done": "load event"
+   },
+   {
+    "t": 1730,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 1915,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 1919,
+    "call": "img.src=/assets/flags/us.svg",
+    "done": "load event"
+   },
+   {
+    "t": 1948,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 1956,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 2046,
+    "call": "speechSynthesis.getVoices []",
+    "done": "sync Array"
+   },
+   {
+    "t": 2046,
+    "call": "setTimeout 1000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2212,
+    "call": "setTimeout 5000ms",
+    "done": "fired"
+   },
+   {
+    "t": 2339,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 2354,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 2740,
+    "call": "speechSynthesis.getVoices []",
+    "done": "sync Array"
+   },
+   {
+    "t": 3083,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3092,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3099,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3146,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3148,
+    "call": "offscreen.getContext [\"2d\"]",
+    "done": "sync OffscreenCanvasRenderingContext2D"
+   },
+   {
+    "t": 3148,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3151,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 3167,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 3169,
+    "call": "offscreen.convertToBlob []",
+    "done": "resolved Blob(267,image/png)"
+   },
+   {
+    "t": 3171,
+    "call": "FileReader.readAsDataURL",
+    "done": "load event"
+   },
+   {
+    "t": 3173,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3173,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3173,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 3179,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 3181,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 3183,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3183,
+    "call": "canvas.getContext [\"2d\"]",
+    "done": "sync CanvasRenderingContext2D"
+   },
+   {
+    "t": 3183,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 3189,
+    "call": "canvas.toDataURL []",
+    "done": "sync string:data:image/png;base64,iVBORw0KGgoAAAANSU"
+   },
+   {
+    "t": 3191,
+    "call": "img.src=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAAA8CAYAAA",
+    "done": "load event"
+   },
+   {
+    "t": 3197,
+    "call": "offlineaudio.startRendering []",
+    "done": "resolved AudioBuffer"
+   },
+   {
+    "t": 3198,
+    "call": "setTimeout 500ms",
+    "done": "fired"
+   },
+   {
+    "t": 3212,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3399,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 3568,
+    "call": "canvas.getContext [\"webgl2\"]",
+    "done": "sync WebGL2RenderingContext"
+   },
+   {
+    "t": 4260,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 5345,
+    "call": "setTimeout 5000ms",
+    "done": null
+   },
+   {
+    "t": 6151,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 6166,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 6168,
+    "call": "subtle.importKey [\"spki\",{}]",
+    "done": "resolved CryptoKey"
+   },
+   {
+    "t": 11023,
+    "call": "setTimeout 10000ms",
+    "done": "fired"
+   },
+   {
+    "t": 21023,
+    "call": "setTimeout 10000ms",
+    "done": null
+   }
+  ]
+ }
+}
