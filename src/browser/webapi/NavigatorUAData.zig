@@ -74,10 +74,11 @@ pub fn getHighEntropyValues(_: *const NavigatorUAData, hints: []const []const u8
         } else if (std.mem.eql(u8, hint, "model")) {
             _ = try values.set("model", "", .{});
         } else if (std.mem.eql(u8, hint, "platformVersion")) {
-            // Chrome reports the OS version here (e.g. "26.3.1"). Reading it
-            // means a platform-specific syscall; an empty string is what a
-            // client declining the hint returns, so it stays empty for now.
-            _ = try values.set("platformVersion", "", .{});
+            // The OS version, from the platform claim rather than from a syscall
+            // on the host — see claimed_platform.zig. Not a hint we can decline
+            // by answering "": that empty string is itself one platform's answer
+            // (the Linux Chrome's) and a mismatch under the other's claim.
+            _ = try values.set("platformVersion", uaPlatformVersion(), .{});
         } else if (std.mem.eql(u8, hint, "uaFullVersion")) {
             _ = try values.set("uaFullVersion", uaFullVersion(exec), .{});
         } else if (std.mem.eql(u8, hint, "fullVersionList")) {
@@ -129,6 +130,10 @@ fn uaArchitecture() []const u8 {
 
 fn uaBitness() []const u8 {
     return claimed_platform.bitness;
+}
+
+fn uaPlatformVersion() []const u8 {
+    return claimed_platform.platform_version;
 }
 
 pub const JsApi = struct {

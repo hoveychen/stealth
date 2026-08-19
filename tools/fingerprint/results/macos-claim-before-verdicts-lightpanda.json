@@ -1,0 +1,67 @@
+{
+ "sannysoft": {
+  "lines": [
+   "WebDriver (New) missing (passed)",
+   "WebDriver Advanced passed",
+   "Chrome (New) present (passed)",
+   "Plugins is of type PluginArray passed",
+   "\"webdriver~~~function get webdriver() { [native code] }\",",
+   "\"selenium\": [",
+   "\"webDriver\": true,"
+  ],
+  "totalLines": 397
+ },
+ "creepjs": {
+  "lines": [
+   "38% like headless:25677de5 ×",
+   "Like Headless",
+   "0% headless:52defe05 ×",
+   "Headless",
+   "0% stealth:0c019315 ×",
+   "Stealth"
+  ],
+  "totalLines": 1679
+ },
+ "iphey": {
+  "lines": [
+   "Bot Check",
+   "Not detected",
+   "BOT"
+  ],
+  "totalLines": 203
+ },
+ "pixelscan": {
+  "lines": [
+   "Bot Verification",
+   "Verify that a user is a human",
+   "Bot Verification",
+   "Verify that user is a human",
+   "Pixelscan runs a full set of stealth and privacy diagnostics in one click, including:",
+   "Bot checker - Detects headless browsers and automation traces",
+   "Bot checker"
+  ],
+  "totalLines": 344
+ },
+ "rebrowser": {
+  "lines": [
+   "🕵️ rebrowser-bot-detector",
+   "Modern tests to detect automated browser behavior. See github repo for more details. How to properly run the tests?",
+   "🟢 runtimeEnableLeak 1.7 ms No leak detected.",
+   "🟢 navigatorWebdriver 2.855 ms No webdriver presented.",
+   "🟢 viewport 3.88 ms Viewport is different from default values used in automation libraries.",
+   "🟢 pwInitScripts 4.525 ms No window.__pwInitScripts detected.",
+   "Sponsored by rebrowser.net — the ultimate stealth browser and scraping solution fueled by AI."
+  ],
+  "totalLines": 34
+ },
+ "areyouheadless": {
+  "lines": [],
+  "totalLines": 2
+ },
+ "deviceinfo": {
+  "lines": [
+   "Navigation failed"
+  ],
+  "totalLines": 2
+ }
+}

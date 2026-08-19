@@ -36,26 +36,53 @@
     gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
   );
 
-  testing.expectEqual(8192, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+  // The driver-picked limits follow the platform claim, and have to agree with
+  // the WebGL 1 context's answers for the same names: a fingerprint that reads
+  // both contexts sees one GPU or two.
+  const mac = navigator.platform === "MacIntel";
+  testing.expectEqual(mac ? 16384 : 8192, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+  testing.expectEqual(mac ? 16384 : 8192, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
   testing.expectEqual(16, gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
 
   // 2.0-only limits.
   testing.expectEqual(2048, gl.getParameter(gl.MAX_3D_TEXTURE_SIZE));
-  testing.expectEqual(6, gl.getParameter(gl.MAX_DRAW_BUFFERS));
-  testing.expectEqual(6, gl.getParameter(gl.MAX_COLOR_ATTACHMENTS));
-  // Six draw buffers means DRAW_BUFFER6 and DRAW_BUFFER7 are not valid enums
-  // to query, and Chrome answers null rather than a slot value.
+  testing.expectEqual(mac ? 8 : 6, gl.getParameter(gl.MAX_DRAW_BUFFERS));
+  testing.expectEqual(mac ? 8 : 6, gl.getParameter(gl.MAX_COLOR_ATTACHMENTS));
+  testing.expectEqual(mac ? 4294967294 : 1073741823, gl.getParameter(gl.MAX_ELEMENT_INDEX));
+  testing.expectEqual(mac ? 120 : 128, gl.getParameter(gl.MAX_FRAGMENT_INPUT_COMPONENTS));
+  testing.expectEqual(mac ? 120 : 128, gl.getParameter(gl.MAX_VERTEX_OUTPUT_COMPONENTS));
+  testing.expectEqual(mac ? 120 : 124, gl.getParameter(gl.MAX_VARYING_COMPONENTS));
+  testing.expectEqual(mac ? 16 : 14, gl.getParameter(gl.MAX_VERTEX_UNIFORM_BLOCKS));
+  testing.expectEqual(mac ? 16 : 14, gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_BLOCKS));
+  testing.expectEqual(mac ? 32 : 60, gl.getParameter(gl.MAX_COMBINED_UNIFORM_BLOCKS));
+  testing.expectEqual(mac ? 32 : 72, gl.getParameter(gl.MAX_UNIFORM_BUFFER_BINDINGS));
+  testing.expectEqual(mac ? 16384 : 65536, gl.getParameter(gl.MAX_UNIFORM_BLOCK_SIZE));
+  testing.expectEqual(mac ? 4096 : 16384, gl.getParameter(gl.MAX_VERTEX_UNIFORM_COMPONENTS));
+  testing.expectEqual(mac ? 4096 : 16384, gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_COMPONENTS));
+  testing.expectEqual(mac ? 69632 : 245760, gl.getParameter(gl.MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS));
+  testing.expectEqual(mac ? 69632 : 245760, gl.getParameter(gl.MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS));
+  testing.expectEqual(mac ? 16 : 256, gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT));
+
+  // A DRAW_BUFFERi past MAX_DRAW_BUFFERS is not a valid enum to query, and
+  // Chrome answers null rather than a slot value -- so where the list stops
+  // moves with the limit above.
   testing.expectEqual(1029, gl.getParameter(gl.DRAW_BUFFER5));
-  testing.expectEqual(null, gl.getParameter(gl.DRAW_BUFFER6));
-  testing.expectEqual(null, gl.getParameter(gl.DRAW_BUFFER7));
+  testing.expectEqual(mac ? 1029 : null, gl.getParameter(gl.DRAW_BUFFER6));
+  testing.expectEqual(mac ? 1029 : null, gl.getParameter(gl.DRAW_BUFFER7));
+  testing.expectEqual(null, gl.getParameter(gl.DRAW_BUFFER8));
 
   testing.expectEqual(true, gl.getParameter(gl.DITHER));
   testing.expectEqual(false, gl.getParameter(gl.RASTERIZER_DISCARD));
 
   const dbg = gl.getExtension("WEBGL_debug_renderer_info");
-  testing.expectEqual("Google Inc. (Google)", gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
   testing.expectEqual(
-    "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    mac ? "Google Inc. (Apple)" : "Google Inc. (Google)",
+    gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL),
+  );
+  testing.expectEqual(
+    mac
+      ? "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+      : "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
     gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL),
   );
 
@@ -72,13 +99,37 @@
   const extensions = gl.getSupportedExtensions();
 
   // 2.0 advertises a different set than 1.0: some names became core and
-  // dropped off, others only exist here.
-  testing.expectEqual(29, extensions.length);
+  // dropped off, others only exist here. Which of those the driver actually has
+  // follows the platform claim.
+  const mac = navigator.platform === "MacIntel";
+  testing.expectEqual(mac ? 36 : 29, extensions.length);
   testing.expectEqual("EXT_clip_control", extensions[0]);
   testing.expectEqual(true, extensions.includes("EXT_color_buffer_float"));
   testing.expectEqual(true, extensions.includes("WEBGL_clip_cull_distance"));
   testing.expectEqual(false, extensions.includes("ANGLE_instanced_arrays"));
   testing.expectEqual(false, extensions.includes("OES_vertex_array_object"));
+
+  // Eight names only Metal advertises here, and one only SwiftShader does.
+  for (const name of [
+    "EXT_disjoint_timer_query_webgl2",
+    "EXT_render_snorm",
+    "EXT_texture_norm16",
+    "KHR_parallel_shader_compile",
+    "WEBGL_blend_func_extended",
+    "WEBGL_compressed_texture_pvrtc",
+    "WEBGL_provoking_vertex",
+    "WEBGL_render_shared_exponent",
+  ]) {
+    testing.expectEqual(mac, extensions.includes(name));
+    testing.expectEqual(mac, gl.getExtension(name) !== null);
+  }
+  testing.expectEqual(!mac, extensions.includes("OVR_multiview2"));
+  testing.expectEqual(!mac, gl.getExtension("OVR_multiview2") !== null);
+
+  // The list stays alphabetical whichever platform it is.
+  for (let i = 1; i < extensions.length; i++) {
+    testing.expectEqual(true, extensions[i - 1] < extensions[i]);
+  }
 
   testing.expectEqual(null, gl.getExtension("ANGLE_instanced_arrays"));
   testing.expectEqual(true, gl.getExtension("EXT_color_buffer_float") !== null);
@@ -129,10 +180,14 @@
   testing.expectEqual(2, indices.length);
   testing.expectEqual(4294967295, indices[0]);
 
+  // How many multisample counts the driver offers is the driver's answer:
+  // Metal has 4x and 2x, SwiftShader only 4x.
+  const mac = navigator.platform === "MacIntel";
   const samples = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA8, gl.SAMPLES);
   testing.expectEqual(true, samples instanceof Int32Array);
+  testing.expectEqual(mac ? 2 : 1, samples.length);
   testing.expectEqual(4, samples[0]);
-  testing.expectEqual(2, samples[1]);
+  if (mac) testing.expectEqual(2, samples[1]);
 
   testing.expectEqual(9729, gl.getSamplerParameter(gl.createSampler(), gl.TEXTURE_MAG_FILTER));
 }

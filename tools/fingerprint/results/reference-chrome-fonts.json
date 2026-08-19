@@ -1,0 +1,884 @@
+{
+ "note": "Survey of what dump-fonts.mjs kept. The metrics themselves live in the generated Zig.",
+ "kept": [
+  {
+   "family": "sans-serif",
+   "resolved": "100px sans-serif"
+  },
+  {
+   "family": "serif",
+   "resolved": "100px serif"
+  },
+  {
+   "family": "monospace",
+   "resolved": "100px monospace"
+  },
+  {
+   "family": "cursive",
+   "resolved": "100px cursive"
+  },
+  {
+   "family": "fantasy",
+   "resolved": "100px fantasy"
+  },
+  {
+   "family": "system-ui",
+   "resolved": "100px system-ui"
+  },
+  {
+   "family": "Courier",
+   "resolved": "100px Courier"
+  },
+  {
+   "family": "Lucida Grande",
+   "resolved": "100px \"Lucida Grande\""
+  },
+  {
+   "family": "American Typewriter",
+   "resolved": "100px \"American Typewriter\""
+  },
+  {
+   "family": "Andale Mono",
+   "resolved": "100px \"Andale Mono\""
+  },
+  {
+   "family": "Apple LiGothic",
+   "resolved": "100px \"Apple LiGothic\""
+  },
+  {
+   "family": "Apple LiSung",
+   "resolved": "100px \"Apple LiSung\""
+  },
+  {
+   "family": "Apple SD Gothic Neo",
+   "resolved": "100px \"Apple SD Gothic Neo\""
+  },
+  {
+   "family": "Apple Symbols",
+   "resolved": "100px \"Apple Symbols\""
+  },
+  {
+   "family": "AppleGothic",
+   "resolved": "100px AppleGothic"
+  },
+  {
+   "family": "AppleMyungjo",
+   "resolved": "100px AppleMyungjo"
+  },
+  {
+   "family": "Arial",
+   "resolved": "100px Arial"
+  },
+  {
+   "family": "Arial Black",
+   "resolved": "100px \"Arial Black\""
+  },
+  {
+   "family": "Arial Narrow",
+   "resolved": "100px \"Arial Narrow\""
+  },
+  {
+   "family": "Arial Rounded MT Bold",
+   "resolved": "100px \"Arial Rounded MT Bold\""
+  },
+  {
+   "family": "Arial Unicode MS",
+   "resolved": "100px \"Arial Unicode MS\""
+  },
+  {
+   "family": "Avenir",
+   "resolved": "100px Avenir"
+  },
+  {
+   "family": "Avenir Next",
+   "resolved": "100px \"Avenir Next\""
+  },
+  {
+   "family": "Avenir Next Condensed",
+   "resolved": "100px \"Avenir Next Condensed\""
+  },
+  {
+   "family": "Ayuthaya",
+   "resolved": "100px Ayuthaya"
+  },
+  {
+   "family": "BIZ UDGothic",
+   "resolved": "100px \"BIZ UDGothic\""
+  },
+  {
+   "family": "BIZ UDMincho",
+   "resolved": "100px \"BIZ UDMincho\""
+  },
+  {
+   "family": "BM Dohyeon",
+   "resolved": "100px \"BM Dohyeon\""
+  },
+  {
+   "family": "BM Hanna 11yrs Old",
+   "resolved": "100px \"BM Hanna 11yrs Old\""
+  },
+  {
+   "family": "BM Hanna Air",
+   "resolved": "100px \"BM Hanna Air\""
+  },
+  {
+   "family": "BM Jua",
+   "resolved": "100px \"BM Jua\""
+  },
+  {
+   "family": "BM Kirang Haerang",
+   "resolved": "100px \"BM Kirang Haerang\""
+  },
+  {
+   "family": "BM Yeonsung",
+   "resolved": "100px \"BM Yeonsung\""
+  },
+  {
+   "family": "Bangla MN",
+   "resolved": "100px \"Bangla MN\""
+  },
+  {
+   "family": "Bangla Sangam MN",
+   "resolved": "100px \"Bangla Sangam MN\""
+  },
+  {
+   "family": "Baoli SC",
+   "resolved": "100px \"Baoli SC\""
+  },
+  {
+   "family": "Baskerville",
+   "resolved": "100px Baskerville"
+  },
+  {
+   "family": "BiauKaiHK",
+   "resolved": "100px BiauKaiHK"
+  },
+  {
+   "family": "Big Caslon",
+   "resolved": "100px \"Big Caslon\""
+  },
+  {
+   "family": "Bodoni 72",
+   "resolved": "100px \"Bodoni 72\""
+  },
+  {
+   "family": "Bodoni 72 Oldstyle",
+   "resolved": "100px \"Bodoni 72 Oldstyle\""
+  },
+  {
+   "family": "Bodoni 72 Smallcaps",
+   "resolved": "100px \"Bodoni 72 Smallcaps\""
+  },
+  {
+   "family": "Bradley Hand",
+   "resolved": "100px \"Bradley Hand\""
+  },
+  {
+   "family": "Brush Script MT",
+   "resolved": "100px \"Brush Script MT\""
+  },
+  {
+   "family": "Bungee",
+   "resolved": "100px Bungee"
+  },
+  {
+   "family": "Chalkboard",
+   "resolved": "100px Chalkboard"
+  },
+  {
+   "family": "Chalkboard SE",
+   "resolved": "100px \"Chalkboard SE\""
+  },
+  {
+   "family": "Chalkduster",
+   "resolved": "100px Chalkduster"
+  },
+  {
+   "family": "Charter",
+   "resolved": "100px Charter"
+  },
+  {
+   "family": "Cochin",
+   "resolved": "100px Cochin"
+  },
+  {
+   "family": "Comic Sans MS",
+   "resolved": "100px \"Comic Sans MS\""
+  },
+  {
+   "family": "Copperplate",
+   "resolved": "100px Copperplate"
+  },
+  {
+   "family": "Courier New",
+   "resolved": "100px \"Courier New\""
+  },
+  {
+   "family": "DIN Alternate",
+   "resolved": "100px \"DIN Alternate\""
+  },
+  {
+   "family": "DIN Condensed",
+   "resolved": "100px \"DIN Condensed\""
+  },
+  {
+   "family": "Devanagari Sangam MN",
+   "resolved": "100px \"Devanagari Sangam MN\""
+  },
+  {
+   "family": "Didot",
+   "resolved": "100px Didot"
+  },
+  {
+   "family": "Euphemia UCAS",
+   "resolved": "100px \"Euphemia UCAS\""
+  },
+  {
+   "family": "Futura",
+   "resolved": "100px Futura"
+  },
+  {
+   "family": "Galvji",
+   "resolved": "100px Galvji"
+  },
+  {
+   "family": "Geneva",
+   "resolved": "100px Geneva"
+  },
+  {
+   "family": "Georgia",
+   "resolved": "100px Georgia"
+  },
+  {
+   "family": "Gill Sans",
+   "resolved": "100px \"Gill Sans\""
+  },
+  {
+   "family": "Grantha Sangam MN",
+   "resolved": "100px \"Grantha Sangam MN\""
+  },
+  {
+   "family": "Gujarati Sangam MN",
+   "resolved": "100px \"Gujarati Sangam MN\""
+  },
+  {
+   "family": "GungSeo",
+   "resolved": "100px GungSeo"
+  },
+  {
+   "family": "Gurmukhi MN",
+   "resolved": "100px \"Gurmukhi MN\""
+  },
+  {
+   "family": "Gurmukhi Sangam MN",
+   "resolved": "100px \"Gurmukhi Sangam MN\""
+  },
+  {
+   "family": "Hannotate SC",
+   "resolved": "100px \"Hannotate SC\""
+  },
+  {
+   "family": "HanziPen SC",
+   "resolved": "100px \"HanziPen SC\""
+  },
+  {
+   "family": "HeadLineA",
+   "resolved": "100px HeadLineA"
+  },
+  {
+   "family": "Hei",
+   "resolved": "100px Hei"
+  },
+  {
+   "family": "Heiti SC",
+   "resolved": "100px \"Heiti SC\""
+  },
+  {
+   "family": "Helvetica Neue",
+   "resolved": "100px \"Helvetica Neue\""
+  },
+  {
+   "family": "Herculanum",
+   "resolved": "100px Herculanum"
+  },
+  {
+   "family": "Hiragino Maru Gothic ProN",
+   "resolved": "100px \"Hiragino Maru Gothic ProN\""
+  },
+  {
+   "family": "Hiragino Mincho ProN",
+   "resolved": "100px \"Hiragino Mincho ProN\""
+  },
+  {
+   "family": "Hiragino Sans",
+   "resolved": "100px \"Hiragino Sans\""
+  },
+  {
+   "family": "Hoefler Text",
+   "resolved": "100px \"Hoefler Text\""
+  },
+  {
+   "family": "Impact",
+   "resolved": "100px Impact"
+  },
+  {
+   "family": "InaiMathi",
+   "resolved": "100px InaiMathi"
+  },
+  {
+   "family": "Kai",
+   "resolved": "100px Kai"
+  },
+  {
+   "family": "Kaiti SC",
+   "resolved": "100px \"Kaiti SC\""
+  },
+  {
+   "family": "Kannada MN",
+   "resolved": "100px \"Kannada MN\""
+  },
+  {
+   "family": "Kannada Sangam MN",
+   "resolved": "100px \"Kannada Sangam MN\""
+  },
+  {
+   "family": "Kefa III",
+   "resolved": "100px \"Kefa III\""
+  },
+  {
+   "family": "Khmer MN",
+   "resolved": "100px \"Khmer MN\""
+  },
+  {
+   "family": "Khmer Sangam MN",
+   "resolved": "100px \"Khmer Sangam MN\""
+  },
+  {
+   "family": "Klee",
+   "resolved": "100px Klee"
+  },
+  {
+   "family": "Kohinoor Bangla",
+   "resolved": "100px \"Kohinoor Bangla\""
+  },
+  {
+   "family": "Kohinoor Telugu",
+   "resolved": "100px \"Kohinoor Telugu\""
+  },
+  {
+   "family": "Krungthep",
+   "resolved": "100px Krungthep"
+  },
+  {
+   "family": "Lantinghei SC",
+   "resolved": "100px \"Lantinghei SC\""
+  },
+  {
+   "family": "Lao MN",
+   "resolved": "100px \"Lao MN\""
+  },
+  {
+   "family": "Lao Sangam MN",
+   "resolved": "100px \"Lao Sangam MN\""
+  },
+  {
+   "family": "LiHei Pro",
+   "resolved": "100px \"LiHei Pro\""
+  },
+  {
+   "family": "LiSong Pro",
+   "resolved": "100px \"LiSong Pro\""
+  },
+  {
+   "family": "Libian SC",
+   "resolved": "100px \"Libian SC\""
+  },
+  {
+   "family": "LingWai SC",
+   "resolved": "100px \"LingWai SC\""
+  },
+  {
+   "family": "Luminari",
+   "resolved": "100px Luminari"
+  },
+  {
+   "family": "Malayalam MN",
+   "resolved": "100px \"Malayalam MN\""
+  },
+  {
+   "family": "Marker Felt",
+   "resolved": "100px \"Marker Felt\""
+  },
+  {
+   "family": "Microsoft Sans Serif",
+   "resolved": "100px \"Microsoft Sans Serif\""
+  },
+  {
+   "family": "Monaco",
+   "resolved": "100px Monaco"
+  },
+  {
+   "family": "Mukta Mahee",
+   "resolved": "100px \"Mukta Mahee\""
+  },
+  {
+   "family": "Myanmar MN",
+   "resolved": "100px \"Myanmar MN\""
+  },
+  {
+   "family": "Myanmar Sangam MN",
+   "resolved": "100px \"Myanmar Sangam MN\""
+  },
+  {
+   "family": "Nanum Brush Script",
+   "resolved": "100px \"Nanum Brush Script\""
+  },
+  {
+   "family": "Nanum Gothic",
+   "resolved": "100px \"Nanum Gothic\""
+  },
+  {
+   "family": "Nanum Myeongjo",
+   "resolved": "100px \"Nanum Myeongjo\""
+  },
+  {
+   "family": "Nanum Pen Script",
+   "resolved": "100px \"Nanum Pen Script\""
+  },
+  {
+   "family": "Noteworthy",
+   "resolved": "100px Noteworthy"
+  },
+  {
+   "family": "Optima",
+   "resolved": "100px Optima"
+  },
+  {
+   "family": "Oriya MN",
+   "resolved": "100px \"Oriya MN\""
+  },
+  {
+   "family": "Oriya Sangam MN",
+   "resolved": "100px \"Oriya Sangam MN\""
+  },
+  {
+   "family": "Osaka",
+   "resolved": "100px Osaka"
+  },
+  {
+   "family": "PCMyungjo",
+   "resolved": "100px PCMyungjo"
+  },
+  {
+   "family": "PT Mono",
+   "resolved": "100px \"PT Mono\""
+  },
+  {
+   "family": "PT Sans",
+   "resolved": "100px \"PT Sans\""
+  },
+  {
+   "family": "PT Sans Caption",
+   "resolved": "100px \"PT Sans Caption\""
+  },
+  {
+   "family": "PT Sans Narrow",
+   "resolved": "100px \"PT Sans Narrow\""
+  },
+  {
+   "family": "PT Serif",
+   "resolved": "100px \"PT Serif\""
+  },
+  {
+   "family": "PT Serif Caption",
+   "resolved": "100px \"PT Serif Caption\""
+  },
+  {
+   "family": "Palatino",
+   "resolved": "100px Palatino"
+  },
+  {
+   "family": "Phosphate",
+   "resolved": "100px Phosphate"
+  },
+  {
+   "family": "PilGi",
+   "resolved": "100px PilGi"
+  },
+  {
+   "family": "PingFang HK",
+   "resolved": "100px \"PingFang HK\""
+  },
+  {
+   "family": "Plantagenet Cherokee",
+   "resolved": "100px \"Plantagenet Cherokee\""
+  },
+  {
+   "family": "Rockwell",
+   "resolved": "100px Rockwell"
+  },
+  {
+   "family": "STFangsong",
+   "resolved": "100px STFangsong"
+  },
+  {
+   "family": "STHeiti",
+   "resolved": "100px STHeiti"
+  },
+  {
+   "family": "STIX Two Math",
+   "resolved": "100px \"STIX Two Math\""
+  },
+  {
+   "family": "STIX Two Text",
+   "resolved": "100px \"STIX Two Text\""
+  },
+  {
+   "family": "STKaiti",
+   "resolved": "100px STKaiti"
+  },
+  {
+   "family": "STSong",
+   "resolved": "100px STSong"
+  },
+  {
+   "family": "Sathu",
+   "resolved": "100px Sathu"
+  },
+  {
+   "family": "Shree Devanagari 714",
+   "resolved": "100px \"Shree Devanagari 714\""
+  },
+  {
+   "family": "Silom",
+   "resolved": "100px Silom"
+  },
+  {
+   "family": "SimSong",
+   "resolved": "100px SimSong"
+  },
+  {
+   "family": "Sinhala MN",
+   "resolved": "100px \"Sinhala MN\""
+  },
+  {
+   "family": "Sinhala Sangam MN",
+   "resolved": "100px \"Sinhala Sangam MN\""
+  },
+  {
+   "family": "Skia",
+   "resolved": "100px Skia"
+  },
+  {
+   "family": "Snell Roundhand",
+   "resolved": "100px \"Snell Roundhand\""
+  },
+  {
+   "family": "Songti SC",
+   "resolved": "100px \"Songti SC\""
+  },
+  {
+   "family": "Sukhumvit Set",
+   "resolved": "100px \"Sukhumvit Set\""
+  },
+  {
+   "family": "Tahoma",
+   "resolved": "100px Tahoma"
+  },
+  {
+   "family": "Tamil MN",
+   "resolved": "100px \"Tamil MN\""
+  },
+  {
+   "family": "Tamil Sangam MN",
+   "resolved": "100px \"Tamil Sangam MN\""
+  },
+  {
+   "family": "Telugu MN",
+   "resolved": "100px \"Telugu MN\""
+  },
+  {
+   "family": "Telugu Sangam MN",
+   "resolved": "100px \"Telugu Sangam MN\""
+  },
+  {
+   "family": "Thonburi",
+   "resolved": "100px Thonburi"
+  },
+  {
+   "family": "Times New Roman",
+   "resolved": "100px \"Times New Roman\""
+  },
+  {
+   "family": "Toppan Bunkyu Gothic",
+   "resolved": "100px \"Toppan Bunkyu Gothic\""
+  },
+  {
+   "family": "Toppan Bunkyu Midashi Gothic",
+   "resolved": "100px \"Toppan Bunkyu Midashi Gothic\""
+  },
+  {
+   "family": "Toppan Bunkyu Midashi Mincho",
+   "resolved": "100px \"Toppan Bunkyu Midashi Mincho\""
+  },
+  {
+   "family": "Toppan Bunkyu Mincho",
+   "resolved": "100px \"Toppan Bunkyu Mincho\""
+  },
+  {
+   "family": "Trattatello",
+   "resolved": "100px Trattatello"
+  },
+  {
+   "family": "Trebuchet MS",
+   "resolved": "100px \"Trebuchet MS\""
+  },
+  {
+   "family": "Tsukushi A Round Gothic",
+   "resolved": "100px \"Tsukushi A Round Gothic\""
+  },
+  {
+   "family": "Tsukushi B Round Gothic",
+   "resolved": "100px \"Tsukushi B Round Gothic\""
+  },
+  {
+   "family": "Verdana",
+   "resolved": "100px Verdana"
+  },
+  {
+   "family": "Wawati SC",
+   "resolved": "100px \"Wawati SC\""
+  },
+  {
+   "family": "Webdings",
+   "resolved": "100px Webdings"
+  },
+  {
+   "family": "Weibei SC",
+   "resolved": "100px \"Weibei SC\""
+  },
+  {
+   "family": "Wingdings",
+   "resolved": "100px Wingdings"
+  },
+  {
+   "family": "Wingdings 2",
+   "resolved": "100px \"Wingdings 2\""
+  },
+  {
+   "family": "Wingdings 3",
+   "resolved": "100px \"Wingdings 3\""
+  },
+  {
+   "family": "Xingkai SC",
+   "resolved": "100px \"Xingkai SC\""
+  },
+  {
+   "family": "YuGothic",
+   "resolved": "100px YuGothic"
+  },
+  {
+   "family": "YuKyokasho",
+   "resolved": "100px YuKyokasho"
+  },
+  {
+   "family": "YuMincho",
+   "resolved": "100px YuMincho"
+  },
+  {
+   "family": "Yuanti SC",
+   "resolved": "100px \"Yuanti SC\""
+  },
+  {
+   "family": "Yuppy SC",
+   "resolved": "100px \"Yuppy SC\""
+  },
+  {
+   "family": "Zapfino",
+   "resolved": "100px Zapfino"
+  }
+ ],
+ "aliases": [
+  [
+   "BlinkMacSystemFont",
+   "system-ui"
+  ],
+  [
+   "Times",
+   "serif"
+  ],
+  [
+   "Apple Chancery",
+   "cursive"
+  ],
+  [
+   "BM Hanna Pro",
+   "BM Hanna 11yrs Old"
+  ],
+  [
+   "Baoli TC",
+   "Baoli SC"
+  ],
+  [
+   "BiauKaiTC",
+   "BiauKaiHK"
+  ],
+  [
+   "Hannotate TC",
+   "Hannotate SC"
+  ],
+  [
+   "HanziPen TC",
+   "HanziPen SC"
+  ],
+  [
+   "Heiti TC",
+   "Heiti SC"
+  ],
+  [
+   "Helvetica",
+   "sans-serif"
+  ],
+  [
+   "Hiragino Sans GB",
+   "Hiragino Sans"
+  ],
+  [
+   "Kaiti TC",
+   "Kaiti SC"
+  ],
+  [
+   "Kohinoor Devanagari",
+   "Kohinoor Bangla"
+  ],
+  [
+   "Lantinghei TC",
+   "Lantinghei SC"
+  ],
+  [
+   "Libian TC",
+   "Libian SC"
+  ],
+  [
+   "LingWai TC",
+   "LingWai SC"
+  ],
+  [
+   "Malayalam Sangam MN",
+   "Bangla Sangam MN"
+  ],
+  [
+   "Menlo",
+   "monospace"
+  ],
+  [
+   "Papyrus",
+   "fantasy"
+  ],
+  [
+   "PingFang MO",
+   "PingFang HK"
+  ],
+  [
+   "PingFang SC",
+   "PingFang HK"
+  ],
+  [
+   "PingFang TC",
+   "PingFang HK"
+  ],
+  [
+   "Songti TC",
+   "Songti SC"
+  ],
+  [
+   "Wawati TC",
+   "Wawati SC"
+  ],
+  [
+   "Weibei TC",
+   "Weibei SC"
+  ],
+  [
+   "Xingkai TC",
+   "Xingkai SC"
+  ],
+  [
+   "YuKyokasho Yoko",
+   "YuKyokasho"
+  ],
+  [
+   "YuMincho +36p Kana",
+   "YuMincho"
+  ],
+  [
+   "Yuanti TC",
+   "Yuanti SC"
+  ],
+  [
+   "Yuppy TC",
+   "Yuppy SC"
+  ]
+ ],
+ "unresolved": [
+  "ui-serif",
+  "ui-sans-serif",
+  "ui-monospace",
+  "ui-rounded",
+  "-apple-system"
+ ],
+ "partial": [
+  "Academy Engraved LET",
+  "Al Bayan",
+  "Al Nile",
+  "Al Tarikh",
+  "Apple Braille",
+  "Apple Color Emoji",
+  "Arial Hebrew",
+  "Arial Hebrew Scholar",
+  "Baghdad",
+  "Beirut",
+  "Bodoni Ornaments",
+  "Corsiva Hebrew",
+  "Damascus",
+  "DecoType Naskh",
+  "Devanagari MT",
+  "Diwan Kufi",
+  "Diwan Thuluth",
+  "Farah",
+  "Farisi",
+  "GB18030 Bitmap",
+  "Geeza Pro",
+  "Gujarati MT",
+  "Gurmukhi MT",
+  "ITF Devanagari",
+  "ITF Devanagari Marathi",
+  "Kailasa",
+  "Kohinoor Gujarati",
+  "Kokonor",
+  "KufiStandardGK",
+  "Mishafi",
+  "Mishafi Gold",
+  "Mshtakan",
+  "Muna",
+  "Nadeem",
+  "New Peninim MT",
+  "Noto Nastaliq Urdu",
+  "Noto Sans Batak",
+  "Noto Sans Kannada",
+  "Noto Sans Myanmar",
+  "Noto Sans NKo",
+  "Noto Sans Oriya",
+  "Noto Sans Syriac",
+  "Noto Sans Tagalog",
+  "Noto Serif Myanmar",
+  "Party LET",
+  "Raanana",
+  "Sana",
+  "Savoye LET",
+  "SignPainter",
+  "Symbol",
+  "Waseem",
+  "Zapf Dingbats"
+ ]
+}

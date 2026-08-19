@@ -63,23 +63,28 @@
 
   function runVoiceChecks(voices) {
   testing.expectEqual(true, window.__voicesChanged);
-  testing.expectEqual(19, voices.length);
+  testing.expectEqual(199, voices.length);
   testing.expectEqual('[object SpeechSynthesisVoice]', Object.prototype.toString.call(voices[0]));
-  testing.expectEqual('Google Deutsch', voices[0].name);
-  testing.expectEqual('Google Deutsch', voices[0].voiceURI);
-  testing.expectEqual('de-DE', voices[0].lang);
-  testing.expectEqual(false, voices[0].localService);
+  // The default voice comes first, and on macOS that is a local one.
+  testing.expectEqual('Samantha', voices[0].name);
+  testing.expectEqual('Samantha', voices[0].voiceURI);
+  testing.expectEqual('en-US', voices[0].lang);
+  testing.expectEqual(true, voices[0].localService);
   testing.expectEqual(true, voices[0].default);
 
-  // Exactly one default voice, and every one of them remote: a Linux Chrome
-  // with no speech-dispatcher behind it has no local voices to list, which is
-  // measured rather than chosen (G21 P4) and is a known tell — CreepJS reads
-  // zero local voices the same way it reads an empty list.
+  // Exactly one default, and the list is the system's 180 local voices followed
+  // by Chrome's 19 remote Google ones. Which of those two blocks exists at all
+  // is the platform's answer: the Linux container has no speech-dispatcher and
+  // so lists only the 19 remote ones, which CreepJS reads the same way it reads
+  // an empty list. The claim is macOS, so the table is the Mac's.
   testing.expectEqual(1, voices.filter((v) => v.default).length);
-  testing.expectEqual(0, voices.filter((v) => v.localService).length);
+  testing.expectEqual(180, voices.filter((v) => v.localService).length);
   testing.expectEqual(19, voices.filter((v) => !v.localService).length);
-  testing.expectEqual('Google 國語（臺灣）', voices[18].name);
-  testing.expectEqual(18, new Set(voices.map((v) => v.lang)).size);
+  // The remote block is contiguous and last, the way Chrome orders it.
+  testing.expectEqual('Google Deutsch', voices[180].name);
+  testing.expectEqual('Google 國語（臺灣）', voices[198].name);
+  testing.expectEqual(180, voices.findIndex((v) => !v.localService));
+  testing.expectEqual(51, new Set(voices.map((v) => v.lang)).size);
 
   // Identity is stable across calls: scripts compare voices with ===.
   testing.expectEqual(true, speechSynthesis.getVoices()[3] === voices[3]);
@@ -132,7 +137,7 @@
     testing.expectEqual(0, fresh.ctorLength);
     testing.expectEqual('', fresh.noArgText);
 
-    testing.expectEqual(['world', 'en-GB', 0.5, 2, 0.25, 'Google US English'], written);
+    testing.expectEqual(['world', 'en-GB', 0.5, 2, 0.25, 'Albert'], written);
 
     testing.expectEqual(
       ['constructor', 'lang', 'onboundary', 'onend', 'onerror', 'onmark', 'onpause', 'onresume', 'onstart', 'pitch', 'rate', 'text', 'voice', 'volume'],

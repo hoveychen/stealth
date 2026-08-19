@@ -30,6 +30,8 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const objects = @import("webgl_objects.zig");
+const gpu_table = @import("gpu.zig");
+const gpu = gpu_table.gpu;
 const DOMException = @import("../DOMException.zig");
 const WebGL1 = @import("WebGLRenderingContext.zig");
 
@@ -609,30 +611,38 @@ pub const TEXTURE_IMMUTABLE_LEVELS: u32 = 0x82DF;
 pub const TIMEOUT_IGNORED: f64 = -1;
 pub const MAX_CLIENT_WAIT_TIMEOUT_WEBGL: u32 = 0x9247;
 
-/// WebGL 2.0 advertises a different extension set than 1.0 does — 13 names it
-/// adds, 16 it drops because they became core. Order is Chrome's.
+/// WebGL 2.0 advertises a different extension set than 1.0 does — names it adds,
+/// and names it drops because they became core. Order is Chrome's, which is
+/// alphabetical. This is the union of both reference drivers; which of them the
+/// claimed one actually has is `advertised_extension_names` below.
 const extension_names = [_][]const u8{
     "EXT_clip_control",
     "EXT_color_buffer_float",
     "EXT_color_buffer_half_float",
     "EXT_conservative_depth",
     "EXT_depth_clamp",
+    "EXT_disjoint_timer_query_webgl2",
     "EXT_float_blend",
     "EXT_polygon_offset_clamp",
+    "EXT_render_snorm",
     "EXT_texture_compression_bptc",
     "EXT_texture_compression_rgtc",
     "EXT_texture_filter_anisotropic",
     "EXT_texture_mirror_clamp_to_edge",
+    "EXT_texture_norm16",
+    "KHR_parallel_shader_compile",
     "NV_shader_noperspective_interpolation",
     "OES_draw_buffers_indexed",
     "OES_sample_variables",
     "OES_shader_multisample_interpolation",
     "OES_texture_float_linear",
     "OVR_multiview2",
+    "WEBGL_blend_func_extended",
     "WEBGL_clip_cull_distance",
     "WEBGL_compressed_texture_astc",
     "WEBGL_compressed_texture_etc",
     "WEBGL_compressed_texture_etc1",
+    "WEBGL_compressed_texture_pvrtc",
     "WEBGL_compressed_texture_s3tc",
     "WEBGL_compressed_texture_s3tc_srgb",
     "WEBGL_debug_renderer_info",
@@ -640,6 +650,8 @@ const extension_names = [_][]const u8{
     "WEBGL_lose_context",
     "WEBGL_multi_draw",
     "WEBGL_polygon_mode",
+    "WEBGL_provoking_vertex",
+    "WEBGL_render_shared_exponent",
     "WEBGL_stencil_texturing",
 };
 
@@ -652,13 +664,17 @@ const Extension = union(enum) {
     supported: struct {},
 };
 
+/// The subset the claimed platform's driver has: eight of the names above are
+/// Apple-GPU only, and OVR_multiview2 is SwiftShader-only.
+const advertised_extension_names = gpu_table.advertised(&extension_names, gpu.webgl2_unsupported);
+
 pub fn getSupportedExtensions(_: *const WebGL2RenderingContext) []const []const u8 {
-    return &extension_names;
+    return advertised_extension_names;
 }
 
 pub fn getExtension(_: *const WebGL2RenderingContext, name: []const u8, exec: *Execution) !?Extension {
     var supported = false;
-    for (extension_names) |candidate| {
+    for (advertised_extension_names) |candidate| {
         if (std.ascii.eqlIgnoreCase(candidate, name)) {
             supported = true;
             break;
@@ -748,7 +764,7 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         STENCIL_BACK_WRITEMASK => .{ .number = 4294967295 },
         UNPACK_ALIGNMENT => .{ .number = 4 },
         PACK_ALIGNMENT => .{ .number = 4 },
-        MAX_TEXTURE_SIZE => .{ .number = 8192 },
+        MAX_TEXTURE_SIZE => .{ .number = gpu.max_texture_size },
         SUBPIXEL_BITS => .{ .number = 4 },
         RED_BITS => .{ .number = 8 },
         GREEN_BITS => .{ .number = 8 },
@@ -763,17 +779,17 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         SAMPLE_COVERAGE_VALUE => .{ .number = 1 },
         GENERATE_MIPMAP_HINT => .{ .number = 4352 },
         MAX_VERTEX_ATTRIBS => .{ .number = 16 },
-        MAX_VERTEX_UNIFORM_VECTORS => .{ .number = 4096 },
-        MAX_VARYING_VECTORS => .{ .number = 31 },
-        MAX_COMBINED_TEXTURE_IMAGE_UNITS => .{ .number = 64 },
-        MAX_VERTEX_TEXTURE_IMAGE_UNITS => .{ .number = 32 },
-        MAX_TEXTURE_IMAGE_UNITS => .{ .number = 32 },
-        MAX_FRAGMENT_UNIFORM_VECTORS => .{ .number = 4096 },
+        MAX_VERTEX_UNIFORM_VECTORS => .{ .number = gpu.max_vertex_uniform_vectors },
+        MAX_VARYING_VECTORS => .{ .number = gpu.max_varying_vectors },
+        MAX_COMBINED_TEXTURE_IMAGE_UNITS => .{ .number = gpu.max_combined_texture_image_units },
+        MAX_VERTEX_TEXTURE_IMAGE_UNITS => .{ .number = gpu.max_vertex_texture_image_units },
+        MAX_TEXTURE_IMAGE_UNITS => .{ .number = gpu.max_texture_image_units },
+        MAX_FRAGMENT_UNIFORM_VECTORS => .{ .number = gpu.max_fragment_uniform_vectors },
         MAX_CUBE_MAP_TEXTURE_SIZE => .{ .number = 16384 },
         ACTIVE_TEXTURE => .{ .number = 33984 },
         IMPLEMENTATION_COLOR_READ_TYPE => .{ .number = 5121 },
         IMPLEMENTATION_COLOR_READ_FORMAT => .{ .number = 6408 },
-        MAX_RENDERBUFFER_SIZE => .{ .number = 8192 },
+        MAX_RENDERBUFFER_SIZE => .{ .number = gpu.max_renderbuffer_size },
         UNPACK_COLORSPACE_CONVERSION_WEBGL => .{ .number = 37444 },
         READ_BUFFER => .{ .number = 1029 },
         UNPACK_ROW_LENGTH => .{ .number = 0 },
@@ -788,40 +804,40 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         MAX_ELEMENTS_VERTICES => .{ .number = 2147483647 },
         MAX_ELEMENTS_INDICES => .{ .number = 2147483647 },
         MAX_TEXTURE_LOD_BIAS => .{ .number = 15 },
-        MAX_DRAW_BUFFERS => .{ .number = 6 },
-        // Only as many slots as MAX_DRAW_BUFFERS: querying DRAW_BUFFER6 or
-        // DRAW_BUFFER7 on a six-buffer context is not a valid enum, and Chrome
-        // answers null rather than a slot value (measured).
-        DRAW_BUFFER0 => .{ .number = 1029 },
-        DRAW_BUFFER1 => .{ .number = 1029 },
-        DRAW_BUFFER2 => .{ .number = 1029 },
-        DRAW_BUFFER3 => .{ .number = 1029 },
-        DRAW_BUFFER4 => .{ .number = 1029 },
-        DRAW_BUFFER5 => .{ .number = 1029 },
-        MAX_FRAGMENT_UNIFORM_COMPONENTS => .{ .number = 16384 },
-        MAX_VERTEX_UNIFORM_COMPONENTS => .{ .number = 16384 },
+        MAX_DRAW_BUFFERS => .{ .number = gpu.max_draw_buffers },
+        // Only as many slots as MAX_DRAW_BUFFERS: querying DRAW_BUFFER6 on a
+        // six-buffer context is not a gettable state variable, and Chrome
+        // answers null rather than a slot value (measured). Where the run stops
+        // therefore moves with the limit above -- six slots on SwiftShader,
+        // eight on Metal.
+        DRAW_BUFFER0...DRAW_BUFFER15 => if (pname - DRAW_BUFFER0 < gpu.max_draw_buffers)
+            .{ .number = 1029 }
+        else
+            null,
+        MAX_FRAGMENT_UNIFORM_COMPONENTS => .{ .number = gpu.max_fragment_uniform_components },
+        MAX_VERTEX_UNIFORM_COMPONENTS => .{ .number = gpu.max_vertex_uniform_components },
         FRAGMENT_SHADER_DERIVATIVE_HINT => .{ .number = 4352 },
         MAX_ARRAY_TEXTURE_LAYERS => .{ .number = 2048 },
         MIN_PROGRAM_TEXEL_OFFSET => .{ .number = -8 },
         MAX_PROGRAM_TEXEL_OFFSET => .{ .number = 7 },
-        MAX_VARYING_COMPONENTS => .{ .number = 124 },
+        MAX_VARYING_COMPONENTS => .{ .number = gpu.max_varying_components },
         MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS => .{ .number = 4 },
         MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS => .{ .number = 128 },
         MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS => .{ .number = 4 },
-        MAX_COLOR_ATTACHMENTS => .{ .number = 6 },
+        MAX_COLOR_ATTACHMENTS => .{ .number = gpu.max_color_attachments },
         MAX_SAMPLES => .{ .number = 4 },
-        MAX_VERTEX_UNIFORM_BLOCKS => .{ .number = 14 },
-        MAX_FRAGMENT_UNIFORM_BLOCKS => .{ .number = 14 },
-        MAX_COMBINED_UNIFORM_BLOCKS => .{ .number = 60 },
-        MAX_UNIFORM_BUFFER_BINDINGS => .{ .number = 72 },
-        MAX_UNIFORM_BLOCK_SIZE => .{ .number = 65536 },
-        MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS => .{ .number = 245760 },
-        MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS => .{ .number = 245760 },
-        UNIFORM_BUFFER_OFFSET_ALIGNMENT => .{ .number = 256 },
-        MAX_VERTEX_OUTPUT_COMPONENTS => .{ .number = 128 },
-        MAX_FRAGMENT_INPUT_COMPONENTS => .{ .number = 128 },
+        MAX_VERTEX_UNIFORM_BLOCKS => .{ .number = gpu.max_vertex_uniform_blocks },
+        MAX_FRAGMENT_UNIFORM_BLOCKS => .{ .number = gpu.max_fragment_uniform_blocks },
+        MAX_COMBINED_UNIFORM_BLOCKS => .{ .number = gpu.max_combined_uniform_blocks },
+        MAX_UNIFORM_BUFFER_BINDINGS => .{ .number = gpu.max_uniform_buffer_bindings },
+        MAX_UNIFORM_BLOCK_SIZE => .{ .number = gpu.max_uniform_block_size },
+        MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS => .{ .number = gpu.max_combined_vertex_uniform_components },
+        MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS => .{ .number = gpu.max_combined_fragment_uniform_components },
+        UNIFORM_BUFFER_OFFSET_ALIGNMENT => .{ .number = gpu.uniform_buffer_offset_alignment },
+        MAX_VERTEX_OUTPUT_COMPONENTS => .{ .number = gpu.max_vertex_output_components },
+        MAX_FRAGMENT_INPUT_COMPONENTS => .{ .number = gpu.max_fragment_input_components },
         MAX_SERVER_WAIT_TIMEOUT => .{ .number = 0 },
-        MAX_ELEMENT_INDEX => .{ .number = 1073741823 },
+        MAX_ELEMENT_INDEX => .{ .number = gpu.max_element_index },
         MAX_CLIENT_WAIT_TIMEOUT_WEBGL => .{ .number = 0 },
         SHADING_LANGUAGE_VERSION => .{ .string = "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)" },
         VENDOR => .{ .string = "WebKit" },
@@ -844,17 +860,17 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         TRANSFORM_FEEDBACK_PAUSED => .{ .boolean = false },
         TRANSFORM_FEEDBACK_ACTIVE => .{ .boolean = false },
         BLEND_COLOR => floatArray(exec, &.{ 0, 0, 0, 0 }),
-        ALIASED_POINT_SIZE_RANGE => floatArray(exec, &.{ 1, 1023 }),
+        ALIASED_POINT_SIZE_RANGE => floatArray(exec, &.{ 1, gpu.aliased_point_size_max }),
         ALIASED_LINE_WIDTH_RANGE => floatArray(exec, &.{ 1, 1 }),
         DEPTH_RANGE => floatArray(exec, &.{ 0, 1 }),
         COLOR_CLEAR_VALUE => floatArray(exec, &.{ 0, 0, 0, 0 }),
-        MAX_VIEWPORT_DIMS => intArray(exec, &.{ 8192, 8192 }),
+        MAX_VIEWPORT_DIMS => intArray(exec, &.{ gpu.max_viewport_dim, gpu.max_viewport_dim }),
         COMPRESSED_TEXTURE_FORMATS => uintArray(exec, &.{}),
         COLOR_WRITEMASK => .{ .booleans = &.{ true, true, true, true } },
         // The viewport and scissor box default to the whole drawing buffer.
         VIEWPORT, SCISSOR_BOX => intArray(exec, &.{ 0, 0, @intCast(self._canvas.width()), @intCast(self._canvas.height()) }),
-        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => .{ .string = "Google Inc. (Google)" },
-        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)" },
+        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_VENDOR_WEBGL => .{ .string = gpu.unmasked_vendor },
+        WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = gpu.unmasked_renderer },
         else => null,
     };
 }
@@ -1063,8 +1079,12 @@ pub fn getShaderPrecisionFormat(
     exec: *Execution,
 ) !?*objects.WebGLShaderPrecisionFormat {
     const format: objects.WebGLShaderPrecisionFormat = switch (precision_type) {
-        LOW_FLOAT, MEDIUM_FLOAT, HIGH_FLOAT => .float,
-        LOW_INT, MEDIUM_INT, HIGH_INT => .int,
+        LOW_FLOAT => .from(gpu.low_float),
+        MEDIUM_FLOAT => .from(gpu.medium_float),
+        HIGH_FLOAT => .from(gpu.high_float),
+        LOW_INT => .from(gpu.low_int),
+        MEDIUM_INT => .from(gpu.medium_int),
+        HIGH_INT => .from(gpu.high_int),
         else => return null,
     };
     return try exec._factory.create(format);
@@ -1167,7 +1187,7 @@ pub fn getInternalformatParameter(_: *const WebGL2RenderingContext, _: u32, _: u
     if (pname != SAMPLES) {
         return null;
     }
-    return intArray(exec, &.{ 4, 2 });
+    return intArray(exec, gpu.internalformat_samples);
 }
 
 const ContextAttributes = struct {

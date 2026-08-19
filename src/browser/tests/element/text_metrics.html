@@ -78,6 +78,73 @@
 }
 </script>
 
+<script id="font_enumeration_matches_the_reference_chrome">
+{
+  // The 65 names fingerprintjs2 shipped, which is still the list most probes
+  // use, and the 26 of them the real macOS Chrome on the reference host detects.
+  // Both measured, not chosen: tools/fingerprint/dump-fonts.mjs records the
+  // table, and the same probe run against that Chrome produces exactly this set.
+  // What the engine answers here IS its font list, so matching the set name for
+  // name is the whole of the test -- detecting one extra is as wrong as missing
+  // one, and an earlier table detected Arial Hebrew, which Chrome does not.
+  const CANDIDATES = [
+    'Andale Mono', 'Arial', 'Arial Black', 'Arial Hebrew', 'Arial MT', 'Arial Narrow',
+    'Arial Rounded MT Bold', 'Arial Unicode MS', 'Bitstream Vera Sans Mono', 'Book Antiqua',
+    'Bookman Old Style', 'Calibri', 'Cambria', 'Cambria Math', 'Century', 'Century Gothic',
+    'Century Schoolbook', 'Comic Sans', 'Comic Sans MS', 'Consolas', 'Courier', 'Courier New',
+    'Geneva', 'Georgia', 'Helvetica', 'Helvetica Neue', 'Impact', 'Lucida Bright',
+    'Lucida Calligraphy', 'Lucida Console', 'Lucida Fax', 'LUCIDA GRANDE', 'Lucida Handwriting',
+    'Lucida Sans', 'Lucida Sans Typewriter', 'Lucida Sans Unicode', 'Microsoft Sans Serif',
+    'Monaco', 'Monotype Corsiva', 'MS Gothic', 'MS Outlook', 'MS PGothic',
+    'MS Reference Sans Serif', 'MS Sans Serif', 'MS Serif', 'MYRIAD', 'MYRIAD PRO', 'Palatino',
+    'Palatino Linotype', 'Segoe Print', 'Segoe Script', 'Segoe UI', 'Segoe UI Light',
+    'Segoe UI Semibold', 'Segoe UI Symbol', 'Tahoma', 'Times', 'Times New Roman',
+    'Times New Roman PS', 'Trebuchet MS', 'Verdana', 'Wingdings', 'Wingdings 2', 'Wingdings 3',
+  ];
+  const EXPECTED = [
+    'Andale Mono', 'Arial', 'Arial Black', 'Arial Narrow', 'Arial Rounded MT Bold',
+    'Arial Unicode MS', 'Comic Sans MS', 'Courier', 'Courier New', 'Geneva', 'Georgia',
+    'Helvetica', 'Helvetica Neue', 'Impact', 'LUCIDA GRANDE', 'Microsoft Sans Serif', 'Monaco',
+    'Palatino', 'Tahoma', 'Times', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Wingdings',
+    'Wingdings 2', 'Wingdings 3',
+  ];
+
+  const span = document.createElement('span');
+  span.style.cssText = 'position:absolute;left:-9999px;font-size:72px;white-space:nowrap;';
+  span.textContent = 'mmmmmmmmmmlli';
+  document.body.appendChild(span);
+  const ctx = document.createElement('canvas').getContext('2d');
+
+  // Three bases, the way the real probes do it: each generic has a blind spot for
+  // the family it is itself resolved from -- 'Times' hides behind serif, 'Menlo'
+  // behind monospace -- so a name counts as present if any base moves.
+  const BASES = ['monospace', 'sans-serif', 'serif'];
+  const detected = { dom: [], canvas: [] };
+  for (const name of CANDIDATES) {
+    let dom = false;
+    let canvas = false;
+    for (const base of BASES) {
+      span.style.fontFamily = base;
+      const domBase = span.offsetWidth;
+      span.style.fontFamily = '"' + name + '", ' + base;
+      if (span.offsetWidth !== domBase) dom = true;
+
+      ctx.font = '72px ' + base;
+      const canvasBase = ctx.measureText('mmmmmmmmmmlli').width;
+      ctx.font = '72px "' + name + '", ' + base;
+      if (ctx.measureText('mmmmmmmmmmlli').width !== canvasBase) canvas = true;
+    }
+    if (dom) detected.dom.push(name);
+    if (canvas) detected.canvas.push(name);
+  }
+
+  testing.expectEqual(EXPECTED, detected.canvas);
+  // The DOM route has to answer the same set: a fingerprint that reads both and
+  // gets two different font lists has found the engine.
+  testing.expectEqual(EXPECTED, detected.dom);
+}
+</script>
+
 <script id="offset_width_agrees_with_measure_text">
 {
   // Both routes resolve the family through the same measured tables, so a

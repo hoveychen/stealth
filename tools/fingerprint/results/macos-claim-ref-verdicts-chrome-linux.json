@@ -1,0 +1,54 @@
+{
+ "sannysoft": [
+  "WebDriver",
+  "missing (passed)",
+  "WebDriver Advanced passed",
+  "present (passed)",
+  "Plugins is of type PluginArray passed",
+  "\"webdriver~~~function get webdriver() { [native code] }\",",
+  "\"selenium\": [",
+  "\"webDriver\": true,"
+ ],
+ "creepjs": [
+  "44% like headless: 28f22dbe",
+  "0% headless: 52defe05",
+  "0% stealth: 295d4148"
+ ],
+ "iphey": [
+  "Bot Check",
+  "BOT",
+  "BOT"
+ ],
+ "pixelscan": [
+  "Bot Verification",
+  "Verify that a user is a human",
+  "Bot Verification",
+  "Verify that user is a human",
+  "Pixelscan runs a full set of stealth and privacy diagnostics in one click, including:",
+  "Bot checker - Detects headless browsers and automation traces",
+  "Bot Checker"
+ ],
+ "rebrowser": [
+  "🕵️ rebrowser-bot-detector",
+  "Modern tests to detect automated browser behavior. See github repo for more details. How to properly run the tests?",
+  "🟢 runtimeEnableLeak 76 ms No leak detected.",
+  "🟢 navigatorWebdriver 121.2 ms No webdriver presented.",
+  "🟢 viewport 274.6 ms Viewport is different from default values used in automation libraries.",
+  "🟢 pwInitScripts 282.3 ms No window.__pwInitScripts detected.",
+  "Sponsored by rebrowser.net — the ultimate stealth browser and scraping solution fueled by AI."
+ ],
+ "areyouheadless": [],
+ "deviceinfo": [
+  "Not detected",
+  "None detected",
+  "Detected",
+  "Spoofed",
+  "None detected",
+  "None detected",
+  "None detected",
+  "None detected",
+  "1920 x 1080 (pixels) (Spoofed)",
+  "16:9 (Spoofed)",
+  "1920 x 1080 (pixels) (Spoofed)"
+ ]
+}

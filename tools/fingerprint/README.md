@@ -3080,3 +3080,276 @@ a plausible list rather than the empty-string hash.
   `## G5`. They land within a few pixels of the container's Chrome, which is
   reassuring and not the same as being right — the sans-serif and serif base
   widths match it exactly, monospace is two pixels wide.
+
+## The platform claim, before touching it
+
+The engine claims Linux (`src/claimed_platform.zig`), while two of its measured
+tables — `font_metrics.zig` and `emoji_metrics.zig` — were recorded from the
+macOS Chrome on this machine. The question this experiment asks is whether
+claiming macOS and recording *every* surface from that same Chrome reads as more
+plausible than the split we have. Before changing anything, what the three
+detectors that produce a readable verdict actually say:
+
+| | lightpanda (claims Linux) | reference Chrome, Linux container | reference Chrome, macOS |
+|---|---|---|---|
+| browserscan score | **95%** | 90% | **100%** |
+| browserscan warnings | `WebGL exception -5%` | timezone only | none |
+| browserscan flagged rows | 2 (`Unmasked Vendor`, `Unmasked Renderer`) | — | **0** |
+| browserscan rows read | 56 | — | 58 |
+| browserscan `Fonts` | `8533CA74` (10) | `6C722935` (13) | `A6BE88C9` (342) |
+| CreepJS like-headless | **38%** | 44% | **38%** |
+| CreepJS headless / stealth | 0% / 0% | 0% / 0% | 0% / 0% |
+| iphey headline | **no verdict at all** | no `Trustworthy` | `Trustworthy` |
+
+Three things fall out of that column, and two of them cut against the
+experiment's premise:
+
+**CreepJS is already at the macOS Chrome number.** 38% like-headless, while
+claiming Linux, on tables recorded from macOS — the same 38% the real macOS
+Chrome scores, and better than the real Linux Chrome's 44%. Whatever CreepJS is
+scoring, the platform claim is not an input to it. A macOS claim cannot improve
+this row; it can only hold or break it.
+
+**browserscan's whole remaining deduction is the renderer pair.** One warning,
+`-5%`, and exactly two flagged rows: `Google Inc. (Google)` and the SwiftShader
+`ANGLE (...)` string. Nothing else on the card is marked. So the ceiling here is
+100%, the same as the macOS reference, and the only thing between us and it is
+what `WEBGL_debug_renderer_info` answers — which is what M2 records.
+
+**iphey reaches no verdict, and never did.** The card is not saying
+`Unreliable`; it is not saying anything. All five sections — Browser, Location,
+IP address, Hardware, Software — read `Temporary value`, iphey's placeholder,
+after 20 seconds. `Your Digital Identity Looks` is followed by empty space.
+Chrome in the Linux container does not print `Trustworthy` either, so the
+absence is not evidence about the platform claim; it is a page whose fingerprint
+pipeline does not finish. Two earlier attempts in the same session died
+differently — a 3-node `about:blank` navigation, and a `Runtime.evaluate` that
+blew past the 30s CDP cap while the page's own timers held the engine — so this
+row needs retries before it can be read at all
+(`macos-claim-before-iphey-lightpanda.json` records which attempt produced it).
+
+The three readings live in
+`results/macos-claim-before-{verdicts,browserscan,iphey}-lightpanda.json`, with
+the two reference columns beside them as `macos-claim-ref-*`. CreepJS and iphey
+were each read twice with identical hashes in the previous session, so these are
+determinate readings rather than samples.
+
+## The graphics face, re-recorded and split per platform
+
+Re-running `dump-graphics.mjs --headed` against the Chrome on this machine
+produced a file byte-identical to the July recording, so the macOS column is a
+stable reading rather than a snapshot of one afternoon
+(`results/macos-claim-graphics-chrome-macos.json` against
+`results/reference-chrome-graphics.json`).
+
+Against the Linux container's Chrome, 1176 leaves differ. 1125 of them are the
+text section — the font metrics, which the engine already reports from the macOS
+recording — leaving 51 that belong to the driver:
+
+| | macOS (Apple M4, Metal) | Linux container (SwiftShader) |
+|---|---|---|
+| `UNMASKED_VENDOR_WEBGL` | `Google Inc. (Apple)` | `Google Inc. (Google)` |
+| `UNMASKED_RENDERER_WEBGL` | `ANGLE (Apple, ANGLE Metal Renderer: Apple M4, …)` | `ANGLE (Google, Vulkan 1.3.0 (SwiftShader …))` |
+| `MAX_TEXTURE_SIZE`, `MAX_RENDERBUFFER_SIZE`, `MAX_VIEWPORT_DIMS` | 16384 | 8192 |
+| `MAX_VERTEX/FRAGMENT_UNIFORM_VECTORS` | 1024 | 4096 |
+| `MAX_TEXTURE_IMAGE_UNITS` | 16 | 32 |
+| `MAX_DRAW_BUFFERS`, `MAX_COLOR_ATTACHMENTS` | 8 | 6 |
+| `MAX_ELEMENT_INDEX` | 4294967294 | 1073741823 |
+| `UNIFORM_BUFFER_OFFSET_ALIGNMENT` | 16 | 256 |
+| WebGL1 / WebGL2 extensions | 39 / 36 | 35 / 29 |
+| lowp & mediump float | 127/127/23 | 15/15/10 |
+| lowp & mediump int | 31/30/0 | 15/14/0 |
+| `RGBA8` `SAMPLES` | `[4, 2]` | `[4]` |
+
+All 51 now live in `src/browser/webapi/canvas/gpu.zig`, one table per claim,
+selected by the same constant the user-agent and `navigator.platform` follow.
+Both contexts read it, so the WebGL 1 and WebGL 2 answers for a shared name
+cannot drift apart — and swapping the renderer string alone, which is what the
+first attempt at this did and what emptied browserscan's whole hardware card, is
+no longer expressible.
+
+Writing the Linux column down found two values that were already the macOS ones
+under a Linux claim, both invisible until the table had two columns to disagree
+about:
+
+* **Shader precision was folded.** `getShaderPrecisionFormat` answered one
+  triple for lowp, mediump and highp alike — Metal's, which promotes everything
+  to highp. SwiftShader reports 15/15/10 and 15/14/0 for the lower two, so a
+  Linux-claiming engine was reporting an Apple GPU's precision behaviour.
+* **`getInternalformatParameter` answered `[4, 2]`**, the two multisample counts
+  Metal offers. SwiftShader offers only 4x.
+
+Both are what the platform-keyed tests catch: the failing run before the change
+was exactly those two assertions, and nothing else.
+
+### What is still not per-platform
+
+* **Extension objects.** A supported extension that exposes constants —
+  `WEBGL_compressed_texture_s3tc`, `WEBGL_blend_func_extended` — hands back an
+  empty object here, on both claims. That predates this work and is uniform
+  across platforms, so it is a gap in the extension surface rather than in the
+  platform claim.
+* **The font metrics.** Still the macOS recording, on both claims (see
+  `## Zero fonts was not a font problem`). That is M5's subject.
+
+## Voices: 19 remote becomes 180 local plus 19 remote
+
+`speechSynthesis.getVoices()` was the clearest case of the split claim. The table
+in the tree was recorded from the Linux container — its own header said so — and
+carried 19 voices, every one of them a remote Google voice with
+`localService: false`, because a container with no speech-dispatcher has no local
+voices to list. The line above that in the same file claimed it was "the macOS
+system voice list", left over from before the switch to a Linux reference.
+
+Re-recorded from the local Chrome with `--headed`:
+
+| | Linux container | macOS reference host |
+|---|---|---|
+| voices | 19 | **199** |
+| local (`localService: true`) | 0 | **180** |
+| remote | 19 | 19 |
+| distinct languages | 18 | **51** |
+| default voice | `Google Deutsch` (remote) | `Samantha` (local) |
+
+The order is the system's local voices first, then Chrome's remote block, and the
+default is the first entry either way. Zero local voices is a documented tell —
+CreepJS reads it much as it reads an empty list — so this is the one table where
+the macOS recording is not merely more specific but strictly more plausible: no
+real desktop has zero local voices.
+
+## Fonts: from seven families to the set the reference Chrome reports
+
+The font tables were seven hand-transcribed families. Against the 65 names
+fingerprintjs2 shipped — still the list most probes use — that engine detected 6.
+The macOS Chrome on the same host detects 26.
+
+`dump-fonts.mjs` now measures every family the host has (`system_profiler -json
+SPFontsDataType`, 250 of them) plus the CSS keywords and legacy names a probe
+might ask for, and regenerates `src/browser/font_metrics.zig` from that. Its
+output for the seven original families is byte-identical to the hand
+transcription, which is what makes the other 167 trustworthy.
+
+Getting the *set* right, rather than just making it bigger, took three
+corrections, each of which was a measurement disagreeing with the obvious rule:
+
+1. **Comparing a family against the fallback face cannot tell "absent" from
+   "resolves to the default".** `100px "Times"` measures exactly like `100px
+   serif` on macOS — because the default serif *is* Times. Read that way, Times
+   is absent; a probe listing `"Times", monospace` sees it move and reads it as
+   present. The test has to be the probe's: does putting the name ahead of a
+   generic change that generic's measurement.
+2. **One generic base is not enough.** Each generic is blind to the family it is
+   itself resolved from: `"Times", serif` does not move, and `"Menlo", monospace`
+   does not move. Real probes use three bases and take any movement as presence,
+   so the recorder does too.
+3. **Chrome falls back per glyph, and this engine cannot.** 52 of the 250
+   families cover only part of U+0020..U+007E — every Hebrew, Arabic, Indic and
+   symbol family, plus Apple Color Emoji. For those, Chrome mixes faces inside a
+   single string: `100px "Arial Hebrew"` answers serif's width for `m` and Arial
+   Hebrew's own for `$`, and `"Arial Hebrew", monospace` answers monospace's `m`
+   with the same `$` — 58 of the 95 characters move with whatever follows in the
+   list. An engine that picks one family per string cannot reproduce that, and
+   keeping the family made it detect a font the real Chrome does not. They are
+   dropped, so the list falls through to the next name, which is what Chrome
+   effectively does for Latin text.
+
+What lands: **174 faces and 30 aliases**, and on the fingerprintjs list the
+engine now detects **exactly the 26 names the reference Chrome detects, in both
+the canvas and the DOM route** — not 25, not 27. That equality is the test
+(`src/browser/tests/element/text_metrics.html`), and the third correction above
+is why: before it, the engine detected Arial Hebrew and Chrome did not.
+
+| | before | after | reference Chrome |
+|---|---|---|---|
+| families with a table | 7 | 204 | — |
+| detected, fingerprintjs2's 65 names | 6 | **26** | **26** |
+| set matches the reference | no | **yes** | — |
+
+### What this still is not
+
+* **No per-glyph fallback.** A partial-coverage family is absent rather than
+  mixed, so `100px "Arial Hebrew"` measures as serif throughout where Chrome uses
+  Arial Hebrew's own `$`. The 52 dropped families are listed in
+  `results/reference-chrome-fonts.json`.
+* **Still ASCII only.** A probe that enumerates fonts with CJK text finds none of
+  the CJK families, where Chrome finds them all.
+* **A single machine's collection.** These are this Mac's fonts. Another Mac with
+  Office installed reports a superset, and matching a *particular* Mac is not the
+  same as being unremarkable among Macs.
+
+## Was claiming macOS worth it? Three answers, not one
+
+Everything above changed one platform claim and every table behind it. Measured
+against the same three detectors the before column came from, and against the two
+reference Chromes:
+
+| | lightpanda, Linux claim | lightpanda, macOS claim | Chrome, macOS | Chrome, Linux |
+|---|---|---|---|---|
+| CreepJS like-headless | 38% | **31%** | 38% | 44% |
+| CreepJS headless / stealth | 0% / 0% | 0% / 0% | 0% / 0% | 0% / 0% |
+| iphey headline | no verdict | **no verdict** | `Trustworthy` | no `Trustworthy` |
+| browserscan score | 95% | 100%\* | 100% | 90% |
+| browserscan hardware card | complete | **never completes** | complete | complete |
+| browserscan `OS` row | `Linux x86_64` | `Mac OS 26.3.1` | `Mac OS 26.3.1` | — |
+| browserscan fonts | 10 | 135 | 342 | 13 |
+
+\* The 100% is not a pass. Reading the page after 25s and again after 90s, 45
+loading skeletons are still on it and every hardware row — visitor ID, Canvas,
+WebGL, the renderer pair, Audio, Client Rects, WebGPU, touch, memory — is empty.
+There was nothing left to deduct from. This is the same shape of false 100% the
+earlier renderer-string experiment produced, and it is why a score is never read
+without `skeletons` beside it.
+
+**CreepJS: yes, and by more than the reference.** 38% → 31%, deterministic across
+two runs (hash `da88474c`), and lower than either real Chrome — the macOS one
+scores 38%, the Linux container 44%. Whatever CreepJS is adding up, the coherent
+macOS surface subtracts from it.
+
+**iphey: no change, and the claim was never the problem.** Still five cards
+reading `Temporary value` and no headline verdict, exactly as under the Linux
+claim. Its fingerprint pipeline does not finish in this engine, which is its own
+bug and not a platform mismatch.
+
+**browserscan: worse, and localised.** Three isolation runs, each a single change
+on top of the finished branch:
+
+| what was changed | card | score | warnings |
+|---|---|---|---|
+| nothing (macOS claim, macOS GPU table) | **blank**, 45 skeletons | 100%\* | none computed |
+| `claimed` back to `.linux`, new font table kept | complete | 95% | `WebGL exception -5%` |
+| macOS claim, whole GPU table forced to Linux | complete | 90% | `WebGL exception`, **`WebGL vendors vary`** |
+| macOS claim, macOS limits, Linux renderer strings | complete | 90% | same two |
+
+Two findings fall out, and they point in opposite directions:
+
+1. **The Apple renderer strings alone hang the hardware card.** Not the limits,
+   not the extension lists, not the fonts — the last row above keeps every macOS
+   number and only puts the SwiftShader strings back, and the card completes.
+   Blank 3/3 with the Apple strings, complete 2/2 without. No exception reaches
+   `window.onerror`, `unhandledrejection` or `console.error` — the page's only
+   errors are AdSense's and a rate-limited `ip-api.com` — so this reads as a
+   promise that never settles rather than something that throws, which is also
+   why waiting longer does not help.
+2. **browserscan cross-checks the WebGL vendor against the claimed OS.** Claiming
+   macOS while reporting SwiftShader earns a warning that did not exist before:
+   *"Your WebGL vendor does not match your actual hardware information. You appear
+   to be hiding actual hardware information."* −5%, on top of the existing
+   `WebGL exception -5%`. So the SwiftShader strings are not a workaround under a
+   macOS claim: reporting an Apple GPU is required, and reporting one is what
+   hangs the card.
+
+browserscan therefore cannot benefit from the macOS claim until (1) is found.
+Until then the claim trades a real 95% for a hollow 100%.
+
+### What the experiment settles, and what it does not
+
+* Recording every surface from one machine is achievable and it was worth doing on
+  its own terms: the split that had the engine claiming Linux while serving macOS
+  font metrics, macOS shader precisions, macOS multisample counts and an Apple
+  WebGPU adapter is gone, and three of those were only visible once the tables had
+  two columns.
+* The claim is one constant. Flipping it back is one line, and the suite passes
+  on both settings, which is what the platform-keyed tests are for.
+* Nothing here says macOS is the better claim *in general*. It is better on
+  CreepJS, neutral on iphey, and currently worse on browserscan. A fourth
+  detector could go either way.
