@@ -429,7 +429,19 @@ fn matchesPart(el: *Node.Element, part: Part, scope: *Node, frame: *Frame) bool 
         },
         .tag => |tag| {
             // Optimized: compare enum directly
-            return el.getTag() == tag;
+            const element_tag = el.getTag();
+            if (element_tag == tag) {
+                return true;
+            }
+            // getTag() is only total over HTML: a foreign element whose tag has
+            // no dedicated Element.Tag value reads `unknown`, so `style` and
+            // `script` in the SVG namespace could never match the enum even
+            // though their names are in the table. Fall back to the tag name for
+            // those, the way the .tag_name arm does for names that are not.
+            if (element_tag != .unknown) {
+                return false;
+            }
+            return std.mem.eql(u8, el.getTagNameLower(), @tagName(tag));
         },
         .tag_name => |tag_name| {
             // Fallback for custom/unknown tags
