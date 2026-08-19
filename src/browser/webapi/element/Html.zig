@@ -2067,7 +2067,14 @@ fn writeText(c: *Node.CData, state: *InnerTextState) !void {
     }
 
     if (isAllAsciiWhitespace(s)) {
-        state.pre_w = state.wrote_any and state.trim_left == false;
+        // A run of collapsible whitespace collapses to one space, so a space
+        // already pending stays pending: this node adds nothing but takes
+        // nothing away either. Clearing it is what made iphey's
+        // `Looks <span> <span>Trustworthy</span> </span>` read LooksTrustworthy.
+        // `wrote_any` still gates it, so leading whitespace is dropped, and
+        // trim_left without a pending space means a block boundary already
+        // trimmed here -- neither may start a space.
+        state.pre_w = state.wrote_any and (state.pre_w or state.trim_left == false);
         return;
     }
 
