@@ -3880,8 +3880,79 @@ matches Chrome exactly, where before the hidden navigation text it was reading
 put it three short. browserscan still scores 100% with no warnings and 0 loading
 skeletons (`mainTotal` 845, `docTotal` 1871 — unchanged).
 
-Ancillary, and not fixed here: re-setting an existing `<style>` element's
-`textContent` does not appear to re-cascade — the same rule text in a freshly
-created `<style>` takes effect, while replacing the text of one already in the
-document did not. Observed while writing the `!important` case above; the
-mechanism is unverified.
+Ancillary, and followed up in the section below: replacing the text of a `<style>`
+element already in the document did not re-cascade, where the same rule text in a
+freshly created one did. The condition turned out to be narrower than that first
+note said, and the note was wrong about there being no re-parse at all.
+
+## `<style>` text mutations, and `!important` against the style attribute
+
+Two cascade gaps, found while writing the `!important` case in the section above
+and measured the same way (Chrome 151, probes `t1c`, `t2-matrix`, `t4-important`).
+
+### Rewriting a mounted `<style>`'s text (T1/T2)
+
+The first note above said mutating `textContent` never re-cascades. It does — the
+condition is whether anything had read the cascade first, because the parse is
+lazy and the cached copy was never invalidated. One isolation run, same mutation,
+one line apart:
+
+| | Chrome | before | after |
+|---|---|---|---|
+| mutate, then read | `visible` | `visible` | `visible` |
+| read, mutate, read again | `visible` | **`hidden`** | `visible` |
+
+Eight mutation shapes were stale that way: `textContent`, `innerHTML`,
+`replaceChildren`, `appendChild` of more text, `firstChild.data`,
+`firstChild.nodeValue`, removing the text node, and emptying the text.
+Removing the whole element, `deleteRule` and remove-then-re-append always worked.
+"Change the theme by rewriting a `<style>`" is an ordinary SPA move, and every
+consumer of the cascade — `getComputedStyle`, `checkVisibility`, `innerText` —
+was reading the pre-mutation rules for the life of the element.
+
+One deliberate deviation: Chrome hands out a *new* `CSSStyleSheet` on a text
+mutation and leaves the old object holding the old rules (`style.sheet` is not the
+object it was). We re-parse in place, because `document.styleSheets` here is
+insertion-ordered and re-registering would move the sheet past every sheet that
+follows it in the document. `style.sheet.cssRules` reads the same either way.
+
+### `!important` against the style attribute (T4)
+
+CSS Cascade 4 §6.9 compares importance before specificity, and the style attribute
+is specificity rather than a tier of its own, so an `!important` rule beats it and
+an `!important` style attribute beats that back. The hidden-element check treated
+the style attribute as unbeatable. Five of eleven rows read wrong:
+
+| rule | style attribute | Chrome | before |
+|---|---|---|---|
+| `visibility:hidden!important` | `visibility:visible` | hidden, checkVisibility false | visible, true |
+| `visibility:visible!important` | `visibility:hidden` | visible, true | hidden, false |
+| `display:none!important` | `display:block` | none, false | none, **true** |
+| `display:block!important` | `display:none` | block, true | none, false |
+| `opacity:0!important` | `opacity:1` | checkVisibility false | true |
+
+The third row is the one worth staring at: `getComputedStyle` said `none` while
+`checkVisibility` said visible *and* `innerText` returned the text, because the
+value path resolved importance and the boolean path did not. Two answers about one
+element, from two functions a detector can call in the same breath.
+
+Left alone deliberately: the computed *value* of `opacity` is not cascaded at all
+(Chrome reads `0` for that last row where we read `1` — only the verdict is fixed),
+`sheet.disabled` is still ignored, and `hasPointerEventsNone` still treats the
+style attribute as unbeatable the way the hidden check used to.
+
+### What it changed on the twelve stations (T3)
+
+Eleven stations read within two characters of the previous sweep (page jitter).
+amiunique dropped 39: its `innerText` was including a bottom navigation that
+`.hidden-lg-and-up { display: none !important }` hides at this viewport width —
+Chrome excludes it too, and did all along. Before the fix `getComputedStyle` on
+that element already said `none` while `innerText` walked into it anyway, which is
+the same self-contradiction the table above describes. browserscan is unchanged at
+100% with no warnings and 0 skeletons.
+
+Two more gaps surfaced and were left for their own plan: an SVG `<style>`'s rules
+are not applied to the document at all (Chrome reads `hidden` for a span beside
+`<svg><style>.tv{visibility:hidden}</style></svg>`, we read `visible`), and
+`querySelector('style')` does not find an SVG-namespaced one, though
+`getElementsByTagName('style')` does.
