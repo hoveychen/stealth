@@ -144,6 +144,76 @@ fn disposeBrowserContext(cmd: *CDP.Command) !void {
     try cmd.sendResult(null, .{});
 }
 
+// Gives a page-less browser context its root page: the page itself, the
+// target id taken from the root frame, the inspector context and the CDP-side
+// origin state. Returns the root frame. Shared by Target.createTarget and by
+// the lazy STARTUP materialization below, which need the same page but
+// announce it to the driver differently.
+fn openRootPage(cmd: *CDP.Command, bc: *CDP.BrowserContext) !*lp.Frame {
+    // if target_id is null, we should never have a blank frame
+    lp.assert(!bc.session.hasPage(), "CDP.target.openRootPage not null page", .{});
+
+    // if target_id is null, we should never have a session_id
+    lp.assert(bc.session_id == null, "CDP.target.openRootPage not null session_id", .{});
+
+    const page = try bc.session.createPage();
+    const frame = page.frame().?;
+
+    // the target_id == the frame_id of the "root" frame
+    bc.target_id = id.toFrameId(page.frame_id);
+    const target_id = &bc.target_id.?;
+    {
+        var ls: js.Local.Scope = undefined;
+        frame.js.localScope(&ls);
+        defer ls.deinit();
+
+        const aux_data = try std.fmt.allocPrint(cmd.arena, "{{\"isDefault\":true,\"type\":\"default\",\"frameId\":\"{s}\"}}", .{target_id});
+        bc.inspector_session.inspector.contextCreated(
+            &ls.local,
+            "",
+            "", // @ZIGDOM
+            // try frame.origin(arena),
+            aux_data,
+            true,
+        );
+    }
+
+    // change CDP state
+    bc.security_origin = "://";
+    bc.secure_context_type = "InsecureScheme";
+
+    return frame;
+}
+
+// Puppeteer answers the synthetic STARTUP target by creating a real
+// BrowserContext of its own, which is what that hack was written for.
+// Playwright does not: it attaches to the target we announced and drives that
+// session straight away, so its Page.navigate arrives with sessionId=STARTUP
+// and used to be answered with an empty result -- nothing navigated and goto
+// hung until it timed out. Back the session with a real page the first time a
+// command actually needs one.
+pub fn materializeStartupSession(cmd: *CDP.Command) !void {
+    const bc = cmd.browser_context orelse cmd.createBrowserContext() catch |err| switch (err) {
+        error.AlreadyExists => unreachable,
+        else => return err,
+    };
+
+    if (bc.session_id) |session_id| {
+        // The driver already attached a real session, so the STARTUP
+        // announcement it was handed at connect time is stale. Adopting it
+        // here would hand a second name to a session that already has one.
+        if (!std.mem.eql(u8, session_id, CDP.STARTUP_SESSION_ID)) {
+            return error.UnknownSessionId;
+        }
+        return;
+    }
+
+    if (bc.target_id == null) {
+        _ = try openRootPage(cmd, bc);
+    }
+    bc.session_id = CDP.STARTUP_SESSION_ID;
+}
+
 fn createTarget(cmd: *CDP.Command) !void {
     const params = (try cmd.params(struct {
         url: [:0]const u8 = "about:blank",
@@ -170,38 +240,8 @@ fn createTarget(cmd: *CDP.Command) !void {
         }
     }
 
-    // if target_id is null, we should never have a blank frame
-    lp.assert(!bc.session.hasPage(), "CDP.target.createTarget not null page", .{});
-
-    // if target_id is null, we should never have a session_id
-    lp.assert(bc.session_id == null, "CDP.target.createTarget not null session_id", .{});
-
-    const page = try bc.session.createPage();
-    const frame = page.frame().?;
-
-    // the target_id == the frame_id of the "root" frame
-    const frame_id = id.toFrameId(page.frame_id);
-    bc.target_id = frame_id;
+    const frame = try openRootPage(cmd, bc);
     const target_id = &bc.target_id.?;
-    {
-        var ls: js.Local.Scope = undefined;
-        frame.js.localScope(&ls);
-        defer ls.deinit();
-
-        const aux_data = try std.fmt.allocPrint(cmd.arena, "{{\"isDefault\":true,\"type\":\"default\",\"frameId\":\"{s}\"}}", .{target_id});
-        bc.inspector_session.inspector.contextCreated(
-            &ls.local,
-            "",
-            "", // @ZIGDOM
-            // try frame.origin(arena),
-            aux_data,
-            true,
-        );
-    }
-
-    // change CDP state
-    bc.security_origin = "://";
-    bc.secure_context_type = "InsecureScheme";
 
     // send targetCreated event
     // TODO: should this only be sent when Target.setDiscoverTargets
@@ -450,7 +490,7 @@ fn setAutoAttach(cmd: *CDP.Command) !void {
     // This hack requires the main cdp dispatch handler to special case
     // messages from this "STARTUP" session.
     try cmd.sendEvent("Target.attachedToTarget", AttachToTarget{
-        .sessionId = "STARTUP",
+        .sessionId = CDP.STARTUP_SESSION_ID,
         .targetInfo = TargetInfo{
             .type = "page",
             .targetId = "TID-STARTUP",
