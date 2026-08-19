@@ -596,6 +596,17 @@ fn rebuildIfDirty(self: *StyleManager) !void {
 pub fn isHidden(self: *StyleManager, el: *Element, cache: ?*VisibilityCache, options: CheckVisibilityOptions) bool {
     self.rebuildIfDirty() catch return false;
 
+    // `display: contents` generates no box, so the element itself is not
+    // visible and has no geometry -- but its descendants still render.
+    // Measured on Chrome 151 (probe v1-contents): the contents element reads
+    // `checkVisibility() === false` with a zero rect and no client rects,
+    // while its child reads true with a box of its own. Hence the check sits
+    // here, ahead of the ancestor walk and outside the cache: it is a verdict
+    // about `el` alone, and caching it would leak onto every descendant.
+    if (options.boxless_hidden and self.generatesNoBox(el)) {
+        return true;
+    }
+
     var current: ?*Element = el;
 
     while (current) |elem| {
@@ -626,6 +637,14 @@ pub fn isHidden(self: *StyleManager, el: *Element, cache: ?*VisibilityCache, opt
     }
 
     return false;
+}
+
+/// Does `el` generate no box of its own? Only `display: contents` does that --
+/// `none` is a different answer (no box *and* no subtree), and no per-tag UA
+/// default is `contents`, so a null cascade is a no.
+fn generatesNoBox(self: *StyleManager, el: *Element) bool {
+    const value = self.computedDisplay(el) orelse return false;
+    return std.ascii.eqlIgnoreCase(value, "contents");
 }
 
 /// Computed display:none for a single element (own property, no ancestor walk).
@@ -1278,6 +1297,12 @@ const CheckVisibilityOptions = struct {
     check_visibility: bool = false,
     check_opacity: bool = false,
     ua_display_none: bool = true,
+    // Count an element that generates no box of its own -- `display: contents`
+    // -- as hidden. Off by default because most callers want the opposite: the
+    // accessibility tree keeps such an element rather than pruning its subtree,
+    // and `getComputedStyle().display` has to keep reporting `contents`.
+    // `checkVisibility` and the geometry keyed off it are the ones that opt in.
+    boxless_hidden: bool = false,
 };
 
 // Inline styles always win over stylesheets - use max u64 as sentinel.

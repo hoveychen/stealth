@@ -1499,7 +1499,7 @@ pub fn hasPointerEventsNone(self: *Element, cache: ?*PointerEventsCache, frame: 
 }
 
 pub fn checkVisibilityCached(self: *Element, cache: ?*VisibilityCache, frame: *Frame) bool {
-    return !frame._style_manager.isHidden(self, cache, .{});
+    return !frame._style_manager.isHidden(self, cache, .{ .boxless_hidden = true });
 }
 
 const CheckVisibilityOpts = struct {
@@ -1513,6 +1513,7 @@ pub fn checkVisibility(self: *Element, opts_: ?CheckVisibilityOpts, frame: *Fram
     return !frame._style_manager.isHidden(self, null, .{
         .check_opacity = opts.checkOpacity or opts.opacityProperty,
         .check_visibility = opts.visibilityProperty or opts.checkVisibilityCSS,
+        .boxless_hidden = true,
     });
 }
 

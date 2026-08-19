@@ -443,3 +443,55 @@
     elements[0].remove();
   }
 </script>
+
+<style>#cts-sheet { display: contents }</style>
+<script id="display_contents_generates_no_box">
+  {
+    // A `display: contents` element generates no box of its own, so it is not
+    // visible and has no geometry -- while its descendants still render. Every
+    // expectation is Chrome 151's reading (probe v1-contents, on about:blank).
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    host.innerHTML = '<div id=cts style="display:contents">M</div>';
+    const cts = document.getElementById("cts");
+    testing.expectEqual("contents", getComputedStyle(cts).display);
+    testing.expectEqual(false, cts.checkVisibility());
+    testing.expectEqual(false, cts.checkVisibility({ checkVisibilityCSS: true }));
+    testing.expectEqual(false, cts.checkVisibility({ opacityProperty: true }));
+    testing.expectEqual(0, cts.offsetWidth);
+    testing.expectEqual(0, cts.offsetHeight);
+    testing.expectEqual(0, cts.getClientRects().length);
+    // But the subtree still renders: this must not become a display:none.
+    testing.expectEqual("M", host.innerText);
+
+    // An inline element reads the same way.
+    host.innerHTML = '<span id=cts2 style="display:contents">M</span>';
+    testing.expectEqual(false, document.getElementById("cts2").checkVisibility());
+    testing.expectEqual("M", host.innerText);
+
+    // A stylesheet rule sets it just as well as an inline declaration.
+    host.innerHTML = '<div id=cts-sheet>M</div>';
+    testing.expectEqual(false, document.getElementById("cts-sheet").checkVisibility());
+
+    // The child of a contents element is visible and keeps its own box: the
+    // no-box verdict belongs to that one element, not to its subtree.
+    host.innerHTML = '<div style="display:contents"><div id=kid>M</div></div>';
+    const kid = document.getElementById("kid");
+    testing.expectEqual(true, kid.checkVisibility());
+    testing.expectEqual(1, kid.getClientRects().length);
+
+    // Nested contents: still no box.
+    host.innerHTML = '<div style="display:contents"><div id=cts3 style="display:contents">M</div></div>';
+    testing.expectEqual(false, document.getElementById("cts3").checkVisibility());
+    testing.expectEqual("M", host.innerText);
+
+    // Controls, so the change is not simply "everything is hidden now".
+    host.innerHTML = '<div id=plain>M</div>';
+    testing.expectEqual(true, document.getElementById("plain").checkVisibility());
+    host.innerHTML = '<div id=gone style="display:none">M</div>';
+    testing.expectEqual(false, document.getElementById("gone").checkVisibility());
+
+    host.remove();
+  }
+</script>
