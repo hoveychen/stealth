@@ -89,13 +89,25 @@ pub const NavPhase = enum(u8) {
     complete,
 };
 
-/// Get high-resolution timestamp in microseconds, rounded to 5μs increments
-/// to match browser behavior (prevents fingerprinting)
+/// How coarse the clock is, in microseconds.
+///
+/// Every browser clamps this, and which number it clamps to is itself a
+/// fingerprint -- the clamp is the resolution a timing attack has to work
+/// with, so a page can measure it in a loop of `performance.now()` calls and
+/// read the smallest non-zero step straight off. Chrome, outside a
+/// cross-origin isolated context, clamps to 100μs; measured on the reference
+/// host, its smallest step is exactly that. This was 5μs, which is Firefox's
+/// number: finer than the browser this engine claims to be, and finer is not
+/// safer here -- it hands a timing attack twenty times the resolution while
+/// naming a browser that would not have given it.
+const clock_resolution_micros = 100;
+
+/// Get high-resolution timestamp in microseconds, clamped to the resolution
+/// the claimed browser reports.
 pub fn highResTimestamp() u64 {
     const micros = lp.datetime.microTimestamp(.boot);
-    // Round to nearest 5 microseconds (like Firefox default)
-    const rounded = @divTrunc(micros + 2, 5) * 5;
-    return rounded;
+    const half = clock_resolution_micros / 2;
+    return @divTrunc(micros + half, clock_resolution_micros) * clock_resolution_micros;
 }
 
 pub fn init() Performance {

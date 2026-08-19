@@ -386,3 +386,34 @@
   testing.expectEqual(1, gl.clear.length);
 }
 </script>
+
+<script id=stringParameterCost>
+  // Asking the driver what it is costs something in a real browser, and how
+  // much is a fingerprint: browserscan.net spins getParameter for 5ms and
+  // rejects any browser answering faster than 100 calls per millisecond.
+  // Chrome on the reference host manages 23 (VERSION) to 33 (the unmasked
+  // strings); a table lookup answers thousands, which is not a browser.
+  {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const debug = gl.getExtension('WEBGL_debug_renderer_info');
+
+    const rate = (fn) => {
+      const start = performance.now();
+      let calls = 0;
+      for (; 5 > performance.now() - start;) {
+        for (let i = 0; i < 10; i++) fn();
+        calls += 10;
+      }
+      return calls / (performance.now() - start);
+    };
+
+    testing.expectEqual(true, rate(() => gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) <= 100);
+    testing.expectEqual(true, rate(() => gl.getParameter(debug.UNMASKED_VENDOR_WEBGL)) <= 100);
+    testing.expectEqual(true, rate(() => gl.getParameter(gl.VERSION)) <= 100);
+
+    // Numbers are cached state in Chrome and stay fast there (MAX_TEXTURE_SIZE
+    // measured at 20206 calls/ms), so the cost belongs to the string answers
+    // alone -- charging every parameter would be its own anomaly.
+    testing.expectEqual(true, rate(() => gl.getParameter(gl.MAX_TEXTURE_SIZE)) > 100);
+  }
+</script>

@@ -35,7 +35,36 @@
 //! one that at least belongs to a real driver: the fake will not cross-check.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 const claimed_platform = @import("../../../claimed_platform.zig");
+
+/// What one string answer from `getParameter` costs, in microseconds.
+///
+/// A table can be read for free and a driver cannot, and the difference is
+/// measurable from JavaScript: browserscan.net spins
+/// `getParameter(UNMASKED_RENDERER_WEBGL)` for five milliseconds and rejects any
+/// browser that answers faster than a hundred calls per millisecond. Chrome on
+/// the reference host manages 23 (`VERSION`) to 33 (the unmasked strings); this
+/// engine, reading the tables above, managed roughly 2400. Claiming an M4 while
+/// answering "what GPU are you" seventy times faster than any machine with one
+/// is the contradiction, and the reply below is the only part of it that can be
+/// made true.
+///
+/// Numbers are not charged. Chrome caches those and stays fast -- measured,
+/// `MAX_TEXTURE_SIZE` answers at 20206 calls per millisecond, well above this
+/// engine's 3048 -- so charging every parameter would replace one anomaly with
+/// another.
+pub const string_query_micros = 30;
+
+/// Spend what the query costs. There is no way to make a synchronous call take
+/// wall-clock time except to spend it, and the page is entitled to the same
+/// answer it would get from Chrome: a loop that hammers this is blocked for as
+/// long as Chrome would block it, and a page that asks a handful of times pays
+/// a handful of microseconds.
+pub fn chargeStringQuery() void {
+    const start = lp.datetime.microTimestamp(.boot);
+    while (lp.datetime.microTimestamp(.boot) -| start < string_query_micros) {}
+}
 
 /// A range/precision triple as `getShaderPrecisionFormat` reports it.
 pub const Precision = struct {

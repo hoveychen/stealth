@@ -550,7 +550,7 @@ fn boolArray(values: []const bool) Parameter {
 /// enum that isn't a gettable state variable, which is most of them — only the
 /// 85 prongs below are real parameters.
 pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execution) !?Parameter {
-    return switch (pname) {
+    const answer: ?Parameter = switch (pname) {
         // --- numbers ---
         BLEND_EQUATION => .{ .number = 32774 },
         BLEND_EQUATION_ALPHA => .{ .number = 32774 },
@@ -646,6 +646,14 @@ pub fn getParameter(self: *const WebGLRenderingContext, pname: u32, exec: *Execu
         Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = gpu.unmasked_renderer },
         else => null,
     };
+
+    // Keyed off the answer's type rather than a list of enums, so a string
+    // added to the switch later cannot be the one that answers for free.
+    if (answer) |a| switch (a) {
+        .string => gpu_table.chargeStringQuery(),
+        else => {},
+    };
+    return answer;
 }
 
 /// Enables a WebGL extension.
