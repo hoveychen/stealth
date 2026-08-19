@@ -4215,3 +4215,62 @@ way the type-selector fix was. The HTML-document branch needs a *case-insensitiv
 attribute lookup*: `getAttributeSafe` is an exact-name lookup, and the stored name
 is not always lowercase (`viewBox`), so lowercasing the selector side alone cannot
 find it.
+
+### Two more readings the fix turned on (A2)
+
+A1 left two questions that only matter once a name can be reached by a fold, and
+they decide the shape of the lookup. Chrome 151, probes `expr-a2.js`,
+`expr-a2b.js`, `expr-a2c.js`.
+
+The first is whether reaching the name by a fold changes how the *value* is read.
+It does not: on an HTML-document SVG `<g Bar="one two">`, every matcher spelled
+`[bar…]` behaves as it would on an exactly-spelled name -- `="one two"` 1,
+`="nope"` 0, `~="two"` 1, `^="one"` 1, `$="two"` 1, `*="e t"` 1, `="ONE TWO"` 0
+and `="ONE TWO" i` 1. In a `text/xml` document the same selectors read 0 across
+the board, the `i` flag included: that flag is about the value, so it cannot
+rescue a name the document matches exactly. `[Bar="ONE TWO" i]` there is 1.
+
+The second is what happens when one element carries both spellings, which only a
+foreign element can. It is decided by *attribute order*, not by which spelling
+the selector used:
+
+| document | stored | `[bar="cap"]` | `[bar="low"]` | `[Bar="cap"]` | `[Bar="low"]` |
+|---|---|---|---|---|---|
+| HTML | `Bar=cap`, `bar=low` | 1 | 0 | 1 | 0 |
+| HTML | `bar=low`, `Bar=cap` | 0 | 1 | 0 | 1 |
+| XML | either order | 0 | 1 | 1 | 0 |
+
+So in an HTML document both spellings resolve to whichever attribute comes first,
+and the exactly-spelled one does not win by being exactly spelled. That rules out
+"exact lookup first, case-insensitive lookup as a fallback" as an implementation:
+it would answer `low` for the first row.
+
+### What the fix was (A2)
+
+`matchesAttribute` no longer looks the name up; it scans the element's attribute
+list for the first entry whose name folds to the selector's. If that entry is
+spelled exactly like the selector, it is the answer under both rules and the
+document is never consulted -- which is the path an ordinary lowercase selector
+over an HTML tree takes, and it keeps the owner-document walk off it. Otherwise
+the document decides: an HTML one takes that entry, and an XML one falls back to
+an exact lookup, since a later entry may still carry the exact spelling.
+
+The owner-document test itself is now shared with `tagNameMatches` as
+`inHtmlDocument`, the two rules being the same one.
+
+Every row of the A1 table and of both A2 tables now reads exactly as Chrome does;
+all four probes match this engine byte for byte. `svg[viewbox]` finds a parsed
+`viewBox` on an ordinary page, and an XHTML `<p Foo="1">` is reachable as `[Foo]`.
+
+### What it changed on the twelve stations (A3)
+
+Nothing, and for the same reason as X3: every station is an HTML document, where a
+lowercase selector against a lowercase stored name takes the exact-spelling branch
+just as it did before. All twelve node counts match a sweep of `dev.319+280343915`
+apart from creepjs, which read 3598 / 3600 / 3598 across three runs of the *fixed*
+binary and so straddles its own baseline -- noise, not movement. Two text lengths
+moved in the first run and three in the third, by 1 to 3 characters; rebrowser and
+deviceinfo differ by that much between runs of one binary too, which is what makes
+them noise. No verdict-word count moved. browserscan is
+unchanged at 100% with no problems, no warnings, 0 skeletons (`mainTotal` 845,
+`docTotal` 1871).
