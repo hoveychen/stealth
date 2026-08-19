@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+<div id=anchor></div>
+
+<script id=parser_kept_capitals_fold>
+{
+  // An attribute name matches ASCII case-insensitively in an HTML document
+  // whatever the element's namespace and whatever case the name is *stored* in.
+  // The stored capital is what separates a real fold from two lowercase
+  // operands: the HTML parser's SVG attribute-adjustment table keeps `viewBox`
+  // and `preserveAspectRatio` as written, so `[viewbox]` -- the spelling a
+  // stylesheet is most likely to carry -- has to reach them.
+  // Chrome 151 readings, probes expr-a1.js / expr-a2.js.
+  const host = document.createElement('div');
+  host.innerHTML = '<svg viewBox="0 0 10 10" preserveAspectRatio="none"><rect/></svg>';
+  document.body.appendChild(host);
+
+  // The premise: the parser keeps the capitals.
+  testing.expectEqual(
+    'viewBox,preserveAspectRatio',
+    [...host.querySelector('svg').attributes].map((a) => a.name).join(','));
+
+  for (const sel of ['[viewBox]', '[viewbox]', '[VIEWBOX]']) {
+    testing.expectEqual(1, host.querySelectorAll(sel).length);
+  }
+  testing.expectEqual(1, host.querySelectorAll('[preserveAspectRatio]').length);
+  testing.expectEqual(1, host.querySelectorAll('[preserveaspectratio]').length);
+
+  // Compounded with a type selector, and reading the value through the fold.
+  testing.expectEqual(1, host.querySelectorAll('svg[viewbox]').length);
+  testing.expectEqual(1, host.querySelectorAll('svg[viewBox]').length);
+  testing.expectEqual(1, host.querySelectorAll('[viewbox="0 0 10 10"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[viewbox^="0 0"]').length);
+  testing.expectEqual('0 0 10 10', host.querySelector('svg[viewbox]').getAttribute('viewBox'));
+  host.remove();
+}
+</script>
+
+<script id=set_attribute_capital_on_foreign_element>
+{
+  // setAttribute lowercases only for HTML-namespaced elements, so this is a
+  // stored capital with no parser in the way -- and every spelling still finds
+  // it. The HTML element below is the control: both operands were lowercase
+  // all along there, which is why that case always worked.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('Bar', '1');
+  const div = document.createElement('div');
+  div.setAttribute('Foo', '1');
+  host.append(g, div);
+
+  testing.expectEqual('Bar', g.attributes[0].name);
+  testing.expectEqual('foo', div.attributes[0].name);
+
+  for (const sel of ['[Bar]', '[bar]', '[BAR]']) {
+    testing.expectEqual(1, host.querySelectorAll(sel).length);
+  }
+  for (const sel of ['[Foo]', '[foo]', '[FOO]']) {
+    testing.expectEqual(1, host.querySelectorAll(sel).length);
+  }
+  host.remove();
+}
+</script>
+
+<script id=value_matchers_through_a_folded_name>
+{
+  // Reaching the name by a fold does not change how the value is read: the
+  // matchers all still run, and the value stays case-sensitive unless the `i`
+  // flag says otherwise (probe expr-a2.js).
+  const host = document.createElement('div');
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('Bar', 'one two');
+  host.appendChild(g);
+  document.body.appendChild(host);
+
+  testing.expectEqual(1, host.querySelectorAll('[bar="one two"]').length);
+  testing.expectEqual(0, host.querySelectorAll('[bar="nope"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[bar~="two"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[bar^="one"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[bar$="two"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[bar*="e t"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[bar="ONE TWO" i]').length);
+  testing.expectEqual(0, host.querySelectorAll('[bar="ONE TWO"]').length);
+  host.remove();
+}
+</script>
+
+<script id=both_spellings_on_one_element>
+{
+  // Only a foreign element can carry both spellings at once. A folded selector
+  // takes the first one in attribute order, not the one it spells the same way
+  // -- so the fold is a scan of the list, not an exact lookup with a fallback
+  // (probe expr-a2b.js).
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const SVG = 'http://www.w3.org/2000/svg';
+
+  const cap_first = document.createElementNS(SVG, 'g');
+  cap_first.setAttribute('Bar', 'cap');
+  cap_first.setAttribute('bar', 'low');
+  host.appendChild(cap_first);
+
+  testing.expectEqual('Bar=cap,bar=low',
+    [...cap_first.attributes].map((a) => a.name + '=' + a.value).join(','));
+  testing.expectEqual(1, host.querySelectorAll('[bar="cap"]').length);
+  testing.expectEqual(0, host.querySelectorAll('[bar="low"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[Bar="cap"]').length);
+  testing.expectEqual(0, host.querySelectorAll('[Bar="low"]').length);
+  cap_first.remove();
+
+  const low_first = document.createElementNS(SVG, 'g');
+  low_first.setAttribute('bar', 'low');
+  low_first.setAttribute('Bar', 'cap');
+  host.appendChild(low_first);
+
+  testing.expectEqual('bar=low,Bar=cap',
+    [...low_first.attributes].map((a) => a.name + '=' + a.value).join(','));
+  testing.expectEqual(0, host.querySelectorAll('[bar="cap"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[bar="low"]').length);
+  testing.expectEqual(0, host.querySelectorAll('[Bar="cap"]').length);
+  testing.expectEqual(1, host.querySelectorAll('[Bar="low"]').length);
+  host.remove();
+}
+</script>

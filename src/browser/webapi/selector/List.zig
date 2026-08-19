@@ -451,7 +451,7 @@ fn matchesPart(el: *Node.Element, part: Part, scope: *Node, frame: *Frame) bool 
         },
         .universal => return true,
         .pseudo_class => |pseudo| return matchesPseudoClass(el, pseudo, scope, frame),
-        .attribute => |attr| return matchesAttribute(el, attr),
+        .attribute => |attr| return matchesAttribute(el, attr, frame),
     }
 }
 
@@ -476,18 +476,21 @@ fn tagNameMatches(el: *Node.Element, lowercase_name: []const u8, original_name: 
         return false;
     }
     // Only a case fold can make this a match now, so it comes down to the
-    // document. A detached node with no owner falls back to the frame's
-    // document, which is how `ownerDocument` already reads it.
+    // document.
+    return inHtmlDocument(el, frame);
+}
+
+/// Both the type selector and the attribute name fold case in an HTML document
+/// and not in an XML one, whatever the element's own namespace. A detached node
+/// with no owner falls back to the frame's document, which is how
+/// `ownerDocument` already reads it.
+fn inHtmlDocument(el: *Node.Element, frame: *Frame) bool {
     const doc = el.asNode().ownerDocument(frame) orelse return true;
     return doc._type == .html;
 }
 
-fn matchesAttribute(el: *Node.Element, attr: Selector.Attribute) bool {
-    // Attribute names match ASCII case-insensitively on HTML elements (both
-    // sides lowercased) and case-sensitively on foreign elements, whose
-    // attributes are stored as written.
-    const name = if (el._namespace == .html) attr.name else attr.original_name;
-    const value = el.getAttributeSafe(name) orelse {
+fn matchesAttribute(el: *Node.Element, attr: Selector.Attribute, frame: *Frame) bool {
+    const value = attributeValueFor(el, attr, frame) orelse {
         return false;
     };
 
@@ -546,6 +549,40 @@ fn matchesAttribute(el: *Node.Element, attr: Selector.Attribute) bool {
             return false;
         },
     }
+}
+
+/// Find the attribute a selector's name names, under the document's case rule.
+/// An HTML document folds ASCII case whatever the element's namespace and
+/// whatever case the name is *stored* in -- a parsed SVG `viewBox` answers to
+/// `[viewbox]` -- while an XML document matches the exact spelling, its
+/// HTML-namespaced elements included (probes expr-a1.js / expr-a2b.js).
+///
+/// The scan is over the list rather than a lookup by name because an element
+/// carrying two spellings of one name resolves to whichever comes *first*, not
+/// to the one spelled like the selector. Reaching the exact spelling settles
+/// both rules at once, which is what keeps the document lookup -- a walk to the
+/// root of the tree -- off the path an ordinary lowercase selector takes.
+fn attributeValueFor(el: *Node.Element, attr: Selector.Attribute, frame: *Frame) ?[]const u8 {
+    const wanted = attr.name.str();
+    const as_written = attr.original_name.str();
+
+    for (el.attributeEntries()) |*entry| {
+        const stored = entry.name();
+        if (!std.ascii.eqlIgnoreCase(stored, wanted)) {
+            continue;
+        }
+        if (std.mem.eql(u8, stored, as_written)) {
+            return entry.value();
+        }
+        // Only a case fold can reach this entry. In an HTML document it is the
+        // answer; in an XML one it is not, and a later entry may still carry
+        // the exact spelling.
+        if (inHtmlDocument(el, frame)) {
+            return entry.value();
+        }
+        return el.getAttributeSafe(attr.original_name);
+    }
+    return null;
 }
 
 fn attributeContainsWord(value: []const u8, word: []const u8) bool {

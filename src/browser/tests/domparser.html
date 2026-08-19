@@ -486,3 +486,73 @@
   }
 }
 </script>
+
+<script id=attributeNameCase-xml>
+{
+  // An attribute name goes the same way as a type selector, and the rule again
+  // follows the *document*: an XML document matches it exactly, HTML-namespaced
+  // elements included. Chrome 151 readings, probes expr-a1.js / expr-a2.js /
+  // expr-a2b.js. The HTML-document half lives in element/svg/attribute_name_case.
+  const parser = new DOMParser();
+
+  {
+    // An XHTML `<p>` is HTML-namespaced, and its capital is still exact-only.
+    const doc = parser.parseFromString(
+      '<html xmlns="http://www.w3.org/1999/xhtml"><body><p Foo="1">x</p></body></html>',
+      'application/xhtml+xml');
+    testing.expectEqual('Foo', doc.querySelector('p').attributes[0].name);
+    testing.expectEqual(1, doc.querySelectorAll('[Foo]').length);
+    testing.expectEqual(0, doc.querySelectorAll('[foo]').length);
+    testing.expectEqual(0, doc.querySelectorAll('[FOO]').length);
+  }
+
+  {
+    // Each spelling picks out its own element, and neither reaches the other.
+    const doc = parser.parseFromString(
+      '<root xmlns:s="http://www.w3.org/2000/svg"><s:g Bar="1"/><s:rect bar="2"/></root>',
+      'text/xml');
+    testing.expectEqual(1, doc.querySelectorAll('[Bar]').length);
+    testing.expectEqual(1, doc.querySelectorAll('[bar]').length);
+    testing.expectEqual(0, doc.querySelectorAll('[BAR]').length);
+    testing.expectEqual('1', doc.querySelector('[Bar]').getAttribute('Bar'));
+    testing.expectEqual('2', doc.querySelector('[bar]').getAttribute('bar'));
+  }
+
+  {
+    // The value matchers never get a chance to run when the name is off, the
+    // `i` flag included -- that flag is about the value, not the name.
+    const doc = parser.parseFromString(
+      '<root xmlns:s="http://www.w3.org/2000/svg"><s:g Bar="one two"/></root>', 'text/xml');
+    testing.expectEqual(1, doc.querySelectorAll('[Bar="one two"]').length);
+    testing.expectEqual(0, doc.querySelectorAll('[bar="one two"]').length);
+    testing.expectEqual(0, doc.querySelectorAll('[bar~="two"]').length);
+    testing.expectEqual(0, doc.querySelectorAll('[bar="ONE TWO" i]').length);
+    testing.expectEqual(1, doc.querySelectorAll('[Bar="ONE TWO" i]').length);
+  }
+
+  {
+    // Both spellings on one element, where an HTML document would take the
+    // first in order: here each selector takes its own, whichever came first.
+    for (const attrs of ['Bar="cap" bar="low"', 'bar="low" Bar="cap"']) {
+      const doc = parser.parseFromString(
+        '<root xmlns:s="http://www.w3.org/2000/svg"><s:g ' + attrs + '/></root>', 'text/xml');
+      testing.expectEqual(1, doc.querySelectorAll('[Bar="cap"]').length);
+      testing.expectEqual(1, doc.querySelectorAll('[bar="low"]').length);
+      testing.expectEqual(0, doc.querySelectorAll('[Bar="low"]').length);
+      testing.expectEqual(0, doc.querySelectorAll('[bar="cap"]').length);
+    }
+  }
+
+  {
+    // No parse step: createDocument makes an XML document too, and setAttribute
+    // does not lowercase there.
+    const doc = document.implementation.createDocument(null, 'Root');
+    const a = doc.createElement('a');
+    a.setAttribute('Foo', '1');
+    doc.documentElement.appendChild(a);
+    testing.expectEqual('Foo', a.attributes[0].name);
+    testing.expectEqual(1, doc.querySelectorAll('[Foo]').length);
+    testing.expectEqual(0, doc.querySelectorAll('[foo]').length);
+  }
+}
+</script>

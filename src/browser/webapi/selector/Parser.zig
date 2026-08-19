@@ -990,8 +990,8 @@ fn attribute(self: *Parser, arena: Allocator) !Selector.Attribute {
         self.input = self.input[1..];
     }
 
-    // Kept as-written in original_name for the case-sensitive match on
-    // foreign elements; like the rest of the AST, it borrows the input.
+    // Kept as-written in original_name for the case-sensitive match an XML
+    // document makes; like the rest of the AST, it borrows the input.
     const attr_name = try self.attributeName(arena);
 
     // Normalize the name to lowercase for fast matching (consistent with Attribute.normalizeNameForLookup)
