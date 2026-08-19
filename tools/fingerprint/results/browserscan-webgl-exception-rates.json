@@ -1,0 +1,60 @@
+{
+ "what": "getParameter call rates in calls per millisecond, measured with tools/fingerprint/webgl-query-rate.mjs. browserscan fails a browser above 100 for the string parameters.",
+ "chrome": {
+  "unmaskedRenderer": 33,
+  "unmaskedVendor": 32,
+  "version": 23,
+  "maxTextureSize": 20206,
+  "maxViewportDims": 2370,
+  "getExtension": 3568,
+  "getSupportedExt": 210,
+  "emptyLoop": 74622
+ },
+ "lightpandaBefore": {
+  "unmaskedRenderer": 1950,
+  "unmaskedVendor": 858,
+  "version": 320,
+  "maxTextureSize": 3048,
+  "maxViewportDims": 350,
+  "getExtension": 1828,
+  "getSupportedExt": 223,
+  "emptyLoop": 15934
+ },
+ "lightpandaAfter": {
+  "unmaskedRenderer": 26,
+  "unmaskedVendor": 31,
+  "version": 31,
+  "maxTextureSize": 898,
+  "maxViewportDims": 792,
+  "getExtension": 754,
+  "getSupportedExt": 164,
+  "emptyLoop": 8330
+ },
+ "clockResolutionMicros": {
+  "chrome": 100,
+  "lightpandaBefore": 5,
+  "lightpandaAfter": 100,
+  "how": "smallest non-zero delta across 2000 consecutive performance.now() calls"
+ },
+ "browserscan": {
+  "before": {
+   "score": "95%",
+   "skeletons": 0,
+   "warnings": [
+    "WebGL exception -5%"
+   ],
+   "flagged": [
+    "Unmasked Vendor",
+    "Unmasked Renderer"
+   ]
+  },
+  "after": {
+   "score": "100%",
+   "skeletons": 0,
+   "warnings": [],
+   "flagged": []
+  },
+  "note": "Two runs after, both 100% with no warnings. Distinct from the earlier stalled 100%, which had 45 skeletons and nothing to deduct."
+ },
+ "regressionCheck": "Seven detector sites re-run: every verdict line identical to before the change; only rebrowser's own reported millisecond timings moved."
+}

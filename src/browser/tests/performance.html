@@ -960,3 +960,26 @@
     });
   }
 </script>
+
+<script id=nowResolution>
+  // A timer finer than the browser's is a fingerprint by itself, and it is what
+  // timing attacks are measured against. Chrome (outside a cross-origin
+  // isolated context) clamps performance.now() to 100us; measured on the
+  // reference host, its smallest non-zero delta is 0.1ms. Ours was 5us, which
+  // is Firefox's number, not the browser this engine claims to be.
+  {
+    const t = [];
+    for (let i = 0; i < 3000; i++) t.push(performance.now());
+    const deltas = [];
+    for (let i = 1; i < t.length; i++) {
+      const d = t[i] - t[i - 1];
+      if (d > 0) deltas.push(d);
+      testing.expectEqual(true, d >= 0);
+    }
+    // Every advance is a whole clamp step, so the smallest one is the step. A
+    // 5us clamp lands at 0.005 here and fails; Chrome's 100us lands at 0.1.
+    const smallest = Math.min(...deltas);
+    testing.expectEqual(true, deltas.length > 0);
+    testing.expectEqual(true, smallest > 0.05);
+  }
+</script>

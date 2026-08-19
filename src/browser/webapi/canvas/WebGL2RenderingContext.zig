@@ -735,7 +735,7 @@ fn uintArray(exec: *Execution, values: []const u32) Parameter {
 }
 
 pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Execution) !?Parameter {
-    return switch (pname) {
+    const answer: ?Parameter = switch (pname) {
         BLEND_EQUATION => .{ .number = 32774 },
         BLEND_EQUATION_ALPHA => .{ .number = 32774 },
         BLEND_DST_RGB => .{ .number = 0 },
@@ -873,6 +873,14 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
         WebGL1.Extension.Type.WEBGL_debug_renderer_info.UNMASKED_RENDERER_WEBGL => .{ .string = gpu.unmasked_renderer },
         else => null,
     };
+
+    // Keyed off the answer's type rather than a list of enums, so a string
+    // added to the switch later cannot be the one that answers for free.
+    if (answer) |a| switch (a) {
+        .string => gpu_table.chargeStringQuery(),
+        else => {},
+    };
+    return answer;
 }
 
 // ---------------------------------------------------------------------------
