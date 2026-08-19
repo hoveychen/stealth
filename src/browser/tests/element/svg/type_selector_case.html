@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+<div id=anchor></div>
+
+<script id=camel_cased_foreign_tag>
+{
+  // In an HTML document a type selector is matched ASCII case-insensitively, and
+  // Chrome 151 applies that to foreign elements too -- `clippath`, `CLIPPATH` and
+  // `ClipPath` all find an SVG `clipPath` (probe c1-case). A foreign element keeps
+  // its name as written, though, so comparing it against the lowercased selector
+  // name matched neither the enum arm nor the tag-name arm and camel-cased SVG
+  // tags were unreachable by selector.
+  const host = document.createElement('div');
+  host.innerHTML = '<svg><clipPath/><linearGradient/><feBlend/><textPath/><foreignObject/></svg>';
+  document.body.appendChild(host);
+
+  // The parser case-corrects these, which is the premise of the rest.
+  testing.expectEqual(
+    'svg,clipPath,linearGradient,feBlend,textPath,foreignObject',
+    [...host.querySelectorAll('*')].map((e) => e.tagName).join(','));
+
+  for (const tag of ['clipPath', 'linearGradient', 'feBlend', 'textPath', 'foreignObject']) {
+    testing.expectEqual(1, host.querySelectorAll(tag).length);
+    testing.expectEqual(1, host.querySelectorAll(tag.toLowerCase()).length);
+    testing.expectEqual(1, host.querySelectorAll(tag.toUpperCase()).length);
+  }
+  testing.expectEqual('clipPath', host.querySelector('ClipPath').tagName);
+
+  // getElementsByTagName is the one that stays case-sensitive out here: it
+  // lowercases its argument only for HTML elements.
+  testing.expectEqual(1, host.getElementsByTagName('clipPath').length);
+  testing.expectEqual(0, host.getElementsByTagName('clippath').length);
+  host.remove();
+}
+</script>
+
+<script id=already_matched_case_variants>
+{
+  // Kept as regressions: an all-lowercase foreign tag, whether or not it has a
+  // dedicated type, and the HTML control.
+  const host = document.createElement('div');
+  host.innerHTML = '<svg><rect/><style>.z{color:red}</style></svg><p>x</p>';
+  document.body.appendChild(host);
+  for (const tag of ['rect', 'style', 'svg', 'p']) {
+    testing.expectEqual(1, host.querySelectorAll(tag).length);
+    testing.expectEqual(1, host.querySelectorAll(tag.toUpperCase()).length);
+  }
+  host.remove();
+}
+</script>
+
+<script id=case_preserved_by_create_element_ns>
+{
+  // createElementNS keeps the name exactly as given, in every namespace, so both
+  // spellings of clipPath can coexist and one selector finds both.
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const camel = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+  const lower = document.createElementNS('http://www.w3.org/2000/svg', 'clippath');
+  const plain = document.createElementNS('urn:x', 'Foo');
+  const math = document.createElementNS('http://www.w3.org/1998/Math/MathML', 'mRow');
+  host.append(camel, lower, plain, math);
+
+  testing.expectEqual('clipPath', camel.tagName);
+  testing.expectEqual('clippath', lower.tagName);
+  testing.expectEqual('Foo', plain.tagName);
+  testing.expectEqual('mRow', math.tagName);
+
+  testing.expectEqual(2, host.querySelectorAll('clipPath').length);
+  testing.expectEqual(2, host.querySelectorAll('clippath').length);
+
+  // A namespace with no interface of its own, and MathML.
+  for (const sel of ['Foo', 'foo', 'FOO']) {
+    testing.expectEqual(1, host.querySelectorAll(sel).length);
+  }
+  for (const sel of ['mRow', 'mrow', 'MROW']) {
+    testing.expectEqual(1, host.querySelectorAll(sel).length);
+  }
+  host.remove();
+}
+</script>

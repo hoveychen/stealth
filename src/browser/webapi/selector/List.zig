@@ -441,18 +441,32 @@ fn matchesPart(el: *Node.Element, part: Part, scope: *Node, frame: *Frame) bool 
             if (element_tag != .unknown) {
                 return false;
             }
-            return std.mem.eql(u8, el.getTagNameLower(), @tagName(tag));
+            return tagNameMatches(el, @tagName(tag));
         },
         .tag_name => |tag_name| {
             // Fallback for custom/unknown tags
-            // Both are lowercase, so we can use fast string comparison
-            const element_tag = el.getTagNameLower();
-            return std.mem.eql(u8, element_tag, tag_name);
+            return tagNameMatches(el, tag_name);
         },
         .universal => return true,
         .pseudo_class => |pseudo| return matchesPseudoClass(el, pseudo, scope, frame),
         .attribute => |attr| return matchesAttribute(el, attr),
     }
+}
+
+/// Compare an element against a type selector's name, which the parser has
+/// lowercased. In an HTML document the comparison is ASCII case-insensitive, and
+/// Chrome 151 applies that to foreign elements as well as HTML ones -- an SVG
+/// `clipPath` answers to `clipPath`, `clippath` and `CLIPPATH` alike (probe
+/// c1-case). Only HTML elements store a lowercased name, so they get the plain
+/// comparison and everything else, which keeps the name as written, pays for the
+/// case fold. (In an XML document type selectors are case-sensitive instead; this
+/// engine does not distinguish, and did not before either.)
+fn tagNameMatches(el: *Node.Element, lowercase_name: []const u8) bool {
+    const element_tag = el.getTagNameLower();
+    if (el._namespace == .html) {
+        return std.mem.eql(u8, element_tag, lowercase_name);
+    }
+    return std.ascii.eqlIgnoreCase(element_tag, lowercase_name);
 }
 
 fn matchesAttribute(el: *Node.Element, attr: Selector.Attribute) bool {
