@@ -188,6 +188,13 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
         if (self._element) |element| {
             if (wrapped.eql(comptime .wrap("display"))) {
                 if (frame._style_manager.hasDisplayNone(element)) return "none";
+                // The cascade, not just the inline `style=` attribute: a
+                // stylesheet rule sets display as often as an inline
+                // declaration does, and the generic inline path below cannot
+                // let a sheet's `!important` outrank one.
+                if (frame._style_manager.computedDisplay(element)) |value| {
+                    return value;
+                }
             } else if (wrapped.eql(comptime .wrap("visibility"))) {
                 if (frame._style_manager.hasVisibilityHiddenInherited(element)) return "hidden";
             }
@@ -1366,4 +1373,8 @@ test "WebApi: CSSStyleDeclaration custom property cascade" {
 
 test "WebApi: CSSStyleDeclaration custom property var substitution" {
     try testing.htmlRunner("css/custom_properties_var.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration display cascade" {
+    try testing.htmlRunner("css/display_cascade.html", .{});
 }

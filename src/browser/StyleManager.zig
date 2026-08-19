@@ -467,6 +467,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
         const val = decl.value;
         if (std.ascii.eqlIgnoreCase(name, "display")) {
             props.display_none = std.ascii.eqlIgnoreCase(val, "none");
+            props.display = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "visibility")) {
             props.visibility_hidden = std.ascii.eqlIgnoreCase(val, "hidden") or std.ascii.eqlIgnoreCase(val, "collapse");
         } else if (std.ascii.eqlIgnoreCase(name, "opacity")) {
@@ -1089,6 +1090,10 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
 
     if (decl.findProperty(comptime .wrap("display"))) |property| {
         props.display_none = property._value.eql(comptime .wrap("none"));
+        props.display = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
     }
 
     if (decl.findProperty(comptime .wrap("visibility"))) |property| {
@@ -1187,7 +1192,13 @@ pub const Declaration = struct {
 };
 
 const RuleProperties = struct {
+    // `display_none` is the visibility answer (isElementHidden and everything
+    // built on it); `display` is the value itself, which innerText and
+    // getComputedStyle need and a boolean cannot carry. Both are filled from
+    // the same declaration rather than one deriving from the other, because the
+    // hidden-element path predates the value and must keep its exact semantics.
     display_none: ?bool = null,
+    display: ?Declaration = null,
     visibility_hidden: ?bool = null,
     opacity_zero: ?bool = null,
     pointer_events_none: ?bool = null,
@@ -1202,6 +1213,7 @@ const RuleProperties = struct {
     // return true if any field in RuleProperties is not null
     fn isRelevant(self: RuleProperties) bool {
         return self.display_none != null or
+            self.display != null or
             self.visibility_hidden != null or
             self.opacity_zero != null or
             self.pointer_events_none != null or
@@ -1378,6 +1390,29 @@ fn computedTextTransformAt(self: *StyleManager, element: ?*Element, depth: u8) ?
     return self.computedTextTransformAt(current.parentElement(), depth + 1);
 }
 
+/// Cascaded `display` keyword, or null when neither a stylesheet rule nor the
+/// inline style declares one -- the caller then falls back to the per-tag UA
+/// default it already has. Same source order as computedFontFamily, minus the
+/// ancestor walk: `display` does not inherit (measured on Chrome 151, probe
+/// d2-cascade -- a span inside a `display: inline-block` div reads `inline`).
+pub fn computedDisplay(self: *StyleManager, element: *Element) ?[]const u8 {
+    const inline_property = getInlineStyleProperty(element, comptime .wrap("display"), self.frame);
+    const rule = self.cascadedDeclaration(element, .display);
+
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            return declaration.value;
+        }
+    }
+    if (inline_property) |property| {
+        return property._value.str();
+    }
+    if (rule) |declaration| {
+        return declaration.value;
+    }
+    return null;
+}
+
 /// Cascaded `font-family` list, verbatim, or null when nothing declares one
 /// anywhere up the chain. Same source order as computedFontSize; the caller
 /// decides which of the listed names it can actually resolve.
@@ -1417,7 +1452,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     return self.cascadedDeclaration(el, .font_size);
 }
 
-const CascadedProperty = enum { font_size, font_family, text_transform };
+const CascadedProperty = enum { font_size, font_family, text_transform, display };
 
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
@@ -1436,6 +1471,7 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
                     .font_size => props.font_size,
                     .font_family => props.font_family,
                     .text_transform => props.text_transform,
+                    .display => props.display,
                 }) orelse continue;
                 if (important.* and !declaration.important) continue;
                 if (declaration.important == important.* and p <= priority.*) continue;

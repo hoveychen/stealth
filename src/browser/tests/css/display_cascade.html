@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<style>
+  #sheet-only { display: flex; }
+  #inline-loses { display: flex; }
+  #important-wins { display: flex !important; }
+  .low-spec { display: flex; }
+  #high-spec { display: grid; }
+  .twice { display: flex; }
+  .twice { display: grid; }
+  #not-inherited-parent { display: inline-block; }
+  .sheet-none { display: none; }
+</style>
+
+<div id=sheet-only></div>
+<div id=inline-loses style="display: grid"></div>
+<div id=important-wins style="display: grid"></div>
+<div id=high-spec class=low-spec></div>
+<div id=twice class=twice></div>
+<div id=not-inherited-parent><span id=not-inherited-child></span></div>
+<span id=tag-default></span>
+<div id=sheet-none class=sheet-none></div>
+
+<script id=displayCascade>
+{
+  // Measured on Chrome 151 (probe d2-cascade): getComputedStyle().display
+  // reports the cascaded value, not just the inline `style=` attribute and the
+  // per-tag UA default. Every expectation below is Chrome's reading verbatim.
+  const display = (id) => getComputedStyle(document.getElementById(id)).display;
+
+  testing.expectEqual('flex', display('sheet-only'));      // a sheet rule alone
+  testing.expectEqual('grid', display('inline-loses'));    // inline beats the sheet
+  testing.expectEqual('flex', display('important-wins'));  // !important beats inline
+  testing.expectEqual('grid', display('high-spec'));       // #id beats .class
+  testing.expectEqual('grid', display('twice'));           // later rule, equal specificity
+
+  // display is not inherited: the child reads its own tag default, not the
+  // parent's inline-block.
+  testing.expectEqual('inline', display('not-inherited-child'));
+
+  // Nothing declares one: the per-tag UA default still answers.
+  testing.expectEqual('inline', display('tag-default'));
+
+  // The display_none path this shares must not regress: a sheet-set
+  // `display: none` still reads back as none and still hides the element.
+  testing.expectEqual('none', display('sheet-none'));
+  testing.expectFalse(document.getElementById('sheet-none').checkVisibility());
+}
+</script>
