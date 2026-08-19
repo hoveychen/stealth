@@ -3516,3 +3516,28 @@ element boundary, not a text-transform issue, and not chased.
 502s and measure nothing in any browser, so nine live detectors is the real
 count. And the TLS fingerprint matches Chrome's JA4 exactly, which is the one
 row in the table no amount of JavaScript work could have produced.
+
+### text-transform applied: what the three sites read now
+
+Re-swept against the same recorded Chrome column
+(`results/text-transform-after-lightpanda.json`):
+
+| site | before | after | Chrome |
+|---|---|---|---|
+| amiunique | `My Fingerprint My Extension Global Statistics Survey Blog Useful Links Language` | **`MY FINGERPRINT MY EXTENSION GLOBAL STATISTICS SURVEY BLOG USEFUL LINKS LANGUAGE`** | identical to after |
+| pixelscan | `… Verify your browser fingerprint Checkers IP Address Check` | **`… Verify your browser fingerprint CHECKERS IP Address Check`** | identical to after |
+| iphey cards | `Learn more Browser Chrome Location United States` | **`Learn more BROWSER Chrome LOCATION United States`** | identical to after |
+
+Node counts held everywhere: sannysoft 291, rebrowser 98, deviceinfo 264,
+browserleaks-js 1183, browserleaks-tls 5, amiunique 1571, iphey 487, pixelscan
+1783, browserscan 1871 — unchanged. browserscan re-read alongside: 100%,
+`skeletons=0`, no warnings, 0 of 58 rows flagged, no empty values.
+
+creepjs moved 3598 → 3600. It has now read 3589 (g21), 3598 and 3600 across
+three runs of its own, so two nodes is inside its own variance rather than an
+attributable change; noted, not claimed either way.
+
+**Still open, and not this plan's:** iphey's headline is `LooksTrustworthy` in
+our `innerText` against Chrome's `Looks Trustworthy`. That is a missing space at
+an element boundary, unaffected by casing, and it survived this fix exactly as
+predicted when it was recorded above.

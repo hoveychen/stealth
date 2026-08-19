@@ -257,3 +257,48 @@
   el.innerHTML = 'x\uFEFFy';
   testing.expectEqual('x\uFEFFy', el.textContent);
 </script>
+
+<script id=innerTextTextTransform>
+  // innerText is defined in terms of layout, so it reports text the way it is
+  // rendered -- text-transform included. Chrome returns MY FINGERPRINT here;
+  // returning the source casing is what made iphey's card read `Browser` where
+  // Chrome reads `BROWSER`, and the same for amiunique and pixelscan.
+  const tt = document.createElement('div');
+  document.body.appendChild(tt);
+
+  // From an inline style.
+  tt.innerHTML = '<div style="text-transform: uppercase">my fingerprint</div>';
+  testing.expectEqual('MY FINGERPRINT', tt.innerText);
+  testing.expectEqual('my fingerprint', tt.textContent);
+
+  tt.innerHTML = '<div style="text-transform: lowercase">MY FINGERPRINT</div>';
+  testing.expectEqual('my fingerprint', tt.innerText);
+
+  tt.innerHTML = '<div style="text-transform: capitalize">my fingerprint here</div>';
+  testing.expectEqual('My Fingerprint Here', tt.innerText);
+
+  tt.innerHTML = '<div style="text-transform: none">my fingerprint</div>';
+  testing.expectEqual('my fingerprint', tt.innerText);
+
+  // It inherits, which is how a page sets it once on a container.
+  tt.innerHTML = '<div style="text-transform: uppercase">a <em>b</em> c</div>';
+  testing.expectEqual('A B C', tt.innerText);
+
+  // A descendant overrides its ancestor.
+  tt.innerHTML = '<div style="text-transform: uppercase">a <em style="text-transform: lowercase">B</em></div>';
+  testing.expectEqual('A b', tt.innerText);
+
+  // From a stylesheet rule, which is the path the three detectors actually use.
+  const sheet = document.createElement('style');
+  sheet.textContent = '.shout { text-transform: uppercase }';
+  document.head.appendChild(sheet);
+  tt.innerHTML = '<div class="shout">my fingerprint</div>';
+  testing.expectEqual('MY FINGERPRINT', tt.innerText);
+
+  // capitalize only touches the first letter of each word, not the rest.
+  tt.innerHTML = '<div style="text-transform: capitalize">mcDONALD o’neill</div>';
+  testing.expectEqual('McDONALD O’neill', tt.innerText);
+
+  tt.remove();
+  sheet.remove();
+</script>
