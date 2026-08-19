@@ -3766,3 +3766,122 @@ Still open, and a different property: `innerText` includes text under
 `visibility: hidden` where Chrome excludes it (`<div style="visibility:hidden">M</div>`
 reads `"M"` here and `""` there). That is a visibility question, not a display
 one, and it reads the same on main.
+
+## innerText and `visibility` (W1)
+
+The section above left this open: `innerText` includes text under
+`visibility: hidden` where Chrome excludes it. Measured on Chrome 151 (probes
+`w1-visibility` and `w1b-visibility`, 32 cases on about:blank). The rule is not
+"skip the subtree" — `visibility` inherits and a descendant can turn it back on.
+
+**Text is emitted only when its nearest element ancestor computes to `visible`.**
+
+| markup | Chrome |
+|---|---|
+| `a<span style="visibility:hidden">M</span>b` | `"ab"` |
+| `a<span style="visibility:collapse">M</span>b` | `"ab"` |
+| `a<span style="visibility:hidden"><span>M</span></span>b` | `"ab"` |
+| `a<span style="visibility:hidden"><span style="visibility:visible">M</span></span>b` | `"aMb"` |
+| `a<span style="visibility:hidden"><span style="visibility:visible"><span>M</span></span></span>b` | `"aMb"` |
+| …and the same nested once more back to hidden | `"ab"` |
+| `a<span style="opacity:0">M</span>b` | `"aMb"` — opacity is not visibility |
+| `el.innerText` where `el` itself is hidden | `""` |
+| the same with a `visibility:visible` child | `"M"` |
+
+**A hidden block box emits no line break, but a visible one does even when empty.**
+This is the part that does not fall out of the engine's lazy `pending_breaks`
+for free: today a hidden block still arms `requireBreaks`, and the next visible
+text flushes it.
+
+| markup | Chrome |
+|---|---|
+| `a<div></div>b` | `"a\nb"` — empty *visible* block still breaks |
+| `a<div> </div>b` | `"a\nb"` |
+| `a<div style="visibility:hidden">M</div>b` | `"ab"` — no break at all |
+| `a<div style="visibility:hidden"></div>b` | `"ab"` |
+| `a<p style="visibility:hidden">M</p>b` | `"ab"` — no blank line either |
+| `a<div style="visibility:hidden"><br></div>b` | `"ab"` — a hidden `<br>` is silent |
+| `a<span style="visibility:hidden"><div>M</div></span>b` | `"ab"` |
+| `a<div>M</div><div style="visibility:hidden">N</div><div>P</div>b` | `"a\nM\nP\nb"` |
+| `a<div style="visibility:hidden">M</div>N<div>P</div>b` | `"aN\nP\nb"` |
+| `a<div style="visibility:hidden"><div style="visibility:visible">M</div></div>b` | `"a\nM\nb"` |
+| `a<div style="visibility:hidden"><span style="visibility:visible">M</span></div>b` | `"aMb"` |
+
+The last two rows together are the shape of it: the *outer* hidden block never
+contributes a break, and whether one appears depends only on whether the visible
+content inside is itself block-level.
+
+**Whitespace: a hidden inline keeps the spaces on both sides; a hidden block
+still trims them.** The inline row looks like the two-space reading the atomic
+inline boxes gave, but the cause turned out to be different — see the W2
+boundary probe below, where an *empty* hidden inline merges the two spaces and an
+empty inline-block does not. It is the zero-width text run that separates them,
+not the box.
+
+| markup | Chrome |
+|---|---|
+| `a <span style="visibility:hidden">M</span> b` | `"a  b"` — **two** spaces |
+| `a <span style="visibility:hidden">M</span>b` | `"a b"` |
+| `a <span style="visibility:hidden">M</span> <span>N</span> b` | `"a  N b"` |
+| `a <div style="visibility:hidden">M</div> b` | `"ab"` — block boundary still trims |
+| `a <div style="display:none">M</div> b` | `"a b"` — display:none is absent, so the two collapsible spaces merge into one |
+
+That last contrast is the control worth keeping: `display: none` and
+`visibility: hidden` differ in the whitespace they leave behind, so the fix
+cannot route one through the other.
+
+### The boundary of the rule (W2)
+
+W1's three tables are the rule; these are the edges that decide how it has to be
+implemented. Measured on Chrome 151 the same way (probe `w2-boundary`, 22 cases).
+
+| markup | Chrome |
+|---|---|
+| `a <span style="visibility:hidden">M</span> b` | `"a  b"` — two spaces |
+| `a <span style="visibility:hidden"></span> b` | `"a b"` — **one**: an empty hidden inline merges them |
+| `a <span style="visibility:hidden"> </span> b` | `"a b"` |
+| `a <span style="display:inline-block"></span> b` | `"a  b"` — an empty *atomic* box still keeps both |
+| `a <span style="visibility:hidden;display:contents">M</span> b` | `"a  b"` — no box at all, still two |
+
+So what separates the two collapsible spaces is the hidden **text run**, which is
+zero-width but still a run in the inline flow — not the element's box. That is
+the opposite of the atomic inline boxes, where the box itself is the content, and
+it is why `display: contents` (no box) still reads two spaces while an empty
+hidden `<span>` (a box, no run) reads one.
+
+| markup | Chrome |
+|---|---|
+| `a <span style="visibility:hidden"><div style="visibility:visible">M</div></span> b` | `"a\nM\nb"` — the visible block's boundary trims what the run would have kept |
+| `a <span style="visibility:hidden;display:inline-block">M</span> b` | `"a  b"` |
+| `a<table><tr><td>M</td><td style="visibility:hidden">N</td><td>P</td></tr></table>b` | `"a\nM\tP\nb"` — **one** tab |
+| `a<table><tr><td>M</td></tr><tr style="visibility:hidden"><td>N</td></tr><tr><td>P</td></tr></table>b` | `"a\nM\nP\nb"` |
+| `a<pre style="visibility:hidden">M  N</pre>b` | `"ab"` |
+| `a<pre style="visibility:hidden"><span style="visibility:visible">M  N</span></pre>b` | `"aM  Nb"` |
+| `.vh{visibility:hidden}` + `a<span class=vh style="visibility:visible">M</span>b` | `"aMb"` — the style attribute outranks the rule |
+| `.vh{visibility:hidden!important}` + the same | `"ab"` — unless the rule is `!important` |
+
+A hidden cell or row contributes no separator and does not count as one for its
+next sibling, which is the table analogue of the missing line break.
+
+### What it changed on the twelve stations (W3)
+
+`innerText` was reading text no browser renders, and on one station by a factor
+of eighteen. Before / after / Chrome 151, one sweep each (`detector-sweep.mjs`):
+
+| site | textLength before | after | Chrome | verdictWords before → after (Chrome) |
+|---|---|---|---|---|
+| creepjs | 87514 | **4133** | 4742 | 2 → 2 (2) |
+| deviceinfo | 6192 | **5859** | 5861 | 25 → **28** (28) |
+| amiunique | 6439 | **6325** | 6360 | 1 → 1 (1) |
+
+The other nine stations read identically before and after. Every station that
+moved, moved toward Chrome; none moved away. deviceinfo's verdict-word count now
+matches Chrome exactly, where before the hidden navigation text it was reading
+put it three short. browserscan still scores 100% with no warnings and 0 loading
+skeletons (`mainTotal` 845, `docTotal` 1871 — unchanged).
+
+Ancillary, and not fixed here: re-setting an existing `<style>` element's
+`textContent` does not appear to re-cascade — the same rule text in a freshly
+created `<style>` takes effect, while replacing the text of one already in the
+document did not. Observed while writing the `!important` case above; the
+mechanism is unverified.

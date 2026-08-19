@@ -249,6 +249,12 @@ pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !
         .frame = frame,
         .preserve = tag == .pre,
         .transform = TextTransform.of(frame._style_manager.computedTextTransform(self.asElement())),
+        // Seeded from the element's own computed value, which is an ancestor walk
+        // because `visibility` inherits -- reading innerText off a hidden element
+        // is `""` in Chrome 151 (probe w1-visibility) even though the hiding
+        // declaration may sit on an ancestor. Every element below is resolved
+        // against this value instead of walking again.
+        .visible = !frame._style_manager.computedVisibilityHides(self.asElement()),
     };
     try self.collectInnerText(&state);
 }
@@ -1789,6 +1795,14 @@ const InnerTextState = struct {
     // boundaries is still one word.
     at_word_start: bool = true,
 
+    // The computed `visibility` of the element whose children we are walking:
+    // text is rendered only when its nearest element ancestor is visible.
+    // Threaded rather than resolved per element because `visibility` inherits,
+    // so the walk we are already doing carries the value for free -- and a
+    // descendant declaring `visible` inside a hidden subtree turns it back on
+    // (Chrome 151, probe w1-visibility).
+    visible: bool = true,
+
     fn requireBreaks(self: *InnerTextState, n: u8) void {
         if (n > self.pending_breaks) {
             self.pending_breaks = n;
@@ -1819,6 +1833,19 @@ const InnerTextState = struct {
         // A block boundary trims the whitespace on either side of it; a break
         // that only escaped an atomic inline box does not.
         self.trim_left = !atomic;
+    }
+
+    // The boundary of a block box whose own visibility is hidden. Such a box
+    // contributes no line break of its own, but it is still a box: it trims the
+    // collapsible whitespace on either side of it exactly as a visible block
+    // boundary does. Chrome 151 (probe w1b-visibility):
+    // `a <div style="visibility:hidden">M</div> b` reads "ab", where the same
+    // shape with display:none reads "a b" -- absent, so the two spaces merge.
+    // pending_breaks is deliberately left alone: a *visible* block nested inside
+    // may have armed one, and that break has to survive out here.
+    fn hiddenBlockBoundary(self: *InnerTextState) void {
+        self.pre_w = false;
+        self.trim_left = true;
     }
 
     // Emit a literal separator (table cell tab / row newline).
@@ -1905,7 +1932,22 @@ fn handleChildElement(
         return;
     }
 
+    // This element's computed `visibility`, restored on the way out. Only its own
+    // declaration is looked up: the value it inherits is whatever the walk
+    // brought here, so a subtree with no declaration of its own costs nothing.
+    const outer_visible = state.visible;
+    defer state.visible = outer_visible;
+    if (state.frame._style_manager.declaredVisibility(he.asElement())) |declared| {
+        state.visible = !StyleManager.visibilityHides(declared);
+    }
+    const visible = state.visible;
+
     if (he._type == .br) {
+        // A hidden <br> is silent (Chrome 151, probe w1b-visibility:
+        // `a<div style="visibility:hidden"><br></div>b` reads "ab").
+        if (!visible) {
+            return;
+        }
         try state.flushBreaks();
         try state.writer.writeByte('\n');
         state.wrote_any = true;
@@ -1925,6 +1967,12 @@ fn handleChildElement(
         .skip => {},
         // Replaced/embedded content: the subtree is not rendered.
         .replaced => {},
+        // A hidden inline box needs nothing of its own: what keeps the spaces on
+        // either side of it apart is the zero-width text run inside it, which
+        // writeText handles. Measured on Chrome 151 (probe w2-boundary):
+        // `a <span style="visibility:hidden">M</span> b` reads "a  b" but
+        // `a <span style="visibility:hidden"></span> b` reads "a b" -- an empty
+        // hidden inline merges them, where an empty inline-block keeps both.
         .@"inline", .transparent => try he.collectInnerText(state),
         // An atomic inline box is content in the run around it, and its own
         // formatting context inside. So a space pending before it is written
@@ -1944,28 +1992,42 @@ fn handleChildElement(
             state.pre_w = false;
             state.trim_left = false;
         },
+        // A hidden block box arms no break of its own -- not even <p>'s blank
+        // line, whose two come from the UA margin. Its children still recurse and
+        // still arm theirs, which is what makes
+        // `a<div style="visibility:hidden"><div style="visibility:visible">M</div></div>b`
+        // read "a\nM\nb" where the same with a visible span inside reads "aMb".
         .block => {
-            state.requireBreaks(1);
+            if (visible) state.requireBreaks(1) else state.hiddenBlockBoundary();
             try enterBlock(he, tag, state);
-            state.requireBreaks(1);
+            if (visible) state.requireBreaks(1) else state.hiddenBlockBoundary();
         },
         .block_p => {
-            state.requireBreaks(2);
+            if (visible) state.requireBreaks(2) else state.hiddenBlockBoundary();
             try he.collectInnerText(state);
-            state.requireBreaks(2);
+            if (visible) state.requireBreaks(2) else state.hiddenBlockBoundary();
         },
+        // A hidden cell or row contributes no separator and does not count as one
+        // for the next sibling either, the same way a hidden block contributes no
+        // break. Chrome 151 (probe w2-boundary): a three-cell row whose middle
+        // cell is hidden reads "M\tP", with one tab, and a three-row table whose
+        // middle row is hidden reads "M\nP".
         .table_cell => {
-            if (saw_cell.*) {
-                try state.writeSeparator('\t');
+            if (visible) {
+                if (saw_cell.*) {
+                    try state.writeSeparator('\t');
+                }
+                saw_cell.* = true;
             }
-            saw_cell.* = true;
             try he.collectInnerText(state);
         },
         .table_row => {
-            if (saw_row.*) {
-                try state.writeSeparator('\n');
+            if (visible) {
+                if (saw_row.*) {
+                    try state.writeSeparator('\n');
+                }
+                saw_row.* = true;
             }
-            saw_row.* = true;
             try he.collectInnerText(state);
         },
     }
@@ -2153,6 +2215,27 @@ fn writeText(c: *Node.CData, state: *InnerTextState) !void {
     const writer = state.writer;
 
     const s = c.getData().str();
+
+    // Hidden text: zero-width, but still a run in the inline flow. It writes no
+    // characters of its own, yet the collapsible spaces on either side of it do
+    // not merge across it -- Chrome 151 (probe w2-boundary) reads
+    // `a <span style="visibility:hidden">M</span> b` as "a  b" and the same with
+    // an empty span as "a b", so it is the run and not the box that separates
+    // them. `display: none` merges them, which is why the two cannot share this.
+    if (!state.visible) {
+        // Whitespace has nothing to separate, and a pending block break already
+        // trims both sides: a zero-width run may not undo either.
+        if (state.pending_breaks != 0 or isAllAsciiWhitespace(s)) {
+            return;
+        }
+        if (state.pre_w) {
+            try writer.writeByte(' ');
+            state.pre_w = false;
+        }
+        // Not wrote_any: nothing was rendered, so a leading break stays suppressed.
+        state.trim_left = false;
+        return;
+    }
     if (state.preserve) {
         if (s.len == 0) {
             return;
