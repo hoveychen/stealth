@@ -24,6 +24,7 @@ const CssParser = @import("../../css/Parser.zig");
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const Element = @import("../Element.zig");
+const StyleManager = @import("../../StyleManager.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -188,6 +189,7 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
         if (self._element) |element| {
             if (wrapped.eql(comptime .wrap("display"))) {
                 if (frame._style_manager.hasDisplayNone(element)) return "none";
+                return resolvedDisplay(element, frame);
             } else if (wrapped.eql(comptime .wrap("visibility"))) {
                 if (frame._style_manager.hasVisibilityHiddenInherited(element)) return "hidden";
             }
@@ -220,6 +222,21 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
         return "";
     };
     return prop._value.str();
+}
+
+/// The `display` a computed view reports: the cascade first (a stylesheet rule
+/// sets display as often as an inline declaration does, and the generic inline
+/// path cannot let a sheet's `!important` outrank one), the per-tag UA default
+/// when nothing declares one, and then blockification -- a flex or grid parent
+/// turns its child element's outer display block-level, which is how Chrome
+/// exposes it and the reason innerText breaks a line there.
+pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
+    const specified = frame._style_manager.computedDisplay(element) orelse getDefaultDisplay(element);
+    const parent = element.parentElement() orelse return specified;
+    if (!frame._style_manager.blockifiesChildren(parent)) {
+        return specified;
+    }
+    return StyleManager.blockify(specified);
 }
 
 fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame: *Frame) []const u8 {
@@ -1366,4 +1383,8 @@ test "WebApi: CSSStyleDeclaration custom property cascade" {
 
 test "WebApi: CSSStyleDeclaration custom property var substitution" {
     try testing.htmlRunner("css/custom_properties_var.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration display cascade" {
+    try testing.htmlRunner("css/display_cascade.html", .{});
 }

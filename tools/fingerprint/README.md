@@ -3602,3 +3602,131 @@ has shown across four runs of its own: 3589, 3598, 3600, 3602). iphey's
 `verdictWords` went 4 → 5, matching Chrome's 5, because `Trustworthy` finally
 separates as its own word. browserscan: 100%, `skeletons=0`, no warnings, 0 of 58
 flagged.
+
+## Where iphey's line break actually comes from (D1)
+
+The section above guessed that `inline-flex` breaks the line. Measured across
+seventeen `display` values on Chrome 151, it does not — and the correction
+matters, because the rule that does hold is both simpler and deeper.
+
+`a<span style="display:VALUE">M</span>b`, one row per value:
+
+| breaks (`a\nM\nb`) | does not break (`aMb`) |
+|---|---|
+| `block`, `flex`, `grid`, `list-item`, `table`, `flow-root` | `inline`, `inline-block`, **`inline-flex`**, `inline-grid`, `inline-table`, `table-cell`, `table-row`, `contents`, `ruby` |
+
+`display: none` drops the subtree (`ab`). So innerText breaks for exactly a
+block-level outer display, which is what the spec says and what our tag-based
+`innerTextDisplay` already approximates.
+
+**The break in iphey's headline is blockification, not the container.** A flex or
+grid container turns its child *elements* into block boxes, and Chrome reports
+that through `getComputedStyle` verbatim:
+
+| markup | Chrome innerText | inner span's computed display |
+|---|---|---|
+| `a<span style="display:inline-flex">M</span>b` | `aMb` | — (bare text, no element) |
+| `a<span style="display:inline-flex"><span>M</span></span>b` | `a\nM\nb` | **`block`** |
+| `a<span style="display:flex"><span>M</span></span>b` | `a\nM\nb` | **`block`** |
+| `a<span style="display:inline-grid"><span>M</span></span>b` | `a\nM\nb` | **`block`** |
+| `a<span style="display:inline-block"><span>M</span></span>b` | `aMb` | `inline` |
+| `a<span><span>M</span></span>b` | `aMb` | `inline` |
+| `a<span style="display:inline-flex"><span>M</span><span>N</span></span>b` | `a\nM\nN\nb` | `block` |
+| `Looks <span style="display:inline-flex"> <span>Trustworthy</span> </span>` | **`Looks \nTrustworthy`** | **`block`** |
+
+The last row is iphey's headline reproduced on `about:blank`. The bare-text row
+is what rules the container out: `M` gets an anonymous flex item, which has no
+node for innerText to walk, so there is no break. Only a real child element is
+blockified, and only that produces the break.
+
+Three things followed, in order, and all three are done now (D2–D4):
+
+1. `StyleManager` carries the cascaded `display` **value** alongside the
+   `display_none` boolean, both filled from the same declaration so the
+   hidden-element path keeps its exact semantics.
+2. `getComputedStyle().display` reads that cascade. It used to read only the
+   inline `style=` attribute and otherwise fall back to a tag-based UA default
+   (`getDefaultDisplay` in CSSStyleDeclaration.zig), which is why the engine
+   reported `inline` for iphey's slot span while reading `inline-flex` back
+   correctly from an inline style.
+3. `resolvedDisplay` blockifies a child element of a flex/grid container, and
+   `innerTextDisplay` consults the same value.
+
+## What the computed-display plan closed (D5)
+
+Everything below was measured the same day on the same machine, engine build
+`1.0.0-dev.296+51515ac1a` against main `1.0.0-dev.292+a9cf2dd02`, Chrome 151.
+
+**iphey's headline, read raw rather than normalised.** The site's own `<h1>`:
+
+| | `innerText` |
+|---|---|
+| main | `"Your Digital Identity Looks Trustworthy"` |
+| this plan | `"Your Digital Identity Looks \nTrustworthy"` |
+| Chrome 151 | `"Your Digital Identity Looks \nTrustworthy"` |
+
+Byte-identical to Chrome. Note that the sweep's `snippet` field collapses
+whitespace and shows all three as the same string — the newline is only visible
+in the raw value, which is the whole reason D1 misdiagnosed this once already.
+
+**Four `innerText` probes, 62 cases, diff clean against Chrome.** `d4-cases`
+(display keyword → break, both directions, plus blockification), `d4-space`
+(whitespace at an atomic inline boundary), `d4-space2` (which parents blockify),
+`d4-space3` (empty and whitespace-only boxes). Every one is byte-identical.
+
+**Twelve detectors, no regression.** Node counts flat on eleven; creepjs went
+3598 → 3600, inside the 3589–3602 band it has shown across five runs of its own.
+`verdictWords` is unchanged on all twelve and matches Chrome on eleven —
+deviceinfo's 25 vs 28 is the one standing gap, and it did not move.
+
+**browserscan: 100%, `skeletons=0`**, no problems, no warnings, 0 of 58 rows
+flagged (`BROWSERSCAN_SETTLE_MS=30000`).
+
+One thing measured and deliberately left alone: `checkVisibility()` returns
+`true` for a `display: contents` element where Chrome returns `false`. It reads
+the same on main, so it is a standing gap in `isElementHidden`, not something
+this plan introduced — and it is a visibility question, not a display one.
+
+### The blockification map, measured
+
+`blockify` in StyleManager.zig, from `d3-blockify` (sixteen child values under
+each of seven parent types, plus the table- and ruby-internal values):
+
+| child declares | inside flex / inline-flex / grid / inline-grid |
+|---|---|
+| `inline`, `inline-block`, `table-cell`, `table-row`, every `table-*-group`, `table-column*`, `table-caption`, `ruby-text`, `ruby-base` | `block` |
+| `inline-flex` | `flex` |
+| `inline-grid` | `grid` |
+| `inline-table` | `table` |
+| `ruby` | `block ruby` |
+| `block`, `flex`, `grid`, `table`, `list-item`, `flow-root` | unchanged |
+| `contents`, `none` | unchanged (they generate no box) |
+
+No other parent blockifies: `block`, `inline-block` and `table` parents leave
+every child's display exactly as declared, and only a direct child is an item —
+a grandchild of a flex container reads `inline`.
+
+### Two measurements that would have been wrong to guess
+
+**`<p>`'s blank line is a margin, not a display.** `a<p style="display:inline">M</p>b`
+reads `"a\n\nM\n\nb"` in Chrome — the two breaks survive an inline display. So
+`innerTextDisplay` returns the `<p>` case before consulting the cascade at all.
+Every other block-level tag does follow its display: `a<div style="display:inline">M</div>b`
+reads `"aMb"`, and so does the `<li>` form.
+
+**An atomic inline box does not collapse the whitespace around it.** A block
+boundary trims the space on either side of it; a break that merely escaped an
+inline-block / inline-flex / inline-grid / inline-table box does not:
+
+| markup | Chrome |
+|---|---|
+| `a <span style="display:block">M</span> b` | `"a\nM\nb"` |
+| `a <span><span style="display:block">M</span></span> b` | `"a\nM\nb"` |
+| `a <span style="display:inline-flex"><span>M</span></span> b` | `"a \nM\n b"` |
+| `a <span style="display:inline-block"></span> b` | `"a  b"` |
+| `a <span style="display:inline-block"> x</span> b` | `"a x b"` |
+
+The empty-box row is the decisive one: Chrome reads **two** spaces, so the box
+is content in the outer run rather than a boundary. That is what `InnerTextState`'s
+`breaks_inside_atomic` encodes, and it is why iphey reads `"Looks \nTrustworthy"`
+with the space kept rather than `"Looks\nTrustworthy"`.
