@@ -118,26 +118,36 @@ fn parseSheet(self: *StyleManager, build_arena: Allocator, sheet: *CSSStyleSheet
         return;
     }
 
+    // Nothing has materialised the CSSOM view, so the rules come straight from
+    // the owner element's text. <style> in either namespace owns its rules that
+    // way -- SVG's is not scoped to its subtree, it feeds the same cascade the
+    // HTML one does (Chrome 151 reads `hidden` for a span next to
+    // `<svg><style>.tv{visibility:hidden}</style></svg>`; probe v2-diag).
     const owner_node = sheet.getOwnerNode() orelse return;
-    if (owner_node.is(Element.Html.Style)) |style| {
-        const text = try style.asNode().getTextContentAlloc(self.arena.allocator());
-        var it = CssParser.parseStylesheet(text);
-        while (it.next()) |parsed_rule| {
-            switch (parsed_rule) {
-                .style => |s| try self.addRawRule(build_arena, s.selector, s.block, NO_LAYER),
-                .at_rule => |a| {
-                    // Only `@media` and `@layer` participate in the cascade
-                    // here. Other at-rules (`@keyframes`, `@supports`,
-                    // `@font-face`, …) don't carry top-level declarations
-                    // relevant to the visibility filter and stay skipped as
-                    // before.
-                    if (std.ascii.eqlIgnoreCase(a.keyword, "media")) {
-                        try self.applyMediaAtRule(build_arena, a.text, 0, NO_LAYER);
-                    } else if (std.ascii.eqlIgnoreCase(a.keyword, "layer")) {
-                        try self.applyLayerAtRule(build_arena, a.text, 0, NO_LAYER);
-                    }
-                },
-            }
+    const owner_style_node = if (owner_node.is(Element.Html.Style)) |style|
+        style.asNode()
+    else if (owner_node.is(Element.Svg.Style)) |style|
+        style.asNode()
+    else
+        return;
+
+    const text = try owner_style_node.getTextContentAlloc(self.arena.allocator());
+    var it = CssParser.parseStylesheet(text);
+    while (it.next()) |parsed_rule| {
+        switch (parsed_rule) {
+            .style => |s| try self.addRawRule(build_arena, s.selector, s.block, NO_LAYER),
+            .at_rule => |a| {
+                // Only `@media` and `@layer` participate in the cascade
+                // here. Other at-rules (`@keyframes`, `@supports`,
+                // `@font-face`, …) don't carry top-level declarations
+                // relevant to the visibility filter and stay skipped as
+                // before.
+                if (std.ascii.eqlIgnoreCase(a.keyword, "media")) {
+                    try self.applyMediaAtRule(build_arena, a.text, 0, NO_LAYER);
+                } else if (std.ascii.eqlIgnoreCase(a.keyword, "layer")) {
+                    try self.applyLayerAtRule(build_arena, a.text, 0, NO_LAYER);
+                }
+            },
         }
     }
 }

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+<div id=anchor></div>
+
+<script id=svg_style_element_cascades>
+{
+  // A <style> in the SVG namespace contributes to the document's cascade exactly
+  // like an HTML one: it is not scoped to the <svg> subtree, and it reaches HTML
+  // siblings. Every reading here is Chrome 151 (probes v1-svgstyle / v2-diag).
+  const NS = 'http://www.w3.org/2000/svg';
+
+  // Parsed from markup, with nothing having touched the CSSOM view. The rules
+  // used to reach the cascade only once something materialised sheet.cssRules,
+  // because the lazy parse only knew how to read an HTMLStyleElement's text.
+  {
+    const host = document.createElement('div');
+    host.innerHTML = '<svg><style>.tv{visibility:hidden}</style></svg><span class=tv>M</span>';
+    document.body.appendChild(host);
+    testing.expectEqual('hidden', getComputedStyle(host.querySelector('.tv')).visibility);
+    testing.expectEqual('', host.innerText);
+    host.remove();
+  }
+
+  // An SVG target inside the same subtree.
+  {
+    const host = document.createElement('div');
+    host.innerHTML = '<svg><style>rect{display:none}</style><rect id=rr /></svg>';
+    document.body.appendChild(host);
+    testing.expectEqual('none', getComputedStyle(host.getElementsByTagName('rect')[0]).display);
+    host.remove();
+  }
+
+  // Built with createElementNS and appended live, again without materialising
+  // the CSSOM view first.
+  {
+    const host = document.createElement('div');
+    host.innerHTML = '<span class=tv2>M</span>';
+    document.body.appendChild(host);
+    const svg = document.createElementNS(NS, 'svg');
+    const style = document.createElementNS(NS, 'style');
+    style.textContent = '.tv2{visibility:hidden}';
+    svg.appendChild(style);
+    host.appendChild(svg);
+    testing.expectEqual('hidden', getComputedStyle(host.querySelector('.tv2')).visibility);
+
+    // And the sheet is the one document.styleSheets carries.
+    testing.expectEqual(1, style.sheet.cssRules.length);
+    testing.expectEqual(true, [...document.styleSheets].includes(style.sheet));
+    host.remove();
+  }
+
+  // Rewriting the text re-parses the rules here too, both before and after
+  // anything has read sheet.cssRules. This already worked -- the hook added for
+  // HTMLStyleElement covers both namespaces -- and is kept as a regression.
+  {
+    const host = document.createElement('div');
+    host.innerHTML = '<span class=tv3>M</span>';
+    document.body.appendChild(host);
+    const svg = document.createElementNS(NS, 'svg');
+    const style = document.createElementNS(NS, 'style');
+    style.textContent = '.tv3{visibility:hidden}';
+    svg.appendChild(style);
+    host.appendChild(svg);
+    testing.expectEqual(1, style.sheet.cssRules.length);
+    style.textContent = '.tv3{visibility:visible}';
+    testing.expectEqual('.tv3 { visibility: visible; }', style.sheet.cssRules[0].cssText);
+    testing.expectEqual('visible', getComputedStyle(host.querySelector('.tv3')).visibility);
+    host.remove();
+  }
+}
+</script>
+
+<script id=svg_type_selector>
+{
+  // A type selector matches an SVG element whose tag name doubles as a known
+  // HTML tag. Those elements have no dedicated Element.Tag value, so the
+  // optimized enum comparison read `unknown` for them and never matched -- while
+  // getElementsByTagName, which compares tag names, always did.
+  const host = document.createElement('div');
+  // The <script> is spelled in pieces so this file's own <script> block survives.
+  host.innerHTML = '<svg><style>.z{color:red}</style><scr' + 'ipt></scr' + 'ipt><rect/><text></text><title>t</title></svg>';
+  document.body.appendChild(host);
+
+  for (const tag of ['style', 'script', 'rect', 'text', 'title', 'svg']) {
+    testing.expectEqual(1, host.querySelectorAll(tag).length);
+    testing.expectEqual(1, host.getElementsByTagName(tag).length);
+    testing.expectEqual(tag, host.querySelector(tag).tagName);
+  }
+
+  testing.expectEqual('http://www.w3.org/2000/svg', host.querySelector('style').namespaceURI);
+  host.remove();
+}
+</script>

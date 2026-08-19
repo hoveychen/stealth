@@ -3956,3 +3956,67 @@ are not applied to the document at all (Chrome reads `hidden` for a span beside
 `<svg><style>.tv{visibility:hidden}</style></svg>`, we read `visible`), and
 `querySelector('style')` does not find an SVG-namespaced one, though
 `getElementsByTagName('style')` does.
+
+## SVG `<style>`: the cascade, and finding it with a selector (V1–V3)
+
+The two gaps the section above left for their own plan. Both measured against
+Chrome 151 on the same machine (probes `v1-svgstyle`, `v2-diag`, `v2-diag2`).
+
+### The rules were invisible until something read the CSSOM view
+
+`StyleManager` parses a `<style>`'s rules lazily, out of the element's text, and
+only knew how to read an `HTMLStyleElement`. `CSSStyleSheet.getCssRules` already
+handled both namespaces, so an SVG `<style>` did have a sheet, and it was in
+`document.styleSheets` — its rules simply never reached the cascade. That made the
+bug conditional on a CSSOM read, which is what the first V1 pass nearly misread:
+
+| | Chrome | before | after |
+|---|---|---|---|
+| `<svg><style>.tv{visibility:hidden}</style></svg>` + `<span class=tv>` | `hidden` | **`visible`** | `hidden` |
+| `<svg><style>rect{display:none}</style><rect>` | `none` | **`inline`** | `none` |
+| same, after one `style.sheet.cssRules` read first | `hidden` | `hidden` | `hidden` |
+
+The rule is not scoped to the `<svg>` subtree in any browser — it feeds the same
+document cascade an HTML `<style>` does, which is why the HTML sibling above is the
+first row.
+
+### A type selector could not match SVG `style` or `script`
+
+Selector parts keep a known tag name as an `Element.Tag` so matching is an enum
+comparison. `getTag()` is only total over HTML, though: a foreign element whose
+name has no dedicated SVG type answers `unknown`. Of the twenty-one SVG tag names
+measured, `style` and `script` are the only two that are in `Element.Tag`, so they
+were the only two the comparison could never match — every other name is absent
+from the table and already took the tag-name arm. `getElementsByTagName`, which
+compares names, found them all along.
+
+| | `querySelectorAll` | `getElementsByTagName` |
+|---|---|---|
+| `style`, `script` (before) | **0** | 1 |
+| `style`, `script` (after) | 1 | 1 |
+| `rect`, `a`, `use`, `text`, `title`, `desc`, `mask`, `pattern`, `image`, `switch`, `defs`, `symbol`, `tspan`, `marker`, `view`, `filter`, `stop`, `svg` | 1 | 1 |
+| `clipPath` | **0** | 1 |
+
+`clipPath` is a different root cause and is left alone here: the selector's name is
+lowercased for comparison while a foreign element keeps its name as written, so a
+camel-cased foreign tag matches neither arm. Chrome matches `clipPath` and not
+`clippath`, so the fix is a case-sensitive compare for non-HTML elements rather
+than a wider lowercase.
+
+### Corrected from the V1 notes
+
+The V1 pass also reported that rewriting an SVG `<style>`'s text does not
+re-cascade. It does — that reading came from a stale binary. Re-measured on the
+plan's base commit, the SVG path matches the HTML control on all three mutation
+shapes tried (`textContent`, `firstChild.data`, remove-then-append), before and
+after the CSSOM view exists, and the row is kept as a regression in the test.
+
+### What it changed on the twelve stations
+
+Eleven stations read within one character of the previous sweep. creepjs gained
+270 nodes and 41 characters of text (3600 → 3870 nodes, 4131 → 4172), moving
+toward Chrome rather than away — Chrome renders 4065 nodes and 4742 characters
+there, and the previous three sweeps of this engine all sat at 3598–3600, so the
+jump is the fix and not page jitter. No station's verdict-word count moved.
+browserscan is unchanged at 100% with no warnings and 0 skeletons (`mainTotal`
+845, `docTotal` 1871).
