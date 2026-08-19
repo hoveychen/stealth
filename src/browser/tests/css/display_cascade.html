@@ -11,6 +11,7 @@
   .twice { display: grid; }
   #not-inherited-parent { display: inline-block; }
   .sheet-none { display: none; }
+  #sheet-flex-parent { display: flex; }
 </style>
 
 <div id=sheet-only></div>
@@ -46,5 +47,70 @@
   // `display: none` still reads back as none and still hides the element.
   testing.expectEqual('none', display('sheet-none'));
   testing.expectFalse(document.getElementById('sheet-none').checkVisibility());
+}
+</script>
+
+<div id=sheet-flex-parent><span id=sheet-flex-child></span></div>
+
+<script id=displayBlockification>
+{
+  // Measured on Chrome 151 (probe d3-blockify, 7 parents x 16 children): a flex
+  // or grid container turns each child element's *outer* display block-level,
+  // and getComputedStyle reports the turned value verbatim. This -- not the
+  // container's own display -- is what breaks iphey's headline line.
+  const probe = (parent, child) => {
+    const host = document.createElement('div');
+    host.innerHTML =
+      '<div style="display:' + parent + '">a<span style="display:' + child + '">M</span>b</div>';
+    document.body.appendChild(host);
+    const value = getComputedStyle(host.querySelector('span')).display;
+    host.remove();
+    return value;
+  };
+
+  // A flex container blockifies every child; the inner display (flex/grid/table)
+  // survives, only the outer half turns block.
+  testing.expectEqual('block', probe('flex', 'inline'));
+  testing.expectEqual('block', probe('flex', 'inline-block'));
+  testing.expectEqual('flex', probe('flex', 'inline-flex'));
+  testing.expectEqual('grid', probe('flex', 'inline-grid'));
+  testing.expectEqual('table', probe('flex', 'inline-table'));
+  testing.expectEqual('block', probe('flex', 'table-cell'));
+  testing.expectEqual('block', probe('flex', 'table-row'));
+  testing.expectEqual('block ruby', probe('flex', 'ruby'));
+  // Already block-level: unchanged.
+  testing.expectEqual('block', probe('flex', 'block'));
+  testing.expectEqual('list-item', probe('flex', 'list-item'));
+  testing.expectEqual('flow-root', probe('flex', 'flow-root'));
+  // The two that generate no box of their own are exempt.
+  testing.expectEqual('contents', probe('flex', 'contents'));
+  testing.expectEqual('none', probe('flex', 'none'));
+
+  // The other three container types blockify the same way.
+  testing.expectEqual('block', probe('inline-flex', 'inline'));
+  testing.expectEqual('flex', probe('inline-flex', 'inline-flex'));
+  testing.expectEqual('block', probe('grid', 'inline'));
+  testing.expectEqual('block', probe('inline-grid', 'inline'));
+
+  // Nothing else does. inline-block in particular looks like it should and
+  // does not -- that reading is why the container was ruled out as the cause.
+  testing.expectEqual('inline', probe('block', 'inline'));
+  testing.expectEqual('inline-block', probe('block', 'inline-block'));
+  testing.expectEqual('inline', probe('inline-block', 'inline'));
+  testing.expectEqual('inline-flex', probe('inline-block', 'inline-flex'));
+  testing.expectEqual('inline', probe('table', 'inline'));
+
+  // Only a direct child is a flex item; a grandchild is not.
+  {
+    const host = document.createElement('div');
+    host.innerHTML = '<div style="display:flex"><span><span id=gk>M</span></span></div>';
+    document.body.appendChild(host);
+    testing.expectEqual('block', getComputedStyle(host.querySelector('span')).display);
+    testing.expectEqual('inline', getComputedStyle(host.querySelector('#gk')).display);
+    host.remove();
+  }
+
+  // The container's display can come from a stylesheet rule just as well.
+  testing.expectEqual('block', getComputedStyle(document.getElementById('sheet-flex-child')).display);
 }
 </script>

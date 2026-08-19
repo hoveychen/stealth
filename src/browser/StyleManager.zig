@@ -1413,6 +1413,54 @@ pub fn computedDisplay(self: *StyleManager, element: *Element) ?[]const u8 {
     return null;
 }
 
+/// Does `element` lay its children out as flex or grid items? Those are exactly
+/// the containers that blockify a child's outer display, so this is the question
+/// `blockify` needs answered about the parent. A null cascade means no rule and
+/// no inline style set one, and no per-tag UA default is flex or grid, so the
+/// answer is no. Blockifying the parent itself would not change this: `blockify`
+/// only rewrites the outer half of a display, never the inner flex/grid half.
+pub fn blockifiesChildren(self: *StyleManager, element: *Element) bool {
+    const value = self.computedDisplay(element) orelse return false;
+    return std.ascii.eqlIgnoreCase(value, "flex") or
+        std.ascii.eqlIgnoreCase(value, "inline-flex") or
+        std.ascii.eqlIgnoreCase(value, "grid") or
+        std.ascii.eqlIgnoreCase(value, "inline-grid");
+}
+
+/// A flex or grid item's display, blockified: the outer half turns block-level
+/// and the inner half is kept. Measured on Chrome 151 (probe d3-blockify: every
+/// one of sixteen child values under each of four container types, plus the
+/// table-internal and ruby-internal values); `contents` and `none` generate no
+/// box of their own and are the two exemptions.
+pub fn blockify(display: []const u8) []const u8 {
+    const map = .{
+        .{ "inline", "block" },
+        .{ "inline-block", "block" },
+        .{ "inline-flex", "flex" },
+        .{ "inline-grid", "grid" },
+        .{ "inline-table", "table" },
+        .{ "table-cell", "block" },
+        .{ "table-row", "block" },
+        .{ "table-row-group", "block" },
+        .{ "table-header-group", "block" },
+        .{ "table-footer-group", "block" },
+        .{ "table-column", "block" },
+        .{ "table-column-group", "block" },
+        .{ "table-caption", "block" },
+        .{ "ruby", "block ruby" },
+        .{ "ruby-text", "block" },
+        .{ "ruby-base", "block" },
+    };
+    inline for (map) |entry| {
+        if (std.ascii.eqlIgnoreCase(display, entry[0])) {
+            return entry[1];
+        }
+    }
+    // Already block-level (block / flex / grid / table / list-item / flow-root),
+    // or box-less (contents / none): unchanged.
+    return display;
+}
+
 /// Cascaded `font-family` list, verbatim, or null when nothing declares one
 /// anywhere up the chain. Same source order as computedFontSize; the caller
 /// decides which of the listed names it can actually resolve.
