@@ -1424,6 +1424,25 @@ test "cdp: STARTUP sessionId" {
     }
 }
 
+test "cdp: STARTUP session drives a real browser context" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    // Puppeteer answers the synthetic STARTUP target by creating a real
+    // BrowserContext of its own, which is what the hack was written for.
+    // Playwright does not: it attaches to the target we announced and drives
+    // it straight away, so every command it sends carries sessionId=STARTUP.
+    // Swallowing those with an empty result left Page.navigate silently doing
+    // nothing -- no frameNavigated, no lifecycleEvent, goto hangs until it
+    // times out. A command on that session has to reach a real page.
+    try ctx.processMessage(.{ .id = 2, .method = "Target.setAutoAttach", .params = .{ .autoAttach = true, .waitForDebuggerOnStart = false } });
+    try ctx.processMessage(.{ .id = 3, .method = "Page.enable", .sessionId = "STARTUP" });
+
+    const bc = ctx.cdp().browser_context orelse return error.StartupSessionCreatedNoBrowserContext;
+    try std.testing.expect(bc.target_id != null);
+    try std.testing.expectEqualStrings("STARTUP", bc.session_id orelse return error.StartupSessionHasNoSessionId);
+}
+
 test "cdp: disconnect latches so the worker keeps exiting" {
     var ctx = try testing.context();
     defer ctx.deinit();
