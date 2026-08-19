@@ -23,6 +23,15 @@ const IS_TEST = builtin.is_test;
 
 const is_debug = builtin.mode == .Debug;
 
+// How much of one logged string we are willing to write. Most of what we log a
+// page put there -- a URL, a console argument -- and a page's idea of a URL runs
+// to whatever it inlined: one iphey load produced a 391,861-byte
+// `data:application/wasm;base64,...` request line. We have one thread, so a host
+// that pipes our output and does not read it stops the engine dead the moment we
+// block in write. Capped in writeString, the single funnel every logged string
+// passes through, so no log site can opt out of it.
+const max_string_len = 2048;
+
 pub const Scope = enum {
     app,
     dom,
@@ -458,9 +467,13 @@ fn writeErased(format: Format, value: Value, writer: *std.Io.Writer) !void {
     }
 }
 
-fn writeString(format: Format, value: []const u8, writer: *std.Io.Writer) !void {
+fn writeString(format: Format, full: []const u8, writer: *std.Io.Writer) !void {
+    const value = full[0..@min(full.len, max_string_len)];
+    const elided = full.len - value.len;
+
     if (format == .pretty) {
-        return writer.writeAll(value);
+        try writer.writeAll(value);
+        return writeElision(elided, writer);
     }
 
     var space_count: usize = 0;
@@ -478,15 +491,24 @@ fn writeString(format: Format, value: []const u8, writer: *std.Io.Writer) !void 
 
     if (binary_count > 0) {
         // TODO: use a different encoding if the ratio of binary data / printable is low
-        return std.base64.standard_no_pad.Encoder.encodeWriter(writer, value);
+        if (elided == 0) {
+            return std.base64.standard_no_pad.Encoder.encodeWriter(writer, value);
+        }
+        // The elision marker has a space in it, so a truncated value has to be
+        // quoted even where the untruncated one would not be.
+        try writer.writeByte('"');
+        try std.base64.standard_no_pad.Encoder.encodeWriter(writer, value);
+        try writeElision(elided, writer);
+        return writer.writeByte('"');
     }
 
     if (escape_count == 0) {
-        if (space_count == 0) {
+        if (space_count == 0 and elided == 0) {
             return writer.writeAll(value);
         }
         try writer.writeByte('"');
         try writer.writeAll(value);
+        try writeElision(elided, writer);
         try writer.writeByte('"');
         return;
     }
@@ -509,7 +531,17 @@ fn writeString(format: Format, value: []const u8, writer: *std.Io.Writer) !void 
         }
         rest = rest[pos + 1 ..];
     }
+    try writeElision(elided, writer);
     return writer.writeByte('"');
+}
+
+// Says how much of the value the cap took, so a reader can tell a value that
+// ends there from one that was cut.
+fn writeElision(elided: usize, writer: *std.Io.Writer) !void {
+    if (elided == 0) {
+        return;
+    }
+    return writer.print("...+{d} bytes", .{elided});
 }
 
 pub const LogFormatWriter = struct {
@@ -603,6 +635,47 @@ test "log: string escape" {
         aw.clearRetainingCapacity();
         try logTo(.app, .err, "test", .{ .string = "\n \thi  \" \" " }, &aw.writer);
         try testing.expectEqual(prefix ++ "string=\"\\n \thi  \\\" \\\" \"\n", aw.written());
+    }
+}
+
+// A logged string is often page-controlled and therefore unbounded: one iphey
+// load put a 391,861-byte `data:application/wasm;base64,...` URL on a single
+// request-complete line. A host that pipes our output without reading it wedges
+// the engine when we block in write, so no single value may run away.
+test "log: long strings are capped" {
+    var aw = std.Io.Writer.Allocating.init(testing.allocator);
+    defer aw.deinit();
+
+    const long = try testing.allocator.alloc(u8, max_string_len + 1000);
+    defer testing.allocator.free(long);
+    @memset(long, 'x');
+
+    {
+        opts.format = .logfmt;
+        defer opts.format = .pretty;
+        try logTo(.app, .err, "test", .{ .url = long }, &aw.writer);
+        const written = aw.written();
+        try testing.expectEqual(true, written.len < max_string_len + 200);
+        try testing.expectEqual(true, std.mem.endsWith(u8, written, "xxx...+1000 bytes\"\n"));
+    }
+
+    // The same cap in pretty format, which is what a terminal gets. Pretty
+    // closes an entry with a blank line, hence the second newline.
+    {
+        aw.clearRetainingCapacity();
+        try logTo(.app, .err, "test", .{ .url = long }, &aw.writer);
+        const written = aw.written();
+        try testing.expectEqual(true, written.len < max_string_len + 200);
+        try testing.expectEqual(true, std.mem.endsWith(u8, written, "xxx...+1000 bytes\n\n"));
+    }
+
+    // A value that fits is untouched, marker and all.
+    {
+        aw.clearRetainingCapacity();
+        opts.format = .logfmt;
+        defer opts.format = .pretty;
+        try logTo(.app, .err, "test", .{ .url = long[0..max_string_len] }, &aw.writer);
+        try testing.expectEqual(true, std.mem.endsWith(u8, aw.written(), "xxxx\n"));
     }
 }
 

@@ -166,7 +166,7 @@ async function viaCurl() {
     const samples = [];
     for (let i = 0; i < repeats; i++) {
         const out = await new Promise((resolve, reject) => {
-            const p = spawn('curl', ['-s', '--max-time', '30', url], { stdio: ['ignore', 'pipe', 'pipe'] });
+            const p = spawn('curl', ['-s', '--max-time', '30', url], { stdio: ['ignore', 'pipe', 'ignore'] });
             let buf = '';
             p.stdout.on('data', (d) => (buf += d));
             p.on('close', (code) => (code === 0 ? resolve(buf) : reject(new Error(`curl exit ${code}`))));

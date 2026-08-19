@@ -3387,9 +3387,13 @@ same settings, same 20s settle:
 
 A 64KB pipe fills, the engine blocks in `write`, its single-threaded loop stops,
 and CDP goes unanswered. Every reading taken through an undrained harness was a
-reading of a wedged engine, not of iphey. `verdicts-lightpanda.mjs` — the
-seven-station regression harness — has the same defect, so its numbers are
-suspect on any page that logs enough.
+reading of a wedged engine, not of iphey. Audited across every harness that
+spawns a browser, `iphey-verdict.mjs` was the only one that left the engine's
+pipes unread — `verdicts-lightpanda.mjs`, the seven-station regression harness,
+drains both with `.on('data')`, so its numbers are not affected. Two more
+harnesses gave *Chrome* an unread pipe (`dump-graphics.mjs`, `dump-fonts.mjs`);
+Chrome writes little enough that nothing was observed, and they now spawn with
+`stdio: 'ignore'` rather than a pipe nobody reads.
 
 **And the engine hands the harness a loaded gun.** One iphey load writes 415,852
 bytes to stderr at default verbosity. Broken down:
@@ -3405,6 +3409,26 @@ That one 383KB line is six times the pipe capacity by itself, it lands at
 page-controlled and unbounded: a `data:` URL is whatever the page inlined.
 `writeString` in `src/log.zig` is the single funnel every logged string passes
 through in both formats, so that is where a cap belongs — not at one log site.
+
+### What was changed, and what it measures at now
+
+`writeString` in `src/log.zig` caps a logged string at `max_string_len` (2048)
+and appends `...+N bytes`, so the reader can tell a value that ends there from
+one that was cut. Truncated values are quoted in `logfmt` even where an
+untruncated one would not be, because the marker contains a space.
+
+Measured on the same iphey load, before and after:
+
+| | before | after |
+|---|---|---|
+| stderr for one load | 415,852 bytes | **26,067 bytes** |
+| longest single line | 391,861 bytes | **2,076 bytes** |
+| undrained harness | `timeout: Runtime.evaluate`, 2/2 | **`Trustworthy`, 2/2** |
+| verdict, drained | `Trustworthy`, 487 nodes | unchanged |
+
+The cap is not a substitute for draining. 26KB is under one pipe's capacity for
+this page, not for a page that logs thousands of short lines, and the harness
+that does not read is still the harness that wedges. Both ends were fixed.
 
 Read the engine's own log volume before trusting any harness reading: `wc -c` on
 the captured stderr is the cheap version of this whole section.
