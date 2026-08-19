@@ -4132,3 +4132,22 @@ document whatever the element's namespace, case-sensitive in XML — and
 `matchesAttribute` splits on the element namespace instead, which is why the last
 two rows are wrong in opposite directions. `getElementsByTagName` is a separate
 comparison in the collections code, not this one.
+
+### What the fix was (X2)
+
+The parser now keeps both spellings of a type selector's name, `Selector.TagName`
+alongside the `Attribute.original_name` that was already there, and only takes the
+`Part.tag` enum shortcut when the selector was already lowercase -- which is the
+only shape where the two spellings cannot be told apart. `tagNameMatches` then
+compares the exact spelling first, because that answers both rules at once, and
+falls back to the case-folded compare only when the element's owner document is an
+HTML one.
+
+Ordering it that way keeps the document lookup off the hot path: an all-lowercase
+selector over an HTML tree stores a lowercase element name on one side and a
+lowercase selector on the other, so the exact compare and the folded compare can
+only ever agree, and a non-match returns before the lookup.
+
+Every type-selector row in the table above now reads exactly as Chrome does,
+including the two `createHTMLDocument` control rows and the `<DIV/>` / `<P>` rows
+that used to match nothing at all. The adjacent rows are unchanged, as intended.

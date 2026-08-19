@@ -329,14 +329,23 @@ fn parsePart(self: *Parser, arena: Allocator) !Part {
                 return error.InvalidTagSelector;
             }
             var buf: [256]u8 = undefined;
-            // Try to match as a known tag enum for optimization
             const lower = std.ascii.lowerString(&buf, tag_name);
-            if (Node.Element.Tag.parseForMatch(lower)) |known_tag| {
-                break :blk .{ .tag = known_tag };
-            }
-            // Store lowercased for fast comparison
             const lower_tag = try arena.dupe(u8, lower);
-            break :blk .{ .tag_name = lower_tag };
+            if (std.mem.eql(u8, lower, tag_name)) {
+                // Already lowercase, so the two spellings coincide and no
+                // document can tell them apart. Try the known-tag enum for
+                // the fast comparison in that case only.
+                if (Node.Element.Tag.parseForMatch(lower)) |known_tag| {
+                    break :blk .{ .tag = known_tag };
+                }
+                break :blk .{ .tag_name = .{ .lower = lower_tag, .original = lower_tag } };
+            }
+            // A capital in the selector: keep it, an XML document needs the
+            // spelling as written.
+            break :blk .{ .tag_name = .{
+                .lower = lower_tag,
+                .original = try arena.dupe(u8, tag_name),
+            } };
         },
         else => error.InvalidSelector,
     };
