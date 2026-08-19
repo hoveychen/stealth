@@ -4013,10 +4013,58 @@ after the CSSOM view exists, and the row is kept as a regression in the test.
 
 ### What it changed on the twelve stations
 
-Eleven stations read within one character of the previous sweep. creepjs gained
-270 nodes and 41 characters of text (3600 → 3870 nodes, 4131 → 4172), moving
-toward Chrome rather than away — Chrome renders 4065 nodes and 4742 characters
-there, and the previous three sweeps of this engine all sat at 3598–3600, so the
-jump is the fix and not page jitter. No station's verdict-word count moved.
-browserscan is unchanged at 100% with no warnings and 0 skeletons (`mainTotal`
-845, `docTotal` 1871).
+Nothing measurable. Eleven stations read within one character of the previous
+sweep, no verdict-word count moved, and browserscan is unchanged at 100% with no
+warnings and 0 skeletons (`mainTotal` 845, `docTotal` 1871).
+
+The twelfth needs a correction, because this section first claimed the opposite.
+The sweep taken right after the fix read creepjs at 3870 nodes and 4172 characters
+against 3598–3600 and ~4131 in the three sweeps before it, and that was written up
+as the fix moving creepjs toward Chrome (which renders 4065 / 4742 there). It was
+not: a later sweep of the very same commit read 3600 / 4129 again. **creepjs has an
+outlier at 3870 that is not attributable to any change here** — one sample against
+a stable baseline is not a finding, and this one was called from exactly that. The
+node count of creepjs is only worth reading in a run of at least three.
+
+## Camel-cased foreign tags and the type selector (C1–C3)
+
+The `clipPath` row the section above left open, and it turned out not to be about
+`clipPath`. Every camel-cased foreign tag was unreachable by selector, in every
+spelling, along with every `createElementNS` name that keeps a capital.
+
+### What the case rule actually is
+
+The assumption going in was Selectors-4's "case-sensitively for foreign elements",
+which would have made `clipPath` match and `clippath` not. Chrome 151 disagrees:
+in an **HTML** document every spelling matches, foreign or not.
+
+| document | selector | Chrome | before | after |
+|---|---|---|---|---|
+| HTML | `clipPath` on SVG `clipPath` | 1 | **0** | 1 |
+| HTML | `clippath`, `CLIPPATH`, `ClipPath` on the same | 1 | **0** | 1 |
+| HTML | `linearGradient` / `feBlend` / `textPath` / `foreignObject`, any case | 1 | **0** | 1 |
+| HTML | `Foo` / `foo` / `FOO` on `createElementNS('urn:x', 'Foo')` | 1 | **0** | 1 |
+| HTML | `mRow` / `mrow` / `MROW` on a MathML `mRow` | 1 | **0** | 1 |
+| HTML | `rect` / `RECT` / `Rect` on SVG `rect` | 1 | 1 | 1 |
+| XML | `Thing` vs `THING` on `<Thing/>` | 1 / **0** | 1 / 1 | 1 / 1 |
+| XHTML | `p` vs `P` | 1 / **0** | 1 / 1 | 1 / 1 |
+
+So the rule is per *document*, not per element: case-insensitive in HTML, sensitive
+in XML. The engine does not distinguish, and did not before — the last two rows are
+wrong here either way, and are left alone because everything this engine is for is
+an HTML document. `getElementsByTagName` is the one that stays case-sensitive for
+foreign elements in an HTML document too (`clipPath` 1, `clippath` 0, in both
+browsers); the test pins that contrast so a future "just lowercase everything"
+cannot quietly take it out.
+
+The mechanism was that the element side went through `getTagNameLower`, which
+lowercases for HTML and hands back a foreign element's name exactly as written,
+against a selector name the parser had already lowercased. Neither the enum arm nor
+the tag-name arm could match, so a camel-cased foreign tag had no route at all.
+
+### What it changed on the twelve stations
+
+Nothing: every station within 2 nodes and 6 characters of a sweep of the same
+commit without the change, taken minutes apart, and no verdict-word count moved.
+browserscan is unchanged at 100%, no warnings, 0 skeletons (`mainTotal` 845,
+`docTotal` 1871).
