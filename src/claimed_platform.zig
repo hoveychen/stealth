@@ -20,9 +20,16 @@
 //! build claiming macOS still handed out a Linux-shaped WebGL string or a
 //! macOS-shaped one on a Linux server, because the *tables* do not move with
 //! `builtin.os.tag` — only the words did. Pinning the claim makes the tables and
-//! the words name the same platform, and Linux is the claim worth pinning: it is
-//! what nearly every headless deployment actually runs on, so the recorded
-//! tables and the deployment agree as well.
+//! the words name the same platform.
+//!
+//! macOS is the claim, because it is the platform the tables can actually be
+//! recorded on. The reference host is a Mac with a real GPU, a full font
+//! collection and a full set of installed voices; the Linux reference is a
+//! container with no GPU, thirteen fonts and no voice list, so a Linux claim can
+//! only ever be as complete as that container is. Two tables — the font and emoji
+//! metrics — were recorded here from the start and never had a Linux counterpart,
+//! which is what made the earlier Linux claim a claim that half the surface
+//! contradicted.
 //!
 //! Whoever reads this file is usually here because they want to add a claim.
 //! Adding one to `Os` is cheap; making it true is not. Every table listed below
@@ -51,7 +58,7 @@ pub const Os = enum {
 };
 
 /// The claim. Everything else in this file follows from it.
-pub const claimed: Os = .linux;
+pub const claimed: Os = .macos;
 
 /// The parenthesised token in Chrome's reduced user-agent. Since the reduction
 /// this comes from a closed set, so it is a complete token rather than an
@@ -93,4 +100,18 @@ pub const architecture = switch (claimed) {
 pub const bitness = switch (claimed) {
     .macos => "64",
     .linux => "64",
+};
+
+/// The `platformVersion` high-entropy hint: the OS version, and the one hint
+/// whose *empty* value is itself platform-specific. Measured on Chrome 151 on
+/// both references — the Mac answers its OS version, and the Linux Chrome in the
+/// container answers the empty string, so "" was right for the Linux claim and is
+/// a tell under this one.
+///
+/// This is the reference host's macOS version rather than something read off the
+/// running kernel: the whole point of this file is that the claim does not follow
+/// the machine.
+pub const platform_version = switch (claimed) {
+    .macos => "26.3.1",
+    .linux => "",
 };
