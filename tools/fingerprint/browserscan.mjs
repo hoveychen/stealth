@@ -21,8 +21,13 @@ import { Cdp, newPage, sleep } from './cdp.mjs';
 const PORT = 9487;
 const LIGHTPANDA = 'zig-out/bin/lightpanda';
 // The hardware card arrives well after load; under 20s it is still blank, and
-// a blank card reads as a difference that is not there.
-const SETTLE_MS = 25000;
+// a blank card reads as a difference that is not there. How long "after load"
+// is depends on the engine: a bigger font table makes the site's own enumeration
+// loop slower, and at 25s the card came back empty with 45 loading skeletons
+// still on the page -- which reads as a hardware card that broke rather than one
+// that had not arrived. BROWSERSCAN_SETTLE_MS raises it; `skeletons` in the
+// output is how you know whether you waited long enough.
+const SETTLE_MS = Number(process.env.BROWSERSCAN_SETTLE_MS ?? 25000);
 
 // The class names are content hashes of browserscan's CSS modules, so they are
 // stable across loads and identical for both engines; the ids are randomised

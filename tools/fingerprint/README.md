@@ -3276,3 +3276,80 @@ is why: before it, the engine detected Arial Hebrew and Chrome did not.
 * **A single machine's collection.** These are this Mac's fonts. Another Mac with
   Office installed reports a superset, and matching a *particular* Mac is not the
   same as being unremarkable among Macs.
+
+## Was claiming macOS worth it? Three answers, not one
+
+Everything above changed one platform claim and every table behind it. Measured
+against the same three detectors the before column came from, and against the two
+reference Chromes:
+
+| | lightpanda, Linux claim | lightpanda, macOS claim | Chrome, macOS | Chrome, Linux |
+|---|---|---|---|---|
+| CreepJS like-headless | 38% | **31%** | 38% | 44% |
+| CreepJS headless / stealth | 0% / 0% | 0% / 0% | 0% / 0% | 0% / 0% |
+| iphey headline | no verdict | **no verdict** | `Trustworthy` | no `Trustworthy` |
+| browserscan score | 95% | 100%\* | 100% | 90% |
+| browserscan hardware card | complete | **never completes** | complete | complete |
+| browserscan `OS` row | `Linux x86_64` | `Mac OS 26.3.1` | `Mac OS 26.3.1` | — |
+| browserscan fonts | 10 | 135 | 342 | 13 |
+
+\* The 100% is not a pass. Reading the page after 25s and again after 90s, 45
+loading skeletons are still on it and every hardware row — visitor ID, Canvas,
+WebGL, the renderer pair, Audio, Client Rects, WebGPU, touch, memory — is empty.
+There was nothing left to deduct from. This is the same shape of false 100% the
+earlier renderer-string experiment produced, and it is why a score is never read
+without `skeletons` beside it.
+
+**CreepJS: yes, and by more than the reference.** 38% → 31%, deterministic across
+two runs (hash `da88474c`), and lower than either real Chrome — the macOS one
+scores 38%, the Linux container 44%. Whatever CreepJS is adding up, the coherent
+macOS surface subtracts from it.
+
+**iphey: no change, and the claim was never the problem.** Still five cards
+reading `Temporary value` and no headline verdict, exactly as under the Linux
+claim. Its fingerprint pipeline does not finish in this engine, which is its own
+bug and not a platform mismatch.
+
+**browserscan: worse, and localised.** Three isolation runs, each a single change
+on top of the finished branch:
+
+| what was changed | card | score | warnings |
+|---|---|---|---|
+| nothing (macOS claim, macOS GPU table) | **blank**, 45 skeletons | 100%\* | none computed |
+| `claimed` back to `.linux`, new font table kept | complete | 95% | `WebGL exception -5%` |
+| macOS claim, whole GPU table forced to Linux | complete | 90% | `WebGL exception`, **`WebGL vendors vary`** |
+| macOS claim, macOS limits, Linux renderer strings | complete | 90% | same two |
+
+Two findings fall out, and they point in opposite directions:
+
+1. **The Apple renderer strings alone hang the hardware card.** Not the limits,
+   not the extension lists, not the fonts — the last row above keeps every macOS
+   number and only puts the SwiftShader strings back, and the card completes.
+   Blank 3/3 with the Apple strings, complete 2/2 without. No exception reaches
+   `window.onerror`, `unhandledrejection` or `console.error` — the page's only
+   errors are AdSense's and a rate-limited `ip-api.com` — so this reads as a
+   promise that never settles rather than something that throws, which is also
+   why waiting longer does not help.
+2. **browserscan cross-checks the WebGL vendor against the claimed OS.** Claiming
+   macOS while reporting SwiftShader earns a warning that did not exist before:
+   *"Your WebGL vendor does not match your actual hardware information. You appear
+   to be hiding actual hardware information."* −5%, on top of the existing
+   `WebGL exception -5%`. So the SwiftShader strings are not a workaround under a
+   macOS claim: reporting an Apple GPU is required, and reporting one is what
+   hangs the card.
+
+browserscan therefore cannot benefit from the macOS claim until (1) is found.
+Until then the claim trades a real 95% for a hollow 100%.
+
+### What the experiment settles, and what it does not
+
+* Recording every surface from one machine is achievable and it was worth doing on
+  its own terms: the split that had the engine claiming Linux while serving macOS
+  font metrics, macOS shader precisions, macOS multisample counts and an Apple
+  WebGPU adapter is gone, and three of those were only visible once the tables had
+  two columns.
+* The claim is one constant. Flipping it back is one line, and the suite passes
+  on both settings, which is what the platform-keyed tests are for.
+* Nothing here says macOS is the better claim *in general*. It is better on
+  CreepJS, neutral on iphey, and currently worse on browserscan. A fourth
+  detector could go either way.
