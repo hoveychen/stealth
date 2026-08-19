@@ -477,6 +477,8 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             props.font_size = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "font-family")) {
             props.font_family = .{ .value = val, .important = decl.important };
+        } else if (std.ascii.eqlIgnoreCase(name, "text-transform")) {
+            props.text_transform = .{ .value = val, .important = decl.important };
         } else if (CSSStyleDeclaration.isCustomProperty(name)) {
             try custom.append(self.arena.allocator(), .{
                 .name = try self.arena.allocator().dupe(u8, name),
@@ -1078,6 +1080,13 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
         };
     }
 
+    if (decl.findProperty(String.wrap("text-transform"))) |property| {
+        props.text_transform = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
+    }
+
     if (decl.findProperty(comptime .wrap("display"))) |property| {
         props.display_none = property._value.eql(comptime .wrap("none"));
     }
@@ -1184,6 +1193,7 @@ const RuleProperties = struct {
     pointer_events_none: ?bool = null,
     font_size: ?Declaration = null,
     font_family: ?Declaration = null,
+    text_transform: ?Declaration = null,
     // Every custom property the rule declares, in declaration order. Unlike
     // the fields above there is no fixed set of names to pick from, and a page
     // can read any of them back through getComputedStyle.
@@ -1197,6 +1207,7 @@ const RuleProperties = struct {
             self.pointer_events_none != null or
             self.font_size != null or
             self.font_family != null or
+            self.text_transform != null or
             self.custom.len > 0;
     }
 };
@@ -1333,6 +1344,40 @@ fn computedFontSizeAt(self: *StyleManager, element: ?*Element, depth: u8) f64 {
     return self.computedFontSizeAt(parent, depth + 1);
 }
 
+/// Cascaded `text-transform` keyword, or null when nothing declares one
+/// anywhere up the chain. Same source order and inheritance walk as
+/// computedFontFamily, minus its presentational-attribute step: `text-transform`
+/// has no HTML attribute form. `innerText` is the caller -- it is defined in
+/// terms of layout, so it reports text the way this says it is rendered.
+pub fn computedTextTransform(self: *StyleManager, element: ?*Element) ?[]const u8 {
+    return self.computedTextTransformAt(element, 0);
+}
+
+fn computedTextTransformAt(self: *StyleManager, element: ?*Element, depth: u8) ?[]const u8 {
+    if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+        return null;
+    }
+    const current = element orelse return null;
+
+    // "text-transform" is 14 bytes, past String's 12-byte SSO limit, so the
+    // wrap has to happen at runtime -- same as String.wrap("preserveAspectRatio").
+    const inline_property = getInlineStyleProperty(current, String.wrap("text-transform"), self.frame);
+    const rule = self.cascadedDeclaration(current, .text_transform);
+
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            return declaration.value;
+        }
+    }
+    if (inline_property) |property| {
+        return property._value.str();
+    }
+    if (rule) |declaration| {
+        return declaration.value;
+    }
+    return self.computedTextTransformAt(current.parentElement(), depth + 1);
+}
+
 /// Cascaded `font-family` list, verbatim, or null when nothing declares one
 /// anywhere up the chain. Same source order as computedFontSize; the caller
 /// decides which of the listed names it can actually resolve.
@@ -1372,7 +1417,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     return self.cascadedDeclaration(el, .font_size);
 }
 
-const CascadedProperty = enum { font_size, font_family };
+const CascadedProperty = enum { font_size, font_family, text_transform };
 
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
@@ -1390,6 +1435,7 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
                 const declaration = (switch (which) {
                     .font_size => props.font_size,
                     .font_family => props.font_family,
+                    .text_transform => props.text_transform,
                 }) orelse continue;
                 if (important.* and !declaration.important) continue;
                 if (declaration.important == important.* and p <= priority.*) continue;

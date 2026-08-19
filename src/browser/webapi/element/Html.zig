@@ -243,7 +243,12 @@ pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !
         else => {},
     }
 
-    var state = InnerTextState{ .writer = writer, .frame = frame, .preserve = tag == .pre };
+    var state = InnerTextState{
+        .writer = writer,
+        .frame = frame,
+        .preserve = tag == .pre,
+        .transform = TextTransform.of(frame._style_manager.computedTextTransform(self.asElement())),
+    };
     try self.collectInnerText(&state);
 }
 
@@ -1763,6 +1768,18 @@ const InnerTextState = struct {
     // preserve whitespace (pre tag, in the future white-space: pre)
     preserve: bool = false,
 
+    // The computed text-transform of the element whose children we are walking.
+    // innerText is defined in terms of layout, so it reports rendered casing.
+    // Resolved per element rather than threaded down, because
+    // computedTextTransform already walks ancestors -- inheritance comes from
+    // that walk, and a descendant's own declaration overrides it for free.
+    transform: TextTransform = .none,
+
+    // Whether the next letter starts a word, for `capitalize`. Lives here and
+    // not in the per-node write so a word split across text nodes or element
+    // boundaries is still one word.
+    at_word_start: bool = true,
+
     fn requireBreaks(self: *InnerTextState, n: u8) void {
         if (n > self.pending_breaks) {
             self.pending_breaks = n;
@@ -1877,6 +1894,12 @@ fn handleChildElement(
         return;
     }
 
+    // This element's own computed value, restored on the way out, the same
+    // set/defer-restore shape enterBlock uses for <pre>'s whitespace.
+    const outer_transform = state.transform;
+    defer state.transform = outer_transform;
+    state.transform = TextTransform.of(state.frame._style_manager.computedTextTransform(he.asElement()));
+
     switch (innerTextDisplay(he, tag)) {
         // Not rendered: skip the subtree entirely (script/style/metadata/...).
         .skip => {},
@@ -1963,6 +1986,58 @@ fn isAllAsciiWhitespace(s: []const u8) bool {
     return true;
 }
 
+// `uppercase` / `lowercase` / `capitalize`, ASCII only. The non-ASCII cases need
+// Unicode case tables we do not carry; a byte above 0x7F passes through, which
+// is wrong for those scripts and right for the Latin text every detector reads.
+const TextTransform = enum {
+    none,
+    uppercase,
+    lowercase,
+    capitalize,
+
+    fn of(value: ?[]const u8) TextTransform {
+        const raw = value orelse return .none;
+        const trimmed = std.mem.trim(u8, raw, &std.ascii.whitespace);
+        if (std.ascii.eqlIgnoreCase(trimmed, "uppercase")) return .uppercase;
+        if (std.ascii.eqlIgnoreCase(trimmed, "lowercase")) return .lowercase;
+        if (std.ascii.eqlIgnoreCase(trimmed, "capitalize")) return .capitalize;
+        // `none`, `full-width`, `math-auto`, anything unrecognised: unchanged.
+        return .none;
+    }
+};
+
+// Writes `s` with the current text-transform applied, updating the word-start
+// flag so `capitalize` survives a word split across nodes.
+fn writeTransformed(state: *InnerTextState, s: []const u8) !void {
+    const writer = state.writer;
+    switch (state.transform) {
+        .none => try writer.writeAll(s),
+        .uppercase => for (s) |b| try writer.writeByte(std.ascii.toUpper(b)),
+        .lowercase => for (s) |b| try writer.writeByte(std.ascii.toLower(b)),
+        // Maintains the flag byte by byte, so it returns rather than falling
+        // through to the run-level update below.
+        .capitalize => {
+            for (s) |b| {
+                if (std.ascii.isWhitespace(b)) {
+                    state.at_word_start = true;
+                    try writer.writeByte(b);
+                } else if (state.at_word_start) {
+                    state.at_word_start = false;
+                    try writer.writeByte(std.ascii.toUpper(b));
+                } else {
+                    try writer.writeByte(b);
+                }
+            }
+            return;
+        },
+    }
+    // The others only need to record whether this run ended mid-word, so that a
+    // `capitalize` sibling continues the word rather than restarting it.
+    if (s.len > 0) {
+        state.at_word_start = std.ascii.isWhitespace(s[s.len - 1]);
+    }
+}
+
 fn writeText(c: *Node.CData, state: *InnerTextState) !void {
     const writer = state.writer;
 
@@ -1977,12 +2052,12 @@ fn writeText(c: *Node.CData, state: *InnerTextState) !void {
         while (i < s.len) : (i += 1) {
             const ch = s[i];
             if (ch == '\r') {
-                try writer.writeByte('\n');
+                try writeTransformed(state, "\n");
                 if (i + 1 < s.len and s[i + 1] == '\n') {
                     i += 1;
                 }
             } else {
-                try writer.writeByte(ch);
+                try writeTransformed(state, s[i .. i + 1]);
             }
         }
         state.wrote_any = true;
@@ -1998,9 +2073,18 @@ fn writeText(c: *Node.CData, state: *InnerTextState) !void {
 
     try state.flushBreaks();
     if (state.pre_w) {
-        try writer.writeByte(' ');
+        try writeTransformed(state, " ");
     }
-    state.pre_w = try c.render(writer, .{ .trim_left = state.trim_left });
+    if (state.transform == .none) {
+        state.pre_w = try c.render(writer, .{ .trim_left = state.trim_left });
+    } else {
+        // render() writes straight to the writer, so the transform cannot wrap
+        // it in place: render once into the frame arena, then transform the
+        // bytes it produced. innerText is not a hot path.
+        var run = std.Io.Writer.Allocating.init(state.frame.local_arena);
+        state.pre_w = try c.render(&run.writer, .{ .trim_left = state.trim_left });
+        try writeTransformed(state, run.written());
+    }
     state.wrote_any = true;
     state.trim_left = state.pre_w;
 }
