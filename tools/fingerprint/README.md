@@ -3602,3 +3602,51 @@ has shown across four runs of its own: 3589, 3598, 3600, 3602). iphey's
 `verdictWords` went 4 → 5, matching Chrome's 5, because `Trustworthy` finally
 separates as its own word. browserscan: 100%, `skeletons=0`, no warnings, 0 of 58
 flagged.
+
+## Where iphey's line break actually comes from (D1)
+
+The section above guessed that `inline-flex` breaks the line. Measured across
+seventeen `display` values on Chrome 151, it does not — and the correction
+matters, because the rule that does hold is both simpler and deeper.
+
+`a<span style="display:VALUE">M</span>b`, one row per value:
+
+| breaks (`a\nM\nb`) | does not break (`aMb`) |
+|---|---|
+| `block`, `flex`, `grid`, `list-item`, `table`, `flow-root` | `inline`, `inline-block`, **`inline-flex`**, `inline-grid`, `inline-table`, `table-cell`, `table-row`, `contents`, `ruby` |
+
+`display: none` drops the subtree (`ab`). So innerText breaks for exactly a
+block-level outer display, which is what the spec says and what our tag-based
+`innerTextDisplay` already approximates.
+
+**The break in iphey's headline is blockification, not the container.** A flex or
+grid container turns its child *elements* into block boxes, and Chrome reports
+that through `getComputedStyle` verbatim:
+
+| markup | Chrome innerText | inner span's computed display |
+|---|---|---|
+| `a<span style="display:inline-flex">M</span>b` | `aMb` | — (bare text, no element) |
+| `a<span style="display:inline-flex"><span>M</span></span>b` | `a\nM\nb` | **`block`** |
+| `a<span style="display:flex"><span>M</span></span>b` | `a\nM\nb` | **`block`** |
+| `a<span style="display:inline-grid"><span>M</span></span>b` | `a\nM\nb` | **`block`** |
+| `a<span style="display:inline-block"><span>M</span></span>b` | `aMb` | `inline` |
+| `a<span><span>M</span></span>b` | `aMb` | `inline` |
+| `a<span style="display:inline-flex"><span>M</span><span>N</span></span>b` | `a\nM\nN\nb` | `block` |
+| `Looks <span style="display:inline-flex"> <span>Trustworthy</span> </span>` | **`Looks \nTrustworthy`** | **`block`** |
+
+The last row is iphey's headline reproduced on `about:blank`. The bare-text row
+is what rules the container out: `M` gets an anonymous flex item, which has no
+node for innerText to walk, so there is no break. Only a real child element is
+blockified, and only that produces the break.
+
+Three things follow, in order, and none of them is done yet:
+
+1. `StyleManager` has to carry the cascaded `display` **value**, not just the
+   `display_none` boolean it keeps today.
+2. `getComputedStyle().display` has to read that cascade. Today it reads the
+   inline `style=` attribute and otherwise falls back to a tag-based UA default
+   (`getDefaultDisplay` in CSSStyleDeclaration.zig), which is why the engine
+   reported `inline` for iphey's slot span while reading `inline-flex` back
+   correctly from an inline style.
+3. `computedDisplay` has to blockify a child element of a flex/grid container
+   before innerText consults it.
