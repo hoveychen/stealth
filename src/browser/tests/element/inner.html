@@ -196,10 +196,12 @@
   d1.innerHTML = 'a<br style="display:none">b';
   testing.expectEqual("ab", d1.innerText);
 
-  // Guard: visibility:hidden text stays INCLUDED (the check is display-only),
-  // so a future switch to a visibility-aware check can't silently over-exclude.
+  // visibility:hidden text is excluded too, and for a different reason than
+  // display:none: the box exists, it just renders nothing. Chrome 151 reads "Y".
+  // The whitespace and line-break halves of that rule are in the
+  // innerTextVisibility group below.
   d1.innerHTML = '<span style="visibility:hidden">X</span>Y';
-  testing.expectEqual("XY", d1.innerText);
+  testing.expectEqual("Y", d1.innerText);
 </script>
 
 <script id=rawTextContext>
@@ -429,4 +431,127 @@
     read('Looks <span style="display:inline-flex"> <span>Trustworthy</span> </span>'));
 
   cd.remove();
+</script>
+
+<script id=innerTextVisibility>
+  // Text is rendered only when its nearest element ancestor computes to
+  // `visible`. Chrome's reading is in the comment on every line; all of them
+  // were measured on Chrome 151 against about:blank (probes w1-visibility and
+  // w1b-visibility, tabulated in tools/fingerprint/README.md).
+  const cv = document.createElement('div');
+  document.body.appendChild(cv);
+  const readv = (html) => { cv.innerHTML = html; return cv.innerText; };
+
+  // `hidden` and `collapse` both hide the text.
+  testing.expectEqual('ab', readv('a<span style="visibility:hidden">M</span>b'));
+  testing.expectEqual('ab', readv('a<span style="visibility:collapse">M</span>b'));
+  // It inherits, so a descendant with no declaration of its own stays hidden...
+  testing.expectEqual('ab', readv('a<span style="visibility:hidden"><span>M</span></span>b'));
+  // ...and one that declares `visible` turns it back on. This is why the rule
+  // is not "skip the subtree".
+  testing.expectEqual('aMb',
+    readv('a<span style="visibility:hidden"><span style="visibility:visible">M</span></span>b'));
+  testing.expectEqual('aMb',
+    readv('a<span style="visibility:hidden"><span style="visibility:visible"><span>M</span></span></span>b'));
+  testing.expectEqual('ab',
+    readv('a<span style="visibility:hidden"><span style="visibility:visible">' +
+          '<span style="visibility:hidden">M</span></span></span>b'));
+  // opacity is not visibility: a transparent element still renders its text.
+  testing.expectEqual('aMb', readv('a<span style="opacity:0">M</span>b'));
+
+  // A hidden block box contributes no line break, but a visible one does even
+  // when it is empty.
+  testing.expectEqual('a\nb', readv('a<div></div>b'));
+  testing.expectEqual('a\nb', readv('a<div> </div>b'));
+  testing.expectEqual('ab', readv('a<div style="visibility:hidden">M</div>b'));
+  testing.expectEqual('ab', readv('a<div style="visibility:hidden"></div>b'));
+  // Not even <p>'s blank line.
+  testing.expectEqual('ab', readv('a<p style="visibility:hidden">M</p>b'));
+  // A hidden <br> is silent too.
+  testing.expectEqual('ab', readv('a<div style="visibility:hidden"><br></div>b'));
+  testing.expectEqual('ab', readv('a<span style="visibility:hidden"><div>M</div></span>b'));
+  testing.expectEqual('a\nM\nP\nb',
+    readv('a<div>M</div><div style="visibility:hidden">N</div><div>P</div>b'));
+  testing.expectEqual('aN\nP\nb',
+    readv('a<div style="visibility:hidden">M</div>N<div>P</div>b'));
+  // The outer hidden block never contributes a break; whether one appears
+  // depends only on whether the visible content inside is block-level.
+  testing.expectEqual('a\nM\nb',
+    readv('a<div style="visibility:hidden"><div style="visibility:visible">M</div></div>b'));
+  testing.expectEqual('aMb',
+    readv('a<div style="visibility:hidden"><span style="visibility:visible">M</span></div>b'));
+
+  // Hidden text is zero-width but still a run in the inline flow: the
+  // collapsible spaces on either side of it do not merge across it. A hidden
+  // block still trims both sides.
+  testing.expectEqual('a  b', readv('a <span style="visibility:hidden">M</span> b'));
+  testing.expectEqual('a b', readv('a <span style="visibility:hidden">M</span>b'));
+  testing.expectEqual('a  N b',
+    readv('a <span style="visibility:hidden">M</span> <span>N</span> b'));
+  testing.expectEqual('ab', readv('a <div style="visibility:hidden">M</div> b'));
+  // The control worth keeping: display:none is *absent*, so the two collapsible
+  // spaces around it merge into one. The two cannot share an implementation.
+  testing.expectEqual('a b', readv('a <div style="display:none">M</div> b'));
+  // And it really is the run and not the box that separates them: an *empty*
+  // hidden inline merges the two spaces, where an empty inline-block keeps both
+  // (probe w2-boundary). So the hidden box itself contributes nothing at all.
+  testing.expectEqual('a b', readv('a <span style="visibility:hidden"></span> b'));
+  testing.expectEqual('a b', readv('a <span style="visibility:hidden"> </span> b'));
+  testing.expectEqual('a  b', readv('a <span style="display:inline-block"></span> b'));
+  // display:contents generates no box to be hidden, and the run inside it still
+  // separates the spaces -- which is the row that rules the box out as the cause.
+  testing.expectEqual('a  b', readv('a <span style="visibility:hidden;display:contents">M</span> b'));
+  testing.expectEqual('ab', readv('a<span style="visibility:hidden;display:contents">M</span>b'));
+  testing.expectEqual('aMb',
+    readv('a<span style="visibility:hidden;display:contents"><span style="visibility:visible">M</span></span>b'));
+  // A visible block inside a hidden inline asserts a real block boundary, so it
+  // trims the space the hidden run would otherwise have kept.
+  testing.expectEqual('a\nM\nb',
+    readv('a <span style="visibility:hidden"><div style="visibility:visible">M</div></span> b'));
+  // A hidden atomic inline keeps both spaces -- as a box, not as a run.
+  testing.expectEqual('a  b', readv('a <span style="visibility:hidden;display:inline-block">M</span> b'));
+  testing.expectEqual('a  b',
+    readv('a <span style="visibility:hidden;display:inline-flex"><span>M</span></span> b'));
+
+  // A hidden cell or row contributes no separator, and does not count as one for
+  // the next sibling either -- the table analogue of the missing line break.
+  testing.expectEqual('a\nM\tP\nb',
+    readv('a<table><tr><td>M</td><td style="visibility:hidden">N</td><td>P</td></tr></table>b'));
+  testing.expectEqual('a\nM\nP\nb',
+    readv('a<table><tr><td>M</td></tr><tr style="visibility:hidden"><td>N</td></tr>' +
+          '<tr><td>P</td></tr></table>b'));
+  testing.expectEqual('ab', readv('a<table style="visibility:hidden"><tr><td>M</td></tr></table>b'));
+
+  // <pre> keeps its whitespace for the visible part and still contributes no
+  // break while hidden.
+  testing.expectEqual('ab', readv('a<pre style="visibility:hidden">M  N</pre>b'));
+  testing.expectEqual('aM  Nb',
+    readv('a<pre style="visibility:hidden"><span style="visibility:visible">M  N</span></pre>b'));
+
+  // The same through a stylesheet rule rather than an inline style, including
+  // the !important ordering: the rule loses to the style attribute unless it is
+  // !important too.
+  const vsheet = document.createElement('style');
+  vsheet.textContent = '.vh { visibility: hidden }';
+  document.head.appendChild(vsheet);
+  testing.expectEqual('ab', readv('a<span class=vh>M</span>b'));
+  testing.expectEqual('aMb', readv('a<span class=vh style="visibility:visible">M</span>b'));
+  testing.expectEqual('aMb', readv('a<span class=vh><span style="visibility:visible">M</span></span>b'));
+  vsheet.remove();
+  const vsheetImp = document.createElement('style');
+  vsheetImp.textContent = '.vh { visibility: hidden !important }';
+  document.head.appendChild(vsheetImp);
+  testing.expectEqual('ab', readv('a<span class=vh style="visibility:visible">M</span>b'));
+  vsheetImp.remove();
+
+  // Reading innerText off a hidden element itself, which is the shape a
+  // detector uses on a hidden honeypot.
+  cv.innerHTML = 'M';
+  cv.style.visibility = 'hidden';
+  testing.expectEqual('', cv.innerText);
+  cv.innerHTML = '<span style="visibility:visible">M</span>';
+  testing.expectEqual('M', cv.innerText);
+  cv.style.visibility = '';
+
+  cv.remove();
 </script>

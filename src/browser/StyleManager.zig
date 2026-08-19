@@ -470,6 +470,7 @@ fn addRawRule(self: *StyleManager, build_arena: Allocator, selector_text: []cons
             props.display = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "visibility")) {
             props.visibility_hidden = std.ascii.eqlIgnoreCase(val, "hidden") or std.ascii.eqlIgnoreCase(val, "collapse");
+            props.visibility = .{ .value = val, .important = decl.important };
         } else if (std.ascii.eqlIgnoreCase(name, "opacity")) {
             props.opacity_zero = std.ascii.eqlIgnoreCase(val, "0");
         } else if (std.ascii.eqlIgnoreCase(name, "pointer-events")) {
@@ -1117,6 +1118,10 @@ fn extractRuleProperties(arena: Allocator, style: *CSSStyleDeclaration) !RulePro
 
     if (decl.findProperty(comptime .wrap("visibility"))) |property| {
         props.visibility_hidden = property._value.eql(comptime .wrap("hidden")) or property._value.eql(comptime .wrap("collapse"));
+        props.visibility = .{
+            .value = try arena.dupe(u8, property._value.str()),
+            .important = property._important,
+        };
     }
 
     if (decl.findProperty(comptime .wrap("opacity"))) |property| {
@@ -1218,7 +1223,14 @@ const RuleProperties = struct {
     // hidden-element path predates the value and must keep its exact semantics.
     display_none: ?bool = null,
     display: ?Declaration = null,
+    // Same split as display, and for the same reason: `visibility_hidden` is
+    // what isElementHidden reduces the declaration to, `visibility` is the
+    // keyword itself, which innerText needs because `visibility` inherits and a
+    // descendant declaring `visible` has to be able to outrank a hidden
+    // ancestor -- a boolean that has already forgotten which element declared
+    // what cannot answer that.
     visibility_hidden: ?bool = null,
+    visibility: ?Declaration = null,
     opacity_zero: ?bool = null,
     pointer_events_none: ?bool = null,
     font_size: ?Declaration = null,
@@ -1234,6 +1246,7 @@ const RuleProperties = struct {
         return self.display_none != null or
             self.display != null or
             self.visibility_hidden != null or
+            self.visibility != null or
             self.opacity_zero != null or
             self.pointer_events_none != null or
             self.font_size != null or
@@ -1438,6 +1451,60 @@ pub fn computedDisplay(self: *StyleManager, element: *Element) ?[]const u8 {
     return null;
 }
 
+/// The element's *own* cascaded `visibility` keyword, or null when neither a
+/// stylesheet rule nor the inline style declares one. Same source order as
+/// computedDisplay. `visibility` inherits, so a null here means "whatever the
+/// parent computes to": computedVisibilityHides does that walk, and innerText
+/// threads the answer down its own top-down walk instead, which is the same
+/// answer for one lookup per element rather than one per ancestor.
+pub fn declaredVisibility(self: *StyleManager, element: *Element) ?[]const u8 {
+    const inline_property = getInlineStyleProperty(element, comptime .wrap("visibility"), self.frame);
+    const rule = self.cascadedDeclaration(element, .visibility);
+
+    if (rule) |declaration| {
+        if (declaration.important and !(inline_property != null and inline_property.?._important)) {
+            return declaration.value;
+        }
+    }
+    if (inline_property) |property| {
+        return property._value.str();
+    }
+    if (rule) |declaration| {
+        return declaration.value;
+    }
+    return null;
+}
+
+/// Does `element`'s computed `visibility` hide it? Walks ancestors because
+/// `visibility` inherits, and stops at the nearest one that declares a value.
+/// That is what makes it a different question from hasVisibilityHiddenInherited,
+/// which answers "does anything up the chain hide" and so cannot see a
+/// descendant turning visibility back on. Chrome 151 renders the text of such a
+/// descendant (probe w1-visibility), which is why innerText asks this one.
+pub fn computedVisibilityHides(self: *StyleManager, element: *Element) bool {
+    var current: ?*Element = element;
+    var depth: u8 = 0;
+    while (current) |elem| : (depth += 1) {
+        if (depth >= MAX_FONT_ANCESTOR_DEPTH) {
+            return false;
+        }
+        if (self.declaredVisibility(elem)) |value| {
+            return visibilityHides(value);
+        }
+        current = elem.parentElement();
+    }
+    // Nothing up the chain declares one, so the initial value `visible` stands.
+    return false;
+}
+
+/// `hidden` and `collapse` are the two hiding keywords -- Chrome 151 reads `""`
+/// for either (probe w1-visibility). Anything else, an unrecognised keyword
+/// included, leaves the element visible.
+pub fn visibilityHides(value: []const u8) bool {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    return std.ascii.eqlIgnoreCase(trimmed, "hidden") or std.ascii.eqlIgnoreCase(trimmed, "collapse");
+}
+
 /// Does `element` lay its children out as flex or grid items? Those are exactly
 /// the containers that blockify a child's outer display, so this is the question
 /// `blockify` needs answered about the parent. A null cascade means no rule and
@@ -1525,7 +1592,7 @@ fn cascadedFontSize(self: *StyleManager, el: *Element) ?Declaration {
     return self.cascadedDeclaration(el, .font_size);
 }
 
-const CascadedProperty = enum { font_size, font_family, text_transform, display };
+const CascadedProperty = enum { font_size, font_family, text_transform, display, visibility };
 
 /// The winning declaration of `property` among the stylesheet rules matching
 /// `el`, or null when none match. Importance outranks specificity, which is
@@ -1545,6 +1612,7 @@ fn cascadedDeclaration(self: *StyleManager, el: *Element, property: CascadedProp
                     .font_family => props.font_family,
                     .text_transform => props.text_transform,
                     .display => props.display,
+                    .visibility => props.visibility,
                 }) orelse continue;
                 if (important.* and !declaration.important) continue;
                 if (declaration.important == important.* and p <= priority.*) continue;
