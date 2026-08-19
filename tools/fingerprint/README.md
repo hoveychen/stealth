@@ -4127,11 +4127,16 @@ touches XML documents does not have to re-measure.
 | `[Foo]` on `<p Foo="1">` in an XHTML document | 1 | **0** (and `[foo]` 0) |
 | `[Bar]` on SVG `<g Bar="2">` in an **HTML** document | 1 | **0** (only `[bar]` matches) |
 
-Attribute names go the same way as tag names — case-insensitive in an HTML
-document whatever the element's namespace, case-sensitive in XML — and
-`matchesAttribute` splits on the element namespace instead, which is why the last
-two rows are wrong in opposite directions. `getElementsByTagName` is a separate
-comparison in the collections code, not this one.
+The last two rows read like the tag-name story repeating, and this paragraph first
+said so outright — case-insensitive in an HTML document whatever the namespace,
+case-sensitive in XML. That was an inference from the neighbouring rule, not a
+reading: an HTML-parsed `Bar="2"` is *stored* lowercased, so the row above cannot
+tell a case-insensitive compare apart from two lowercase operands. The A1 section
+below measures it properly, and the rule does come out that way — but it is that
+section, not this one, that establishes it.
+
+`getElementsByTagName` is a separate comparison in the collections code, not this
+one.
 
 ### What the fix was (X2)
 
@@ -4163,3 +4168,50 @@ browserscan is unchanged at 100% with no problems, no warnings, 0 skeletons
 
 That is the expected shape: an HTML document takes the same code path it did
 before, and every station is an HTML document.
+
+## Attribute names and the document (A1–A3)
+
+The plan above left the attribute half of the same question open on an inference.
+A1 measures it. Chrome 151 against `dev.319+280343915`, probe `expr-a1.js`.
+
+The probe is built to separate two readings that the earlier table could not: an
+HTML-parsed attribute is stored lowercased, so `[Bar]` matching there proves
+nothing about case folding. `setAttribute` only lowercases for HTML-namespaced
+elements, so setting `Bar` on an SVG element is a stored capital in an HTML
+document — and `viewBox` is one the HTML parser itself keeps, via its SVG
+attribute-adjustment table.
+
+| document | element | stored name | selector | Chrome | this engine |
+|---|---|---|---|---|---|
+| HTML | SVG `<g>`, `setAttribute('Bar')` | `Bar` | `[Bar]` / `[bar]` / `[BAR]` | 1 / 1 / 1 | 1 / **0** / **0** |
+| HTML | `<div>`, `setAttribute('Foo')` | `foo` | `[Foo]` / `[foo]` / `[FOO]` | 1 / 1 / 1 | 1 / 1 / 1 |
+| HTML | parsed `<svg viewBox=…>` | `viewBox` | `[viewBox]` / `[viewbox]` / `[VIEWBOX]` | 1 / 1 / 1 | 1 / **0** / **0** |
+| HTML | parsed `<svg preserveAspectRatio=…>` | `preserveAspectRatio` | exact / lowercase | 1 / 1 | 1 / **0** |
+| XHTML | `<p Foo="1">` | `Foo` | `[Foo]` / `[foo]` / `[FOO]` | 1 / 0 / 0 | **0** / 0 / 0 |
+| `text/xml` | `<s:g Bar>` + `<s:rect bar>` | as written | `[Bar]` / `[bar]` / `[BAR]` | 1 / 1 / 0 | 1 / 1 / 0 |
+| XML | `createElement` + `setAttribute('Foo')` | `Foo` | `[Foo]` / `[foo]` | 1 / 0 | 1 / 0 |
+| HTML | `<div data-x="ABC">` | — | `="ABC"` / `="abc"` / `="abc" i` | 1 / 0 / 1 | 1 / 0 / 1 |
+
+So the rule is the same shape as the tag-name one and it *is* a genuine fold, not
+two lowercase operands: an HTML document matches an attribute name ASCII
+case-insensitively whatever the element's namespace and whatever case the name is
+stored in, and an XML document matches it exactly, HTML-namespaced elements
+included. The value side (`i`) is unrelated and already correct.
+
+`matchesAttribute` splits on `el._namespace` instead, so it is wrong in two
+directions at once: a stored capital in an HTML document is reachable only by its
+exact spelling, and in an XML document an HTML-namespaced element's attribute is
+reachable by no spelling at all, because the selector's name was lowercased at
+parse time and the stored one was not.
+
+The `viewBox` row is the one with reach beyond XML documents: `svg[viewbox]`, the
+spelling a stylesheet is most likely to carry, currently selects nothing in an
+ordinary HTML page.
+
+### A note for the fix
+
+This one is not just a matter of passing `original_name` instead of `name`, the
+way the type-selector fix was. The HTML-document branch needs a *case-insensitive
+attribute lookup*: `getAttributeSafe` is an exact-name lookup, and the stored name
+is not always lowercase (`viewBox`), so lowercasing the selector side alone cannot
+find it.
