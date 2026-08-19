@@ -3730,3 +3730,39 @@ The empty-box row is the decisive one: Chrome reads **two** spaces, so the box
 is content in the outer run rather than a boundary. That is what `InnerTextState`'s
 `breaks_inside_atomic` encodes, and it is why iphey reads `"Looks \nTrustworthy"`
 with the space kept rather than `"Looks\nTrustworthy"`.
+
+## display:contents generates no box (checkvisibility-contents plan)
+
+The computed-display plan measured this and left it alone as out of its scope:
+`checkVisibility()` read `true` for a `display: contents` element where Chrome
+reads `false`. Measured on Chrome 151 (probe `v1-contents`), the element itself
+has no box at all, while everything under it still renders:
+
+| probe | `display` | `checkVisibility()` | `getClientRects().length` | host `innerText` |
+|---|---|---|---|---|
+| `<div style="display:contents">M</div>` | `contents` | **`false`** | 0 | `"M"` |
+| the same set from a stylesheet rule | `contents` | `false` | 0 | `"M"` |
+| nested inside another contents | `contents` | `false` | 0 | `"M"` |
+| **its child** | `block` | **`true`** | 1 | `"M"` |
+| `<div>M</div>` (control) | `block` | `true` | 1 | `"M"` |
+| `<div style="display:none">M</div>` (control) | `none` | `false` | 0 | `""` |
+
+The child row is the one that shapes the fix: the no-box verdict belongs to that
+one element and must not reach its subtree. So it is checked ahead of `isHidden`'s
+ancestor walk and deliberately kept out of the visibility cache, where a cached
+`hidden = true` would be read back by every descendant's own walk.
+
+It is also opt-in (`boxless_hidden`), not a change to `isElementHidden` itself.
+Three callers must keep the old answer: the accessibility tree prunes on
+`isHidden` and would drop the whole subtree, `innerText` walks through a contents
+element by way of `hasDisplayNone`, and `getComputedStyle().display` has to go on
+reporting `contents`.
+
+All ten contents probes now read identically to Chrome. Twelve detectors: node
+counts identical on all twelve, `verdictWords` unchanged on all twelve.
+browserscan 100%, `skeletons=0`, 0 of 58 flagged.
+
+Still open, and a different property: `innerText` includes text under
+`visibility: hidden` where Chrome excludes it (`<div style="visibility:hidden">M</div>`
+reads `"M"` here and `""` there). That is a visibility question, not a display
+one, and it reads the same on main.
