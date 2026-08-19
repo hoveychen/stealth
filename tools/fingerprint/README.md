@@ -4151,3 +4151,15 @@ only ever agree, and a non-match returns before the lookup.
 Every type-selector row in the table above now reads exactly as Chrome does,
 including the two `createHTMLDocument` control rows and the `<DIV/>` / `<P>` rows
 that used to match nothing at all. The adjacent rows are unchanged, as intended.
+
+### What it changed on the twelve stations (X3)
+
+Nothing. All twelve node counts are identical to a sweep of `dev.312+16ea92afa`
+and no verdict-word count moved; four text lengths differ by 1 to 6 characters,
+which is the usual counter/timing noise. creepjs read 3600 nodes both times, the
+stable value -- not the 3870 outlier the previous plan's notes warned about.
+browserscan is unchanged at 100% with no problems, no warnings, 0 skeletons
+(`mainTotal` 845, `docTotal` 1871).
+
+That is the expected shape: an HTML document takes the same code path it did
+before, and every station is an HTML document.
