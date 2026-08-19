@@ -357,12 +357,17 @@ fn dispatchParsed(self: *CDP, arena: Allocator, sender: Command.Sender, str: []c
 // independent actions that the browser is expected to take. For example
 // Puppeteer expects the browser to startup a tab and thus have existing
 // targets.
-// To this end, we create a [very] dummy BrowserContext, Target and
-// Session. There isn't actually a BrowserContext, just a special id.
-// When messages are received with the "STARTUP" sessionId, we do
-// "special" handling - the bare minimum we need to do until the driver
-// switches to a real BrowserContext.
-// (I can imagine this logic will become driver-specific)
+// To this end, Target.setAutoAttach announces a target under this session id
+// before any BrowserContext exists. Puppeteer answers by creating a real
+// BrowserContext, at which point the announcement has served its purpose.
+// Playwright does not: it drives the announced target directly, so every
+// command it sends arrives here. Those used to be answered with an empty
+// result, which made Page.navigate a silent no-op - no frameNavigated, no
+// lifecycleEvent, and goto hung until it timed out. So give the session a
+// real page on first use and then dispatch normally; from the second command
+// on, the session id is a valid one and this path isn't taken at all.
+pub const STARTUP_SESSION_ID = "STARTUP";
+
 fn dispatchStartupCommand(command: *Command, method: []const u8) !void {
     // Stagehand parses the response and error if we don't return a
     // correct one for Page.getFrameTree on startup call.
@@ -371,7 +376,8 @@ fn dispatchStartupCommand(command: *Command, method: []const u8) !void {
         return dispatchCommand(command, method);
     }
 
-    return command.sendResult(null, .{});
+    try @import("domains/target.zig").materializeStartupSession(command);
+    return dispatchCommand(command, method);
 }
 
 fn dispatchCommand(command: *Command, method: []const u8) !void {
@@ -567,6 +573,14 @@ pub const BrowserContext = struct {
     next_script_id: u32 = 1,
 
     http_proxy_changed: bool = false,
+
+    // True while this context and its page exist only because
+    // Target.setAutoAttach had to announce something to a driver that blocks
+    // until the browser has a target. A driver that then asks for a context
+    // and a target of its own adopts this one (see Target.createBrowserContext
+    // and Target.createTarget) instead of colliding with the single-context
+    // limit. Cleared the moment it is adopted.
+    provisional: bool = false,
     user_agent_changed: bool = false,
 
     // Extra headers to add to all requests.
@@ -1400,28 +1414,67 @@ test "cdp: invalid sessionId" {
 }
 
 test "cdp: STARTUP sessionId" {
-    var ctx = try testing.context();
-    defer ctx.deinit();
-
+    // A command on the STARTUP session is dispatched for real against a
+    // lazily materialized page, so an unknown method now answers the way any
+    // other session would rather than reporting a bare success.
     {
+        var ctx = try testing.context();
+        defer ctx.deinit();
+
         // we have no browser context
         try ctx.processMessage(.{ .id = 2, .method = "Hi", .sessionId = "STARTUP" });
-        try ctx.expectSentResult(null, .{ .id = 2, .index = 0, .session_id = "STARTUP" });
+        try ctx.expectSentError(-31999, "InvalidMethod", .{ .id = 2 });
     }
 
     {
+        var ctx = try testing.context();
+        defer ctx.deinit();
+
         // we have a browser context but no session_id
         _ = try ctx.loadBrowserContext(.{});
         try ctx.processMessage(.{ .id = 3, .method = "Hi", .sessionId = "STARTUP" });
-        try ctx.expectSentResult(null, .{ .id = 3, .index = 1, .session_id = "STARTUP" });
+        try ctx.expectSentError(-31999, "InvalidMethod", .{ .id = 3 });
     }
 
     {
-        // we have a browser context with a different session_id
+        var ctx = try testing.context();
+        defer ctx.deinit();
+
+        // we have a browser context with a different session_id: the STARTUP
+        // announcement is stale, so it does not get to take the session over.
         _ = try ctx.loadBrowserContext(.{ .session_id = "SESS-2" });
         try ctx.processMessage(.{ .id = 4, .method = "Hi", .sessionId = "STARTUP" });
-        try ctx.expectSentResult(null, .{ .id = 4, .index = 2, .session_id = "STARTUP" });
+        try ctx.expectSentError(-31999, "UnknownSessionId", .{ .id = 4 });
     }
+}
+
+test "cdp: STARTUP session drives a real browser context" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    // Puppeteer answers the synthetic STARTUP target by creating a real
+    // BrowserContext of its own, which is what the hack was written for.
+    // Playwright does not: it attaches to the target we announced and drives
+    // it straight away, so every command it sends carries sessionId=STARTUP.
+    // Swallowing those with an empty result left Page.navigate silently doing
+    // nothing -- no frameNavigated, no lifecycleEvent, goto hangs until it
+    // times out. A command on that session has to reach a real page.
+    try ctx.processMessage(.{ .id = 2, .method = "Target.setAutoAttach", .params = .{ .autoAttach = true, .waitForDebuggerOnStart = false } });
+
+    const bc = ctx.cdp().browser_context orelse return error.AutoAttachCreatedNoBrowserContext;
+    const target_id = &(bc.target_id orelse return error.AutoAttachOpenedNoTarget);
+    const session_id = bc.session_id orelse return error.AutoAttachBoundNoSession;
+
+    // The announced target has to name the page the driver will then drive.
+    // Announcing an id the frame tree doesn't know made Playwright treat its
+    // own main frame as detached the moment it read the tree back.
+    try ctx.expectSentEvent("Target.attachedToTarget", .{
+        .sessionId = session_id,
+        .targetInfo = .{ .targetId = target_id, .url = "about:blank", .attached = true, .type = "page", .browserContextId = bc.id },
+    }, .{});
+
+    try ctx.processMessage(.{ .id = 3, .method = "Page.getFrameTree", .sessionId = session_id });
+    try ctx.expectSentResult(.{ .frameTree = .{ .frame = .{ .id = target_id } } }, .{ .id = 3, .session_id = session_id });
 }
 
 test "cdp: disconnect latches so the worker keeps exiting" {

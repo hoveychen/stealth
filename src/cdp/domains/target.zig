@@ -116,7 +116,22 @@ fn createBrowserContext(cmd: *CDP.Command) !void {
     }
 
     const bc = cmd.createBrowserContext() catch |err| switch (err) {
-        error.AlreadyExists => return cmd.sendError(-32000, "Cannot have more than one browser context at a time", .{}),
+        // The only context around may be the placeholder setAutoAttach opened
+        // so that the driver had something to attach to. A driver asking for a
+        // context of its own expects a fresh, empty one; handing the
+        // placeholder back leaves it holding two handles on a single context
+        // whose page is already spoken for. Retract the placeholder instead.
+        error.AlreadyExists => blk: {
+            const existing = cmd.browser_context.?;
+            if (existing.provisional == false) {
+                return cmd.sendError(-32000, "Cannot have more than one browser context at a time", .{});
+            }
+            try retractProvisionalContext(cmd, existing);
+            break :blk cmd.createBrowserContext() catch |e| switch (e) {
+                error.AlreadyExists => unreachable,
+                else => return e,
+            };
+        },
         else => return err,
     };
 
@@ -133,6 +148,25 @@ fn createBrowserContext(cmd: *CDP.Command) !void {
     }, .{});
 }
 
+// Withdraws the placeholder context setAutoAttach opened, telling the driver
+// its target and session are gone before the context goes away. Both ids are
+// slices into the id generators' reused buffers, so the events have to go out
+// before anything generates a replacement id.
+fn retractProvisionalContext(cmd: *CDP.Command, bc: *CDP.BrowserContext) !void {
+    if (bc.target_id) |*target_id| {
+        if (bc.session_id) |session_id| {
+            try cmd.sendEvent("Target.detachedFromTarget", .{
+                .sessionId = session_id,
+                .targetId = target_id,
+            }, .{});
+        }
+        try cmd.sendEvent("Target.targetDestroyed", .{ .targetId = target_id }, .{});
+    }
+
+    _ = cmd.cdp.disposeBrowserContext(bc.id);
+    cmd.browser_context = null;
+}
+
 fn disposeBrowserContext(cmd: *CDP.Command) !void {
     const params = (try cmd.params(struct {
         browserContextId: []const u8,
@@ -144,44 +178,23 @@ fn disposeBrowserContext(cmd: *CDP.Command) !void {
     try cmd.sendResult(null, .{});
 }
 
-fn createTarget(cmd: *CDP.Command) !void {
-    const params = (try cmd.params(struct {
-        url: [:0]const u8 = "about:blank",
-        // width: ?u64 = null,
-        // height: ?u64 = null,
-        browserContextId: ?[]const u8 = null,
-        // enableBeginFrameControl: bool = false,
-        // newWindow: bool = false,
-        // background: bool = false,
-        // forTab: ?bool = null,
-    })) orelse return error.InvalidParams;
-
-    const bc = cmd.browser_context orelse cmd.createBrowserContext() catch |err| switch (err) {
-        error.AlreadyExists => unreachable,
-        else => return err,
-    };
-
-    if (bc.target_id != null) {
-        return error.TargetAlreadyLoaded;
-    }
-    if (params.browserContextId) |param_browser_context_id| {
-        if (std.mem.eql(u8, param_browser_context_id, bc.id) == false) {
-            return error.UnknownBrowserContextId;
-        }
-    }
-
+// Gives a page-less browser context its root page: the page itself, the
+// target id taken from the root frame, the inspector context and the CDP-side
+// origin state. Returns the root frame. Shared by Target.createTarget and by
+// the lazy STARTUP materialization below, which need the same page but
+// announce it to the driver differently.
+fn openRootPage(cmd: *CDP.Command, bc: *CDP.BrowserContext) !*lp.Frame {
     // if target_id is null, we should never have a blank frame
-    lp.assert(!bc.session.hasPage(), "CDP.target.createTarget not null page", .{});
+    lp.assert(!bc.session.hasPage(), "CDP.target.openRootPage not null page", .{});
 
     // if target_id is null, we should never have a session_id
-    lp.assert(bc.session_id == null, "CDP.target.createTarget not null session_id", .{});
+    lp.assert(bc.session_id == null, "CDP.target.openRootPage not null session_id", .{});
 
     const page = try bc.session.createPage();
     const frame = page.frame().?;
 
     // the target_id == the frame_id of the "root" frame
-    const frame_id = id.toFrameId(page.frame_id);
-    bc.target_id = frame_id;
+    bc.target_id = id.toFrameId(page.frame_id);
     const target_id = &bc.target_id.?;
     {
         var ls: js.Local.Scope = undefined;
@@ -203,6 +216,75 @@ fn createTarget(cmd: *CDP.Command) !void {
     bc.security_origin = "://";
     bc.secure_context_type = "InsecureScheme";
 
+    return frame;
+}
+
+// Puppeteer answers the synthetic STARTUP target by creating a real
+// BrowserContext of its own, which is what that hack was written for.
+// Playwright does not: it attaches to the target we announced and drives that
+// session straight away, so its Page.navigate arrives with sessionId=STARTUP
+// and used to be answered with an empty result -- nothing navigated and goto
+// hung until it timed out. Back the session with a real page the first time a
+// command actually needs one.
+pub fn materializeStartupSession(cmd: *CDP.Command) !void {
+    const bc = cmd.browser_context orelse cmd.createBrowserContext() catch |err| switch (err) {
+        error.AlreadyExists => unreachable,
+        else => return err,
+    };
+
+    if (bc.session_id) |session_id| {
+        // The driver already attached a real session, so the STARTUP
+        // announcement it was handed at connect time is stale. Adopting it
+        // here would hand a second name to a session that already has one.
+        if (!std.mem.eql(u8, session_id, CDP.STARTUP_SESSION_ID)) {
+            return error.UnknownSessionId;
+        }
+        return;
+    }
+
+    if (bc.target_id == null) {
+        _ = try openRootPage(cmd, bc);
+    }
+    bc.session_id = CDP.STARTUP_SESSION_ID;
+}
+
+fn createTarget(cmd: *CDP.Command) !void {
+    const params = (try cmd.params(struct {
+        url: [:0]const u8 = "about:blank",
+        // width: ?u64 = null,
+        // height: ?u64 = null,
+        browserContextId: ?[]const u8 = null,
+        // enableBeginFrameControl: bool = false,
+        // newWindow: bool = false,
+        // background: bool = false,
+        // forTab: ?bool = null,
+    })) orelse return error.InvalidParams;
+
+    const bc = cmd.browser_context orelse cmd.createBrowserContext() catch |err| switch (err) {
+        error.AlreadyExists => unreachable,
+        else => return err,
+    };
+
+    // A provisional page is the one setAutoAttach opened before the driver
+    // asked for anything; the driver asking for a target now is it claiming
+    // that page, so hand it over instead of reporting the slot as taken.
+    const adopting = bc.target_id != null and bc.provisional;
+    if (bc.target_id != null and adopting == false) {
+        return error.TargetAlreadyLoaded;
+    }
+    if (params.browserContextId) |param_browser_context_id| {
+        if (std.mem.eql(u8, param_browser_context_id, bc.id) == false) {
+            return error.UnknownBrowserContextId;
+        }
+    }
+
+    const frame = if (adopting)
+        (bc.mainFrame() orelse return error.FrameNotLoaded)
+    else
+        try openRootPage(cmd, bc);
+    bc.provisional = false;
+    const target_id = &bc.target_id.?;
+
     // send targetCreated event
     // TODO: should this only be sent when Target.setDiscoverTargets
     // has been enabled?
@@ -216,8 +298,11 @@ fn createTarget(cmd: *CDP.Command) !void {
         },
     }, .{});
 
-    // attach to the target only if auto attach is set.
-    if (cmd.cdp.target_auto_attach) {
+    // attach to the target only if auto attach is set. An adopted page was
+    // already attached when setAutoAttach announced it, and the driver is
+    // holding that session id -- announcing a second attach for it would hand
+    // the same session out twice.
+    if (cmd.cdp.target_auto_attach and bc.session_id == null) {
         try doAttachtoTarget(cmd, target_id);
     }
 
@@ -441,24 +526,21 @@ fn setAutoAttach(cmd: *CDP.Command) !void {
         return;
     }
 
-    // This is a hack. Puppeteer, and probably others, expect the Browser to
-    // automatically started creating targets. Things like an empty tab, or
-    // a blank frame. And they block until this happens. So we send an event
-    // telling them that they've been attached to our Browser. Hopefully, the
-    // first thing they'll do is create a real BrowserContext and progress from
-    // there.
-    // This hack requires the main cdp dispatch handler to special case
-    // messages from this "STARTUP" session.
-    try cmd.sendEvent("Target.attachedToTarget", AttachToTarget{
-        .sessionId = "STARTUP",
-        .targetInfo = TargetInfo{
-            .type = "page",
-            .targetId = "TID-STARTUP",
-            .title = "",
-            .url = "about:blank",
-            .browserContextId = "BID-STARTUP",
-        },
-    }, .{});
+    // Puppeteer, and probably others, expect the Browser to have started
+    // creating targets on its own - an empty tab, a blank frame - and block
+    // until one shows up. This used to answer with a placeholder target id that
+    // had no page behind it, on the assumption that the driver would create a
+    // real BrowserContext before doing anything else. Neither Puppeteer 25 nor
+    // Playwright does: they drive the target they were handed, so its id has to
+    // name a page that can actually navigate. Open one and announce that.
+    //
+    // It is marked provisional because the driver never asked for it. If it
+    // goes on to create a context and a target of its own, those calls adopt
+    // this one rather than running into the single-context limit.
+    const bc = try cmd.createBrowserContext();
+    bc.provisional = true;
+    _ = try openRootPage(cmd, bc);
+    try doAttachtoTarget(cmd, &bc.target_id.?);
 
     try cmd.sendResult(null, .{});
 }
