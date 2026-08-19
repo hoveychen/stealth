@@ -3812,8 +3812,11 @@ contributes a break, and whether one appears depends only on whether the visible
 content inside is itself block-level.
 
 **Whitespace: a hidden inline keeps the spaces on both sides; a hidden block
-still trims them.** The inline row is the same two-space reading the atomic
-inline boxes gave — a hidden box is present and zero-width, not absent.
+still trims them.** The inline row looks like the two-space reading the atomic
+inline boxes gave, but the cause turned out to be different — see the W2
+boundary probe below, where an *empty* hidden inline merges the two spaces and an
+empty inline-block does not. It is the zero-width text run that separates them,
+not the box.
 
 | markup | Chrome |
 |---|---|
@@ -3826,3 +3829,59 @@ inline boxes gave — a hidden box is present and zero-width, not absent.
 That last contrast is the control worth keeping: `display: none` and
 `visibility: hidden` differ in the whitespace they leave behind, so the fix
 cannot route one through the other.
+
+### The boundary of the rule (W2)
+
+W1's three tables are the rule; these are the edges that decide how it has to be
+implemented. Measured on Chrome 151 the same way (probe `w2-boundary`, 22 cases).
+
+| markup | Chrome |
+|---|---|
+| `a <span style="visibility:hidden">M</span> b` | `"a  b"` — two spaces |
+| `a <span style="visibility:hidden"></span> b` | `"a b"` — **one**: an empty hidden inline merges them |
+| `a <span style="visibility:hidden"> </span> b` | `"a b"` |
+| `a <span style="display:inline-block"></span> b` | `"a  b"` — an empty *atomic* box still keeps both |
+| `a <span style="visibility:hidden;display:contents">M</span> b` | `"a  b"` — no box at all, still two |
+
+So what separates the two collapsible spaces is the hidden **text run**, which is
+zero-width but still a run in the inline flow — not the element's box. That is
+the opposite of the atomic inline boxes, where the box itself is the content, and
+it is why `display: contents` (no box) still reads two spaces while an empty
+hidden `<span>` (a box, no run) reads one.
+
+| markup | Chrome |
+|---|---|
+| `a <span style="visibility:hidden"><div style="visibility:visible">M</div></span> b` | `"a\nM\nb"` — the visible block's boundary trims what the run would have kept |
+| `a <span style="visibility:hidden;display:inline-block">M</span> b` | `"a  b"` |
+| `a<table><tr><td>M</td><td style="visibility:hidden">N</td><td>P</td></tr></table>b` | `"a\nM\tP\nb"` — **one** tab |
+| `a<table><tr><td>M</td></tr><tr style="visibility:hidden"><td>N</td></tr><tr><td>P</td></tr></table>b` | `"a\nM\nP\nb"` |
+| `a<pre style="visibility:hidden">M  N</pre>b` | `"ab"` |
+| `a<pre style="visibility:hidden"><span style="visibility:visible">M  N</span></pre>b` | `"aM  Nb"` |
+| `.vh{visibility:hidden}` + `a<span class=vh style="visibility:visible">M</span>b` | `"aMb"` — the style attribute outranks the rule |
+| `.vh{visibility:hidden!important}` + the same | `"ab"` — unless the rule is `!important` |
+
+A hidden cell or row contributes no separator and does not count as one for its
+next sibling, which is the table analogue of the missing line break.
+
+### What it changed on the twelve stations (W3)
+
+`innerText` was reading text no browser renders, and on one station by a factor
+of eighteen. Before / after / Chrome 151, one sweep each (`detector-sweep.mjs`):
+
+| site | textLength before | after | Chrome | verdictWords before → after (Chrome) |
+|---|---|---|---|---|
+| creepjs | 87514 | **4133** | 4742 | 2 → 2 (2) |
+| deviceinfo | 6192 | **5859** | 5861 | 25 → **28** (28) |
+| amiunique | 6439 | **6325** | 6360 | 1 → 1 (1) |
+
+The other nine stations read identically before and after. Every station that
+moved, moved toward Chrome; none moved away. deviceinfo's verdict-word count now
+matches Chrome exactly, where before the hidden navigation text it was reading
+put it three short. browserscan still scores 100% with no warnings and 0 loading
+skeletons (`mainTotal` 845, `docTotal` 1871 — unchanged).
+
+Ancillary, and not fixed here: re-setting an existing `<style>` element's
+`textContent` does not appear to re-cascade — the same rule text in a freshly
+created `<style>` takes effect, while replacing the text of one already in the
+document did not. Observed while writing the `!important` case above; the
+mechanism is unverified.
