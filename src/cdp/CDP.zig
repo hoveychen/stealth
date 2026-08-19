@@ -573,6 +573,14 @@ pub const BrowserContext = struct {
     next_script_id: u32 = 1,
 
     http_proxy_changed: bool = false,
+
+    // True while this context and its page exist only because
+    // Target.setAutoAttach had to announce something to a driver that blocks
+    // until the browser has a target. A driver that then asks for a context
+    // and a target of its own adopts this one (see Target.createBrowserContext
+    // and Target.createTarget) instead of colliding with the single-context
+    // limit. Cleared the moment it is adopted.
+    provisional: bool = false,
     user_agent_changed: bool = false,
 
     // Extra headers to add to all requests.
@@ -1452,11 +1460,21 @@ test "cdp: STARTUP session drives a real browser context" {
     // nothing -- no frameNavigated, no lifecycleEvent, goto hangs until it
     // times out. A command on that session has to reach a real page.
     try ctx.processMessage(.{ .id = 2, .method = "Target.setAutoAttach", .params = .{ .autoAttach = true, .waitForDebuggerOnStart = false } });
-    try ctx.processMessage(.{ .id = 3, .method = "Page.enable", .sessionId = "STARTUP" });
 
-    const bc = ctx.cdp().browser_context orelse return error.StartupSessionCreatedNoBrowserContext;
-    try std.testing.expect(bc.target_id != null);
-    try std.testing.expectEqualStrings("STARTUP", bc.session_id orelse return error.StartupSessionHasNoSessionId);
+    const bc = ctx.cdp().browser_context orelse return error.AutoAttachCreatedNoBrowserContext;
+    const target_id = &(bc.target_id orelse return error.AutoAttachOpenedNoTarget);
+    const session_id = bc.session_id orelse return error.AutoAttachBoundNoSession;
+
+    // The announced target has to name the page the driver will then drive.
+    // Announcing an id the frame tree doesn't know made Playwright treat its
+    // own main frame as detached the moment it read the tree back.
+    try ctx.expectSentEvent("Target.attachedToTarget", .{
+        .sessionId = session_id,
+        .targetInfo = .{ .targetId = target_id, .url = "about:blank", .attached = true, .type = "page", .browserContextId = bc.id },
+    }, .{});
+
+    try ctx.processMessage(.{ .id = 3, .method = "Page.getFrameTree", .sessionId = session_id });
+    try ctx.expectSentResult(.{ .frameTree = .{ .frame = .{ .id = target_id } } }, .{ .id = 3, .session_id = session_id });
 }
 
 test "cdp: disconnect latches so the worker keeps exiting" {

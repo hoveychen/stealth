@@ -116,7 +116,16 @@ fn createBrowserContext(cmd: *CDP.Command) !void {
     }
 
     const bc = cmd.createBrowserContext() catch |err| switch (err) {
-        error.AlreadyExists => return cmd.sendError(-32000, "Cannot have more than one browser context at a time", .{}),
+        // The only context around may be the one setAutoAttach opened on this
+        // driver's behalf. Asking for a context of its own is the driver
+        // claiming that one, not a second concurrent context.
+        error.AlreadyExists => blk: {
+            const existing = cmd.browser_context.?;
+            if (existing.provisional == false) {
+                return cmd.sendError(-32000, "Cannot have more than one browser context at a time", .{});
+            }
+            break :blk existing;
+        },
         else => return err,
     };
 
@@ -231,7 +240,11 @@ fn createTarget(cmd: *CDP.Command) !void {
         else => return err,
     };
 
-    if (bc.target_id != null) {
+    // A provisional page is the one setAutoAttach opened before the driver
+    // asked for anything; the driver asking for a target now is it claiming
+    // that page, so hand it over instead of reporting the slot as taken.
+    const adopting = bc.target_id != null and bc.provisional;
+    if (bc.target_id != null and adopting == false) {
         return error.TargetAlreadyLoaded;
     }
     if (params.browserContextId) |param_browser_context_id| {
@@ -240,7 +253,11 @@ fn createTarget(cmd: *CDP.Command) !void {
         }
     }
 
-    const frame = try openRootPage(cmd, bc);
+    const frame = if (adopting)
+        (bc.mainFrame() orelse return error.FrameNotLoaded)
+    else
+        try openRootPage(cmd, bc);
+    bc.provisional = false;
     const target_id = &bc.target_id.?;
 
     // send targetCreated event
@@ -256,8 +273,11 @@ fn createTarget(cmd: *CDP.Command) !void {
         },
     }, .{});
 
-    // attach to the target only if auto attach is set.
-    if (cmd.cdp.target_auto_attach) {
+    // attach to the target only if auto attach is set. An adopted page was
+    // already attached when setAutoAttach announced it, and the driver is
+    // holding that session id -- announcing a second attach for it would hand
+    // the same session out twice.
+    if (cmd.cdp.target_auto_attach and bc.session_id == null) {
         try doAttachtoTarget(cmd, target_id);
     }
 
@@ -481,24 +501,21 @@ fn setAutoAttach(cmd: *CDP.Command) !void {
         return;
     }
 
-    // This is a hack. Puppeteer, and probably others, expect the Browser to
-    // automatically started creating targets. Things like an empty tab, or
-    // a blank frame. And they block until this happens. So we send an event
-    // telling them that they've been attached to our Browser. Hopefully, the
-    // first thing they'll do is create a real BrowserContext and progress from
-    // there.
-    // This hack requires the main cdp dispatch handler to special case
-    // messages from this "STARTUP" session.
-    try cmd.sendEvent("Target.attachedToTarget", AttachToTarget{
-        .sessionId = CDP.STARTUP_SESSION_ID,
-        .targetInfo = TargetInfo{
-            .type = "page",
-            .targetId = "TID-STARTUP",
-            .title = "",
-            .url = "about:blank",
-            .browserContextId = "BID-STARTUP",
-        },
-    }, .{});
+    // Puppeteer, and probably others, expect the Browser to have started
+    // creating targets on its own - an empty tab, a blank frame - and block
+    // until one shows up. This used to answer with a placeholder target id that
+    // had no page behind it, on the assumption that the driver would create a
+    // real BrowserContext before doing anything else. Neither Puppeteer 25 nor
+    // Playwright does: they drive the target they were handed, so its id has to
+    // name a page that can actually navigate. Open one and announce that.
+    //
+    // It is marked provisional because the driver never asked for it. If it
+    // goes on to create a context and a target of its own, those calls adopt
+    // this one rather than running into the single-context limit.
+    const bc = try cmd.createBrowserContext();
+    bc.provisional = true;
+    _ = try openRootPage(cmd, bc);
+    try doAttachtoTarget(cmd, &bc.target_id.?);
 
     try cmd.sendResult(null, .{});
 }
