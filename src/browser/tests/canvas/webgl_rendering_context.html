@@ -8,13 +8,19 @@
   testing.expectEqual(true, ctx instanceof WebGLRenderingContext);
 
   const supportedExtensions = ctx.getSupportedExtensions();
-  // The order Chrome prefer.
+  // Which extensions exist is the driver's answer, not the spec's, so the list
+  // follows the platform the engine claims — the same claim navigator.platform
+  // carries. Both columns are recorded (tools/fingerprint/results/), and both
+  // are alphabetical, which is the order Chrome hands them out in.
+  const mac = navigator.platform === "MacIntel";
   const expectedExtensions = [
       "ANGLE_instanced_arrays",
       "EXT_blend_minmax",
       "EXT_clip_control",
       "EXT_color_buffer_half_float",
       "EXT_depth_clamp",
+      // Metal's timer query and parallel compile; SwiftShader has neither.
+      ...(mac ? ["EXT_disjoint_timer_query"] : []),
       "EXT_float_blend",
       "EXT_frag_depth",
       "EXT_polygon_offset_clamp",
@@ -24,6 +30,7 @@
       "EXT_texture_filter_anisotropic",
       "EXT_texture_mirror_clamp_to_edge",
       "EXT_sRGB",
+      ...(mac ? ["KHR_parallel_shader_compile"] : []),
       "OES_element_index_uint",
       "OES_fbo_render_mipmap",
       "OES_standard_derivatives",
@@ -32,10 +39,13 @@
       "OES_texture_half_float",
       "OES_texture_half_float_linear",
       "OES_vertex_array_object",
+      ...(mac ? ["WEBGL_blend_func_extended"] : []),
       "WEBGL_color_buffer_float",
       "WEBGL_compressed_texture_astc",
       "WEBGL_compressed_texture_etc",
       "WEBGL_compressed_texture_etc1",
+      // PVRTC is an Apple-GPU texture format.
+      ...(mac ? ["WEBGL_compressed_texture_pvrtc"] : []),
       "WEBGL_compressed_texture_s3tc",
       "WEBGL_compressed_texture_s3tc_srgb",
       "WEBGL_debug_renderer_info",
@@ -47,10 +57,17 @@
       "WEBGL_polygon_mode"
   ];
 
+  testing.expectEqual(mac ? 39 : 35, expectedExtensions.length);
   testing.expectEqual(expectedExtensions.length, supportedExtensions.length);
   for (let i = 0; i < expectedExtensions.length; i++) {
     testing.expectEqual(expectedExtensions[i], supportedExtensions[i]);
   }
+
+  // A name the other platform advertises is not merely absent from the list --
+  // asking for it hands back null, the way Chrome answers for an extension the
+  // driver does not have.
+  testing.expectEqual(mac, ctx.getExtension("WEBGL_compressed_texture_pvrtc") !== null);
+  testing.expectEqual(mac, ctx.getExtension("KHR_parallel_shader_compile") !== null);
 }
 </script>
 
@@ -66,9 +83,17 @@
   testing.expectEqual(UNMASKED_VENDOR_WEBGL, 0x9245);
   testing.expectEqual(UNMASKED_RENDERER_WEBGL, 0x9246);
 
-  testing.expectEqual("Google Inc. (Google)", ctx.getParameter(UNMASKED_VENDOR_WEBGL));
+  // The GPU behind ANGLE, which has to be the one the claimed platform would
+  // have: an Apple M4 through Metal, or SwiftShader on a container with no GPU.
+  const mac = navigator.platform === "MacIntel";
   testing.expectEqual(
-    "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    mac ? "Google Inc. (Apple)" : "Google Inc. (Google)",
+    ctx.getParameter(UNMASKED_VENDOR_WEBGL),
+  );
+  testing.expectEqual(
+    mac
+      ? "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)"
+      : "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
     ctx.getParameter(UNMASKED_RENDERER_WEBGL),
   );
 }
@@ -112,9 +137,19 @@
     ctx.getParameter(ctx.SHADING_LANGUAGE_VERSION),
   );
 
-  // Numeric limits.
-  testing.expectEqual(8192, ctx.getParameter(ctx.MAX_TEXTURE_SIZE));
+  // Numeric limits. The ones a driver picks follow the platform claim; the ones
+  // every ANGLE backend agrees on do not.
+  const mac = navigator.platform === "MacIntel";
+  testing.expectEqual(mac ? 16384 : 8192, ctx.getParameter(ctx.MAX_TEXTURE_SIZE));
+  testing.expectEqual(mac ? 16384 : 8192, ctx.getParameter(ctx.MAX_RENDERBUFFER_SIZE));
+  testing.expectEqual(mac ? 1024 : 4096, ctx.getParameter(ctx.MAX_VERTEX_UNIFORM_VECTORS));
+  testing.expectEqual(mac ? 1024 : 4096, ctx.getParameter(ctx.MAX_FRAGMENT_UNIFORM_VECTORS));
+  testing.expectEqual(mac ? 30 : 31, ctx.getParameter(ctx.MAX_VARYING_VECTORS));
+  testing.expectEqual(mac ? 32 : 64, ctx.getParameter(ctx.MAX_COMBINED_TEXTURE_IMAGE_UNITS));
+  testing.expectEqual(mac ? 16 : 32, ctx.getParameter(ctx.MAX_VERTEX_TEXTURE_IMAGE_UNITS));
+  testing.expectEqual(mac ? 16 : 32, ctx.getParameter(ctx.MAX_TEXTURE_IMAGE_UNITS));
   testing.expectEqual(16, ctx.getParameter(ctx.MAX_VERTEX_ATTRIBS));
+  testing.expectEqual(16384, ctx.getParameter(ctx.MAX_CUBE_MAP_TEXTURE_SIZE));
   testing.expectEqual(4, ctx.getParameter(ctx.SAMPLES));
   testing.expectEqual(24, ctx.getParameter(ctx.DEPTH_BITS));
 
@@ -128,11 +163,12 @@
   testing.expectEqual(true, range instanceof Float32Array);
   testing.expectEqual(2, range.length);
   testing.expectEqual(1, range[0]);
-  testing.expectEqual(1023, range[1]);
+  testing.expectEqual(mac ? 511 : 1023, range[1]);
 
   const dims = ctx.getParameter(ctx.MAX_VIEWPORT_DIMS);
   testing.expectEqual(true, dims instanceof Int32Array);
-  testing.expectEqual(8192, dims[0]);
+  testing.expectEqual(mac ? 16384 : 8192, dims[0]);
+  testing.expectEqual(mac ? 16384 : 8192, dims[1]);
 
   // The viewport defaults to the whole drawing buffer.
   const viewport = ctx.getParameter(ctx.VIEWPORT);
@@ -255,15 +291,35 @@
   testing.expectEqual(1, current[3]);
   testing.expectEqual(0, gl.getVertexAttribOffset(0, gl.VERTEX_ATTRIB_ARRAY_POINTER));
 
+  // Whether lowp and mediump differ from highp is the driver's business: Metal
+  // has no reduced precisions and answers the highp triple for all three, while
+  // SwiftShader reports real ES2-era ranges for the lower two. Folding them
+  // together reports one platform's answer under the other's claim.
+  const mac = navigator.platform === "MacIntel";
   const high = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT);
   testing.expectEqual("[object WebGLShaderPrecisionFormat]", Object.prototype.toString.call(high));
   testing.expectEqual(127, high.rangeMin);
   testing.expectEqual(127, high.rangeMax);
   testing.expectEqual(23, high.precision);
-  const int = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_INT);
-  testing.expectEqual(31, int.rangeMin);
-  testing.expectEqual(30, int.rangeMax);
-  testing.expectEqual(0, int.precision);
+
+  for (const type of [gl.LOW_FLOAT, gl.MEDIUM_FLOAT]) {
+    const f = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, type);
+    testing.expectEqual(mac ? 127 : 15, f.rangeMin);
+    testing.expectEqual(mac ? 127 : 15, f.rangeMax);
+    testing.expectEqual(mac ? 23 : 10, f.precision);
+  }
+
+  const highInt = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_INT);
+  testing.expectEqual(31, highInt.rangeMin);
+  testing.expectEqual(30, highInt.rangeMax);
+  testing.expectEqual(0, highInt.precision);
+
+  for (const type of [gl.LOW_INT, gl.MEDIUM_INT]) {
+    const i = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, type);
+    testing.expectEqual(mac ? 31 : 15, i.rangeMin);
+    testing.expectEqual(mac ? 30 : 14, i.rangeMax);
+    testing.expectEqual(0, i.precision);
+  }
 
   const attrs = gl.getContextAttributes();
   testing.expectEqual(true, attrs.alpha);

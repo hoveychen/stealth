@@ -3133,3 +3133,61 @@ The three readings live in
 the two reference columns beside them as `macos-claim-ref-*`. CreepJS and iphey
 were each read twice with identical hashes in the previous session, so these are
 determinate readings rather than samples.
+
+## The graphics face, re-recorded and split per platform
+
+Re-running `dump-graphics.mjs --headed` against the Chrome on this machine
+produced a file byte-identical to the July recording, so the macOS column is a
+stable reading rather than a snapshot of one afternoon
+(`results/macos-claim-graphics-chrome-macos.json` against
+`results/reference-chrome-graphics.json`).
+
+Against the Linux container's Chrome, 1176 leaves differ. 1125 of them are the
+text section — the font metrics, which the engine already reports from the macOS
+recording — leaving 51 that belong to the driver:
+
+| | macOS (Apple M4, Metal) | Linux container (SwiftShader) |
+|---|---|---|
+| `UNMASKED_VENDOR_WEBGL` | `Google Inc. (Apple)` | `Google Inc. (Google)` |
+| `UNMASKED_RENDERER_WEBGL` | `ANGLE (Apple, ANGLE Metal Renderer: Apple M4, …)` | `ANGLE (Google, Vulkan 1.3.0 (SwiftShader …))` |
+| `MAX_TEXTURE_SIZE`, `MAX_RENDERBUFFER_SIZE`, `MAX_VIEWPORT_DIMS` | 16384 | 8192 |
+| `MAX_VERTEX/FRAGMENT_UNIFORM_VECTORS` | 1024 | 4096 |
+| `MAX_TEXTURE_IMAGE_UNITS` | 16 | 32 |
+| `MAX_DRAW_BUFFERS`, `MAX_COLOR_ATTACHMENTS` | 8 | 6 |
+| `MAX_ELEMENT_INDEX` | 4294967294 | 1073741823 |
+| `UNIFORM_BUFFER_OFFSET_ALIGNMENT` | 16 | 256 |
+| WebGL1 / WebGL2 extensions | 39 / 36 | 35 / 29 |
+| lowp & mediump float | 127/127/23 | 15/15/10 |
+| lowp & mediump int | 31/30/0 | 15/14/0 |
+| `RGBA8` `SAMPLES` | `[4, 2]` | `[4]` |
+
+All 51 now live in `src/browser/webapi/canvas/gpu.zig`, one table per claim,
+selected by the same constant the user-agent and `navigator.platform` follow.
+Both contexts read it, so the WebGL 1 and WebGL 2 answers for a shared name
+cannot drift apart — and swapping the renderer string alone, which is what the
+first attempt at this did and what emptied browserscan's whole hardware card, is
+no longer expressible.
+
+Writing the Linux column down found two values that were already the macOS ones
+under a Linux claim, both invisible until the table had two columns to disagree
+about:
+
+* **Shader precision was folded.** `getShaderPrecisionFormat` answered one
+  triple for lowp, mediump and highp alike — Metal's, which promotes everything
+  to highp. SwiftShader reports 15/15/10 and 15/14/0 for the lower two, so a
+  Linux-claiming engine was reporting an Apple GPU's precision behaviour.
+* **`getInternalformatParameter` answered `[4, 2]`**, the two multisample counts
+  Metal offers. SwiftShader offers only 4x.
+
+Both are what the platform-keyed tests catch: the failing run before the change
+was exactly those two assertions, and nothing else.
+
+### What is still not per-platform
+
+* **Extension objects.** A supported extension that exposes constants —
+  `WEBGL_compressed_texture_s3tc`, `WEBGL_blend_func_extended` — hands back an
+  empty object here, on both claims. That predates this work and is uniform
+  across platforms, so it is a gap in the extension surface rather than in the
+  platform claim.
+* **The font metrics.** Still the macOS recording, on both claims (see
+  `## Zero fonts was not a font problem`). That is M5's subject.

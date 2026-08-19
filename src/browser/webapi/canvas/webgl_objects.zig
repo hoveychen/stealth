@@ -27,6 +27,7 @@
 //! handle for a prototype link nothing calls, so it is deliberately skipped.
 
 const js = @import("../../js/js.zig");
+const Precision = @import("gpu.zig").Precision;
 
 pub fn registerTypes() []const type {
     return &.{
@@ -115,16 +116,21 @@ pub const WebGLActiveInfo = struct {
     };
 };
 
-/// The numeric range and precision of a shader's float/int types. Chrome on the
-/// reference host answers 127/127/23 for all three float precisions and
-/// 31/30/0 for all three integer ones, in both shader stages.
+/// The numeric range and precision of a shader's float/int types. The same in
+/// both shader stages on every driver measured, and different between lowp,
+/// mediump and highp on some of them — so the six triples come from the
+/// per-platform table rather than from here.
 pub const WebGLShaderPrecisionFormat = struct {
     _range_min: i32,
     _range_max: i32,
     _precision: i32,
 
-    pub const float: WebGLShaderPrecisionFormat = .{ ._range_min = 127, ._range_max = 127, ._precision = 23 };
-    pub const int: WebGLShaderPrecisionFormat = .{ ._range_min = 31, ._range_max = 30, ._precision = 0 };
+    /// What a precision is worth belongs to the driver, not to this object:
+    /// Metal answers the highp triple for lowp and mediump too, SwiftShader does
+    /// not. The table is `canvas/gpu.zig`.
+    pub fn from(p: Precision) WebGLShaderPrecisionFormat {
+        return .{ ._range_min = p.range_min, ._range_max = p.range_max, ._precision = p.precision };
+    }
 
     pub fn getRangeMin(self: *const WebGLShaderPrecisionFormat) i32 {
         return self._range_min;

@@ -41,6 +41,9 @@
 //!   * the `architecture` and `bitness` high-entropy hints (NavigatorUAData)
 //!   * which recorded audio render `startRendering()` replays
 //!     (audio/canonical_render.zig)
+//!   * the whole driver-dependent half of WebGL — the `WEBGL_debug_renderer_info`
+//!     strings, every `getParameter` limit a driver picks, the extension lists,
+//!     the shader precisions and the multisample counts (canvas/gpu.zig)
 
 pub const Os = enum {
     macos,
