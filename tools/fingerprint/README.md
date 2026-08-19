@@ -3216,3 +3216,63 @@ default is the first entry either way. Zero local voices is a documented tell �
 CreepJS reads it much as it reads an empty list — so this is the one table where
 the macOS recording is not merely more specific but strictly more plausible: no
 real desktop has zero local voices.
+
+## Fonts: from seven families to the set the reference Chrome reports
+
+The font tables were seven hand-transcribed families. Against the 65 names
+fingerprintjs2 shipped — still the list most probes use — that engine detected 6.
+The macOS Chrome on the same host detects 26.
+
+`dump-fonts.mjs` now measures every family the host has (`system_profiler -json
+SPFontsDataType`, 250 of them) plus the CSS keywords and legacy names a probe
+might ask for, and regenerates `src/browser/font_metrics.zig` from that. Its
+output for the seven original families is byte-identical to the hand
+transcription, which is what makes the other 167 trustworthy.
+
+Getting the *set* right, rather than just making it bigger, took three
+corrections, each of which was a measurement disagreeing with the obvious rule:
+
+1. **Comparing a family against the fallback face cannot tell "absent" from
+   "resolves to the default".** `100px "Times"` measures exactly like `100px
+   serif` on macOS — because the default serif *is* Times. Read that way, Times
+   is absent; a probe listing `"Times", monospace` sees it move and reads it as
+   present. The test has to be the probe's: does putting the name ahead of a
+   generic change that generic's measurement.
+2. **One generic base is not enough.** Each generic is blind to the family it is
+   itself resolved from: `"Times", serif` does not move, and `"Menlo", monospace`
+   does not move. Real probes use three bases and take any movement as presence,
+   so the recorder does too.
+3. **Chrome falls back per glyph, and this engine cannot.** 52 of the 250
+   families cover only part of U+0020..U+007E — every Hebrew, Arabic, Indic and
+   symbol family, plus Apple Color Emoji. For those, Chrome mixes faces inside a
+   single string: `100px "Arial Hebrew"` answers serif's width for `m` and Arial
+   Hebrew's own for `$`, and `"Arial Hebrew", monospace` answers monospace's `m`
+   with the same `$` — 58 of the 95 characters move with whatever follows in the
+   list. An engine that picks one family per string cannot reproduce that, and
+   keeping the family made it detect a font the real Chrome does not. They are
+   dropped, so the list falls through to the next name, which is what Chrome
+   effectively does for Latin text.
+
+What lands: **174 faces and 30 aliases**, and on the fingerprintjs list the
+engine now detects **exactly the 26 names the reference Chrome detects, in both
+the canvas and the DOM route** — not 25, not 27. That equality is the test
+(`src/browser/tests/element/text_metrics.html`), and the third correction above
+is why: before it, the engine detected Arial Hebrew and Chrome did not.
+
+| | before | after | reference Chrome |
+|---|---|---|---|
+| families with a table | 7 | 204 | — |
+| detected, fingerprintjs2's 65 names | 6 | **26** | **26** |
+| set matches the reference | no | **yes** | — |
+
+### What this still is not
+
+* **No per-glyph fallback.** A partial-coverage family is absent rather than
+  mixed, so `100px "Arial Hebrew"` measures as serif throughout where Chrome uses
+  Arial Hebrew's own `$`. The 52 dropped families are listed in
+  `results/reference-chrome-fonts.json`.
+* **Still ASCII only.** A probe that enumerates fonts with CJK text finds none of
+  the CJK families, where Chrome finds them all.
+* **A single machine's collection.** These are this Mac's fonts. Another Mac with
+  Office installed reports a superset, and matching a *particular* Mac is not the
+  same as being unremarkable among Macs.
