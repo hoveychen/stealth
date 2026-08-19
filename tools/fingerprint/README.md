@@ -3353,3 +3353,58 @@ Until then the claim trades a real 95% for a hollow 100%.
 * Nothing here says macOS is the better claim *in general*. It is better on
   CreepJS, neutral on iphey, and currently worse on browserscan. A fourth
   detector could go either way.
+
+## iphey did produce a verdict; the harness could not hear it
+
+The row above reads `iphey headline: no verdict` under both platform claims, and
+that was the premise this plan started from. Re-measured on the finished branch,
+it is wrong twice over.
+
+**The verdict is there, and it is Chrome's verdict.** Polling the page every two
+seconds instead of reading it once:
+
+| t | lightpanda | Chrome |
+|---|---|---|
+| 0–7s | 290–294 nodes, 5× `Temporary value` | 286–294 nodes, 5× `Temporary value` |
+| 9s | 294 nodes, still `Temporary value` | **487 nodes, `Trustworthy`, 0 temporary** |
+| 17s | **487 nodes, `Trustworthy`, 0 temporary** | same |
+| 17–60s | unchanged | unchanged |
+
+The terminal state is identical — 487 nodes, the headline reading `Trustworthy`,
+not one card left on `Temporary value`. The engine takes 17s to Chrome's 9s, and
+the five-`Temporary value` state every earlier reading captured is not a stall at
+all: it is the state Chrome is also in for its first seven seconds.
+
+**What actually failed was the probe harness, and it failed by not reading.**
+`iphey-verdict.mjs` spawns the engine with `stdio: ['ignore', 'pipe', 'pipe']`
+and never reads either pipe. Isolated in both directions on the same script,
+same settings, same 20s settle:
+
+| child stdout/stderr | outcome |
+|---|---|
+| drained (`proc.stdout.resume()`) | `Trustworthy`, 7 runs of 7, evaluate answers in 106–405ms |
+| left undrained | `timeout: Runtime.evaluate`, 2 of 2, past a 45s cap |
+
+A 64KB pipe fills, the engine blocks in `write`, its single-threaded loop stops,
+and CDP goes unanswered. Every reading taken through an undrained harness was a
+reading of a wedged engine, not of iphey. `verdicts-lightpanda.mjs` — the
+seven-station regression harness — has the same defect, so its numbers are
+suspect on any page that logs enough.
+
+**And the engine hands the harness a loaded gun.** One iphey load writes 415,852
+bytes to stderr at default verbosity. Broken down:
+
+| bytes | share | what |
+|---|---|---|
+| 391,861 | 94% | **a single line**: `log.info(.http, "request complete", …)` at `Fetch.zig:230` printing a `data:application/wasm;base64,…` URL in full |
+| 18,560 | 4% | one page `console.table` call, serialized row by row (iphey's devtools probe, 500 entries) |
+| 5,431 | 1% | everything else — normal request and script lines |
+
+That one 383KB line is six times the pipe capacity by itself, it lands at
++8051ms, and it is why the page freezes at the 294-node mark. Its content is
+page-controlled and unbounded: a `data:` URL is whatever the page inlined.
+`writeString` in `src/log.zig` is the single funnel every logged string passes
+through in both formats, so that is where a cap belongs — not at one log site.
+
+Read the engine's own log volume before trusting any harness reading: `wc -c` on
+the captured stderr is the cheap version of this whole section.

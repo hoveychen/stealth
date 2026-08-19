@@ -19,6 +19,12 @@
 //   node tools/fingerprint/stall-trace.mjs ok              # engine, SwiftShader strings
 //   node tools/fingerprint/stall-trace.mjs native --chrome # the real Chrome
 //
+// URL points it at another page and PROBE at that page's own read of whether it
+// finished, so the same subtraction works anywhere:
+//
+//   URL=https://iphey.com/ PROBE='document.body.innerText.match(/Looks\s+(\w+)/)' \
+//     LP_BIN=/abs/path/zig-out/bin/lightpanda node tools/fingerprint/stall-trace.mjs stall
+//
 // The wrappers are not free of side effects: anything constructed rather than
 // called (RTCPeerConnection) breaks if wrapped this way, so check that the
 // run's own outcome still matches an untraced one before trusting a trace.
@@ -26,6 +32,9 @@ import { spawn } from 'node:child_process';
 import { Cdp, newPage, sleep } from './cdp.mjs';
 
 const SETTLE_MS = Number(process.env.SETTLE_MS ?? 30000);
+const PAGE_URL = process.env.URL ?? 'https://www.browserscan.net/';
+const PROBE = process.env.PROBE ?? 'document.querySelectorAll("[class*=skeleton]").length';
+const LP_BIN = process.env.LP_BIN ?? 'zig-out/bin/lightpanda';
 const APPLE_V = 'Google Inc. (Apple)';
 const APPLE_R = 'ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)';
 const SS_V = 'Google Inc. (Google)';
@@ -227,7 +236,7 @@ if (useChrome) {
     '--no-first-run', '--no-default-browser-check',
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
-  proc = spawn('zig-out/bin/lightpanda',
+  proc = spawn(LP_BIN,
     ['serve', '--host', '127.0.0.1', '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'] });
 }
 proc.stdout.resume();
@@ -248,7 +257,7 @@ await cdp.send('Runtime.enable', {}, sessionId).catch(() => {});
 await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: TRACE(pair) }, sessionId);
 await cdp.send('Emulation.setDeviceMetricsOverride',
   { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false }, sessionId).catch(() => {});
-await cdp.send('Page.navigate', { url: 'https://www.browserscan.net/' }, sessionId);
+await cdp.send('Page.navigate', { url: PAGE_URL }, sessionId);
 await sleep(SETTLE_MS);
 
 const READ = `JSON.stringify({
@@ -257,7 +266,7 @@ const READ = `JSON.stringify({
   frames: typeof window.__frames === 'function' ? window.__frames() : null,
   promises: (window.__promises || []).filter((p) => p.done === null).map((p) => ({ t: p.t, stack: p.stack })),
   promiseTotal: (window.__promises || []).length,
-  skeletons: document.querySelectorAll('[class*=skeleton]').length,
+  probe: (() => { try { return ${JSON.stringify(PROBE)} && eval(${JSON.stringify(PROBE)}); } catch (e) { return 'probe threw: ' + e.message; } })(),
 })`;
 const res = await cdp.send('Runtime.evaluate', { expression: READ, returnByValue: true }, sessionId);
 console.log(JSON.stringify({ variant: which, ...JSON.parse(res.result.value) }, null, 1));
