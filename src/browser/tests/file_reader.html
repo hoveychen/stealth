@@ -135,6 +135,35 @@
   });
 </script>
 
+<script id=listenerRegisteredAfterRead type=module>
+  // The read answers on a task, not before the call returns. Real pages count
+  // on it: browserscan.net's canvas check calls readAsDataURL(blob) and then
+  // registers its load listener on the *next* line, inside a promise that only
+  // that listener resolves. Reading synchronously fires load before the
+  // listener exists, and the page waits on that promise forever.
+  const state = await testing.async();
+  const reader = new FileReader();
+  const blob = new Blob(["test"], { type: "text/plain" });
+
+  reader.readAsDataURL(blob);
+  const readyStateAfterCall = reader.readyState;
+  const resultAfterCall = reader.result;
+
+  // Raced against a timer so a synchronous implementation fails an assertion
+  // here rather than hanging the runner on a promise nothing will resolve.
+  const result = await Promise.race([
+    new Promise((resolve) => reader.addEventListener("load", () => resolve(reader.result))),
+    new Promise((resolve) => setTimeout(() => resolve("(load never reached a listener registered after the call)"), 100)),
+  ]);
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(1, readyStateAfterCall);
+    testing.expectEqual(null, resultAfterCall);
+    testing.expectEqual("data:text/plain;base64,dGVzdA==", result);
+  });
+</script>
+
 <script id=abort>
   // Test aborting when not loading (should do nothing)
   {
@@ -142,11 +171,33 @@
     reader.abort(); // Should not throw
     testing.expectEqual(0, reader.readyState);
   }
+</script>
 
-  // Note: Testing abort during read is implementation-dependent.
-  // In synchronous implementations (like ours), the read completes before abort can be called.
-  // In async implementations (like Firefox), you can abort during the read.
-  // We test that abort() at least doesn't throw and maintains correct state.
+<script id=abortDuringRead type=module>
+  // The read is a task, so abort() can land before it runs -- and then the
+  // read must deliver nothing at all.
+  const state = await testing.async();
+  const reader = new FileReader();
+  const blob = new Blob(["test"]);
+
+  let loadFired = false;
+  let abortFired = false;
+  reader.addEventListener("load", () => { loadFired = true; });
+  reader.addEventListener("abort", () => { abortFired = true; });
+
+  reader.readAsText(blob);
+  reader.abort();
+  const readyStateAfterAbort = reader.readyState;
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(true, abortFired);
+    testing.expectEqual(false, loadFired);
+    testing.expectEqual(2, readyStateAfterAbort);
+    testing.expectEqual(null, reader.result);
+  });
 </script>
 
 <script id=multipleReads type=module>
