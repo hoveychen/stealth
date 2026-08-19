@@ -112,6 +112,19 @@ pub fn setDisabled(self: *Style, disabled: bool, frame: *Frame) !void {
     sheet.setDisabled(disabled);
 }
 
+/// Same as HTMLStyleElement's: the rules were parsed from this element's text and
+/// cached, so a text mutation has to re-parse them in place. See the comment on
+/// Element.Html.Style.textContentChanged for why the sheet object is kept.
+pub fn textContentChanged(self: *Style, frame: *Frame) void {
+    const sheet = self._sheet orelse return;
+    if (sheet._css_rules != null) {
+        const text = self.asNode().getTextContentAlloc(frame.local_arena) catch return;
+        sheet.replaceSync(text, frame) catch return;
+        return;
+    }
+    frame._style_manager.sheetModified();
+}
+
 pub fn styleAddedCallback(self: *Style, frame: *Frame) !void {
     if (self.getSheet(frame) catch null) |_| {
         frame._style_manager.sheetModified();

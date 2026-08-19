@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+<div id=anchor></div>
+
+<script id=styleTextMutation>
+  // A <style>'s rules are parsed from its text and the parsed copy is cached on
+  // its CSSStyleSheet, so mutating the text has to invalidate that copy. The
+  // mutation only used to land when nothing had read the cascade yet -- one
+  // getComputedStyle before it was enough to freeze the old rules forever.
+  // Every reading here is Chrome 151 (probe t2-matrix, nine mutation shapes).
+  const run = (mutate) => {
+    const host = document.createElement('div');
+    host.innerHTML = '<span class=tv>M</span>';
+    document.body.appendChild(host);
+    const el = host.querySelector('.tv');
+    const style = document.createElement('style');
+    style.textContent = '.tv { visibility: hidden }';
+    document.head.appendChild(style);
+    // Reads the cascade before the mutation: this is what made it stale.
+    const before = getComputedStyle(el).visibility;
+    mutate(style);
+    const after = getComputedStyle(el).visibility + ' ' + JSON.stringify(host.innerText);
+    host.remove();
+    style.remove();
+    return before + ' -> ' + after;
+  };
+
+  const REVEALED = 'hidden -> visible "M"';
+
+  // Replacing the text, by every route that reaches it.
+  testing.expectEqual(REVEALED, run((s) => s.textContent = '.tv { visibility: visible }'));
+  testing.expectEqual(REVEALED, run((s) => s.innerHTML = '.tv { visibility: visible }'));
+  testing.expectEqual(REVEALED, run((s) => s.firstChild.data = '.tv { visibility: visible }'));
+  testing.expectEqual(REVEALED, run((s) => s.replaceChildren(
+    document.createTextNode('.tv { visibility: visible }'))));
+  // Appending a second rule: the later one wins, so the element is revealed
+  // without the first rule going anywhere.
+  testing.expectEqual(REVEALED, run((s) => s.appendChild(
+    document.createTextNode('.tv { visibility: visible }'))));
+
+  // Emptying it, likewise: the rule is gone, so the initial value stands.
+  testing.expectEqual(REVEALED, run((s) => s.textContent = ''));
+  testing.expectEqual(REVEALED, run((s) => s.firstChild.nodeValue = ''));
+  testing.expectEqual(REVEALED, run((s) => s.firstChild.remove()));
+
+  // Already worked, and worth keeping either side of the fix: removing the
+  // element drops its rules, and a sheet nothing has read yet parses the text
+  // it finds when it is first read rather than the text it was created with.
+  testing.expectEqual(REVEALED, run((s) => {
+    s.remove();
+    s.textContent = '.tv { visibility: visible }';
+    document.head.appendChild(s);
+  }));
+
+  // The CSSOM view agrees with the cascade afterwards: reading style.sheet gives
+  // one rule, the new one. Note that Chrome hands out a *new* CSSStyleSheet here
+  // and leaves the old object holding the old rule, where we re-parse in place --
+  // document.styleSheets is insertion-ordered, so re-registering the sheet would
+  // move it to the end of the cascade. The reading below is the one both agree on.
+  {
+    const style = document.createElement('style');
+    style.textContent = '.tv { visibility: hidden }';
+    document.head.appendChild(style);
+    testing.expectEqual(1, style.sheet.cssRules.length);
+    style.textContent = '.tv { visibility: visible }';
+    testing.expectEqual(1, style.sheet.cssRules.length);
+    testing.expectEqual('.tv { visibility: visible; }', style.sheet.cssRules[0].cssText);
+    style.remove();
+  }
+</script>

@@ -2720,6 +2720,31 @@ const RemoveNodeOpts = struct {
     // Set to false when the caller queues its own combined mutation record
     notify_observers: bool = true,
 };
+/// A <style> element's rules are parsed from its text and the parsed copy lives on
+/// its CSSStyleSheet, so any mutation of that text has to re-parse them. Called
+/// from the three paths that can change it -- a node inserted, a node removed, and
+/// character data rewritten -- with the *parent* of the mutated node, since a
+/// removal has already unlinked the child by then.
+///
+/// Chrome 151 re-reads the text for every shape (probe t2-matrix: textContent,
+/// innerHTML, replaceChildren, appendChild, .data, .nodeValue, removing the text
+/// node). We used to re-read only while nothing had read the cascade yet, because
+/// the parse is lazy: one getComputedStyle before the mutation froze the old rules
+/// for the life of the element.
+///
+/// Only the direct parent is inspected. <style> is a raw-text element, so text
+/// nodes are the only children the parser gives it; text nested under an element
+/// child put there by script is not covered.
+pub fn styleTextChanged(self: *Frame, parent: ?*Node) void {
+    const node = parent orelse return;
+    const el = node.is(Element) orelse return;
+    if (el.is(Element.Html.Style)) |style| {
+        style.textContentChanged(self);
+    } else if (el.is(Element.Svg.Style)) |style| {
+        style.textContentChanged(self);
+    }
+}
+
 pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpts) void {
     // NodeIterator pre-removing steps must run while the tree is intact.
     if (self._live_node_iterators.first != null) {
@@ -2747,6 +2772,10 @@ pub fn removeNode(self: *Frame, parent: *Node, child: *Node, opts: RemoveNodeOpt
     const id_maps = if (was_connected) self.getElementIdMap(child) else null;
 
     child._parent = null;
+
+    // The child is unlinked, so the parent's text now reads as it will from here
+    // on: if that parent is a <style>, its rules have to be re-parsed from it.
+    self.styleTextChanged(parent);
 
     // Update live ranges for removal (DOM spec remove steps 4-7)
     if (child_index_for_ranges) |idx| {
@@ -2920,6 +2949,12 @@ pub fn _insertNodeRelative(self: *Frame, comptime from_parser: bool, parent: *No
         },
     }
     child._parent = parent;
+
+    // Ahead of every early return below, and of the parser branch: inserting text
+    // into a <style> changes the text its rules come from. During a parse the
+    // element has no sheet yet, so this is a no-op there and styleAddedCallback
+    // does the first parse.
+    self.styleTextChanged(parent);
 
     // Update live ranges for insertion (DOM spec insert step 6).
     // For .before/.after the child was inserted at a specific position;
