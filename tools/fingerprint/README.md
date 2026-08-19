@@ -3353,3 +3353,103 @@ Until then the claim trades a real 95% for a hollow 100%.
 * Nothing here says macOS is the better claim *in general*. It is better on
   CreepJS, neutral on iphey, and currently worse on browserscan. A fourth
   detector could go either way.
+
+## iphey did produce a verdict; the harness could not hear it
+
+The row above reads `iphey headline: no verdict` under both platform claims, and
+that was the premise this plan started from. Re-measured on the finished branch,
+it is wrong twice over.
+
+**The verdict is there, and it is Chrome's verdict.** Polling the page every two
+seconds instead of reading it once:
+
+| t | lightpanda | Chrome |
+|---|---|---|
+| 0–7s | 290–294 nodes, 5× `Temporary value` | 286–294 nodes, 5× `Temporary value` |
+| 9s | 294 nodes, still `Temporary value` | **487 nodes, `Trustworthy`, 0 temporary** |
+| 17s | **487 nodes, `Trustworthy`, 0 temporary** | same |
+| 17–60s | unchanged | unchanged |
+
+The terminal state is identical — 487 nodes, the headline reading `Trustworthy`,
+not one card left on `Temporary value`. The engine takes 17s to Chrome's 9s, and
+the five-`Temporary value` state every earlier reading captured is not a stall at
+all: it is the state Chrome is also in for its first seven seconds.
+
+**What actually failed was the probe harness, and it failed by not reading.**
+`iphey-verdict.mjs` spawns the engine with `stdio: ['ignore', 'pipe', 'pipe']`
+and never reads either pipe. Isolated in both directions on the same script,
+same settings, same 20s settle:
+
+| child stdout/stderr | outcome |
+|---|---|
+| drained (`proc.stdout.resume()`) | `Trustworthy`, 7 runs of 7, evaluate answers in 106–405ms |
+| left undrained | `timeout: Runtime.evaluate`, 2 of 2, past a 45s cap |
+
+A 64KB pipe fills, the engine blocks in `write`, its single-threaded loop stops,
+and CDP goes unanswered. Every reading taken through an undrained harness was a
+reading of a wedged engine, not of iphey. Audited across every harness that
+spawns a browser, `iphey-verdict.mjs` was the only one that left the engine's
+pipes unread — `verdicts-lightpanda.mjs`, the seven-station regression harness,
+drains both with `.on('data')`, so its numbers are not affected. Two more
+harnesses gave *Chrome* an unread pipe (`dump-graphics.mjs`, `dump-fonts.mjs`);
+Chrome writes little enough that nothing was observed, and they now spawn with
+`stdio: 'ignore'` rather than a pipe nobody reads.
+
+**And the engine hands the harness a loaded gun.** One iphey load writes 415,852
+bytes to stderr at default verbosity. Broken down:
+
+| bytes | share | what |
+|---|---|---|
+| 391,861 | 94% | **a single line**: `log.info(.http, "request complete", …)` at `Fetch.zig:230` printing a `data:application/wasm;base64,…` URL in full |
+| 18,560 | 4% | one page `console.table` call, serialized row by row (iphey's devtools probe, 500 entries) |
+| 5,431 | 1% | everything else — normal request and script lines |
+
+That one 383KB line is six times the pipe capacity by itself, it lands at
++8051ms, and it is why the page freezes at the 294-node mark. Its content is
+page-controlled and unbounded: a `data:` URL is whatever the page inlined.
+`writeString` in `src/log.zig` is the single funnel every logged string passes
+through in both formats, so that is where a cap belongs — not at one log site.
+
+### What was changed, and what it measures at now
+
+`writeString` in `src/log.zig` caps a logged string at `max_string_len` (2048)
+and appends `...+N bytes`, so the reader can tell a value that ends there from
+one that was cut. Truncated values are quoted in `logfmt` even where an
+untruncated one would not be, because the marker contains a space.
+
+Measured on the same iphey load, before and after:
+
+| | before | after |
+|---|---|---|
+| stderr for one load | 415,852 bytes | **26,067 bytes** |
+| longest single line | 391,861 bytes | **2,076 bytes** |
+| undrained harness | `timeout: Runtime.evaluate`, 2/2 | **`Trustworthy`, 2/2** |
+| verdict, drained | `Trustworthy`, 487 nodes | unchanged |
+
+The cap is not a substitute for draining. 26KB is under one pipe's capacity for
+this page, not for a page that logs thousands of short lines, and the harness
+that does not read is still the harness that wedges. Both ends were fixed.
+
+### The regression check the cap needed
+
+A log cap cannot change what a detector concludes, but it is one line away from
+every log site, so it was checked against the binary it was built from — both
+harnesses run the same day, same machine, same site list:
+
+| station | main `97104bfbb` | this branch |
+|---|---|---|
+| sannysoft | | identical |
+| creepjs | `31% like headless:da88474c`, `0% headless`, `0% stealth` | identical |
+| iphey | `Bot Check / Not detected / BOT` | identical |
+| pixelscan | | identical |
+| rebrowser | 5 rows, all 🟢 | same rows, all 🟢 — only the milliseconds each row prints differ (`2.9 ms` / `3 ms`), byte-identical once those are stripped |
+| areyouheadless | | identical |
+| deviceinfo | | identical |
+
+browserscan re-read alongside it: 100%, `skeletons=0`, no warnings, 0 of 58 rows
+flagged, no empty values — unchanged. And the canonical iphey probe, the one that
+timed out 2 of 2 before, now answers on its first attempt: 487 nodes,
+`Trustworthy`, zero `Temporary value`, all five cards present.
+
+Read the engine's own log volume before trusting any harness reading: `wc -c` on
+the captured stderr is the cheap version of this whole section.

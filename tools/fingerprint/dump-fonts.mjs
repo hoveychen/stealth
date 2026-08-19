@@ -63,7 +63,7 @@ const EXTRA_NAMES = [
 /// a stylesheet cannot resolve them, and Chrome does not, so they are dropped.
 async function installedFamilies() {
     const out = await new Promise((resolve, reject) => {
-        const p = spawn('system_profiler', ['-json', 'SPFontsDataType'], { stdio: ['ignore', 'pipe', 'pipe'] });
+        const p = spawn('system_profiler', ['-json', 'SPFontsDataType'], { stdio: ['ignore', 'pipe', 'ignore'] });
         let buf = '';
         p.stdout.on('data', (d) => (buf += d));
         p.on('error', reject);
@@ -125,7 +125,8 @@ const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-fonts-'));
 const flags = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check'];
 if (!headed) flags.push('--headless=new');
 const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
-const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
+// No pipe we do not read -- see dump-graphics.mjs.
+const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: 'ignore' });
 
 let tables = [];
 try {

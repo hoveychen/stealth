@@ -373,7 +373,9 @@ if (!headed) flags.push('--headless=new');
 // from linux-chrome.mjs. The renderer strings and every driver limit below are
 // the whole reason this file exists, and they belong to the platform we claim.
 const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
-const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
+// Nothing here reads Chrome's output, so do not give it a pipe to fill: a
+// child that fills an unread pipe blocks in write and stops answering CDP.
+const proc = ENDPOINT ? null : spawn(CHROME, flags, { stdio: 'ignore' });
 const snapshot = {
     note:
         'Graphics-surface ground truth, measured from the real Google Chrome on the reference host. ' +
