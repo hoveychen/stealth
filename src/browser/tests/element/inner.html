@@ -302,3 +302,42 @@
   tt.remove();
   sheet.remove();
 </script>
+
+<script id=innerTextCollapsedBoundary>
+  // A collapsible space pending from one text run must survive an all-whitespace
+  // text node. iphey's headline is `Looks <span> <span>Trustworthy</span> </span>`:
+  // the space after "Looks" was pending, the slot span's whitespace-only child
+  // cleared it, and the card read LooksTrustworthy. Chrome's readings are in the
+  // comments; all of these were measured on Chrome 151 against about:blank.
+  const ws = document.createElement('div');
+  document.body.appendChild(ws);
+
+  // Chrome: "a b" -- the pending space survives the nested inline's whitespace.
+  ws.innerHTML = 'a <span> <span>b</span> </span>';
+  testing.expectEqual('a b', ws.innerText);
+
+  // Chrome: "a b" -- two whitespace-only nodes still collapse to one space.
+  ws.innerHTML = 'a <span> </span><span> </span>b';
+  testing.expectEqual('a b', ws.innerText);
+
+  // Chrome: "a b" -- this one already passed; nothing is pending after "a", so
+  // the whitespace-only node is what creates the space. Kept as the control
+  // that says the fix did not simply force a space in unconditionally.
+  ws.innerHTML = 'a<span> <span>b</span> </span>';
+  testing.expectEqual('a b', ws.innerText);
+
+  // Chrome: "a b" -- an inline-block slot collapses rather than breaking.
+  ws.innerHTML = 'a <span style="display:inline-block"> <span>b</span> </span>';
+  testing.expectEqual('a b', ws.innerText);
+
+  // Chrome: "ab" -- with no whitespace anywhere there is no space to preserve.
+  ws.innerHTML = 'a<span><span>b</span></span>';
+  testing.expectEqual('ab', ws.innerText);
+
+  // Chrome: "a" -- leading and trailing whitespace is still dropped, so the
+  // fix must not turn a pending space into a trailing one.
+  ws.innerHTML = ' <span> </span>a<span> </span> ';
+  testing.expectEqual('a', ws.innerText);
+
+  ws.remove();
+</script>

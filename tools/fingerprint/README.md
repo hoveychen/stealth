@@ -3541,3 +3541,64 @@ attributable change; noted, not claimed either way.
 our `innerText` against Chrome's `Looks Trustworthy`. That is a missing space at
 an element boundary, unaffected by casing, and it survived this fix exactly as
 predicted when it was recorded above.
+
+## LooksTrustworthy was two bugs, and the smaller framing was mine
+
+The section above left iphey's headline open and called it "a missing space at an
+element boundary". Read against Chrome rather than against a normalised diff,
+that description was wrong in one respect and right in another.
+
+The markup, identical in both engines:
+
+```html
+<h1> Your Digital Identity Looks <span class="hero-status-slot"> <span class="hero-status">Trustworthy</span> </span> </h1>
+```
+
+Raw `innerText`, measured on the element itself rather than through the sweep's
+whitespace-normalised snippet:
+
+| | before | Chrome |
+|---|---|---|
+| iphey headline | `Your Digital Identity LooksTrustworthy` | `Your Digital Identity Looks \nTrustworthy` |
+
+**Chrome puts a line break there, not a space.** `hero-status-slot` computes to
+`display: inline-flex` in Chrome, and `innerText` breaks for a non-inline
+display. The earlier note read it as a space because the sweep comparison ran
+`\s+ → " "` first, which turns Chrome's `\n` into exactly the space it was
+looking for. That is the hazard of diffing normalised text: the normalisation
+answers the question.
+
+Isolated on `about:blank`, one case per row, Chrome 151 against the engine:
+
+| markup | Chrome | before | after |
+|---|---|---|---|
+| `a <span> <span>b</span> </span>` | `a b` | **`ab`** | `a b` |
+| `a <span> </span><span> </span>b` | `a b` | **`ab`** | `a b` |
+| `a<span> <span>b</span> </span>` | `a b` | `a b` | `a b` |
+| `a <span style="display:inline-block"> <span>b</span> </span>` | `a b` | **`ab`** | `a b` |
+| `a <span style="display:inline-flex"> <span>b</span> </span>` | **`a \nb`** | `ab` | `a b` |
+
+So there were two independent faults, and the row that already passed is what
+separates them: with nothing pending after `a`, the whitespace-only node
+correctly produced the space. The bug was that a space *already* pending got
+cleared by the next whitespace-only node —
+`state.pre_w = state.wrote_any and state.trim_left == false` in `writeText`,
+which discards a pending space instead of leaving it pending. A run of
+collapsible whitespace collapses to one space, so the node should take nothing
+away. Fixed; four of the five rows now match Chrome exactly.
+
+**What is still open, and is a bigger change than this plan.** `inline-flex`
+should break the line. We cannot honour it yet because `StyleManager` carries
+`display` only as a `display_none` boolean, not as a value — which is also why
+the engine reported `display: inline` for that span on iphey while reading
+`inline-flex` back correctly from an inline style in the table above. Teaching
+the cascade to carry computed `display` is the prerequisite, and it is not
+attempted here. iphey's headline therefore reads `Looks Trustworthy` against
+Chrome's `Looks \nTrustworthy`: the words separate correctly now, and the
+separator is a space where Chrome has a break.
+
+Node counts across the sweep held (creepjs 3600 → 3602, inside the variance it
+has shown across four runs of its own: 3589, 3598, 3600, 3602). iphey's
+`verdictWords` went 4 → 5, matching Chrome's 5, because `Trustworthy` finally
+separates as its own word. browserscan: 100%, `skeletons=0`, no warnings, 0 of 58
+flagged.
