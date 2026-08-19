@@ -84,7 +84,9 @@ if (ENDPOINT) {
     // which is what --window-size defaults to. extractReach records the width
     // each page actually saw, so a mismatch shows up in the results instead of
     // hiding inside a node count.
-    proc = spawn(path.join(repo, 'zig-out/bin/lightpanda'), [
+    // LP_BIN so a worktree can sweep with the main checkout's build instead of
+    // duplicating a 215MB link, the same knob verdicts-lightpanda.mjs takes.
+    proc = spawn(process.env.LP_BIN ?? path.join(repo, 'zig-out/bin/lightpanda'), [
         'serve', '--host', '127.0.0.1', '--port', String(PORT),
         ...(proxy ? ['--http-proxy', proxy] : []),
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
