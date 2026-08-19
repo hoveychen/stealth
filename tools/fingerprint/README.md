@@ -4068,3 +4068,98 @@ Nothing: every station within 2 nodes and 6 characters of a sweep of the same
 commit without the change, taken minutes apart, and no verdict-word count moved.
 browserscan is unchanged at 100%, no warnings, 0 skeletons (`mainTotal` 845,
 `docTotal` 1871).
+
+## Type selectors in XML documents (X1–X3)
+
+The section above closed the HTML half of the case rule and left the XML half
+open, on the reading that "everything this engine is for is an HTML document".
+X1 measures that half. The readings below are Chrome 151 against
+`dev.315+7d866bb9d`, the commit the previous plan merged, so the `clipPath` fix
+is already in — which is exactly why the XML side reads *more* wrong than it did
+before: the case fold that HTML wanted now applies to every document.
+
+Probes: `expr-x1.js` (selectors, `getElementsByTagName`, attribute names, four
+document flavours), `expr-x1b.js` (tree dumps behind the surprises),
+`expr-x1c.js` (`createDocument` / `new Document()` / `createHTMLDocument`).
+
+### Type selectors: case-sensitive in every non-HTML document
+
+| document | element | selector | Chrome | this engine |
+|---|---|---|---|---|
+| `text/xml` | `<Thing/>` + `<thing/>` | `Thing` / `thing` / `THING` | 1 / 1 / **0** | 2 / 2 / **2** |
+| `text/xml` | `<s:clipPath/>` | `clipPath` / `clippath` / `CLIPPATH` | 1 / **0** / **0** | 1 / **1** / **1** |
+| `application/xhtml+xml` | `<p>` | `p` / `P` | 1 / **0** | 1 / **1** |
+| `application/xhtml+xml` | `<body>` | `body` / `BODY` | 1 / **0** | 1 / **1** |
+| `application/xhtml+xml` | `<DIV/>` | `DIV` / `div` | 1 / **0** | **0** / 0 |
+| `application/xhtml+xml` | `<P>a</P>` | `P` / `p` | 1 / **0** | **0** / 0 |
+| `image/svg+xml` | `<clipPath/>` | `clipPath` / `clippath` | 1 / **0** | 1 / **1** |
+| `image/svg+xml` | root `<svg>` | `svg` / `SVG` | 1 / **0** | 1 / **1** |
+| `createDocument(null,'Root')` | `<Root>`, `<Kid>` | `Root` / `root` / `Kid` / `kid` | 1 / **0** / 1 / **0** | 1 / **1** / 1 / **1** |
+| `new Document()` | `<Thing>` | `Thing` / `thing` | 1 / **0** | 1 / **1** |
+| `createHTMLDocument` | `<div>`, SVG `<clipPath>` | any case of either | 1 | 1 |
+
+The `<DIV/>` and `<P>` rows are the interesting ones: the engine matches them
+under *no* spelling, where the rest of the table is only too permissive. The
+selector parser lowercases a type selector's name and the fast enum arm keys off
+that lowercase form, so an XML-parsed HTML-namespaced element that kept a capital
+in its name has no route in at all — `.tag` compares an enum the element does not
+carry, and `.tag_name` compares a lowercased selector against a name that is not
+lowercase. Fixing the fold direction therefore needs the *original* spelling kept
+alongside the lowercased one, the way `Selector.Attribute` already keeps
+`original_name` next to `name`.
+
+`createHTMLDocument` is the control: every spelling matches there in both
+browsers, and has to keep matching.
+
+### Adjacent readings taken at the same time
+
+These are measured, not fixed by this plan. Recording them so the next plan that
+touches XML documents does not have to re-measure.
+
+| what | Chrome | this engine |
+|---|---|---|
+| `document.contentType` after `text/xml` / `application/xhtml+xml` / `image/svg+xml` | echoes the parse mime | always `application/xml` |
+| `tagName` of `<p>` in an XHTML document | `p` | `P` (uppercased regardless of document) |
+| `tagName` of `<s:clipPath/>` | `s:clipPath` | `clipPath` (prefix dropped) |
+| `namespaceURI` of `<root>` with no `xmlns` | `null` | `http://www.w3.org/XML/1998/namespace` |
+| `xmlns` attribute on a parsed XML root | present in `attributes` | dropped |
+| `getElementsByTagName('P')` in an XHTML document | 0 | 1 |
+| `[Foo]` on `<p Foo="1">` in an XHTML document | 1 | **0** (and `[foo]` 0) |
+| `[Bar]` on SVG `<g Bar="2">` in an **HTML** document | 1 | **0** (only `[bar]` matches) |
+
+Attribute names go the same way as tag names — case-insensitive in an HTML
+document whatever the element's namespace, case-sensitive in XML — and
+`matchesAttribute` splits on the element namespace instead, which is why the last
+two rows are wrong in opposite directions. `getElementsByTagName` is a separate
+comparison in the collections code, not this one.
+
+### What the fix was (X2)
+
+The parser now keeps both spellings of a type selector's name, `Selector.TagName`
+alongside the `Attribute.original_name` that was already there, and only takes the
+`Part.tag` enum shortcut when the selector was already lowercase -- which is the
+only shape where the two spellings cannot be told apart. `tagNameMatches` then
+compares the exact spelling first, because that answers both rules at once, and
+falls back to the case-folded compare only when the element's owner document is an
+HTML one.
+
+Ordering it that way keeps the document lookup off the hot path: an all-lowercase
+selector over an HTML tree stores a lowercase element name on one side and a
+lowercase selector on the other, so the exact compare and the folded compare can
+only ever agree, and a non-match returns before the lookup.
+
+Every type-selector row in the table above now reads exactly as Chrome does,
+including the two `createHTMLDocument` control rows and the `<DIV/>` / `<P>` rows
+that used to match nothing at all. The adjacent rows are unchanged, as intended.
+
+### What it changed on the twelve stations (X3)
+
+Nothing. All twelve node counts are identical to a sweep of `dev.312+16ea92afa`
+and no verdict-word count moved; four text lengths differ by 1 to 6 characters,
+which is the usual counter/timing noise. creepjs read 3600 nodes both times, the
+stable value -- not the 3870 outlier the previous plan's notes warned about.
+browserscan is unchanged at 100% with no problems, no warnings, 0 skeletons
+(`mainTotal` 845, `docTotal` 1871).
+
+That is the expected shape: an HTML document takes the same code path it did
+before, and every station is an HTML document.

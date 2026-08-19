@@ -419,3 +419,70 @@
   testing.expectEqual(2, allElements.length);
 }
 </script>
+
+<script id=typeSelectorCase-xml>
+{
+  // A type selector folds case in an HTML document and not in an XML one, and
+  // the rule follows the *document*, not the element's namespace: an XHTML
+  // `<p>` is case-sensitive even though it is HTML-namespaced. Chrome 151
+  // readings, probes expr-x1.js / expr-x1d.js / expr-x1e.js.
+  const parser = new DOMParser();
+
+  {
+    const doc = parser.parseFromString(
+      '<root xmlns:s="http://www.w3.org/2000/svg"><Thing/><thing/><s:clipPath/></root>', 'text/xml');
+    testing.expectEqual(1, doc.querySelectorAll('Thing').length);
+    testing.expectEqual(1, doc.querySelectorAll('thing').length);
+    testing.expectEqual(0, doc.querySelectorAll('THING').length);
+    testing.expectEqual(1, doc.querySelectorAll('clipPath').length);
+    testing.expectEqual(0, doc.querySelectorAll('clippath').length);
+    testing.expectEqual(0, doc.querySelectorAll('CLIPPATH').length);
+  }
+
+  {
+    // A capital kept by the XML parser is reachable only by that same
+    // spelling, and each of `p` / `P` picks out its own element.
+    const doc = parser.parseFromString(
+      '<html xmlns="http://www.w3.org/1999/xhtml"><body><p>a</p><DIV/><P>b</P></body></html>',
+      'application/xhtml+xml');
+    testing.expectEqual('a', doc.querySelector('p').textContent);
+    testing.expectEqual('b', doc.querySelector('P').textContent);
+    testing.expectEqual(1, doc.querySelectorAll('body').length);
+    testing.expectEqual(0, doc.querySelectorAll('BODY').length);
+    testing.expectEqual(1, doc.querySelectorAll('DIV').length);
+    testing.expectEqual(0, doc.querySelectorAll('div').length);
+  }
+
+  {
+    const doc = parser.parseFromString(
+      '<svg xmlns="http://www.w3.org/2000/svg"><clipPath/><g/></svg>', 'image/svg+xml');
+    testing.expectEqual(1, doc.querySelectorAll('clipPath').length);
+    testing.expectEqual(0, doc.querySelectorAll('clippath').length);
+    testing.expectEqual(1, doc.querySelectorAll('svg').length);
+    testing.expectEqual(0, doc.querySelectorAll('SVG').length);
+    testing.expectEqual(1, doc.querySelectorAll('g').length);
+    testing.expectEqual(0, doc.querySelectorAll('G').length);
+  }
+
+  {
+    // No parse step at all: createDocument makes an XML document too.
+    const doc = document.implementation.createDocument(null, 'Root');
+    doc.documentElement.appendChild(doc.createElement('Kid'));
+    testing.expectEqual(1, doc.querySelectorAll('Root').length);
+    testing.expectEqual(0, doc.querySelectorAll('root').length);
+    testing.expectEqual(1, doc.querySelectorAll('Kid').length);
+    testing.expectEqual(0, doc.querySelectorAll('kid').length);
+    testing.expectEqual(0, doc.querySelectorAll('KID').length);
+  }
+
+  {
+    // The control: an HTML document still folds, foreign elements included.
+    const doc = document.implementation.createHTMLDocument('t');
+    doc.body.innerHTML = '<div></div><svg><clipPath></clipPath></svg>';
+    testing.expectEqual(1, doc.querySelectorAll('DIV').length);
+    testing.expectEqual(1, doc.querySelectorAll('clipPath').length);
+    testing.expectEqual(1, doc.querySelectorAll('clippath').length);
+    testing.expectEqual(1, doc.querySelectorAll('CLIPPATH').length);
+  }
+}
+</script>

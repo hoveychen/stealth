@@ -208,10 +208,20 @@ pub const Part = union(enum) {
     id: []const u8,
     class: []const u8,
     tag: Node.Element.Tag, // optimized, for known tags
-    tag_name: []const u8, // fallback for custom/unknown tags
+    tag_name: TagName, // fallback for custom/unknown tags, and for any capital
     universal, // '*' any element
     pseudo_class: PseudoClass,
     attribute: Attribute,
+};
+
+pub const TagName = struct {
+    // Lowercased for the case-insensitive match an HTML document does.
+    lower: []const u8,
+    // As written in the selector: an XML document matches a type selector
+    // case-sensitively, HTML-namespaced elements included. The two are the same
+    // slice when the selector was already lowercase, which is also the only
+    // shape the `tag` enum arm above is used for.
+    original: []const u8,
 };
 
 pub const Attribute = struct {
@@ -330,7 +340,7 @@ pub const Compound = struct {
                 try writer.writeAll(val);
             },
             .tag => |val| try writer.writeAll(@tagName(val)),
-            .tag_name => |val| try writer.writeAll(val),
+            .tag_name => |val| try writer.writeAll(val.lower),
             .universal => try writer.writeByte('*'),
             .pseudo_class => |val| {
                 try writer.writeByte(':');
