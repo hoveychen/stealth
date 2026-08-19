@@ -3453,3 +3453,66 @@ timed out 2 of 2 before, now answers on its first attempt: 487 nodes,
 
 Read the engine's own log volume before trusting any harness reading: `wc -c` on
 the captured stderr is the cheap version of this whole section.
+
+## The twelve detectors, re-read because every before column had rotted
+
+The iphey section above is the reason for this one. A before snapshot asserted a
+stall on a page that reaches a verdict, and it survived two handoffs because
+nothing re-read it. Every `results/detectors-*.json` predates the plans since,
+so the whole sweep was re-run rather than trusted:
+`results/rebaseline-2026-08-19-lightpanda.json` (engine `1.0.0-dev.281+91216a567`)
+and `results/rebaseline-2026-08-19-chrome.json` (headed `Chrome/151.0.7922.138`),
+same machine, same day, same 1920×1080 window.
+
+| detector | engine nodes | Chrome nodes | Δ | reads as |
+|---|---|---|---|---|
+| sannysoft | 291 | 290 | +1 | every row `passed` in both |
+| creepjs | 3598 | 4066 | −468 | both render a fingerprint; text differs widely |
+| areyouheadless | 8 | 8 | 0 | `502 Bad Gateway` in both — still dead |
+| fpscanner | 8 | 8 | 0 | `502 Bad Gateway` in both — still dead |
+| rebrowser | 98 | 98 | 0 | same rows, all green in both |
+| deviceinfo | 264 | 264 | 0 | **`You are human!` in both** |
+| browserleaks-js | 1183 | 1180 | +3 | same page |
+| browserleaks-tls | 5 | 7 | −2 | **same JA4**: `t13d1516h2_8daaf6152771_806a8c22fdea` |
+| amiunique | 1571 | 1551 | +20 | same page |
+| iphey | 487 | 487 | 0 | **`Trustworthy` in both** |
+| pixelscan | 1783 | 1783 | 0 | same page |
+| browserscan | 1871 | 2055 | −184 | 100%, zero skeletons (read separately) |
+
+Against the newest prior sweep (`detectors-g21-lightpanda.json`, engine
+`1.0.0-dev.250`, 31 commits back), six sites moved: browserleaks-js +179,
+amiunique +11, creepjs +9, browserscan +1, iphey −3, pixelscan −45.
+
+**iphey read 490 nodes at g21, before the plan that reported it had no verdict.**
+The drained harness had it right the whole time; only the undrained one said
+otherwise. That is the same fault the iphey section isolated, seen from the other
+side, and it is the argument for re-reading a baseline rather than citing one.
+
+### What the re-read found that the node counts hide
+
+**`text-transform` is computed but never applied to text.** Isolated on
+`about:blank` in both engines:
+
+| | engine | Chrome |
+|---|---|---|
+| `innerText` of a `text-transform: uppercase` div | `my fingerprint` | `MY FINGERPRINT` |
+| `innerText` of a `text-transform: capitalize` div | `my fingerprint` | `My Fingerprint` |
+| `textContent` | `my fingerprint` | `my fingerprint` |
+| `getComputedStyle(...).textTransform` | `uppercase` | `uppercase` |
+
+The property parses and computes correctly; layout just does not honour it, and
+`innerText` is defined in terms of layout. One cause explains three of the text
+differences in the sweep — iphey's `Browser` against Chrome's `BROWSER`,
+amiunique's `My Fingerprint` against `MY FINGERPRINT`, pixelscan's `Checkers`
+against `CHECKERS`. Any detector that reads `innerText` off an
+uppercase-styled element sees a different string from us than from Chrome. Not
+fixed here; recorded.
+
+**Unattributed, found alongside it.** iphey's headline is `LooksTrustworthy` in
+our `innerText` and `Looks Trustworthy` in Chrome's — a missing space at an
+element boundary, not a text-transform issue, and not chased.
+
+**Two things this sweep settles.** `areyouheadless` and `fpscanner` are still
+502s and measure nothing in any browser, so nine live detectors is the real
+count. And the TLS fingerprint matches Chrome's JA4 exactly, which is the one
+row in the table no amount of JavaScript work could have produced.
