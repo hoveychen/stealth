@@ -3766,3 +3766,63 @@ Still open, and a different property: `innerText` includes text under
 `visibility: hidden` where Chrome excludes it (`<div style="visibility:hidden">M</div>`
 reads `"M"` here and `""` there). That is a visibility question, not a display
 one, and it reads the same on main.
+
+## innerText and `visibility` (W1)
+
+The section above left this open: `innerText` includes text under
+`visibility: hidden` where Chrome excludes it. Measured on Chrome 151 (probes
+`w1-visibility` and `w1b-visibility`, 32 cases on about:blank). The rule is not
+"skip the subtree" — `visibility` inherits and a descendant can turn it back on.
+
+**Text is emitted only when its nearest element ancestor computes to `visible`.**
+
+| markup | Chrome |
+|---|---|
+| `a<span style="visibility:hidden">M</span>b` | `"ab"` |
+| `a<span style="visibility:collapse">M</span>b` | `"ab"` |
+| `a<span style="visibility:hidden"><span>M</span></span>b` | `"ab"` |
+| `a<span style="visibility:hidden"><span style="visibility:visible">M</span></span>b` | `"aMb"` |
+| `a<span style="visibility:hidden"><span style="visibility:visible"><span>M</span></span></span>b` | `"aMb"` |
+| …and the same nested once more back to hidden | `"ab"` |
+| `a<span style="opacity:0">M</span>b` | `"aMb"` — opacity is not visibility |
+| `el.innerText` where `el` itself is hidden | `""` |
+| the same with a `visibility:visible` child | `"M"` |
+
+**A hidden block box emits no line break, but a visible one does even when empty.**
+This is the part that does not fall out of the engine's lazy `pending_breaks`
+for free: today a hidden block still arms `requireBreaks`, and the next visible
+text flushes it.
+
+| markup | Chrome |
+|---|---|
+| `a<div></div>b` | `"a\nb"` — empty *visible* block still breaks |
+| `a<div> </div>b` | `"a\nb"` |
+| `a<div style="visibility:hidden">M</div>b` | `"ab"` — no break at all |
+| `a<div style="visibility:hidden"></div>b` | `"ab"` |
+| `a<p style="visibility:hidden">M</p>b` | `"ab"` — no blank line either |
+| `a<div style="visibility:hidden"><br></div>b` | `"ab"` — a hidden `<br>` is silent |
+| `a<span style="visibility:hidden"><div>M</div></span>b` | `"ab"` |
+| `a<div>M</div><div style="visibility:hidden">N</div><div>P</div>b` | `"a\nM\nP\nb"` |
+| `a<div style="visibility:hidden">M</div>N<div>P</div>b` | `"aN\nP\nb"` |
+| `a<div style="visibility:hidden"><div style="visibility:visible">M</div></div>b` | `"a\nM\nb"` |
+| `a<div style="visibility:hidden"><span style="visibility:visible">M</span></div>b` | `"aMb"` |
+
+The last two rows together are the shape of it: the *outer* hidden block never
+contributes a break, and whether one appears depends only on whether the visible
+content inside is itself block-level.
+
+**Whitespace: a hidden inline keeps the spaces on both sides; a hidden block
+still trims them.** The inline row is the same two-space reading the atomic
+inline boxes gave — a hidden box is present and zero-width, not absent.
+
+| markup | Chrome |
+|---|---|
+| `a <span style="visibility:hidden">M</span> b` | `"a  b"` — **two** spaces |
+| `a <span style="visibility:hidden">M</span>b` | `"a b"` |
+| `a <span style="visibility:hidden">M</span> <span>N</span> b` | `"a  N b"` |
+| `a <div style="visibility:hidden">M</div> b` | `"ab"` — block boundary still trims |
+| `a <div style="display:none">M</div> b` | `"a b"` — display:none is absent, so the two collapsible spaces merge into one |
+
+That last contrast is the control worth keeping: `display: none` and
+`visibility: hidden` differ in the whitespace they leave behind, so the fix
+cannot route one through the other.
