@@ -3080,3 +3080,56 @@ a plausible list rather than the empty-string hash.
   `## G5`. They land within a few pixels of the container's Chrome, which is
   reassuring and not the same as being right — the sans-serif and serif base
   widths match it exactly, monospace is two pixels wide.
+
+## The platform claim, before touching it
+
+The engine claims Linux (`src/claimed_platform.zig`), while two of its measured
+tables — `font_metrics.zig` and `emoji_metrics.zig` — were recorded from the
+macOS Chrome on this machine. The question this experiment asks is whether
+claiming macOS and recording *every* surface from that same Chrome reads as more
+plausible than the split we have. Before changing anything, what the three
+detectors that produce a readable verdict actually say:
+
+| | lightpanda (claims Linux) | reference Chrome, Linux container | reference Chrome, macOS |
+|---|---|---|---|
+| browserscan score | **95%** | 90% | **100%** |
+| browserscan warnings | `WebGL exception -5%` | timezone only | none |
+| browserscan flagged rows | 2 (`Unmasked Vendor`, `Unmasked Renderer`) | — | **0** |
+| browserscan rows read | 56 | — | 58 |
+| browserscan `Fonts` | `8533CA74` (10) | `6C722935` (13) | `A6BE88C9` (342) |
+| CreepJS like-headless | **38%** | 44% | **38%** |
+| CreepJS headless / stealth | 0% / 0% | 0% / 0% | 0% / 0% |
+| iphey headline | **no verdict at all** | no `Trustworthy` | `Trustworthy` |
+
+Three things fall out of that column, and two of them cut against the
+experiment's premise:
+
+**CreepJS is already at the macOS Chrome number.** 38% like-headless, while
+claiming Linux, on tables recorded from macOS — the same 38% the real macOS
+Chrome scores, and better than the real Linux Chrome's 44%. Whatever CreepJS is
+scoring, the platform claim is not an input to it. A macOS claim cannot improve
+this row; it can only hold or break it.
+
+**browserscan's whole remaining deduction is the renderer pair.** One warning,
+`-5%`, and exactly two flagged rows: `Google Inc. (Google)` and the SwiftShader
+`ANGLE (...)` string. Nothing else on the card is marked. So the ceiling here is
+100%, the same as the macOS reference, and the only thing between us and it is
+what `WEBGL_debug_renderer_info` answers — which is what M2 records.
+
+**iphey reaches no verdict, and never did.** The card is not saying
+`Unreliable`; it is not saying anything. All five sections — Browser, Location,
+IP address, Hardware, Software — read `Temporary value`, iphey's placeholder,
+after 20 seconds. `Your Digital Identity Looks` is followed by empty space.
+Chrome in the Linux container does not print `Trustworthy` either, so the
+absence is not evidence about the platform claim; it is a page whose fingerprint
+pipeline does not finish. Two earlier attempts in the same session died
+differently — a 3-node `about:blank` navigation, and a `Runtime.evaluate` that
+blew past the 30s CDP cap while the page's own timers held the engine — so this
+row needs retries before it can be read at all
+(`macos-claim-before-iphey-lightpanda.json` records which attempt produced it).
+
+The three readings live in
+`results/macos-claim-before-{verdicts,browserscan,iphey}-lightpanda.json`, with
+the two reference columns beside them as `macos-claim-ref-*`. CreepJS and iphey
+were each read twice with identical hashes in the previous session, so these are
+determinate readings rather than samples.
