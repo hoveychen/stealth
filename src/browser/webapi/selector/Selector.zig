@@ -225,10 +225,11 @@ pub const TagName = struct {
 };
 
 pub const Attribute = struct {
-    // Lowercased for the HTML-element case-insensitive match.
+    // Lowercased, for the case-insensitive match an HTML document makes.
     name: String,
-    // As written in the selector: attribute names match case-sensitively on
-    // foreign (SVG/MathML) elements, whose attributes are stored unnormalized.
+    // As written in the selector: an XML document matches an attribute name
+    // case-sensitively, HTML-namespaced elements included, the same way it
+    // matches a type selector.
     original_name: String,
     matcher: AttributeMatcher,
     case_insensitive: bool,
