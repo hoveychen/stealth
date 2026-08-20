@@ -1,0 +1,95 @@
+{
+  "xml_root": [
+    "Root",
+    "Root",
+    "Root",
+    null,
+    null
+  ],
+  "xml_lower_kid": [
+    "kid",
+    "kid",
+    "kid",
+    null,
+    null
+  ],
+  "xml_upper_kid": [
+    "KID",
+    "KID",
+    "KID",
+    null,
+    null
+  ],
+  "xhtml_html": [
+    "html",
+    "html",
+    "html",
+    null,
+    "http://www.w3.org/1999/xhtml"
+  ],
+  "xhtml_body": [
+    "body",
+    "body",
+    "body",
+    null,
+    "http://www.w3.org/1999/xhtml"
+  ],
+  "xhtml_p": [
+    "p",
+    "p",
+    "p",
+    null,
+    "http://www.w3.org/1999/xhtml"
+  ],
+  "xhtml_DIV": [
+    "DIV",
+    "DIV",
+    "DIV",
+    null,
+    "http://www.w3.org/1999/xhtml"
+  ],
+  "xml_prefixed_clipPath": [
+    "s:clipPath",
+    "s:clipPath",
+    "clipPath",
+    "s",
+    "http://www.w3.org/2000/svg"
+  ],
+  "xml_prefixed_g": [
+    "s:g",
+    "s:g",
+    "g",
+    "s",
+    "http://www.w3.org/2000/svg"
+  ],
+  "svgdoc_root": [
+    "svg",
+    "svg",
+    "svg",
+    null,
+    "http://www.w3.org/2000/svg"
+  ],
+  "svgdoc_clipPath": [
+    "clipPath",
+    "clipPath",
+    "clipPath",
+    null,
+    "http://www.w3.org/2000/svg"
+  ],
+  "html_p": [
+    "P",
+    "P",
+    "p",
+    null,
+    "http://www.w3.org/1999/xhtml"
+  ],
+  "html_clipPath": [
+    "clipPath",
+    "clipPath",
+    "clipPath",
+    null,
+    "http://www.w3.org/2000/svg"
+  ],
+  "xml_prefixed_outer": "<s:clipPath xmlns:s=\"http://www.w3.org/2000/svg\"/>",
+  "xhtml_p_outer": "<p xmlns=\"http://www.w3.org/1999/xhtml\">x</p>"
+}

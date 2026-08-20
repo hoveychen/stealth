@@ -38,6 +38,8 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `dump-voices.mjs` | Regenerates `src/browser/webapi/speech/voices.zig` from the real Chrome's `speechSynthesis.getVoices()`. The list arrives asynchronously, so it polls until it stops growing and refuses to write an empty table. |
 | `dump-graphics.mjs` | Dumps Chrome's *whole* graphics API surface — every GLenum, every method's arity, every `getParameter` answer, every character's advance width. `probe.js` asks "what does a fingerprinting script see"; this asks "what exactly should we report". The Zig code under `src/browser/webapi/canvas/` is transcribed from its output. |
 | `diff.mjs` | Renders a candidate/reference markdown comparison. |
+| `run-expr.mjs` | Evaluates one expression file against either engine and prints the result as JSON. The collectors walk a fixed property list; this answers a one-off "what does Chrome say about X", and the answer to "are we aligned" is the diff of the two outputs. |
+| `probes/` | The expression files the sections below cite by name, and what `run-expr.mjs` takes. |
 
 ## Two things to know before trusting a result
 
@@ -4400,3 +4402,65 @@ verdict unchanged. Reproduced across two runs.
 `browserscan-webgl-exception-after-lightpanda.json`: score 100% both, zero
 warnings both, 845 main and 1871 document nodes both. The only rows that differ
 are the clock and the seven-day IP count.
+
+## The probes the sections above cite
+
+Every `expr-*.js` name in this file used to mean a scratch file in a tmp
+directory, which is to say that a reading could be cited but not re-checked.
+They are in `probes/` now, and each runs against either engine through
+`run-expr.mjs`:
+
+```
+node tools/fingerprint/run-expr.mjs chrome     tools/fingerprint/probes/expr-g4-p67.js
+node tools/fingerprint/run-expr.mjs lightpanda tools/fingerprint/probes/expr-g4-p67.js
+```
+
+`LP_BIN`, `CHROME` and `PORT` override the binaries and the CDP port, the last
+so two runs can go at once.
+
+`results/probes/<name>.{chrome,lightpanda}.json` holds both engines' output for
+each, taken on `dev.337+a4f812c47`. Thirteen of the eighteen are byte-identical
+between the two, and every row that differs in the other five is a deviation
+this file records: the XML serializer (`expr-g4-p67`, `expr-g5-p67`, `expr-g5`,
+and `outerHTML` in `expr-g5b`) and the missing namespace on an attribute
+(`expr-g5b`, `expr-xlink-p67`).
+
+### What running them found
+
+Three things, none of which reading the code had turned up.
+
+**A probe that had never been run against this engine.** `expr-xlink-p67`
+appended its fixture to `document.body`, and this engine's `about:blank` has
+neither a `body` nor a `documentElement`. Nothing it measures needs to be
+connected, so the fixture stays detached and it now runs on both. Chrome's
+readings are unchanged by that edit, which matters because
+`element/svg/animated_string.html` asserts them.
+
+**A real ordering bug.** `expr-g5b`'s `both` row -- an element carrying a
+default *and* a prefixed declaration -- read back reversed. So did any element
+with two prefixed ones. Chrome keeps declarations in the order they were
+written; xml5ever's tokenizer hoists each to the front of the tag's attributes
+as it finishes it, so they arrive reversed and the capture handed them on that
+way. `expr-order.js` is the probe that pins it, and all five of its rows are
+identical now.
+
+**A missing method.** `attributes.getNamedItemNS` does not exist here at all --
+not a null return, no method. That read is wrapped now, the way `probe.js`
+wraps its reads, so "the method is missing" is recorded as a reading instead of
+losing the other rows in the file.
+
+### One more deviation, found by running them
+
+`expr-g5-p67` compares malformed-XML handling, and the two engines part on more
+than the serializer:
+
+| what | Chrome | this engine |
+|---|---|---|
+| `parseFromString('<a', 'text/xml')` | keeps `<a>` as the document element **and appends an XHTML `<parsererror>` block inside it** describing the error | keeps `<a>`, appends nothing |
+
+The document element agrees -- `a`, null namespace, no attributes in both -- so
+this is not the namespace work regressing; we simply do not report a recoverable
+parse error into the tree. The empty-input case does produce a `<parsererror>`
+document (`DOMParser.zig` synthesises one, and `domparser.html`'s `basic` block
+pins its serialization against Chrome's for the same markup), so the gap is
+specifically the malformed-but-recoverable path. Left as measured, not fixed.

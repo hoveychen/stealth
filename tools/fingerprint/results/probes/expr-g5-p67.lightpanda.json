@@ -1,0 +1,15 @@
+{
+  "parsererror_serialized": "<a></a>",
+  "parsererror_root_name": "a",
+  "parsererror_root_ns": null,
+  "parsererror_attrs": [],
+  "made_serialized": "<Root></Root>",
+  "made_attrs": [],
+  "round_serialized": "<parsererror xmlns=\"http://www.mozilla.org/newlayout/xml/parsererror.xml\">error</parsererror>",
+  "round_attrs": [
+    [
+      "xmlns",
+      "http://www.mozilla.org/newlayout/xml/parsererror.xml"
+    ]
+  ]
+}
