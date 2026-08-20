@@ -17,7 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::ptr;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::borrow::Cow;
 use std::os::raw::{c_void};
 
@@ -64,6 +64,13 @@ pub struct Sink<'arena> {
     pub append_based_on_parent_node_callback: AppendBasedOnParentNodeCallback,
     pub attach_declarative_shadow_callback: AttachDeclarativeShadowCallback,
     pub allow_declarative_shadow: bool,
+    // xml5ever's tree builder consumes `xmlns` / `xmlns:*` attributes while
+    // resolving namespaces and hands `create_element` a list with them already
+    // stripped, but a browser keeps them in `element.attributes`. The XML
+    // pipeline in lib.rs puts them here from a token sink that runs before the
+    // tree builder, and `create_element` below puts them back. Always `None` on
+    // the HTML path, which has no such stripping.
+    pub namespace_declarations: RefCell<Option<Vec<Attribute>>>,
 }
 
 impl<'arena> TreeSink for Sink<'arena> {
@@ -128,6 +135,17 @@ impl<'arena> TreeSink for Sink<'arena> {
 
     fn create_element(&self, name: QualName, attrs: Vec<Attribute>, flags: ElementFlags) -> Ref {
         let data = self.arena.alloc(ElementData::new(name.clone(), flags));
+
+        // A declaration comes first whatever its position in the source, which
+        // is what Chrome reads back, and is what prepending gives us for free:
+        // the tree builder passes the remaining attributes in source order.
+        let attrs = match self.namespace_declarations.borrow_mut().take() {
+            None => attrs,
+            Some(mut declarations) => {
+                declarations.extend(attrs);
+                declarations
+            }
+        };
 
         unsafe {
             let mut attribute_iterator = CAttributeIterator { vec: attrs, pos: 0 };

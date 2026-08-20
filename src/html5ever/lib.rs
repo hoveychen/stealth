@@ -25,7 +25,7 @@ mod url;
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::os::raw::{c_uchar, c_void};
 use types::*;
 
@@ -34,6 +34,12 @@ use html5ever::driver::parse_fragment_for_element;
 use html5ever::interface::tree_builder::QuirksMode;
 use html5ever::tendril::{StrTendril, TendrilSink};
 use html5ever::{ns, parse_document, LocalName, ParseOpts, Parser, QualName};
+use xml5ever::buffer_queue::BufferQueue;
+use xml5ever::tokenizer::{
+    ProcessResult, TagKind, Token as XmlToken, TokenSink as XmlTokenSink, XmlTokenizer,
+};
+use xml5ever::tree_builder::XmlTreeBuilder;
+use xml5ever::TokenizerResult;
 
 #[no_mangle]
 pub extern "C" fn html5ever_parse_document(
@@ -85,6 +91,7 @@ pub extern "C" fn html5ever_parse_document(
         append_based_on_parent_node_callback: append_based_on_parent_node_callback,
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
+        namespace_declarations: RefCell::new(None),
     };
 
     let bytes = unsafe { std::slice::from_raw_parts(html, len) };
@@ -159,6 +166,7 @@ pub extern "C" fn html5ever_parse_document_with_encoding(
         append_based_on_parent_node_callback: append_based_on_parent_node_callback,
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
+        namespace_declarations: RefCell::new(None),
     };
 
     // Parse directly from decoded string
@@ -517,6 +525,7 @@ pub extern "C" fn html5ever_parse_fragment(
         append_based_on_parent_node_callback: append_based_on_parent_node_callback,
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
+        namespace_declarations: RefCell::new(None),
     };
 
     let bytes = unsafe { std::slice::from_raw_parts(html, len) };
@@ -683,6 +692,7 @@ pub extern "C" fn html5ever_streaming_parser_create(
         append_based_on_parent_node_callback: append_based_on_parent_node_callback,
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
+        namespace_declarations: RefCell::new(None),
     };
 
     // Create a parser which implements TendrilSink for streaming parsing
@@ -814,10 +824,71 @@ pub extern "C" fn xml5ever_parse_document(
         append_based_on_parent_node_callback: append_based_on_parent_node_callback,
         attach_declarative_shadow_callback: attach_declarative_shadow_callback,
         allow_declarative_shadow: allow_declarative_shadow,
+        namespace_declarations: RefCell::new(None),
     };
 
     let bytes = unsafe { std::slice::from_raw_parts(xml, len) };
-    xml5ever::driver::parse_document(sink, xml5ever::driver::XmlParseOpts::default())
-        .from_utf8()
-        .one(bytes);
+
+    // `xml5ever::driver::parse_document` would wire the tokenizer straight to
+    // the tree builder, and the tree builder drops every namespace declaration
+    // on the way to `create_element` (`process_namespaces`, `tag.attrs =
+    // new_attr`). Spelling the same pipeline out here lets us slot
+    // `NamespaceDeclarationCapture` in between, so the declarations still reach
+    // the sink. Mirrors `XmlParser`'s own `process` / `finish`.
+    let opts = xml5ever::driver::XmlParseOpts::default();
+    let tree_builder = XmlTreeBuilder::new(sink, opts.tree_builder);
+    let tokenizer = XmlTokenizer::new(
+        NamespaceDeclarationCapture {
+            inner: tree_builder,
+        },
+        opts.tokenizer,
+    );
+
+    let input = BufferQueue::default();
+    input.push_back(StrTendril::from(String::from_utf8_lossy(bytes).as_ref()));
+    while let TokenizerResult::Script(_) = tokenizer.feed(&input) {}
+    tokenizer.end();
+}
+
+/// Sits between the XML tokenizer and the XML tree builder, copying each tag's
+/// namespace declarations aside before the tree builder gets to strip them.
+struct NamespaceDeclarationCapture<'arena> {
+    inner: XmlTreeBuilder<Ref, sink::Sink<'arena>>,
+}
+
+impl<'arena> XmlTokenSink for NamespaceDeclarationCapture<'arena> {
+    type Handle = Ref;
+
+    fn process_token(&self, token: XmlToken) -> ProcessResult<Self::Handle> {
+        // A single slot rather than a queue: the tree builder finishes every
+        // action for a token (`Reprocess` included) inside the one
+        // `process_token` call below, so `create_element` always sees the
+        // declarations of the tag that is being forwarded right now. A tag that
+        // creates no element just gets overwritten by the next one, where a
+        // queue would drift forever.
+        if let XmlToken::Tag(ref tag) = token {
+            if matches!(tag.kind, TagKind::StartTag | TagKind::EmptyTag) {
+                // The predicate xml5ever's `process_namespaces` strips by.
+                let declarations: Vec<html5ever::Attribute> = tag
+                    .attrs
+                    .iter()
+                    .filter(|attr| {
+                        attr.name.prefix.as_ref().is_some_and(|p| &**p == "xmlns")
+                            || &*attr.name.local == "xmlns"
+                    })
+                    .cloned()
+                    .collect();
+                *self.inner.sink.namespace_declarations.borrow_mut() = match declarations.is_empty()
+                {
+                    true => None,
+                    false => Some(declarations),
+                };
+            }
+        }
+        self.inner.process_token(token)
+    }
+
+    fn end(&self) {
+        self.inner.end()
+    }
 }

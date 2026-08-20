@@ -11,9 +11,17 @@
   }
 
   {
+    // Our stand-in for the error document is a parse of the <parsererror>
+    // markup itself, so the declaration it carries is now an attribute and
+    // shows up in the serialization -- which is what Chrome 151 prints for
+    // that same markup (probe expr-g5-p67.js, `round_serialized`). Chrome's
+    // own error document is a much larger XHTML one; only the namespace
+    // handling is compared here.
     const parser = new DOMParser();
     let d = parser.parseFromString('', 'text/xml');
-    testing.expectEqual('<parsererror>error</parsererror>', new XMLSerializer().serializeToString(d));
+    testing.expectEqual(
+      '<parsererror xmlns="http://www.mozilla.org/newlayout/xml/parsererror.xml">error</parsererror>',
+      new XMLSerializer().serializeToString(d));
   }
 }
 </script>
@@ -683,6 +691,102 @@
     testing.expectEqual('Foo', a.attributes[0].name);
     testing.expectEqual(1, doc.querySelectorAll('[Foo]').length);
     testing.expectEqual(0, doc.querySelectorAll('[foo]').length);
+  }
+}
+</script>
+
+<script id=xmlnsAttribute-xml>
+{
+  // A namespace declaration is consumed by the parser *and* left behind as an
+  // ordinary attribute, ahead of the others whatever the source order. Chrome
+  // 151 readings, probe expr-g5.js.
+  //
+  // What is checked here is the attribute's name and value. Chrome also reads
+  // its `namespaceURI` as the xmlns namespace and splits `prefix` / `localName`
+  // off the colon; this engine has no namespace on an attribute at all
+  // (`Attribute.getNamespaceURI` is a flat null, `getAttributeNS` ignores the
+  // argument), which is its own deviation and not this one's to fix.
+  const parser = new DOMParser();
+  const XHTML = 'http://www.w3.org/1999/xhtml';
+  const SVG = 'http://www.w3.org/2000/svg';
+  const attrs = (el) => Array.from(el.attributes).map((a) => [a.name, a.value]);
+
+  {
+    // Nothing declared, nothing to keep.
+    const doc = parser.parseFromString('<root><kid/></root>', 'text/xml');
+    testing.expectEqual([], attrs(doc.documentElement));
+  }
+
+  {
+    const doc = parser.parseFromString('<root xmlns="urn:x"><kid/></root>', 'text/xml');
+    const root = doc.documentElement;
+    testing.expectEqual([['xmlns', 'urn:x']], attrs(root));
+    testing.expectEqual('urn:x', root.getAttribute('xmlns'));
+    testing.expectEqual(true, root.hasAttribute('xmlns'));
+    // The declaration reaches only the element carrying it, not its children.
+    testing.expectEqual([], attrs(root.firstElementChild));
+  }
+
+  {
+    // An inner declaration is kept on the inner element.
+    const doc = parser.parseFromString(
+      '<root xmlns="urn:x"><kid xmlns="urn:y"><g/></kid></root>', 'text/xml');
+    testing.expectEqual([['xmlns', 'urn:x']], attrs(doc.documentElement));
+    testing.expectEqual([['xmlns', 'urn:y']],
+      attrs(doc.documentElement.firstElementChild));
+  }
+
+  {
+    // The empty declaration is still an attribute.
+    const doc = parser.parseFromString(
+      '<root xmlns="urn:x"><kid xmlns=""/></root>', 'text/xml');
+    testing.expectEqual([['xmlns', '']], attrs(doc.documentElement.firstElementChild));
+  }
+
+  {
+    // A prefix declaration keeps its `xmlns:` spelling, and is what makes
+    // `lookupNamespaceURI` answer for that prefix.
+    const doc = parser.parseFromString(
+      '<root xmlns:s="' + SVG + '"><s:g/><plain/></root>', 'text/xml');
+    const root = doc.documentElement;
+    testing.expectEqual([['xmlns:s', SVG]], attrs(root));
+    testing.expectEqual(SVG, root.lookupNamespaceURI('s'));
+    // Carried by the root only: the elements that follow it hold nothing.
+    testing.expectEqual([], attrs(root.children[0]));
+    testing.expectEqual([], attrs(root.children[1]));
+  }
+
+  {
+    // The declaration comes first in `attributes` whatever the source order.
+    const mixed = parser.parseFromString('<root a="1" xmlns="urn:x" b="2"/>', 'text/xml');
+    testing.expectEqual([['xmlns', 'urn:x'], ['a', '1'], ['b', '2']],
+      attrs(mixed.documentElement));
+
+    const prefixFirst = parser.parseFromString('<root xmlns:s="urn:y" a="1"/>', 'text/xml');
+    testing.expectEqual([['xmlns:s', 'urn:y'], ['a', '1']],
+      attrs(prefixFirst.documentElement));
+  }
+
+  {
+    const doc = parser.parseFromString(
+      '<html xmlns="' + XHTML + '"><body><p>x</p></body></html>', 'application/xhtml+xml');
+    testing.expectEqual([['xmlns', XHTML]], attrs(doc.documentElement));
+    testing.expectEqual([], attrs(doc.getElementsByTagNameNS(XHTML, 'body')[0]));
+  }
+
+  {
+    const doc = parser.parseFromString(
+      '<svg xmlns="' + SVG + '"><clipPath/></svg>', 'image/svg+xml');
+    testing.expectEqual([['xmlns', SVG]], attrs(doc.documentElement));
+  }
+
+  {
+    // No parse step: createDocument writes no declaration attribute for the
+    // namespace it is handed.
+    testing.expectEqual([],
+      attrs(document.implementation.createDocument('urn:x', 'Root').documentElement));
+    testing.expectEqual([],
+      attrs(document.implementation.createDocument(null, 'Root').documentElement));
   }
 }
 </script>
