@@ -920,6 +920,40 @@ test "cdp.target: attachToTarget" {
     }
 }
 
+test "cdp.target: a target's events reach every session attached to it" {
+    // A driver that receives the auto-attach announcement and then attaches
+    // explicitly (Playwright does) ends up holding an auxiliary session, while
+    // the page's events are addressed to the primary one. Measured against the
+    // real binary before this was routed: Page.frameNavigated, loadEventFired
+    // and the rest all arrived on the primary session id only, so the driver
+    // saw nothing and its goto() sat until timeout.
+    var ctx = try testing.context();
+    defer ctx.deinit();
+    const bc = try ctx.loadBrowserContext(.{
+        .id = "BID-FANOUT",
+        .session_id = "SID-PRIMARY",
+        .target_id = "TID-00000000FA".*,
+    });
+
+    try ctx.processMessage(.{ .id = 1, .method = "Target.attachToBrowserTarget" });
+    try ctx.processMessage(.{
+        .id = 2,
+        .method = "Target.attachToTarget",
+        .sessionId = "BSID-1",
+        .params = .{ .targetId = "TID-00000000FA" },
+    });
+    const auxiliary = bc.attached_sessions.items[0].id;
+
+    try bc.cdp.sendEvent("Page.loadEventFired", .{ .timestamp = 1 }, .{ .session_id = bc.session_id.? });
+
+    // The two commands above account for indices 0..3 (two results and two
+    // attachedToTarget announcements); the event then lands once for the
+    // primary session and once for the auxiliary one.
+    try ctx.expectSentCount(6);
+    try ctx.expectSentEvent("Page.loadEventFired", .{ .timestamp = 1 }, .{ .index = 4, .session_id = "SID-PRIMARY" });
+    try ctx.expectSentEvent("Page.loadEventFired", .{ .timestamp = 1 }, .{ .index = 5, .session_id = auxiliary });
+}
+
 test "cdp.target: auxiliary session is unique and routed through its parent" {
     var ctx = try testing.context();
     defer ctx.deinit();

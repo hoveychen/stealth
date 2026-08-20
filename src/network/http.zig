@@ -269,8 +269,11 @@ fn opensocketCallback(
 
 // What we advertise in Accept-Encoding, and what curl is told to decode. One
 // constant because the two must not drift: HttpClient sends the header itself,
-// to control its position, while curl still does the decoding.
-pub const accept_encoding: [:0]const u8 = "gzip, deflate, br";
+// to control its position, while curl still does the decoding. Chrome's own
+// four, measured -- zstd included, which is why libzstd is linked into curl
+// (build.zig buildZstd); advertising an encoding we cannot decode would mean a
+// server answering in it hands us a body we cannot read.
+pub const accept_encoding: [:0]const u8 = "gzip, deflate, br, zstd";
 
 pub const Connection = struct {
     _easy: *libcurl.Curl,

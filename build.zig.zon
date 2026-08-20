@@ -9,6 +9,10 @@
             .hash = "v8-0.0.0-xddH6x4GAwB6psyI4sllqMbK7cLkz-Bo3xC9WDheGksn",
         },
         // .v8 = .{ .path = "../zig-v8-fork" },
+        .zstd = .{
+            .url = "https://github.com/facebook/zstd/archive/refs/tags/v1.5.7.tar.gz",
+            .hash = "N-V-__8AAPZ7fwBg4JoCzM_0o2A8wxH2hsUUeiU1iuZv53L5",
+        },
         .brotli = .{
             // v1.2.0
             .url = "https://github.com/google/brotli/archive/028fb5a23661f123017c060daa546b55cf4bde29.tar.gz",

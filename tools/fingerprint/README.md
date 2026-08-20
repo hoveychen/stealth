@@ -68,24 +68,43 @@ On the document request, 13 of Chrome's 14 headers are now present, up from 6:
 | missing | `Connection`, `Sec-Ch-Ua-Mobile`, `Sec-Ch-Ua-Platform`, `Upgrade-Insecure-Requests`, `Sec-Fetch-Site/Mode/User/Dest` | `Connection` |
 | headers Chrome doesn't send | none | none |
 
-Three gaps remain at this layer, all measured rather than assumed:
+All three gaps at this layer are closed, and the closure is measured the same
+way the gaps were: `collect-lightpanda.mjs`'s `localHeaders` step against the
+same echo server the Chrome capture used. **Nine of nine probe paths now match
+Chrome 151's header order byte for byte** — navigation, iframe, stylesheet,
+script, image, favicon, xhr, fetch and a second navigation.
 
-1. **Header order still differs.** Chrome sends
-   `host connection sec-ch-ua sec-ch-ua-mobile sec-ch-ua-platform upgrade-insecure-requests user-agent accept sec-fetch-site sec-fetch-mode sec-fetch-user sec-fetch-dest accept-encoding accept-language`;
-   we send
-   `host accept-encoding sec-ch-ua sec-ch-ua-mobile sec-ch-ua-platform user-agent accept-language accept sec-fetch-dest sec-fetch-mode sec-fetch-site upgrade-insecure-requests sec-fetch-user`.
-   libcurl emits `Host` and `Accept-Encoding` from its own slots and appends the
-   caller's slist after them, so the interleaving Chrome produces isn't
-   reachable by ordering the slist alone. Closing this means either taking over
-   curl's internal headers (supply `Host:` explicitly, blank out curl's
-   defaults) or moving off libcurl for page requests.
-2. **`Connection: keep-alive` is deliberately absent.** Chrome sends it on
-   HTTP/1.1 only — the header is illegal in HTTP/2. Headers are built before
-   the protocol version is known, so emitting it unconditionally would put an
-   illegal header on every h2 request. Needs a version-aware hook.
-3. **`Accept-Encoding` omits `zstd`.** Chrome sends `gzip, deflate, br, zstd`.
-   The first three are now in Chrome's order, but advertising `zstd` when the
-   bundled libcurl may not have it means a response we cannot decode.
+1. **Header order.** Chrome's order is not one order: a navigation leads with
+   the three client hints, a subresource leads with `sec-ch-ua-platform` and
+   `User-Agent` and only then repeats `sec-ch-ua` / `sec-ch-ua-mobile`. Neither
+   is insertion order, and `Referer` arrives after the transfer exists, so the
+   list is materialised through a per-destination order table
+   (`Transfer.emitHeaders`, with `chrome_navigation_order` and
+   `chrome_subresource_order` beside it) rather than by ordering the slist.
+2. **`Accept-Encoding` position.** curl wrote it second, one slot after `Host`,
+   where Chrome has it second to last. We send it ourselves now: curl skips its
+   own copy once the header list carries one (`Curl_checkheaders`), and response
+   decoding is gated on `CURLOPT_ACCEPT_ENCODING` being *set* rather than on
+   curl having written the header — so the position moves and the body still
+   arrives decompressed. One constant (`http.accept_encoding`) feeds both, so
+   what we advertise and what curl decodes cannot drift.
+3. **`Connection: keep-alive`.** Sent. The version-awareness the old note asked
+   for turned out to be curl's already: `h2_permissible_field` drops
+   `Connection` when it converts the request to HTTP/2, which is also what
+   Chrome does. The vendored curl's `http_hd_t` order moved
+   `H1_HD_CONNECTION` to follow `H1_HD_HOST` so the field lands where Chrome
+   puts it.
+4. **`zstd`.** Advertised, and decodable: libzstd (decoder only) is linked into
+   curl via `buildZstd` in build.zig, with `HAVE_ZSTD` set. The test server's
+   `/zstd` endpoint answers with a real zstd frame and
+   `tests/net/xhr.html#xhr_zstd_response` asserts the page reads it back as
+   plain text -- advertising an encoding we could not decode would be worse than
+   omitting it.
+
+One residual, worth naming: Chrome's subresource order was measured on one page
+shape (the echo harness pulling one of each destination). A page that produces a
+destination the harness does not cover would be ordered by the same table, not
+by a fresh measurement.
 
 ## Subresource status (after S1–S3)
 
