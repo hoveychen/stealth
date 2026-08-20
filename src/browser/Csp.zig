@@ -35,10 +35,23 @@
 //!   leading `*.` wildcard, and an optional port or `:*`. A host-source's path
 //!   is ignored, so a policy that allows one path of a host allows all of it —
 //!   more permissive than the spec, never less, so it cannot break a page.
-//! * `'nonce-…'` and `'sha256-…'` never match a URL (correct: they apply to
-//!   inline scripts), and `'strict-dynamic'` is ignored rather than honoured.
-//!   Honouring it would allow every script inserted by another script, which is
-//!   exactly the load rebrowser tests, so ignoring it is the strict reading.
+//! * `'nonce-…'` matches a script element carrying that exact nonce, whatever
+//!   its URL — which is what the spec says and is not an inline-only rule. An
+//!   earlier revision of this file claimed the opposite ("nonces never match a
+//!   URL, correct: they apply to inline scripts") and that cost us every
+//!   Cloudflare managed challenge: the interstitial sends
+//!   `script-src 'nonce-…' 'unsafe-eval' https://challenges.cloudflare.com`
+//!   with no `'self'`, then injects its own loader with `a.nonce` set on the
+//!   element, so the nonce is the only source expression admitting that
+//!   same-origin URL. Refusing it left the engine on `Just a moment...` forever
+//!   (`tools/fingerprint/results/antibot-2026-08-20-vs-chrome.md`).
+//! * `'sha256-…'` still never matches a URL: a hash is over a script's body,
+//!   and nothing here hashes a response to check it.
+//! * `'strict-dynamic'` is ignored rather than honoured. Honouring it would
+//!   allow every script inserted by another script, which is exactly the load
+//!   rebrowser tests, so ignoring it is the strict reading. A nonce is narrower
+//!   than that on purpose: it admits the one element the page put a secret on,
+//!   not everything that element goes on to insert.
 //!
 //! Multiple policies are conjunctive per spec: a URL has to satisfy every one.
 
@@ -53,8 +66,11 @@ _policies: []const Policy,
 pub const empty = Csp{ ._policies = &.{} };
 
 pub const Policy = struct {
-    // Source expressions exactly as written, lower-cased for the keyword and
-    // scheme comparisons. Null means the directive was absent from this policy.
+    // Source expressions exactly as written, case preserved. A nonce is
+    // base64 and compared exactly, so lower-casing them here -- which this
+    // parser used to do -- silently breaks every mixed-case nonce; the keyword,
+    // scheme and host comparisons fold case themselves instead. Null means the
+    // directive was absent from this policy.
     script_src: ?[]const []const u8 = null,
     default_src: ?[]const []const u8 = null,
 };
@@ -86,7 +102,7 @@ pub fn parsePolicy(allocator: Allocator, text: []const u8) !Policy {
 
         var sources: std.ArrayList([]const u8) = .empty;
         while (parts.next()) |source| {
-            try sources.append(allocator, try std.ascii.allocLowerString(allocator, source));
+            try sources.append(allocator, try allocator.dupe(u8, source));
         }
         const owned = try sources.toOwnedSlice(allocator);
 
@@ -127,14 +143,49 @@ pub fn isEmpty(self: *const Csp) bool {
 
 /// Would a real browser fetch `url` for a `<script src>` in a document served
 /// from `document_url`? Every policy has to say yes.
-pub fn allowsScript(self: *const Csp, url: []const u8, document_url: []const u8) bool {
+///
+/// `nonce` is the element's `nonce` content attribute, or null when it carries
+/// none. A policy listing a matching `'nonce-…'` is satisfied whatever the URL
+/// says, which is how a page admits one script it trusts without opening its
+/// origin -- and how Cloudflare's interstitial loads its own challenge.
+pub fn allowsScript(self: *const Csp, url: []const u8, document_url: []const u8, nonce: ?[]const u8) bool {
     for (self._policies) |policy| {
         const sources = policy.script_src orelse policy.default_src orelse continue;
+        if (nonceMatches(sources, nonce)) {
+            continue;
+        }
         if (!anySourceMatches(sources, url, document_url)) {
             return false;
         }
     }
     return true;
+}
+
+/// Does this source list carry a `'nonce-…'` equal to the element's nonce?
+///
+/// The `nonce-` keyword folds case; the value after it does not. It is base64
+/// and the spec compares it exactly, so `'nonce-ABC'` must not admit an element
+/// claiming `abc` -- a fold there would turn a secret into a guess.
+fn nonceMatches(sources: []const []const u8, nonce: ?[]const u8) bool {
+    const have = nonce orelse return false;
+    if (have.len == 0) {
+        return false;
+    }
+    for (sources) |source| {
+        // The shortest possible form is 'nonce-x': two quotes, the keyword, and
+        // at least one character of value.
+        if (source.len < 9 or source[0] != '\'' or source[source.len - 1] != '\'') {
+            continue;
+        }
+        const inner = source[1 .. source.len - 1];
+        if (!std.ascii.startsWithIgnoreCase(inner, "nonce-")) {
+            continue;
+        }
+        if (std.mem.eql(u8, inner["nonce-".len..], have)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn anySourceMatches(sources: []const []const u8, url: []const u8, document_url: []const u8) bool {
@@ -152,10 +203,11 @@ fn sourceMatches(source: []const u8, url: []const u8, document_url: []const u8) 
     }
 
     // Keyword sources. Only 'self' says anything about a URL; 'none' says no,
-    // and the rest ('unsafe-inline', 'unsafe-eval', 'strict-dynamic', nonces,
-    // hashes) are about inline script or are deliberately not honoured.
+    // and the rest ('unsafe-inline', 'unsafe-eval', 'strict-dynamic', hashes)
+    // are about inline script or are deliberately not honoured. A nonce is
+    // handled before this, against the element rather than the URL.
     if (source[0] == '\'') {
-        if (std.mem.eql(u8, source, "'self'")) {
+        if (std.ascii.eqlIgnoreCase(source, "'self'")) {
             return sameOrigin(url, document_url);
         }
         return false;
@@ -308,7 +360,7 @@ test "Csp: absent directive allows everything" {
     var policies: std.ArrayList(Policy) = .empty;
     try Csp.parseInto(a, &policies, "img-src 'self'; report-uri /r");
     const csp = Csp.init(policies.items);
-    try testing.expectEqual(true, csp.allowsScript("https://cdn.example.com/x.js", "https://site.test/"));
+    try testing.expectEqual(true, csp.allowsScript("https://cdn.example.com/x.js", "https://site.test/", null));
 }
 
 test "Csp: rebrowser's own policy" {
@@ -323,13 +375,13 @@ test "Csp: rebrowser's own policy" {
 
     const doc = "https://bot-detector.rebrowser.net/";
     // The script the bypassCsp test appends: not listed, so blocked.
-    try testing.expectEqual(false, csp.allowsScript("https://www.w3schools.com/js/myScript.js", doc));
+    try testing.expectEqual(false, csp.allowsScript("https://www.w3schools.com/js/myScript.js", doc, null));
     // Its own scripts, and the two hosts it does list.
-    try testing.expectEqual(true, csp.allowsScript("https://bot-detector.rebrowser.net/index.js?2", doc));
-    try testing.expectEqual(true, csp.allowsScript("https://static.cloudflareinsights.com/beacon.js", doc));
-    try testing.expectEqual(true, csp.allowsScript("blob:https://bot-detector.rebrowser.net/abc", doc));
+    try testing.expectEqual(true, csp.allowsScript("https://bot-detector.rebrowser.net/index.js?2", doc, null));
+    try testing.expectEqual(true, csp.allowsScript("https://static.cloudflareinsights.com/beacon.js", doc, null));
+    try testing.expectEqual(true, csp.allowsScript("blob:https://bot-detector.rebrowser.net/abc", doc, null));
     // default-src's `*` does not rescue it: script-src overrides default-src.
-    try testing.expectEqual(false, csp.allowsScript("https://evil.test/x.js", doc));
+    try testing.expectEqual(false, csp.allowsScript("https://evil.test/x.js", doc, null));
 }
 
 test "Csp: source expressions" {
@@ -374,8 +426,62 @@ test "Csp: source expressions" {
         var policies: std.ArrayList(Policy) = .empty;
         try Csp.parseInto(a, &policies, case[0]);
         const csp = Csp.init(policies.items);
-        testing.expectEqual(case[2], csp.allowsScript(case[1], doc)) catch |err| {
+        testing.expectEqual(case[2], csp.allowsScript(case[1], doc, null)) catch |err| {
             std.debug.print("csp case failed: \"{s}\" vs {s}\n", .{ case[0], case[1] });
+            return err;
+        };
+    }
+}
+
+test "Csp: a nonce admits the element carrying it" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const doc = "https://site.test/page";
+    // Cloudflare's interstitial policy, verbatim apart from the random value.
+    const cf = "script-src 'nonce-v4r3E9xWYvR93f3o09vl4E' 'unsafe-eval' https://challenges.cloudflare.com";
+    const cases = .{
+        // The load that was being refused: same-origin, no 'self' in the
+        // policy, the nonce set on the element.
+        .{ cf, "https://site.test/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a", "v4r3E9xWYvR93f3o09vl4E", true },
+        // Without the nonce the same URL is still refused, so honouring one is
+        // not the same as ignoring the policy -- rebrowser's bypassCsp row
+        // cannot regress into a pass through here.
+        .{ cf, "https://site.test/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a", null, false },
+        // Exact comparison: base64 is case-sensitive, and a fold would turn the
+        // secret into a guess. This is the case the old parser could not have
+        // passed even with the matching in place, because it lower-cased every
+        // source expression as it read it.
+        .{ cf, "https://site.test/a.js", "v4r3e9xwyvr93f3o09vl4e", false },
+        .{ cf, "https://site.test/a.js", "not-the-nonce", false },
+        .{ cf, "https://site.test/a.js", "", false },
+        // A host the policy does list needs no nonce.
+        .{ cf, "https://challenges.cloudflare.com/turnstile/v0/api.js", null, true },
+        // The keyword folds even though the value does not.
+        .{ "script-src 'NONCE-abc123'", "https://other.test/a.js", "abc123", true },
+        // A nonce satisfies the policy it appears in, and only that one. Both
+        // must be satisfied, and the second names no nonce.
+        .{ "script-src 'nonce-abc', script-src 'self'", "https://other.test/a.js", "abc", false },
+        .{ "script-src 'nonce-abc', script-src 'self'", "https://site.test/a.js", "abc", true },
+        // 'strict-dynamic' is still not honoured: the nonce admits the element
+        // that carries it, not whatever that element goes on to insert.
+        .{ "script-src 'strict-dynamic' 'nonce-abc'", "https://site.test/a.js", null, false },
+        // A hash is over a body nothing here reads, so it still matches no URL.
+        .{ "script-src 'sha256-abc'", "https://site.test/a.js", "abc", false },
+        // default-src carries a nonce the same way script-src does.
+        .{ "default-src 'nonce-abc'", "https://other.test/a.js", "abc", true },
+    };
+
+    inline for (cases) |case| {
+        var policies: std.ArrayList(Policy) = .empty;
+        try Csp.parseInto(a, &policies, case[0]);
+        const csp = Csp.init(policies.items);
+        // Annotated rather than inferred: a bare `null` in the table has type
+        // @TypeOf(null), which neither coerces at the call nor formats as {?s}.
+        const nonce: ?[]const u8 = case[2];
+        testing.expectEqual(case[3], csp.allowsScript(case[1], doc, nonce)) catch |err| {
+            std.debug.print("csp nonce case failed: \"{s}\" vs {s} nonce={?s}\n", .{ case[0], case[1], nonce });
             return err;
         };
     }
@@ -392,10 +498,14 @@ test "Csp: policies are conjunctive" {
     try Csp.parseInto(a, &policies, "script-src *, script-src 'self'");
     try testing.expectEqual(2, policies.items.len);
     const csp = Csp.init(policies.items);
-    try testing.expectEqual(true, csp.allowsScript("https://site.test/a.js", doc));
-    try testing.expectEqual(false, csp.allowsScript("https://cdn.test/a.js", doc));
+    try testing.expectEqual(true, csp.allowsScript("https://site.test/a.js", doc, null));
+    try testing.expectEqual(false, csp.allowsScript("https://cdn.test/a.js", doc, null));
 }
 
 test "WebApi: CSP script-src" {
     try testing.htmlRunner("csp.html", .{});
+}
+
+test "WebApi: CSP nonce" {
+    try testing.htmlRunner("csp_nonce.html", .{});
 }

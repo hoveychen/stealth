@@ -1,0 +1,193 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "startedAt": "2026-08-20T21:01:43.201Z",
+  "egress": {
+    "fl": "1231f12",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787259703.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.343+62df3f9fc",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9226/"
+  },
+  "stations": [
+    {
+      "name": "cf-scrapingcourse",
+      "vendor": "cloudflare",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "guards": "challenge",
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "status": 403,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 403,
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a2e455c5ea55ed36",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a2e455c5ea55ed36",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/turnstile/v0/g/aae2b9a1c261/api.js?onload=mlyM5&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/turnstile/v0/g/aae2b9a1c261/api.js?onload=mlyM5&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/g/fo/2768214011:1787256305:HJ3V445xSMvjJ-y3Aesk0T8WOFfHX2wAE_cAbw0Tw3E/a2e455c5ea55ed36/e4GOc4Lg.baH47pRO4RKtxfbXCdHoJMC.2ayDd3BTOw-1787259705-1.2.1.1-gt4arAcZ_teZzzjB5fjQwRRmaglhnn2ro5wRfHWz8PROZGKcI7ikY06qs1WsWR27",
+          "type": "XHR"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/g/fo/2768214011:1787256305:HJ3V445xSMvjJ-y3Aesk0T8WOFfHX2wAE_cAbw0Tw3E/a2e455c5ea55ed36/e4GOc4Lg.baH47pRO4RKtxfbXCdHoJMC.2ayDd3BTOw-1787259705-1.2.1.1-gt4arAcZ_teZzzjB5fjQwRRmaglhnn2ro5wRfHWz8PROZGKcI7ikY06qs1WsWR27",
+          "type": "XHR"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 403,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "nodes": 46,
+      "textLength": 270,
+      "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2e455c5ea55ed36",
+        "captchaDelivery": false,
+        "blockText": false
+      },
+      "ms": 27848
+    }
+  ],
+  "fresh": true,
+  "engineLog": [
+    "\u001b[0;32mNOTE\u001b[0m  app : server running . . . . . . . . . . . . . . . . . . \u001b[0m[+0ms]",
+    "      address = 127.0.0.1:9226",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+185ms]",
+    "      ip = 127.0.0.1:59232",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+195ms]",
+    "      ip = 127.0.0.1:59233",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+202ms]",
+    "      ip = 127.0.0.1:59234",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+217ms]",
+    "      url = https://www.scrapingcourse.com/cloudflare-challenge",
+    "      method = GET",
+    "      reason = address_bar",
+    "      body = false",
+    "      type = root",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+349ms]",
+    "      src = https://www.scrapingcourse.com/cloudflare-challenge",
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+409ms]",
+    "      src = https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=a2e455c5ea55ed36",
+    "      kind = javascript",
+    "      cacheable = true",
+    "\u001b[0;31mERROR browser : worker fetch error . . . . . . . . . . . . . . \u001b[0m[+459ms]",
+    "      url = blob:https://www.scrapingcourse.com/ca7ae3fb-101a-4b99-974c-87227b1bcec7",
+    "      err = Abort",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+485ms]",
+    "      url = about:blank",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+567ms]",
+    "      src = https://challenges.cloudflare.com/turnstile/v0/g/aae2b9a1c261/api.js?onload=mlyM5&render=explicit",
+    "      kind = javascript",
+    "      cacheable = true",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+660ms]",
+    "      source = xhr",
+    "      url = https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/g/fo/2768214011:1787256305:HJ3V445xSMvjJ-y3Aesk0T8WOFfHX2wAE_cAbw0Tw3E/a2e455c5ea55ed36/e4GOc4Lg.baH47pRO4RKtxfbXCdHoJMC.2ayDd3BTOw-1787259705-1.2.1.1-gt4arAcZ_teZzzjB5fjQwRRmaglhnn2ro5wRfHWz8PROZGKcI7ikY06qs1WsWR27",
+    "      status = 200",
+    "      len = 113560",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+689ms]",
+    "      url = blob:https://www.scrapingcourse.com/156a9730-c293-4357-b0cc-f81185fc96e8",
+    "      len = 291"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

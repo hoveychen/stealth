@@ -4669,3 +4669,76 @@ column beside an unstable control cannot be read as a verdict about the client.
 Cold profile per station and twenty-five more minutes of requests from one
 address are both in the difference and neither was isolated. Alternating engine
 order across repeated runs is what would make it say something.
+
+## Honouring the nonce, and the door behind that door
+
+The section above ends on a bug rather than a verdict: Cloudflare's challenge
+never ran here because `Csp.zig` treated a `'nonce-…'` source as inline-only and
+refused the interstitial's own loader. That is fixed, and the fix says something
+about the fingerprint work that the sweep alone could not.
+
+Two things were wrong, one of which would have hidden the other:
+
+1. **A nonce source never matched a URL.** Per spec it matches the *element*
+   carrying that nonce, whatever its URL — that is the whole point of a nonce,
+   and it is not an inline-only rule. `allowsScript` takes the element's nonce
+   now, and a policy naming a matching one is satisfied without consulting the
+   URL at all.
+2. **The parser lower-cased every source expression it read.** A nonce is
+   base64 and is compared exactly, so `'nonce-v4r3E9xWYvR93f3o09vl4E'` was
+   already unusable before the matching was missing. Sources keep their case
+   now; the keyword, scheme and host comparisons fold case themselves.
+
+`'strict-dynamic'` is still not honoured and `'sha256-…'` still matches no URL —
+a hash is over a body nothing here reads. A nonce is much narrower than
+strict-dynamic: it admits the one element the page put a secret on, not
+everything that element goes on to insert, so rebrowser's `bypassCsp` row cannot
+regress through it. `csp_nonce.html` pins that directly — same file, same
+policy, the un-nonced and wrongly-nonced insertions both still fire `error`.
+
+### What it bought, measured
+
+Full table in `results/antibot-nonce-fix.md`. The challenge conversation now
+happens end to end:
+
+```
+GET  /cloudflare-challenge                                    403
+GET  /cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1  200   <- was blocked
+GET  challenges.cloudflare.com/turnstile/v0/g/…/api.js        200
+POST /cdn-cgi/challenge-platform/h/g/fo/…                     200   <- the result, submitted
+```
+
+**This engine has now been evaluated by Cloudflare for the first time.** The
+interstitial still does not clear, and what stops it is again not a verdict:
+
+```
+Turnstile Widget seem to have hung:  etjo7
+[Cloudflare Turnstile] Cannot find Widget cf-chl-widget-etjo7, …
+```
+
+Turnstile builds its hidden `cf-turnstile-response` input and never gets its
+widget container or iframe into the document — `querySelectorAll('iframe')` is
+empty at 20s, with `window.turnstile` an object and `getElementById` working on
+what does exist — so its own lookup fails, it declares itself hung, and the page
+reloads and starts over every ~20s. A 75s settle reads exactly what 25s reads,
+so it is not slowness. There is one `worker fetch error … blob:… err = Abort` in
+the same window and one `initialFrameNavigation` for a frame that does not
+survive.
+
+So the answer to "does the fingerprint survive Cloudflare" is still **unmeasured**
+— but the blocker has moved from a policy check we got wrong to a named,
+reproducible DOM gap, which is what the first one needed too before anyone could
+fix it.
+
+### Two side effects, and one of them is worse
+
+- **chatgpt.com renders its real page**, 491 nodes against 40. Not attributed:
+  the pre-fix trace logged no CSP block on that host, and Chrome's own readings
+  moved 514 → 722 between runs, so this is an improvement whose cause was not
+  isolated.
+- **claude.ai went from blank to wedged.** Its main bundle was the blocked
+  script; it loads now, the app runs, and the engine stops answering
+  `Runtime.evaluate` after 86s. Same shape as pixiv, which wedges regardless of
+  this change, so the count of unattributed engine hangs went from one to two.
+- **indeed, discord and nowsecure are byte-for-byte unchanged**, which is the
+  over-permissiveness check.
