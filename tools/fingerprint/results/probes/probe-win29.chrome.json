@@ -1,0 +1,333 @@
+{
+ "events": {
+  "AnimationPlaybackEvent_bare": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object AnimationPlaybackEvent]",
+   "currentTime": "null",
+   "timelineTime": "null"
+  },
+  "AnimationPlaybackEvent_init": {
+   "type": "x",
+   "bubbles": true,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object AnimationPlaybackEvent]",
+   "currentTime": "5",
+   "timelineTime": "7"
+  },
+  "BeforeInstallPromptEvent_bare": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object BeforeInstallPromptEvent]",
+   "platforms": "[object Array]",
+   "userChoice": "[object Promise]"
+  },
+  "BeforeInstallPromptEvent_prompt": {
+   "settled": "rejected",
+   "err": "InvalidStateError: Failed to execute 'prompt' on 'BeforeInstallPromptEvent': The prompt() method cannot be called."
+  },
+  "BlobEvent_missingData": "TypeError: Failed to construct 'BlobEvent': Failed to read the 'data' property from 'BlobEventInit': Required member is undefined.",
+  "BlobEvent_nonDict": "TypeError: Failed to construct 'BlobEvent': The provided value is not of type 'BlobEventInit'.",
+  "BlobEvent_init": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object BlobEvent]",
+   "data": "[object Blob]",
+   "timecode": "3"
+  },
+  "ClipboardEvent_bare": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object ClipboardEvent]",
+   "clipboardData": "null"
+  },
+  "ClipboardEvent_init": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object ClipboardEvent]",
+   "clipboardData": "null"
+  },
+  "ContentVisibility_bare": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object ContentVisibilityAutoStateChangeEvent]",
+   "skipped": "false"
+  },
+  "ContentVisibility_init": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object ContentVisibilityAutoStateChangeEvent]",
+   "skipped": "true"
+  },
+  "PictureInPictureEvent_missing": "TypeError: Failed to construct 'PictureInPictureEvent': 2 arguments required, but only 1 present.",
+  "PictureInPictureEvent_null": "TypeError: Failed to construct 'PictureInPictureEvent': Failed to read the 'pictureInPictureWindow' property from 'PictureInPictureEventInit': Failed to convert value to 'PictureInPictureWindow'.",
+  "SecurityPolicyViolationEvent_bare": {
+   "type": "x",
+   "bubbles": true,
+   "cancelable": false,
+   "composed": true,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object SecurityPolicyViolationEvent]",
+   "documentURI": "",
+   "referrer": "",
+   "blockedURI": "",
+   "violatedDirective": "",
+   "effectiveDirective": "",
+   "originalPolicy": "",
+   "disposition": "enforce",
+   "sourceFile": "",
+   "statusCode": "0",
+   "lineNumber": "0",
+   "columnNumber": "0",
+   "sample": ""
+  },
+  "SecurityPolicyViolationEvent_init": {
+   "type": "securitypolicyviolation",
+   "bubbles": true,
+   "cancelable": false,
+   "composed": true,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object SecurityPolicyViolationEvent]",
+   "documentURI": "a",
+   "blockedURI": "b",
+   "disposition": "report",
+   "statusCode": "200",
+   "lineNumber": "4",
+   "columnNumber": "9",
+   "sample": "s",
+   "violatedDirective": "v",
+   "effectiveDirective": "ed",
+   "sourceFile": "f",
+   "referrer": "r",
+   "originalPolicy": "p"
+  },
+  "SecurityPolicyViolationEvent_badDisposition": "TypeError: Failed to construct 'SecurityPolicyViolationEvent': Failed to read the 'disposition' property from 'SecurityPolicyViolationEventInit': The provided value 'nope' is not a valid enum value of type SecurityPolicyViolationEventDisposition.",
+  "TrackEvent_bare": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object TrackEvent]",
+   "track": "null"
+  },
+  "TrackEvent_init": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object TrackEvent]",
+   "track": "null"
+  },
+  "WebGLContextEvent_bare": {
+   "type": "webglcontextlost",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object WebGLContextEvent]",
+   "statusMessage": ""
+  },
+  "WebGLContextEvent_init": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object WebGLContextEvent]",
+   "statusMessage": "lost"
+  },
+  "VirtualKeyboard_bare": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object VirtualKeyboardGeometryChangeEvent]"
+  },
+  "WindowControlsOverlay_missing": "TypeError: Failed to construct 'WindowControlsOverlayGeometryChangeEvent': 2 arguments required, but only 1 present.",
+  "WindowControlsOverlay_init": {
+   "type": "x",
+   "bubbles": false,
+   "cancelable": false,
+   "composed": false,
+   "isTrusted": false,
+   "own": "isTrusted",
+   "brand": "[object WindowControlsOverlayGeometryChangeEvent]",
+   "titlebarAreaRect": "null",
+   "visible": "false"
+  },
+  "NavigateEvent_missing": "TypeError: Failed to construct 'NavigateEvent': 2 arguments required, but only 1 present.",
+  "NavigateEvent_init": "TypeError: Failed to construct 'NavigateEvent': Failed to read the 'destination' property from 'NavigateEventInit': Failed to convert value to 'NavigationDestination'.",
+  "MutationEvent": "undefined"
+ },
+ "geom": {
+  "quadBare": "{\"p1\":[0,0,0,1],\"p4\":[0,0],\"p1Brand\":\"[object DOMPoint]\",\"bounds\":\"{\\\"x\\\":0,\\\"y\\\":0,\\\"width\\\":0,\\\"height\\\":0,\\\"top\\\":0,\\\"right\\\":0,\\\"bottom\\\":0,\\\"left\\\":0}\",\"json\":\"{\\\"p1\\\":{\\\"x\\\":0,\\\"y\\\":0,\\\"z\\\":0,\\\"w\\\":1},\\\"p2\\\":{\\\"x\\\":0,\\\"y\\\":0,\\\"z\\\":0,\\\"w\\\":1},\\\"p3\\\":{\\\"x\\\":0,\\\"y\\\":0,\\\"z\\\":0,\\\"w\\\":1},\\\"p4\\\":{\\\"x\\\":0,\\\"y\\\":0,\\\"z\\\":0,\\\"w\\\":1}}\"}",
+  "quadFromRect": "{\"p1\":[1,2],\"p2\":[4,2],\"p3\":[4,6],\"p4\":[1,6],\"bounds\":\"{\\\"x\\\":1,\\\"y\\\":2,\\\"width\\\":3,\\\"height\\\":4,\\\"top\\\":2,\\\"right\\\":4,\\\"bottom\\\":6,\\\"left\\\":1}\"}",
+  "quadFromQuad": "{\"p1\":[5,6],\"p2\":[0,0]}",
+  "quadFromPoints": "{\"bounds\":\"{\\\"x\\\":1,\\\"y\\\":1,\\\"width\\\":3,\\\"height\\\":4,\\\"top\\\":1,\\\"right\\\":4,\\\"bottom\\\":5,\\\"left\\\":1}\",\"p3\":[4,5]}",
+  "quadP1Writable": "9",
+  "path2dBare": "ok",
+  "path2dFromPath": "[object Path2D] ctor=Path2D",
+  "path2dFromSvg": "[object Path2D] ctor=Path2D",
+  "path2dAddPathNonPath": "TypeError: Failed to execute 'addPath' on 'Path2D': parameter 1 is not of type 'Path2D'.",
+  "path2dUsedByCanvas": "255,0,0,255",
+  "clientRects": "[object DOMRectList] ctor=DOMRectList",
+  "clientRectsLen": "{\"length\":1,\"zero\":\"[object DOMRect]\",\"item\":\"[object DOMRect] ctor=DOMRect\",\"itemOob\":\"null\",\"spread\":1}",
+  "touchBare": "TypeError: Failed to construct 'Touch': Failed to read the 'identifier' property from 'TouchInit': Required member is undefined.",
+  "touchMinimal": "{\"identifier\":3,\"target\":\"[object HTMLBodyElement] ctor=HTMLBodyElement\",\"screenX\":0,\"clientY\":0,\"radiusX\":0,\"force\":0,\"rotationAngle\":0,\"pageX\":0}",
+  "touchNoTarget": "TypeError: Failed to construct 'Touch': Failed to read the 'target' property from 'TouchInit': Required member is undefined.",
+  "touchFull": "10|60|3|45|0.5",
+  "touchList": "no createTouchList: TypeError",
+  "timeRanges": "{\"buffered\":\"[object TimeRanges] ctor=TimeRanges\",\"len\":0,\"played\":\"[object TimeRanges] ctor=TimeRanges\",\"seekable\":\"[object TimeRanges] ctor=TimeRanges\",\"startOob\":\"IndexSizeError: Failed to execute 'start' on 'TimeRanges': The index provided (0) is greater than or equal to the maximum bound (0).\",\"endOob\":\"IndexSizeError: Failed to execute 'end' on 'TimeRanges': The index provided (0) is greater than or equal to the maximum bound (0).\"}",
+  "deviceMotionCtors": "{\"accel\":\"function\",\"rot\":\"function\",\"dme\":\"function\",\"dmeEventAccel\":\"[object DeviceMotionEventAcceleration] ctor=DeviceMotionEventAcceleration x=1\",\"dmeBare\":\"accel=null rot=null interval=0\"}"
+ },
+ "tracks": {
+  "videoTextTracks": "{\"list\":\"[object TextTrackList] ctor=TextTrackList\",\"len\":0}",
+  "addTextTrack": "{\"track\":\"[object TextTrack] ctor=TextTrack\",\"kind\":\"subtitles\",\"label\":\"L\",\"language\":\"en\",\"id\":\"\",\"mode\":\"hidden\",\"cues\":\"[object TextTrackCueList]\",\"activeCues\":\"[object TextTrackCueList]\",\"listLen\":1,\"listItem\":\"[object TextTrack] ctor=TextTrack\",\"byId\":\"[object TextTrack]\"}",
+  "textTrackModeSet": "{\"mode\":\"showing\",\"cues\":\"[object TextTrackCueList] ctor=TextTrackCueList\",\"cuesLen\":0,\"byId\":\"null\"}",
+  "addTextTrackBadKind": "TypeError: Failed to execute 'addTextTrack' on 'HTMLMediaElement': The provided value 'nope' is not a valid enum value of type TextTrackKind.",
+  "pipWindow": "{\"typeofCtor\":\"function\",\"docPipEnabled\":\"true\",\"reqOnVideo\":\"function\"}",
+  "pipRequest": {
+   "settled": "rejected",
+   "err": "InvalidStateError: Failed to execute 'requestPictureInPicture' on 'HTMLVideoElement': Metadata for the video element are not loaded yet."
+  },
+  "overconstrained": "{\"name\":\"OverconstrainedError\",\"message\":\"nope\",\"constraint\":\"width\",\"str\":\"OverconstrainedError: nope\",\"isDOMException\":true,\"isError\":true,\"code\":0}",
+  "overconstrainedBare": "{\"name\":\"OverconstrainedError\",\"message\":\"\\\"\\\"\",\"constraint\":\"width\"}",
+  "captureController": "InvalidStateError: Failed to execute 'getSupportedZoomLevels' on 'CaptureController': Not actively capturing.",
+  "cropTarget": {
+   "settled": "resolved",
+   "value": "[object CropTarget]",
+   "brand": "[object CropTarget]"
+  },
+  "browserCaptureTrack": "function"
+ },
+ "cssdom": {
+  "highlight": "{\"size\":0,\"priority\":0,\"type\":\"highlight\",\"own\":\"\",\"setType\":\"spelling-error\",\"setBadType\":\"spelling-error\",\"setPriority\":\"3\"}",
+  "highlightWithRange": "{\"size\":1,\"has\":true,\"addNonRange\":\"TypeError: Failed to execute 'add' on 'Highlight': parameter 1 is not of type 'AbstractRange'.\",\"iter\":\"[object Range]\",\"del\":true,\"sizeAfter\":0}",
+  "highlightRegistry": "{\"brand\":\"[object HighlightRegistry] ctor=HighlightRegistry\",\"size\":0,\"set\":\"1\",\"get\":\"[object Highlight] ctor=Highlight\",\"keys\":\"a\",\"entriesFirst\":\"a=[object Highlight]\",\"fromPoint\":\"[]\",\"del\":\"true\"}",
+  "customStateSet": "{\"brand\":\"[object CustomStateSet] ctor=CustomStateSet\",\"size\":0,\"add\":\"1\",\"has\":true,\"addBad\":\"undefined\",\"iter\":\"--on,nope\",\"del\":\"true\",\"clear\":\"0\"}",
+  "mathml": "{\"brand\":\"[object MathMLElement] ctor=MathMLElement\",\"ns\":\"http://www.w3.org/1998/Math/MathML\",\"tag\":\"math\",\"localName\":\"math\",\"isMathML\":true,\"isElement\":true,\"isHTML\":false,\"style\":\"[object CSSStyleDeclaration] ctor=CSSStyleDeclaration\",\"focus\":\"function\"}",
+  "mathmlInHtml": "{\"brand\":\"[object MathMLElement] ctor=MathMLElement\",\"ns\":\"http://www.w3.org/1998/Math/MathML\",\"childBrand\":\"[object MathMLElement] ctor=MathMLElement\"}",
+  "xslt": "{\"own\":\"\",\"setParam\":\"undefined\",\"getParam\":\"b\",\"getMissing\":\"null\",\"reset\":\"undefined\",\"afterReset\":\"null\",\"importBad\":\"TypeError: Failed to execute 'importStylesheet' on 'XSLTProcessor': parameter 1 is not of type 'Node'.\",\"transformNoSheet\":\"null\"}",
+  "xsltReal": "{\"doc\":\"[object XMLDocument] ctor=XMLDocument\",\"root\":\"out\",\"frag\":\"[object DocumentFragment] ctor=DocumentFragment\"}",
+  "sanitizer": "{\"own\":\"\",\"cfgKeys\":\"attributes,comments,dataAttributes,elements\",\"cfgSample\":\"{\\\"attributes\\\":[{\\\"name\\\":\\\"alignment-baseline\\\",\\\"namespace\\\":null},{\\\"name\\\":\\\"baseline-shift\\\",\\\"namespace\\\":null},{\\\"name\\\":\\\"clip-path\\\",\\\"namespace\\\":null},{\\\"name\\\":\\\"clip-rule\\\",\\\"namespace\\\":null},{\\\"name\\\":\\\"color\\\",\\\"na\",\"allowEl\":\"{\\\"attributes\\\":[{\\\"name\\\":\\\"alignment-baseline\\\",\\\"namespace\\\":null},{\\\"name\\\":\\\"baseline-shift\\\",\\\"namespace\\\":null},{\\\"name\\\":\\\"clip-p\",\"removeUnsafe\":\"undefined\",\"setComments\":\"undefined\"}",
+  "sanitizerPreset": "[object Sanitizer] ctor=Sanitizer",
+  "domError": "{\"name\":\"AbortError\",\"message\":\"msg\",\"own\":\"\",\"str\":\"[object DOMError]\",\"isError\":false}",
+  "domErrorBare": "{\"name\":\"X\",\"message\":\"\\\"\\\"\"}"
+ },
+ "misc": {
+  "urlPatternBare": "{\"protocol\":\"*\",\"username\":\"*\",\"password\":\"*\",\"hostname\":\"*\",\"port\":\"*\",\"pathname\":\"*\",\"search\":\"*\",\"hash\":\"*\",\"hasRegExpGroups\":false}",
+  "urlPatternObj": "{\"pathname\":\"/books/:id\",\"protocol\":\"*\",\"test\":true,\"testNo\":false,\"exec\":\"{\\\"hash\\\":{\\\"groups\\\":{\\\"0\\\":\\\"\\\"},\\\"input\\\":\\\"\\\"},\\\"hostname\\\":{\\\"groups\\\":{\\\"0\\\":\\\"x.com\\\"},\\\"input\\\":\\\"x.com\\\"},\\\"inputs\\\":[\\\"https://x.com/books/7\\\"],\\\"password\\\":{\\\"groups\\\":{\\\"0\\\":\\\"\\\"},\\\"input\\\":\\\"\\\"},\\\"pathname\\\":{\\\"groups\\\":{\\\"id\\\":\\\"7\\\"},\\\"input\\\":\\\"/books/7\\\"},\\\"port\\\":{\\\"groups\\\":{\\\"0\\\":\\\"\\\"},\\\"input\\\":\\\"\\\"},\\\"protocol\\\":{\\\"groups\\\":{\\\"0\\\":\\\"https\\\"},\\\"input\\\":\\\"https\\\"},\\\"search\\\":{\\\"groups\\\":{\\\"0\\\":\\\"\\\"},\\\"input\\\":\\\"\\\"},\\\"username\\\":{\\\"groups\\\":{\\\"0\\\":\\\"\\\"},\\\"input\\\":\\\"\\\"}}\"}",
+  "urlPatternStr": "{\"protocol\":\"https\",\"hostname\":\"example.com\",\"pathname\":\"/a/:b\",\"test\":true}",
+  "urlPatternBase": "{\"hostname\":\"base.test\",\"pathname\":\"/x/:y\",\"hasRegExpGroups\":false}",
+  "urlPatternBad": "TypeError: Failed to construct 'URLPattern': Relative constructor string '{' must have a base URL passed as the second argument.",
+  "urlPatternRegexGroups": "true",
+  "option": "{\"brand\":\"[object HTMLOptionElement]\",\"tag\":\"OPTION\",\"text\":\"\\\"\\\"\",\"value\":\"\\\"\\\"\",\"selected\":false,\"defaultSelected\":false,\"index\":0,\"form\":\"null\",\"label\":\"\\\"\\\"\",\"ctorIsHTMLOption\":false,\"isHTMLOption\":true}",
+  "optionArgs": "{\"text\":\"T\",\"value\":\"V\",\"defaultSelected\":true,\"selected\":true,\"html\":\"<option value=\\\"V\\\" selected=\\\"\\\">T</option>\"}",
+  "optionInSelect": "{\"len\":1,\"index\":0,\"value\":\"1\"}",
+  "profiler": "NotAllowedError: Failed to construct 'Profiler': JS profiling is disabled by Document Policy.",
+  "profilerBadInit": "TypeError: Failed to construct 'Profiler': Failed to read the 'maxBufferSize' property from 'ProfilerInitOptions': Required member is undefined.",
+  "profilerNonDict": "TypeError: Failed to construct 'Profiler': The provided value is not of type 'ProfilerInitOptions'.",
+  "eyeDropper": {
+   "own": "",
+   "open": {
+    "settled": "rejected",
+    "err": "NotAllowedError: Failed to execute 'open' on 'EyeDropper': EyeDropper::open() requires user gesture."
+   }
+  },
+  "idleDetector": {
+   "userState": "null",
+   "screenState": "null",
+   "onchange": "null",
+   "own": "",
+   "start": {
+    "settled": "rejected",
+    "err": "NotAllowedError: Idle detection permission denied"
+   },
+   "startBadThreshold": {
+    "settled": "rejected",
+    "err": "InvalidStateError: Failed to execute 'start' on 'IdleDetector': Idle detector is already started."
+   },
+   "perm": {
+    "settled": "rejected",
+    "err": "NotAllowedError: Failed to execute 'requestPermission' on 'IdleDetector': Must be handling a user gesture to show a permission request."
+   }
+  },
+  "inputDeviceCaps": "{\"bare\":false,\"set\":true,\"own\":\"\",\"onUiEvent\":\"null\"}",
+  "reportingObserver": {
+   "own": "",
+   "observe": "undefined",
+   "takeRecords": "[{\"type\":\"deprecation\",\"url\":\"http://127.0.0.1:8752/\",\"body\":{\"sourceFile\":null,\"lineNumber\":99,\"columnNumber\":41,\"id\":\"XSLT\",\"message\":\"XSLTProcessor and XSLT Processing Instructions have been deprecated by all browsers. These features will be removed from this browser soon.\",\"anticipatedRemoval\":null}}]",
+   "disconnect": "undefined",
+   "noCallback": "TypeError: Failed to construct 'ReportingObserver': 1 argument required, but only 0 present.",
+   "nonFn": "TypeError: Failed to construct 'ReportingObserver': parameter 1 is not of type 'Function'.",
+   "badTypes": "TypeError: Failed to construct 'ReportingObserver': Failed to read the 'types' property from 'ReportingObserverOptions': The provided value cannot be converted to a sequence."
+  },
+  "clipboardItem": {
+   "types": "[\"text/plain\"]",
+   "own": "",
+   "supports": "true,true,false",
+   "supportsNoArg": "TypeError: Failed to execute 'supports' on 'ClipboardItem': 1 argument required, but only 0 present.",
+   "getType": {
+    "settled": "resolved",
+    "value": "[object Blob]",
+    "brand": "[object Blob]"
+   },
+   "getTypeMissing": {
+    "settled": "rejected",
+    "err": "NotFoundError: Failed to execute 'getType' on 'ClipboardItem': The type was not found"
+   },
+   "fromString": "[\"text/plain\"]",
+   "empty": "TypeError: Failed to construct 'ClipboardItem': Empty dictionary argument",
+   "nonDict": "TypeError: Failed to construct 'ClipboardItem': Only objects can be converted to record<K,V> types"
+  },
+  "keyframeEffect": "{\"brand\":\"[object KeyframeEffect] ctor=KeyframeEffect\",\"target\":\"[object HTMLDivElement] ctor=HTMLDivElement\",\"pseudoElement\":\"null\",\"composite\":\"replace\",\"keyframes\":\"[{\\\"offset\\\":null,\\\"easing\\\":\\\"linear\\\",\\\"composite\\\":\\\"auto\\\",\\\"opacity\\\":\\\"0\\\",\\\"computedOffset\\\":0},{\\\"offset\\\":null,\\\"easing\\\":\\\"linear\\\",\\\"composite\\\":\\\"auto\\\",\\\"opacity\\\":\\\"1\\\",\\\"computedOffset\\\":1}]\",\"timing\":\"{\\\"delay\\\":0,\\\"direction\\\":\\\"normal\\\",\\\"duration\\\":500,\\\"easing\\\":\\\"linear\\\",\\\"endDelay\\\":0,\\\"fill\\\":\\\"auto\\\",\\\"iterationStart\\\":0,\\\"iterations\\\":2}\",\"computed\":\"{\\\"delay\\\":0,\\\"direction\\\":\\\"normal\\\",\\\"duration\\\":500,\\\"easing\\\":\\\"linear\\\",\\\"endDelay\\\":0,\\\"fill\\\":\\\"none\\\",\\\"iterationStart\\\":0,\\\"iterations\\\":2,\\\"activeDuration\\\":1000,\\\"currentIteration\\\":null,\\\"endTime\\\":1000,\\\"localTime\\\":null,\\\"progress\\\":null}\",\"setKeyframes\":\"[{\\\"offset\\\":null,\\\"easing\\\":\\\"linear\\\",\\\"composite\\\":\\\"auto\\\",\\\"opacity\\\":\\\"0.5\\\",\\\"computedOffset\\\":1}]\"}",
+  "keyframeEffectNullTarget": "{\"target\":\"null\",\"keyframes\":\"[]\",\"timing\":\"{\\\"delay\\\":0,\\\"direction\\\":\\\"normal\\\",\\\"duration\\\":\\\"auto\\\",\\\"easing\\\":\\\"linear\\\",\\\"endDelay\\\":0,\\\"fill\\\":\\\"auto\\\",\\\"iterationStart\\\":0,\\\"iterations\\\":1}\"}",
+  "keyframeEffectFromEffect": "[object KeyframeEffect] ctor=KeyframeEffect",
+  "keyframeEffectViaAnimate": "{\"effect\":\"[object KeyframeEffect] ctor=KeyframeEffect\",\"isKeyframeEffect\":true}",
+  "idbOpen": "{\"brand\":\"[object IDBOpenDBRequest] ctor=IDBOpenDBRequest\",\"isOpenDB\":true,\"isRequest\":true,\"onblocked\":\"null\",\"onupgradeneeded\":\"null\",\"readyState\":\"pending\",\"own\":\"\"}",
+  "idbDelete": "[object IDBOpenDBRequest] ctor=IDBOpenDBRequest",
+  "navigation": "{\"nav\":\"[object Navigation] ctor=Navigation\",\"transition\":\"null\",\"currentEntry\":\"[object NavigationHistoryEntry] ctor=NavigationHistoryEntry\",\"destinationCtor\":\"function\",\"transitionCtor\":\"function\"}",
+  "openDatabase": "undefined"
+ }
+}

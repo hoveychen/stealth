@@ -1,0 +1,1269 @@
+{
+ "href": "http://127.0.0.1:8752/",
+ "out": {
+  "StyleSheet": {
+   "arity": 0,
+   "cname": "StyleSheet",
+   "chain": [
+    "StyleSheet",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "type=a:g",
+    "href=a:g",
+    "ownerNode=a:g",
+    "parentStyleSheet=a:g",
+    "title=a:g",
+    "media=a:gs",
+    "disabled=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSStyleSheet": {
+   "arity": 0,
+   "cname": "CSSStyleSheet",
+   "chain": [
+    "CSSStyleSheet",
+    "StyleSheet",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "ownerRule=a:g",
+    "cssRules=a:g",
+    "rules=a:g",
+    "addRule=m:0",
+    "deleteRule=m:1",
+    "insertRule=m:1",
+    "removeRule=m:0",
+    "replace=m:1",
+    "replaceSync=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSRule": {
+   "arity": 0,
+   "cname": "CSSRule",
+   "chain": [
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "type=a:g",
+    "cssText=a:gs",
+    "parentRule=a:g",
+    "parentStyleSheet=a:g",
+    "STYLE_RULE=v:1",
+    "CHARSET_RULE=v:2",
+    "IMPORT_RULE=v:3",
+    "MEDIA_RULE=v:4",
+    "FONT_FACE_RULE=v:5",
+    "PAGE_RULE=v:6",
+    "MARGIN_RULE=v:9",
+    "NAMESPACE_RULE=v:10",
+    "KEYFRAMES_RULE=v:7",
+    "KEYFRAME_RULE=v:8",
+    "COUNTER_STYLE_RULE=v:11",
+    "FONT_FEATURE_VALUES_RULE=v:14",
+    "SUPPORTS_RULE=v:12",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [
+    "STYLE_RULE=v:1",
+    "CHARSET_RULE=v:2",
+    "IMPORT_RULE=v:3",
+    "MEDIA_RULE=v:4",
+    "FONT_FACE_RULE=v:5",
+    "PAGE_RULE=v:6",
+    "MARGIN_RULE=v:9",
+    "NAMESPACE_RULE=v:10",
+    "KEYFRAMES_RULE=v:7",
+    "KEYFRAME_RULE=v:8",
+    "COUNTER_STYLE_RULE=v:11",
+    "FONT_FEATURE_VALUES_RULE=v:14",
+    "SUPPORTS_RULE=v:12"
+   ]
+  },
+  "CSSStyleRule": {
+   "arity": 0,
+   "cname": "CSSStyleRule",
+   "chain": [
+    "CSSStyleRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "selectorText=a:gs",
+    "style=a:gs",
+    "styleMap=a:g",
+    "cssRules=a:g",
+    "deleteRule=m:1",
+    "insertRule=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSGroupingRule": {
+   "arity": 0,
+   "cname": "CSSGroupingRule",
+   "chain": [
+    "CSSGroupingRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "cssRules=a:g",
+    "deleteRule=m:1",
+    "insertRule=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSConditionRule": {
+   "arity": 0,
+   "cname": "CSSConditionRule",
+   "chain": [
+    "CSSConditionRule",
+    "CSSGroupingRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "conditionText=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMediaRule": {
+   "arity": 0,
+   "cname": "CSSMediaRule",
+   "chain": [
+    "CSSMediaRule",
+    "CSSConditionRule",
+    "CSSGroupingRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "media=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSSupportsRule": {
+   "arity": 0,
+   "cname": "CSSSupportsRule",
+   "chain": [
+    "CSSSupportsRule",
+    "CSSConditionRule",
+    "CSSGroupingRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSContainerRule": {
+   "arity": 0,
+   "cname": "CSSContainerRule",
+   "chain": [
+    "CSSContainerRule",
+    "CSSConditionRule",
+    "CSSGroupingRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "containerName=a:g",
+    "containerQuery=a:g",
+    "conditions=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSLayerBlockRule": {
+   "arity": 0,
+   "cname": "CSSLayerBlockRule",
+   "chain": [
+    "CSSLayerBlockRule",
+    "CSSGroupingRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "name=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSLayerStatementRule": {
+   "arity": 0,
+   "cname": "CSSLayerStatementRule",
+   "chain": [
+    "CSSLayerStatementRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "nameList=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSImportRule": {
+   "arity": 0,
+   "cname": "CSSImportRule",
+   "chain": [
+    "CSSImportRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "href=a:g",
+    "media=a:gs",
+    "styleSheet=a:g",
+    "layerName=a:g",
+    "supportsText=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSPageRule": {
+   "arity": 0,
+   "cname": "CSSPageRule",
+   "chain": [
+    "CSSPageRule",
+    "CSSGroupingRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "selectorText=a:gs",
+    "style=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSNamespaceRule": {
+   "arity": 0,
+   "cname": "CSSNamespaceRule",
+   "chain": [
+    "CSSNamespaceRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "namespaceURI=a:g",
+    "prefix=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSFontFaceRule": {
+   "arity": 0,
+   "cname": "CSSFontFaceRule",
+   "chain": [
+    "CSSFontFaceRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "style=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSFontPaletteValuesRule": {
+   "arity": 0,
+   "cname": "CSSFontPaletteValuesRule",
+   "chain": [
+    "CSSFontPaletteValuesRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "name=a:g",
+    "fontFamily=a:g",
+    "basePalette=a:g",
+    "overrideColors=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSCounterStyleRule": {
+   "arity": 0,
+   "cname": "CSSCounterStyleRule",
+   "chain": [
+    "CSSCounterStyleRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "name=a:gs",
+    "system=a:gs",
+    "symbols=a:gs",
+    "additiveSymbols=a:gs",
+    "negative=a:gs",
+    "prefix=a:gs",
+    "suffix=a:gs",
+    "range=a:gs",
+    "pad=a:gs",
+    "speakAs=a:gs",
+    "fallback=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSPropertyRule": {
+   "arity": 0,
+   "cname": "CSSPropertyRule",
+   "chain": [
+    "CSSPropertyRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "name=a:g",
+    "syntax=a:g",
+    "inherits=a:g",
+    "initialValue=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSKeyframesRule": {
+   "arity": 0,
+   "cname": "CSSKeyframesRule",
+   "chain": [
+    "CSSKeyframesRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "name=a:gs",
+    "cssRules=a:g",
+    "appendRule=m:1",
+    "deleteRule=m:1",
+    "findRule=m:1",
+    "length=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "CSSKeyframeRule": {
+   "arity": 0,
+   "cname": "CSSKeyframeRule",
+   "chain": [
+    "CSSKeyframeRule",
+    "CSSRule",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "keyText=a:gs",
+    "style=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSRuleList": {
+   "arity": 0,
+   "cname": "CSSRuleList",
+   "chain": [
+    "CSSRuleList",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "length=a:g",
+    "item=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "CSSStyleDeclaration": {
+   "arity": 0,
+   "cname": "CSSStyleDeclaration",
+   "chain": [
+    "CSSStyleDeclaration",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "cssText=a:gs",
+    "length=a:g",
+    "parentRule=a:g",
+    "cssFloat=a:gs",
+    "getPropertyPriority=m:1",
+    "getPropertyValue=m:1",
+    "item=m:1",
+    "removeProperty=m:1",
+    "setProperty=m:2",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "StyleSheetList": {
+   "arity": 0,
+   "cname": "StyleSheetList",
+   "chain": [
+    "StyleSheetList",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "length=a:g",
+    "item=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "MediaList": {
+   "arity": 0,
+   "cname": "MediaList",
+   "chain": [
+    "MediaList",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "length=a:g",
+    "mediaText=a:gs",
+    "appendMedium=m:1",
+    "deleteMedium=m:1",
+    "item=m:1",
+    "toString=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "CSSStyleValue": {
+   "arity": 0,
+   "cname": "CSSStyleValue",
+   "chain": [
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "toString=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [
+    "parse=m:2",
+    "parseAll=m:2"
+   ]
+  },
+  "CSSKeywordValue": {
+   "arity": 1,
+   "cname": "CSSKeywordValue",
+   "chain": [
+    "CSSKeywordValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "value=a:gs",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSUnitValue": {
+   "arity": 2,
+   "cname": "CSSUnitValue",
+   "chain": [
+    "CSSUnitValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "value=a:gs",
+    "unit=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSNumericValue": {
+   "arity": 0,
+   "cname": "CSSNumericValue",
+   "chain": [
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "add=m:0",
+    "div=m:0",
+    "equals=m:0",
+    "max=m:0",
+    "min=m:0",
+    "mul=m:0",
+    "sub=m:0",
+    "to=m:1",
+    "toSum=m:0",
+    "type=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [
+    "parse=m:1"
+   ]
+  },
+  "CSSUnparsedValue": {
+   "arity": 1,
+   "cname": "CSSUnparsedValue",
+   "chain": [
+    "CSSUnparsedValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "entries=m:0",
+    "keys=m:0",
+    "values=m:0",
+    "forEach=m:1",
+    "length=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "CSSVariableReferenceValue": {
+   "arity": 1,
+   "cname": "CSSVariableReferenceValue",
+   "chain": [
+    "CSSVariableReferenceValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "variable=a:gs",
+    "fallback=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSImageValue": {
+   "arity": 0,
+   "cname": "CSSImageValue",
+   "chain": [
+    "CSSImageValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSNumericArray": {
+   "arity": 0,
+   "cname": "CSSNumericArray",
+   "chain": [
+    "CSSNumericArray",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "entries=m:0",
+    "keys=m:0",
+    "values=m:0",
+    "forEach=m:1",
+    "length=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathValue": {
+   "arity": 0,
+   "cname": "CSSMathValue",
+   "chain": [
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "operator=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathSum": {
+   "arity": 0,
+   "cname": "CSSMathSum",
+   "chain": [
+    "CSSMathSum",
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "values=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathProduct": {
+   "arity": 0,
+   "cname": "CSSMathProduct",
+   "chain": [
+    "CSSMathProduct",
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "values=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathNegate": {
+   "arity": 1,
+   "cname": "CSSMathNegate",
+   "chain": [
+    "CSSMathNegate",
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "value=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathMin": {
+   "arity": 0,
+   "cname": "CSSMathMin",
+   "chain": [
+    "CSSMathMin",
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "values=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathMax": {
+   "arity": 0,
+   "cname": "CSSMathMax",
+   "chain": [
+    "CSSMathMax",
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "values=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathInvert": {
+   "arity": 1,
+   "cname": "CSSMathInvert",
+   "chain": [
+    "CSSMathInvert",
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "value=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMathClamp": {
+   "arity": 3,
+   "cname": "CSSMathClamp",
+   "chain": [
+    "CSSMathClamp",
+    "CSSMathValue",
+    "CSSNumericValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "lower=a:g",
+    "value=a:g",
+    "upper=a:g",
+    "constructor=m:3"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSTransformValue": {
+   "arity": 1,
+   "cname": "CSSTransformValue",
+   "chain": [
+    "CSSTransformValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "entries=m:0",
+    "keys=m:0",
+    "values=m:0",
+    "forEach=m:1",
+    "length=a:g",
+    "is2D=a:g",
+    "toMatrix=m:0",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "CSSTransformComponent": {
+   "arity": 0,
+   "cname": "CSSTransformComponent",
+   "chain": [
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "is2D=a:gs",
+    "toMatrix=m:0",
+    "toString=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSTranslate": {
+   "arity": 2,
+   "cname": "CSSTranslate",
+   "chain": [
+    "CSSTranslate",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "x=a:gs",
+    "y=a:gs",
+    "z=a:gs",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSRotate": {
+   "arity": 1,
+   "cname": "CSSRotate",
+   "chain": [
+    "CSSRotate",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "angle=a:gs",
+    "x=a:gs",
+    "y=a:gs",
+    "z=a:gs",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSScale": {
+   "arity": 2,
+   "cname": "CSSScale",
+   "chain": [
+    "CSSScale",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "x=a:gs",
+    "y=a:gs",
+    "z=a:gs",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSSkew": {
+   "arity": 2,
+   "cname": "CSSSkew",
+   "chain": [
+    "CSSSkew",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "ax=a:gs",
+    "ay=a:gs",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSSkewX": {
+   "arity": 1,
+   "cname": "CSSSkewX",
+   "chain": [
+    "CSSSkewX",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "ax=a:gs",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSSkewY": {
+   "arity": 1,
+   "cname": "CSSSkewY",
+   "chain": [
+    "CSSSkewY",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "ay=a:gs",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSPerspective": {
+   "arity": 1,
+   "cname": "CSSPerspective",
+   "chain": [
+    "CSSPerspective",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "length=a:gs",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSMatrixComponent": {
+   "arity": 1,
+   "cname": "CSSMatrixComponent",
+   "chain": [
+    "CSSMatrixComponent",
+    "CSSTransformComponent",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "matrix=a:gs",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSPositionValue": {
+   "arity": 2,
+   "cname": "CSSPositionValue",
+   "chain": [
+    "CSSPositionValue",
+    "CSSStyleValue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "x=a:gs",
+    "y=a:gs",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "StylePropertyMap": {
+   "arity": 0,
+   "cname": "StylePropertyMap",
+   "chain": [
+    "StylePropertyMap",
+    "StylePropertyMapReadOnly",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "append=m:1",
+    "clear=m:0",
+    "delete=m:1",
+    "set=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "StylePropertyMapReadOnly": {
+   "arity": 0,
+   "cname": "StylePropertyMapReadOnly",
+   "chain": [
+    "StylePropertyMapReadOnly",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "size=a:g",
+    "get=m:1",
+    "getAll=m:1",
+    "has=m:1",
+    "entries=m:0",
+    "forEach=m:1",
+    "keys=m:0",
+    "values=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": []
+  },
+  "TransitionEvent": {
+   "arity": 1,
+   "cname": "TransitionEvent",
+   "chain": [
+    "TransitionEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "propertyName=a:g",
+    "elapsedTime=a:g",
+    "pseudoElement=a:g",
+    "animation=a:g",
+    "constructor=m:1",
+    "pseudoTarget=a:g"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "AnimationEvent": {
+   "arity": 1,
+   "cname": "AnimationEvent",
+   "chain": [
+    "AnimationEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "animationName=a:g",
+    "elapsedTime=a:g",
+    "pseudoElement=a:g",
+    "animation=a:g",
+    "constructor=m:1",
+    "pseudoTarget=a:g"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "MediaQueryListEvent": {
+   "arity": 1,
+   "cname": "MediaQueryListEvent",
+   "chain": [
+    "MediaQueryListEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "media=a:g",
+    "matches=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "FontFaceSetLoadEvent": {
+   "arity": 1,
+   "cname": "FontFaceSetLoadEvent",
+   "chain": [
+    "FontFaceSetLoadEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "fontfaces=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSAnimation": {
+   "arity": 0,
+   "cname": "CSSAnimation",
+   "chain": [
+    "CSSAnimation",
+    "Animation",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "animationName=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "CSSTransition": {
+   "arity": 0,
+   "cname": "CSSTransition",
+   "chain": [
+    "CSSTransition",
+    "Animation",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "transitionProperty=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "Animation": {
+   "arity": 0,
+   "cname": "Animation",
+   "chain": [
+    "Animation",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "effect=a:gs",
+    "timeline=a:gs",
+    "startTime=a:gs",
+    "currentTime=a:gs",
+    "playbackRate=a:gs",
+    "rangeStart=a:gs",
+    "rangeEnd=a:gs",
+    "playState=a:g",
+    "replaceState=a:g",
+    "pending=a:g",
+    "id=a:gs",
+    "onfinish=a:gs",
+    "oncancel=a:gs",
+    "onremove=a:gs",
+    "finished=a:g",
+    "ready=a:g",
+    "cancel=m:0",
+    "commitStyles=m:0",
+    "finish=m:0",
+    "pause=m:0",
+    "persist=m:0",
+    "play=m:0",
+    "reverse=m:0",
+    "updatePlaybackRate=m:1",
+    "overallProgress=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "AnimationEffect": {
+   "arity": 0,
+   "cname": "AnimationEffect",
+   "chain": [
+    "AnimationEffect",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "getComputedTiming=m:0",
+    "getTiming=m:0",
+    "updateTiming=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  },
+  "MediaQueryList": {
+   "arity": 0,
+   "cname": "MediaQueryList",
+   "chain": [
+    "MediaQueryList",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "media=a:g",
+    "matches=a:g",
+    "onchange=a:gs",
+    "addListener=m:1",
+    "removeListener=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": []
+  }
+ }
+}

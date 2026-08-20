@@ -25,7 +25,7 @@
 // alone, and everything below (the default mode of "hidden", cues going null
 // while the mode is "disabled", the NotFoundError from removing a cue that was
 // never added) is real behaviour, measured on a headed Chrome 150. See
-// tools/fingerprint/scratch/win-batch/probe-win31.js.
+// tools/fingerprint/probes/probe-win31.js.
 
 const std = @import("std");
 

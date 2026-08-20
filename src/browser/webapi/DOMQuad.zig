@@ -22,7 +22,7 @@
 // thing: nothing here needs a layout box.
 //
 // Every default and every bound below was read off a headed Chrome 150; see
-// tools/fingerprint/scratch/win-batch/probe-win29.js and
+// tools/fingerprint/probes/probe-win29.js and
 // win29-chrome.json.
 
 const lp = @import("lightpanda");

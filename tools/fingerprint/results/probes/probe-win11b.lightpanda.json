@@ -1,0 +1,251 @@
+{
+ "href": "http://127.0.0.1:8752/",
+ "secure": true,
+ "out": {
+  "new Sensor()": {
+   "threw": "TypeError|Failed to construct 'Sensor': Illegal constructor|TypeError|code=undefined"
+  },
+  "new Sensor({frequency:60})": {
+   "threw": "TypeError|Failed to construct 'Sensor': Illegal constructor|TypeError|code=undefined"
+  },
+  "Sensor() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new Accelerometer()": {
+   "ok": true,
+   "brand": "[object Accelerometer]"
+  },
+  "new Accelerometer({frequency:60})": {
+   "ok": true,
+   "brand": "[object Accelerometer]"
+  },
+  "Accelerometer() no new": {
+   "threw": "TypeError|Failed to construct 'Accelerometer': Please use the 'new' operator, this DOM object constructor cannot be called as a function.|TypeError|code=undefined"
+  },
+  "new LinearAccelerationSensor()": {
+   "ok": true,
+   "brand": "[object LinearAccelerationSensor]"
+  },
+  "new LinearAccelerationSensor({frequency:60})": {
+   "ok": true,
+   "brand": "[object LinearAccelerationSensor]"
+  },
+  "LinearAccelerationSensor() no new": {
+   "threw": "TypeError|Failed to construct 'LinearAccelerationSensor': Please use the 'new' operator, this DOM object constructor cannot be called as a function.|TypeError|code=undefined"
+  },
+  "new GravitySensor()": {
+   "ok": true,
+   "brand": "[object GravitySensor]"
+  },
+  "new GravitySensor({frequency:60})": {
+   "ok": true,
+   "brand": "[object GravitySensor]"
+  },
+  "GravitySensor() no new": {
+   "threw": "TypeError|Failed to construct 'GravitySensor': Please use the 'new' operator, this DOM object constructor cannot be called as a function.|TypeError|code=undefined"
+  },
+  "new Gyroscope()": {
+   "ok": true,
+   "brand": "[object Gyroscope]"
+  },
+  "new Gyroscope({frequency:60})": {
+   "ok": true,
+   "brand": "[object Gyroscope]"
+  },
+  "Gyroscope() no new": {
+   "threw": "TypeError|Failed to construct 'Gyroscope': Please use the 'new' operator, this DOM object constructor cannot be called as a function.|TypeError|code=undefined"
+  },
+  "new OrientationSensor()": {
+   "threw": "TypeError|Failed to construct 'OrientationSensor': Illegal constructor|TypeError|code=undefined"
+  },
+  "new OrientationSensor({frequency:60})": {
+   "threw": "TypeError|Failed to construct 'OrientationSensor': Illegal constructor|TypeError|code=undefined"
+  },
+  "OrientationSensor() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new AbsoluteOrientationSensor()": {
+   "ok": true,
+   "brand": "[object AbsoluteOrientationSensor]"
+  },
+  "new AbsoluteOrientationSensor({frequency:60})": {
+   "ok": true,
+   "brand": "[object AbsoluteOrientationSensor]"
+  },
+  "AbsoluteOrientationSensor() no new": {
+   "threw": "TypeError|Failed to construct 'AbsoluteOrientationSensor': Please use the 'new' operator, this DOM object constructor cannot be called as a function.|TypeError|code=undefined"
+  },
+  "new RelativeOrientationSensor()": {
+   "ok": true,
+   "brand": "[object RelativeOrientationSensor]"
+  },
+  "new RelativeOrientationSensor({frequency:60})": {
+   "ok": true,
+   "brand": "[object RelativeOrientationSensor]"
+  },
+  "RelativeOrientationSensor() no new": {
+   "threw": "TypeError|Failed to construct 'RelativeOrientationSensor': Please use the 'new' operator, this DOM object constructor cannot be called as a function.|TypeError|code=undefined"
+  },
+  "new Accelerometer({frequency:\"x\"})": {
+   "threw": "TypeError|Failed to construct 'Accelerometer': Failed to read the 'frequency' property from 'SensorOptions': The provided double value is non-finite.|TypeError|code=undefined"
+  },
+  "new AbsoluteOrientationSensor({referenceFrame:\"screen\"})": {
+   "ok": true,
+   "brand": "[object AbsoluteOrientationSensor]"
+  },
+  "new AbsoluteOrientationSensor({referenceFrame:\"bogus\"})": {
+   "threw": "TypeError|Failed to construct 'AbsoluteOrientationSensor': Failed to read the 'referenceFrame' property from 'SpatialSensorOptions': The provided value 'bogus' is not a valid enum value of type LocalCoordinateSystem.|TypeError|code=undefined"
+  },
+  "accelIdle": {
+   "brand": "[object Accelerometer]",
+   "activated": false,
+   "hasReading": false,
+   "timestamp": null,
+   "x": null,
+   "y": null,
+   "z": null,
+   "onerror": null,
+   "onreading": null,
+   "onactivate": null
+  },
+  "accelStart": {
+   "startThrew": null,
+   "events": [
+    "error:NotReadableError|Could not connect to a sensor|DOMException|code=0|target=[object Accelerometer]|type=error|ctor=SensorErrorEvent"
+   ],
+   "activated": false,
+   "hasReading": false,
+   "timestamp": null,
+   "x": null
+  },
+  "accelStop": {
+   "stopThrew": null,
+   "activated": false
+  },
+  "accelStopTwice": "ok",
+  "orientIdle": {
+   "quaternion": null,
+   "activated": false
+  },
+  "populateMatrixNoArg": "TypeError|Failed to execute 'populateMatrix' on 'OrientationSensor': 1 argument required, but only 0 present.|TypeError|code=undefined",
+  "populateMatrixFloat32x16": "NotReadableError|Failed to execute 'populateMatrix' on 'OrientationSensor': Sensor data is not available.|DOMException|code=0",
+  "populateMatrixShort": "TypeError|Failed to execute 'populateMatrix' on 'OrientationSensor': Target buffer must have at least 16 elements.|TypeError|code=undefined",
+  "populateMatrixArray": "TypeError|Failed to execute 'populateMatrix' on 'OrientationSensor': The provided value is not of type '(DOMMatrix or Float32Array or Float64Array)'.|TypeError|code=undefined",
+  "new SensorErrorEvent()": {
+   "threw": "TypeError|Failed to construct 'SensorErrorEvent': 2 arguments required, but only 0 present.|TypeError|code=undefined"
+  },
+  "new SensorErrorEvent(\"e\")": {
+   "threw": "TypeError|Failed to construct 'SensorErrorEvent': 2 arguments required, but only 1 present.|TypeError|code=undefined"
+  },
+  "new SensorErrorEvent(\"e\",{})": {
+   "threw": "TypeError|Failed to construct 'SensorErrorEvent': Failed to read the 'error' property from 'SensorErrorEventInit': Required member is undefined.|TypeError|code=undefined"
+  },
+  "sensorErrorEvent": {
+   "type": "e",
+   "error": "NotAllowedError|boom|DOMException|code=0",
+   "bubbles": false,
+   "cancelable": false,
+   "ctor": "SensorErrorEvent"
+  },
+  "new SensorErrorEvent(\"e\",{error:null})": {
+   "threw": "TypeError|Failed to construct 'SensorErrorEvent': Failed to read the 'error' property from 'SensorErrorEventInit': Failed to convert value to 'DOMException'.|TypeError|code=undefined"
+  },
+  "new SensorErrorEvent(\"e\",{error:1})": {
+   "threw": "TypeError|Failed to construct 'SensorErrorEvent': Failed to read the 'error' property from 'SensorErrorEventInit': Failed to convert value to 'DOMException'.|TypeError|code=undefined"
+  },
+  "new MIDIAccess()": {
+   "threw": "TypeError|Failed to construct 'MIDIAccess': Illegal constructor|TypeError|code=undefined"
+  },
+  "MIDIAccess() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new MIDIPort()": {
+   "threw": "TypeError|Failed to construct 'MIDIPort': Illegal constructor|TypeError|code=undefined"
+  },
+  "MIDIPort() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new MIDIInput()": {
+   "threw": "TypeError|Failed to construct 'MIDIInput': Illegal constructor|TypeError|code=undefined"
+  },
+  "MIDIInput() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new MIDIOutput()": {
+   "threw": "TypeError|Failed to construct 'MIDIOutput': Illegal constructor|TypeError|code=undefined"
+  },
+  "MIDIOutput() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new MIDIInputMap()": {
+   "threw": "TypeError|Failed to construct 'MIDIInputMap': Illegal constructor|TypeError|code=undefined"
+  },
+  "MIDIInputMap() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new MIDIOutputMap()": {
+   "threw": "TypeError|Failed to construct 'MIDIOutputMap': Illegal constructor|TypeError|code=undefined"
+  },
+  "MIDIOutputMap() no new": {
+   "threw": "TypeError|Illegal constructor|TypeError|code=undefined"
+  },
+  "new MIDIMessageEvent()": {
+   "threw": "TypeError|Failed to construct 'MIDIMessageEvent': 1 argument required, but only 0 present.|TypeError|code=undefined"
+  },
+  "midiMessageEventDefault": {
+   "type": "midimessage",
+   "data": null,
+   "dataBrand": "null",
+   "ctor": "MIDIMessageEvent"
+  },
+  "midiMessageEventData": {
+   "dataBrand": "[object Uint8Array]",
+   "bytes": [
+    144,
+    69,
+    127
+   ],
+   "len": 3
+  },
+  "new MIDIMessageEvent(\"m\",{data:[1,2]})": {
+   "threw": "TypeError|Failed to construct 'MIDIMessageEvent': Failed to read the 'data' property from 'MIDIMessageEventInit': Failed to convert value to 'Uint8Array'.|TypeError|code=undefined"
+  },
+  "new MIDIConnectionEvent()": {
+   "threw": "TypeError|Failed to construct 'MIDIConnectionEvent': 1 argument required, but only 0 present.|TypeError|code=undefined"
+  },
+  "midiConnectionEventDefault": {
+   "type": "statechange",
+   "port": null,
+   "ctor": "MIDIConnectionEvent"
+  },
+  "new MIDIConnectionEvent(\"s\",{port:null})": {
+   "ok": true,
+   "brand": "[object MIDIConnectionEvent]"
+  },
+  "new MIDIConnectionEvent(\"s\",{port:1})": {
+   "threw": "TypeError|Failed to construct 'MIDIConnectionEvent': Failed to read the 'port' property from 'MIDIConnectionEventInit': Failed to convert value to 'MIDIPort'.|TypeError|code=undefined"
+  },
+  "requestMIDIAccessType": "function",
+  "requestMIDIAccessArity": 0,
+  "requestMIDIAccess()": {
+   "pendingAfter2500ms": true
+  },
+  "requestMIDIAccess({sysex:true})": {
+   "pendingAfter2500ms": true
+  },
+  "requestMIDIAccess({software:true})": {
+   "pendingAfter2500ms": true
+  },
+  "requestMIDIAccess(1)": {
+   "rejected": "TypeError|Failed to execute 'requestMIDIAccess' on 'Navigator': The provided value is not of type 'MIDIOptions'.|TypeError|code=undefined"
+  },
+  "requestMIDIAccess(null)": {
+   "pendingAfter2500ms": true
+  },
+  "perm:accelerometer": "granted",
+  "perm:gyroscope": "granted",
+  "perm:magnetometer": "granted",
+  "perm:midi": "prompt",
+  "perm:ambient-light-sensor": "TypeError|Failed to execute 'query' on 'Permissions': GenericSensorExtraClasses flag is not enabled.|TypeError|code=undefined"
+ }
+}

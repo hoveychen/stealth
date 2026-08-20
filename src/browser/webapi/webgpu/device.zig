@@ -21,7 +21,7 @@
 // GPU.requestAdapter; see adapter.zig for why that now hands out a real adapter.
 //
 // Everything measured on a headed Chrome 150 with
-// tools/fingerprint/scratch/win-batch/probe-win38.js: the getter block comes
+// tools/fingerprint/probes/probe-win38.js: the getter block comes
 // before the accessor block and neither is alphabetical, `label` starts empty
 // and round-trips a written string, `onuncapturederror` reads back null, and
 // `lost` stays pending until destroy() settles it with

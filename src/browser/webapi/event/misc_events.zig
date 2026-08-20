@@ -31,7 +31,7 @@
 // when it feeds a constructor the wrong thing.
 //
 // Measured on a headed Chrome 150; see
-// tools/fingerprint/scratch/win-batch/probe-win29.js and
+// tools/fingerprint/probes/probe-win29.js and
 // probe-win30.js for the captures each default below comes from.
 
 const std = @import("std");

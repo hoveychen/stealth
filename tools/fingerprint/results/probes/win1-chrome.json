@@ -1,0 +1,1386 @@
+{
+ "href": "http://localhost:8752/",
+ "secure": true,
+ "keys": {
+  "BarProp": {
+   "where": "own",
+   "own": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BarProp",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "locationbar": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get locationbar",
+    "getArity": 0,
+    "setName": "set locationbar",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object BarProp]",
+   "liveCtor": "BarProp",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "visible": true
+   }
+  },
+  "menubar": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get menubar",
+    "getArity": 0,
+    "setName": "set menubar",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object BarProp]",
+   "liveCtor": "BarProp",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "visible": true
+   }
+  },
+  "personalbar": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get personalbar",
+    "getArity": 0,
+    "setName": "set personalbar",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object BarProp]",
+   "liveCtor": "BarProp",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "visible": true
+   }
+  },
+  "scrollbars": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get scrollbars",
+    "getArity": 0,
+    "setName": "set scrollbars",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object BarProp]",
+   "liveCtor": "BarProp",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "visible": true
+   }
+  },
+  "statusbar": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get statusbar",
+    "getArity": 0,
+    "setName": "set statusbar",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object BarProp]",
+   "liveCtor": "BarProp",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "visible": true
+   }
+  },
+  "toolbar": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get toolbar",
+    "getArity": 0,
+    "setName": "set toolbar",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object BarProp]",
+   "liveCtor": "BarProp",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "visible": true
+   }
+  },
+  "devicePixelRatio": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get devicePixelRatio",
+    "getArity": 0,
+    "setName": "set devicePixelRatio",
+    "setArity": 1
+   },
+   "liveType": "number",
+   "liveValue": 2
+  },
+  "isSecureContext": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get isSecureContext",
+    "getArity": 0
+   },
+   "liveType": "boolean",
+   "liveValue": true
+  },
+  "crossOriginIsolated": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get crossOriginIsolated",
+    "getArity": 0
+   },
+   "liveType": "boolean",
+   "liveValue": false
+  },
+  "originAgentCluster": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get originAgentCluster",
+    "getArity": 0
+   },
+   "liveType": "boolean",
+   "liveValue": true
+  },
+  "credentialless": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get credentialless",
+    "getArity": 0
+   },
+   "liveType": "boolean",
+   "liveValue": false
+  },
+  "clientInformation": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get clientInformation",
+    "getArity": 0,
+    "setName": "set clientInformation",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object Navigator]",
+   "liveCtor": "Navigator",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "vendorSub": "",
+    "productSub": "20030107",
+    "vendor": "Google Inc.",
+    "maxTouchPoints": 0,
+    "hardwareConcurrency": 10,
+    "cookieEnabled": true,
+    "appCodeName": "Mozilla",
+    "appName": "Netscape",
+    "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+    "platform": "MacIntel",
+    "product": "Gecko",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+    "language": "en-US",
+    "onLine": true,
+    "webdriver": false,
+    "pdfViewerEnabled": true,
+    "deprecatedRunAdAuctionEnforcesKAnonymity": false,
+    "deviceMemory": 16
+   }
+  },
+  "external": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get external",
+    "getArity": 0,
+    "setName": "set external",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object External]",
+   "liveCtor": "External",
+   "liveOwn": [],
+   "liveProtoScalars": {}
+  },
+  "External": {
+   "where": "own",
+   "own": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "External",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "status": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get status",
+    "getArity": 0,
+    "setName": "set status",
+    "setArity": 1
+   },
+   "liveType": "string",
+   "liveValue": ""
+  },
+  "styleMedia": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get styleMedia",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object StyleMedia]",
+   "liveCtor": "Object",
+   "liveOwn": [],
+   "liveProtoScalars": {
+    "type": "screen"
+   }
+  },
+  "StyleMedia": {
+   "where": "absent",
+   "own": null,
+   "liveType": "undefined"
+  },
+  "offscreenBuffering": {
+   "where": "own",
+   "own": {
+    "e": false,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get offscreenBuffering",
+    "getArity": 0,
+    "setName": "set offscreenBuffering",
+    "setArity": 1
+   },
+   "liveType": "boolean",
+   "liveValue": true
+  },
+  "find": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "find",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "print": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "print",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "stop": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "stop",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "moveBy": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "moveBy",
+    "arity": 2
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "moveTo": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "moveTo",
+    "arity": 2
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "resizeBy": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "resizeBy",
+    "arity": 2
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "resizeTo": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "resizeTo",
+    "arity": 2
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "captureEvents": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "captureEvents",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "releaseEvents": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "releaseEvents",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "openDatabase": {
+   "where": "absent",
+   "own": null,
+   "liveType": "undefined"
+  },
+  "webkitURL": {
+   "where": "own",
+   "own": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "URL",
+    "arity": 1
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "webkitRequestAnimationFrame": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "webkitRequestAnimationFrame",
+    "arity": 1
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "webkitCancelAnimationFrame": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "webkitCancelAnimationFrame",
+    "arity": 1
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "createImageBitmap": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "createImageBitmap",
+    "arity": 1
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "queryLocalFonts": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "queryLocalFonts",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "showDirectoryPicker": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "showDirectoryPicker",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "showOpenFilePicker": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "showOpenFilePicker",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "showSaveFilePicker": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "showSaveFilePicker",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "getScreenDetails": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "getScreenDetails",
+    "arity": 0
+   },
+   "liveType": "function",
+   "liveBrand": "[object Function]",
+   "liveCtor": "Function"
+  },
+  "scheduler": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": true,
+    "getName": "get scheduler",
+    "getArity": 0,
+    "setName": "set scheduler",
+    "setArity": 1
+   },
+   "liveType": "object",
+   "liveBrand": "[object Scheduler]",
+   "liveCtor": "Scheduler",
+   "liveOwn": [],
+   "liveProtoScalars": {}
+  },
+  "launchQueue": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get launchQueue",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object LaunchQueue]",
+   "liveCtor": "LaunchQueue",
+   "liveOwn": [],
+   "liveProtoScalars": {}
+  },
+  "trustedTypes": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get trustedTypes",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object TrustedTypePolicyFactory]",
+   "liveCtor": "TrustedTypePolicyFactory",
+   "liveOwn": [],
+   "liveProtoScalars": {}
+  },
+  "caches": {
+   "where": "own",
+   "own": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get caches",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object CacheStorage]",
+   "liveCtor": "CacheStorage",
+   "liveOwn": [],
+   "liveProtoScalars": {}
+  },
+  "console": {
+   "where": "own",
+   "own": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "object",
+    "brand": "[object console]",
+    "ctor": "Object"
+   },
+   "liveType": "object",
+   "liveBrand": "[object console]",
+   "liveCtor": "Object",
+   "liveOwn": [
+    "debug",
+    "error",
+    "info",
+    "log",
+    "warn",
+    "dir",
+    "dirxml",
+    "table",
+    "trace",
+    "group",
+    "groupCollapsed",
+    "groupEnd",
+    "clear",
+    "count",
+    "countReset",
+    "assert",
+    "profile",
+    "profileEnd",
+    "time",
+    "timeLog",
+    "timeEnd",
+    "timeStamp",
+    "context",
+    "createTask",
+    "memory"
+   ],
+   "liveProtoScalars": {}
+  }
+ },
+ "ifaces": {
+  "BarProp": {
+   "arity": 0,
+   "cname": "BarProp",
+   "chain": [
+    "BarProp",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "visible=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BarProp",
+    "arity": 0
+   }
+  },
+  "External": {
+   "arity": 0,
+   "cname": "External",
+   "chain": [
+    "External",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "AddSearchProvider=m:0",
+    "IsSearchProviderInstalled=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "External",
+    "arity": 0
+   }
+  },
+  "StyleMedia": null,
+  "Scheduler": {
+   "arity": 0,
+   "cname": "Scheduler",
+   "chain": [
+    "Scheduler",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "postTask=m:1",
+    "yield=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "Scheduler",
+    "arity": 0
+   }
+  },
+  "TaskController": {
+   "arity": 0,
+   "cname": "TaskController",
+   "chain": [
+    "TaskController",
+    "AbortController",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "setPriority=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TaskController",
+    "arity": 0
+   }
+  },
+  "TaskSignal": {
+   "arity": 0,
+   "cname": "TaskSignal",
+   "chain": [
+    "TaskSignal",
+    "AbortSignal",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "priority=a:g",
+    "onprioritychange=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [
+    "any=m:1"
+   ],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TaskSignal",
+    "arity": 0
+   }
+  },
+  "TaskPriorityChangeEvent": {
+   "arity": 2,
+   "cname": "TaskPriorityChangeEvent",
+   "chain": [
+    "TaskPriorityChangeEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "previousPriority=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TaskPriorityChangeEvent",
+    "arity": 2
+   }
+  },
+  "LaunchQueue": {
+   "arity": 0,
+   "cname": "LaunchQueue",
+   "chain": [
+    "LaunchQueue",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "setConsumer=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "LaunchQueue",
+    "arity": 0
+   }
+  },
+  "LaunchParams": {
+   "arity": 0,
+   "cname": "LaunchParams",
+   "chain": [
+    "LaunchParams",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "targetURL=a:g",
+    "files=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "LaunchParams",
+    "arity": 0
+   }
+  },
+  "TrustedTypePolicyFactory": {
+   "arity": 0,
+   "cname": "TrustedTypePolicyFactory",
+   "chain": [
+    "TrustedTypePolicyFactory",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "emptyHTML=a:g",
+    "emptyScript=a:g",
+    "defaultPolicy=a:g",
+    "createPolicy=m:1",
+    "getAttributeType=m:2",
+    "getPropertyType=m:2",
+    "getTypeMapping=m:0",
+    "isHTML=m:1",
+    "isScript=m:1",
+    "isScriptURL=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TrustedTypePolicyFactory",
+    "arity": 0
+   }
+  },
+  "TrustedTypePolicy": {
+   "arity": 0,
+   "cname": "TrustedTypePolicy",
+   "chain": [
+    "TrustedTypePolicy",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "name=a:g",
+    "createHTML=m:1",
+    "createScript=m:1",
+    "createScriptURL=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TrustedTypePolicy",
+    "arity": 0
+   }
+  },
+  "TrustedHTML": {
+   "arity": 0,
+   "cname": "TrustedHTML",
+   "chain": [
+    "TrustedHTML",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "toJSON=m:0",
+    "toString=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TrustedHTML",
+    "arity": 0
+   }
+  },
+  "TrustedScript": {
+   "arity": 0,
+   "cname": "TrustedScript",
+   "chain": [
+    "TrustedScript",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "toJSON=m:0",
+    "toString=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TrustedScript",
+    "arity": 0
+   }
+  },
+  "TrustedScriptURL": {
+   "arity": 0,
+   "cname": "TrustedScriptURL",
+   "chain": [
+    "TrustedScriptURL",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "toJSON=m:0",
+    "toString=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "TrustedScriptURL",
+    "arity": 0
+   }
+  },
+  "CacheStorage": {
+   "arity": 0,
+   "cname": "CacheStorage",
+   "chain": [
+    "CacheStorage",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "delete=m:1",
+    "has=m:1",
+    "keys=m:0",
+    "match=m:1",
+    "open=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "CacheStorage",
+    "arity": 0
+   }
+  },
+  "Cache": {
+   "arity": 0,
+   "cname": "Cache",
+   "chain": [
+    "Cache",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "add=m:1",
+    "addAll=m:1",
+    "delete=m:1",
+    "keys=m:0",
+    "match=m:1",
+    "matchAll=m:0",
+    "put=m:2",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "Cache",
+    "arity": 0
+   }
+  },
+  "ScreenDetails": {
+   "arity": 0,
+   "cname": "ScreenDetails",
+   "chain": [
+    "ScreenDetails",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "screens=a:g",
+    "currentScreen=a:g",
+    "onscreenschange=a:gs",
+    "oncurrentscreenchange=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "ScreenDetails",
+    "arity": 0
+   }
+  },
+  "ScreenDetailed": {
+   "arity": 0,
+   "cname": "ScreenDetailed",
+   "chain": [
+    "ScreenDetailed",
+    "Screen",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "left=a:g",
+    "top=a:g",
+    "isPrimary=a:g",
+    "isInternal=a:g",
+    "devicePixelRatio=a:g",
+    "label=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "ScreenDetailed",
+    "arity": 0
+   }
+  },
+  "ImageBitmap": {
+   "arity": 0,
+   "cname": "ImageBitmap",
+   "chain": [
+    "ImageBitmap",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "width=a:g",
+    "height=a:g",
+    "close=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "ImageBitmap",
+    "arity": 0
+   }
+  },
+  "FontData": {
+   "arity": 0,
+   "cname": "FontData",
+   "chain": [
+    "FontData",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "postscriptName=a:g",
+    "fullName=a:g",
+    "family=a:g",
+    "style=a:g",
+    "blob=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "FontData",
+    "arity": 0
+   }
+  },
+  "FileSystemHandle": {
+   "arity": 0,
+   "cname": "FileSystemHandle",
+   "chain": [
+    "FileSystemHandle",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "kind=a:g",
+    "name=a:g",
+    "isSameEntry=m:1",
+    "queryPermission=m:0",
+    "remove=m:0",
+    "requestPermission=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "FileSystemHandle",
+    "arity": 0
+   }
+  },
+  "FileSystemFileHandle": {
+   "arity": 0,
+   "cname": "FileSystemFileHandle",
+   "chain": [
+    "FileSystemFileHandle",
+    "FileSystemHandle",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "createWritable=m:0",
+    "getFile=m:0",
+    "move=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "FileSystemFileHandle",
+    "arity": 0
+   }
+  },
+  "FileSystemDirectoryHandle": {
+   "arity": 0,
+   "cname": "FileSystemDirectoryHandle",
+   "chain": [
+    "FileSystemDirectoryHandle",
+    "FileSystemHandle",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "getDirectoryHandle=m:1",
+    "getFileHandle=m:1",
+    "removeEntry=m:1",
+    "resolve=m:1",
+    "entries=m:0",
+    "keys=m:0",
+    "values=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.asyncIterator)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "FileSystemDirectoryHandle",
+    "arity": 0
+   }
+  },
+  "FileSystemWritableFileStream": {
+   "arity": 0,
+   "cname": "FileSystemWritableFileStream",
+   "chain": [
+    "FileSystemWritableFileStream",
+    "WritableStream",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "seek=m:1",
+    "truncate=m:1",
+    "write=m:1",
+    "mode=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "FileSystemWritableFileStream",
+    "arity": 0
+   }
+  },
+  "Console": null
+ }
+}

@@ -1,0 +1,648 @@
+{
+ "shapes": {
+  "AudioData": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "AudioData",
+   "arity": 1,
+   "ctorStr": "function AudioData() { [native code] }",
+   "statics": "",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get format[ec-],get sampleRate[ec-],get numberOfFrames[ec-],get numberOfChannels[ec-],get duration[ec-],get timestamp[ec-],allocationSize/1[ecw],clone/0[ecw],close/0[ecw],copyTo/2[ecw],@@toStringTag=AudioData",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'AudioData': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'AudioData': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "AudioDecoder": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "AudioDecoder",
+   "arity": 1,
+   "ctorStr": "function AudioDecoder() { [native code] }",
+   "statics": "isConfigSupported/1[ecw]",
+   "ctorProtoOf": "EventTarget",
+   "protoOwn": "get decodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],decode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=AudioDecoder",
+   "protoChain": "EventTarget>Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'AudioDecoder': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'AudioDecoder': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "AudioEncoder": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "AudioEncoder",
+   "arity": 1,
+   "ctorStr": "function AudioEncoder() { [native code] }",
+   "statics": "isConfigSupported/1[ecw]",
+   "ctorProtoOf": "EventTarget",
+   "protoOwn": "get encodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],encode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=AudioEncoder",
+   "protoChain": "EventTarget>Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'AudioEncoder': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'AudioEncoder': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "EncodedAudioChunk": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "EncodedAudioChunk",
+   "arity": 1,
+   "ctorStr": "function EncodedAudioChunk() { [native code] }",
+   "statics": "",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get type[ec-],get timestamp[ec-],get byteLength[ec-],get duration[ec-],copyTo/1[ecw],@@toStringTag=EncodedAudioChunk",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'EncodedAudioChunk': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'EncodedAudioChunk': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "EncodedVideoChunk": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "EncodedVideoChunk",
+   "arity": 1,
+   "ctorStr": "function EncodedVideoChunk() { [native code] }",
+   "statics": "",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get type[ec-],get timestamp[ec-],get duration[ec-],get byteLength[ec-],copyTo/1[ecw],@@toStringTag=EncodedVideoChunk",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'EncodedVideoChunk': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'EncodedVideoChunk': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "ImageDecoder": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "ImageDecoder",
+   "arity": 1,
+   "ctorStr": "function ImageDecoder() { [native code] }",
+   "statics": "isTypeSupported/1[ecw]",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get type[ec-],get complete[ec-],get completed[ec-],get tracks[ec-],close/0[ecw],decode/0[ecw],reset/0[ecw],@@toStringTag=ImageDecoder",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'ImageDecoder': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'ImageDecoder': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "ImageTrack": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "ImageTrack",
+   "arity": 0,
+   "ctorStr": "function ImageTrack() { [native code] }",
+   "statics": "",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get frameCount[ec-],get animated[ec-],get repetitionCount[ec-],accessor selected[ec-],@@toStringTag=ImageTrack",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'ImageTrack': Illegal constructor",
+   "callNoNew": "TypeError: Illegal constructor"
+  },
+  "ImageTrackList": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "ImageTrackList",
+   "arity": 0,
+   "ctorStr": "function ImageTrackList() { [native code] }",
+   "statics": "",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get length[ec-],get selectedIndex[ec-],get selectedTrack[ec-],get ready[ec-],@@toStringTag=ImageTrackList,@@iterator=function values() { [native code] }",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'ImageTrackList': Illegal constructor",
+   "callNoNew": "TypeError: Illegal constructor"
+  },
+  "VideoColorSpace": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "VideoColorSpace",
+   "arity": 0,
+   "ctorStr": "function VideoColorSpace() { [native code] }",
+   "statics": "",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get primaries[ec-],get transfer[ec-],get matrix[ec-],get fullRange[ec-],toJSON/0[ecw],@@toStringTag=VideoColorSpace",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": {
+    "ok": true,
+    "brand": "[object VideoColorSpace]",
+    "own": "",
+    "str": "[object VideoColorSpace]"
+   },
+   "callNoNew": "TypeError: Failed to construct 'VideoColorSpace': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "VideoDecoder": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "VideoDecoder",
+   "arity": 1,
+   "ctorStr": "function VideoDecoder() { [native code] }",
+   "statics": "isConfigSupported/1[ecw]",
+   "ctorProtoOf": "EventTarget",
+   "protoOwn": "get decodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],decode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=VideoDecoder",
+   "protoChain": "EventTarget>Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'VideoDecoder': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'VideoDecoder': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "VideoEncoder": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "VideoEncoder",
+   "arity": 1,
+   "ctorStr": "function VideoEncoder() { [native code] }",
+   "statics": "isConfigSupported/1[ecw]",
+   "ctorProtoOf": "EventTarget",
+   "protoOwn": "get encodeQueueSize[ec-],accessor ondequeue[ec-],get state[ec-],close/0[ecw],configure/1[ecw],encode/1[ecw],flush/0[ecw],reset/0[ecw],@@toStringTag=VideoEncoder",
+   "protoChain": "EventTarget>Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'VideoEncoder': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'VideoEncoder': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  },
+  "VideoFrame": {
+   "ownOnWindow": true,
+   "winFlags": "-cw",
+   "typeof": "function",
+   "ctorName": "VideoFrame",
+   "arity": 1,
+   "ctorStr": "function VideoFrame() { [native code] }",
+   "statics": "",
+   "ctorProtoOf": "Function.prototype",
+   "protoOwn": "get format[ec-],get timestamp[ec-],get duration[ec-],get codedWidth[ec-],get codedHeight[ec-],get codedRect[ec-],get visibleRect[ec-],get rotation[ec-],get flip[ec-],get displayWidth[ec-],get displayHeight[ec-],get colorSpace[ec-],allocationSize/0[ecw],clone/0[ecw],close/0[ecw],copyTo/1[ecw],metadata/0[ecw],@@toStringTag=VideoFrame",
+   "protoChain": "Object",
+   "protoDescOfCtor": "---",
+   "newNoArg": "TypeError: Failed to construct 'VideoFrame': 1 argument required, but only 0 present.",
+   "callNoNew": "TypeError: Failed to construct 'VideoFrame': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+  }
+ },
+ "entry": {
+  "VideoColorSpace": {
+   "empty": {
+    "brand": "[object VideoColorSpace]",
+    "own": "",
+    "primaries": null,
+    "transfer": null,
+    "matrix": null,
+    "fullRange": null
+   },
+   "emptyJson": {
+    "fullRange": null,
+    "matrix": null,
+    "primaries": null,
+    "transfer": null
+   },
+   "full": {
+    "brand": "[object VideoColorSpace]",
+    "own": "",
+    "primaries": "bt709",
+    "transfer": "iec61966-2-1",
+    "matrix": "smpte170m",
+    "fullRange": true
+   },
+   "fullJson": {
+    "fullRange": true,
+    "matrix": "smpte170m",
+    "primaries": "bt709",
+    "transfer": "iec61966-2-1"
+   },
+   "jsonBrand": "[object Object]",
+   "jsonKeys": [
+    "fullRange",
+    "matrix",
+    "primaries",
+    "transfer"
+   ],
+   "badPrimaries": "TypeError: Failed to construct 'VideoColorSpace': Failed to read the 'primaries' property from 'VideoColorSpaceInit': The provided value 'nope' is not a valid enum value of type VideoColorPrimaries.",
+   "stringArg": "TypeError: Failed to construct 'VideoColorSpace': The provided value is not of type 'VideoColorSpaceInit'."
+  },
+  "VideoFrame": {
+   "fromCanvas": "[object VideoFrame]",
+   "frame": {
+    "brand": "[object VideoFrame]",
+    "own": "",
+    "format": "BGRA",
+    "timestamp": 1234,
+    "duration": null,
+    "codedWidth": 32,
+    "codedHeight": 16,
+    "codedRect": "[object DOMRectReadOnly]",
+    "visibleRect": "[object DOMRectReadOnly]",
+    "rotation": 0,
+    "flip": false,
+    "displayWidth": 32,
+    "displayHeight": 16,
+    "colorSpace": "[object VideoColorSpace]"
+   },
+   "visibleRect": {
+    "brand": "[object DOMRectReadOnly]",
+    "json": {
+     "x": 0,
+     "y": 0,
+     "width": 32,
+     "height": 16,
+     "top": 0,
+     "right": 32,
+     "bottom": 16,
+     "left": 0
+    }
+   },
+   "colorSpace": {
+    "brand": "[object VideoColorSpace]",
+    "json": {
+     "fullRange": true,
+     "matrix": "rgb",
+     "primaries": "bt709",
+     "transfer": "iec61966-2-1"
+    }
+   },
+   "allocationSize": "[object Number]",
+   "allocationSizeValue": 2048,
+   "metadata": {
+    "brand": "[object Object]",
+    "keys": []
+   },
+   "cloned": {
+    "brand": "[object VideoFrame]",
+    "own": "",
+    "format": "BGRA",
+    "timestamp": 1234,
+    "duration": null,
+    "codedWidth": 32,
+    "codedHeight": 16,
+    "codedRect": "[object DOMRectReadOnly]",
+    "visibleRect": "[object DOMRectReadOnly]",
+    "rotation": 0,
+    "flip": false,
+    "displayWidth": 32,
+    "displayHeight": 16,
+    "colorSpace": "[object VideoColorSpace]"
+   },
+   "copyTo": "resolved [{\"offset\":0,\"stride\":128}]",
+   "afterClose": {
+    "codedWidth": 0,
+    "format": "null",
+    "timestamp": 1234,
+    "allocationSize": "InvalidStateError: Failed to execute 'allocationSize' on 'VideoFrame': VideoFrame is closed."
+   },
+   "noTimestamp": "TypeError: Failed to construct 'VideoFrame': VideoFrameInit must provide timestamp",
+   "noArg": "TypeError: Failed to construct 'VideoFrame': 1 argument required, but only 0 present.",
+   "badSource": "TypeError: Failed to construct 'VideoFrame': Overload resolution failed.",
+   "fromBuffer": "[object VideoFrame]",
+   "fromBufferNoFormat": "TypeError: Failed to construct 'VideoFrame': Failed to read the 'format' property from 'VideoFrameBufferInit': Required member is undefined.",
+   "fromBufferBadFormat": "TypeError: Failed to construct 'VideoFrame': Failed to read the 'format' property from 'VideoFrameBufferInit': The provided value 'nope' is not a valid enum value of type VideoPixelFormat."
+  },
+  "EncodedVideoChunk": {
+   "chunk": {
+    "brand": "[object EncodedVideoChunk]",
+    "own": "",
+    "type": "key",
+    "timestamp": 7,
+    "duration": null,
+    "byteLength": 3
+   },
+   "copyTo": [
+    1,
+    2,
+    3
+   ],
+   "withDuration": {
+    "brand": "[object EncodedVideoChunk]",
+    "own": "",
+    "type": "delta",
+    "timestamp": 1,
+    "duration": 5,
+    "byteLength": 1
+   },
+   "noArg": "TypeError: Failed to construct 'EncodedVideoChunk': 1 argument required, but only 0 present.",
+   "empty": "TypeError: Failed to construct 'EncodedVideoChunk': Failed to read the 'data' property from 'EncodedVideoChunkInit': Required member is undefined.",
+   "noType": "TypeError: Failed to construct 'EncodedVideoChunk': Failed to read the 'type' property from 'EncodedVideoChunkInit': Required member is undefined.",
+   "badType": "TypeError: Failed to construct 'EncodedVideoChunk': Failed to read the 'type' property from 'EncodedVideoChunkInit': The provided value 'nope' is not a valid enum value of type EncodedVideoChunkType.",
+   "noTimestamp": "TypeError: Failed to construct 'EncodedVideoChunk': Failed to read the 'timestamp' property from 'EncodedVideoChunkInit': Required member is undefined.",
+   "noData": "TypeError: Failed to construct 'EncodedVideoChunk': Failed to read the 'data' property from 'EncodedVideoChunkInit': Required member is undefined.",
+   "badData": "TypeError: Failed to construct 'EncodedVideoChunk': Failed to read the 'data' property from 'EncodedVideoChunkInit': The provided value is not of type '([AllowShared] ArrayBuffer or [AllowShared] ArrayBufferView)'."
+  },
+  "EncodedAudioChunk": {
+   "chunk": {
+    "brand": "[object EncodedAudioChunk]",
+    "own": "",
+    "type": "key",
+    "timestamp": 7,
+    "byteLength": 3,
+    "duration": null
+   },
+   "noArg": "TypeError: Failed to construct 'EncodedAudioChunk': 1 argument required, but only 0 present.",
+   "empty": "TypeError: Failed to construct 'EncodedAudioChunk': Failed to read the 'data' property from 'EncodedAudioChunkInit': Required member is undefined.",
+   "badType": "TypeError: Failed to construct 'EncodedAudioChunk': Failed to read the 'type' property from 'EncodedAudioChunkInit': The provided value 'nope' is not a valid enum value of type EncodedAudioChunkType."
+  },
+  "AudioData": {
+   "data": {
+    "brand": "[object AudioData]",
+    "own": "",
+    "format": "f32",
+    "sampleRate": 48000,
+    "numberOfFrames": 100,
+    "numberOfChannels": 2,
+    "duration": 2083,
+    "timestamp": 0
+   },
+   "allocationSize": "[object Number]",
+   "allocationSizeValue": 800,
+   "cloned": {
+    "brand": "[object AudioData]",
+    "own": "",
+    "format": "f32",
+    "sampleRate": 48000,
+    "numberOfFrames": 100,
+    "numberOfChannels": 2,
+    "duration": 2083,
+    "timestamp": 0
+   },
+   "afterClose": {
+    "format": "null",
+    "sampleRate": 0,
+    "numberOfFrames": 0
+   },
+   "noArg": "TypeError: Failed to construct 'AudioData': 1 argument required, but only 0 present.",
+   "empty": "TypeError: Failed to construct 'AudioData': Failed to read the 'data' property from 'AudioDataInit': Required member is undefined.",
+   "badFormat": "TypeError: Failed to construct 'AudioData': Failed to read the 'format' property from 'AudioDataInit': The provided value 'nope' is not a valid enum value of type AudioSampleFormat.",
+   "noData": "TypeError: Failed to construct 'AudioData': Failed to read the 'data' property from 'AudioDataInit': Required member is undefined."
+  },
+  "VideoDecoder": {
+   "statics": [
+    "isConfigSupported"
+   ],
+   "isConfigSupported": {
+    "brand": "[object Object]",
+    "keys": [
+     "config",
+     "supported"
+    ],
+    "json": {
+     "config": {
+      "codec": "vp8",
+      "codedHeight": 240,
+      "codedWidth": 320,
+      "flip": false,
+      "hardwareAcceleration": "no-preference",
+      "rotation": 0
+     },
+     "supported": true
+    }
+   },
+   "isConfigSupportedNoArg": "TypeError: Failed to execute 'isConfigSupported' on 'VideoDecoder': 1 argument required, but only 0 present.",
+   "isConfigSupportedEmpty": "TypeError: Failed to execute 'isConfigSupported' on 'VideoDecoder': Failed to read the 'codec' property from 'VideoDecoderConfig': Required member is undefined.",
+   "isConfigSupportedBogusCodec": "resolved {\"config\":{\"codec\":\"nope\",\"codedHeight\":240,\"codedWidth\":320,\"flip\":false,\"hardwareAcceleration\":\"no-preference\",\"rotation\":0},\"supported\":false}",
+   "instance": {
+    "brand": "[object VideoDecoder]",
+    "own": "",
+    "decodeQueueSize": 0,
+    "ondequeue": null,
+    "state": "unconfigured"
+   },
+   "configure": "undefined",
+   "afterConfigure": {
+    "state": "configured",
+    "queue": 0
+   },
+   "configureEmpty": "TypeError: Failed to execute 'configure' on 'VideoDecoder': Failed to read the 'codec' property from 'VideoDecoderConfig': Required member is undefined.",
+   "configureBogus": "undefined",
+   "reset": "undefined",
+   "stateAfterReset": "unconfigured",
+   "close": "undefined",
+   "stateAfterClose": "closed",
+   "configureAfterClose": "InvalidStateError: Failed to execute 'configure' on 'VideoDecoder': Cannot call 'decode' on a closed codec.",
+   "ctorNoArg": "TypeError: Failed to construct 'VideoDecoder': 1 argument required, but only 0 present.",
+   "ctorEmpty": "TypeError: Failed to construct 'VideoDecoder': Failed to read the 'error' property from 'VideoDecoderInit': Required member is undefined.",
+   "ctorNoError": "TypeError: Failed to construct 'VideoDecoder': Failed to read the 'error' property from 'VideoDecoderInit': Required member is undefined.",
+   "ctorBadOutput": "TypeError: Failed to construct 'VideoDecoder': Failed to read the 'output' property from 'VideoDecoderInit': The given value is not a function."
+  },
+  "VideoEncoder": {
+   "statics": [
+    "isConfigSupported"
+   ],
+   "isConfigSupported": {
+    "brand": "[object Object]",
+    "keys": [
+     "config",
+     "supported"
+    ],
+    "json": {
+     "config": {
+      "alpha": "discard",
+      "bitrate": 1000000,
+      "bitrateMode": "variable",
+      "codec": "vp8",
+      "contentHint": "",
+      "framerate": 30,
+      "hardwareAcceleration": "no-preference",
+      "height": 240,
+      "latencyMode": "quality",
+      "width": 320
+     },
+     "supported": true
+    }
+   },
+   "isConfigSupportedNoArg": "TypeError: Failed to execute 'isConfigSupported' on 'VideoEncoder': 1 argument required, but only 0 present.",
+   "isConfigSupportedEmpty": "TypeError: Failed to execute 'isConfigSupported' on 'VideoEncoder': Failed to read the 'codec' property from 'VideoEncoderConfig': Required member is undefined.",
+   "isConfigSupportedBogusCodec": "resolved {\"config\":{\"alpha\":\"discard\",\"bitrate\":1000000,\"bitrateMode\":\"variable\",\"codec\":\"nope\",\"contentHint\":\"\",\"framerate\":30,\"hardwareAcceleration\":\"no-preference\",\"height\":240,\"latencyMode\":\"quality\",\"width\":320},\"supported\":false}",
+   "instance": {
+    "brand": "[object VideoEncoder]",
+    "own": "",
+    "encodeQueueSize": 0,
+    "ondequeue": null,
+    "state": "unconfigured"
+   },
+   "configure": "undefined",
+   "afterConfigure": {
+    "state": "configured",
+    "queue": 0
+   },
+   "configureEmpty": "TypeError: Failed to execute 'configure' on 'VideoEncoder': Failed to read the 'codec' property from 'VideoEncoderConfig': Required member is undefined.",
+   "configureBogus": "undefined",
+   "reset": "undefined",
+   "stateAfterReset": "unconfigured",
+   "close": "undefined",
+   "stateAfterClose": "closed",
+   "configureAfterClose": "InvalidStateError: Failed to execute 'configure' on 'VideoEncoder': Cannot call 'configure' on a closed codec.",
+   "ctorNoArg": "TypeError: Failed to construct 'VideoEncoder': 1 argument required, but only 0 present.",
+   "ctorEmpty": "TypeError: Failed to construct 'VideoEncoder': Failed to read the 'error' property from 'VideoEncoderInit': Required member is undefined.",
+   "ctorNoError": "TypeError: Failed to construct 'VideoEncoder': Failed to read the 'error' property from 'VideoEncoderInit': Required member is undefined.",
+   "ctorBadOutput": "TypeError: Failed to construct 'VideoEncoder': Failed to read the 'output' property from 'VideoEncoderInit': The given value is not a function."
+  },
+  "AudioDecoder": {
+   "statics": [
+    "isConfigSupported"
+   ],
+   "isConfigSupported": {
+    "brand": "[object Object]",
+    "keys": [
+     "config",
+     "supported"
+    ],
+    "json": {
+     "config": {
+      "codec": "opus",
+      "numberOfChannels": 2,
+      "sampleRate": 48000
+     },
+     "supported": true
+    }
+   },
+   "isConfigSupportedNoArg": "TypeError: Failed to execute 'isConfigSupported' on 'AudioDecoder': 1 argument required, but only 0 present.",
+   "isConfigSupportedEmpty": "TypeError: Failed to execute 'isConfigSupported' on 'AudioDecoder': Failed to read the 'codec' property from 'AudioDecoderConfig': Required member is undefined.",
+   "isConfigSupportedBogusCodec": "resolved {\"config\":{\"codec\":\"nope\",\"numberOfChannels\":2,\"sampleRate\":48000},\"supported\":false}",
+   "instance": {
+    "brand": "[object AudioDecoder]",
+    "own": "",
+    "decodeQueueSize": 0,
+    "ondequeue": null,
+    "state": "unconfigured"
+   },
+   "configure": "undefined",
+   "afterConfigure": {
+    "state": "configured",
+    "queue": 0
+   },
+   "configureEmpty": "TypeError: Failed to execute 'configure' on 'AudioDecoder': Failed to read the 'codec' property from 'AudioDecoderConfig': Required member is undefined.",
+   "configureBogus": "undefined",
+   "reset": "undefined",
+   "stateAfterReset": "unconfigured",
+   "close": "undefined",
+   "stateAfterClose": "closed",
+   "configureAfterClose": "InvalidStateError: Failed to execute 'configure' on 'AudioDecoder': Cannot call 'decode' on a closed codec.",
+   "ctorNoArg": "TypeError: Failed to construct 'AudioDecoder': 1 argument required, but only 0 present.",
+   "ctorEmpty": "TypeError: Failed to construct 'AudioDecoder': Failed to read the 'error' property from 'AudioDecoderInit': Required member is undefined.",
+   "ctorNoError": "TypeError: Failed to construct 'AudioDecoder': Failed to read the 'error' property from 'AudioDecoderInit': Required member is undefined.",
+   "ctorBadOutput": "TypeError: Failed to construct 'AudioDecoder': Failed to read the 'output' property from 'AudioDecoderInit': The given value is not a function."
+  },
+  "AudioEncoder": {
+   "statics": [
+    "isConfigSupported"
+   ],
+   "isConfigSupported": {
+    "brand": "[object Object]",
+    "keys": [
+     "config",
+     "supported"
+    ],
+    "json": {
+     "config": {
+      "bitrate": 128000,
+      "bitrateMode": "variable",
+      "codec": "opus",
+      "numberOfChannels": 2,
+      "sampleRate": 48000
+     },
+     "supported": true
+    }
+   },
+   "isConfigSupportedNoArg": "TypeError: Failed to execute 'isConfigSupported' on 'AudioEncoder': 1 argument required, but only 0 present.",
+   "isConfigSupportedEmpty": "TypeError: Failed to execute 'isConfigSupported' on 'AudioEncoder': Failed to read the 'codec' property from 'AudioEncoderConfig': Required member is undefined.",
+   "isConfigSupportedBogusCodec": "resolved {\"config\":{\"bitrate\":128000,\"bitrateMode\":\"variable\",\"codec\":\"nope\",\"numberOfChannels\":2,\"sampleRate\":48000},\"supported\":false}",
+   "instance": {
+    "brand": "[object AudioEncoder]",
+    "own": "",
+    "encodeQueueSize": 0,
+    "ondequeue": null,
+    "state": "unconfigured"
+   },
+   "configure": "undefined",
+   "afterConfigure": {
+    "state": "configured",
+    "queue": 0
+   },
+   "configureEmpty": "TypeError: Failed to execute 'configure' on 'AudioEncoder': Failed to read the 'codec' property from 'AudioEncoderConfig': Required member is undefined.",
+   "configureBogus": "undefined",
+   "reset": "undefined",
+   "stateAfterReset": "unconfigured",
+   "close": "undefined",
+   "stateAfterClose": "closed",
+   "configureAfterClose": "InvalidStateError: Failed to execute 'configure' on 'AudioEncoder': Cannot call 'configure' on a closed codec.",
+   "ctorNoArg": "TypeError: Failed to construct 'AudioEncoder': 1 argument required, but only 0 present.",
+   "ctorEmpty": "TypeError: Failed to construct 'AudioEncoder': Failed to read the 'error' property from 'AudioEncoderInit': Required member is undefined.",
+   "ctorNoError": "TypeError: Failed to construct 'AudioEncoder': Failed to read the 'error' property from 'AudioEncoderInit': Required member is undefined.",
+   "ctorBadOutput": "TypeError: Failed to construct 'AudioEncoder': Failed to read the 'output' property from 'AudioEncoderInit': The given value is not a function."
+  },
+  "ImageDecoder": {
+   "statics": [
+    "isTypeSupported"
+   ],
+   "isTypeSupported": {
+    "image/png": true,
+    "image/jpeg": true,
+    "image/gif": true,
+    "image/webp": true,
+    "image/avif": true,
+    "image/svg+xml": false,
+    "nope": false
+   },
+   "isTypeSupportedNoArg": "TypeError: Failed to execute 'isTypeSupported' on 'ImageDecoder': 1 argument required, but only 0 present.",
+   "instance": {
+    "brand": "[object ImageDecoder]",
+    "own": "",
+    "type": "image/png",
+    "complete": true,
+    "completed": "[object Promise]",
+    "tracks": "[object ImageTrackList]"
+   },
+   "completed": "resolved",
+   "tracks": {
+    "brand": "[object ImageTrackList]",
+    "length": 0,
+    "selectedIndex": -1,
+    "ready": "[object Promise]",
+    "own": "",
+    "byIndex": "none",
+    "isArray": false,
+    "iterable": true
+   },
+   "decoded": {
+    "brand": "[object Object]",
+    "keys": [
+     "complete",
+     "image"
+    ],
+    "complete": true,
+    "image": {
+     "brand": "[object VideoFrame]",
+     "own": "",
+     "format": "BGRA",
+     "timestamp": 0,
+     "duration": null,
+     "codedWidth": 1,
+     "codedHeight": 1,
+     "codedRect": "[object DOMRectReadOnly]",
+     "visibleRect": "[object DOMRectReadOnly]",
+     "rotation": 0,
+     "flip": false,
+     "displayWidth": 1,
+     "displayHeight": 1,
+     "colorSpace": "[object VideoColorSpace]"
+    }
+   },
+   "decodeBadIndex": "RangeError: The frame index provided (99) is outside the range [0, 1).",
+   "reset": "undefined",
+   "close": "undefined",
+   "afterClose": {
+    "complete": "[object Boolean]",
+    "decode": "InvalidStateError: The decoder has been closed."
+   },
+   "ctorNoArg": "TypeError: Failed to construct 'ImageDecoder': 1 argument required, but only 0 present.",
+   "ctorEmpty": "TypeError: Failed to construct 'ImageDecoder': Failed to read the 'data' property from 'ImageDecoderInit': Required member is undefined.",
+   "ctorNoType": "TypeError: Failed to construct 'ImageDecoder': Failed to read the 'type' property from 'ImageDecoderInit': Required member is undefined.",
+   "ctorNoData": "TypeError: Failed to construct 'ImageDecoder': Failed to read the 'data' property from 'ImageDecoderInit': Required member is undefined.",
+   "ctorBogusType": "[object ImageDecoder]"
+  }
+ }
+}

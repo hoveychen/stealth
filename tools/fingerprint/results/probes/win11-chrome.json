@@ -1,0 +1,495 @@
+{
+ "href": "http://localhost:8752/",
+ "secure": true,
+ "ownCount": 1233,
+ "keys": {},
+ "ifaces": {
+  "Sensor": {
+   "arity": 0,
+   "cname": "Sensor",
+   "chain": [
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "activated=a:g",
+    "hasReading=a:g",
+    "timestamp=a:g",
+    "onerror=a:gs",
+    "onreading=a:gs",
+    "onactivate=a:gs",
+    "start=m:0",
+    "stop=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "Sensor",
+    "arity": 0
+   }
+  },
+  "SensorErrorEvent": {
+   "arity": 2,
+   "cname": "SensorErrorEvent",
+   "chain": [
+    "SensorErrorEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "error=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "SensorErrorEvent",
+    "arity": 2
+   }
+  },
+  "Accelerometer": {
+   "arity": 0,
+   "cname": "Accelerometer",
+   "chain": [
+    "Accelerometer",
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "x=a:g",
+    "y=a:g",
+    "z=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "Accelerometer",
+    "arity": 0
+   }
+  },
+  "LinearAccelerationSensor": {
+   "arity": 0,
+   "cname": "LinearAccelerationSensor",
+   "chain": [
+    "LinearAccelerationSensor",
+    "Accelerometer",
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "LinearAccelerationSensor",
+    "arity": 0
+   }
+  },
+  "GravitySensor": {
+   "arity": 0,
+   "cname": "GravitySensor",
+   "chain": [
+    "GravitySensor",
+    "Accelerometer",
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "GravitySensor",
+    "arity": 0
+   }
+  },
+  "Gyroscope": {
+   "arity": 0,
+   "cname": "Gyroscope",
+   "chain": [
+    "Gyroscope",
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "x=a:g",
+    "y=a:g",
+    "z=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "Gyroscope",
+    "arity": 0
+   }
+  },
+  "OrientationSensor": {
+   "arity": 0,
+   "cname": "OrientationSensor",
+   "chain": [
+    "OrientationSensor",
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "quaternion=a:g",
+    "populateMatrix=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "OrientationSensor",
+    "arity": 0
+   }
+  },
+  "AbsoluteOrientationSensor": {
+   "arity": 0,
+   "cname": "AbsoluteOrientationSensor",
+   "chain": [
+    "AbsoluteOrientationSensor",
+    "OrientationSensor",
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "AbsoluteOrientationSensor",
+    "arity": 0
+   }
+  },
+  "RelativeOrientationSensor": {
+   "arity": 0,
+   "cname": "RelativeOrientationSensor",
+   "chain": [
+    "RelativeOrientationSensor",
+    "OrientationSensor",
+    "Sensor",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "RelativeOrientationSensor",
+    "arity": 0
+   }
+  },
+  "MIDIAccess": {
+   "arity": 0,
+   "cname": "MIDIAccess",
+   "chain": [
+    "MIDIAccess",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "inputs=a:g",
+    "outputs=a:g",
+    "sysexEnabled=a:g",
+    "onstatechange=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIAccess",
+    "arity": 0
+   }
+  },
+  "MIDIPort": {
+   "arity": 0,
+   "cname": "MIDIPort",
+   "chain": [
+    "MIDIPort",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "connection=a:g",
+    "id=a:g",
+    "manufacturer=a:g",
+    "name=a:g",
+    "state=a:g",
+    "type=a:g",
+    "version=a:g",
+    "onstatechange=a:gs",
+    "close=m:0",
+    "open=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIPort",
+    "arity": 0
+   }
+  },
+  "MIDIInput": {
+   "arity": 0,
+   "cname": "MIDIInput",
+   "chain": [
+    "MIDIInput",
+    "MIDIPort",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "onmidimessage=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIInput",
+    "arity": 0
+   }
+  },
+  "MIDIOutput": {
+   "arity": 0,
+   "cname": "MIDIOutput",
+   "chain": [
+    "MIDIOutput",
+    "MIDIPort",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "send=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIOutput",
+    "arity": 0
+   }
+  },
+  "MIDIInputMap": {
+   "arity": 0,
+   "cname": "MIDIInputMap",
+   "chain": [
+    "MIDIInputMap",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "size=a:g",
+    "entries=m:0",
+    "forEach=m:1",
+    "get=m:1",
+    "has=m:1",
+    "keys=m:0",
+    "values=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIInputMap",
+    "arity": 0
+   }
+  },
+  "MIDIOutputMap": {
+   "arity": 0,
+   "cname": "MIDIOutputMap",
+   "chain": [
+    "MIDIOutputMap",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "size=a:g",
+    "entries=m:0",
+    "forEach=m:1",
+    "get=m:1",
+    "has=m:1",
+    "keys=m:0",
+    "values=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIOutputMap",
+    "arity": 0
+   }
+  },
+  "MIDIMessageEvent": {
+   "arity": 1,
+   "cname": "MIDIMessageEvent",
+   "chain": [
+    "MIDIMessageEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "data=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIMessageEvent",
+    "arity": 1
+   }
+  },
+  "MIDIConnectionEvent": {
+   "arity": 1,
+   "cname": "MIDIConnectionEvent",
+   "chain": [
+    "MIDIConnectionEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "port=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "MIDIConnectionEvent",
+    "arity": 1
+   }
+  }
+ }
+}
