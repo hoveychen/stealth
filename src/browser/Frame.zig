@@ -168,6 +168,7 @@ _element_internals: ElementInternals.Lookup = .empty,
 _node_owner_documents: Node.OwnerDocumentLookup = .empty,
 _element_scroll_positions: Element.ScrollPositionLookup = .empty,
 _element_namespace_uris: Element.NamespaceUriLookup = .empty,
+_element_prefixes: Element.PrefixLookup = .empty,
 _svg_animated_enumerations: AnimatedEnumeration.Lookup = .empty,
 _svg_animated_lengths: AnimatedLength.Lookup = .empty,
 _svg_animated_numbers: AnimatedNumber.Lookup = .empty,
@@ -2655,7 +2656,7 @@ pub fn appendNew(self: *Frame, parent: *Node, child: *Node) !void {
 // called from the parser when the node and all its children have been added
 pub fn nodeComplete(self: *Frame, node: *Node) !void {
     Node.Build.call(node, "complete", .{ node, self }) catch |err| {
-        log.err(.bug, "build.complete", .{ .tag = node.getNodeName(&self.buf), .err = err, .type = self._type, .url = self.url });
+        log.err(.bug, "build.complete", .{ .tag = node.getNodeName(self, &self.buf), .err = err, .type = self._type, .url = self.url });
         return err;
     };
     return self.nodeIsReady(true, node);

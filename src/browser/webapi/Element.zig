@@ -66,6 +66,11 @@ pub const ClassListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMT
 pub const RelListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
 pub const ShadowRootLookup = std.AutoHashMapUnmanaged(*Element, *ShadowRoot);
 pub const NamespaceUriLookup = std.AutoHashMapUnmanaged(*Element, []const u8);
+// The namespace prefix an XML document wrote the element with. A side table
+// like the one above rather than a field, and rather than storing the whole
+// qualified name in `_tag_name`: the tag name is what picks the element's type
+// out of the factory's dispatch table, so it has to stay the local name.
+pub const PrefixLookup = std.AutoHashMapUnmanaged(*Element, []const u8);
 
 pub const ScrollPosition = struct {
     x: u32 = 0,
@@ -105,8 +110,10 @@ pub const Namespace = enum(u8) {
         if (namespace.len == 0) {
             return .null;
         }
-        if (namespace.len == "http://www.w3.org/1999/xhtml".len) {
-            // Common case, avoid the string comparison. Recklessly
+        if (std.mem.eql(u8, namespace, "http://www.w3.org/1999/xhtml")) {
+            // Common case. The comparison cannot be skipped on length alone:
+            // an XML document can declare any uri at all, and a 28-character
+            // one is not the XHTML namespace just because it is 28 characters.
             @branchHint(.likely);
             return .html;
         }
@@ -305,7 +312,67 @@ pub fn getTagNameLower(self: *const Element) []const u8 {
     }
 }
 
-pub fn getTagNameSpec(self: *const Element, buf: []u8) []const u8 {
+/// `tagName` (and so `nodeName`) per spec: the qualified name, ASCII-uppercased
+/// only when the element is in the HTML namespace *and* its node document is an
+/// HTML document. An XHTML `<p>` therefore reads `p`, and a prefixed XML
+/// element keeps the prefix -- `<s:clipPath/>` reads `s:clipPath`. Chrome 151
+/// readings: probe expr-g4-p67.js.
+///
+/// `frame` is optional for the two internal consumers that have none -- the CDP
+/// node dump and the XPath name functions, which only reach the element arm for
+/// a document the frame itself loaded -- and a null one reads as an HTML
+/// document, which is what both did before.
+pub fn getTagNameSpec(self: *Element, frame: ?*const Frame, buf: []u8) []const u8 {
+    const fold = if (frame) |f| self.inHtmlDocument(f) else true;
+    // Only the parser's side table composes: `createElementNS('urn:x', 'p:q')`
+    // already stored `p:q` as the tag name, so prepending would double it.
+    const prefix = self.parsedPrefix(frame) orelse {
+        return if (fold) self.tagNameFolded(buf) else self.getTagNameLower();
+    };
+
+    // "prefix" + ":" + the name, composed into the caller's buffer. The folded
+    // name is written into the tail so that prepending cannot clobber it.
+    const total = prefix.len + 1 + self.getTagNameLower().len;
+    if (total > buf.len) {
+        log.info(.dom, "tag.long.name", .{ .name = self.getTagNameLower() });
+        return self.getTagNameLower();
+    }
+    const name = if (fold) self.tagNameFolded(buf[prefix.len + 1 ..]) else self.getTagNameLower();
+    std.mem.copyBackwards(u8, buf[prefix.len + 1 ..][0..name.len], name);
+    @memcpy(buf[0..prefix.len], prefix);
+    buf[prefix.len] = ':';
+    return buf[0 .. prefix.len + 1 + name.len];
+}
+
+/// The namespace prefix the element was written with, or null. The XML parser
+/// files it in a side table, the way it files a namespace uri outside the
+/// built-in set; `createElementNS('urn:x', 'p:q')` instead stores the qualified
+/// name whole, so that spelling is still found by splitting.
+pub fn getPrefix(self: *Element, frame: ?*const Frame) ?[]const u8 {
+    if (self.parsedPrefix(frame)) |prefix| {
+        return prefix;
+    }
+    const name = self.getTagNameLower();
+    if (std.mem.indexOfScalar(u8, name, ':')) |pos| {
+        return name[0..pos];
+    }
+    return null;
+}
+
+fn parsedPrefix(self: *Element, frame: ?*const Frame) ?[]const u8 {
+    const f = frame orelse return null;
+    return f._element_prefixes.get(self);
+}
+
+/// A case fold follows the *document*, not the element's namespace: an HTML
+/// document folds, an XML one does not. A detached node with no owner falls
+/// back to the frame's document, which is how `ownerDocument` already reads it.
+pub fn inHtmlDocument(self: *Element, frame: *const Frame) bool {
+    const doc = self.asNode().ownerDocument(frame) orelse return true;
+    return doc._type == .html;
+}
+
+fn tagNameFolded(self: *const Element, buf: []u8) []const u8 {
     return switch (self._type) {
         .html => |he| switch (he._type) {
             .anchor => "A",
@@ -421,7 +488,7 @@ pub fn lookupNamespaceURIForElement(self: *Element, prefix: ?[]const u8, frame: 
 
     // Step 1: check element's own namespace/prefix
     if (self.getNamespaceUri(frame)) |ns_uri| {
-        const el_prefix = self._prefix();
+        const el_prefix = self.getPrefix(frame);
         const match = if (prefix == null and el_prefix == null)
             true
         else if (prefix != null and el_prefix != null)
@@ -459,7 +526,7 @@ pub fn lookupNamespaceURIForElement(self: *Element, prefix: ?[]const u8, frame: 
 pub fn lookupPrefixForElement(self: *Element, namespace: []const u8, frame: *Frame) ?[]const u8 {
     // Step 1: element's own namespace/prefix
     if (self.getNamespaceUri(frame)) |ns_uri| {
-        if (self._prefix()) |el_prefix| {
+        if (self.getPrefix(frame)) |el_prefix| {
             if (std.mem.eql(u8, ns_uri, namespace)) {
                 return el_prefix;
             }
@@ -479,12 +546,8 @@ pub fn lookupPrefixForElement(self: *Element, namespace: []const u8, frame: *Fra
     return parent.lookupPrefixForElement(namespace, frame);
 }
 
-fn _prefix(self: *const Element) ?[]const u8 {
-    const name = self.getTagNameLower();
-    if (std.mem.indexOfPos(u8, name, 0, ":")) |pos| {
-        return name[0..pos];
-    }
-    return null;
+fn _prefix(self: *Element, frame: *Frame) ?[]const u8 {
+    return self.getPrefix(frame);
 }
 
 pub fn getLocalName(self: *Element) []const u8 {
@@ -2577,7 +2640,7 @@ pub const JsApi = struct {
     };
 
     fn _tagName(self: *Element, frame: *Frame) []const u8 {
-        return self.getTagNameSpec(&frame.buf);
+        return self.getTagNameSpec(frame, &frame.buf);
     }
     // the frame-aware variant returns the original URI for namespaces
     // outside the built-in set instead of the placeholder

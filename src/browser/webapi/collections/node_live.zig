@@ -59,9 +59,22 @@ pub const TagNameNsFilter = struct {
     local_name: String,
 };
 
+pub const TagNameFilter = struct {
+    // The name as written by the caller.
+    name: String,
+    // Set only for an XML document, where the name is compared to the element's
+    // *qualified* name exactly -- prefix included, no case fold. Split here so
+    // the matcher never has to, and carrying the frame the prefix lookup needs.
+    qualified: ?struct {
+        prefix: ?[]const u8,
+        local: []const u8,
+        frame: *Frame,
+    } = null,
+};
+
 const Filters = union(Mode) {
     tag: Element.Tag,
-    tag_name: String,
+    tag_name: TagNameFilter,
     tag_name_ns: TagNameNsFilter,
     class_name: ClassNameFilter,
     name: []const u8,
@@ -282,14 +295,31 @@ pub fn NodeLive(comptime mode: Mode) type {
                     // If we're in `tag_name` mode, then the tag_name isn't
                     // a known tag. It could be a custom element, heading, or
                     // any generic element. Compare against the element's tag name.
-                    // Per spec, getElementsByTagName is case-insensitive for HTML
-                    // namespace elements, case-sensitive for others.
                     const el = node.is(Element) orelse return false;
+
+                    // An XML document compares the qualified name exactly, so
+                    // `s:clipPath` reaches the element and `clipPath` does not
+                    // (probe expr-g2-p67.js). Built structurally rather than by
+                    // materialising the name, which needs no buffer and so has
+                    // no length to truncate at.
+                    if (self._filter.qualified) |qualified| {
+                        const element_prefix = el.getPrefix(qualified.frame);
+                        if (qualified.prefix) |prefix| {
+                            const have = element_prefix orelse return false;
+                            if (!std.mem.eql(u8, prefix, have)) return false;
+                        } else if (element_prefix != null) {
+                            return false;
+                        }
+                        return std.mem.eql(u8, qualified.local, el.getLocalName());
+                    }
+
+                    // An HTML document folds ASCII case for its own namespace,
+                    // and compares a foreign element as stored.
                     const element_tag = el.getTagNameLower();
                     if (el._namespace == .html) {
-                        return std.ascii.eqlIgnoreCase(element_tag, self._filter.str());
+                        return std.ascii.eqlIgnoreCase(element_tag, self._filter.name.str());
                     }
-                    return std.mem.eql(u8, element_tag, self._filter.str());
+                    return std.mem.eql(u8, element_tag, self._filter.name.str());
                 },
                 .tag_name_ns => {
                     const el = node.is(Element) orelse return false;

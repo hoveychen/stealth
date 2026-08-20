@@ -53,7 +53,25 @@ pub fn getOrCreate(element: *Element, kind: Kind, frame: *Frame) !*AnimatedStrin
 }
 
 pub fn getBaseVal(self: *const AnimatedString) []const u8 {
+    if (self._kind == .href) {
+        return href(self._element) orelse "";
+    }
     return self._element.getAttributeSafe(self.attributeName()) orelse "";
+}
+
+/// SVG's `href` reflects the plain `href` attribute and the legacy
+/// `xlink:href` one, plain winning. Measured in Chrome 151 (probe
+/// `expr-xlink-p67.js`): `<use xlink:href="#icon">` reads `#icon`, and a `use`
+/// carrying both reads the plain one.
+///
+/// Chrome tells the legacy attribute apart from a literal one by its
+/// namespace -- `setAttribute('xlink:href')` lands in no namespace and is not
+/// reflected. This engine has no namespace on an attribute at all, so that
+/// literal spelling reflects here where it would not in Chrome. Modelling it
+/// properly needs the whole attribute-namespace model.
+pub fn href(element: *const Element) ?[]const u8 {
+    return element.getAttributeSafe(comptime .wrap("href")) orelse
+        element.getAttributeSafe(comptime .wrap("xlink:href"));
 }
 
 pub fn setBaseVal(self: *AnimatedString, value: String, frame: *Frame) !void {

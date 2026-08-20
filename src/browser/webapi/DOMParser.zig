@@ -93,7 +93,14 @@ pub fn parseFromString(
                 // Return a document with a <parsererror> element per spec.
                 break :blk (try Frame.parse.xmlDocument(frame, "<parsererror xmlns=\"http://www.mozilla.org/newlayout/xml/parsererror.xml\">error</parsererror>")).?;
             };
-            return doc.asDocument();
+            const document = doc.asDocument();
+            // `contentType` reports the mime the document was parsed as, the way
+            // `createDocument` reports one derived from the namespace it was
+            // given -- not a single stand-in for "some kind of XML".
+            // `@tagName` of the matched mime is static, so nothing is borrowed
+            // from the caller's string.
+            document._content_type = @tagName(target_mime);
+            return document;
         },
     };
 }

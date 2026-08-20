@@ -92,13 +92,13 @@ pub const Animation = struct {
         return self.asElement().asNode();
     }
 
-    /// `href` (which is where the parser also files `xlink:href`) names the
-    /// target; without one the animation applies to its parent element.
+    /// `href`, or the legacy `xlink:href` it falls back to, names the target;
+    /// without one the animation applies to its parent element.
     /// Chrome hands back null for a target that is not an SVG element, which
     /// is what the SVGElement? return type says.
     pub fn getTargetElement(self: *Animation, frame: *Frame) ?*Element {
         const element = self.asElement();
-        const href = element.getAttributeSafe(comptime .wrap("href")) orelse "";
+        const href = AnimatedString.href(element) orelse "";
         const trimmed = std.mem.trim(u8, href, " \t\r\n");
         if (trimmed.len == 0) {
             const parent = self.asNode().parentNode() orelse return null;

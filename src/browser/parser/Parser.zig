@@ -463,8 +463,12 @@ fn createElementCallback(ctx: *anyopaque, data: *anyopaque, qname: h5e.QualName,
     return _createElementCallbackWithDefaultnamespace(ctx, data, qname, attributes, .unknown);
 }
 
+// An XML element that no declaration reaches is in no namespace at all -- not
+// in the XML/1998 one, which only ever comes from an explicit `xml:` prefix.
+// Chrome 151 reads `<root/>` in a text/xml document back as a null
+// namespaceURI, probe expr-g5.js.
 fn createXMLElementCallback(ctx: *anyopaque, data: *anyopaque, qname: h5e.QualName, attributes: h5e.AttributeIterator) callconv(.c) ?*anyopaque {
-    return _createElementCallbackWithDefaultnamespace(ctx, data, qname, attributes, .xml);
+    return _createElementCallbackWithDefaultnamespace(ctx, data, qname, attributes, .null);
 }
 
 // html5ever_parse_fragment materializes the fragment's context element through
@@ -501,6 +505,27 @@ fn _createElementCallback(self: *Parser, data: *anyopaque, qname: h5e.QualName, 
     const namespace_string = qname.ns.slice();
     const namespace = if (namespace_string.len == 0) default_namespace else Element.Namespace.parse(namespace_string);
     const node = try Frame.node_factory.createElementNS(frame, namespace, name, attributes);
+
+    // `Namespace` has no room for a uri it does not know, so a declared one has
+    // to go in the frame lookup that `Element.getNamespaceUri` falls back to --
+    // the same place `Document.createElementNS` puts it. Without this the
+    // element reads back as a null namespace, losing what the document said.
+    if (namespace == .unknown and namespace_string.len > 0) {
+        const duped = try frame.dupeString(namespace_string);
+        try frame._element_namespace_uris.put(frame.arena, node.as(Element), duped);
+    }
+
+    // The tag name has to stay the local name -- it is what picked the element's
+    // type out of the factory above -- so a prefix the XML document wrote goes
+    // in a side table for `tagName` / `prefix` to read back. The HTML parser
+    // never sets one: its foreign-attribute table gives prefixes to attributes,
+    // not to tag names.
+    if (qname.prefix.unwrap()) |prefix| {
+        if (prefix.len > 0) {
+            const duped = try frame.dupeString(prefix.slice());
+            try frame._element_prefixes.put(frame.arena, node.as(Element), duped);
+        }
+    }
 
     const pn = try self.arena.create(ParsedNode);
     pn.* = .{

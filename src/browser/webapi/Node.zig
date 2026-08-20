@@ -477,9 +477,10 @@ pub fn setTextContent(self: *Node, data: []const u8, frame: *Frame) !void {
     }
 }
 
-pub fn getNodeName(self: *const Node, buf: []u8) []const u8 {
+// `frame` is optional: see `Element.getTagNameSpec`, the only arm that reads it.
+pub fn getNodeName(self: *const Node, frame: ?*const Frame, buf: []u8) []const u8 {
     return switch (self._type) {
-        .element => |el| el.getTagNameSpec(buf),
+        .element => |el| el.getTagNameSpec(frame, buf),
         .cdata => |cd| switch (cd._type) {
             .text => "#text",
             .cdata_section => "#cdata-section",
@@ -1397,6 +1398,30 @@ pub fn getElementsByTagName(self: *Node, tag_name: []const u8, frame: *Frame) !G
         };
     }
 
+    const arena = frame.arena;
+
+    // The name is compared to the element's qualified name, and only an HTML
+    // document folds ASCII case while doing it. So in an XML document neither
+    // the lowercasing below nor the known-tag fast path applies: an XHTML `<p>`
+    // must miss `P`, and `<s:clipPath/>` must miss `clipPath` (probe
+    // expr-g2-p67.js). A document node owns itself.
+    const document = self.ownerDocument(frame) orelse self.as(Document);
+    if (document._type != .html) {
+        // The halves have to be slices of the arena copy, not of the `String`:
+        // a String of 12 bytes or fewer keeps its bytes inline, so `str()` on a
+        // local one points into that local.
+        const written = try arena.dupe(u8, tag_name);
+        const colon = std.mem.indexOfScalar(u8, written, ':');
+        return .{ .tag_name = collections.NodeLive(.tag_name).init(self, .{
+            .name = try String.init(arena, written, .{}),
+            .qualified = .{
+                .prefix = if (colon) |pos| written[0..pos] else null,
+                .local = if (colon) |pos| written[pos + 1 ..] else written,
+                .frame = frame,
+            },
+        }, frame) };
+    }
+
     const lower = std.ascii.lowerString(&frame.buf, tag_name);
     if (Node.Element.Tag.parseForMatch(lower)) |known| {
         // optimized for known tag names, comparis
@@ -1405,9 +1430,8 @@ pub fn getElementsByTagName(self: *Node, tag_name: []const u8, frame: *Frame) !G
         };
     }
 
-    const arena = frame.arena;
     const filter = try String.init(arena, tag_name, .{});
-    return .{ .tag_name = collections.NodeLive(.tag_name).init(self, filter, frame) };
+    return .{ .tag_name = collections.NodeLive(.tag_name).init(self, .{ .name = filter }, frame) };
 }
 
 // Not exposed in the WebAPI, but used by both Element and Document
@@ -1688,7 +1712,7 @@ pub const JsApi = struct {
 
     pub const nodeName = bridge.accessor(struct {
         fn wrap(self: *const Node, frame: *Frame) []const u8 {
-            return self.getNodeName(&frame.buf);
+            return self.getNodeName(frame, &frame.buf);
         }
     }.wrap, null, .{});
     pub const nodeType = bridge.accessor(Node.getNodeType, null, .{});

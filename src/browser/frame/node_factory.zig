@@ -1061,7 +1061,7 @@ fn createHtmlElementT(frame: *Frame, comptime E: type, namespace: Element.Namesp
     const node = element.asNode();
     if (@hasDecl(E, "Build") and @hasDecl(E.Build, "created")) {
         @call(.auto, @field(E.Build, "created"), .{ node, frame }) catch |err| {
-            log.err(.frame, "build.created", .{ .tag = node.getNodeName(&frame.buf), .err = err, .type = frame._type, .url = frame.url });
+            log.err(.frame, "build.created", .{ .tag = node.getNodeName(frame, &frame.buf), .err = err, .type = frame._type, .url = frame.url });
             return err;
         };
     }
@@ -1105,7 +1105,23 @@ fn populateElementAttributes(frame: *Frame, element: *Element, list: anytype) !v
     var attributes = &element._attributes;
     try attributes.ensureTotalCapacity(count, frame);
     while (list.next()) |attr| {
-        try attributes.putNew(attr.name.local.slice(), attr.value.slice(), element, frame);
+        // A prefixed attribute keeps the qualified name it was written with:
+        // `xmlns:s` stays `xmlns:s`, and an `xlink:href` on a foreign element
+        // stays `xlink:href`, both of which is what Chrome reads back. The
+        // parser only ever hands us a prefix for the namespaced attributes it
+        // recognises, so the plain HTML path never takes this branch.
+        //
+        // A plain `xmlns` arrives with an *empty* prefix rather than none
+        // (html5ever's foreign-attribute table spells it `qualname!("" xmlns
+        // "xmlns")`, whose three-token arm wraps the prefix in `Some`), so an
+        // empty prefix has to read as no prefix or the name comes out `:xmlns`.
+        const name = blk: {
+            const local = attr.name.local.slice();
+            const prefix = attr.name.prefix.unwrap() orelse break :blk local;
+            if (prefix.len == 0) break :blk local;
+            break :blk try std.fmt.allocPrint(frame.arena, "{s}:{s}", .{ prefix.slice(), local });
+        };
+        try attributes.putNew(name, attr.value.slice(), element, frame);
     }
 }
 
