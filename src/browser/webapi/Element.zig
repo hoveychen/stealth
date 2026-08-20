@@ -803,7 +803,7 @@ pub fn getAttributeNS(
     return self.getAttribute(local_name, frame);
 }
 
-fn prefixedAttributeName(namespace: []const u8, local_name: []const u8, frame: *Frame) !?[]const u8 {
+pub fn prefixedAttributeName(namespace: []const u8, local_name: []const u8, frame: *Frame) !?[]const u8 {
     const prefix = blk: {
         if (std.mem.eql(u8, namespace, "http://www.w3.org/1999/xlink")) {
             break :blk "xlink";
@@ -2809,7 +2809,18 @@ pub const JsApi = struct {
     fn _getAttributeNodeNS(self: *Element, _: ?[]const u8, local_name: String, frame: *Frame) !?*Attribute {
         return self.getAttributeNode(local_name, frame);
     }
-    fn _removeAttributeNS(self: *Element, _: ?[]const u8, local_name: String, frame: *Frame) !void {
+    // Attributes are keyed by qualified name here, so a namespaced one has to
+    // be reached through the same fixed-prefix mapping getAttributeNS uses --
+    // dropping the namespace and removing the bare local name leaves an
+    // `xlink:href` in place, which is observable through SVG's targetElement.
+    fn _removeAttributeNS(self: *Element, namespace_: ?[]const u8, local_name: String, frame: *Frame) !void {
+        if (namespace_) |namespace| {
+            if (try Element.prefixedAttributeName(namespace, local_name.str(), frame)) |prefixed| {
+                if (self.hasAttributeSafe(.wrap(prefixed))) {
+                    return self.removeAttribute(.wrap(prefixed), frame);
+                }
+            }
+        }
         return self.removeAttribute(local_name, frame);
     }
     // getHTML's options dictionary actually selects which shadow roots are
@@ -3068,12 +3079,10 @@ test "Element: div chain slot size" {
     // Guard against accidental growth: new Element fields (e.g. _flags) must
     // fit in existing padding. Debug is larger from the _proto_canary fields.
     //
-    // MERGE NOTE: these two numbers come from upstream, measured on an Element
-    // without our `_plain_tag_name: String`. That field is a deliberate 16-byte
-    // cost (a `.plain` element has no subtype to keep its tag name on, see
-    // Element.Type.plain), so the expected values have to be re-measured once
-    // the tree builds -- the failure prints the actual slot size.
+    // 16 bytes above upstream's own figure, which is the deliberate cost of
+    // `_plain_tag_name: String`: a `.plain` element has no subtype to keep its
+    // tag name on (see Element.Type.plain), so Element carries it.
     const Div = @import("element/html/Div.zig");
     const slot = comptime Factory.chainOffsetOf(Div, Div) + @sizeOf(Div);
-    try testing.expectEqual(if (comptime lp.IS_DEBUG) 120 else 74, slot);
+    try testing.expectEqual(if (comptime lp.IS_DEBUG) 136 else 90, slot);
 }

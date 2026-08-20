@@ -79,6 +79,12 @@ const OptionsOrBaseUrl = union(enum) {
     };
 };
 
+fn throwTypeError(message: []const u8, exec: *const Execution) anyerror {
+    const isolate = exec.js.isolate;
+    _ = isolate.throwException(isolate.createTypeError(message));
+    return error.JsException;
+}
+
 pub fn init(input: ?Input, arg2: ?OptionsOrBaseUrl, arg3: ?OptionsOrBaseUrl.Options, exec: *const Execution) !*URLPattern {
     var base_url: ?[]const u8 = null;
     var options: OptionsOrBaseUrl.Options = .{};
@@ -110,7 +116,13 @@ pub fn init(input: ?Input, arg2: ?OptionsOrBaseUrl, arg3: ?OptionsOrBaseUrl.Opti
         .string => |str| {
             pattern_init = try parseConstructorString(env, str);
             if (base_url == null and pattern_init.protocol == null) {
-                return error.TypeError;
+                // Chrome's exact wording, measured -- a bare TypeError arrives
+                // in JS with an empty message.
+                return throwTypeError(try std.fmt.allocPrint(
+                    exec.local_arena,
+                    "Failed to construct 'URLPattern': Relative constructor string '{s}' must have a base URL passed as the second argument.",
+                    .{str},
+                ), exec);
             }
             pattern_init.baseURL = base_url;
         },
@@ -275,21 +287,27 @@ pub fn generate(self: *const URLPattern, name: ComponentName, groups_: ?js.Objec
     return self.getComponent(name).generate(env, &groups);
 }
 
+// Same reason as Result: Chrome reads back groups before input.
 const ComponentResult = struct {
-    input: []const u8,
     groups: js.Object,
+    input: []const u8,
 };
 
+// Field order is the JS object's own-property order, and Chrome's is not the
+// spec's declaration order: measured on HeadlessChrome/151,
+// Object.keys(new URLPattern({pathname:'/books/:id'}).exec('https://x.com/books/7'))
+// is hash, hostname, inputs, password, pathname, port, protocol, search,
+// username -- alphabetical -- and each component reads groups before input.
 pub const Result = struct {
-    inputs: js.Value,
-    protocol: ComponentResult,
-    username: ComponentResult,
-    password: ComponentResult,
-    hostname: ComponentResult,
-    port: ComponentResult,
-    pathname: ComponentResult,
-    search: ComponentResult,
     hash: ComponentResult,
+    hostname: ComponentResult,
+    inputs: js.Value,
+    password: ComponentResult,
+    pathname: ComponentResult,
+    port: ComponentResult,
+    protocol: ComponentResult,
+    search: ComponentResult,
+    username: ComponentResult,
 };
 
 fn match(self: *const URLPattern, input: ?Input, base_url: ?[]const u8, exec: *const Execution) !?Result {
@@ -1936,13 +1954,22 @@ pub const JsApi = struct {
     pub const search = bridge.accessor(URLPattern.getSearch, null, .{});
     pub const hash = bridge.accessor(URLPattern.getHash, null, .{});
     pub const hasRegExpGroups = bridge.accessor(URLPattern.getHasRegExpGroups, null, .{});
-    pub const @"test" = bridge.function(URLPattern.testFn, .{});
+    // Measured on HeadlessChrome/151, the version this build claims:
+    // Object.getOwnPropertyNames(URLPattern.prototype) ends
+    // "...hasRegExpGroups, exec, test, constructor" -- `exec` before `test` --
+    // and Object.getOwnPropertyNames(URLPattern) is only length/name/prototype.
+    // So neither `generate` nor the static `compareComponent` is exposed here:
+    // both are Chromium-tentative APIs that this Chrome does not carry, and a
+    // member Chrome lacks is as much of a tell as a missing one. The
+    // implementations stay below, ready for the build that ships them.
     pub const exec = bridge.function(URLPattern.execFn, .{});
-    pub const compareComponent = bridge.function(URLPattern.compareComponent, .{ .static = true });
-    pub const generate = bridge.function(URLPattern.generate, .{});
+    pub const @"test" = bridge.function(URLPattern.testFn, .{});
 };
 
 const testing = @import("../../testing.zig");
 test "WebApi: URLPattern" {
     try testing.htmlRunner("urlpattern.html", .{});
+    // This fork had its own, smaller implementation until upstream shipped
+    // this one; its test file stays, pointed here.
+    try testing.htmlRunner("url_pattern.html", .{});
 }

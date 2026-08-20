@@ -39,7 +39,11 @@ const Crypto = @import("Crypto.zig");
 const Console = @import("Console.zig");
 const Navigator = @import("Navigator.zig");
 const Timers = @import("Timers.zig");
-const Scheduler = @import("Scheduler.zig");
+// This fork keeps Scheduler, TaskSignal, TaskController and
+// TaskPriorityChangeEvent in one module; `Scheduler.zig` and `scheduler.zig`
+// are the same file on a case-insensitive filesystem, and importing it under
+// two spellings makes two distinct types, only one of which is registered.
+const scheduler = @import("scheduler.zig");
 const EventTarget = @import("EventTarget.zig");
 const Performance = @import("Performance.zig");
 const WorkerLocation = @import("WorkerLocation.zig");
@@ -117,7 +121,7 @@ _cookie_store: ?*CookieStore = null,
 _location: WorkerLocation,
 
 _timers: Timers = .{},
-_scheduler: Scheduler = .{},
+_scheduler: scheduler.Scheduler = .init,
 
 pub const Type = union(enum) {
     shared: *SharedWorkerGlobalScope,
@@ -328,7 +332,7 @@ pub fn getNavigator(self: *WorkerGlobalScope) *Navigator {
     return &self._navigator;
 }
 
-pub fn getScheduler(self: *WorkerGlobalScope) *Scheduler {
+pub fn getScheduler(self: *WorkerGlobalScope) *scheduler.Scheduler {
     return &self._scheduler;
 }
 

@@ -22,7 +22,6 @@ const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
 
 const Event = @import("Event.zig");
-const Scheduler = @import("Scheduler.zig");
 const EventTarget = @import("EventTarget.zig");
 const DOMException = @import("DOMException.zig");
 const ModelContextTool = @import("ModelContext.zig").Tool;
@@ -46,9 +45,6 @@ const TIMED_OUT = "signal timed out";
 const Dependend = union(enum) {
     signal: *AbortSignal,
     model_context_tool: *ModelContextTool,
-    // Handled by the owning signal's markAborted (which runs for dependent
-    // signals too, unlike this union's markAborted).
-    scheduler_task: *Scheduler.Task,
 
     // Returns false if the dependent was already aborted, in which case no
     // abort event must be dispatched for it.
@@ -63,14 +59,13 @@ const Dependend = union(enum) {
                 try dep.markAborted(exec);
                 return true;
             },
-            .scheduler_task => return false,
         }
     }
 
     fn dispatchAbortEvent(self: Dependend, exec: *const Execution) !void {
         switch (self) {
             .signal => |dep| try dep.dispatchAbortEvent(exec),
-            .model_context_tool, .scheduler_task => {},
+            .model_context_tool => {},
         }
     }
 };
@@ -89,7 +84,7 @@ _source_signals: std.ArrayList(*AbortSignal) = .empty,
 
 pub const Type = union(enum) {
     generic: void,
-    task_signal: *@import("TaskSignal.zig"),
+    task_signal: *@import("scheduler.zig").TaskSignal,
 };
 
 pub fn init(exec: *const Execution) !*AbortSignal {
@@ -157,7 +152,6 @@ fn markAborted(self: *AbortSignal, reason_: ?Reason, exec: *const Execution) !vo
     // task registered on an any() signal still gets rejected.
     for (self._dependents.items) |dep| {
         switch (dep) {
-            .scheduler_task => |task| task.onAbort(self._reason, exec),
             else => {},
         }
     }

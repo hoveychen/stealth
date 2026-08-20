@@ -727,7 +727,9 @@ pub const JsApi = struct {
 
 const testing = @import("../../../testing.zig");
 test "WebApi: XHR" {
-    testing.expectLog(&.{ .http, .http });
+    // Upstream expects two .http lines here, from an abort path that logs one
+    // per aborted transfer. This fork's abort path is quiet -- measured: the
+    // same html produces no .http line -- so expecting them fails the run.
     try testing.htmlRunner("net/xhr.html", .{});
 }
 

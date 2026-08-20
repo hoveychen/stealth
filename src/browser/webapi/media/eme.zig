@@ -940,11 +940,17 @@ fn readEventType(comptime interface: []const u8, type_: ?js.Value, exec: *const 
 }
 
 fn buildEvent(child: anytype, typ: []const u8, options_: ?js.Value, exec: *const Execution) !*@TypeOf(child) {
-    const T = @TypeOf(child);
-    const options = try Event.optionsFromJs(options_);
-    const arena = try exec.getArena(.tiny, T.JsApi.Meta.name);
+    const arena = try exec.getArena(.tiny, @TypeOf(child).JsApi.Meta.name);
     errdefer arena.release();
+    return buildEventIn(arena, child, typ, options_, exec);
+}
 
+// Same, for a caller that had to acquire the arena first because a member of
+// `child` is allocated from it. The event takes the arena over, so the string
+// lives exactly as long as the event does -- releasing it before handing it to
+// the factory leaves the member dangling.
+fn buildEventIn(arena: *lp.Arena, child: anytype, typ: []const u8, options_: ?js.Value, exec: *const Execution) !*@TypeOf(child) {
+    const options = try Event.optionsFromJs(options_);
     const event = try exec._factory.event(arena, try String.init(arena.allocator(), typ, .{}), child);
     Event.populatePrototypes(event, options, false);
     return event;
@@ -1050,22 +1056,26 @@ pub const MediaEncryptedEvent = struct {
         const typ = try readEventType("MediaEncryptedEvent", type_, exec);
         const init = try Init.read(options_, exec);
 
+        // The arena that will own the event, acquired up front: initDataType is
+        // a free-form DOMString, so it has to be allocated from the event's own
+        // arena rather than from one released before the event is built.
         const arena = try exec.getArena(.tiny, "MediaEncryptedEvent");
+        errdefer arena.release();
         const init_data_type = try init.string("initDataType", "", arena.allocator());
 
         var init_data: ?js.Value.Global = null;
         if (try init.present("initData")) |member| {
             if (!member.isNull()) {
                 if (!member.isArrayBuffer()) {
-                    arena.release();
+                    // The errdefer above releases the arena; releasing here too
+                    // would return it to the pool twice.
                     return Init.convertFailed("initData", "ArrayBuffer", exec);
                 }
                 init_data = try member.persist();
             }
         }
-        arena.release();
 
-        return buildEvent(MediaEncryptedEvent{
+        return buildEventIn(arena, MediaEncryptedEvent{
             ._proto = undefined,
             ._init_data_type = init_data_type,
             ._init_data = init_data,

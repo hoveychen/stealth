@@ -240,24 +240,9 @@
   }
 </script>
 
-<script id=tentative>
-  // Chromium-only tentative APIs (WPT urlpattern-{compare,generate}.tentative).
-  const cmp = (l, r) => URLPattern.compareComponent('pathname', new URLPattern(l), new URLPattern(r));
-  testing.expectEqual(-1, cmp({ pathname: '/foo/a' }, { pathname: '/foo/b' }));
-  testing.expectEqual(1, cmp({ pathname: '/foo/bar' }, { pathname: '/foo/:bar' }));
-  testing.expectEqual(1, cmp({ pathname: '/foo/:bar' }, { pathname: '/foo/*' }));
-  testing.expectEqual(1, cmp({ pathname: '/foo/{bar}+' }, { pathname: '/foo/{bar}?' }));
-  testing.expectEqual(1, cmp({ pathname: '*/foo' }, { pathname: '*' }));
-  testing.expectEqual(0, cmp({ pathname: '/foo/:b' }, { pathname: '/foo/:a' }));
-  testing.expectEqual(1, URLPattern.compareComponent('port', new URLPattern({ port: '9' }), new URLPattern({ port: '100' })));
-  testing.expectError('TypeError', () => URLPattern.compareComponent('nope', new URLPattern(), new URLPattern()));
-
-  testing.expectEqual('/foo/baz', new URLPattern({ pathname: '/foo/:bar' }).generate('pathname', { bar: 'baz' }));
-  testing.expectEqual('/%20', new URLPattern('https://example.com/:foo').generate('pathname', { foo: ' ' }));
-  testing.expectEqual('/ ', new URLPattern('original-scheme://example.com/:foo').generate('pathname', { foo: ' ' }));
-  testing.expectEqual('xn--fi8h.example.com', new URLPattern({ hostname: '{:foo}.example.com' }).generate('hostname', { foo: '🍅' }));
-  testing.expectError('TypeError', () => new URLPattern({ pathname: '/:foo' }).generate('pathname', {}));
-  testing.expectError('TypeError', () => new URLPattern({ pathname: '/:foo' }).generate('pathname', { foo: 'bar/baz' }));
-  testing.expectError('TypeError', () => new URLPattern({ pathname: '/*' }).generate('pathname', {}));
-  testing.expectError('TypeError', () => new URLPattern({ pathname: '/foo' }).generate('invalid', {}));
-</script>
+<!-- Upstream also covered the Chromium-tentative `URLPattern.compare` and
+     `URLPattern.prototype.generate` in a `tentative` block here. Measured on
+     HeadlessChrome/151: neither exists (URLPattern's own properties are
+     length/name/prototype only, and typeof generate is "undefined"), so this
+     fork does not expose them and the block has nothing left to assert. The
+     implementations are still in URLPattern.zig. -->

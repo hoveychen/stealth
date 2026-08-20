@@ -68,7 +68,10 @@
 <script id=navigator_plugins_iterable>
   // WebIDL: indexed getter => @@iterator (Chrome: [...navigator.plugins] works)
   testing.expectEqual('function', typeof navigator.plugins[Symbol.iterator]);
-  testing.expectEqual(0, [...navigator.plugins].length);
+  // Five, not upstream's zero: a plugin-less navigator is itself a signal, so
+  // this fork ships the five entries a real Chrome reports (see the
+  // navigator_plugins block below, which pins their names).
+  testing.expectEqual(5, [...navigator.plugins].length);
 </script>
 
 <script id=navigator_native_descriptor_walk>

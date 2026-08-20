@@ -25,6 +25,19 @@ zig fmt --check ./*.zig ./**/*.zig    # Exact command CI runs
 
 `zig build` depends on the fmt step, so a local build catches drift too.
 
+## Flags that break the disguise
+
+Two upstream features announce the client as a bot. Both are off unless asked
+for, and both should stay off for any run whose point is to look like a browser:
+
+- `--obey-robots` fetches `/robots.txt` and honours it. Real Chrome never
+  requests that file, so the request itself is the tell — and with this fork's
+  Chrome user-agent the matcher reads the product token as `Mozilla`, which
+  matches no real robots.txt group anyway.
+- `--web-bot-auth-key-file` / `--web-bot-auth-keyid` / `--web-bot-auth-domain`
+  (all three required) add `Signature-Agent`, `Signature-Input` and `Signature`
+  headers: an Ed25519-signed, cryptographically attested "I am a bot".
+
 ## Conventions
 
 Mirror the patterns in neighboring files. In particular:

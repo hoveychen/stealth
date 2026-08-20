@@ -30,6 +30,7 @@ const CSS = @import("CSS.zig");
 const Navigator = @import("Navigator.zig");
 const ModelContext = @import("ModelContext.zig");
 const Screen = @import("Screen.zig");
+const scheduler = @import("scheduler.zig");
 const BarProp = @import("BarProp.zig");
 const External = @import("External.zig");
 const StyleMedia = @import("StyleMedia.zig");
@@ -66,7 +67,6 @@ const HighlightRegistry = @import("css/highlights.zig").HighlightRegistry;
 const CustomElementRegistry = @import("CustomElementRegistry.zig");
 const Selection = @import("Selection.zig");
 const Timers = @import("Timers.zig");
-const Scheduler = @import("Scheduler.zig");
 const Notification = @import("../../Notification.zig");
 
 const log = lp.log;
@@ -143,7 +143,7 @@ _reporting_error: bool = false,
 _current_event: ?*Event = null,
 _location: *Location,
 _timers: Timers = .{},
-_scheduler: Scheduler = .{},
+_scheduler: scheduler.Scheduler = .init,
 _custom_elements: CustomElementRegistry = .{},
 _scroll_pos: struct {
     x: u32,
@@ -340,7 +340,7 @@ pub fn getNavigator(self: *Window) *Navigator {
     return &self._navigator;
 }
 
-pub fn getScheduler(self: *Window) *Scheduler {
+pub fn getScheduler(self: *Window) *scheduler.Scheduler {
     return &self._scheduler;
 }
 

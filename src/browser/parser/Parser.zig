@@ -517,21 +517,17 @@ fn _createElementCallbackWithDefaultnamespace(ctx: *anyopaque, data: *anyopaque,
 }
 fn _createElementCallback(self: *Parser, data: *anyopaque, qname: h5e.QualName, attributes: h5e.AttributeIterator, default_namespace: Element.Namespace) !*anyopaque {
     const frame = self.frame;
+    // The LOCAL name, not the qualified one: it is what picks the element's
+    // type out of the factory's dispatch table below, so `<s:clipPath>` has to
+    // arrive as `clipPath` or it resolves to an unknown element. The prefix the
+    // document wrote is filed separately, further down, for `tagName` and
+    // `prefix` to read back -- upstream instead passes the qualified name and
+    // keeps no side table, which both loses the type and, with the table still
+    // in place, would compose the prefix twice (`s:s:clipPath`).
     const local = qname.local.slice();
-    // Elements are keyed by qualified name (prefix/localName split on ':'),
-    // like createElementNS. html5ever never sets a prefix; xml5ever does.
-    const name = if (qname.prefix.unwrap()) |prefix| blk: {
-        if (prefix.len == 0) break :blk local;
-        break :blk try std.fmt.allocPrint(frame.local_arena, "{s}:{s}", .{ prefix.slice(), local });
-    } else local;
     const namespace_string = qname.ns.slice();
     const namespace = if (namespace_string.len == 0) default_namespace else Element.Namespace.parse(namespace_string);
-    const node = try Frame.node_factory.createElementNS(frame, namespace, name, attributes);
-    if (namespace == .unknown and namespace_string.len > 0) {
-        // Same as Document.createElementNS: keep the URI so namespaceURI and
-        // lookupNamespaceURI can return it.
-        try frame._element_namespace_uris.put(frame.arena, node.as(Element), try frame.dupeString(namespace_string));
-    }
+    const node = try Frame.node_factory.createElementNS(frame, namespace, local, attributes);
 
     // `Namespace` has no room for a uri it does not know, so a declared one has
     // to go in the frame lookup that `Element.getNamespaceUri` falls back to --
