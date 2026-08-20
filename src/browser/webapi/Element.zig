@@ -105,8 +105,10 @@ pub const Namespace = enum(u8) {
         if (namespace.len == 0) {
             return .null;
         }
-        if (namespace.len == "http://www.w3.org/1999/xhtml".len) {
-            // Common case, avoid the string comparison. Recklessly
+        if (std.mem.eql(u8, namespace, "http://www.w3.org/1999/xhtml")) {
+            // Common case. The comparison cannot be skipped on length alone:
+            // an XML document can declare any uri at all, and a 28-character
+            // one is not the XHTML namespace just because it is 28 characters.
             @branchHint(.likely);
             return .html;
         }

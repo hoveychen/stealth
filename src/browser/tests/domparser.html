@@ -513,6 +513,110 @@
 }
 </script>
 
+<script id=namespaceURI-xml>
+{
+  // An XML element sits in whatever namespace is declared over it, and in none
+  // at all when nothing declares one. Chrome 151 readings, probes expr-g5.js /
+  // expr-g5b.js.
+  //
+  // The declaration attribute the readings also show -- `xmlns` staying in
+  // `attributes` -- is checked separately, in `xmlnsAttribute-xml`.
+  const parser = new DOMParser();
+  const XHTML = 'http://www.w3.org/1999/xhtml';
+  const SVG = 'http://www.w3.org/2000/svg';
+
+  {
+    // Nothing declared: the null namespace, not the XML one.
+    const doc = parser.parseFromString('<root><kid/></root>', 'text/xml');
+    const root = doc.documentElement;
+    testing.expectEqual(null, root.namespaceURI);
+    testing.expectEqual(null, root.firstElementChild.namespaceURI);
+  }
+
+  {
+    // A default declaration reaches the element that carries it and its
+    // descendants.
+    const doc = parser.parseFromString('<root xmlns="urn:x"><kid/></root>', 'text/xml');
+    const root = doc.documentElement;
+    testing.expectEqual('urn:x', root.namespaceURI);
+    testing.expectEqual('urn:x', root.firstElementChild.namespaceURI);
+    testing.expectEqual('urn:x', root.lookupNamespaceURI(null));
+  }
+
+  {
+    // An inner declaration wins over the outer one for its own subtree.
+    const doc = parser.parseFromString(
+      '<root xmlns="urn:x"><kid xmlns="urn:y"><g/></kid></root>', 'text/xml');
+    const kid = doc.documentElement.firstElementChild;
+    testing.expectEqual('urn:x', doc.documentElement.namespaceURI);
+    testing.expectEqual('urn:y', kid.namespaceURI);
+    testing.expectEqual('urn:y', kid.firstElementChild.namespaceURI);
+  }
+
+  {
+    // `xmlns=""` puts the subtree back in the null namespace.
+    const doc = parser.parseFromString(
+      '<root xmlns="urn:x"><kid xmlns=""/></root>', 'text/xml');
+    const kid = doc.documentElement.firstElementChild;
+    testing.expectEqual('urn:x', doc.documentElement.namespaceURI);
+    testing.expectEqual(null, kid.namespaceURI);
+  }
+
+  {
+    // A prefix declaration does not move the element that carries it: `<root>`
+    // stays in the null namespace and only `s:`-prefixed elements follow it.
+    const doc = parser.parseFromString(
+      '<root xmlns:s="' + SVG + '"><s:g/><plain/></root>', 'text/xml');
+    const root = doc.documentElement;
+    testing.expectEqual(null, root.namespaceURI);
+    testing.expectEqual(SVG, root.children[0].namespaceURI);
+    testing.expectEqual('g', root.children[0].localName);
+    testing.expectEqual(null, root.children[1].namespaceURI);
+  }
+
+  {
+    // The two mimes whose namespace the document flavour would otherwise
+    // suggest: it is the declaration that puts them there.
+    const doc = parser.parseFromString(
+      '<html xmlns="' + XHTML + '"><body><p>x</p></body></html>', 'application/xhtml+xml');
+    testing.expectEqual(XHTML, doc.documentElement.namespaceURI);
+    testing.expectEqual(XHTML, doc.querySelector('p').namespaceURI);
+  }
+
+  {
+    const doc = parser.parseFromString(
+      '<svg xmlns="' + SVG + '"><clipPath/></svg>', 'image/svg+xml');
+    testing.expectEqual(SVG, doc.documentElement.namespaceURI);
+    testing.expectEqual(SVG, doc.documentElement.firstElementChild.namespaceURI);
+  }
+
+  {
+    // No parse step: createDocument puts the root in the namespace it is given.
+    const withNs = document.implementation.createDocument('urn:x', 'Root');
+    testing.expectEqual('urn:x', withNs.documentElement.namespaceURI);
+
+    const withoutNs = document.implementation.createDocument(null, 'Root');
+    testing.expectEqual(null, withoutNs.documentElement.namespaceURI);
+  }
+
+  {
+    // A uri exactly as long as the XHTML namespace is not the XHTML namespace:
+    // 28 characters is a coincidence, not a match. Chrome 151 readings, probe
+    // expr-g5b.js.
+    const U28 = 'urn:aaaaaaaaaaaaaaaaaaaaaaaa';
+    testing.expectEqual(28, U28.length);
+    testing.expectEqual(28, 'http://www.w3.org/1999/xhtml'.length);
+
+    const root = parser.parseFromString(
+      '<root xmlns="' + U28 + '"><kid/></root>', 'text/xml').documentElement;
+    testing.expectEqual(U28, root.namespaceURI);
+    testing.expectEqual(U28, root.firstElementChild.namespaceURI);
+    testing.expectEqual('root', root.tagName);
+    testing.expectEqual(U28, document.createElementNS(U28, 'thing').namespaceURI);
+  }
+}
+</script>
+
 <script id=attributeNameCase-xml>
 {
   // An attribute name goes the same way as a type selector, and the rule again
