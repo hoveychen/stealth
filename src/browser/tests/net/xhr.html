@@ -712,3 +712,22 @@
     });
   }
 </script>
+
+<script id=xhr_zstd_response type=module>
+  {
+    // We advertise zstd in Accept-Encoding because Chrome does; this proves the
+    // other half, that a server taking us up on it hands back something
+    // readable. The body is a zstd frame; curl decodes it (libzstd is linked
+    // in build.zig for exactly this) and the page sees plain text.
+    const state = await testing.async();
+    const req = new XMLHttpRequest();
+    req.onload = () => state.resolve();
+    req.open('GET', 'http://127.0.0.1:9582/zstd');
+    req.send();
+
+    await state.done(() => {
+      testing.expectEqual(200, req.status);
+      testing.expectEqual('zstd works', req.responseText);
+    });
+  }
+</script>

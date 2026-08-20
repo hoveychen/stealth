@@ -499,11 +499,41 @@ const SendEventOpts = struct {
     session_id: ?[]const u8 = null,
 };
 pub fn sendEvent(self: *CDP, method: []const u8, p: anytype, opts: SendEventOpts) !void {
-    return self.sendJSON(.{
+    const params = if (comptime @typeInfo(@TypeOf(p)) == .null) struct {}{} else p;
+    try self.sendJSON(.{
         .method = method,
-        .params = if (comptime @typeInfo(@TypeOf(p)) == .null) struct {}{} else p,
+        .params = params,
         .sessionId = opts.session_id,
     });
+
+    // Chrome delivers a target's events to *every* session attached to it, and
+    // a driver that receives the auto-attach announcement and then attaches
+    // explicitly (Playwright) holds an auxiliary session rather than the
+    // primary one. Every event site addresses the primary session
+    // (`bc.session_id`), so without this fan-out that driver's Page.navigate
+    // sits until timeout: measured against a real `serve` -- frameNavigated,
+    // domContentEventFired, loadEventFired and frameStoppedLoading all arrived
+    // on the primary id and none on the driver's.
+    //
+    // Only events addressed to the primary session fan out: an event already
+    // aimed at one session (Target.attachedToTarget routes through its parent)
+    // must not be duplicated. One divergence from Chrome stands: it filters by
+    // the domains each session enabled, and this engine's enables are
+    // per-context, so an auxiliary session can see an event for a domain it
+    // never enabled.
+    const session_id = opts.session_id orelse return;
+    const browser_context = &(self.browser_context orelse return);
+    const primary = browser_context.session_id orelse return;
+    if (std.mem.eql(u8, session_id, primary) == false) {
+        return;
+    }
+    for (browser_context.attached_sessions.items) |session| {
+        try self.sendJSON(.{
+            .method = method,
+            .params = params,
+            .sessionId = session.id,
+        });
+    }
 }
 
 pub const BrowserContext = struct {

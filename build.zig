@@ -446,6 +446,9 @@ fn linkCurl(b: *Build, mod: *Build.Module, is_tsan: bool) void {
     const brotli = buildBrotli(b, target, mod.optimize.?, is_tsan);
     for (brotli) |lib| curl.root_module.linkLibrary(lib);
 
+    const zstd = buildZstd(b, target, mod.optimize.?, is_tsan);
+    curl.root_module.linkLibrary(zstd);
+
     const nghttp2 = buildNghttp2(b, target, mod.optimize.?, is_tsan);
     curl.root_module.linkLibrary(nghttp2);
 
@@ -535,6 +538,44 @@ fn buildBrotli(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.Op
     });
 
     return .{ brotlicmn, brotlidec, brotlienc };
+}
+
+// Decoder only: curl's content_encoding.c calls ZSTD_createDStream /
+// ZSTD_decompressStream / ZSTD_freeDStream and nothing from the compressor.
+// Chrome advertises zstd in Accept-Encoding on every request, so a client that
+// wants to look like Chrome has to be able to decode what a server sends back.
+fn buildZstd(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, is_tsan: bool) *Build.Step.Compile {
+    const dep = b.dependency("zstd", .{});
+
+    const mod = cLibModule(b, target, optimize, is_tsan);
+    mod.addIncludePath(dep.path("lib"));
+    mod.addIncludePath(dep.path("lib/common"));
+
+    const zstd = b.addLibrary(.{ .name = "zstd", .root_module = mod });
+    zstd.installHeader(dep.path("lib/zstd.h"), "zstd.h");
+    zstd.installHeader(dep.path("lib/zstd_errors.h"), "zstd_errors.h");
+
+    mod.addCSourceFiles(.{
+        .root = dep.path("lib/common"),
+        .files = &.{
+            "debug.c",          "entropy_common.c", "error_private.c",
+            "fse_decompress.c", "pool.c",           "threading.c",
+            "xxhash.c",         "zstd_common.c",
+        },
+    });
+    mod.addCSourceFiles(.{
+        .root = dep.path("lib/decompress"),
+        .files = &.{
+            "huf_decompress.c",  "zstd_ddict.c",
+            "zstd_decompress.c", "zstd_decompress_block.c",
+        },
+    });
+    // The hand-written amd64 huffman decoder loop. Off rather than assembled:
+    // it is one target's optimisation, and the C fallback is what every other
+    // target uses anyway.
+    mod.addCMacro("ZSTD_DISABLE_ASM", "1");
+
+    return zstd;
 }
 
 fn buildBoringSsl(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) [2]*Build.Step.Compile {
@@ -630,6 +671,7 @@ fn buildCurl(
     const config = .{
         .HAVE_LIBZ = true,
         .HAVE_BROTLI = true,
+        .HAVE_ZSTD = true,
         .USE_NGHTTP2 = true,
 
         .USE_OPENSSL = true,

@@ -1056,6 +1056,25 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    if (std.mem.eql(u8, path, "/zstd")) {
+        // A zstd frame of the string "zstd works", produced with `zstd -19`.
+        // Embedded rather than compressed here because Zig's std has a zstd
+        // decompressor and no compressor -- and the point of the endpoint is to
+        // prove the *client* decodes what it advertises: we send zstd in
+        // Accept-Encoding on every request (Chrome does), so a server taking us
+        // up on it must not produce an unreadable body.
+        const zstd_body = [_]u8{
+            0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x0a, 0x51, 0x00, 0x00, 0x7a, 0x73, 0x74,
+            0x64, 0x20, 0x77, 0x6f, 0x72, 0x6b, 0x73, 0xd2, 0x0a, 0x70, 0xde,
+        };
+        return req.respond(&zstd_body, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/plain; charset=utf-8" },
+                .{ .name = "Content-Encoding", .value = "zstd" },
+            },
+        });
+    }
+
     if (std.mem.eql(u8, path, "/echo_headers")) {
         // Echo every request header back as "name: value" lines, so tests
         // can assert on the headers a request actually sent.
