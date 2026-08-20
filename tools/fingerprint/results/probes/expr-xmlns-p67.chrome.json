@@ -1,0 +1,54 @@
+{
+  "none": [],
+  "declared": [
+    [
+      "xmlns",
+      "urn:x"
+    ]
+  ],
+  "declared_child": [],
+  "empty_decl": [
+    [
+      "xmlns",
+      ""
+    ]
+  ],
+  "prefix_decl": [
+    [
+      "xmlns:s",
+      "http://www.w3.org/2000/svg"
+    ]
+  ],
+  "prefix_lookup": "http://www.w3.org/2000/svg",
+  "order_mid": [
+    [
+      "xmlns",
+      "urn:x"
+    ],
+    [
+      "a",
+      "1"
+    ],
+    [
+      "b",
+      "2"
+    ]
+  ],
+  "order_last": [
+    [
+      "xmlns",
+      "urn:x"
+    ],
+    [
+      "a",
+      "1"
+    ],
+    [
+      "b",
+      "2"
+    ]
+  ],
+  "created": [],
+  "ns_declared": "urn:x",
+  "ns_undeclared": null
+}

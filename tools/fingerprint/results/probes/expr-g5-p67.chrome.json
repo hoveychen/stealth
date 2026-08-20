@@ -1,0 +1,15 @@
+{
+  "parsererror_serialized": "<a><parsererror xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display: block; white-space: pre; border: 2px solid #c77; padding: 0 1em 0 1em; margin: 1em; background-color: #fdd; color: black\"><h3>This page contains the following errors:</h3><div style=\"font-family:monospace;font-size:12px\">error on line 1 at column 3: Couldn't find end of Start Tag a\n</div><h3>Below is a rendering of the page up to the first error.</h3></parsererror></a>",
+  "parsererror_root_name": "a",
+  "parsererror_root_ns": null,
+  "parsererror_attrs": [],
+  "made_serialized": "<Root xmlns=\"urn:x\"/>",
+  "made_attrs": [],
+  "round_serialized": "<parsererror xmlns=\"http://www.mozilla.org/newlayout/xml/parsererror.xml\">error</parsererror>",
+  "round_attrs": [
+    [
+      "xmlns",
+      "http://www.mozilla.org/newlayout/xml/parsererror.xml"
+    ]
+  ]
+}

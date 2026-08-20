@@ -1,0 +1,26 @@
+{
+  "dflt_then_prefix": [
+    "xmlns",
+    "xmlns:s"
+  ],
+  "prefix_then_dflt": [
+    "xmlns:s",
+    "xmlns"
+  ],
+  "two_prefixes": [
+    "xmlns:a",
+    "xmlns:b"
+  ],
+  "three_mixed": [
+    "xmlns:a",
+    "xmlns",
+    "xmlns:b"
+  ],
+  "decls_and_plain": [
+    "xmlns",
+    "xmlns:s",
+    "p",
+    "q",
+    "r"
+  ]
+}

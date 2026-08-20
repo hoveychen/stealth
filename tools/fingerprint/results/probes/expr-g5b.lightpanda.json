@@ -1,0 +1,92 @@
+{
+  "order_middle": [
+    [
+      "xmlns",
+      "urn:x",
+      null
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "b",
+      "2",
+      null
+    ]
+  ],
+  "order_first": [
+    [
+      "xmlns",
+      "urn:x",
+      null
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "b",
+      "2",
+      null
+    ]
+  ],
+  "order_last": [
+    [
+      "xmlns",
+      "urn:x",
+      null
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "b",
+      "2",
+      null
+    ]
+  ],
+  "order_prefixed": [
+    [
+      "xmlns:s",
+      "urn:s",
+      null
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "s:b",
+      "2",
+      null
+    ]
+  ],
+  "both": [
+    [
+      "xmlns",
+      "urn:x",
+      null
+    ],
+    [
+      "xmlns:s",
+      "urn:s",
+      null
+    ]
+  ],
+  "namedItem": "urn:s",
+  "namedItemNS": "TypeError: e.attributes.getNamedItemNS is not a function",
+  "getAttributeNS": null,
+  "hasAttribute": true,
+  "outerHTML": "<root xmlns:s=\"urn:s\"></root>",
+  "prefixedAttr": {
+    "name": "s:b",
+    "ns": null,
+    "local": "s:b"
+  }
+}

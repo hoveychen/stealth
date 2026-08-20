@@ -1,0 +1,221 @@
+{
+  "bare": {
+    "root": {
+      "tagName": "root",
+      "ns": null,
+      "prefix": null,
+      "local": "root",
+      "attrs": []
+    },
+    "kid": {
+      "tagName": "kid",
+      "ns": null,
+      "prefix": null,
+      "local": "kid",
+      "attrs": []
+    }
+  },
+  "defaultNs": {
+    "root": {
+      "tagName": "root",
+      "ns": "urn:x",
+      "prefix": null,
+      "local": "root",
+      "attrs": [
+        {
+          "name": "xmlns",
+          "value": "urn:x",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": null,
+          "local": "xmlns"
+        }
+      ]
+    },
+    "kid": {
+      "tagName": "kid",
+      "ns": "urn:x",
+      "prefix": null,
+      "local": "kid",
+      "attrs": []
+    },
+    "getAttr": "urn:x",
+    "hasAttr": true,
+    "getAttrNS": "urn:x",
+    "lookupDefault": "urn:x",
+    "serialized": "<root xmlns=\"urn:x\"><kid/></root>"
+  },
+  "redeclared": {
+    "root": {
+      "tagName": "root",
+      "ns": "urn:x",
+      "prefix": null,
+      "local": "root",
+      "attrs": [
+        {
+          "name": "xmlns",
+          "value": "urn:x",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": null,
+          "local": "xmlns"
+        }
+      ]
+    },
+    "kid": {
+      "tagName": "kid",
+      "ns": "urn:y",
+      "prefix": null,
+      "local": "kid",
+      "attrs": [
+        {
+          "name": "xmlns",
+          "value": "urn:y",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": null,
+          "local": "xmlns"
+        }
+      ]
+    },
+    "g": {
+      "tagName": "g",
+      "ns": "urn:y",
+      "prefix": null,
+      "local": "g",
+      "attrs": []
+    }
+  },
+  "undeclaredBack": {
+    "root": {
+      "tagName": "root",
+      "ns": "urn:x",
+      "prefix": null,
+      "local": "root",
+      "attrs": [
+        {
+          "name": "xmlns",
+          "value": "urn:x",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": null,
+          "local": "xmlns"
+        }
+      ]
+    },
+    "kid": {
+      "tagName": "kid",
+      "ns": null,
+      "prefix": null,
+      "local": "kid",
+      "attrs": [
+        {
+          "name": "xmlns",
+          "value": "",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": null,
+          "local": "xmlns"
+        }
+      ]
+    }
+  },
+  "prefixed": {
+    "root": {
+      "tagName": "root",
+      "ns": null,
+      "prefix": null,
+      "local": "root",
+      "attrs": [
+        {
+          "name": "xmlns:s",
+          "value": "http://www.w3.org/2000/svg",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": "xmlns",
+          "local": "s"
+        }
+      ]
+    },
+    "g": {
+      "tagName": "s:g",
+      "ns": "http://www.w3.org/2000/svg",
+      "prefix": "s",
+      "local": "g",
+      "attrs": []
+    },
+    "plain": {
+      "tagName": "plain",
+      "ns": null,
+      "prefix": null,
+      "local": "plain",
+      "attrs": []
+    },
+    "lookupS": "http://www.w3.org/2000/svg"
+  },
+  "xhtml": {
+    "root": {
+      "tagName": "html",
+      "ns": "http://www.w3.org/1999/xhtml",
+      "prefix": null,
+      "local": "html",
+      "attrs": [
+        {
+          "name": "xmlns",
+          "value": "http://www.w3.org/1999/xhtml",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": null,
+          "local": "xmlns"
+        }
+      ]
+    },
+    "p": {
+      "tagName": "p",
+      "ns": "http://www.w3.org/1999/xhtml",
+      "prefix": null,
+      "local": "p",
+      "attrs": []
+    }
+  },
+  "svg": {
+    "root": {
+      "tagName": "svg",
+      "ns": "http://www.w3.org/2000/svg",
+      "prefix": null,
+      "local": "svg",
+      "attrs": [
+        {
+          "name": "xmlns",
+          "value": "http://www.w3.org/2000/svg",
+          "ns": "http://www.w3.org/2000/xmlns/",
+          "prefix": null,
+          "local": "xmlns"
+        }
+      ]
+    },
+    "clip": {
+      "tagName": "clipPath",
+      "ns": "http://www.w3.org/2000/svg",
+      "prefix": null,
+      "local": "clipPath",
+      "attrs": []
+    }
+  },
+  "collections": {
+    "declared_null": 0,
+    "declared_urn": 1,
+    "declared_star": 1,
+    "bare_null": 1,
+    "bare_star": 1
+  },
+  "createDocument": {
+    "withNs": {
+      "tagName": "Root",
+      "ns": "urn:x",
+      "prefix": null,
+      "local": "Root",
+      "attrs": []
+    },
+    "withoutNs": {
+      "tagName": "Root",
+      "ns": null,
+      "prefix": null,
+      "local": "Root",
+      "attrs": []
+    }
+  }
+}

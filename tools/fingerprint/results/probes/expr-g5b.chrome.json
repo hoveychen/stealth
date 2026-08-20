@@ -1,0 +1,93 @@
+{
+  "order_middle": [
+    [
+      "xmlns",
+      "urn:x",
+      "http://www.w3.org/2000/xmlns/"
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "b",
+      "2",
+      null
+    ]
+  ],
+  "order_first": [
+    [
+      "xmlns",
+      "urn:x",
+      "http://www.w3.org/2000/xmlns/"
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "b",
+      "2",
+      null
+    ]
+  ],
+  "order_last": [
+    [
+      "xmlns",
+      "urn:x",
+      "http://www.w3.org/2000/xmlns/"
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "b",
+      "2",
+      null
+    ]
+  ],
+  "order_prefixed": [
+    [
+      "xmlns:s",
+      "urn:s",
+      "http://www.w3.org/2000/xmlns/"
+    ],
+    [
+      "a",
+      "1",
+      null
+    ],
+    [
+      "s:b",
+      "2",
+      "urn:s"
+    ]
+  ],
+  "both": [
+    [
+      "xmlns",
+      "urn:x",
+      "http://www.w3.org/2000/xmlns/"
+    ],
+    [
+      "xmlns:s",
+      "urn:s",
+      "http://www.w3.org/2000/xmlns/"
+    ]
+  ],
+  "namedItem": "urn:s",
+  "namedItemNS": "urn:s",
+  "getAttributeNS": "urn:s",
+  "hasAttribute": true,
+  "outerHTML": "<root xmlns:s=\"urn:s\"/>",
+  "prefixedAttr": {
+    "name": "s:b",
+    "ns": "urn:s",
+    "prefix": "s",
+    "local": "b"
+  }
+}

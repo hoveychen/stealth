@@ -1,0 +1,87 @@
+{
+  "u1_attrs": [
+    [
+      "id",
+      "id",
+      null,
+      "u1"
+    ],
+    [
+      "xlink:href",
+      "href",
+      "http://www.w3.org/1999/xlink",
+      "#icon"
+    ]
+  ],
+  "u1_href_baseVal": "#icon",
+  "u1_getAttribute_href": null,
+  "u1_getAttribute_xlinkhref": "#icon",
+  "u2_href_baseVal": "#modern",
+  "u2_attrs": [
+    [
+      "id",
+      "id",
+      null,
+      "u2"
+    ],
+    [
+      "href",
+      "href",
+      null,
+      "#modern"
+    ],
+    [
+      "xlink:href",
+      "href",
+      "http://www.w3.org/1999/xlink",
+      "#legacy"
+    ]
+  ],
+  "u1_after_write_attrs": [
+    [
+      "id",
+      "id",
+      null,
+      "u1"
+    ],
+    [
+      "xlink:href",
+      "href",
+      "http://www.w3.org/1999/xlink",
+      "#icon"
+    ]
+  ],
+  "u1_after_write_baseVal": "#other",
+  "u4_attrs": [
+    [
+      "xlink:href",
+      "xlink:href",
+      null,
+      "#literal"
+    ]
+  ],
+  "u4_href_baseVal": "",
+  "u4_after_write_attrs": [
+    [
+      "xlink:href",
+      "xlink:href",
+      null,
+      "#literal"
+    ],
+    [
+      "href",
+      "href",
+      null,
+      "#written"
+    ]
+  ],
+  "u3_attrs": [
+    [
+      "xlink:href",
+      "href",
+      "http://www.w3.org/1999/xlink",
+      "#runtime"
+    ]
+  ],
+  "u3_href_baseVal": "#runtime"
+}

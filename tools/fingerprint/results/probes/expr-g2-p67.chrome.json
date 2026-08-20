@@ -1,0 +1,75 @@
+{
+  "xml_Root": [
+    "Root"
+  ],
+  "xml_root_lower": [],
+  "xml_kid": [
+    "kid"
+  ],
+  "xml_KID": [
+    "KID"
+  ],
+  "xml_star": [
+    "Root",
+    "kid",
+    "KID"
+  ],
+  "xml_ns_kid": [
+    "kid"
+  ],
+  "xml_ns_KID": [
+    "KID"
+  ],
+  "xml_ns_null_kid": [
+    "kid"
+  ],
+  "xhtml_p": [
+    "p"
+  ],
+  "xhtml_P": [],
+  "xhtml_DIV": [
+    "DIV"
+  ],
+  "xhtml_div": [],
+  "xhtml_body": [
+    "body"
+  ],
+  "xhtml_BODY": [],
+  "xhtml_ns_p": [
+    "p"
+  ],
+  "xhtml_ns_P": [],
+  "xhtml_ns_DIV": [
+    "DIV"
+  ],
+  "pfx_qualified": [
+    "s:clipPath"
+  ],
+  "pfx_local": [],
+  "pfx_g_qualified": [
+    "s:g"
+  ],
+  "pfx_g_local": [],
+  "pfx_lower": [],
+  "pfx_ns_local": [
+    "s:clipPath"
+  ],
+  "pfx_ns_qualified": [],
+  "pfx_ns_star_local": [
+    "s:clipPath"
+  ],
+  "html_p": [
+    "P"
+  ],
+  "html_P": [
+    "P"
+  ],
+  "html_clipPath": [
+    "clipPath"
+  ],
+  "html_clippath": [],
+  "html_ns_clipPath": [
+    "clipPath"
+  ],
+  "html_ns_clippath": []
+}
