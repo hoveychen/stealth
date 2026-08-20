@@ -24,6 +24,79 @@ export const DETECTORS = [
     { name: 'browserscan', url: 'https://www.browserscan.net/', settleMs: 18000 },
 ];
 
+// The commercial guards (antibot-sweep.mjs). A different question from the
+// twelve above: those pages *report* a fingerprint, these ones *act* on it, and
+// the only reading that matters is whether the guard served the site or served a
+// challenge. Every entry was recon'd with a bare curl first (Chrome UA, curl's
+// own TLS) and `guards` records what came back, so a station that stops guarding
+// is visible as a changed field rather than as a silently easy pass —
+// nowsecure.nl, for years the community's Cloudflare test site, answers 200 to
+// bare curl now and is on the list as a control for exactly that reason.
+export const ANTIBOT = [
+    // Cloudflare, managed challenge: 403 + `cf-mitigated: challenge` to curl.
+    { name: 'cf-scrapingcourse', vendor: 'cloudflare', url: 'https://www.scrapingcourse.com/cloudflare-challenge', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-nopecha', vendor: 'cloudflare', url: 'https://nopecha.com/demo/cloudflare', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-zeroclover', vendor: 'cloudflare', url: 'https://turnstile.zeroclover.io/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-chatgpt', vendor: 'cloudflare', url: 'https://chatgpt.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-claude', vendor: 'cloudflare', url: 'https://claude.ai/', settleMs: 25000, guards: 'challenge' },
+    { name: 'cf-indeed', vendor: 'cloudflare', url: 'https://www.indeed.com/', settleMs: 25000, guards: 'challenge' },
+    // Cloudflare in front, no challenge for a bare curl. These are the controls:
+    // a failure here is the engine breaking a CF-fronted ordinary page, which is
+    // a different finding from failing a challenge.
+    { name: 'cf-nowsecure', vendor: 'cloudflare', url: 'https://nowsecure.nl/', settleMs: 10000, guards: 'none' },
+    { name: 'cf-discord', vendor: 'cloudflare', url: 'https://discord.com/', settleMs: 12000, guards: 'none' },
+    { name: 'cf-pixiv', vendor: 'cloudflare', url: 'https://www.pixiv.net/', settleMs: 12000, guards: 'none' },
+    // DataDome: 403 + `x-datadome: protected` to curl.
+    { name: 'dd-datadome', vendor: 'datadome', url: 'https://datadome.co/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-g2', vendor: 'datadome', url: 'https://www.g2.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-leboncoin', vendor: 'datadome', url: 'https://www.leboncoin.fr/', settleMs: 25000, guards: 'challenge' },
+    { name: 'dd-hermes', vendor: 'datadome', url: 'https://www.hermes.com/', settleMs: 25000, guards: 'challenge' },
+    // 403 to curl behind an edge that names no vendor in its headers.
+    { name: 'x-sony', vendor: 'unattributed', url: 'https://www.sony.com/', settleMs: 25000, guards: 'challenge' },
+    { name: 'x-zillow', vendor: 'unattributed', url: 'https://www.zillow.com/', settleMs: 25000, guards: 'challenge' },
+];
+
+// What a guard's own page looks like from inside it. Signals are recorded raw
+// and the verdict is derived outside the page, so a reading can be re-judged
+// later without re-running the sweep.
+//
+// The Cloudflare marks are the interstitial's, not the CDN's: `_cf_chl_opt` is
+// the challenge script's config object, `/cdn-cgi/challenge-platform/` its
+// loader, and `#challenge-form` / `#challenge-running` its DOM. A Turnstile
+// *widget* (`challenges.cloudflare.com/turnstile`) is deliberately a separate
+// field — a site can embed one on a page it served us perfectly happily, which
+// is not the same as being stopped at the door.
+export const extractAntibot = `(() => {
+  const html = document.documentElement ? document.documentElement.outerHTML : '';
+  const text = (document.body && document.body.innerText) || '';
+  const srcs = Array.from(document.querySelectorAll('script[src], iframe[src]'))
+    .map((e) => e.getAttribute('src') || '');
+  const has = (sel) => !!document.querySelector(sel);
+  return {
+    title: document.title,
+    href: location.href,
+    ready: document.readyState,
+    nodes: document.getElementsByTagName('*').length,
+    textLength: text.length,
+    text: text.slice(0, 1200),
+    cf: {
+      chlOpt: typeof window._cf_chl_opt !== 'undefined',
+      platformScript: srcs.some((s) => s.includes('/cdn-cgi/challenge-platform/')),
+      challengeDom: has('#challenge-form') || has('#challenge-running') || has('#cf-chl-widget') || has('#challenge-stage'),
+      justAMoment: /just a moment|un momento|checking your browser|\\u60a8\\u7684\\u8bf7\\u6c42/i.test(document.title + ' ' + text.slice(0, 400)),
+      blocked: /sorry, you have been blocked|error 1020|cloudflare ray id/i.test(text),
+      turnstileWidget: srcs.some((s) => s.includes('challenges.cloudflare.com/turnstile')),
+      rayId: (html.match(/[Rr]ay ID:?\\s*<?[a-z]*>?\\s*([0-9a-f]{16})/) || [])[1] || null,
+    },
+    dd: {
+      captchaDelivery: srcs.some((s) => s.includes('captcha-delivery.com')) || /captcha-delivery\\.com/.test(html),
+      blockText: /vous avez \\u00e9t\\u00e9 bloqu|you have been blocked|blocked by datadome|enable javascript and cookies to continue/i.test(text),
+    },
+    // Any guard's last resort: an empty document with nothing on it.
+    empty: text.trim().length === 0,
+  };
+})()`;
+
 // Words a detector uses to say what it decided. Counted, not interpreted: the
 // question this sweep answers is "did the page finish and reach a verdict",
 // not "what score did we get" — per-site scrapers rot, and a page that never

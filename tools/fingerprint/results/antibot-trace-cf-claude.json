@@ -1,0 +1,702 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "startedAt": "2026-08-20T19:28:34.584Z",
+  "egress": {
+    "fl": "1231f33",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787254114.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.340+3d96734f2",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9226/"
+  },
+  "stations": [
+    {
+      "name": "cf-claude",
+      "vendor": "cloudflare",
+      "url": "https://claude.ai/",
+      "guards": "challenge",
+      "documents": [
+        {
+          "url": "https://claude.ai/login",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://claude.ai/",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://claude.ai/login",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/index-CVGzhryG.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://claude.ai/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-zod-CIzVg8oX.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/rolldown-runtime-C_JJxWoe.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-frame-_Jg2mXKL.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-query-BTpb5jOU.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-prosemirror-CYBgh5Ej.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-tiptap-Ckw6N985.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-all-0-CsNmc38E.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/preload-helper-DI4wZ5Gk.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-datadog-BiPS_f2G.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-growthbook-BEdehWPA.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-0-Dg-3WPCJ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-frame-DHavf7mr.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-intl-mL42mugX.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-router-Ri2oxKwO.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-1-EXghdxwV.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-luxon-BpdSR0OR.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-icons-8N0GoC4j.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-2-DbeIxuB9.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-base-ui-BPg2sFgE.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-3-C1vzDuJg.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-utils-DWaswhiK.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-4-DiiaT9Vj.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-motion-Dc6M5cqx.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-5-CgnlSk84.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-6-DTbd99AD.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-markdown-Vnbv95zQ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-styles-CE4rcqPx.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-7-C90D2sx1.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-8-CN00oIlU.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-9-DqnS1xDv.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-10-CvyXjqOF.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-11-C2kl_KEg.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-12-wHknK7O5.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-13-Dkxu349A.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-14-6UHiI0AI.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-15-pn2C8NIO.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-16-Ct3THULf.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-frame-CnCfmbiZ.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-frame-CnCfmbiZ.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-styles-CHWTPurz.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-styles-CHWTPurz.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c6a992d55-CM14U0fv.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/c6a992d55-CM14U0fv.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://claude.ai/cdn-cgi/challenge-platform/scripts/jsd/main.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 500,
+          "url": "https://claude.ai/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/rolldown-runtime-C_JJxWoe.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-query-BTpb5jOU.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/index-CVGzhryG.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-zod-CIzVg8oX.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-prosemirror-CYBgh5Ej.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-tiptap-Ckw6N985.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-all-0-CsNmc38E.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/preload-helper-DI4wZ5Gk.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-frame-_Jg2mXKL.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-datadog-BiPS_f2G.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-growthbook-BEdehWPA.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-intl-mL42mugX.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-frame-DHavf7mr.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-router-Ri2oxKwO.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-0-Dg-3WPCJ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-1-EXghdxwV.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-luxon-BpdSR0OR.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-icons-8N0GoC4j.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-base-ui-BPg2sFgE.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-utils-DWaswhiK.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-4-DiiaT9Vj.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-3-C1vzDuJg.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-motion-Dc6M5cqx.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-2-DbeIxuB9.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-5-CgnlSk84.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-6-DTbd99AD.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-markdown-Vnbv95zQ.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-styles-CE4rcqPx.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-7-C90D2sx1.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-8-CN00oIlU.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-9-DqnS1xDv.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-10-CvyXjqOF.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-11-C2kl_KEg.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-12-wHknK7O5.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-13-Dkxu349A.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-14-6UHiI0AI.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-16-Ct3THULf.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/shared-15-pn2C8NIO.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://claude.ai/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://claude.ai/cdn-cgi/challenge-platform/h/g/scripts/jsd/aae2b9a1c261/main.js?",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://claude.ai/cdn-cgi/challenge-platform/h/g/jsd/oneshot/aae2b9a1c261/0.03990278211793841:1787252719:iNX3lwIpGqac63qacEwsDi3sM0jDziIk8gYx7Dwr-vA/a2e3cd4b995d26d3",
+          "type": "XHR"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://claude.ai/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://claude.ai/cdn-cgi/challenge-platform/h/g/jsd/oneshot/aae2b9a1c261/0.03990278211793841:1787252719:iNX3lwIpGqac63qacEwsDi3sM0jDziIk8gYx7Dwr-vA/a2e3cd4b995d26d3",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://claude.ai/edge-api/client-health/check?platform=web&bundle=1787247686&locale=en-US",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://claude.ai/edge-api/client-health/check?platform=web&bundle=1787247686&locale=en-US",
+          "type": "Fetch"
+        }
+      ],
+      "verdict": "empty-document",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Claude",
+      "landedOn": "https://claude.ai/login",
+      "nodes": 121,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false
+      },
+      "ms": 27739
+    }
+  ],
+  "fresh": true,
+  "engineLog": [
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  http : script blocked by csp . . . . . . . . . . . . . . \u001b[0m[+395ms]",
+    "      url = https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/index-CVGzhryG.js",
+    "      ctx = parsing",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+1396ms]",
+    "      src = https://claude.ai/login",
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+1399ms]",
+    "      src = https://claude.ai/login",
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+1837ms]",
+    "      src = https://claude.ai/login",
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+1838ms]",
+    "      src = https://claude.ai/login",
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+1839ms]",
+    "      src = https://claude.ai/login",
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+1842ms]",
+    "      url = about:blank",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+1844ms]",
+    "      src = https://claude.ai/login",
+    "      kind = javascript",
+    "      cacheable = false",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+1857ms]",
+    "      source = fetch",
+    "      url = https://claude.ai/edge-api/bootstrap?statsig_hashing_algorithm=djb2&growthbook_format=sdk&include_system_prompts=false",
+    "      status = 500",
+    "      len = 21",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+2060ms]",
+    "      src = https://claude.ai/cdn-cgi/challenge-platform/scripts/jsd/main.js",
+    "      kind = javascript",
+    "      cacheable = true",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+2066ms]",
+    "      url = about:blank",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2145ms]",
+    "      source = xhr",
+    "      url = https://claude.ai/cdn-cgi/challenge-platform/h/g/jsd/oneshot/aae2b9a1c261/0.03990278211793841:1787252719:iNX3lwIpGqac63qacEwsDi3sM0jDziIk8gYx7Dwr-vA/a2e3cd4b995d26d3",
+    "      status = 200",
+    "      len = 0",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+6880ms]",
+    "      source = fetch",
+    "      url = https://claude.ai/edge-api/client-health/check?platform=web&bundle=1787247686&locale=en-US",
+    "      status = 200",
+    "      len = 2"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

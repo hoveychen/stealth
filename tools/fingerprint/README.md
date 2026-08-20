@@ -32,6 +32,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `probe.js` | One async expression collecting ~90 fingerprint surface values. Every read is wrapped, so "this property throws" is recorded as data instead of aborting the run. |
 | `header-echo.mjs` | Raw-TCP HTTP server that records the byte-exact request head. `node:http` reorders headers, and header order is itself part of the fingerprint. Serves a page pulling one of every fetch destination (document, style, script, image, iframe, fetch, xhr). |
 | `sites.mjs` | URLs + in-page extractors for bot.sannysoft.com and CreepJS, plus the twelve-site detector list the sweep walks. |
+| `antibot-sweep.mjs` | Walks the commercial guards in `sites.mjs` (`ANTIBOT`) and records whether each one served the site or served a challenge. The detectors above *report* a fingerprint; these *act* on one, so the reading is the document's HTTP status plus the interstitial's own marks, not a verdict string. `--fresh` gives each station its own engine process, `--trace` records every request and console line for one. |
 | `detector-sweep.mjs` | Walks every detector in `sites.mjs` and records how far each page got — nodes, text length, verdict words, and whether the navigation happened at all. Answers "does the detector finish", which the collectors do not. |
 | `subresource-check.mjs` | Answers "did the request happen at all", per fetch destination. Exits non-zero on a miss. Takes engine flags after `--`. |
 | `collect-*.mjs` | Spawn the engine, run the four steps, write one JSON snapshot. |
@@ -4464,3 +4465,120 @@ parse error into the tree. The empty-input case does produce a `<parsererror>`
 document (`DOMParser.zig` synthesises one, and `domparser.html`'s `basic` block
 pins its serialization against Chrome's for the same markup), so the gap is
 specifically the malformed-but-recoverable path. Left as measured, not fixed.
+
+## The commercial guards, and the regression that came with them (2026-08-20)
+
+Everything above this line measures a *detector*: a page that reads a
+fingerprint and writes down what it thinks. None of them can refuse to serve
+you. The question a crawler actually has is the other one — does Cloudflare open
+the door — and this harness had never asked it. `grep -i cloudflare` over
+`tools/fingerprint/` returned nothing before this section.
+
+`antibot-sweep.mjs` asks it. Fifteen stations in `sites.mjs`'s new `ANTIBOT`
+list, every one recon'd with a bare curl first so `guards` records what it does
+to a naive client; both engines driven over the same route minutes apart, because
+the address is half of any guard's decision. The reading is the document's HTTP
+status off `Network.responseReceived` plus the guard's marks in the DOM, kept
+separate: a challenge that clears leaves a 200 behind and looks like a plain pass
+on status alone.
+
+The full table and the caveats that go with each row are
+`results/antibot-2026-08-20-vs-chrome.md`. The short version:
+
+| | Chrome (headed 151) | this engine (`dev.340+3d96734f2`) |
+|---|---|---|
+| Cloudflare **managed challenge** (3 stations) | scrapingcourse solved, 403→200 | **all three stuck on the interstitial, 403, `Just a moment...`** |
+| Cloudflare **passive scoring**, production sites | indeed 1216n, discord 1196n, nowsecure 51n | **indeed 1211n, discord 1531n, nowsecure 51n — passed** |
+| claude.ai | 1086n sign-in page | empty document, 121n |
+| chatgpt.com | 722n | 40n `Application Error!` |
+| pixiv | 311n | wedges the engine, 73s then no answer |
+| DataDome (4 stations) | 0/4 in this run, 3/4 in the run before | not attributable — see below |
+
+### The Cloudflare challenge is refused by us, not by Cloudflare
+
+The engine's own log names it on the first station traced:
+
+```
+http : script blocked by csp
+url = …/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=…
+```
+
+The interstitial sends `script-src 'nonce-…' 'unsafe-eval'
+https://challenges.cloudflare.com` — no `'self'`, no `'strict-dynamic'` — and
+injects its loader with `a.nonce = '…'` set on the element. The nonce is the only
+source expression that admits that same-origin URL. `Csp.zig` treats a
+`'nonce-…'` source as inline-only, matches nothing, and refuses the script; the
+challenge never runs, nothing is posted back, and the interstitial never clears.
+The whole station is four wire events: the document, its 403, the favicon, its
+200.
+
+**So this is not a fingerprint reading.** Cloudflare had not run a line of its
+detection code when we declined to load it, and what its verdict on this engine
+would be is unmeasured. The same rule blocks claude.ai's main bundle, which is
+why that page comes back empty.
+
+That falsifies a claim this file has carried since F4: "every one of those
+simplifications is in the more-permissive direction, so none of them can break a
+page a real browser would run." Two of them were deliberately in the stricter
+direction, and those are the two that broke a page — one of them the page
+standing between this engine and every Cloudflare-protected site that challenges.
+
+The encouraging half of the same table is that Cloudflare's *passive* layer is
+being passed on production sites: indeed.com answers a bare curl with `403` +
+`cf-mitigated: challenge` and answers this engine with the site, within 5 nodes
+of Chrome's rendering. That is the P3–P6 transport and navigator work doing what
+it was for.
+
+### The regression, run at the same time
+
+Same binary, the twelve detectors and the probe collectors, against a headed
+`Chrome/151.0.7922.138` taken the same day
+(`results/regression-2026-08-20-{lightpanda,chrome}.json`,
+`results/regression-2026-08-20-vs-chrome.md`).
+
+**Nothing moved.** Every one of the twelve node counts is identical to the last
+recorded sweep, across the fifty-nine commits since `dev.281`: sannysoft 291,
+creepjs 3600, rebrowser 98, deviceinfo 264, browserleaks-js 1183,
+browserleaks-tls 5, amiunique 1571, iphey 487, pixelscan 1783, browserscan 1871,
+the two dead `arh` endpoints 8. iphey still reads `Looks Trustworthy` with its
+space, sannysoft still has **0 FAIL rows**, and the probe surface is at its best
+recorded figure: **74/90 keys identical to Chrome**, up from the 59/90 the P7
+table ends on.
+
+The sixteen that differ are all in classes this file already records — the two
+deliberately fixed values (`hardwareConcurrency`, `deviceMemory`), the window box
+(`screen.avail*`, `inner/outerWidth`), `userAgentData.highEntropy`'s empty
+`platformVersion`, the canvas hash and font widths, the two `ownPropertyNames`
+counts, the three header-layer gaps, and CreepJS's own ids. No new deviation
+class appeared.
+
+### Where the sweep was wrong about itself, twice
+
+Both worth reading before trusting a number out of it.
+
+**A wedged station used to take every station after it.** pixiv times out, and
+the first run then reported six DataDome and unattributed stations as
+`Page.navigate` timeouts that were never attempted — six clean-looking refusals,
+manufactured. `--fresh` gives each station its own engine process, and every
+number above was taken with it. Same class of fault as the undrained-pipe one in
+the detector-sweep section, and it produced a plausible wrong answer on the first
+try again.
+
+**`_cf_chl_opt` and the challenge-platform script are not evidence of a block.**
+The first verdict rule counted them and scored two served pages as challenges:
+headed Chrome reads pixiv's real page with both marks set, and chatgpt serves the
+script to this engine while serving Chrome a page without it. Cloudflare's JS
+detections ride along on ordinary pages. The rule now turns on the interstitial's
+own title and DOM, or a document that never stops being a 4xx.
+
+### The DataDome column is not a result yet
+
+Four stations, and the *control* moved between two runs twenty-five minutes
+apart on the same route: the first sweep's headed Chrome passed datadome.co,
+leboncoin and hermes and was challenged only at g2; the `--fresh` re-run's Chrome
+was challenged at all four. This engine's column reads better than Chrome's in
+the re-run — it passes datadome.co and hermes — and that means nothing, because a
+column beside an unstable control cannot be read as a verdict about the client.
+Cold profile per station and twenty-five more minutes of requests from one
+address are both in the difference and neither was isolated. Alternating engine
+order across repeated runs is what would make it say something.

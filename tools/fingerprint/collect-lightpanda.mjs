@@ -25,7 +25,11 @@ const PORT = 9223;
 
 const probeSrc = await fs.readFile(path.join(here, 'probe.js'), 'utf8');
 
-const bin = path.join(repo, 'zig-out/bin/lightpanda');
+// LP_BIN so a worktree can collect with the main checkout's build instead of
+// duplicating a 215MB link, the same knob detector-sweep.mjs and run-expr.mjs
+// take. Without it a worktree run dies on a spawn ENOENT for its own empty
+// zig-out.
+const bin = process.env.LP_BIN ?? path.join(repo, 'zig-out/bin/lightpanda');
 const serverLog = [];
 const proc = spawn(bin, ['serve', '--host', '127.0.0.1', '--port', String(PORT)], { stdio: ['ignore', 'pipe', 'pipe'] });
 proc.stdout.on('data', (d) => serverLog.push(String(d)));
