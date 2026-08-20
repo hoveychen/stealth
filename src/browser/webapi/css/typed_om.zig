@@ -21,6 +21,7 @@ const Frame = @import("../../Frame.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
 const DOMMatrixReadOnly = @import("../DOMMatrixReadOnly.zig");
 const CSSStyleDeclaration = @import("CSSStyleDeclaration.zig");
+const chrome_keywords = @import("chrome_keywords.zig");
 const Css = @import("../Css.zig");
 const Execution = js.Execution;
 
@@ -481,6 +482,22 @@ pub const CSSStyleValue = struct {
         if (!isKnownProperty(property)) return frame.js.fail(
             error.TypeError,
             "Failed to execute 'parse' on 'CSSStyleValue': Invalid property name",
+        );
+        // Measured: `parse` runs Chrome's real per-property value parser, so a
+        // bare identifier the property does not take is a TypeError --
+        // `parse('width', 'auto')` answers a keyword where
+        // `parse('width', 'notalength')` throws. Only `parse` gets the check:
+        // the style maps read values that are already in a declaration, and a
+        // computed keyword the table has never seen would start reading as an
+        // absent property there.
+        //
+        // Both the value and the property are echoed exactly as passed, neither
+        // trimmed nor lowercased.
+        if (lookupIdentifier(property, value) == .rejected) return failFmt(
+            frame,
+            error.TypeError,
+            "Failed to execute 'parse' on 'CSSStyleValue': The value provided ('{s}') could not be parsed as a '{s}'.",
+            .{ value, property },
         );
         return dispatch(property, value, frame);
     }
@@ -3007,9 +3024,69 @@ pub fn dispatch(property: []const u8, value: []const u8, frame: *Frame) !*CSSSty
         return unit._proto._proto;
     }
     if (isIdentifier(value)) {
-        return (try CSSKeywordValue.create(value, frame))._proto;
+        // A recognised keyword comes back in its canonical spelling; anything
+        // the table cannot vouch for is kept as written.
+        const text = switch (lookupIdentifier(property, value)) {
+            .canonical => |keyword| keyword,
+            else => value,
+        };
+        return (try CSSKeywordValue.create(text, frame))._proto;
     }
     return CSSStyleValue.init(value, frame);
+}
+
+/// What a property makes of a bare identifier, from the measured table in
+/// `src/browser/webapi/css/chrome_keywords.zig` (see
+/// `tools/fingerprint/dump-css-keywords.mjs`).
+const Identifier = union(enum) {
+    /// A name the table does not cover, so nothing is known and nothing is
+    /// judged.
+    unknown,
+    /// The property takes an arbitrary `<custom-ident>` -- a font family, an
+    /// animation name, a grid line name. Measured: the text comes back exactly
+    /// as written, `parse('font-family', 'MyOwnFont')` answers `MyOwnFont`.
+    any,
+    /// The property takes this keyword. Measured: the answer is the canonical
+    /// spelling rather than the one passed, `parse('display', 'BLOCK')` answers
+    /// `block`.
+    canonical: []const u8,
+    /// The property does not take it, and Chrome throws.
+    rejected,
+};
+
+/// Only two shapes are judged: an empty value, which Chrome always rejects, and
+/// a single bare identifier.
+///
+/// Everything else is `unknown`. Chrome rejects plenty more -- `parse('color',
+/// 'rgb(bogus)')`, `parse('width', 'abc def')` -- but judging those needs the
+/// per-property grammars this engine does not have, and a wrong rejection is
+/// worse than the permissiveness it would fix: it breaks pages Chrome renders,
+/// and reads as "not Chrome" just as loudly. Same reason a property missing from
+/// the table stays permissive.
+fn lookupIdentifier(property: []const u8, value: []const u8) Identifier {
+    // A custom property takes anything, including nothing.
+    if (isCustomProperty(property)) return .any;
+
+    const trimmed = std.mem.trim(u8, value, " \t\r\n");
+    if (trimmed.len == 0) return .rejected;
+    if (!isIdentifier(trimmed)) return .unknown;
+
+    for (chrome_keywords.css_wide) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return .{ .canonical = keyword };
+    }
+
+    // Chrome only answers to the lowercase dash-case spelling, which is what the
+    // table is keyed on.
+    var buf: [128]u8 = undefined;
+    if (property.len > buf.len) return .unknown;
+    const name = std.ascii.lowerString(buf[0..property.len], property);
+
+    if (chrome_keywords.any_identifier.has(name)) return .any;
+    const accepted = chrome_keywords.keywords.get(name) orelse return .unknown;
+    for (accepted) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return .{ .canonical = keyword };
+    }
+    return .rejected;
 }
 
 fn isIdentifier(value: []const u8) bool {

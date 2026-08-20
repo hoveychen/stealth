@@ -981,3 +981,62 @@ function attach(el) {
     testing.expectEqual('5px', getComputedStyle(el).borderTopWidth);
 }
 </script>
+
+<script id="typedom_style_value_parse_validation">
+{
+    // Measured: CSSStyleValue.parse runs Chrome's real per-property value
+    // parser, so a bare identifier the property does not take is a TypeError.
+    // The message echoes the value and the property exactly as passed.
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notalength') could not be parsed as a 'width'.",
+        errorText(() => CSSStyleValue.parse('width', 'notalength')));
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notakeyword') could not be parsed as a 'display'.",
+        errorText(() => CSSStyleValue.parse('display', 'notakeyword')));
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notacolor') could not be parsed as a 'color'.",
+        errorText(() => CSSStyleValue.parse('color', 'notacolor')));
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notanumber') could not be parsed as a 'opacity'.",
+        errorText(() => CSSStyleValue.parse('opacity', 'notanumber')));
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('') could not be parsed as a 'width'.",
+        errorText(() => CSSStyleValue.parse('width', '')));
+    // Shorthands and the legacy webkit spellings validate too.
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notalength') could not be parsed as a 'margin'.",
+        errorText(() => CSSStyleValue.parse('margin', 'notalength')));
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notalength') could not be parsed as a '-webkit-border-radius'.",
+        errorText(() => CSSStyleValue.parse('-webkit-border-radius', 'notalength')));
+    // Chrome takes the property name case-insensitively and echoes it back as
+    // passed: `parse('WIDTH', 'notalength')` reports "...as a 'WIDTH'.". This
+    // engine's property lookup is case-sensitive, so it stops one step earlier
+    // with "Invalid property name". That gap predates the keyword table and is
+    // not the Typed OM's -- it is `CSSStyleDeclaration.isKnownPropertyName`,
+    // which every style map member consults too -- so it is recorded here rather
+    // than papered over.
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': Invalid property name",
+        errorText(() => CSSStyleValue.parse('WIDTH', 'notalength')));
+
+    // Still accepted, and this is the half that matters: rejecting any of these
+    // would leave the engine stricter than Chrome, which breaks real pages.
+    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('width', 'auto')));
+    testing.expectEqual('CSSKeywordValue|min-content', brand(CSSStyleValue.parse('width', 'min-content')));
+    testing.expectEqual('CSSKeywordValue|inherit', brand(CSSStyleValue.parse('width', 'inherit')));
+    testing.expectEqual('CSSKeywordValue|revert-layer', brand(CSSStyleValue.parse('width', 'revert-layer')));
+    // Keyword matching is case-insensitive.
+    testing.expectEqual('CSSKeywordValue|block', brand(CSSStyleValue.parse('display', 'BLOCK')));
+    // A custom property takes anything at all.
+    testing.expectEqual('CSSUnparsedValue|notalength', brand(CSSStyleValue.parse('--x', 'notalength')));
+    // Measured: a font family, an animation name and a grid line name are
+    // arbitrary identifiers, so no identifier can be rejected for them.
+    testing.expectEqual('CSSStyleValue|MyOwnFont', brand(CSSStyleValue.parse('font-family', 'MyOwnFont')));
+    testing.expectEqual('CSSKeywordValue|whatever', brand(CSSStyleValue.parse('animation-name', 'whatever')));
+    // A value that is not a bare identifier is left alone: this engine has no
+    // colour or list grammars, so rejecting here would be guessing.
+    testing.expectEqual('CSSUnitValue|10px', brand(CSSStyleValue.parse('width', '10px')));
+    testing.expectEqual('CSSStyleValue|red', brand(CSSStyleValue.parse('color', 'red')));
+
+    // The style maps must not gain the check: they read values that are already
+    // in the declaration, and a computed keyword this table has never seen would
+    // start reading as absent.
+    const el = attach(document.createElement('div'));
+    el.style.width = '10px';
+    testing.expectEqual('CSSUnitValue|10px', brand(el.attributeStyleMap.get('width')));
+    testing.expectEqual('CSSKeywordValue|block', brand(el.computedStyleMap().get('display')));
+}
+</script>
