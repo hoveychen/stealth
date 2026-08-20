@@ -4543,9 +4543,35 @@ Chrome 151 `--headless=new` than under the recorded headed Chrome 150. The
 records for WebGPU, and `origin` / `filesystem.request` only carry the host the
 page was served from -- but the split is why the headed recordings stay.
 
-**Where we still differ, by cluster.** `probe-css7` is the worst at 32 of 209
-leaves: CSS Typed OM's `computedGet*` answers and most of its parse-error
-messages. `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
+**Where we still differ, by cluster.** `probe-css7` was the worst at 32 of 209
+leaves -- CSS Typed OM's `computedGet*` answers and most of its parse-error
+messages -- and is now **0 of 208**, both engines rerun against the same host on
+Chrome 151 (`results/probes/probe-css7.{chrome,lightpanda}.json`). Three things
+were behind it. The bridge had no way to put a message on an exception at all,
+so 25 rejections threw the right error type with nothing after the colon; there
+is a `js.Context.fail` now and every sentence is quoted from a measurement,
+because Blink's own wording is not guessable (`Must specify an number unit`
+beside `Must specify a number unit`, `Invalid propertyName` for `get` beside
+`Invalid property name` for `delete`). `computedStyleMap().get()` answered
+`undefined` for six properties whose initial value the computed view did not
+carry -- and `border-width` cannot share that initial value with
+`getComputedStyle`, which reports the used `0px` where the Typed OM reports the
+computed `3px`. And `CSSStyleValue.parse` accepted any identifier for any
+property, where Chrome runs its real per-property parser; `dump-css-keywords.mjs`
+now measures that parser one (property, identifier) pair at a time into
+`src/browser/webapi/css/chrome_keywords.zig`.
+
+Two `probe-css7`-adjacent gaps stayed open on purpose, both recorded in
+`src/browser/tests/css/typed_om.html`: property names are matched
+case-sensitively here where Chrome is case-insensitive (that is
+`CSSStyleDeclaration.isKnownPropertyName`, which every style map member
+consults, not the Typed OM), and `parse` still accepts non-identifier values
+Chrome rejects (`parse('width', 'abc def')`), which would need the
+per-property grammars this engine does not have. Separately, and larger than
+either: an invalid inline value sticks here (`el.style.width = 'notalength'`
+reads back `notalength`) where Chrome drops it.
+
+`probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
 `probe-win29` has 8 of 263, including `XSLTProcessor` producing no document and
 `Path2D` not reaching the canvas. `probe-win55` has 7 of 31, all of them
