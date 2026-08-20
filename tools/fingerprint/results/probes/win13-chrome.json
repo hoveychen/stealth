@@ -1,0 +1,954 @@
+{
+ "href": "http://localhost:8752/",
+ "secure": true,
+ "ownCount": 1233,
+ "ifaces": {
+  "Bluetooth": {
+   "arity": 0,
+   "cname": "Bluetooth",
+   "chain": [
+    "Bluetooth",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "getAvailability=m:0",
+    "requestDevice=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "Bluetooth",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'Bluetooth': Illegal constructor",
+   "protoStr": "[object Bluetooth]"
+  },
+  "BluetoothCharacteristicProperties": {
+   "arity": 0,
+   "cname": "BluetoothCharacteristicProperties",
+   "chain": [
+    "BluetoothCharacteristicProperties",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "broadcast=a:g",
+    "read=a:g",
+    "writeWithoutResponse=a:g",
+    "write=a:g",
+    "notify=a:g",
+    "indicate=a:g",
+    "authenticatedSignedWrites=a:g",
+    "reliableWrite=a:g",
+    "writableAuxiliaries=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BluetoothCharacteristicProperties",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'BluetoothCharacteristicProperties': Illegal constructor",
+   "protoStr": "[object BluetoothCharacteristicProperties]"
+  },
+  "BluetoothDevice": {
+   "arity": 0,
+   "cname": "BluetoothDevice",
+   "chain": [
+    "BluetoothDevice",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "id=a:g",
+    "name=a:g",
+    "gatt=a:g",
+    "ongattserverdisconnected=a:gs",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BluetoothDevice",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'BluetoothDevice': Illegal constructor",
+   "protoStr": "[object BluetoothDevice]"
+  },
+  "BluetoothRemoteGATTCharacteristic": {
+   "arity": 0,
+   "cname": "BluetoothRemoteGATTCharacteristic",
+   "chain": [
+    "BluetoothRemoteGATTCharacteristic",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "service=a:g",
+    "uuid=a:g",
+    "properties=a:g",
+    "value=a:g",
+    "oncharacteristicvaluechanged=a:gs",
+    "getDescriptor=m:1",
+    "getDescriptors=m:0",
+    "readValue=m:0",
+    "startNotifications=m:0",
+    "stopNotifications=m:0",
+    "writeValue=m:1",
+    "writeValueWithResponse=m:1",
+    "writeValueWithoutResponse=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BluetoothRemoteGATTCharacteristic",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'BluetoothRemoteGATTCharacteristic': Illegal constructor",
+   "protoStr": "[object BluetoothRemoteGATTCharacteristic]"
+  },
+  "BluetoothRemoteGATTDescriptor": {
+   "arity": 0,
+   "cname": "BluetoothRemoteGATTDescriptor",
+   "chain": [
+    "BluetoothRemoteGATTDescriptor",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "characteristic=a:g",
+    "uuid=a:g",
+    "value=a:g",
+    "readValue=m:0",
+    "writeValue=m:1",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BluetoothRemoteGATTDescriptor",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'BluetoothRemoteGATTDescriptor': Illegal constructor",
+   "protoStr": "[object BluetoothRemoteGATTDescriptor]"
+  },
+  "BluetoothRemoteGATTServer": {
+   "arity": 0,
+   "cname": "BluetoothRemoteGATTServer",
+   "chain": [
+    "BluetoothRemoteGATTServer",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "device=a:g",
+    "connected=a:g",
+    "connect=m:0",
+    "disconnect=m:0",
+    "getPrimaryService=m:1",
+    "getPrimaryServices=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BluetoothRemoteGATTServer",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'BluetoothRemoteGATTServer': Illegal constructor",
+   "protoStr": "[object BluetoothRemoteGATTServer]"
+  },
+  "BluetoothRemoteGATTService": {
+   "arity": 0,
+   "cname": "BluetoothRemoteGATTService",
+   "chain": [
+    "BluetoothRemoteGATTService",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "device=a:g",
+    "uuid=a:g",
+    "isPrimary=a:g",
+    "getCharacteristic=m:1",
+    "getCharacteristics=m:0",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BluetoothRemoteGATTService",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'BluetoothRemoteGATTService': Illegal constructor",
+   "protoStr": "[object BluetoothRemoteGATTService]"
+  },
+  "BluetoothUUID": {
+   "arity": 0,
+   "cname": "BluetoothUUID",
+   "chain": [
+    "BluetoothUUID",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [
+    "canonicalUUID=m:1",
+    "getCharacteristic=m:1",
+    "getDescriptor=m:1",
+    "getService=m:1"
+   ],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "BluetoothUUID",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'BluetoothUUID': Illegal constructor",
+   "protoStr": "[object BluetoothUUID]"
+  },
+  "HID": {
+   "arity": 0,
+   "cname": "HID",
+   "chain": [
+    "HID",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "onconnect=a:gs",
+    "ondisconnect=a:gs",
+    "getDevices=m:0",
+    "constructor=m:0",
+    "requestDevice=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "HID",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'HID': Illegal constructor",
+   "protoStr": "[object HID]"
+  },
+  "HIDConnectionEvent": {
+   "arity": 2,
+   "cname": "HIDConnectionEvent",
+   "chain": [
+    "HIDConnectionEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "device=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "HIDConnectionEvent",
+    "arity": 2
+   },
+   "bare": "TypeError: Failed to construct 'HIDConnectionEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'HIDConnectionEvent': 2 arguments required, but only 0 present.",
+   "protoStr": "[object HIDConnectionEvent]"
+  },
+  "HIDDevice": {
+   "arity": 0,
+   "cname": "HIDDevice",
+   "chain": [
+    "HIDDevice",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "oninputreport=a:gs",
+    "opened=a:g",
+    "vendorId=a:g",
+    "productId=a:g",
+    "productName=a:g",
+    "collections=a:g",
+    "close=m:0",
+    "forget=m:0",
+    "open=m:0",
+    "receiveFeatureReport=m:1",
+    "sendFeatureReport=m:2",
+    "sendReport=m:2",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "HIDDevice",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'HIDDevice': Illegal constructor",
+   "protoStr": "[object HIDDevice]"
+  },
+  "HIDInputReportEvent": {
+   "arity": 0,
+   "cname": "HIDInputReportEvent",
+   "chain": [
+    "HIDInputReportEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "device=a:g",
+    "reportId=a:g",
+    "data=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "HIDInputReportEvent",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'HIDInputReportEvent': Illegal constructor",
+   "protoStr": "[object HIDInputReportEvent]"
+  },
+  "Serial": {
+   "arity": 0,
+   "cname": "Serial",
+   "chain": [
+    "Serial",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "onconnect=a:gs",
+    "ondisconnect=a:gs",
+    "getPorts=m:0",
+    "constructor=m:0",
+    "requestPort=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "Serial",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'Serial': Illegal constructor",
+   "protoStr": "[object Serial]"
+  },
+  "SerialPort": {
+   "arity": 0,
+   "cname": "SerialPort",
+   "chain": [
+    "SerialPort",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "onconnect=a:gs",
+    "ondisconnect=a:gs",
+    "readable=a:g",
+    "writable=a:g",
+    "close=m:0",
+    "forget=m:0",
+    "getInfo=m:0",
+    "getSignals=m:0",
+    "open=m:1",
+    "setSignals=m:0",
+    "connected=a:g",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "SerialPort",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'SerialPort': Illegal constructor",
+   "protoStr": "[object SerialPort]"
+  },
+  "USB": {
+   "arity": 0,
+   "cname": "USB",
+   "chain": [
+    "USB",
+    "EventTarget",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "onconnect=a:gs",
+    "ondisconnect=a:gs",
+    "getDevices=m:0",
+    "constructor=m:0",
+    "requestDevice=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USB",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'USB': Illegal constructor",
+   "protoStr": "[object USB]"
+  },
+  "USBAlternateInterface": {
+   "arity": 2,
+   "cname": "USBAlternateInterface",
+   "chain": [
+    "USBAlternateInterface",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "alternateSetting=a:g",
+    "interfaceClass=a:g",
+    "interfaceSubclass=a:g",
+    "interfaceProtocol=a:g",
+    "interfaceName=a:g",
+    "endpoints=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBAlternateInterface",
+    "arity": 2
+   },
+   "bare": "TypeError: Failed to construct 'USBAlternateInterface': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBAlternateInterface': 2 arguments required, but only 0 present.",
+   "protoStr": "[object USBAlternateInterface]"
+  },
+  "USBConfiguration": {
+   "arity": 2,
+   "cname": "USBConfiguration",
+   "chain": [
+    "USBConfiguration",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "configurationValue=a:g",
+    "configurationName=a:g",
+    "interfaces=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBConfiguration",
+    "arity": 2
+   },
+   "bare": "TypeError: Failed to construct 'USBConfiguration': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBConfiguration': 2 arguments required, but only 0 present.",
+   "protoStr": "[object USBConfiguration]"
+  },
+  "USBConnectionEvent": {
+   "arity": 2,
+   "cname": "USBConnectionEvent",
+   "chain": [
+    "USBConnectionEvent",
+    "Event",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "device=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBConnectionEvent",
+    "arity": 2
+   },
+   "bare": "TypeError: Failed to construct 'USBConnectionEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBConnectionEvent': 2 arguments required, but only 0 present.",
+   "protoStr": "[object USBConnectionEvent]"
+  },
+  "USBDevice": {
+   "arity": 0,
+   "cname": "USBDevice",
+   "chain": [
+    "USBDevice",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "usbVersionMajor=a:g",
+    "usbVersionMinor=a:g",
+    "usbVersionSubminor=a:g",
+    "deviceClass=a:g",
+    "deviceSubclass=a:g",
+    "deviceProtocol=a:g",
+    "vendorId=a:g",
+    "productId=a:g",
+    "deviceVersionMajor=a:g",
+    "deviceVersionMinor=a:g",
+    "deviceVersionSubminor=a:g",
+    "manufacturerName=a:g",
+    "productName=a:g",
+    "serialNumber=a:g",
+    "configuration=a:g",
+    "configurations=a:g",
+    "opened=a:g",
+    "claimInterface=m:1",
+    "clearHalt=m:2",
+    "close=m:0",
+    "controlTransferIn=m:2",
+    "controlTransferOut=m:1",
+    "forget=m:0",
+    "isochronousTransferIn=m:2",
+    "isochronousTransferOut=m:3",
+    "open=m:0",
+    "releaseInterface=m:1",
+    "reset=m:0",
+    "selectAlternateInterface=m:2",
+    "selectConfiguration=m:1",
+    "transferIn=m:2",
+    "transferOut=m:2",
+    "constructor=m:0"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBDevice",
+    "arity": 0
+   },
+   "bare": "TypeError: Illegal constructor",
+   "withNew": "TypeError: Failed to construct 'USBDevice': Illegal constructor",
+   "protoStr": "[object USBDevice]"
+  },
+  "USBEndpoint": {
+   "arity": 3,
+   "cname": "USBEndpoint",
+   "chain": [
+    "USBEndpoint",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "endpointNumber=a:g",
+    "direction=a:g",
+    "type=a:g",
+    "packetSize=a:g",
+    "constructor=m:3"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBEndpoint",
+    "arity": 3
+   },
+   "bare": "TypeError: Failed to construct 'USBEndpoint': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBEndpoint': 3 arguments required, but only 0 present.",
+   "protoStr": "[object USBEndpoint]"
+  },
+  "USBInTransferResult": {
+   "arity": 1,
+   "cname": "USBInTransferResult",
+   "chain": [
+    "USBInTransferResult",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "data=a:g",
+    "status=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBInTransferResult",
+    "arity": 1
+   },
+   "bare": "TypeError: Failed to construct 'USBInTransferResult': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBInTransferResult': 1 argument required, but only 0 present.",
+   "protoStr": "[object USBInTransferResult]"
+  },
+  "USBInterface": {
+   "arity": 2,
+   "cname": "USBInterface",
+   "chain": [
+    "USBInterface",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "interfaceNumber=a:g",
+    "alternate=a:g",
+    "alternates=a:g",
+    "claimed=a:g",
+    "constructor=m:2"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBInterface",
+    "arity": 2
+   },
+   "bare": "TypeError: Failed to construct 'USBInterface': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBInterface': 2 arguments required, but only 0 present.",
+   "protoStr": "[object USBInterface]"
+  },
+  "USBIsochronousInTransferPacket": {
+   "arity": 1,
+   "cname": "USBIsochronousInTransferPacket",
+   "chain": [
+    "USBIsochronousInTransferPacket",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "status=a:g",
+    "data=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBIsochronousInTransferPacket",
+    "arity": 1
+   },
+   "bare": "TypeError: Failed to construct 'USBIsochronousInTransferPacket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBIsochronousInTransferPacket': 1 argument required, but only 0 present.",
+   "protoStr": "[object USBIsochronousInTransferPacket]"
+  },
+  "USBIsochronousInTransferResult": {
+   "arity": 1,
+   "cname": "USBIsochronousInTransferResult",
+   "chain": [
+    "USBIsochronousInTransferResult",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "data=a:g",
+    "packets=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBIsochronousInTransferResult",
+    "arity": 1
+   },
+   "bare": "TypeError: Failed to construct 'USBIsochronousInTransferResult': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBIsochronousInTransferResult': 1 argument required, but only 0 present.",
+   "protoStr": "[object USBIsochronousInTransferResult]"
+  },
+  "USBIsochronousOutTransferPacket": {
+   "arity": 1,
+   "cname": "USBIsochronousOutTransferPacket",
+   "chain": [
+    "USBIsochronousOutTransferPacket",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "bytesWritten=a:g",
+    "status=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBIsochronousOutTransferPacket",
+    "arity": 1
+   },
+   "bare": "TypeError: Failed to construct 'USBIsochronousOutTransferPacket': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBIsochronousOutTransferPacket': 1 argument required, but only 0 present.",
+   "protoStr": "[object USBIsochronousOutTransferPacket]"
+  },
+  "USBIsochronousOutTransferResult": {
+   "arity": 1,
+   "cname": "USBIsochronousOutTransferResult",
+   "chain": [
+    "USBIsochronousOutTransferResult",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "packets=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBIsochronousOutTransferResult",
+    "arity": 1
+   },
+   "bare": "TypeError: Failed to construct 'USBIsochronousOutTransferResult': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBIsochronousOutTransferResult': 1 argument required, but only 0 present.",
+   "protoStr": "[object USBIsochronousOutTransferResult]"
+  },
+  "USBOutTransferResult": {
+   "arity": 1,
+   "cname": "USBOutTransferResult",
+   "chain": [
+    "USBOutTransferResult",
+    "Object.prototype"
+   ],
+   "protoKeys": [
+    "bytesWritten=a:g",
+    "status=a:g",
+    "constructor=m:1"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "staticKeys": [],
+   "winDesc": {
+    "e": false,
+    "c": true,
+    "kind": "value",
+    "w": true,
+    "vtype": "function",
+    "fname": "USBOutTransferResult",
+    "arity": 1
+   },
+   "bare": "TypeError: Failed to construct 'USBOutTransferResult': Please use the 'new' operator, this DOM object constructor cannot be called as a function.",
+   "withNew": "TypeError: Failed to construct 'USBOutTransferResult': 1 argument required, but only 0 present.",
+   "protoStr": "[object USBOutTransferResult]"
+  }
+ },
+ "navProps": {
+  "usb": {
+   "desc": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get usb",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object USB]",
+   "liveCtor": "USB"
+  },
+  "hid": {
+   "desc": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get hid",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object HID]",
+   "liveCtor": "HID"
+  },
+  "serial": {
+   "desc": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get serial",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object Serial]",
+   "liveCtor": "Serial"
+  },
+  "bluetooth": {
+   "desc": {
+    "e": true,
+    "c": true,
+    "kind": "accessor",
+    "get": true,
+    "set": false,
+    "getName": "get bluetooth",
+    "getArity": 0
+   },
+   "liveType": "object",
+   "liveBrand": "[object Bluetooth]",
+   "liveCtor": "Bluetooth"
+  }
+ }
+}

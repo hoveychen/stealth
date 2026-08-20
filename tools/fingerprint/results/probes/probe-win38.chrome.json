@@ -1,0 +1,63 @@
+{
+ "wgslOrder": [
+  "packed_4x8_integer_dot_product",
+  "subgroup_uniformity",
+  "immediate_address_space",
+  "linear_indexing",
+  "subgroup_id",
+  "readonly_and_readwrite_storage_textures",
+  "unrestricted_pointer_parameters",
+  "pointer_composite_access",
+  "texture_and_sampler_let",
+  "uniform_buffer_standard_layout"
+ ],
+ "adapterFeaturesOrder": [
+  "depth32float-stencil8",
+  "rg11b10ufloat-renderable",
+  "bgra8unorm-storage",
+  "texture-formats-tier1",
+  "texture-compression-bc",
+  "dual-source-blending",
+  "core-features-and-limits",
+  "float32-filterable",
+  "indirect-first-instance",
+  "texture-compression-astc-sliced-3d",
+  "float32-blendable",
+  "texture-compression-astc",
+  "texture-compression-etc2",
+  "depth-clip-control",
+  "texture-compression-bc-sliced-3d",
+  "clip-distances",
+  "shader-f16",
+  "timestamp-query",
+  "texture-formats-tier2",
+  "primitive-index",
+  "texture-component-swizzle",
+  "subgroups"
+ ],
+ "adapterFeaturesSameEachRead": true,
+ "adapterLimitsSameEachRead": true,
+ "adapterInfoSameEachRead": true,
+ "adapterOwn": "",
+ "adapterHasIsFallbackAdapter": false,
+ "requestDeviceArity": 0,
+ "deviceFeaturesOrder": [
+  "core-features-and-limits"
+ ],
+ "deviceLabelInitial": "",
+ "deviceLabelAfterSet": "hello",
+ "deviceQueueSameEachRead": true,
+ "deviceLostSameEachRead": true,
+ "deviceAdapterInfoSameAsAdapterInfo": false,
+ "deviceAdapterInfoVendor": "apple",
+ "queueLabelInitial": "",
+ "queueLabelAfterSet": "q",
+ "deviceOnUncapturedError": null,
+ "lostBeforeDestroy": "pending",
+ "lostAfterDestroy": {
+  "reason": "destroyed",
+  "message": "Device was destroyed.",
+  "brand": "[object GPUDeviceLostInfo]"
+ },
+ "adapterCachedAcrossCalls": false
+}

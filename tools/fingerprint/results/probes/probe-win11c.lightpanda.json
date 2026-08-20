@@ -1,0 +1,127 @@
+{
+ "href": "http://127.0.0.1:8752/",
+ "out": {
+  "dataIdentityWithInit": true,
+  "dataStableAcrossReads": true,
+  "dataMutationVisible": 9,
+  "errorIdentity": true,
+  "errorStable": true,
+  "data:Uint8ClampedArray": {
+   "threw": "TypeError|Failed to construct 'MIDIMessageEvent': Failed to read the 'data' property from 'MIDIMessageEventInit': Failed to convert value to 'Uint8Array'."
+  },
+  "data:Int8Array": {
+   "threw": "TypeError|Failed to construct 'MIDIMessageEvent': Failed to read the 'data' property from 'MIDIMessageEventInit': Failed to convert value to 'Uint8Array'."
+  },
+  "data:ArrayBuffer": {
+   "threw": "TypeError|Failed to construct 'MIDIMessageEvent': Failed to read the 'data' property from 'MIDIMessageEventInit': Failed to convert value to 'Uint8Array'."
+  },
+  "data:undefined": {
+   "ok": true,
+   "v": "null"
+  },
+  "data:null": {
+   "ok": true,
+   "v": "null"
+  },
+  "port:undefined": {
+   "ok": true,
+   "v": "null"
+  },
+  "eventInit": {
+   "bubbles": true,
+   "cancelable": true,
+   "composed": true,
+   "isTrusted": false
+  },
+  "MIDIMessageEvent.data on Event": {
+   "threw": "TypeError|Illegal invocation"
+  },
+  "Sensor.activated on plain": {
+   "threw": "TypeError|Illegal invocation"
+  },
+  "Sensor.start on plain": {
+   "threw": "TypeError|Illegal invocation"
+  },
+  "Sensor.activated on Accelerometer": {
+   "ok": true,
+   "v": false
+  },
+  "frequency:0": {
+   "ok": true,
+   "v": "constructed"
+  },
+  "frequency:-1": {
+   "ok": true,
+   "v": "constructed"
+  },
+  "frequency:Infinity": {
+   "threw": "TypeError|Failed to construct 'Accelerometer': Failed to read the 'frequency' property from 'SensorOptions': The provided double value is non-finite."
+  },
+  "frequency:NaN": {
+   "threw": "TypeError|Failed to construct 'Accelerometer': Failed to read the 'frequency' property from 'SensorOptions': The provided double value is non-finite."
+  },
+  "frequency:1000000000": {
+   "ok": true,
+   "v": "constructed"
+  },
+  "frequency:60": {
+   "ok": true,
+   "v": "constructed"
+  },
+  "frequency:null": {
+   "ok": true,
+   "v": "constructed"
+  },
+  "options:null": {
+   "ok": true,
+   "v": "constructed"
+  },
+  "options:1": {
+   "threw": "TypeError|Failed to construct 'Accelerometer': The provided value is not of type 'SpatialSensorOptions'."
+  },
+  "options:\"x\"": {
+   "threw": "TypeError|Failed to construct 'Accelerometer': The provided value is not of type 'SpatialSensorOptions'."
+  },
+  "activatedRightAfterStart": false,
+  "startTwice": "ok",
+  "microtaskAfterStart": 0,
+  "afterTimeout0": 0,
+  "afterTimeout800": [
+   "listener:NotReadableError:Could not connect to a sensor:error:false:false:true:[object SensorErrorEvent]"
+  ],
+  "activatedAfterError": false,
+  "secondRound": [
+   "listener:NotReadableError:Could not connect to a sensor:error:false:false:true:[object SensorErrorEvent]"
+  ],
+  "stoppedBeforeError": [],
+  "populateMatrix(DOMMatrix)": {
+   "threw": "NotReadableError|Failed to execute 'populateMatrix' on 'OrientationSensor': Sensor data is not available."
+  },
+  "populateMatrix(Float64Array16)": {
+   "threw": "NotReadableError|Failed to execute 'populateMatrix' on 'OrientationSensor': Sensor data is not available."
+  },
+  "populateMatrix(null)": {
+   "threw": "TypeError|Failed to execute 'populateMatrix' on 'OrientationSensor': The provided value is not of type '(DOMMatrix or Float32Array or Float64Array)'."
+  },
+  "startDesc": {
+   "e": true,
+   "c": true,
+   "w": true
+  },
+  "activatedDesc": {
+   "e": true,
+   "c": true
+  },
+  "toStringTagDesc": {
+   "value": "Sensor",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "midiMapIteratorSame": false,
+  "midiMapTag": "MIDIInputMap",
+  "sensorProtoTag": "Sensor",
+  "sensorToString": "function Sensor() { [native code] }",
+  "accelToString": "function Accelerometer() { [native code] }"
+ }
+}

@@ -1,0 +1,151 @@
+{
+ "names": [
+  "RTCTransformEvent",
+  "RTCRtpScriptTransformer",
+  "RTCDataChannel",
+  "RTCEncodedVideoFrame",
+  "RTCEncodedAudioFrame"
+ ],
+ "classes": {
+  "RTCTransformEvent": {
+   "statics": [],
+   "proto": [
+    "transformer:accessor/get",
+    "constructor:method/0"
+   ],
+   "length": 0,
+   "name": "RTCTransformEvent"
+  },
+  "RTCRtpScriptTransformer": {
+   "statics": [],
+   "proto": [
+    "readable:accessor/get",
+    "writable:accessor/get",
+    "options:accessor/get",
+    "sendKeyFrameRequest:method/0",
+    "constructor:method/0"
+   ],
+   "length": 0,
+   "name": "RTCRtpScriptTransformer"
+  },
+  "RTCDataChannel": {
+   "statics": [],
+   "proto": [
+    "label:accessor/get",
+    "ordered:accessor/get",
+    "maxPacketLifeTime:accessor/get",
+    "maxRetransmits:accessor/get",
+    "protocol:accessor/get",
+    "negotiated:accessor/get",
+    "id:accessor/get",
+    "readyState:accessor/get",
+    "bufferedAmount:accessor/get",
+    "bufferedAmountLowThreshold:accessor/get/set",
+    "onopen:accessor/get/set",
+    "onbufferedamountlow:accessor/get/set",
+    "onerror:accessor/get/set",
+    "onclosing:accessor/get/set",
+    "onclose:accessor/get/set",
+    "onmessage:accessor/get/set",
+    "binaryType:accessor/get/set",
+    "reliable:accessor/get",
+    "close:method/0",
+    "send:method/1",
+    "constructor:method/0"
+   ],
+   "length": 0,
+   "name": "RTCDataChannel"
+  },
+  "RTCEncodedVideoFrame": {
+   "statics": [],
+   "proto": [
+    "type:accessor/get",
+    "timestamp:accessor/get",
+    "data:accessor/get/set",
+    "getMetadata:method/0",
+    "toString:method/0",
+    "constructor:method/1"
+   ],
+   "length": 1,
+   "name": "RTCEncodedVideoFrame"
+  },
+  "RTCEncodedAudioFrame": {
+   "statics": [],
+   "proto": [
+    "timestamp:accessor/get",
+    "data:accessor/get/set",
+    "getMetadata:method/0",
+    "toString:method/0",
+    "constructor:method/1"
+   ],
+   "length": 1,
+   "name": "RTCEncodedAudioFrame"
+  }
+ },
+ "chains": {
+  "RTCTransformEvent": {
+   "protoChain": [
+    "Event",
+    "Object"
+   ],
+   "classProto": "Event",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true
+   }
+  },
+  "RTCRtpScriptTransformer": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true
+   }
+  },
+  "RTCDataChannel": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true
+   }
+  },
+  "RTCEncodedVideoFrame": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true
+   }
+  },
+  "RTCEncodedAudioFrame": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true
+   }
+  }
+ },
+ "ctorThrows": {
+  "RTCTransformEvent": "TypeError: Failed to construct 'RTCTransformEvent': Illegal constructor",
+  "RTCRtpScriptTransformer": "TypeError: Failed to construct 'RTCRtpScriptTransformer': Illegal constructor",
+  "RTCDataChannel": "TypeError: Failed to construct 'RTCDataChannel': Illegal constructor",
+  "RTCEncodedVideoFrame": "TypeError: Failed to construct 'RTCEncodedVideoFrame': 1 argument required, but only 0 present.",
+  "RTCEncodedAudioFrame": "TypeError: Failed to construct 'RTCEncodedAudioFrame': 1 argument required, but only 0 present."
+ }
+}

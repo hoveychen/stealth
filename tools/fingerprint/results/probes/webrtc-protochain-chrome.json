@@ -1,0 +1,1014 @@
+{
+ "rtcGlobals": [
+  "webkitRTCPeerConnection",
+  "RTCTrackEvent",
+  "RTCStatsReport",
+  "RTCSessionDescription",
+  "RTCSctpTransport",
+  "RTCRtpTransceiver",
+  "RTCRtpSender",
+  "RTCRtpReceiver",
+  "RTCPeerConnectionIceEvent",
+  "RTCPeerConnectionIceErrorEvent",
+  "RTCPeerConnection",
+  "RTCIceTransport",
+  "RTCIceCandidate",
+  "RTCErrorEvent",
+  "RTCError",
+  "RTCEncodedVideoFrame",
+  "RTCEncodedAudioFrame",
+  "RTCDtlsTransport",
+  "RTCDataChannelEvent",
+  "RTCDTMFToneChangeEvent",
+  "RTCDTMFSender",
+  "RTCCertificate",
+  "RTCDataChannel",
+  "RTCRtpScriptTransform"
+ ],
+ "chains": {
+  "webkitRTCPeerConnection": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCTrackEvent": {
+   "protoChain": [
+    "Event",
+    "Object"
+   ],
+   "classProto": "Event",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCStatsReport": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCSessionDescription": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCSctpTransport": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCRtpTransceiver": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCRtpSender": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCRtpReceiver": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCPeerConnectionIceEvent": {
+   "protoChain": [
+    "Event",
+    "Object"
+   ],
+   "classProto": "Event",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCPeerConnectionIceErrorEvent": {
+   "protoChain": [
+    "Event",
+    "Object"
+   ],
+   "classProto": "Event",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCPeerConnection": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCIceTransport": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCIceCandidate": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCErrorEvent": {
+   "protoChain": [
+    "Event",
+    "Object"
+   ],
+   "classProto": "Event",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCError": {
+   "protoChain": [
+    "DOMException",
+    "Error",
+    "Object"
+   ],
+   "classProto": "DOMException",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCEncodedVideoFrame": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCEncodedAudioFrame": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCDtlsTransport": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCDataChannelEvent": {
+   "protoChain": [
+    "Event",
+    "Object"
+   ],
+   "classProto": "Event",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCDTMFToneChangeEvent": {
+   "protoChain": [
+    "Event",
+    "Object"
+   ],
+   "classProto": "Event",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCDTMFSender": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCCertificate": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCDataChannel": {
+   "protoChain": [
+    "EventTarget",
+    "Object"
+   ],
+   "classProto": "EventTarget",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  },
+  "RTCRtpScriptTransform": {
+   "protoChain": [
+    "Object"
+   ],
+   "classProto": "",
+   "desc": {
+    "writable": true,
+    "enumerable": false,
+    "configurable": true,
+    "isAccessor": false
+   }
+  }
+ },
+ "protoKeys": {
+  "webkitRTCPeerConnection": [
+   "localDescription",
+   "currentLocalDescription",
+   "pendingLocalDescription",
+   "remoteDescription",
+   "currentRemoteDescription",
+   "pendingRemoteDescription",
+   "signalingState",
+   "iceGatheringState",
+   "iceConnectionState",
+   "connectionState",
+   "canTrickleIceCandidates",
+   "onnegotiationneeded",
+   "onicecandidate",
+   "onsignalingstatechange",
+   "oniceconnectionstatechange",
+   "onconnectionstatechange",
+   "onicegatheringstatechange",
+   "onicecandidateerror",
+   "ontrack",
+   "sctp",
+   "ondatachannel",
+   "onaddstream",
+   "onremovestream",
+   "addIceCandidate",
+   "addStream",
+   "addTrack",
+   "addTransceiver",
+   "close",
+   "createAnswer",
+   "createDTMFSender",
+   "createDataChannel",
+   "createOffer",
+   "getConfiguration",
+   "getLocalStreams",
+   "getReceivers",
+   "getRemoteStreams",
+   "getSenders",
+   "getStats",
+   "getTransceivers",
+   "removeStream",
+   "removeTrack",
+   "restartIce",
+   "setConfiguration",
+   "setLocalDescription",
+   "setRemoteDescription",
+   "constructor"
+  ],
+  "RTCTrackEvent": [
+   "receiver",
+   "track",
+   "streams",
+   "transceiver",
+   "constructor"
+  ],
+  "RTCStatsReport": [
+   "size",
+   "entries",
+   "forEach",
+   "get",
+   "has",
+   "keys",
+   "values",
+   "constructor"
+  ],
+  "RTCSessionDescription": [
+   "type",
+   "sdp",
+   "toJSON",
+   "constructor"
+  ],
+  "RTCSctpTransport": [
+   "transport",
+   "state",
+   "maxMessageSize",
+   "maxChannels",
+   "onstatechange",
+   "constructor"
+  ],
+  "RTCRtpTransceiver": [
+   "mid",
+   "sender",
+   "receiver",
+   "stopped",
+   "direction",
+   "currentDirection",
+   "getHeaderExtensionsToNegotiate",
+   "getNegotiatedHeaderExtensions",
+   "setCodecPreferences",
+   "setHeaderExtensionsToNegotiate",
+   "stop",
+   "constructor"
+  ],
+  "RTCRtpSender": [
+   "track",
+   "transport",
+   "rtcpTransport",
+   "dtmf",
+   "createEncodedStreams",
+   "getParameters",
+   "getStats",
+   "replaceTrack",
+   "setParameters",
+   "setStreams",
+   "transform",
+   "constructor"
+  ],
+  "RTCRtpReceiver": [
+   "track",
+   "transport",
+   "rtcpTransport",
+   "playoutDelayHint",
+   "createEncodedStreams",
+   "getContributingSources",
+   "getParameters",
+   "getStats",
+   "getSynchronizationSources",
+   "jitterBufferTarget",
+   "transform",
+   "constructor"
+  ],
+  "RTCPeerConnectionIceEvent": [
+   "candidate",
+   "constructor"
+  ],
+  "RTCPeerConnectionIceErrorEvent": [
+   "address",
+   "port",
+   "hostCandidate",
+   "url",
+   "errorCode",
+   "errorText",
+   "constructor"
+  ],
+  "RTCPeerConnection": [
+   "localDescription",
+   "currentLocalDescription",
+   "pendingLocalDescription",
+   "remoteDescription",
+   "currentRemoteDescription",
+   "pendingRemoteDescription",
+   "signalingState",
+   "iceGatheringState",
+   "iceConnectionState",
+   "connectionState",
+   "canTrickleIceCandidates",
+   "onnegotiationneeded",
+   "onicecandidate",
+   "onsignalingstatechange",
+   "oniceconnectionstatechange",
+   "onconnectionstatechange",
+   "onicegatheringstatechange",
+   "onicecandidateerror",
+   "ontrack",
+   "sctp",
+   "ondatachannel",
+   "onaddstream",
+   "onremovestream",
+   "addIceCandidate",
+   "addStream",
+   "addTrack",
+   "addTransceiver",
+   "close",
+   "createAnswer",
+   "createDTMFSender",
+   "createDataChannel",
+   "createOffer",
+   "getConfiguration",
+   "getLocalStreams",
+   "getReceivers",
+   "getRemoteStreams",
+   "getSenders",
+   "getStats",
+   "getTransceivers",
+   "removeStream",
+   "removeTrack",
+   "restartIce",
+   "setConfiguration",
+   "setLocalDescription",
+   "setRemoteDescription",
+   "constructor"
+  ],
+  "RTCIceTransport": [
+   "role",
+   "state",
+   "gatheringState",
+   "onstatechange",
+   "ongatheringstatechange",
+   "onselectedcandidatepairchange",
+   "getLocalCandidates",
+   "getLocalParameters",
+   "getRemoteCandidates",
+   "getRemoteParameters",
+   "getSelectedCandidatePair",
+   "constructor"
+  ],
+  "RTCIceCandidate": [
+   "candidate",
+   "sdpMid",
+   "sdpMLineIndex",
+   "foundation",
+   "component",
+   "priority",
+   "address",
+   "protocol",
+   "port",
+   "type",
+   "tcpType",
+   "relatedAddress",
+   "relatedPort",
+   "usernameFragment",
+   "relayProtocol",
+   "url",
+   "toJSON",
+   "constructor"
+  ],
+  "RTCErrorEvent": [
+   "error",
+   "constructor"
+  ],
+  "RTCError": [
+   "errorDetail",
+   "sdpLineNumber",
+   "httpRequestStatusCode",
+   "sctpCauseCode",
+   "receivedAlert",
+   "sentAlert",
+   "constructor"
+  ],
+  "RTCEncodedVideoFrame": [
+   "type",
+   "timestamp",
+   "data",
+   "getMetadata",
+   "toString",
+   "constructor"
+  ],
+  "RTCEncodedAudioFrame": [
+   "timestamp",
+   "data",
+   "getMetadata",
+   "toString",
+   "constructor"
+  ],
+  "RTCDtlsTransport": [
+   "iceTransport",
+   "state",
+   "onstatechange",
+   "onerror",
+   "getRemoteCertificates",
+   "constructor"
+  ],
+  "RTCDataChannelEvent": [
+   "channel",
+   "constructor"
+  ],
+  "RTCDTMFToneChangeEvent": [
+   "tone",
+   "constructor"
+  ],
+  "RTCDTMFSender": [
+   "ontonechange",
+   "canInsertDTMF",
+   "toneBuffer",
+   "insertDTMF",
+   "constructor"
+  ],
+  "RTCCertificate": [
+   "expires",
+   "getFingerprints",
+   "constructor"
+  ],
+  "RTCDataChannel": [
+   "label",
+   "ordered",
+   "maxPacketLifeTime",
+   "maxRetransmits",
+   "protocol",
+   "negotiated",
+   "id",
+   "readyState",
+   "bufferedAmount",
+   "bufferedAmountLowThreshold",
+   "onopen",
+   "onbufferedamountlow",
+   "onerror",
+   "onclosing",
+   "onclose",
+   "onmessage",
+   "binaryType",
+   "reliable",
+   "close",
+   "send",
+   "constructor"
+  ],
+  "RTCRtpScriptTransform": [
+   "constructor"
+  ]
+ },
+ "ctorLengths": {
+  "webkitRTCPeerConnection": 0,
+  "RTCTrackEvent": 2,
+  "RTCStatsReport": 0,
+  "RTCSessionDescription": 0,
+  "RTCSctpTransport": 0,
+  "RTCRtpTransceiver": 0,
+  "RTCRtpSender": 0,
+  "RTCRtpReceiver": 0,
+  "RTCPeerConnectionIceEvent": 1,
+  "RTCPeerConnectionIceErrorEvent": 2,
+  "RTCPeerConnection": 0,
+  "RTCIceTransport": 0,
+  "RTCIceCandidate": 0,
+  "RTCErrorEvent": 2,
+  "RTCError": 1,
+  "RTCEncodedVideoFrame": 1,
+  "RTCEncodedAudioFrame": 1,
+  "RTCDtlsTransport": 0,
+  "RTCDataChannelEvent": 2,
+  "RTCDTMFToneChangeEvent": 2,
+  "RTCDTMFSender": 0,
+  "RTCCertificate": 0,
+  "RTCDataChannel": 0,
+  "RTCRtpScriptTransform": 1
+ },
+ "aliasIdentity": {
+  "same": true,
+  "aliasName": "RTCPeerConnection"
+ },
+ "calls": {
+  "RTCError()": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCError': 1 argument required, but only 0 present."
+  },
+  "RTCError(dict)": {
+   "ok": true,
+   "value": {
+    "name": "OperationError",
+    "message": "",
+    "code": 0,
+    "errorDetail": "data-channel-failure",
+    "sdpLineNumber": null,
+    "httpRequestStatusCode": null,
+    "sctpCauseCode": null,
+    "receivedAlert": null,
+    "sentAlert": null,
+    "isDOMException": true,
+    "str": "OperationError",
+    "stack": "undefined"
+   }
+  },
+  "RTCError(bad detail)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCError': Failed to read the 'errorDetail' property from 'RTCErrorInit': The provided value 'nope' is not a valid enum value of type RTCErrorDetailType."
+  },
+  "RTCError(full)": {
+   "ok": true,
+   "value": {
+    "message": "boom",
+    "sdpLineNumber": 7,
+    "httpRequestStatusCode": 404,
+    "sctpCauseCode": 3,
+    "receivedAlert": 40,
+    "sentAlert": 41
+   }
+  },
+  "RTCErrorEvent(1)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCErrorEvent': 2 arguments required, but only 1 present."
+  },
+  "RTCErrorEvent(2)": {
+   "ok": true,
+   "value": {
+    "type": "e",
+    "errName": "OperationError",
+    "bubbles": false,
+    "cancelable": false
+   }
+  },
+  "RTCErrorEvent(no error)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCErrorEvent': Failed to read the 'error' property from 'RTCErrorEventInit': Required member is undefined."
+  },
+  "RTCTrackEvent(1)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCTrackEvent': 2 arguments required, but only 1 present."
+  },
+  "RTCTrackEvent(empty dict)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCTrackEvent': Failed to read the 'receiver' property from 'RTCTrackEventInit': Required member is undefined."
+  },
+  "RTCDataChannelEvent(1)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCDataChannelEvent': 2 arguments required, but only 1 present."
+  },
+  "RTCDataChannelEvent(empty)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCDataChannelEvent': Failed to read the 'channel' property from 'RTCDataChannelEventInit': Required member is undefined."
+  },
+  "RTCDataChannelEvent(real)": {
+   "ok": true,
+   "value": {
+    "type": "datachannel",
+    "label": "x",
+    "bubbles": false
+   }
+  },
+  "RTCPeerConnectionIceErrorEvent(1)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCPeerConnectionIceErrorEvent': 2 arguments required, but only 1 present."
+  },
+  "RTCPeerConnectionIceErrorEvent(empty)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCPeerConnectionIceErrorEvent': Failed to read the 'errorCode' property from 'RTCPeerConnectionIceErrorEventInit': Required member is undefined."
+  },
+  "RTCPeerConnectionIceErrorEvent(2)": {
+   "ok": true,
+   "value": {
+    "type": "icecandidateerror",
+    "address": null,
+    "port": null,
+    "hostCandidate": "",
+    "url": "",
+    "errorCode": 701,
+    "errorText": ""
+   }
+  },
+  "RTCPeerConnectionIceErrorEvent(addr)": {
+   "ok": true,
+   "value": {
+    "address": "1.2.3.4",
+    "port": 5000,
+    "hostCandidate": "",
+    "url": "stun:x",
+    "errorCode": 701,
+    "errorText": "nope"
+   }
+  },
+  "RTCPeerConnectionIceErrorEvent(addr no port)": {
+   "ok": true,
+   "value": {
+    "address": "1.2.3.4",
+    "port": null,
+    "hostCandidate": ""
+   }
+  },
+  "RTCDTMFToneChangeEvent(1)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCDTMFToneChangeEvent': 2 arguments required, but only 1 present."
+  },
+  "RTCDTMFToneChangeEvent(empty)": {
+   "ok": true,
+   "value": {
+    "tone": ""
+   }
+  },
+  "RTCEncodedAudioFrame(1)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCEncodedAudioFrame': 1 argument required, but only 0 present."
+  },
+  "RTCEncodedAudioFrame(junk)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCEncodedAudioFrame': parameter 1 is not of type 'RTCEncodedAudioFrame'."
+  },
+  "RTCEncodedVideoFrame(junk)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCEncodedVideoFrame': parameter 1 is not of type 'RTCEncodedVideoFrame'."
+  },
+  "RTCRtpScriptTransform()": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCRtpScriptTransform': 1 argument required, but only 0 present."
+  },
+  "RTCRtpScriptTransform(junk)": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCRtpScriptTransform': parameter 1 is not of type 'Worker'."
+  },
+  "RTCCertificate()": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCCertificate': Illegal constructor"
+  },
+  "RTCRtpTransceiver()": {
+   "ok": false,
+   "err": "TypeError: Failed to construct 'RTCRtpTransceiver': Illegal constructor"
+  }
+ },
+ "tags": {
+  "webkitRTCPeerConnection": {
+   "value": "RTCPeerConnection",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCTrackEvent": {
+   "value": "RTCTrackEvent",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCStatsReport": {
+   "value": "RTCStatsReport",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCSessionDescription": {
+   "value": "RTCSessionDescription",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCSctpTransport": {
+   "value": "RTCSctpTransport",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCRtpTransceiver": {
+   "value": "RTCRtpTransceiver",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCRtpSender": {
+   "value": "RTCRtpSender",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCRtpReceiver": {
+   "value": "RTCRtpReceiver",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCPeerConnectionIceEvent": {
+   "value": "RTCPeerConnectionIceEvent",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCPeerConnectionIceErrorEvent": {
+   "value": "RTCPeerConnectionIceErrorEvent",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCPeerConnection": {
+   "value": "RTCPeerConnection",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCIceTransport": {
+   "value": "RTCIceTransport",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCIceCandidate": {
+   "value": "RTCIceCandidate",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCErrorEvent": {
+   "value": "RTCErrorEvent",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCError": {
+   "value": "RTCError",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCEncodedVideoFrame": {
+   "value": "RTCEncodedVideoFrame",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCEncodedAudioFrame": {
+   "value": "RTCEncodedAudioFrame",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCDtlsTransport": {
+   "value": "RTCDtlsTransport",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCDataChannelEvent": {
+   "value": "RTCDataChannelEvent",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCDTMFToneChangeEvent": {
+   "value": "RTCDTMFToneChangeEvent",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCDTMFSender": {
+   "value": "RTCDTMFSender",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCCertificate": {
+   "value": "RTCCertificate",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCDataChannel": {
+   "value": "RTCDataChannel",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  },
+  "RTCRtpScriptTransform": {
+   "value": "RTCRtpScriptTransform",
+   "writable": false,
+   "enumerable": false,
+   "configurable": true
+  }
+ },
+ "liveTransceiver": {
+  "mid": null,
+  "direction": "sendrecv",
+  "currentDirection": null,
+  "stopped": false,
+  "senderCtor": "RTCRtpSender",
+  "receiverCtor": "RTCRtpReceiver",
+  "transportOnSender": null,
+  "dtmfCtor": "RTCDTMFSender",
+  "headerExts": [
+   {
+    "direction": "sendrecv",
+    "uri": "urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+   },
+   {
+    "direction": "sendrecv",
+    "uri": "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+   }
+  ],
+  "negotiated": [
+   {
+    "direction": "stopped",
+    "uri": "urn:ietf:params:rtp-hdrext:ssrc-audio-level"
+   },
+   {
+    "direction": "stopped",
+    "uri": "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time"
+   },
+   {
+    "direction": "stopped",
+    "uri": "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01"
+   },
+   {
+    "direction": "stopped",
+    "uri": "urn:ietf:params:rtp-hdrext:sdes:mid"
+   },
+   {
+    "direction": "stopped",
+    "uri": "http://www.webrtc.org/experiments/rtp-hdrext/abs-capture-time"
+   }
+  ]
+ },
+ "workerRtc": [
+  "RTCTransformEvent",
+  "RTCRtpScriptTransformer",
+  "RTCDataChannel",
+  "RTCEncodedVideoFrame",
+  "RTCEncodedAudioFrame"
+ ]
+}

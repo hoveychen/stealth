@@ -1,0 +1,273 @@
+{
+ "buffer_minimal": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUBuffer]",
+   "size": 16,
+   "usage": 12,
+   "mapState": "unmapped",
+   "label": ""
+  }
+ },
+ "buffer_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUBuffer]",
+   "size": 4,
+   "usage": 1,
+   "mapState": "unmapped",
+   "label": "buf"
+  }
+ },
+ "buffer_mapped_at_creation": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUBuffer]",
+   "size": 4,
+   "usage": 2,
+   "mapState": "mapped",
+   "label": ""
+  }
+ },
+ "buffer_no_size": {
+  "threw": "TypeError: Failed to execute 'createBuffer' on 'GPUDevice': Failed to read the 'size' property from 'GPUBufferDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "buffer_no_usage": {
+  "threw": "TypeError: Failed to execute 'createBuffer' on 'GPUDevice': Failed to read the 'usage' property from 'GPUBufferDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "buffer_no_descriptor": {
+  "threw": "TypeError: Failed to execute 'createBuffer' on 'GPUDevice': 1 argument required, but only 0 present.",
+  "err": null
+ },
+ "buffer_usage_zero": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUBuffer]",
+   "size": 4,
+   "usage": 0,
+   "mapState": "unmapped",
+   "label": ""
+  }
+ },
+ "texture_array_size": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUTexture]",
+   "width": 8,
+   "height": 4,
+   "depthOrArrayLayers": 1,
+   "mipLevelCount": 1,
+   "sampleCount": 1,
+   "dimension": "2d",
+   "format": "rgba8unorm",
+   "usage": 4,
+   "label": ""
+  }
+ },
+ "texture_dict_size": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUTexture]",
+   "width": 8,
+   "height": 4,
+   "depthOrArrayLayers": 2,
+   "mipLevelCount": 1,
+   "sampleCount": 1,
+   "dimension": "2d",
+   "format": "rgba8unorm",
+   "usage": 4,
+   "label": ""
+  }
+ },
+ "texture_width_only": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUTexture]",
+   "width": 8,
+   "height": 1,
+   "depthOrArrayLayers": 1,
+   "mipLevelCount": 1,
+   "sampleCount": 1,
+   "dimension": "2d",
+   "format": "r8unorm",
+   "usage": 2,
+   "label": ""
+  }
+ },
+ "texture_3d": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUTexture]",
+   "width": 8,
+   "height": 8,
+   "depthOrArrayLayers": 4,
+   "mipLevelCount": 1,
+   "sampleCount": 1,
+   "dimension": "3d",
+   "format": "rgba8unorm",
+   "usage": 4,
+   "label": ""
+  }
+ },
+ "texture_mips": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUTexture]",
+   "width": 8,
+   "height": 8,
+   "depthOrArrayLayers": 1,
+   "mipLevelCount": 3,
+   "sampleCount": 1,
+   "dimension": "2d",
+   "format": "rgba8unorm",
+   "usage": 4,
+   "label": "tex"
+  }
+ },
+ "texture_no_format": {
+  "threw": "TypeError: Failed to execute 'createTexture' on 'GPUDevice': Failed to read the 'format' property from 'GPUTextureDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "texture_no_size": {
+  "threw": "TypeError: Failed to execute 'createTexture' on 'GPUDevice': Failed to read the 'size' property from 'GPUTextureDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "texture_no_usage": {
+  "threw": "TypeError: Failed to execute 'createTexture' on 'GPUDevice': Failed to read the 'usage' property from 'GPUTextureDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "texture_bad_format": {
+  "threw": "TypeError: Failed to execute 'createTexture' on 'GPUDevice': Failed to read the 'format' property from 'GPUTextureDescriptor': The provided value 'nope' is not a valid enum value of type GPUTextureFormat.",
+  "err": null
+ },
+ "view_default": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUTextureView]",
+   "label": ""
+  }
+ },
+ "view_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUTextureView]",
+   "label": "v"
+  }
+ },
+ "sampler_default": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUSampler]",
+   "label": ""
+  }
+ },
+ "sampler_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUSampler]",
+   "label": "s"
+  }
+ },
+ "queryset": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUQuerySet]",
+   "type": "occlusion",
+   "count": 4,
+   "label": ""
+  }
+ },
+ "queryset_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUQuerySet]",
+   "type": "occlusion",
+   "count": 2,
+   "label": "q"
+  }
+ },
+ "queryset_no_type": {
+  "threw": "TypeError: Failed to execute 'createQuerySet' on 'GPUDevice': Failed to read the 'type' property from 'GPUQuerySetDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "queryset_no_count": {
+  "threw": "TypeError: Failed to execute 'createQuerySet' on 'GPUDevice': Failed to read the 'count' property from 'GPUQuerySetDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "queryset_bad_type": {
+  "threw": "TypeError: Failed to execute 'createQuerySet' on 'GPUDevice': Failed to read the 'type' property from 'GPUQuerySetDescriptor': The provided value 'nope' is not a valid enum value of type GPUQueryType.",
+  "err": null
+ },
+ "bind_group_layout_empty": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUBindGroupLayout]",
+   "label": ""
+  }
+ },
+ "bind_group_layout_no_entries": {
+  "threw": "TypeError: Failed to execute 'createBindGroupLayout' on 'GPUDevice': Failed to read the 'entries' property from 'GPUBindGroupLayoutDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "pipeline_layout_empty": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUPipelineLayout]",
+   "label": ""
+  }
+ },
+ "pipeline_layout_no_member": {
+  "threw": "TypeError: Failed to execute 'createPipelineLayout' on 'GPUDevice': Failed to read the 'bindGroupLayouts' property from 'GPUPipelineLayoutDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "bind_group_empty": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUBindGroup]",
+   "label": ""
+  }
+ },
+ "bind_group_no_layout": {
+  "threw": "TypeError: Failed to execute 'createBindGroup' on 'GPUDevice': Failed to read the 'layout' property from 'GPUBindGroupDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "external_texture_no_source": {
+  "threw": "TypeError: Failed to execute 'importExternalTexture' on 'GPUDevice': Failed to read the 'source' property from 'GPUExternalTextureDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "external_texture_bad_source": {
+  "threw": "TypeError: Failed to execute 'importExternalTexture' on 'GPUDevice': Failed to read the 'source' property from 'GPUExternalTextureDescriptor': The provided value is not of type '(HTMLVideoElement or VideoFrame)'.",
+  "err": null
+ },
+ "label_roundtrip": {
+  "buffer": "x",
+  "sampler": "y"
+ },
+ "errorScope": {
+  "popWithoutPush": "OperationError: No error scopes to pop",
+  "badFilter": "TypeError: Failed to execute 'pushErrorScope' on 'GPUDevice': The provided value 'nope' is not a valid enum value of type GPUErrorFilter.",
+  "emptyScope": "null",
+  "outOfMemoryFilter": "ok",
+  "internalFilter": "ok"
+ }
+}

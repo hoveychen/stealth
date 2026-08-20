@@ -1,0 +1,322 @@
+{
+ "href": "http://127.0.0.1:8752/",
+ "secure": true,
+ "out": {
+  "names": {
+   "geolocation": {
+    "state": "prompt",
+    "statusName": "geolocation"
+   },
+   "notifications": {
+    "state": "prompt",
+    "statusName": "notifications"
+   },
+   "push": {
+    "rejected": "NotSupportedError|Failed to execute 'query' on 'Permissions': Push Permission without userVisibleOnly:true isn't supported yet.|DOMException"
+   },
+   "midi": {
+    "state": "prompt",
+    "statusName": "midi"
+   },
+   "camera": {
+    "state": "prompt",
+    "statusName": "video_capture"
+   },
+   "microphone": {
+    "state": "prompt",
+    "statusName": "audio_capture"
+   },
+   "speaker": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'speaker' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "device-info": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'device-info' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "background-fetch": {
+    "state": "granted",
+    "statusName": "background_fetch"
+   },
+   "background-sync": {
+    "state": "granted",
+    "statusName": "background_sync"
+   },
+   "bluetooth": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'bluetooth' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "persistent-storage": {
+    "state": "prompt",
+    "statusName": "durable_storage"
+   },
+   "ambient-light-sensor": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': GenericSensorExtraClasses flag is not enabled.|TypeError"
+   },
+   "accelerometer": {
+    "state": "granted",
+    "statusName": "sensors"
+   },
+   "gyroscope": {
+    "state": "granted",
+    "statusName": "sensors"
+   },
+   "magnetometer": {
+    "state": "granted",
+    "statusName": "sensors"
+   },
+   "clipboard-read": {
+    "state": "prompt",
+    "statusName": "clipboard_read"
+   },
+   "clipboard-write": {
+    "state": "granted",
+    "statusName": "clipboard_write"
+   },
+   "display-capture": {
+    "state": "prompt",
+    "statusName": "display_capture"
+   },
+   "nfc": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Web NFC is not enabled.|TypeError"
+   },
+   "screen-wake-lock": {
+    "state": "granted",
+    "statusName": "screen_wake_lock"
+   },
+   "system-wake-lock": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': System Wake Lock is not enabled.|TypeError"
+   },
+   "payment-handler": {
+    "state": "granted",
+    "statusName": "payment_handler"
+   },
+   "periodic-background-sync": {
+    "state": "denied",
+    "statusName": "periodic_background_sync"
+   },
+   "storage-access": {
+    "state": "granted",
+    "statusName": "storage-access"
+   },
+   "window-management": {
+    "state": "prompt",
+    "statusName": "window-management"
+   },
+   "local-fonts": {
+    "state": "prompt",
+    "statusName": "local_fonts"
+   },
+   "top-level-storage-access": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': The requested origin is invalid.|TypeError"
+   },
+   "captured-surface-control": {
+    "state": "prompt",
+    "statusName": "captured-surface-control"
+   },
+   "speaker-selection": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': The Speaker Selection API is not enabled.|TypeError"
+   },
+   "idle-detection": {
+    "state": "prompt",
+    "statusName": "idle_detection"
+   },
+   "window-placement": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'window-placement' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "accessibility-events": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'accessibility-events' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "automatic-fullscreen": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'automatic-fullscreen' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "web-app-installation": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': The Web App Install API is not enabled.|TypeError"
+   },
+   "pointer-lock": {
+    "state": "granted",
+    "statusName": "pointer-lock"
+   },
+   "keyboard-lock": {
+    "state": "granted",
+    "statusName": "keyboard-lock"
+   },
+   "smart-card": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'smart-card' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "protected-media-identifier": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'protected-media-identifier' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "sensors": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'sensors' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "compute-pressure": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'compute-pressure' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "hand-tracking": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'hand-tracking' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "xr-spatial-tracking": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'xr-spatial-tracking' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "fullscreen": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Fullscreen Permission only supports allowWithoutGesture:true.|TypeError"
+   },
+   "vr": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'vr' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "ar": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'ar' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "audio-capture": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'audio-capture' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "video-capture": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'video-capture' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "durable-storage": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'durable-storage' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "wake-lock": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'wake-lock' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "periodic-sync": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'periodic-sync' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "bogus-name": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'bogus-name' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value '' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "GEOLOCATION": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'GEOLOCATION' is not a valid enum value of type PermissionName.|TypeError"
+   }
+  },
+  "descriptors": {
+   "1": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': parameter 1 is not of type 'object'.|TypeError"
+   },
+   "noArg": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': 1 argument required, but only 0 present.|TypeError"
+   },
+   "{}": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': Required member is undefined.|TypeError"
+   },
+   "{name:undefined}": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': Required member is undefined.|TypeError"
+   },
+   "{name:null}": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value 'null' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "{name:1}": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': The provided value '1' is not a valid enum value of type PermissionName.|TypeError"
+   },
+   "null": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': parameter 1 is not of type 'object'.|TypeError"
+   },
+   "\"x\"": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': parameter 1 is not of type 'object'.|TypeError"
+   },
+   "[]": {
+    "rejected": "TypeError|Failed to execute 'query' on 'Permissions': Failed to read the 'name' property from 'PermissionDescriptor': Required member is undefined.|TypeError"
+   },
+   "push+uvo": {
+    "state": "prompt",
+    "statusName": "notifications"
+   },
+   "push+uvo:false": {
+    "rejected": "NotSupportedError|Failed to execute 'query' on 'Permissions': Push Permission without userVisibleOnly:true isn't supported yet.|DOMException"
+   },
+   "midi+sysex": {
+    "state": "prompt",
+    "statusName": "midi"
+   },
+   "midi+sysex:false": {
+    "state": "prompt",
+    "statusName": "midi"
+   },
+   "geo+extra": {
+    "state": "prompt",
+    "statusName": "geolocation"
+   },
+   "camera+panTiltZoom": {
+    "state": "prompt",
+    "statusName": "video_capture"
+   },
+   "tlsa+origin": {
+    "state": "prompt",
+    "statusName": "top-level-storage-access"
+   }
+  },
+  "status": {
+   "brand": "[object PermissionStatus]",
+   "protoKeys": [
+    "name",
+    "state",
+    "onchange",
+    "constructor"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "tag": "PermissionStatus",
+   "chainIsEventTarget": true,
+   "name": "geolocation",
+   "state": "prompt",
+   "onchange": null,
+   "ownKeys": [],
+   "isEventTarget": true,
+   "hasAddEventListener": "function",
+   "descs": {
+    "name": {
+     "kind": "accessor",
+     "get": true,
+     "set": false,
+     "e": true,
+     "c": true
+    },
+    "state": {
+     "kind": "accessor",
+     "get": true,
+     "set": false,
+     "e": true,
+     "c": true
+    },
+    "onchange": {
+     "kind": "accessor",
+     "get": true,
+     "set": true,
+     "e": true,
+     "c": true
+    }
+   },
+   "ctorArity": 0,
+   "ctorName": "PermissionStatus",
+   "winDesc": {
+    "kind": "value",
+    "t": "function",
+    "arity": 0,
+    "e": false,
+    "c": true,
+    "w": true
+   },
+   "illegal": "TypeError|Failed to construct 'PermissionStatus': Illegal constructor|TypeError",
+   "identity": false
+  },
+  "permissions": {
+   "brand": "[object Permissions]",
+   "protoKeys": [
+    "query",
+    "constructor"
+   ],
+   "protoSyms": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "queryArity": 1,
+   "ctorArity": 0,
+   "identity": true,
+   "illegal": "TypeError|Failed to construct 'Permissions': Illegal constructor|TypeError"
+  },
+  "onchangeReadsBack": true,
+  "onchangeClears": null,
+  "onchangeNonFunction": null
+ }
+}

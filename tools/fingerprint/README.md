@@ -41,6 +41,11 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `diff.mjs` | Renders a candidate/reference markdown comparison. |
 | `run-expr.mjs` | Evaluates one expression file against either engine and prints the result as JSON. The collectors walk a fixed property list; this answers a one-off "what does Chrome say about X", and the answer to "are we aligned" is the diff of the two outputs. |
 | `probes/` | The expression files the sections below cite by name, and what `run-expr.mjs` takes. |
+| `run-probe.mjs` | Runs one `probe-*.js` on either engine and prints the result as JSON. Takes a url, because `about:blank` is not a secure context and this engine does not run scheduled tasks under an outstanding `awaitPromise` evaluate — a probe that awaits a timer needs a real page. |
+| `run-page-probe.mjs` | Runs a probe on this engine as a *page load* rather than through CDP, for the same timer reason. `lightpanda fetch --dump` decides the load is over somewhere between two and six seconds, so this is the short-probe path; anything with a longer wait budget belongs on `run-probe.mjs`. |
+| `webrtc-protochain.mjs` | Ground truth for every `RTC*` global: prototype chain, class-side inheritance, the window property descriptor, and the exact `TypeError` text for a few argument shapes. |
+| `webrtc-worker-surface.mjs` | The same question for a `DedicatedWorkerGlobalScope` — which `RTC*` names a worker carries, and the full shape of each. |
+| `run-iphey.mjs` | Reproduces iphey's `i20: TypeError: Illegal invocation` and attributes it, by patching `alert()` to record a stack and wrapping the reflection entry points so a throw names its receiver. |
 
 ## Two things to know before trusting a result
 
@@ -4465,6 +4470,88 @@ parse error into the tree. The empty-input case does produce a `<parsererror>`
 document (`DOMParser.zig` synthesises one, and `domparser.html`'s `basic` block
 pins its serialization against Chrome's for the same markup), so the gap is
 specifically the malformed-but-recoverable path. Left as measured, not fixed.
+
+## The `probe-*` batch the sections above cite
+
+The same problem, one directory over. The `probe-win*.js`, `probe-css*.js` and
+`probe-perm*.js` names the sections above cite -- and the `win*-chrome.json`
+readings and `win*-findings.md` notes they quote -- were a scratch directory
+that had wandered into an unrelated repository's working tree. Nineteen probes
+are in `probes/` now; the recordings they are quoted against, and the notes
+written from them, are in `results/probes/`.
+
+Which runner depends on what the probe waits for:
+
+```
+node tools/fingerprint/run-probe.mjs chrome     tools/fingerprint/probes/probe-win29.js http://127.0.0.1:8752/
+node tools/fingerprint/run-probe.mjs lightpanda tools/fingerprint/probes/probe-win29.js http://127.0.0.1:8752/
+node tools/fingerprint/run-page-probe.mjs                tools/fingerprint/probes/probe-win29.js
+```
+
+The url is not optional for this engine. `about:blank` is not a secure context,
+and -- the part that costs an afternoon if you do not know it -- **this engine
+does not run scheduled tasks while an `awaitPromise` evaluate is outstanding**,
+so any probe that awaits a `setTimeout` hangs until the CDP client's 30-second
+timeout. Nine of these nineteen do exactly that. `run-expr.mjs`, which drives
+the `expr-*.js` files above against `about:blank`, therefore cannot carry this
+batch at all; a bare
+`await new Promise((r) => setTimeout(() => r('fired'), 50))` never resolves
+under it and returns `{"timer": "fired"}` the moment the same expression is
+loaded as a page. `run-page-probe.mjs` is that page path, and it has its own
+ceiling: `lightpanda fetch --dump` decides the load is finished somewhere
+between two and six seconds no matter what keeps a timer alive, so a probe with
+a longer wait budget -- `probe-win11b` spends up to 13.7 seconds on guards --
+has to go through `run-probe.mjs` against a served page.
+
+`results/probes/` now holds two kinds of file, and the difference matters:
+
+* `probe-*.{chrome,lightpanda}.json` -- this run. `dev.340+3d96734f2` and
+  Chrome 151.0.7922.138 `--headless=new`, both against the same
+  `http://127.0.0.1:8752/`, so the pair is comparable leaf by leaf.
+* `win*-chrome.json`, `perm1-chrome.json`, `webrtc-*-chrome.json` -- the
+  readings the code comments cite by name, taken earlier on a *headed* Chrome
+  150. Those are the ground truth the Zig comments quote; they are kept as
+  recorded, not regenerated.
+
+Four probes are byte-identical between the two engines: `probe-perm1`,
+`probe-perm2`, `probe-win43` and `probe-win52`. Across the other fifteen, 84
+leaves differ -- three of which only carry the host the page was served from or
+a frame timestamp, leaving 81 real ones.
+
+### What running them found
+
+**Three recorded readings the engine had outgrown.** `css11-lp.json`,
+`win29-lp.json` and `win57-lp.json` were stale, and re-running the probes is
+what said so. `probe-css11`'s seven constructor `TypeError` rows went from 0 of
+7 matching Chrome to 7 of 7 -- the messages are Chrome's exact
+`Failed to construct 'CSSAnimation': Illegal constructor` wording now, where
+the recording still had the generic `Illegal Constructor`. `probe-win29` went
+from 5% of its shared leaves matching Chrome to 96%: the recording is a wall of
+`ReferenceError: DOMError is not defined`, `Highlight`, `MathMLElement`,
+`Sanitizer`, `XSLTProcessor`, `BlobEvent`, `ClipboardEvent` -- all implemented
+since. `probe-win57` went from 93% to 98%, with `ImageCapture` and
+`MediaMetadata` arriving in between. Nothing regressed; the files were simply
+older than the engine.
+
+**A headless Chrome does not reproduce a headed one, on five of them.**
+`probe-win11b` (`perm:midi`), `probe-win29`
+(`reportingObserver.takeRecords`), `probe-win38`
+(`adapterFeaturesOrder`), `probe-win57` and `probe-win63` (`origin`,
+`filesystem.request`, `ElementInternals.protoOwn`) read differently under
+Chrome 151 `--headless=new` than under the recorded headed Chrome 150. The
+`adapterFeaturesOrder` rows are the unstable-order case this file already
+records for WebGPU, and `origin` / `filesystem.request` only carry the host the
+page was served from -- but the split is why the headed recordings stay.
+
+**Where we still differ, by cluster.** `probe-css7` is the worst at 32 of 209
+leaves: CSS Typed OM's `computedGet*` answers and most of its parse-error
+messages. `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
+`SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
+`probe-win29` has 8 of 263, including `XSLTProcessor` producing no document and
+`Path2D` not reaching the canvas. `probe-win55` has 7 of 31, all of them
+maplike iterator identity (`iteratorIsValues`) on the WebXR collections.
+`probe-win30`'s `bipe.frozen` and `probe-win57`'s `MediaMetadataArtworkFrozen`
+are the same shape of miss: an array Chrome freezes and we do not.
 
 ## The commercial guards, and the regression that came with them (2026-08-20)
 

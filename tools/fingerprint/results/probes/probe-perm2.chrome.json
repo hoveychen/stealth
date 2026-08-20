@@ -1,0 +1,33 @@
+{
+ "fullscreen+awg": {
+  "state": "denied",
+  "name": "fullscreen"
+ },
+ "fullscreen+awg:false": "REJECT TypeError|Failed to execute 'query' on 'Permissions': Fullscreen Permission only supports allowWithoutGesture:true.",
+ "tlsa+badorigin": "REJECT TypeError|Failed to execute 'query' on 'Permissions': The requested origin is invalid.",
+ "tlsa+origin": {
+  "state": "prompt",
+  "name": "top-level-storage-access"
+ },
+ "camera+ptz:false": {
+  "state": "prompt",
+  "name": "video_capture"
+ },
+ "mic+ptz": {
+  "state": "prompt",
+  "name": "audio_capture"
+ },
+ "sensorNames": [
+  "sensors",
+  "sensors",
+  false
+ ],
+ "permTag": "Permissions",
+ "statusTag": "PermissionStatus",
+ "navDesc": {
+  "get": true,
+  "set": false,
+  "e": true,
+  "c": true
+ }
+}

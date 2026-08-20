@@ -1,0 +1,39 @@
+{
+ "anchorSet": {
+  "brand": "[object XRAnchorSet]",
+  "size": "0",
+  "stable": "false",
+  "isSet": "false",
+  "has": "TypeError: Failed to execute 'has' on 'XRAnchorSet': parameter 1 is not of type 'XRAnchor'.",
+  "values": "[object XRAnchorSet Iterator]|[]",
+  "entries": "[]",
+  "forEach": "0",
+  "forEachNoArg": "TypeError: Failed to execute 'forEach' on 'XRAnchorSet': 1 argument required, but only 0 present.",
+  "iteratorIsValues": "true"
+ },
+ "planeSet": {
+  "brand": "[object XRPlaneSet]",
+  "size": "0",
+  "isSet": "false",
+  "spread": "[]",
+  "iteratorIsValues": "true"
+ },
+ "inputSourceArray": {
+  "brand": "[object XRInputSourceArray]",
+  "length": "0",
+  "isArray": "false",
+  "spread": "[]",
+  "entries": "[object Array Iterator]|[]",
+  "keys": "[]",
+  "forEach": "0",
+  "forEachNoArg": "TypeError: undefined is not a function",
+  "index0": "undefined",
+  "hasIndexProp": "",
+  "iteratorIsValues": "true"
+ },
+ "endReturnBrand": "[object Promise]",
+ "endPromise": "PENDING 10s",
+ "endEvents": "none",
+ "ticksObserved": "105",
+ "visibilityAfterEnd": "visible"
+}

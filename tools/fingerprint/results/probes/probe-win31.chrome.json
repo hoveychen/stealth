@@ -1,0 +1,51 @@
+{
+ "addTextTrackArity": "1",
+ "textTracksIdentity": "true",
+ "addTextTrackDefaults": "{\"kind\":\"metadata\",\"label\":\"\\\"\\\"\",\"language\":\"\\\"\\\"\",\"id\":\"\\\"\\\"\",\"mode\":\"hidden\"}",
+ "validKinds": "subtitles:subtitles,captions:captions,descriptions:descriptions,chapters:chapters,metadata:metadata",
+ "modeDisabledCues": "{\"mode\":\"disabled\",\"cues\":\"null\",\"activeCues\":\"null\"}",
+ "modeBadValue": "hidden",
+ "trackListShape": "{\"len\":2,\"zero\":\"A\",\"one\":\"B\",\"oob\":\"undefined\",\"item\":\"[object TextTrack]\",\"spread\":2,\"sameObject\":true}",
+ "getTrackByIdMissing": "null",
+ "addRemoveCue": "{\"len\":1,\"first\":true,\"byId\":\"null\",\"cueTrack\":\"[object TextTrack]\",\"lenAfterRemove\":0,\"removeUnknown\":\"NotFoundError: Failed to execute 'removeCue' on 'TextTrack': The specified cue is not listed in the TextTrack's list of cues.\",\"addNonCue\":\"TypeError: Failed to execute 'addCue' on 'TextTrack': parameter 1 is not of type 'TextTrackCue'.\"}",
+ "cueIdLookup": "{\"byId\":true,\"missing\":\"null\"}",
+ "trackEventsFire": "addtrack:[object TrackEvent]:L|change",
+ "capture": {
+  "own": "",
+  "isEventTarget": true,
+  "zoomLevel": "null",
+  "onzoomlevelchange": "null",
+  "getSupportedZoomLevels": "InvalidStateError: Failed to execute 'getSupportedZoomLevels' on 'CaptureController': Not actively capturing.",
+  "setFocusBehaviorValid": "undefined",
+  "setFocusBehaviorBad": "TypeError: Failed to execute 'setFocusBehavior' on 'CaptureController': The provided value 'nope' is not a valid enum value of type CaptureStartFocusBehavior.",
+  "setFocusBehaviorNoArg": "TypeError: Failed to execute 'setFocusBehavior' on 'CaptureController': 1 argument required, but only 0 present.",
+  "increaseZoomLevel": "[object Promise]",
+  "decreaseZoomLevel": "[object Promise]",
+  "resetZoomLevel": "[object Promise]",
+  "forwardWheelNull": "[object Promise]",
+  "forwardWheelBad": "[object Promise]"
+ },
+ "cropFromElementDiv": {
+  "settled": "resolved",
+  "brand": "[object CropTarget]"
+ },
+ "cropFromElementNonElement": {
+  "settled": "rejected",
+  "err": "TypeError: Failed to execute 'fromElement' on 'CropTarget': parameter 1 is not of type 'Element'."
+ },
+ "cropFromElementNoArg": {
+  "settled": "rejected",
+  "err": "TypeError: Failed to execute 'fromElement' on 'CropTarget': 1 argument required, but only 0 present."
+ },
+ "cropTargetsDiffer": "different",
+ "oce": "{\"name\":\"OverconstrainedError\",\"message\":\"nope\",\"constraint\":\"width\",\"code\":0,\"str\":\"OverconstrainedError: nope\",\"ownKeys\":\"\",\"protoOfProto\":\"DOMException\",\"stack\":\"undefined\"}",
+ "oceNoArg": "TypeError: Failed to construct 'OverconstrainedError': 1 argument required, but only 0 present.",
+ "oceNonString": "{\"constraint\":\"5\",\"message\":\"6\"}",
+ "oceThrown": "true/true/OverconstrainedError",
+ "pip": "{\"ctor\":\"function\",\"docEnabled\":true,\"docElement\":\"null\",\"exitFn\":\"function\",\"onEnter\":true,\"disablePip\":true}",
+ "pipExit": {
+  "settled": "rejected",
+  "err": "InvalidStateError: Failed to execute 'exitPictureInPicture' on 'Document': There is no Picture-in-Picture element in this document."
+ },
+ "bcmst": "{\"isSubclassOfMediaStreamTrack\":true,\"cropToArity\":1,\"restrictToArity\":1}"
+}

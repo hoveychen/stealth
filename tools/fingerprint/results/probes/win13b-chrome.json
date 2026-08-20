@@ -1,0 +1,270 @@
+{
+ "uuid.canonical(0x1234)": {
+  "ok": true,
+  "type": "string",
+  "val": "00001234-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.canonical(0)": {
+  "ok": true,
+  "type": "string",
+  "val": "00000000-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.canonical(0xffffffff)": {
+  "ok": true,
+  "type": "string",
+  "val": "ffffffff-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.canonical(-1)": {
+  "ok": false,
+  "err": "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': Value is outside the 'unsigned long' value range."
+ },
+ "uuid.canonical(\"x\")": {
+  "ok": false,
+  "err": "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': Value is not of type 'unsigned long'."
+ },
+ "uuid.canonical()": {
+  "ok": false,
+  "err": "TypeError: Failed to execute 'canonicalUUID' on 'BluetoothUUID': 1 argument required, but only 0 present."
+ },
+ "uuid.getService(\"battery_service\")": {
+  "ok": true,
+  "type": "string",
+  "val": "0000180f-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getService(\"generic_access\")": {
+  "ok": true,
+  "type": "string",
+  "val": "00001800-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getService(0x180f)": {
+  "ok": true,
+  "type": "string",
+  "val": "0000180f-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getService(uuidstr)": {
+  "ok": true,
+  "type": "string",
+  "val": "0000180f-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getService(\"bogus\")": {
+  "ok": false,
+  "err": "TypeError: Failed to execute 'getService' on 'BluetoothUUID': Invalid Service name: 'bogus'. It must be a valid UUID alias (e.g. 0x1234), UUID (lowercase hex characters e.g. '00001234-0000-1000-8000-00805f9b34fb'), or recognized standard name from https://www.bluetooth.com/specifications/gatt/services e.g. 'alert_notification'."
+ },
+ "uuid.getService()": {
+  "ok": false,
+  "err": "TypeError: Failed to execute 'getService' on 'BluetoothUUID': 1 argument required, but only 0 present."
+ },
+ "uuid.getCharacteristic(\"battery_level\")": {
+  "ok": true,
+  "type": "string",
+  "val": "00002a19-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getCharacteristic(0x2a19)": {
+  "ok": true,
+  "type": "string",
+  "val": "00002a19-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getCharacteristic(\"bogus\")": {
+  "ok": false,
+  "err": "TypeError: Failed to execute 'getCharacteristic' on 'BluetoothUUID': Invalid Characteristic name: 'bogus'. It must be a valid UUID alias (e.g. 0x1234), UUID (lowercase hex characters e.g. '00001234-0000-1000-8000-00805f9b34fb'), or recognized standard name from https://www.bluetooth.com/specifications/gatt/characteristics e.g. 'aerobic_heart_rate_lower_limit'."
+ },
+ "uuid.getDescriptor(\"gatt.characteristic_presentation_format\")": {
+  "ok": true,
+  "type": "string",
+  "val": "00002904-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getDescriptor(0x2901)": {
+  "ok": true,
+  "type": "string",
+  "val": "00002901-0000-1000-8000-00805f9b34fb"
+ },
+ "uuid.getDescriptor(\"bogus\")": {
+  "ok": false,
+  "err": "TypeError: Failed to execute 'getDescriptor' on 'BluetoothUUID': Invalid Descriptor name: 'bogus'. It must be a valid UUID alias (e.g. 0x1234), UUID (lowercase hex characters e.g. '00001234-0000-1000-8000-00805f9b34fb'), or recognized standard name from https://www.bluetooth.com/specifications/gatt/descriptors e.g. 'gatt.characteristic_presentation_format'."
+ },
+ "new USBInTransferResult(\"ok\")": {
+  "ok": true,
+  "type": "string",
+  "val": "ok"
+ },
+ "new USBInTransferResult(\"ok\").data": {
+  "ok": true,
+  "type": "object",
+  "val": "null"
+ },
+ "new USBInTransferResult(\"ok\",dv).data": {
+  "ok": true,
+  "type": "object",
+  "val": "DataView(byteLength=4)"
+ },
+ "new USBInTransferResult(\"stall\")": {
+  "ok": true,
+  "type": "string",
+  "val": "stall"
+ },
+ "new USBInTransferResult(\"bogus\")": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBInTransferResult': The provided value 'bogus' is not a valid enum value of type USBTransferStatus."
+ },
+ "new USBInTransferResult()": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBInTransferResult': 1 argument required, but only 0 present."
+ },
+ "new USBOutTransferResult(\"ok\")": {
+  "ok": true,
+  "type": "string",
+  "val": "ok"
+ },
+ "new USBOutTransferResult(\"ok\").bytesWritten": {
+  "ok": true,
+  "type": "number",
+  "val": 0
+ },
+ "new USBOutTransferResult(\"ok\",7).bytesWritten": {
+  "ok": true,
+  "type": "number",
+  "val": 7
+ },
+ "new USBOutTransferResult(\"babble\")": {
+  "ok": true,
+  "type": "string",
+  "val": "babble"
+ },
+ "new USBOutTransferResult(\"bogus\")": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBOutTransferResult': The provided value 'bogus' is not a valid enum value of type USBTransferStatus."
+ },
+ "new USBIsochronousInTransferPacket(\"ok\").status": {
+  "ok": true,
+  "type": "string",
+  "val": "ok"
+ },
+ "new USBIsochronousInTransferPacket(\"ok\").data": {
+  "ok": true,
+  "type": "object",
+  "val": "null"
+ },
+ "new USBIsochronousInTransferPacket(\"bogus\")": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBIsochronousInTransferPacket': The provided value 'bogus' is not a valid enum value of type USBTransferStatus."
+ },
+ "new USBIsochronousOutTransferPacket(\"ok\").status": {
+  "ok": true,
+  "type": "string",
+  "val": "ok"
+ },
+ "new USBIsochronousOutTransferPacket(\"ok\").bytesWritten": {
+  "ok": true,
+  "type": "number",
+  "val": 0
+ },
+ "new USBIsochronousOutTransferPacket(\"ok\",3).bytesWritten": {
+  "ok": true,
+  "type": "number",
+  "val": 3
+ },
+ "new USBIsochronousInTransferResult([]).packets": {
+  "ok": true,
+  "type": "string",
+  "val": "packets=[object Array] len=0 frozen=true"
+ },
+ "new USBIsochronousInTransferResult([p]).packets[0]": {
+  "ok": true,
+  "type": "string",
+  "val": "len=1 same=true"
+ },
+ "new USBIsochronousInTransferResult([]).data": {
+  "ok": true,
+  "type": "object",
+  "val": "null"
+ },
+ "new USBIsochronousInTransferResult()": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBIsochronousInTransferResult': 1 argument required, but only 0 present."
+ },
+ "new USBIsochronousInTransferResult([1])": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBIsochronousInTransferResult': Failed to convert value to 'USBIsochronousInTransferPacket'."
+ },
+ "new USBIsochronousOutTransferResult([]).packets": {
+  "ok": true,
+  "type": "string",
+  "val": "packets=[object Array] len=0 frozen=true"
+ },
+ "new USBIsochronousOutTransferResult()": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBIsochronousOutTransferResult': 1 argument required, but only 0 present."
+ },
+ "new USBConfiguration()": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBConfiguration': 2 arguments required, but only 0 present."
+ },
+ "new USBConfiguration(null,1)": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBConfiguration': parameter 1 is not of type 'USBDevice'."
+ },
+ "new USBConfiguration({},1)": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBConfiguration': parameter 1 is not of type 'USBDevice'."
+ },
+ "new USBInterface(null,0)": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBInterface': parameter 1 is not of type 'USBConfiguration'."
+ },
+ "new USBAlternateInterface(null,0)": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBAlternateInterface': parameter 1 is not of type 'USBInterface'."
+ },
+ "new USBEndpoint(null,1,\"in\")": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBEndpoint': parameter 1 is not of type 'USBAlternateInterface'."
+ },
+ "new USBConnectionEvent(\"connect\")": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBConnectionEvent': 2 arguments required, but only 1 present."
+ },
+ "new USBConnectionEvent(\"connect\",{})": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBConnectionEvent': Failed to read the 'device' property from 'USBConnectionEventInit': Required member is undefined."
+ },
+ "new USBConnectionEvent(\"connect\",{device:null})": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'USBConnectionEvent': Failed to read the 'device' property from 'USBConnectionEventInit': Failed to convert value to 'USBDevice'."
+ },
+ "new HIDConnectionEvent(\"connect\",{})": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'HIDConnectionEvent': Failed to read the 'device' property from 'HIDConnectionEventInit': Required member is undefined."
+ },
+ "new HIDConnectionEvent(\"connect\",{device:null})": {
+  "ok": false,
+  "err": "TypeError: Failed to construct 'HIDConnectionEvent': Failed to read the 'device' property from 'HIDConnectionEventInit': Failed to convert value to 'HIDDevice'."
+ },
+ "nav.usb.getDevices": "resolved Array(0)",
+ "nav.hid.getDevices": "resolved Array(0)",
+ "nav.serial.getPorts": "resolved Array(0)",
+ "nav.bluetooth.getAvailability": "resolved boolean true",
+ "nav.usb.requestDevice sync": {
+  "ok": true,
+  "type": "object",
+  "val": "[object Promise]"
+ },
+ "nav.hid.requestDevice sync": {
+  "ok": true,
+  "type": "object",
+  "val": "[object Promise]"
+ },
+ "nav.serial.requestPort sync": {
+  "ok": true,
+  "type": "object",
+  "val": "[object Promise]"
+ },
+ "nav.bluetooth.requestDevice sync": {
+  "ok": true,
+  "type": "object",
+  "val": "[object Promise]"
+ },
+ "nav.usb.requestDevice": "rejected SecurityError: Failed to execute 'requestDevice' on 'USB': Must be handling a user gesture to show a permission request.",
+ "nav.hid.requestDevice": "rejected SecurityError: Failed to execute 'requestDevice' on 'HID': Must be handling a user gesture to show a permission request.",
+ "nav.serial.requestPort": "rejected SecurityError: Failed to execute 'requestPort' on 'Serial': Must be handling a user gesture to show a permission request.",
+ "nav.bluetooth.requestDevice": "rejected SecurityError: Failed to execute 'requestDevice' on 'Bluetooth': Must be handling a user gesture to show a permission request."
+}

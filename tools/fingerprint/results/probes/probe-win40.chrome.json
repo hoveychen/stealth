@@ -1,0 +1,449 @@
+{
+ "shader_minimal": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUShaderModule]",
+   "label": ""
+  }
+ },
+ "shader_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUShaderModule]",
+   "label": "sm"
+  }
+ },
+ "shader_no_arg": {
+  "threw": "TypeError: Failed to execute 'createShaderModule' on 'GPUDevice': 1 argument required, but only 0 present.",
+  "err": null
+ },
+ "shader_empty_descriptor": {
+  "threw": "TypeError: Failed to execute 'createShaderModule' on 'GPUDevice': Failed to read the 'code' property from 'GPUShaderModuleDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "shader_undefined_descriptor": {
+  "threw": "TypeError: Failed to execute 'createShaderModule' on 'GPUDevice': The provided value is not of type 'GPUShaderModuleDescriptor'.",
+  "err": null
+ },
+ "shader_code_number": {
+  "threw": null,
+  "err": {
+   "brand": "[object GPUValidationError]",
+   "message": "Error while parsing WGSL: :1:1 error: unexpected token\n5\n^\n\n\n - While calling [Device].CreateShaderModule([ShaderModuleDescriptor]).\n"
+  },
+  "value": {
+   "brand": "[object GPUShaderModule]",
+   "label": ""
+  }
+ },
+ "shader_empty_code": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUShaderModule]",
+   "label": ""
+  }
+ },
+ "compilation_info_ok": {
+  "brand": "[object GPUCompilationInfo]",
+  "messagesBrand": "[object Array]",
+  "isArray": true,
+  "frozen": true,
+  "length": 0,
+  "sameOnReread": false,
+  "messages": []
+ },
+ "compilation_info_bad": {
+  "brand": "[object GPUCompilationInfo]",
+  "messagesBrand": "[object Array]",
+  "isArray": true,
+  "frozen": true,
+  "length": 1,
+  "sameOnReread": false,
+  "messages": [
+   {
+    "brand": "[object GPUCompilationMessage]",
+    "message": "expected ')' for function declaration",
+    "type": "error",
+    "lineNum": 1,
+    "linePos": 19,
+    "offset": 18,
+    "length": 1
+   }
+  ]
+ },
+ "compilation_info_warning": {
+  "brand": "[object GPUCompilationInfo]",
+  "messagesBrand": "[object Array]",
+  "isArray": true,
+  "frozen": true,
+  "length": 0,
+  "sameOnReread": false,
+  "messages": []
+ },
+ "compilation_info_identity": {
+  "same": false,
+  "sameMessages": false
+ },
+ "compute_pipeline": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUComputePipeline]",
+   "label": ""
+  }
+ },
+ "compute_pipeline_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUComputePipeline]",
+   "label": "cp"
+  }
+ },
+ "compute_pipeline_no_arg": {
+  "threw": "TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice': 1 argument required, but only 0 present.",
+  "err": null
+ },
+ "compute_pipeline_empty": {
+  "threw": "TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice': Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': Required member is undefined.",
+  "err": null
+ },
+ "compute_pipeline_no_layout": {
+  "threw": "TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice': Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': Required member is undefined.",
+  "err": null
+ },
+ "compute_pipeline_no_compute": {
+  "threw": "TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice': Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "compute_pipeline_compute_no_module": {
+  "threw": "TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice': Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': Failed to read the 'module' property from 'GPUProgrammableStage': Required member is undefined.",
+  "err": null
+ },
+ "compute_pipeline_module_number": {
+  "threw": "TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice': Failed to read the 'compute' property from 'GPUComputePipelineDescriptor': Failed to read the 'module' property from 'GPUProgrammableStage': Failed to convert value to 'GPUShaderModule'.",
+  "err": null
+ },
+ "compute_pipeline_layout_bogus": {
+  "threw": "TypeError: Failed to execute 'createComputePipeline' on 'GPUDevice': Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': The provided value 'nope' is not a valid enum value of type GPUAutoLayoutMode.",
+  "err": null
+ },
+ "compute_pipeline_bind_group_layout": {
+  "zero": {
+   "brand": "[object GPUBindGroupLayout]",
+   "label": ""
+  },
+  "same": false,
+  "noArg": "TypeError: Failed to execute 'getBindGroupLayout' on 'GPUComputePipeline': 1 argument required, but only 0 present.",
+  "outOfRange": "[object GPUBindGroupLayout]",
+  "outOfRangeScoped": "Bind group layout index (9) exceeds or equals the maximum number of bind groups (4).\n - While Validating GetBindGroupLayout (9) on [ComputePipeline (unlabeled)]\n"
+ },
+ "compute_pipeline_async": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUComputePipeline]",
+   "label": ""
+  }
+ },
+ "compute_pipeline_async_is_promise": {
+  "brand": "[object Promise]",
+  "isPromise": true
+ },
+ "compute_pipeline_async_reject": {
+  "brand": "[object GPUPipelineError]",
+  "name": "GPUPipelineError",
+  "message": "Compatible entry point for stage (Compute) doesn't exist in the shader module [ShaderModule (unlabeled)].\n - While validating compute stage ([ShaderModule (unlabeled)], entryPoint: [undefined]).\n",
+  "reason": "validation",
+  "isDomException": true
+ },
+ "render_pipeline": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderPipeline]",
+   "label": ""
+  }
+ },
+ "render_pipeline_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderPipeline]",
+   "label": "rp"
+  }
+ },
+ "render_pipeline_vertex_only": {
+  "threw": null,
+  "err": {
+   "brand": "[object GPUValidationError]",
+   "message": "No attachment was specified.\n - While calling [Device].CreateRenderPipeline([RenderPipelineDescriptor]).\n"
+  },
+  "value": {
+   "brand": "[object GPURenderPipeline]",
+   "label": ""
+  }
+ },
+ "render_pipeline_no_arg": {
+  "threw": "TypeError: Failed to execute 'createRenderPipeline' on 'GPUDevice': 1 argument required, but only 0 present.",
+  "err": null
+ },
+ "render_pipeline_empty": {
+  "threw": "TypeError: Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': Required member is undefined.",
+  "err": null
+ },
+ "render_pipeline_no_vertex": {
+  "threw": "TypeError: Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "render_pipeline_no_layout": {
+  "threw": "TypeError: Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'layout' property from 'GPUPipelineDescriptorBase': Required member is undefined.",
+  "err": null
+ },
+ "render_pipeline_vertex_no_module": {
+  "threw": "TypeError: Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'vertex' property from 'GPURenderPipelineDescriptor': Failed to read the 'module' property from 'GPUProgrammableStage': Required member is undefined.",
+  "err": null
+ },
+ "render_pipeline_fragment_no_targets": {
+  "threw": "TypeError: Failed to execute 'createRenderPipeline' on 'GPUDevice': Failed to read the 'fragment' property from 'GPURenderPipelineDescriptor': Failed to read the 'targets' property from 'GPUFragmentState': Required member is undefined.",
+  "err": null
+ },
+ "render_pipeline_async": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderPipeline]",
+   "label": ""
+  }
+ },
+ "render_pipeline_bind_group_layout": {
+  "zero": {
+   "brand": "[object GPUBindGroupLayout]",
+   "label": ""
+  },
+  "same": false
+ },
+ "command_encoder": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUCommandEncoder]",
+   "label": ""
+  }
+ },
+ "command_encoder_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUCommandEncoder]",
+   "label": "ce"
+  }
+ },
+ "command_encoder_undefined": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUCommandEncoder]",
+   "label": ""
+  }
+ },
+ "command_encoder_string": {
+  "threw": "TypeError: Failed to execute 'createCommandEncoder' on 'GPUDevice': The provided value is not of type 'GPUCommandEncoderDescriptor'.",
+  "err": null
+ },
+ "command_buffer": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUCommandBuffer]",
+   "label": ""
+  }
+ },
+ "command_buffer_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUCommandBuffer]",
+   "label": "cb"
+  }
+ },
+ "compute_pass": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUComputePassEncoder]",
+   "label": ""
+  }
+ },
+ "compute_pass_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPUComputePassEncoder]",
+   "label": "pass"
+  }
+ },
+ "render_pass_no_arg": {
+  "threw": "TypeError: Failed to execute 'beginRenderPass' on 'GPUCommandEncoder': 1 argument required, but only 0 present.",
+  "err": null
+ },
+ "render_pass_empty": {
+  "threw": "TypeError: Failed to execute 'beginRenderPass' on 'GPUCommandEncoder': Failed to read the 'colorAttachments' property from 'GPURenderPassDescriptor': Required member is undefined.",
+  "err": null
+ },
+ "render_pass": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderPassEncoder]",
+   "label": ""
+  }
+ },
+ "render_pass_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderPassEncoder]",
+   "label": "rpass"
+  }
+ },
+ "render_pass_attachment_no_view": {
+  "threw": "TypeError: Failed to execute 'beginRenderPass' on 'GPUCommandEncoder': Failed to read the 'colorAttachments' property from 'GPURenderPassDescriptor': Failed to read the 'view' property from 'GPURenderPassColorAttachment': Required member is undefined.",
+  "err": null
+ },
+ "round_trip": {
+  "ok": true,
+  "buffer": "[object GPUCommandBuffer]"
+ },
+ "encoder_state": {
+  "first": "[object GPUCommandBuffer]",
+  "second": "[object GPUCommandBuffer]",
+  "secondScoped": "Command encoding already finished.\n - While finishing [CommandEncoder (unlabeled)].\n"
+ },
+ "render_bundle_encoder": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderBundleEncoder]",
+   "label": ""
+  }
+ },
+ "render_bundle_encoder_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderBundleEncoder]",
+   "label": "rbe"
+  }
+ },
+ "render_bundle_encoder_no_arg": {
+  "threw": "TypeError: Failed to execute 'createRenderBundleEncoder' on 'GPUDevice': 1 argument required, but only 0 present.",
+  "err": null
+ },
+ "render_bundle_encoder_empty": {
+  "threw": "TypeError: Failed to execute 'createRenderBundleEncoder' on 'GPUDevice': Failed to read the 'colorFormats' property from 'GPURenderPassLayout': Required member is undefined.",
+  "err": null
+ },
+ "render_bundle": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderBundle]",
+   "label": ""
+  }
+ },
+ "render_bundle_labelled": {
+  "threw": null,
+  "err": null,
+  "value": {
+   "brand": "[object GPURenderBundle]",
+   "label": "rb"
+  }
+ },
+ "canvas": {
+  "brand": "[object GPUCanvasContext]",
+  "sameOnReread": true,
+  "canvasIdentity": true,
+  "canvasBrand": "[object HTMLCanvasElement]",
+  "before": {
+   "brand": "[object GPUCanvasContext]",
+   "canvas": "[object HTMLCanvasElement]"
+  },
+  "configurationBefore": "null",
+  "currentTextureBefore": "InvalidStateError: Failed to execute 'getCurrentTexture' on 'GPUCanvasContext': context is not configured",
+  "preferredFormat": "bgra8unorm",
+  "then2d": "null",
+  "thenWebgl": "null",
+  "configureNoArg": "TypeError: Failed to execute 'configure' on 'GPUCanvasContext': 1 argument required, but only 0 present.",
+  "configureEmpty": "TypeError: Failed to execute 'configure' on 'GPUCanvasContext': Failed to read the 'device' property from 'GPUCanvasConfiguration': Required member is undefined.",
+  "configureNoFormat": "TypeError: Failed to execute 'configure' on 'GPUCanvasContext': Failed to read the 'format' property from 'GPUCanvasConfiguration': Required member is undefined.",
+  "configureNoDevice": "TypeError: Failed to execute 'configure' on 'GPUCanvasContext': Failed to read the 'device' property from 'GPUCanvasConfiguration': Required member is undefined.",
+  "configureBadFormat": "TypeError: Failed to execute 'configure' on 'GPUCanvasContext': Failed to read the 'format' property from 'GPUCanvasConfiguration': The provided value 'nope' is not a valid enum value of type GPUTextureFormat.",
+  "configure": "ok",
+  "configureScoped": null,
+  "configurationAfter": {
+   "keys": [
+    "alphaMode",
+    "colorSpace",
+    "device",
+    "format",
+    "toneMapping",
+    "usage",
+    "viewFormats"
+   ],
+   "json": {
+    "alphaMode": "opaque",
+    "colorSpace": "srgb",
+    "format": "bgra8unorm",
+    "toneMapping": {
+     "mode": "standard"
+    },
+    "usage": 16,
+    "viewFormats": []
+   },
+   "deviceIsDevice": true
+  },
+  "currentTexture": {
+   "brand": "[object GPUTexture]",
+   "width": 300,
+   "height": 150,
+   "depthOrArrayLayers": 1,
+   "mipLevelCount": 1,
+   "sampleCount": 1,
+   "dimension": "2d",
+   "format": "bgra8unorm",
+   "usage": 16,
+   "label": ""
+  },
+  "currentTextureSame": true,
+  "unconfigure": "ok",
+  "configurationAfterUnconfigure": "null",
+  "currentTextureAfterUnconfigure": "InvalidStateError: Failed to execute 'getCurrentTexture' on 'GPUCanvasContext': context is not configured",
+  "sizedTexture": {
+   "brand": "[object GPUTexture]",
+   "width": 64,
+   "height": 32,
+   "depthOrArrayLayers": 1,
+   "mipLevelCount": 1,
+   "sampleCount": 1,
+   "dimension": "2d",
+   "format": "bgra8unorm",
+   "usage": 16,
+   "label": ""
+  },
+  "sizedConfiguration": {
+   "alphaMode": "opaque",
+   "colorSpace": "srgb",
+   "format": "bgra8unorm",
+   "toneMapping": {
+    "mode": "standard"
+   },
+   "usage": 16,
+   "viewFormats": []
+  },
+  "offscreen": "[object GPUCanvasContext]"
+ }
+}
