@@ -1,0 +1,722 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "startedAt": "2026-08-20T19:29:03.090Z",
+  "egress": {
+    "fl": "464f202",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787254143.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.340+3d96734f2",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9226/"
+  },
+  "stations": [
+    {
+      "name": "cf-chatgpt",
+      "vendor": "cloudflare",
+      "url": "https://chatgpt.com/",
+      "guards": "challenge",
+      "documents": [
+        {
+          "url": "https://chatgpt.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/client-Cb1Zqv96.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/scripts/declarative-partial-updates-86e1288f46d8.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/rolldown-runtime-QTnfLwEv.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/client-shared-CgKW--oW.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/client-C39C6FK6.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/react-stable-kq7RRrkt.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/en-US-7gKY_7Ua.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/mobile-sidebar-DD1UcoXd.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/client-Cb1Zqv96.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/scripts/declarative-partial-updates-86e1288f46d8.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/rolldown-runtime-QTnfLwEv.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/client-shared-CgKW--oW.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/en-US-7gKY_7Ua.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/mobile-sidebar-DD1UcoXd.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/client-C39C6FK6.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/react-stable-kq7RRrkt.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/dom-D7LrF7Vh.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/app-DNAylPzE.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/app-DNAylPzE.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/events/page-view",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/sentinel/chat-requirements/prepare",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/conversation/prepare",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/app-C8hQArIy.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/app-C8hQArIy.css",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/desktop-shell-B4YbKNpl.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/lazy.sidebar-BWScXUlr.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/app.startup-B03d8LwB.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/content-reference-sheets-DNCLP68E.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/performance-metrics-DamdmjRC.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/dom-D7LrF7Vh.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 204,
+          "url": "https://chatgpt.com/unauth-mweb/events/page-view",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/use-desktop-shell-layout-CNzXM-HY.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/desktop-product-hover-card-HeCn-E1v.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/sidebar-icon-symbols-Cmdy9H57.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/desktop-shell-B4YbKNpl.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/lazy.sidebar-BWScXUlr.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/app.startup-B03d8LwB.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/content-reference-sheets-DNCLP68E.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/performance-metrics-DamdmjRC.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/sentinel/chat-requirements/prepare",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/conversation/prepare",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/use-desktop-shell-layout-CNzXM-HY.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/desktop-product-hover-card-HeCn-E1v.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/sidebar-icon-symbols-Cmdy9H57.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/content-reference-sheet-open-request-BNQfsMWi.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/declarative-partial-update-tree-discovery-Cqffp5wn.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/content-reference-sheet-open-request-BNQfsMWi.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/declarative-partial-update-tree-discovery-Cqffp5wn.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/images/chatgpt-icon-48x48.png",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/web-vitals-stable-SkxylvN4.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/en-US-D3RFd2CN.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/mobile-composer-DIiVdNXP.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/images/chatgpt-icon-48x48.png",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/en-US-D3RFd2CN.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/web-vitals-stable-SkxylvN4.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/events/statsc/flush",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/mobile-composer-DIiVdNXP.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/image-gen-composer-replay-CDZHLrnS.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/mobile-composer.module-DsJD-KzD.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/composer.i18n.generated-czytnJsK.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/composer-actions-icon-symbols-BqLLDGj9.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/composer-deferred-icon-symbols-DzTSyCG2.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/mobile-composer.module-DsJD-KzD.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/composer.i18n.generated-czytnJsK.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/composer-actions-icon-symbols-BqLLDGj9.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/image-gen-composer-replay-CDZHLrnS.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/composer-deferred-icon-symbols-DzTSyCG2.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/returning-user-auth-prompt-B30CtlJ1.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/idle-interaction-effects-kIFnOrcS.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/events/statsc/flush",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/returning-user-auth-prompt-B30CtlJ1.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/idle-interaction-effects-kIFnOrcS.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/google-one-tap-C5eTevbi.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/google-one-tap-C5eTevbi.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/cookie-stable-pdQiWSJg.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/auth-handoff-BqMWlWzk.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://chatgpt.com/unauth-mweb/assets/stored-auth-account-DuHy9dU7.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/cookie-stable-pdQiWSJg.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/auth-handoff-BqMWlWzk.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/assets/stored-auth-account-DuHy9dU7.js",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://accounts.google.com/gsi/client",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://accounts.google.com/gsi/client",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://accounts.google.com/gsi/style",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://accounts.google.com/gsi/style",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/events/client-fatal-error",
+          "type": "Fetch"
+        },
+        {
+          "ev": "console.warning",
+          "text": "[GSI_LOGGER]: Your client application uses one of the Google One Tap prompt UI status methods that may stop functioning when FedCM becomes mandatory. Refer to the migration guide to update your code accordingly and opt-in to FedCM to test your changes. Learn more: https://developers.google.com/ident"
+        },
+        {
+          "ev": "console.error",
+          "text": "[GSI_LOGGER]: FedCM get() rejects with Error: W"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/events/business",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/events/business",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 204,
+          "url": "https://chatgpt.com/unauth-mweb/events/client-fatal-error",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 204,
+          "url": "https://chatgpt.com/unauth-mweb/events/business",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 204,
+          "url": "https://chatgpt.com/unauth-mweb/events/business",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/events/statsc/flush",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://chatgpt.com/unauth-mweb/events/performance",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 204,
+          "url": "https://chatgpt.com/unauth-mweb/events/performance",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://chatgpt.com/unauth-mweb/events/statsc/flush",
+          "type": "Fetch"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "ChatGPT: Chat, Work, Create & Code with AI",
+      "landedOn": "https://chatgpt.com/",
+      "nodes": 491,
+      "textLength": 434,
+      "snippet": "New chat Search chats Images Plugins Deep research See plans and pricing Settings Help Get responses tailored to you Log in to get answers based on saved chats, plus create images and upload files. Lo",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false
+      },
+      "ms": 26963
+    }
+  ],
+  "fresh": true,
+  "engineLog": [
+    "      url = https://chatgpt.com/unauth-mweb/events/page-view",
+    "      status = 204",
+    "      len = 0",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+943ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/sentinel/chat-requirements/prepare",
+    "      status = 200",
+    "      len = 73857",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+956ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/conversation/prepare",
+    "      status = 200",
+    "      len = 371",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+1569ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/events/statsc/flush",
+    "      status = 200",
+    "      len = 0",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+2417ms]",
+    "      src = https://accounts.google.com/gsi/client",
+    "      kind = javascript",
+    "      cacheable = true",
+    "\u001b[0;33mWARN\u001b[0m  js : console.warn . . . . . . . . . . . . . . . . . . .  \u001b[0m[+2659ms]",
+    "      0 = ",
+    "  arg(1): [GSI_LOGGER]: Your client application uses one of the Google One Tap prompt UI status methods that may stop functioning when FedCM becomes mandatory. Refer to the migration guide to update your code accordingly and opt-in to FedCM to test your changes. Learn more: https://developers.google.com/identity/gsi/web/guides/fedcm-migration?s=dc#display_moment and https://developers.google.com/identity/gsi/web/guides/fedcm-migration?s=dc#skipped_moment (string)",
+    "\u001b[0;33mWARN\u001b[0m  js : console.error . . . . . . . . . . . . . . . . . . . \u001b[0m[+2674ms]",
+    "      0 = ",
+    "  arg(1): [GSI_LOGGER]: FedCM get() rejects with Error: W (string)",
+    " stack: ",
+    "        <https://accounts.google.com/gsi/client>",
+    "        _.H:88",
+    "        _.Vu.la:348",
+    "        la:350",
+    "        Ut.ga:310",
+    "        <anonymous>:308",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2713ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/events/client-fatal-error",
+    "      status = 204",
+    "      len = 0",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2729ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/events/business",
+    "      status = 204",
+    "      len = 0",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2752ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/events/business",
+    "      status = 204",
+    "      len = 0",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+6610ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/events/performance",
+    "      status = 204",
+    "      len = 0",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+6701ms]",
+    "      source = fetch",
+    "      url = https://chatgpt.com/unauth-mweb/events/statsc/flush",
+    "      status = 200",
+    "      len = 0"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 1
+  }
+}
