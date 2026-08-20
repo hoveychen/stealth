@@ -21,6 +21,7 @@ const Frame = @import("../../Frame.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
 const DOMMatrixReadOnly = @import("../DOMMatrixReadOnly.zig");
 const CSSStyleDeclaration = @import("CSSStyleDeclaration.zig");
+const chrome_keywords = @import("chrome_keywords.zig");
 const Css = @import("../Css.zig");
 const Execution = js.Execution;
 
@@ -68,6 +69,22 @@ pub const NumericError = error{ TypeError, OutOfMemory };
 /// The error set of `CSSNumericValue.parse`, which recurses through itself for
 /// the arguments of `min()`/`max()`.
 pub const ParseError = NumericError || error{ SyntaxError, RangeError };
+
+/// Every rejection below quotes Blink's own sentence, measured rather than
+/// derived: Blink's wording is not consistent enough to guess ("an number unit"
+/// beside "a number unit", `Invalid propertyName` for `get` beside `Invalid
+/// property name` for `delete`, three phrasings across CSSTranslate's own three
+/// setters), and a `TypeError:` with nothing after the colon is a fingerprint on
+/// its own. The message goes on the context and the bridge picks it up; see
+/// `js.Context.fail`.
+///
+/// The formatted half lives in `call_arena`, not `local_arena`: the bridge
+/// serialises the arguments for its debug log on the way out, and that can
+/// re-enter JS, which resets `local_arena`.
+fn failFmt(frame: *Frame, err: anytype, comptime fmt: []const u8, args: anytype) @TypeOf(err) {
+    const message = std.fmt.allocPrint(frame.call_arena, fmt, args) catch "";
+    return frame.js.fail(err, message);
+}
 
 // ---------------------------------------------------------------------------
 // Number serialisation
@@ -462,7 +479,26 @@ pub const CSSStyleValue = struct {
     /// `CSSStyleValue.parse(property, value)` runs the same property-aware
     /// dispatch a style map does.
     pub fn parse(property: []const u8, value: []const u8, frame: *Frame) !*CSSStyleValue {
-        if (!isKnownProperty(property)) return error.TypeError;
+        if (!isKnownProperty(property)) return frame.js.fail(
+            error.TypeError,
+            "Failed to execute 'parse' on 'CSSStyleValue': Invalid property name",
+        );
+        // Measured: `parse` runs Chrome's real per-property value parser, so a
+        // bare identifier the property does not take is a TypeError --
+        // `parse('width', 'auto')` answers a keyword where
+        // `parse('width', 'notalength')` throws. Only `parse` gets the check:
+        // the style maps read values that are already in a declaration, and a
+        // computed keyword the table has never seen would start reading as an
+        // absent property there.
+        //
+        // Both the value and the property are echoed exactly as passed, neither
+        // trimmed nor lowercased.
+        if (lookupIdentifier(property, value) == .rejected) return failFmt(
+            frame,
+            error.TypeError,
+            "Failed to execute 'parse' on 'CSSStyleValue': The value provided ('{s}') could not be parsed as a '{s}'.",
+            .{ value, property },
+        );
         return dispatch(property, value, frame);
     }
 
@@ -504,8 +540,12 @@ pub const CSSKeywordValue = struct {
     }
 
     pub fn create(value: []const u8, frame: *Frame) !*CSSKeywordValue {
-        // Measured: an empty keyword is a TypeError, both here and in the setter.
-        if (value.len == 0) return error.TypeError;
+        // Measured: an empty keyword is a TypeError, both here and in the
+        // setter, and both carry the same sentence under a different prefix.
+        if (value.len == 0) return frame.js.fail(
+            error.TypeError,
+            "Failed to construct 'CSSKeywordValue': CSSKeywordValue does not support empty strings",
+        );
         const keyword = try frame._factory.chained(.{
             CSSStyleValue{ ._type = undefined },
             CSSKeywordValue{ ._proto = undefined, ._value = try frame.dupeString(value) },
@@ -519,7 +559,10 @@ pub const CSSKeywordValue = struct {
     }
 
     pub fn setValue(self: *CSSKeywordValue, value: []const u8, frame: *Frame) !void {
-        if (value.len == 0) return error.TypeError;
+        if (value.len == 0) return frame.js.fail(
+            error.TypeError,
+            "Failed to set the 'value' property on 'CSSKeywordValue': CSSKeywordValue does not support empty strings",
+        );
         self._value = try frame.dupeString(value);
     }
 
@@ -631,17 +674,19 @@ pub const CSSNumericValue = struct {
     // -- add / sub ---------------------------------------------------------
 
     pub fn add(self: *CSSNumericValue, values: []const Numberish, frame: *Frame) !*CSSNumericValue {
-        return self.addAll(values, false, frame);
+        return self.addAll(values, false, "add", frame);
     }
 
     /// Measured: `sub` is `add` of the negated argument, and negating a unit
     /// value flips the value rather than wrapping it, so `1px.sub(2em)` is
     /// `calc(1px + -2em)`.
     pub fn sub(self: *CSSNumericValue, values: []const Numberish, frame: *Frame) !*CSSNumericValue {
-        return self.addAll(values, true, frame);
+        return self.addAll(values, true, "sub", frame);
     }
 
-    fn addAll(self: *CSSNumericValue, values: []const Numberish, negate: bool, frame: *Frame) !*CSSNumericValue {
+    /// `member` is the name the type clash is reported under: the message names
+    /// the operation the script called, not the shared code that noticed.
+    fn addAll(self: *CSSNumericValue, values: []const Numberish, negate: bool, comptime member: []const u8, frame: *Frame) !*CSSNumericValue {
         if (values.len == 0) return self;
 
         const resolved = try frame.local_arena.alloc(*CSSNumericValue, values.len);
@@ -649,7 +694,13 @@ pub const CSSNumericValue = struct {
         for (values, resolved) |raw, *slot| {
             var value = try raw.resolve(frame);
             if (negate) value = try value.negated(frame);
-            running = try running.add(try value.numericType());
+            running = running.add(try value.numericType()) catch |err| switch (err) {
+                error.TypeError => return frame.js.fail(
+                    error.TypeError,
+                    "Failed to execute '" ++ member ++ "' on 'CSSNumericValue': Incompatible types",
+                ),
+                else => return err,
+            };
             slot.* = value;
         }
 
@@ -728,7 +779,10 @@ pub const CSSNumericValue = struct {
                 slot.* = .{ .numeric = (try CSSMathInvert.create(value, frame))._proto._proto };
                 continue;
             };
-            if (unit._value == 0) return error.RangeError;
+            if (unit._value == 0) return frame.js.fail(
+                error.RangeError,
+                "Failed to execute 'div' on 'CSSNumericValue': Can't divide-by-zero",
+            );
             if (unit._unit != .number) {
                 slot.* = .{ .numeric = (try CSSMathInvert.create(value, frame))._proto._proto };
                 continue;
@@ -741,20 +795,26 @@ pub const CSSNumericValue = struct {
     // -- min / max / equals ------------------------------------------------
 
     pub fn min(self: *CSSNumericValue, values: []const Numberish, frame: *Frame) !*CSSNumericValue {
-        return self.extremum(values, true, frame);
+        return self.extremum(values, true, "min", frame);
     }
 
     pub fn max(self: *CSSNumericValue, values: []const Numberish, frame: *Frame) !*CSSNumericValue {
-        return self.extremum(values, false, frame);
+        return self.extremum(values, false, "max", frame);
     }
 
-    fn extremum(self: *CSSNumericValue, values: []const Numberish, want_min: bool, frame: *Frame) !*CSSNumericValue {
+    fn extremum(self: *CSSNumericValue, values: []const Numberish, want_min: bool, comptime member: []const u8, frame: *Frame) !*CSSNumericValue {
         if (values.len == 0) return self;
         const resolved = try frame.local_arena.alloc(*CSSNumericValue, values.len);
         var running = try self.numericType();
         for (values, resolved) |raw, *slot| {
             const value = try raw.resolve(frame);
-            running = try running.add(try value.numericType());
+            running = running.add(try value.numericType()) catch |err| switch (err) {
+                error.TypeError => return frame.js.fail(
+                    error.TypeError,
+                    "Failed to execute '" ++ member ++ "' on 'CSSNumericValue': Incompatible types",
+                ),
+                else => return err,
+            };
             slot.* = value;
         }
 
@@ -802,18 +862,31 @@ pub const CSSNumericValue = struct {
     /// Measured: an unknown target unit is a SyntaxError while an
     /// unconvertible one is a TypeError.
     pub fn to(self: *CSSNumericValue, unit_name: []const u8, frame: *Frame) !*CSSUnitValue {
-        const target = Unit.parse(unit_name) orelse return error.SyntaxError;
+        const target = Unit.parse(unit_name) orelse return frame.js.fail(
+            error.SyntaxError,
+            "Failed to execute 'to' on 'CSSNumericValue': Invalid unit for conversion",
+        );
 
         var terms: std.ArrayList(*CSSNumericValue) = .empty;
         try self.collectSumTerms(&terms, frame);
 
         var total: f64 = 0;
         for (terms.items) |term| {
-            const unit = term.asUnit() orelse return error.TypeError;
-            total += try convert(unit._value, unit._unit, target);
+            // Measured: both a term that is not a unit value (a product) and a
+            // term whose type cannot reach the target report the same sentence,
+            // echoing the requested unit as it was passed -- `to('DEG')` says
+            // "Cannot convert to DEG".
+            const unit = term.asUnit() orelse return failFmt(frame, error.TypeError, cannot_convert, .{unit_name});
+            // `convert` only ever fails with a type clash, and that is exactly
+            // the case this sentence describes.
+            total += convert(unit._value, unit._unit, target) catch
+                return failFmt(frame, error.TypeError, cannot_convert, .{unit_name});
         }
         return CSSUnitValue.create(total, target, frame);
     }
+
+    const cannot_convert = "Failed to execute 'to' on 'CSSNumericValue': Cannot convert to {s}";
+    const invalid_value = "Failed to execute 'toSum' on 'CSSNumericValue': Invalid value for conversion";
 
     fn convert(value: f64, from: Unit, to_unit: Unit) !f64 {
         if (from == to_unit) return value;
@@ -834,11 +907,16 @@ pub const CSSNumericValue = struct {
             const slots = try frame.local_arena.alloc(f64, unit_names.len);
             const units = try frame.local_arena.alloc(Unit, unit_names.len);
             for (unit_names, units, slots) |name, *unit, *slot| {
-                unit.* = Unit.parse(name) orelse return error.SyntaxError;
+                unit.* = Unit.parse(name) orelse return frame.js.fail(
+                    error.SyntaxError,
+                    "Failed to execute 'toSum' on 'CSSNumericValue': Invalid unit for conversion",
+                );
                 slot.* = 0;
             }
             for (terms.items) |term| {
-                const unit = term.asUnit() orelse return error.TypeError;
+                // Measured: a term that is not a unit value says "Invalid value
+                // for conversion", one word off the unit message above.
+                const unit = term.asUnit() orelse return frame.js.fail(error.TypeError, invalid_value);
                 var placed = false;
                 for (units, slots) |target, *slot| {
                     const converted = convert(unit._value, unit._unit, target) catch continue;
@@ -848,7 +926,10 @@ pub const CSSNumericValue = struct {
                 }
                 // Measured: a term that fits none of the requested units is
                 // "leftover terms that were not converted", a TypeError.
-                if (!placed) return error.TypeError;
+                if (!placed) return frame.js.fail(
+                    error.TypeError,
+                    "Failed to execute 'toSum' on 'CSSNumericValue': There were leftover terms that were not converted",
+                );
             }
             const values = try frame.local_arena.alloc(*CSSNumericValue, units.len);
             for (units, slots, values) |unit, total, *slot| {
@@ -861,7 +942,7 @@ pub const CSSNumericValue = struct {
         // come out sorted by unit name: `calc(2em + 4px)`.
         var buckets: std.ArrayList(struct { unit: Unit, total: f64 }) = .empty;
         for (terms.items) |term| {
-            const unit = term.asUnit() orelse return error.TypeError;
+            const unit = term.asUnit() orelse return frame.js.fail(error.TypeError, invalid_value);
             for (buckets.items) |*bucket| {
                 if (bucket.unit == unit._unit) {
                     bucket.total += unit._value;
@@ -888,7 +969,21 @@ pub const CSSNumericValue = struct {
     /// else — a bare keyword, an empty string and `var()` are all SyntaxErrors.
     /// A `calc()` always comes back as a CSSMathSum, already folded per unit,
     /// while `min()`/`max()` fold all the way to a unit value when they can.
+    /// Measured: every shape `parse` rejects -- a bare keyword, an empty string,
+    /// a `var()`, a malformed `calc()` -- reports the same sentence, so the
+    /// wording is attached once here rather than at each of the dozen places
+    /// below that notice.
     pub fn parse(text: []const u8, frame: *Frame) ParseError!*CSSNumericValue {
+        return parseText(text, frame) catch |err| switch (err) {
+            error.SyntaxError => return frame.js.fail(
+                error.SyntaxError,
+                "Failed to execute 'parse' on 'CSSNumericValue': Invalid math expression",
+            ),
+            else => return err,
+        };
+    }
+
+    fn parseText(text: []const u8, frame: *Frame) ParseError!*CSSNumericValue {
         const trimmed = std.mem.trim(u8, text, " \t\r\n");
         if (trimmed.len == 0) return error.SyntaxError;
 
@@ -1073,9 +1168,20 @@ pub const CSSUnitValue = struct {
     _unit: Unit,
 
     pub fn init(value: f64, unit_name: []const u8, frame: *Frame) !*CSSUnitValue {
-        // Measured: a non-finite number and an unknown unit are both TypeErrors.
-        if (!std.math.isFinite(value)) return error.TypeError;
-        const unit = Unit.parse(unit_name) orelse return error.TypeError;
+        // Measured: a non-finite number and an unknown unit are both TypeErrors,
+        // and the unit is echoed back exactly as it was passed -- neither
+        // lowercased nor trimmed, so `new CSSUnitValue(5, ' px ')` reports
+        // `Invalid unit:  px `.
+        if (!std.math.isFinite(value)) return frame.js.fail(
+            error.TypeError,
+            "Failed to construct 'CSSUnitValue': The provided double value is non-finite.",
+        );
+        const unit = Unit.parse(unit_name) orelse return failFmt(
+            frame,
+            error.TypeError,
+            "Failed to construct 'CSSUnitValue': Invalid unit: {s}",
+            .{unit_name},
+        );
         return create(value, unit, frame);
     }
 
@@ -1094,8 +1200,11 @@ pub const CSSUnitValue = struct {
         return self._value;
     }
 
-    pub fn setValue(self: *CSSUnitValue, value: f64) !void {
-        if (!std.math.isFinite(value)) return error.TypeError;
+    pub fn setValue(self: *CSSUnitValue, value: f64, frame: *Frame) !void {
+        if (!std.math.isFinite(value)) return frame.js.fail(
+            error.TypeError,
+            "Failed to set the 'value' property on 'CSSUnitValue': The provided double value is non-finite.",
+        );
         self._value = value;
     }
 
@@ -1360,17 +1469,21 @@ fn VariadicMath(comptime class_name: []const u8, comptime tag: []const u8) type 
         _proto: *CSSMathValue,
         _values: *CSSNumericArray,
 
+        const empty_arguments = "Failed to construct '" ++ class_name ++ "': Arguments can't be empty";
+        const incompatible_types = "Failed to construct '" ++ class_name ++ "': Incompatible types";
+
         pub fn init(values: []const Numberish, frame: *Frame) !*Self {
             // Measured: an empty argument list is a SyntaxError ("Arguments
-            // can't be empty"), not a TypeError.
-            if (values.len == 0) return error.SyntaxError;
+            // can't be empty"), not a TypeError -- a DOMException, where the
+            // type clash below is a plain TypeError.
+            if (values.len == 0) return frame.js.fail(error.SyntaxError, empty_arguments);
             const resolved = try frame.local_arena.alloc(*CSSNumericValue, values.len);
             for (values, resolved) |raw, *slot| slot.* = try raw.resolve(frame);
             return create(resolved, frame);
         }
 
         pub fn create(values: []const *CSSNumericValue, frame: *Frame) !*Self {
-            if (values.len == 0) return error.SyntaxError;
+            if (values.len == 0) return frame.js.fail(error.SyntaxError, empty_arguments);
             // Type-check up front so `new CSSMathSum(1px, 2deg)` throws from
             // the constructor rather than later from a getter.
             var running = try values[0].numericType();
@@ -1378,7 +1491,10 @@ fn VariadicMath(comptime class_name: []const u8, comptime tag: []const u8) type 
                 running = if (comptime std.mem.eql(u8, tag, "product"))
                     try running.multiply(try value.numericType())
                 else
-                    try running.add(try value.numericType());
+                    running.add(try value.numericType()) catch |err| switch (err) {
+                        error.TypeError => return frame.js.fail(error.TypeError, incompatible_types),
+                        else => return err,
+                    };
             }
 
             const node = try frame._factory.chained(.{
@@ -1480,7 +1596,13 @@ pub const CSSMathClamp = struct {
         };
         var running = try three[0].numericType();
         for (three[1..]) |member| {
-            running = try running.add(try member.numericType());
+            running = running.add(try member.numericType()) catch |err| switch (err) {
+                error.TypeError => return frame.js.fail(
+                    error.TypeError,
+                    "Failed to construct 'CSSMathClamp': Incompatible types",
+                ),
+                else => return err,
+            };
         }
 
         const node = try frame._factory.chained(.{
@@ -1532,7 +1654,10 @@ pub const CSSVariableReferenceValue = struct {
     _fallback: ?*CSSUnparsedValue,
 
     pub fn init(variable: []const u8, fallback: ?*CSSUnparsedValue, frame: *Frame) !*CSSVariableReferenceValue {
-        if (!isCustomProperty(variable)) return error.TypeError;
+        if (!isCustomProperty(variable)) return frame.js.fail(
+            error.TypeError,
+            "Failed to construct 'CSSVariableReferenceValue': Invalid custom property name",
+        );
         return frame._factory.create(CSSVariableReferenceValue{
             ._variable = try frame.dupeString(variable),
             ._fallback = fallback,
@@ -1544,7 +1669,10 @@ pub const CSSVariableReferenceValue = struct {
     }
 
     pub fn setVariable(self: *CSSVariableReferenceValue, variable: []const u8, frame: *Frame) !void {
-        if (!isCustomProperty(variable)) return error.TypeError;
+        if (!isCustomProperty(variable)) return frame.js.fail(
+            error.TypeError,
+            "Failed to set the 'variable' property on 'CSSVariableReferenceValue': Invalid custom property name",
+        );
         self._variable = try frame.dupeString(variable);
     }
 
@@ -1764,9 +1892,15 @@ pub const CSSPositionValue = struct {
     _x: *CSSNumericValue,
     _y: *CSSNumericValue,
 
+    // Measured: this is the one transform-adjacent interface that names the
+    // offending coordinate in lower case, and says "in" where CSSTranslate says
+    // "of".
+    const bad_x = "Must pass length or percentage to x in CSSPositionValue";
+    const bad_y = "Must pass length or percentage to y in CSSPositionValue";
+
     pub fn init(x: *CSSNumericValue, y: *CSSNumericValue, frame: *Frame) !*CSSPositionValue {
-        try requireLengthPercent(x);
-        try requireLengthPercent(y);
+        try requireLengthPercent(x, frame, "Failed to construct 'CSSPositionValue': " ++ bad_x);
+        try requireLengthPercent(y, frame, "Failed to construct 'CSSPositionValue': " ++ bad_y);
         return create(x, y, frame);
     }
 
@@ -1783,8 +1917,8 @@ pub const CSSPositionValue = struct {
         return self._x;
     }
 
-    pub fn setX(self: *CSSPositionValue, x: *CSSNumericValue) !void {
-        try requireLengthPercent(x);
+    pub fn setX(self: *CSSPositionValue, x: *CSSNumericValue, frame: *Frame) !void {
+        try requireLengthPercent(x, frame, "Failed to set the 'x' property on 'CSSPositionValue': " ++ bad_x);
         self._x = x;
     }
 
@@ -1792,8 +1926,8 @@ pub const CSSPositionValue = struct {
         return self._y;
     }
 
-    pub fn setY(self: *CSSPositionValue, y: *CSSNumericValue) !void {
-        try requireLengthPercent(y);
+    pub fn setY(self: *CSSPositionValue, y: *CSSNumericValue, frame: *Frame) !void {
+        try requireLengthPercent(y, frame, "Failed to set the 'y' property on 'CSSPositionValue': " ++ bad_y);
         self._y = y;
     }
 
@@ -1818,22 +1952,30 @@ pub const CSSPositionValue = struct {
     };
 };
 
-fn requireLengthPercent(value: *CSSNumericValue) !void {
+// Each of the three checks below is shared by a constructor and a setter that
+// word the same rejection differently -- and, measured, the transform
+// constructors word it differently again depending on how many coordinates the
+// call passed: every failure in `new CSSScale(x, y, z)` reports "Must specify a
+// number for X, Y and Z" where `new CSSScale(x, y)` reports "Must specify an
+// number unit", whichever coordinate was at fault. So the sentence comes from
+// the call site, not from here.
+
+fn requireLengthPercent(value: *CSSNumericValue, frame: *Frame, message: []const u8) !void {
     const numeric_type = try value.numericType();
-    const base = numeric_type.onlyBase() orelse return error.TypeError;
-    if (numeric_type.get(base) != 1) return error.TypeError;
-    if (base != .length and base != .percent) return error.TypeError;
+    const base = numeric_type.onlyBase() orelse return frame.js.fail(error.TypeError, message);
+    if (numeric_type.get(base) != 1) return frame.js.fail(error.TypeError, message);
+    if (base != .length and base != .percent) return frame.js.fail(error.TypeError, message);
 }
 
-fn requireAngle(value: *CSSNumericValue) !void {
+fn requireAngle(value: *CSSNumericValue, frame: *Frame, message: []const u8) !void {
     const numeric_type = try value.numericType();
-    const base = numeric_type.onlyBase() orelse return error.TypeError;
-    if (base != .angle or numeric_type.get(.angle) != 1) return error.TypeError;
+    const base = numeric_type.onlyBase() orelse return frame.js.fail(error.TypeError, message);
+    if (base != .angle or numeric_type.get(.angle) != 1) return frame.js.fail(error.TypeError, message);
 }
 
-fn requireNumber(value: *CSSNumericValue) !void {
+fn requireNumber(value: *CSSNumericValue, frame: *Frame, message: []const u8) !void {
     const numeric_type = try value.numericType();
-    if (numeric_type.onlyBase() != null) return error.TypeError;
+    if (numeric_type.onlyBase() != null) return frame.js.fail(error.TypeError, message);
 }
 
 // ---------------------------------------------------------------------------
@@ -1972,10 +2114,16 @@ pub const CSSTranslate = struct {
     _y: *CSSNumericValue,
     _z: *CSSNumericValue,
 
+    // Measured: the two-argument form blames "X and Y" and the three-argument
+    // form blames "X, Y and Z", whichever coordinate actually failed.
+    const bad_2d = "Failed to construct 'CSSTranslate': Must pass length or percentage to X and Y of CSSTranslate";
+    const bad_3d = "Failed to construct 'CSSTranslate': Must pass length or percentage to X, Y and Z of CSSTranslate";
+
     pub fn init(x: *CSSNumericValue, y: *CSSNumericValue, z_: ?*CSSNumericValue, frame: *Frame) !*CSSTranslate {
-        try requireLengthPercent(x);
-        try requireLengthPercent(y);
-        if (z_) |z| try requireLengthPercent(z);
+        const message = if (z_ == null) bad_2d else bad_3d;
+        try requireLengthPercent(x, frame, message);
+        try requireLengthPercent(y, frame, message);
+        if (z_) |z| try requireLengthPercent(z, frame, message);
         const z = z_ orelse (try CSSUnitValue.create(0, .px, frame))._proto;
         return chainComponent(CSSTranslate, "translate", CSSTranslate{
             ._proto = undefined,
@@ -1995,17 +2143,20 @@ pub const CSSTranslate = struct {
         return self._z;
     }
 
-    pub fn setX(self: *CSSTranslate, x: *CSSNumericValue) !void {
-        try requireLengthPercent(x);
+    /// Measured: Blink words these three rejections three different ways --
+    /// "length or percentage" for x, "length or percent" for y, and plain
+    /// "length" for z. Quoted, not derived.
+    pub fn setX(self: *CSSTranslate, x: *CSSNumericValue, frame: *Frame) !void {
+        try requireLengthPercent(x, frame, "Failed to set the 'x' property on 'CSSTranslate': Must pass length or percentage to X of CSSTranslate");
         self._x = x;
     }
-    pub fn setY(self: *CSSTranslate, y: *CSSNumericValue) !void {
-        try requireLengthPercent(y);
+    pub fn setY(self: *CSSTranslate, y: *CSSNumericValue, frame: *Frame) !void {
+        try requireLengthPercent(y, frame, "Failed to set the 'y' property on 'CSSTranslate': Must pass length or percent to Y of CSSTranslate");
         self._y = y;
     }
     /// Measured: assigning z does NOT make the component 3D.
-    pub fn setZ(self: *CSSTranslate, z: *CSSNumericValue) !void {
-        try requireLengthPercent(z);
+    pub fn setZ(self: *CSSTranslate, z: *CSSNumericValue, frame: *Frame) !void {
+        try requireLengthPercent(z, frame, "Failed to set the 'z' property on 'CSSTranslate': Must pass length to Z of CSSTranslate");
         self._z = z;
     }
 
@@ -2060,11 +2211,16 @@ pub const CSSRotate = struct {
     _y: *CSSNumericValue,
     _z: *CSSNumericValue,
 
+    // Measured: the axis check in the 3D form borrows CSSScale's wording, typo
+    // and all, while the axis setters below use the grammatical version.
+    const bad_angle = "Must pass an angle to CSSRotate";
+    const bad_axis = "Failed to construct 'CSSRotate': Must specify an number unit";
+
     /// One argument is the 2D form; four are `rotate3d(x, y, z, angle)`.
     pub fn init(first: Numberish, second_: ?Numberish, third_: ?Numberish, fourth_: ?Numberish, frame: *Frame) !*CSSRotate {
         if (second_ == null) {
             const angle = try first.resolve(frame);
-            try requireAngle(angle);
+            try requireAngle(angle, frame, "Failed to construct 'CSSRotate': " ++ bad_angle);
             return chainComponent(CSSRotate, "rotate", CSSRotate{
                 ._proto = undefined,
                 ._angle = angle,
@@ -2082,10 +2238,10 @@ pub const CSSRotate = struct {
         const y = try second.resolve(frame);
         const z = try third.resolve(frame);
         const angle = try fourth.resolve(frame);
-        try requireNumber(x);
-        try requireNumber(y);
-        try requireNumber(z);
-        try requireAngle(angle);
+        try requireNumber(x, frame, bad_axis);
+        try requireNumber(y, frame, bad_axis);
+        try requireNumber(z, frame, bad_axis);
+        try requireAngle(angle, frame, "Failed to construct 'CSSRotate': " ++ bad_angle);
         return chainComponent(CSSRotate, "rotate", CSSRotate{
             ._proto = undefined,
             ._angle = angle,
@@ -2108,24 +2264,24 @@ pub const CSSRotate = struct {
         return self._z;
     }
 
-    pub fn setAngle(self: *CSSRotate, angle: *CSSNumericValue) !void {
-        try requireAngle(angle);
+    pub fn setAngle(self: *CSSRotate, angle: *CSSNumericValue, frame: *Frame) !void {
+        try requireAngle(angle, frame, "Failed to set the 'angle' property on 'CSSRotate': " ++ bad_angle);
         self._angle = angle;
     }
     /// Measured: assigning an axis on a 2D rotate leaves it 2D.
     pub fn setX(self: *CSSRotate, x: Numberish, frame: *Frame) !void {
         const value = try x.resolve(frame);
-        try requireNumber(value);
+        try requireNumber(value, frame, "Failed to set the 'x' property on 'CSSRotate': Must specify a number unit");
         self._x = value;
     }
     pub fn setY(self: *CSSRotate, y: Numberish, frame: *Frame) !void {
         const value = try y.resolve(frame);
-        try requireNumber(value);
+        try requireNumber(value, frame, "Failed to set the 'y' property on 'CSSRotate': Must specify a number unit");
         self._y = value;
     }
     pub fn setZ(self: *CSSRotate, z: Numberish, frame: *Frame) !void {
         const value = try z.resolve(frame);
-        try requireNumber(value);
+        try requireNumber(value, frame, "Failed to set the 'z' property on 'CSSRotate': Must specify a number unit");
         self._z = value;
     }
 
@@ -2204,16 +2360,23 @@ pub const CSSScale = struct {
     _y: *CSSNumericValue,
     _z: *CSSNumericValue,
 
+    // Measured: the two-argument form says "Must specify an number unit" (sic)
+    // and the three-argument form switches to "Must specify a number for X, Y
+    // and Z", whichever coordinate actually failed.
+    const bad_2d = "Failed to construct 'CSSScale': Must specify an number unit";
+    const bad_3d = "Failed to construct 'CSSScale': Must specify a number for X, Y and Z";
+
     pub fn init(x_raw: Numberish, y_raw: Numberish, z_: ?Numberish, frame: *Frame) !*CSSScale {
+        const message = if (z_ == null) bad_2d else bad_3d;
         const x = try x_raw.resolve(frame);
         const y = try y_raw.resolve(frame);
-        try requireNumber(x);
-        try requireNumber(y);
+        try requireNumber(x, frame, message);
+        try requireNumber(y, frame, message);
 
         var z = (try CSSUnitValue.create(1, .number, frame))._proto;
         if (z_) |z_raw| {
             z = try z_raw.resolve(frame);
-            try requireNumber(z);
+            try requireNumber(z, frame, message);
         }
         return chainComponent(CSSScale, "scale", CSSScale{
             ._proto = undefined,
@@ -2235,17 +2398,17 @@ pub const CSSScale = struct {
 
     pub fn setX(self: *CSSScale, x: Numberish, frame: *Frame) !void {
         const value = try x.resolve(frame);
-        try requireNumber(value);
+        try requireNumber(value, frame, "Failed to set the 'x' property on 'CSSScale': Must specify a number unit");
         self._x = value;
     }
     pub fn setY(self: *CSSScale, y: Numberish, frame: *Frame) !void {
         const value = try y.resolve(frame);
-        try requireNumber(value);
+        try requireNumber(value, frame, "Failed to set the 'y' property on 'CSSScale': Must specify a number unit");
         self._y = value;
     }
     pub fn setZ(self: *CSSScale, z: Numberish, frame: *Frame) !void {
         const value = try z.resolve(frame);
-        try requireNumber(value);
+        try requireNumber(value, frame, "Failed to set the 'z' property on 'CSSScale': Must specify a number unit");
         self._z = value;
     }
 
@@ -2311,9 +2474,13 @@ pub const CSSSkew = struct {
     _ax: *CSSNumericValue,
     _ay: *CSSNumericValue,
 
+    // Measured: the constructor says "does not support non-angles" while the
+    // setters say "Must specify an angle unit".
+    const bad_ctor = "Failed to construct 'CSSSkew': CSSSkew does not support non-angles";
+
     pub fn init(ax: *CSSNumericValue, ay: *CSSNumericValue, frame: *Frame) !*CSSSkew {
-        try requireAngle(ax);
-        try requireAngle(ay);
+        try requireAngle(ax, frame, bad_ctor);
+        try requireAngle(ay, frame, bad_ctor);
         return chainComponent(CSSSkew, "skew", CSSSkew{ ._proto = undefined, ._ax = ax, ._ay = ay }, true, frame);
     }
 
@@ -2323,12 +2490,12 @@ pub const CSSSkew = struct {
     pub fn getAy(self: *const CSSSkew) *CSSNumericValue {
         return self._ay;
     }
-    pub fn setAx(self: *CSSSkew, ax: *CSSNumericValue) !void {
-        try requireAngle(ax);
+    pub fn setAx(self: *CSSSkew, ax: *CSSNumericValue, frame: *Frame) !void {
+        try requireAngle(ax, frame, "Failed to set the 'ax' property on 'CSSSkew': Must specify an angle unit");
         self._ax = ax;
     }
-    pub fn setAy(self: *CSSSkew, ay: *CSSNumericValue) !void {
-        try requireAngle(ay);
+    pub fn setAy(self: *CSSSkew, ay: *CSSNumericValue, frame: *Frame) !void {
+        try requireAngle(ay, frame, "Failed to set the 'ay' property on 'CSSSkew': Must specify an angle unit");
         self._ay = ay;
     }
 
@@ -2366,15 +2533,15 @@ pub const CSSSkewX = struct {
     _ax: *CSSNumericValue,
 
     pub fn init(ax: *CSSNumericValue, frame: *Frame) !*CSSSkewX {
-        try requireAngle(ax);
+        try requireAngle(ax, frame, "Failed to construct 'CSSSkewX': CSSSkewX does not support non-angles");
         return chainComponent(CSSSkewX, "skew_x", CSSSkewX{ ._proto = undefined, ._ax = ax }, true, frame);
     }
 
     pub fn getAx(self: *const CSSSkewX) *CSSNumericValue {
         return self._ax;
     }
-    pub fn setAx(self: *CSSSkewX, ax: *CSSNumericValue) !void {
-        try requireAngle(ax);
+    pub fn setAx(self: *CSSSkewX, ax: *CSSNumericValue, frame: *Frame) !void {
+        try requireAngle(ax, frame, "Failed to set the 'ax' property on 'CSSSkewX': Must specify an angle unit");
         self._ax = ax;
     }
 
@@ -2409,15 +2576,15 @@ pub const CSSSkewY = struct {
     _ay: *CSSNumericValue,
 
     pub fn init(ay: *CSSNumericValue, frame: *Frame) !*CSSSkewY {
-        try requireAngle(ay);
+        try requireAngle(ay, frame, "Failed to construct 'CSSSkewY': CSSSkewY does not support non-angles");
         return chainComponent(CSSSkewY, "skew_y", CSSSkewY{ ._proto = undefined, ._ay = ay }, true, frame);
     }
 
     pub fn getAy(self: *const CSSSkewY) *CSSNumericValue {
         return self._ay;
     }
-    pub fn setAy(self: *CSSSkewY, ay: *CSSNumericValue) !void {
-        try requireAngle(ay);
+    pub fn setAy(self: *CSSSkewY, ay: *CSSNumericValue, frame: *Frame) !void {
+        try requireAngle(ay, frame, "Failed to set the 'ay' property on 'CSSSkewY': Must specify an angle unit");
         self._ay = ay;
     }
 
@@ -2458,8 +2625,12 @@ pub const CSSPerspective = struct {
     _proto: *CSSTransformComponent,
     _length: Length,
 
+    // Measured: an angle, a percentage and any keyword other than `none` all
+    // report the same sentence.
+    const bad_length = "Must pass length or none to CSSPerspective";
+
     pub fn init(length: Length, frame: *Frame) !*CSSPerspective {
-        try validate(length);
+        try validate(length, frame, "Failed to construct 'CSSPerspective': " ++ bad_length);
         // Measured: a perspective is never 2D.
         return chainComponent(CSSPerspective, "perspective", CSSPerspective{
             ._proto = undefined,
@@ -2467,15 +2638,15 @@ pub const CSSPerspective = struct {
         }, false, frame);
     }
 
-    fn validate(length: Length) !void {
+    fn validate(length: Length, frame: *Frame, message: []const u8) !void {
         switch (length) {
             .numeric => |numeric| {
                 const numeric_type = try numeric.numericType();
-                const base = numeric_type.onlyBase() orelse return error.TypeError;
-                if (base != .length or numeric_type.get(.length) != 1) return error.TypeError;
+                const base = numeric_type.onlyBase() orelse return frame.js.fail(error.TypeError, message);
+                if (base != .length or numeric_type.get(.length) != 1) return frame.js.fail(error.TypeError, message);
             },
             .keyword => |keyword| {
-                if (!std.ascii.eqlIgnoreCase(keyword._value, "none")) return error.TypeError;
+                if (!std.ascii.eqlIgnoreCase(keyword._value, "none")) return frame.js.fail(error.TypeError, message);
             },
         }
     }
@@ -2484,8 +2655,8 @@ pub const CSSPerspective = struct {
         return self._length;
     }
 
-    pub fn setLength(self: *CSSPerspective, length: Length) !void {
-        try validate(length);
+    pub fn setLength(self: *CSSPerspective, length: Length, frame: *Frame) !void {
+        try validate(length, frame, "Failed to set the 'length' property on 'CSSPerspective': " ++ bad_length);
         self._length = length;
     }
 
@@ -2520,7 +2691,17 @@ pub const CSSMatrixComponent = struct {
     _proto: *CSSTransformComponent,
     _matrix: [16]f64,
 
-    pub fn init(matrix: *DOMMatrixReadOnly, options_: ?Options, frame: *Frame) !*CSSMatrixComponent {
+    /// Takes the raw value rather than a `*DOMMatrixReadOnly` so the rejection
+    /// can carry Blink's wording. Measured: the constructor names the parameter
+    /// position and the IDL type ("parameter 1 is not of type
+    /// 'DOMMatrixReadOnly'.") where the `matrix` setter says "Failed to convert
+    /// value to 'DOMMatrix'." -- a different sentence and a different type name
+    /// for the same conversion.
+    pub fn init(raw: js.Value, options_: ?Options, frame: *Frame) !*CSSMatrixComponent {
+        const matrix = raw.toZig(*DOMMatrixReadOnly) catch return frame.js.fail(
+            error.TypeError,
+            "Failed to construct 'CSSMatrixComponent': parameter 1 is not of type 'DOMMatrixReadOnly'.",
+        );
         const state = matrix.getState();
         const options = options_ orelse Options{};
         return chainComponent(CSSMatrixComponent, "matrix", CSSMatrixComponent{
@@ -2535,7 +2716,11 @@ pub const CSSMatrixComponent = struct {
         return DOMMatrix.create(self._matrix, self._proto._is_2d, frame._page);
     }
 
-    pub fn setMatrix(self: *CSSMatrixComponent, matrix: *DOMMatrixReadOnly) !void {
+    pub fn setMatrix(self: *CSSMatrixComponent, raw: js.Value, frame: *Frame) !void {
+        const matrix = raw.toZig(*DOMMatrixReadOnly) catch return frame.js.fail(
+            error.TypeError,
+            "Failed to set the 'matrix' property on 'CSSMatrixComponent': Failed to convert value to 'DOMMatrix'.",
+        );
         const state = matrix.getState();
         self._matrix = state.matrix;
         self._proto._is_2d = state.is_2d;
@@ -2593,9 +2778,14 @@ pub const CSSTransformValue = struct {
     _items: std.ArrayList(*CSSTransformComponent),
 
     pub fn init(components: []const *CSSTransformComponent, frame: *Frame) !*CSSTransformValue {
-        // Measured: both a missing argument and an empty list are TypeErrors,
-        // and both arrive here as an empty slice.
-        if (components.len == 0) return error.TypeError;
+        // Measured: an empty list is a TypeError with this sentence, while a
+        // missing argument never reaches here -- the bridge's WebIDL arity check
+        // answers "1 argument required, but only 0 present." first, exactly as
+        // Blink does.
+        if (components.len == 0) return frame.js.fail(
+            error.TypeError,
+            "Failed to construct 'CSSTransformValue': CSSTransformValue must have at least one component",
+        );
         return create(components, frame);
     }
 
@@ -2834,9 +3024,69 @@ pub fn dispatch(property: []const u8, value: []const u8, frame: *Frame) !*CSSSty
         return unit._proto._proto;
     }
     if (isIdentifier(value)) {
-        return (try CSSKeywordValue.create(value, frame))._proto;
+        // A recognised keyword comes back in its canonical spelling; anything
+        // the table cannot vouch for is kept as written.
+        const text = switch (lookupIdentifier(property, value)) {
+            .canonical => |keyword| keyword,
+            else => value,
+        };
+        return (try CSSKeywordValue.create(text, frame))._proto;
     }
     return CSSStyleValue.init(value, frame);
+}
+
+/// What a property makes of a bare identifier, from the measured table in
+/// `src/browser/webapi/css/chrome_keywords.zig` (see
+/// `tools/fingerprint/dump-css-keywords.mjs`).
+const Identifier = union(enum) {
+    /// A name the table does not cover, so nothing is known and nothing is
+    /// judged.
+    unknown,
+    /// The property takes an arbitrary `<custom-ident>` -- a font family, an
+    /// animation name, a grid line name. Measured: the text comes back exactly
+    /// as written, `parse('font-family', 'MyOwnFont')` answers `MyOwnFont`.
+    any,
+    /// The property takes this keyword. Measured: the answer is the canonical
+    /// spelling rather than the one passed, `parse('display', 'BLOCK')` answers
+    /// `block`.
+    canonical: []const u8,
+    /// The property does not take it, and Chrome throws.
+    rejected,
+};
+
+/// Only two shapes are judged: an empty value, which Chrome always rejects, and
+/// a single bare identifier.
+///
+/// Everything else is `unknown`. Chrome rejects plenty more -- `parse('color',
+/// 'rgb(bogus)')`, `parse('width', 'abc def')` -- but judging those needs the
+/// per-property grammars this engine does not have, and a wrong rejection is
+/// worse than the permissiveness it would fix: it breaks pages Chrome renders,
+/// and reads as "not Chrome" just as loudly. Same reason a property missing from
+/// the table stays permissive.
+fn lookupIdentifier(property: []const u8, value: []const u8) Identifier {
+    // A custom property takes anything, including nothing.
+    if (isCustomProperty(property)) return .any;
+
+    const trimmed = std.mem.trim(u8, value, " \t\r\n");
+    if (trimmed.len == 0) return .rejected;
+    if (!isIdentifier(trimmed)) return .unknown;
+
+    for (chrome_keywords.css_wide) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return .{ .canonical = keyword };
+    }
+
+    // Chrome only answers to the lowercase dash-case spelling, which is what the
+    // table is keyed on.
+    var buf: [128]u8 = undefined;
+    if (property.len > buf.len) return .unknown;
+    const name = std.ascii.lowerString(buf[0..property.len], property);
+
+    if (chrome_keywords.any_identifier.has(name)) return .any;
+    const accepted = chrome_keywords.keywords.get(name) orelse return .unknown;
+    for (accepted) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return .{ .canonical = keyword };
+    }
+    return .rejected;
 }
 
 fn isIdentifier(value: []const u8) bool {
@@ -2970,15 +3220,31 @@ pub const StylePropertyMapReadOnly = struct {
         return self._style.length();
     }
 
+    /// Measured: get/has/getAll/set/append all say "Invalid propertyName: <as
+    /// passed>" -- not normalised -- while `delete` alone says "Invalid property
+    /// name". Each names the interface its member is declared on, so the three
+    /// read-only members below say StylePropertyMapReadOnly and the three
+    /// writable ones say StylePropertyMap.
+    fn invalidProperty(frame: *Frame, comptime member: []const u8, comptime interface: []const u8, property: []const u8) error{TypeError} {
+        return failFmt(
+            frame,
+            error.TypeError,
+            "Failed to execute '" ++ member ++ "' on '" ++ interface ++ "': Invalid propertyName: {s}",
+            .{property},
+        );
+    }
+
     pub fn has(self: *StylePropertyMapReadOnly, property: []const u8) !bool {
-        if (!isKnownProperty(property)) return error.TypeError;
+        if (!isKnownProperty(property)) return invalidProperty(self._frame, "has", "StylePropertyMapReadOnly", property);
         return (try self.get(property)) != null;
     }
 
     pub fn get(self: *StylePropertyMapReadOnly, property: []const u8) !?*CSSStyleValue {
-        if (!isKnownProperty(property)) return error.TypeError;
+        if (!isKnownProperty(property)) return invalidProperty(self._frame, "get", "StylePropertyMapReadOnly", property);
         const frame = self._frame;
-        const value = self._style.getPropertyValue(property, frame);
+        // The computed value, not the used one: measured, Chrome's Typed OM and
+        // its getComputedStyle disagree on an undeclared border width.
+        const value = self._style.getComputedValue(property, frame);
         if (value.len == 0) return null;
         // frame.arena, not local_arena: the value outlives this call.
         return dispatch(property, try frame.arena.dupe(u8, value), frame);
@@ -2988,6 +3254,9 @@ pub const StylePropertyMapReadOnly = struct {
     /// get returns one. Measured: entries() and values() yield these sequences,
     /// not bare values.
     pub fn getAll(self: *StylePropertyMapReadOnly, property: []const u8) ![]const *CSSStyleValue {
+        // Its own check rather than letting `get` reject: the message names the
+        // member the script called.
+        if (!isKnownProperty(property)) return invalidProperty(self._frame, "getAll", "StylePropertyMapReadOnly", property);
         const single = try self.get(property) orelse return &.{};
         const list = try self._frame.local_arena.alloc(*CSSStyleValue, 1);
         list[0] = single;
@@ -3082,9 +3351,17 @@ pub const StylePropertyMap = struct {
     /// Measured: Blink has no list-valued append for any property, so this
     /// always throws — with a different message for a custom property, but the
     /// same TypeError.
-    pub fn append(_: *StylePropertyMap, property: []const u8, _: []const Value) !void {
-        if (!isCustomProperty(property) and !isKnownProperty(property)) return error.TypeError;
-        return error.TypeError;
+    pub fn append(self: *StylePropertyMap, property: []const u8, _: []const Value) !void {
+        const frame = self._proto._frame;
+        if (isCustomProperty(property)) return frame.js.fail(
+            error.TypeError,
+            "Failed to execute 'append' on 'StylePropertyMap': Appending to custom properties is not supported",
+        );
+        if (!isKnownProperty(property)) return StylePropertyMapReadOnly.invalidProperty(frame, "append", "StylePropertyMap", property);
+        return frame.js.fail(
+            error.TypeError,
+            "Failed to execute 'append' on 'StylePropertyMap': Property does not support multiple values",
+        );
     }
 
     /// Measured: clear() empties the style attribute but leaves it in place.
@@ -3093,14 +3370,20 @@ pub const StylePropertyMap = struct {
     }
 
     pub fn delete(self: *StylePropertyMap, property: []const u8, frame: *Frame) !void {
-        if (!isKnownProperty(property)) return error.TypeError;
+        // Measured: `delete` is the one member that spells it "property name".
+        if (!isKnownProperty(property)) return failFmt(
+            frame,
+            error.TypeError,
+            "Failed to execute 'delete' on 'StylePropertyMap': Invalid property name: {s}",
+            .{property},
+        );
         _ = try self._proto._style.removeProperty(property, frame);
     }
 
     pub fn set(self: *StylePropertyMap, property: []const u8, values: []const Value, frame: *Frame) !void {
-        if (!isKnownProperty(property)) return error.TypeError;
+        if (!isKnownProperty(property)) return StylePropertyMapReadOnly.invalidProperty(frame, "set", "StylePropertyMap", property);
         // Measured: a missing value is "Invalid type for property", a TypeError.
-        if (values.len != 1) return error.TypeError;
+        if (values.len != 1) return frame.js.fail(error.TypeError, invalid_type);
         const text = switch (values[0]) {
             .text => |t| t,
             .typed => |typed| try typed.toString(frame),
@@ -3125,8 +3408,10 @@ pub const StylePropertyMap = struct {
         _ = current;
         const numeric_type = try numeric.numericType();
         const base = numeric_type.onlyBase() orelse return;
-        if (base == .angle and isLengthProperty(property)) return error.TypeError;
+        if (base == .angle and isLengthProperty(property)) return frame.js.fail(error.TypeError, invalid_type);
     }
+
+    const invalid_type = "Failed to execute 'set' on 'StylePropertyMap': Invalid type for property";
 
     fn isLengthProperty(property: []const u8) bool {
         const names = [_][]const u8{

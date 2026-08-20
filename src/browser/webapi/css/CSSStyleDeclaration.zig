@@ -171,7 +171,22 @@ pub fn getParentRule(_: *const CSSStyleDeclaration) ?bool {
     return null;
 }
 
+/// Which of the two values a computed declaration is being asked for. They only
+/// differ in the initial values below; a declared value reads the same either
+/// way.
+pub const Surface = enum { used, computed };
+
+/// What `getComputedStyle()` reports: the used value.
 pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame) []const u8 {
+    return self.propertyValue(property_name, frame, .used);
+}
+
+/// What the CSS Typed OM reports: the computed value. See `borderWidth`.
+pub fn getComputedValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame) []const u8 {
+    return self.propertyValue(property_name, frame, .computed);
+}
+
+fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame, surface: Surface) []const u8 {
     const normalized = normalizePropertyName(property_name, &frame.buf);
     const wrapped = String.wrap(normalized);
 
@@ -237,7 +252,7 @@ pub fn getPropertyValue(self: *const CSSStyleDeclaration, property_name: []const
                     return resolvedDimension(element, .height, frame);
                 }
             }
-            return getDefaultPropertyValue(self, wrapped);
+            return getDefaultPropertyValue(self, wrapped, surface);
         }
         return "";
     };
@@ -954,7 +969,7 @@ fn isLengthProperty(name: []const u8) bool {
     return length_properties.has(name);
 }
 
-fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String) []const u8 {
+fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surface: Surface) []const u8 {
     switch (name.len) {
         5 => {
             if (name.eql(comptime .wrap("color"))) {
@@ -970,10 +985,29 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String) []con
                 const element = self._element orelse return "";
                 return getDefaultDisplay(element);
             }
+            if (name.eql(comptime .wrap("z-index"))) {
+                return "auto";
+            }
+        },
+        9 => {
+            if (name.eqlSlice("flex-grow")) {
+                return "0";
+            }
         },
         10 => {
             if (name.eql(comptime .wrap("visibility"))) {
                 return "visible";
+            }
+        },
+        11 => {
+            if (name.eqlSlice("line-height")) {
+                return "normal";
+            }
+            // The serif this engine's font metrics already model as the default
+            // family (font_metrics.zig maps "Times" onto its serif table), which
+            // is also what Chrome reports on the platform this build claims.
+            if (name.eqlSlice("font-family")) {
+                return "Times";
             }
         },
         16 => {
@@ -981,10 +1015,50 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String) []con
                 // transparent
                 return "rgba(0, 0, 0, 0)";
             }
+            if (name.eqlSlice("border-top-width")) {
+                return borderWidth(surface);
+            }
+        },
+        17 => {
+            if (name.eqlSlice("border-left-width")) {
+                return borderWidth(surface);
+            }
+        },
+        18 => {
+            if (name.eqlSlice("border-right-width")) {
+                return borderWidth(surface);
+            }
+        },
+        19 => {
+            if (name.eqlSlice("transition-duration")) {
+                return "0s";
+            }
+            if (name.eqlSlice("border-bottom-width")) {
+                return borderWidth(surface);
+            }
         },
         else => {},
     }
     return "";
+}
+
+/// The one initial value measured to differ between the two surfaces: the
+/// initial `border-width: medium` computes to 3px, and the CSS Typed OM reports
+/// that, while getComputedStyle reports the used width, which `border-style:
+/// none` collapses to 0px. Chrome 151 on a div with no border answers `3px` from
+/// `computedStyleMap().get('border-top-width')` and `0px` from
+/// `getComputedStyle().borderTopWidth`.
+///
+/// Only the undeclared case comes through here, so a declared width is reported
+/// as declared on both surfaces. An element that declares a border *style* but
+/// no width still reads 0px here where Chrome would say 3px: the used width then
+/// depends on the cascaded border-style, which this computed view does not
+/// resolve.
+fn borderWidth(surface: Surface) []const u8 {
+    return switch (surface) {
+        .used => "0px",
+        .computed => "3px",
+    };
 }
 
 fn getDefaultDisplay(element: *const Element) []const u8 {
