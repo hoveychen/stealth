@@ -51,6 +51,10 @@ const proxy = arg('--proxy', null);
 const windowSize = arg('--window-size', '1920,1080');
 // Substring filter, so one station can be re-run without walking fifteen.
 const only = arg('--only', null);
+// Overrides the station's own settle. A challenge that has not cleared by the
+// time the default expires is either failing or slow, and those are different
+// findings; raising this is how the two get told apart.
+const settleOverride = arg('--settle', null);
 const headed = process.argv.includes('--headed');
 // One engine process per station instead of one per sweep. Needed because a
 // station that wedges the page takes every station after it down with it: the
@@ -257,7 +261,9 @@ try {
         try {
             if (fresh) live = await session();
             const { cdp, sessionId } = live;
-            await goto(cdp, sessionId, station.url, { settleMs: station.settleMs });
+            const settleMs = settleOverride ? Number(settleOverride) : station.settleMs;
+            row.settleMs = settleMs;
+            await goto(cdp, sessionId, station.url, { settleMs });
             reading = await evaluate(cdp, sessionId, extractAntibot);
         } catch (e) {
             row.error = String((e && e.message) || e).slice(0, 200);

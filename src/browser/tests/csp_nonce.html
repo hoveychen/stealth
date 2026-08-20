@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!--
+  Cloudflare's challenge interstitial, reduced to its CSP shape. It sends
+
+    script-src 'nonce-<random>' 'unsafe-eval' https://challenges.cloudflare.com
+
+  with no 'self' and no 'strict-dynamic', then injects its own loader with the
+  nonce set on the element:
+
+    var a = document.createElement('script');
+    a.nonce = '<random>';
+    a.src = '/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=...';
+
+  so the nonce is the only source expression that admits that same-origin URL.
+  A browser that treats a nonce-source as inline-only refuses the loader, the
+  challenge never runs, nothing is posted back, and the interstitial never
+  clears -- which is what this engine did until the nonce matching below landed
+  (tools/fingerprint/results/antibot-2026-08-20-vs-chrome.md).
+
+  Every script in this file therefore carries the nonce, testing.js included:
+  without 'self' in the policy, an un-nonced one is blocked.
+-->
+<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-v4r3E9xWYvR93f3o09vl4E'">
+<script nonce="v4r3E9xWYvR93f3o09vl4E" src="./testing.js"></script>
+
+<script nonce="v4r3E9xWYvR93f3o09vl4E" id=csp_nonce_admits_harness>
+{
+  // The policy lists no 'self', so testing.js got here on its nonce alone. If
+  // this file reports nothing at all, that is the finding.
+  testing.expectEqual('object', typeof testing);
+}
+</script>
+
+<script nonce="v4r3E9xWYvR93f3o09vl4E" id=csp_nonce_admits_matching_src type=module>
+{
+  // The Cloudflare case: same-origin src, no 'self' in the policy, nonce set as
+  // an IDL property on the element the way the interstitial sets it.
+  const state = await testing.async();
+  const s = document.createElement('script');
+  s.nonce = 'v4r3E9xWYvR93f3o09vl4E';
+  s.src = './csp-nonced.js';
+  let fired = null;
+  s.onload = () => { fired = 'load'; };
+  s.onerror = () => { fired = 'error'; };
+  document.head.appendChild(s);
+  await new Promise((r) => setTimeout(r, 300));
+  state.resolve();
+
+  await state.done(() => {
+    // The nonce reflects the content attribute, which is what the policy check
+    // reads; if this is empty the IDL attribute is the bug, not the matching.
+    testing.expectEqual('v4r3E9xWYvR93f3o09vl4E', s.getAttribute('nonce'));
+    testing.expectEqual('load', fired);
+    testing.expectEqual(1, window.cspNonced);
+  });
+}
+</script>
+
+<script nonce="v4r3E9xWYvR93f3o09vl4E" id=csp_nonce_still_blocks_unnonced type=module>
+{
+  // The control, and the reason honouring a nonce is not the same as ignoring
+  // the policy: the same insertion without a nonce is still refused, so
+  // rebrowser's bypassCsp row cannot regress into a pass.
+  const state = await testing.async();
+  const s = document.createElement('script');
+  s.src = './worker/defer-noop.js';
+  let fired = null;
+  s.onload = () => { fired = 'load'; };
+  s.onerror = () => { fired = 'error'; };
+  document.head.appendChild(s);
+  await new Promise((r) => setTimeout(r, 300));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual('error', fired);
+    testing.expectEqual(undefined, window.deferNoop);
+  });
+}
+</script>
+
+<script nonce="v4r3E9xWYvR93f3o09vl4E" id=csp_nonce_rejects_wrong_nonce type=module>
+{
+  // A nonce that does not match is no better than none. Exact comparison, so a
+  // case-folded copy of the real one has to fail too -- the nonce is base64 and
+  // the parser used to lower-case every source expression it read.
+  const state = await testing.async();
+  const wrong = document.createElement('script');
+  wrong.nonce = 'not-the-nonce';
+  wrong.src = './worker/defer-noop.js';
+  let wrongFired = null;
+  wrong.onload = () => { wrongFired = 'load'; };
+  wrong.onerror = () => { wrongFired = 'error'; };
+  document.head.appendChild(wrong);
+
+  const folded = document.createElement('script');
+  folded.nonce = 'v4r3e9xwyvr93f3o09vl4e';
+  folded.src = './worker/defer-noop.js';
+  let foldedFired = null;
+  folded.onload = () => { foldedFired = 'load'; };
+  folded.onerror = () => { foldedFired = 'error'; };
+  document.head.appendChild(folded);
+
+  await new Promise((r) => setTimeout(r, 300));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual('error', wrongFired);
+    testing.expectEqual('error', foldedFired);
+    testing.expectEqual(undefined, window.deferNoop);
+  });
+}
+</script>
