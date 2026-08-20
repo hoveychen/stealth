@@ -768,6 +768,28 @@
   }
 
   {
+    // Several declarations on one element keep their own source order, whatever
+    // that order is and whatever sits between them. Chrome 151 readings, probe
+    // expr-order.js.
+    testing.expectEqual(['xmlns', 'xmlns:s'],
+      attrs(parser.parseFromString('<root xmlns="urn:x" xmlns:s="urn:s"/>', 'text/xml')
+        .documentElement).map((a) => a[0]));
+    testing.expectEqual(['xmlns:s', 'xmlns'],
+      attrs(parser.parseFromString('<root xmlns:s="urn:s" xmlns="urn:x"/>', 'text/xml')
+        .documentElement).map((a) => a[0]));
+    testing.expectEqual(['xmlns:a', 'xmlns:b'],
+      attrs(parser.parseFromString('<root xmlns:a="urn:a" xmlns:b="urn:b"/>', 'text/xml')
+        .documentElement).map((a) => a[0]));
+    testing.expectEqual(['xmlns:a', 'xmlns', 'xmlns:b'],
+      attrs(parser.parseFromString('<root xmlns:a="urn:a" xmlns="urn:x" xmlns:b="urn:b"/>', 'text/xml')
+        .documentElement).map((a) => a[0]));
+    // ... and they all still come ahead of the plain attributes.
+    testing.expectEqual(['xmlns', 'xmlns:s', 'p', 'q', 'r'],
+      attrs(parser.parseFromString('<root p="1" xmlns="urn:x" q="2" xmlns:s="urn:s" r="3"/>', 'text/xml')
+        .documentElement).map((a) => a[0]));
+  }
+
+  {
     const doc = parser.parseFromString(
       '<html xmlns="' + XHTML + '"><body><p>x</p></body></html>', 'application/xhtml+xml');
     testing.expectEqual([['xmlns', XHTML]], attrs(doc.documentElement));

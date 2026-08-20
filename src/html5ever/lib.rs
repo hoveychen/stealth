@@ -869,7 +869,7 @@ impl<'arena> XmlTokenSink for NamespaceDeclarationCapture<'arena> {
         if let XmlToken::Tag(ref tag) = token {
             if matches!(tag.kind, TagKind::StartTag | TagKind::EmptyTag) {
                 // The predicate xml5ever's `process_namespaces` strips by.
-                let declarations: Vec<html5ever::Attribute> = tag
+                let mut declarations: Vec<html5ever::Attribute> = tag
                     .attrs
                     .iter()
                     .filter(|attr| {
@@ -878,6 +878,13 @@ impl<'arena> XmlTokenSink for NamespaceDeclarationCapture<'arena> {
                     })
                     .cloned()
                     .collect();
+                // The tokenizer already hoists a declaration to the front of
+                // the tag's attributes (`finish_attribute`, `insert(0, attr)`),
+                // which puts several of them in reverse source order. Chrome
+                // keeps them in the order they were written -- `<root
+                // xmlns:a=… xmlns:b=…>` reads `xmlns:a`, `xmlns:b` (probe
+                // expr-order.js) -- so undo the hoist's reversal.
+                declarations.reverse();
                 *self.inner.sink.namespace_declarations.borrow_mut() = match declarations.is_empty()
                 {
                     true => None,
