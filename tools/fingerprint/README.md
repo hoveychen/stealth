@@ -4343,3 +4343,60 @@ The five are not independent. `getElementsByTagName('s:clipPath')` cannot be rig
 until `tagName` carries the prefix, and `getElementsByTagNameNS(null, …)` cannot be
 right until a bare XML element sits in the null namespace. So the namespace and
 `tagName` work comes before the collections comparison, not after it.
+
+### What G2–G5 changed, and what is left
+
+The order G1 argued for is the order they were done in: `contentType` first
+because it stands alone, then the namespace and `tagName` work, then the
+collections comparison that depends on both.
+
+| | what it fixed | probe now identical to Chrome 151 |
+|---|---|---|
+| G3 | `contentType` echoes the mime that was parsed | `expr-g1.js` |
+| G5 | a declared `xmlns` reads back, an undeclared element is in no namespace, and the declaration stays in `attributes` -- declaration first, whatever its source position | `expr-xmlns-p67.js`, 11 of 11 rows |
+| G4 | `tagName` / `nodeName` fold case only in an HTML document, and keep the prefix (`s:clipPath`, `prefix` `s`, `localName` `clipPath`) | `expr-g4-p67.js`, every name row |
+| G2 | `getElementsByTagName` compares the qualified name and folds only in an HTML document | `expr-g2-p67.js`, 30 of 30 rows |
+
+The `getElementsByTagName('DIV')`-is-unreachable row and the
+`getElementsByTagNameNS(null, 'Thing')` row that G1 found beyond the table both
+fall out of G2 and G5 respectively, as predicted.
+
+Two deviations were measured on the way and deliberately left:
+
+| what | Chrome | this engine |
+|---|---|---|
+| `new XMLSerializer().serializeToString()` of a prefixed or XHTML element | `<s:clipPath xmlns:s="…"/>`, `<p xmlns="…">x</p>` | `<clipPath></clipPath>`, `<p>x</p>` |
+| `href.baseVal` of an element given `setAttribute('xlink:href', …)` | `""` -- the attribute is in no namespace, so it does not reflect | the value, indistinguishable from the parsed one |
+
+The first is the XML serializer, which emits no namespace declarations at all
+and is its own piece of work rather than a name bug. The second is the residual
+half of the `xlink:href` fix: G4's prefix join stops the parser filing
+`xlink:href` under `href`, which is what Chrome reads, and SVG's `href` now
+falls back to the legacy spelling so a parsed `<use xlink:href>` still
+reflects. Telling that apart from a literal `setAttribute` of the same string
+needs a namespace on the attribute, which this engine does not have anywhere
+(`Attribute.getNamespaceURI` is a flat null). Chrome 151 readings for both:
+`expr-xlink-p67.js`, `expr-g4-p67.js`.
+
+### Regression sweep
+
+`detectors-g2456-lightpanda.json`, all twelve detectors, against
+`detectors-g21-lightpanda.json`. Every site still navigates and completes; node
+counts move within their usual run-to-run range. One row moved a long way, in
+the right direction:
+
+| | G21 | now | Chrome |
+|---|---|---|---|
+| CreepJS `textLength` | 87144 | 4130 | 4698 |
+| CreepJS nodes | 3589 | 3602 | 3756 |
+| CreepJS verdict words | 2 | 2 | 2 |
+
+Every historical lightpanda sweep sat between 41457 and 87879 here while Chrome
+sat at 4698, so the page was rendering an order of magnitude more text than
+Chrome does; it now sits 12% under Chrome's figure with the node count and
+verdict unchanged. Reproduced across two runs.
+
+`browserscan-g2456-lightpanda.json` against
+`browserscan-webgl-exception-after-lightpanda.json`: score 100% both, zero
+warnings both, 845 main and 1871 document nodes both. The only rows that differ
+are the clock and the seven-day IP count.
