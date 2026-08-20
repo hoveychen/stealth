@@ -487,6 +487,32 @@
 }
 </script>
 
+<script id=contentType-echoes-the-parsed-mime>
+{
+  // `contentType` reports the mime the document was parsed as, not a single
+  // stand-in for "some kind of XML". Chrome 151 readings, probe expr-g1.js.
+  const parser = new DOMParser();
+  const SVG = 'http://www.w3.org/2000/svg';
+
+  testing.expectEqual('text/xml', parser.parseFromString('<r/>', 'text/xml').contentType);
+  testing.expectEqual('application/xml',
+    parser.parseFromString('<r/>', 'application/xml').contentType);
+  testing.expectEqual('image/svg+xml',
+    parser.parseFromString('<svg xmlns="' + SVG + '"/>', 'image/svg+xml').contentType);
+  testing.expectEqual('application/xhtml+xml',
+    parser.parseFromString(
+      '<html xmlns="http://www.w3.org/1999/xhtml"><body><p>x</p></body></html>',
+      'application/xhtml+xml').contentType);
+
+  // The two that were already right, kept as regressions: the HTML branch and
+  // the documents that never went through a parser at all.
+  testing.expectEqual('text/html', parser.parseFromString('<p>x</p>', 'text/html').contentType);
+  testing.expectEqual('text/html', document.implementation.createHTMLDocument('t').contentType);
+  testing.expectEqual('application/xml',
+    document.implementation.createDocument(null, 'Root').contentType);
+}
+</script>
+
 <script id=attributeNameCase-xml>
 {
   // An attribute name goes the same way as a type selector, and the rule again
