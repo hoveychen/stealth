@@ -7,7 +7,7 @@
 // conversions and the error each rejection path throws were all measured on a
 // headed Chrome 150 over http://localhost (probes probe-css1.js and
 // probe-css7.js .. probe-css10.js in
-// agent-workspace/stealth-detector-probes/css-batch). Where Chrome disagrees
+// tools/fingerprint/scratch/css-batch). Where Chrome disagrees
 // with the CSS Typed OM spec the comment says so and Chrome wins.
 //
 // Declaration order inside each JsApi is Chrome's own

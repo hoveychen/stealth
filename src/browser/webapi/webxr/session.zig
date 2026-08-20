@@ -39,7 +39,7 @@
 //      settles and no `end` event is ever dispatched. Confirmed with a ten
 //      second window and a 100ms ticker running alongside (probe-win55.js).
 //
-// See stealth-detector-probes/win-batch/win52-findings.md for the rest.
+// See tools/fingerprint/scratch/win-batch/win52-findings.md for the rest.
 
 const std = @import("std");
 const lp = @import("lightpanda");

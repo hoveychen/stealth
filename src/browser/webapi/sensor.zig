@@ -23,7 +23,7 @@
 //! than inventing readings: it queues a NotReadableError "Could not connect to
 //! a sensor", which is exactly what a headed Chrome 150 answers on a machine
 //! with no motion sensors (measured over http://localhost; the probes live in
-//! agent-workspace/stealth-detector-probes/win-batch/). The sensor never
+//! tools/fingerprint/scratch/win-batch/). The sensor never
 //! activates, never reads, and every reading attribute stays null -- the same
 //! observable state Chrome leaves behind after that failure.
 //!

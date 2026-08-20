@@ -19,7 +19,7 @@
 // WebXR's geometry: the two types a page can construct outright, and the
 // read-only ones a session hands back. All of it measured on a headed Chrome
 // 150 at http://localhost (WebXR is [SecureContext], and localhost counts) --
-// see stealth-detector-probes/win-batch/win52-findings.md.
+// see tools/fingerprint/scratch/win-batch/win52-findings.md.
 //
 // Two things here are worth stating up front, because neither is in the spec
 // and both are readable from script:

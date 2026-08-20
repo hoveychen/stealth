@@ -21,7 +21,7 @@
 // Everything a page reaches through `device.create*` once it has a device.
 //
 // Shapes, arities and member order are Chrome 150's, read with
-// stealth-detector-probes/win-batch/probe-win37.js. The order is not
+// tools/fingerprint/scratch/win-batch/probe-win37.js. The order is not
 // alphabetical, and GPUCommandEncoder's is not even one run of it: the methods
 // restart at `clearBuffer` after `pushDebugGroup`, and that is how it is written
 // here.

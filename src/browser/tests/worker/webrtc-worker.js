@@ -1,5 +1,5 @@
 // The RTC surface a Chrome DedicatedWorkerGlobalScope carries. Measured with
-// agent-workspace/stealth-detector-probes/webrtc-worker-surface.mjs: exactly
+// tools/fingerprint/scratch/webrtc-worker-surface.mjs: exactly
 // five names, none of them RTCPeerConnection.
 (function() {
   const names = Object.getOwnPropertyNames(self).filter((k) => /^RTC/.test(k)).sort();

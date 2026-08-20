@@ -24,7 +24,7 @@
 // All five report constructor length 2 in Chrome — type plus a *required*
 // dictionary — so `opts` is non-optional here (getArity stops at the first
 // optional parameter). Every arity and default below was read off a headed
-// Chrome 150; see agent-workspace/stealth-detector-probes/webrtc-protochain.mjs
+// Chrome 150; see tools/fingerprint/scratch/webrtc-protochain.mjs
 // and /tmp/webrtc-protochain-chrome.json.
 
 const lp = @import("lightpanda");

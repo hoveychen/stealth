@@ -22,9 +22,9 @@
 //! at all -- which is what this used to do -- means answering 'prompt' for
 //! names no browser has ever heard of, and Chrome rejects those. The table, the
 //! default states, every message and the odd bits below were measured on a
-//! headed Chrome 150 over http://localhost (agent-workspace/
-//! stealth-detector-probes/win-batch/probe-perm1.js and probe-perm2.js, with
-//! perm1-chrome.json).
+//! headed Chrome 150 over http://localhost
+//! (tools/fingerprint/scratch/win-batch/probe-perm1.js and probe-perm2.js,
+//! with perm1-chrome.json).
 //!
 //! Two things worth knowing before reading the table:
 //!

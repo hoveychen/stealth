@@ -19,7 +19,7 @@
 // a Chrome DedicatedWorkerGlobalScope has exactly RTCTransformEvent,
 // RTCRtpScriptTransformer, RTCDataChannel, RTCEncodedVideoFrame and
 // RTCEncodedAudioFrame (measured; see
-// agent-workspace/stealth-detector-probes/webrtc-worker-surface.mjs and
+// tools/fingerprint/scratch/webrtc-worker-surface.mjs and
 // /tmp/webrtc-worker-chrome.json).
 //
 // So these two types live in the worker API list, and are named directly in the

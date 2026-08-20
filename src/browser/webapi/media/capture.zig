@@ -29,7 +29,7 @@
 //     element, and two calls on the same element give two different objects.
 //
 // All of it measured on a headed Chrome 150 with no capture in flight; see
-// agent-workspace/stealth-detector-probes/win-batch/probe-win31.js.
+// tools/fingerprint/scratch/win-batch/probe-win31.js.
 
 const std = @import("std");
 

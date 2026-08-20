@@ -10,4 +10,5 @@ lightpanda.id
 src/snapshot.bin
 /v8/
 /.worktrees/
+/tools/fingerprint/scratch/
 TASKS.md
