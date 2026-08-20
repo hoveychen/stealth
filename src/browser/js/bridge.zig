@@ -28,7 +28,6 @@ const Caller = @import("Caller.zig");
 const Context = @import("Context.zig");
 
 const v8 = js.v8;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 pub fn Builder(comptime T: type) type {
     return struct {
@@ -181,6 +180,7 @@ pub const Function = struct {
     js_name: ?[:0]const u8 = null,
     exposed: Caller.Function.Opts.Exposed = .both,
     cache: ?Caller.Function.Opts.Caching = null,
+    rejects_bad_receiver: bool,
     func: *const fn (?*const v8.FunctionCallbackInfo) callconv(.c) void,
 
     fn init(comptime T: type, comptime func: anytype, comptime opts: Caller.Function.Opts) Function {
@@ -191,8 +191,11 @@ pub const Function = struct {
             .enumerable = opts.enumerable,
             .js_name = opts.js_name,
             .exposed = opts.exposed,
+            .rejects_bad_receiver = returnsPromise(@TypeOf(func)),
             // Non-static methods receive `self` as their first param; static
-            // methods don't, so don't skip the first param for them.
+            // methods don't, so don't skip the first param for them. `opts.arity`
+            // overrides the derived value, which a variadic operation needs (see
+            // Console's members, all of which report length 0).
             .arity = opts.arity orelse getArity(@TypeOf(func), if (opts.static) 0 else 1),
             .func = if (opts.noop) noopFunction else struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
@@ -203,6 +206,14 @@ pub const Function = struct {
     }
 
     pub fn noopFunction(_: ?*const v8.FunctionCallbackInfo) callconv(.c) void {}
+
+    fn returnsPromise(comptime F: type) bool {
+        const R = @typeInfo(F).@"fn".return_type orelse return false;
+        return switch (@typeInfo(R)) {
+            .error_union => |eu| eu.payload,
+            else => R,
+        } == js.Promise;
+    }
 
     fn getArity(comptime T: type, comptime start: usize) usize {
         const Execution = js.Execution;
@@ -231,6 +242,12 @@ pub const Function = struct {
             }
 
             if (@typeInfo(PT) == .optional) {
+                break;
+            }
+
+            // A slice of js.Value is always bound as variadic (see
+            // Caller.getArgs) and variadics contribute 0 to length.
+            if (@typeInfo(PT) == .pointer and @typeInfo(PT).pointer.size == .slice and @typeInfo(PT).pointer.child == js.Value) {
                 break;
             }
             count += 1;
@@ -696,7 +713,7 @@ pub fn unknownWindowPropertyCallback(c_name: ?*const v8.Name, handle: ?*const v8
         .worker => {}, // no global lookup in a worker
     }
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         if (std.mem.startsWith(u8, property, "__")) {
             // some frameworks will extend built-in types using a __ prefix
             // these should always be safe to ignore.
@@ -742,7 +759,7 @@ pub fn unknownWindowPropertyCallback(c_name: ?*const v8.Name, handle: ?*const v8
 
 // Only used for debugging
 pub fn unknownObjectPropertyCallback(comptime JsApi: type) *const fn (?*const v8.Name, ?*const v8.PropertyCallbackInfo) callconv(.c) u32 {
-    if (comptime !IS_DEBUG) {
+    if (comptime !lp.IS_DEBUG) {
         @compileError("unknownObjectPropertyCallback should only be used in debug builds");
     }
 
@@ -995,6 +1012,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/DocumentType.zig"),
     @import("../webapi/ShadowRoot.zig"),
     @import("../webapi/DOMException.zig"),
+    @import("../webapi/QuotaExceededError.zig"),
     @import("../webapi/DOMError.zig"),
     @import("../webapi/ClipboardItem.zig"),
     @import("../webapi/EyeDropper.zig"),
@@ -1252,6 +1270,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/storage/idb/idb.zig"),
     @import("../webapi/event/CookieChangeEvent.zig"),
     @import("../webapi/URL.zig"),
+    @import("../webapi/URLPattern.zig"),
     @import("../webapi/Window.zig"),
     @import("../webapi/Performance.zig"),
     @import("../webapi/performance/timing.zig"),
@@ -1283,6 +1302,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/FileReader.zig"),
     @import("../webapi/DataTransfer.zig"),
     @import("../webapi/Screen.zig"),
+    @import("../webapi/scheduler.zig"),
     @import("../webapi/VisualViewport.zig"),
     @import("../webapi/BarProp.zig"),
     @import("../webapi/trusted_types.zig"),
@@ -1293,7 +1313,6 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/canvas/ImageBitmap.zig"),
     @import("../webapi/canvas/ImageBitmapRenderingContext.zig"),
     @import("../webapi/storage/cache_storage.zig"),
-    @import("../webapi/scheduler.zig"),
     @import("../webapi/sensor.zig"),
     @import("../webapi/midi.zig"),
     @import("../webapi/navigator/bluetooth.zig"),
@@ -1310,7 +1329,6 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),
     @import("../webapi/ReportingObserver.zig"),
-    @import("../webapi/net/URLPattern.zig"),
     @import("../webapi/navigation/Navigation.zig"),
     @import("../webapi/navigation/NavigationHistoryEntry.zig"),
     @import("../webapi/navigation/NavigationActivation.zig"),
@@ -1422,6 +1440,7 @@ const worker_common_apis = [_]type{
     @import("../webapi/event/PromiseRejectionEvent.zig"),
     @import("../webapi/event/CloseEvent.zig"),
     @import("../webapi/DOMException.zig"),
+    @import("../webapi/QuotaExceededError.zig"),
     @import("../webapi/DOMRectReadOnly.zig"),
     @import("../webapi/DOMRect.zig"),
     @import("../webapi/DOMMatrixReadOnly.zig"),
@@ -1460,6 +1479,7 @@ const worker_common_apis = [_]type{
     @import("../webapi/AbortSignal.zig"),
     @import("../webapi/AbortController.zig"),
     @import("../webapi/URL.zig"),
+    @import("../webapi/URLPattern.zig"),
     @import("../webapi/canvas/OffscreenCanvas.zig"),
     @import("../webapi/canvas/OffscreenCanvasRenderingContext2D.zig"),
     // An OffscreenCanvas hands back a WebGL context inside a worker too, so
@@ -1477,11 +1497,11 @@ const worker_common_apis = [_]type{
     @import("../webapi/net/WebSocket.zig"),
     @import("../webapi/net/EventSource.zig"),
     @import("../webapi/FileReader.zig"),
+    @import("../webapi/FileReaderSync.zig"),
     @import("../webapi/ImageData.zig"),
     @import("../webapi/Performance.zig"),
     @import("../webapi/PerformanceObserver.zig"),
     @import("../webapi/ReportingObserver.zig"),
-    @import("../webapi/net/URLPattern.zig"),
     @import("../webapi/storage/CookieStore.zig"),
     @import("../webapi/storage/idb/idb.zig"),
     @import("../webapi/event/CookieChangeEvent.zig"),
@@ -1516,9 +1536,11 @@ pub const SharedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/SharedW
 // to know about all possible types. Individual snapshots use their own
 // subsets (PageJsApis, WorkerSnapshot.JsApis).
 pub const JsApis = blk: {
-    // worker_transform holds the only [Exposed=Worker]-only interfaces, so they
-    // are named here rather than reached through PageJsApis.
+    // worker_transform's interfaces are [Exposed=Worker]-only, so they are
+    // named here rather than reached through PageJsApis.
     const base = PageJsApis ++ flattenTypes(&.{@import("../webapi/webrtc/worker_transform.zig")}) ++ [_]type{
+        // Worker-only, so it isn't in PageJsApis either.
+        @import("../webapi/FileReaderSync.zig").JsApi,
         @import("../webapi/DedicatedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/SharedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/WorkerGlobalScope.zig").JsApi,

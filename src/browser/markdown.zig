@@ -206,12 +206,12 @@ const Context = struct {
             .document, .document_fragment => {
                 try self.renderChildren(node);
             },
-            .element => |el| {
-                try self.renderElement(el);
+            .element => {
+                try self.renderElement(node.subtype(Node.Element));
             },
-            .cdata => |cd| {
+            .cdata => {
                 if (node.is(Node.CData.Text)) |_| {
-                    var text = cd.getData().str();
+                    var text = node.subtype(Node.CData).getData().str();
                     if (self.state.pre_node) |pre| {
                         if (node.parentNode() == pre and node.nextSibling() == null) {
                             text = std.mem.trimEnd(u8, text, " \t\r\n");
@@ -439,7 +439,7 @@ const Context = struct {
         // path (cf. dump.zig's default .rendered mode), so we always pierce; the
         // early-return tags above can never be valid shadow hosts, so only this
         // generic path needs the check.
-        if (self.frame._element_shadow_roots.get(el)) |shadow| {
+        if (el.hostedShadowRoot(self.frame)) |shadow| {
             try self.renderChildren(shadow.asNode());
         } else {
             try self.renderChildren(el.asNode());

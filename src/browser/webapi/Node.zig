@@ -23,7 +23,6 @@ const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const URL = @import("../URL.zig");
 const Factory = @import("../Factory.zig");
-const reflect = @import("../reflect.zig");
 
 const EventTarget = @import("EventTarget.zig");
 const collections = @import("collections.zig");
@@ -38,7 +37,6 @@ pub const ShadowRoot = @import("ShadowRoot.zig");
 
 const String = lp.String;
 const Allocator = std.mem.Allocator;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 pub const AssignedSlotLookup = std.AutoHashMapUnmanaged(*Node, *Element.Html.Slot);
 
@@ -47,6 +45,7 @@ const Node = @This();
 pub const Proto = EventTarget;
 
 _type: Type,
+_flags: Flags = .{}, // Fits in existing struct padding.
 _parent: ?*Node = null,
 // The first child's `_prev` points at the LAST child (keeping lastChild
 // O(1)); the last child's `_next` is null. A detached node has null links.
@@ -56,19 +55,47 @@ _prev: ?*Node = null,
 // In debug, set so that we can check that we have a proper contiguous block
 // of memory for the entire chain (and thus, simple pointer arithmetics will
 // work to resolve the proto).
-_proto_canary: if (IS_DEBUG) *EventTarget else void = undefined,
+_proto_canary: if (lp.IS_DEBUG) *EventTarget else void = undefined,
 
 // Lookup for nodes that have a different owner document than frame.document
 pub const OwnerDocumentLookup = std.AutoHashMapUnmanaged(*Node, *Document);
 
-pub const Type = union(enum) {
-    cdata: *CData,
-    element: *Element,
-    document: *Document,
-    document_type: *DocumentType,
-    attribute: *Element.Attribute,
-    document_fragment: *DocumentFragment,
+pub const Type = enum(u8) {
+    cdata,
+    element,
+    document,
+    document_type,
+    attribute,
+    document_fragment,
 };
+
+pub const Flags = packed struct(u8) {
+    assigned_slot: bool = false,
+    _unused: u7 = 0,
+};
+
+pub fn Subtype(comptime tag: Type) type {
+    return switch (tag) {
+        .cdata => CData,
+        .element => Element,
+        .document => Document,
+        .document_type => DocumentType,
+        .attribute => Element.Attribute,
+        .document_fragment => DocumentFragment,
+    };
+}
+
+pub fn subtype(self: *const Node, comptime T: type) *T {
+    const offset = comptime Factory.chainOffsetOf(T, T) - Factory.chainOffsetOf(T, Node);
+    const sub: *T = @ptrFromInt(@intFromPtr(self) + offset);
+    if (comptime lp.IS_DEBUG) {
+        // This pointer dance only works because the factory allocates the chain
+        // in a contiguous block of memory. In debug, we assert this holds via
+        // the _proto_canary back pointer.
+        std.debug.assert(Factory.protoOf(sub) == self);
+    }
+    return sub;
+}
 
 pub fn asEventTarget(self: *Node) *EventTarget {
     return Factory.protoOf(self);
@@ -84,7 +111,8 @@ pub fn as(self: *Node, comptime T: type) *T {
 pub fn is(self: *Node, comptime T: type) ?*T {
     const type_name = @typeName(T);
     switch (self._type) {
-        .element => |el| {
+        .element => {
+            const el = self.subtype(Element);
             if (T == Element) {
                 return el;
             }
@@ -92,7 +120,8 @@ pub fn is(self: *Node, comptime T: type) ?*T {
                 return el.is(T);
             }
         },
-        .cdata => |cd| {
+        .cdata => {
+            const cd = self.subtype(CData);
             if (T == CData) {
                 return cd;
             }
@@ -100,12 +129,13 @@ pub fn is(self: *Node, comptime T: type) ?*T {
                 return cd.is(T);
             }
         },
-        .attribute => |attr| {
+        .attribute => {
             if (T == Element.Attribute) {
-                return attr;
+                return self.subtype(Element.Attribute);
             }
         },
-        .document => |doc| {
+        .document => {
+            const doc = self.subtype(Document);
             if (T == Document) {
                 return doc;
             }
@@ -113,12 +143,13 @@ pub fn is(self: *Node, comptime T: type) ?*T {
                 return doc.is(T);
             }
         },
-        .document_type => |dt| {
+        .document_type => {
             if (T == DocumentType) {
-                return dt;
+                return self.subtype(DocumentType);
             }
         },
-        .document_fragment => |doc| {
+        .document_fragment => {
+            const doc = self.subtype(DocumentFragment);
             if (T == DocumentFragment) {
                 return doc;
             }
@@ -260,7 +291,8 @@ fn ensurePreInsertValidity(parent: *Node, node: *Node, child: ?*Node, comptime m
 
     switch (node._type) {
         .document, .attribute => return error.HierarchyError,
-        .cdata => |cd| {
+        .cdata => {
+            const cd = node.subtype(CData);
             if ((cd._type == .text or cd._type == .cdata_section) and parent._type == .document) {
                 // A Text node (CDATASection included) cannot be a child of a
                 // document.
@@ -286,7 +318,8 @@ fn ensurePreInsertValidity(parent: *Node, node: *Node, child: ?*Node, comptime m
             while (it.next()) |frag_child| {
                 switch (frag_child._type) {
                     .element => element_count += 1,
-                    .cdata => |cd| {
+                    .cdata => {
+                        const cd = frag_child.subtype(CData);
                         // A Text node (CDATASection included) cannot be a
                         // child of a document.
                         if (cd._type == .text or cd._type == .cdata_section) {
@@ -366,10 +399,7 @@ pub fn appendChild(self: *Node, child: *Node, frame: *Frame) !*Node {
 
     frame.domChanged();
 
-    // If the child is currently connected, and if its new parent is connected,
-    // then we can remove + add a bit more efficiently (we don't have to fully
-    // disconnect then reconnect)
-    const child_connected = child.isConnected();
+    const previous_root = child.getRootNode(.{});
 
     // Check if we're adopting the node to a different document
     const child_owner = child.ownerDocument(frame);
@@ -377,12 +407,8 @@ pub fn appendChild(self: *Node, child: *Node, frame: *Frame) !*Node {
     const adopting_to_new_document = child_owner != null and child_owner.? != parent_owner;
 
     if (child._parent) |parent| {
-        // we can signal removeNode that the child will remain connected
-        // (when it's appended to self) so that it can be a bit more efficient.
-        // But on cross-document moves the child must fully disconnect from the
-        // source document (firing disconnectedCallback) before adoption.
         frame.removeNode(parent, child, .{
-            .will_be_reconnected = self.isConnected() and !adopting_to_new_document,
+            .reconnect_to = if (adopting_to_new_document) null else self,
         });
     }
 
@@ -392,7 +418,7 @@ pub fn appendChild(self: *Node, child: *Node, frame: *Frame) !*Node {
     }
 
     try frame.appendNode(self, child, .{
-        .child_already_connected = child_connected,
+        .previous_root = previous_root,
         .adopting_to_new_document = adopting_to_new_document,
     });
     return child;
@@ -414,10 +440,10 @@ pub fn getTextContent(self: *Node, writer: *std.Io.Writer) error{WriteFailed}!vo
                 try child.getTextContent(writer);
             }
         },
-        .cdata => |c| try writer.writeAll(c._data.str()),
+        .cdata => try writer.writeAll(self.subtype(CData)._data.str()),
         .document => {},
         .document_type => {},
-        .attribute => |attr| try writer.writeAll(attr._value.str()),
+        .attribute => try writer.writeAll(self.subtype(Element.Attribute)._value.str()),
     }
 }
 
@@ -437,7 +463,7 @@ pub fn getChildTextContent(self: *Node, writer: *std.Io.Writer) error{WriteFaile
     var it = self.childrenIterator();
     while (it.next()) |child| {
         if (child.is(CData.Text)) |text| {
-            try writer.writeAll(text._proto._data.str());
+            try writer.writeAll(text.asCData()._data.str());
         }
     }
 }
@@ -449,7 +475,7 @@ pub fn childTextContentLen(self: *Node) usize {
     var it = self.childrenIterator();
     while (it.next()) |child| {
         if (child.is(CData.Text)) |text| {
-            len += text._proto._data.str().len;
+            len += text.asCData()._data.str().len;
         }
     }
     return len;
@@ -457,40 +483,50 @@ pub fn childTextContentLen(self: *Node) usize {
 
 pub fn setTextContent(self: *Node, data: []const u8, frame: *Frame) !void {
     switch (self._type) {
-        .element => |el| {
+        .element => {
+            const el = self.subtype(Element);
             if (data.len == 0) {
                 return el.replaceChildren(&.{}, frame);
             }
             return el.replaceChildren(&.{.{ .text = data }}, frame);
         },
         // Per spec, setting textContent on CharacterData runs replaceData(0, length, value)
-        .cdata => |c| try c.replaceData(0, c.getLength(), data, frame),
+        .cdata => {
+            const c = self.subtype(CData);
+            try c.replaceData(0, c.getLength(), data, frame);
+        },
         .document => {},
         .document_type => {},
-        .document_fragment => |frag| {
+        .document_fragment => {
+            const frag = self.subtype(DocumentFragment);
             if (data.len == 0) {
                 return frag.replaceChildren(&.{}, frame);
             }
             return frag.replaceChildren(&.{.{ .text = data }}, frame);
         },
-        .attribute => |attr| return attr.setValue(.wrap(data), frame),
+        .attribute => return self.subtype(Element.Attribute).setValue(.wrap(data), frame),
     }
 }
 
 // `frame` is optional: see `Element.getTagNameSpec`, the only arm that reads it.
 pub fn getNodeName(self: *const Node, frame: ?*const Frame, buf: []u8) []const u8 {
     return switch (self._type) {
-        .element => |el| el.getTagNameSpec(frame, buf),
-        .cdata => |cd| switch (cd._type) {
-            .text => "#text",
-            .cdata_section => "#cdata-section",
-            .comment => "#comment",
-            .processing_instruction => cd.subtype(CData.ProcessingInstruction)._target,
+        // `frame` is ours: the qualified name an XML element was written with
+        // (and whether the name folds to upper case) depends on the document.
+        .element => self.subtype(Element).getTagNameSpec(frame, buf),
+        .cdata => {
+            const cd = self.subtype(CData);
+            return switch (cd._type) {
+                .text => "#text",
+                .cdata_section => "#cdata-section",
+                .comment => "#comment",
+                .processing_instruction => cd.subtype(CData.ProcessingInstruction)._target,
+            };
         },
         .document => "#document",
-        .document_type => |dt| dt.getName(),
+        .document_type => self.subtype(DocumentType).getName(),
         .document_fragment => "#document-fragment",
-        .attribute => |attr| attr._name.str(),
+        .attribute => self.subtype(Element.Attribute)._name.str(),
     };
 }
 
@@ -498,7 +534,7 @@ pub fn getNodeType(self: *const Node) u8 {
     return switch (self._type) {
         .element => 1,
         .attribute => 2,
-        .cdata => |cd| switch (cd._type) {
+        .cdata => switch (self.subtype(CData)._type) {
             .text => 3,
             .cdata_section => 4,
             .processing_instruction => 7,
@@ -514,14 +550,14 @@ pub fn lookupNamespaceURI(self: *Node, prefix_arg: ?[]const u8, frame: *Frame) ?
     const prefix: ?[]const u8 = if (prefix_arg) |p| (if (p.len == 0) null else p) else null;
 
     switch (self._type) {
-        .element => |el| return el.lookupNamespaceURIForElement(prefix, frame),
-        .document => |doc| {
-            const de = doc.getDocumentElement() orelse return null;
+        .element => return self.subtype(Element).lookupNamespaceURIForElement(prefix, frame),
+        .document => {
+            const de = self.subtype(Document).getDocumentElement() orelse return null;
             return de.lookupNamespaceURIForElement(prefix, frame);
         },
         .document_type, .document_fragment => return null,
-        .attribute => |attr| {
-            const owner = attr.getOwnerElement() orelse return null;
+        .attribute => {
+            const owner = self.subtype(Element.Attribute).getOwnerElement() orelse return null;
             return owner.lookupNamespaceURIForElement(prefix, frame);
         },
         .cdata => {
@@ -536,14 +572,14 @@ pub fn lookupPrefix(self: *Node, namespace_arg: ?[]const u8, frame: *Frame) ?[]c
     if (namespace.len == 0) return null;
 
     switch (self._type) {
-        .element => |el| return el.lookupPrefixForElement(namespace, frame),
-        .document => |doc| {
-            const de = doc.getDocumentElement() orelse return null;
+        .element => return self.subtype(Element).lookupPrefixForElement(namespace, frame),
+        .document => {
+            const de = self.subtype(Document).getDocumentElement() orelse return null;
             return de.lookupPrefixForElement(namespace, frame);
         },
         .document_type, .document_fragment => return null,
-        .attribute => |attr| {
-            const owner = attr.getOwnerElement() orelse return null;
+        .attribute => {
+            const owner = self.subtype(Element.Attribute).getOwnerElement() orelse return null;
             return owner.lookupPrefixForElement(namespace, frame);
         },
         .cdata => {
@@ -602,15 +638,15 @@ pub fn isEqualChildren(a: *Node, b: *Node) bool {
     return a_count == b_count;
 }
 
+// The shadow root whose tree this node belongs to, or null when it belongs to
+// a document tree or a detached one. Inclusive: a shadow root is in its own
+// tree.
+pub fn containingShadowRoot(self: *Node) ?*ShadowRoot {
+    return self.getRootNode(.{}).is(ShadowRoot);
+}
+
 pub fn isInShadowTree(self: *Node) bool {
-    var node = self._parent;
-    while (node) |n| {
-        if (n.is(ShadowRoot) != null) {
-            return true;
-        }
-        node = n._parent;
-    }
-    return false;
+    return self.containingShadowRoot() != null;
 }
 
 pub fn isConnected(self: *const Node) bool {
@@ -622,7 +658,8 @@ pub fn isConnected(self: *const Node) bool {
 
     switch (root._type) {
         .document => return true,
-        .document_fragment => |df| {
+        .document_fragment => {
+            const df = root.subtype(DocumentFragment);
             const sr = df.is(ShadowRoot) orelse return false;
             return sr._host.asNode().isConnected();
         },
@@ -680,7 +717,7 @@ pub fn ownerDocument(self: *const Node, frame: *const Frame) ?*Document {
     // An attribute node has no parent; its owner follows its element's
     // (including across adoption into another document).
     if (self._type == .attribute) {
-        if (self._type.attribute._element) |element| {
+        if (self.subtype(Element.Attribute)._element) |element| {
             return element.asNode().ownerDocument(frame);
         }
     }
@@ -693,16 +730,14 @@ pub fn ownerDocument(self: *const Node, frame: *const Frame) ?*Document {
 
     // If the root is a document, then that's our owner.
     if (current._type == .document) {
-        return current._type.document;
+        return current.subtype(Document);
     }
 
     // A shadow tree's root is a parent-less ShadowRoot fragment; its owner
     // is the host's owner document.
-    // can't use current.is(ShadowRoot) without @constCast on `current`
     if (current._type == .document_fragment) {
-        const df = current._type.document_fragment;
-        if (df._type == .shadow_root) {
-            return df._type.shadow_root._host.asNode().ownerDocument(frame);
+        if (current.subtype(DocumentFragment).is(ShadowRoot)) |sr| {
+            return sr._host.asNode().ownerDocument(frame);
         }
     }
 
@@ -718,7 +753,7 @@ pub fn ownerDocument(self: *const Node, frame: *const Frame) ?*Document {
 
 fn ownerDocumentIncludingSelf(self: *const Node, frame: *const Frame) ?*Document {
     if (self._type == .document) {
-        return self._type.document;
+        return self.subtype(Document);
     }
     return self.ownerDocument(frame);
 }
@@ -778,7 +813,7 @@ pub fn removeChild(self: *Node, child: *Node, frame: *Frame) !*Node {
     while (it.next()) |n| {
         if (n == child) {
             frame.domChanged();
-            frame.removeNode(self, child, .{ .will_be_reconnected = false });
+            frame.removeNode(self, child, .{ .reconnect_to = null });
             return child;
         }
     }
@@ -817,7 +852,7 @@ fn insertBeforeInner(self: *Node, new_node: *Node, ref_node_: ?*Node, frame: *Fr
         return new_node;
     }
 
-    const child_already_connected = new_node.isConnected();
+    const previous_root = new_node.getRootNode(.{});
 
     // Check if we're adopting the node to a different document
     const child_owner = new_node.ownerDocument(frame);
@@ -825,9 +860,10 @@ fn insertBeforeInner(self: *Node, new_node: *Node, ref_node_: ?*Node, frame: *Fr
     const adopting_to_new_document = child_owner != null and child_owner.? != parent_owner;
 
     frame.domChanged();
-    const will_be_reconnected = self.isConnected() and !adopting_to_new_document;
     if (new_node._parent) |parent| {
-        frame.removeNode(parent, new_node, .{ .will_be_reconnected = will_be_reconnected });
+        frame.removeNode(parent, new_node, .{
+            .reconnect_to = if (adopting_to_new_document) null else self,
+        });
     }
 
     // Adopt the node tree if moving between documents
@@ -840,7 +876,7 @@ fn insertBeforeInner(self: *Node, new_node: *Node, ref_node_: ?*Node, frame: *Fr
         new_node,
         .{ .before = ref_node },
         .{
-            .child_already_connected = child_already_connected,
+            .previous_root = previous_root,
             .adopting_to_new_document = adopting_to_new_document,
         },
     );
@@ -861,16 +897,16 @@ pub fn replaceChild(self: *Node, new_child: *Node, old_child: *Node, frame: *Fra
         // followed by an addition record.
         const prev = old_child.previousSibling();
         const next = old_child.nextSibling();
-        const was_connected = old_child.isConnected();
-        frame.removeNode(self, old_child, .{ .will_be_reconnected = was_connected, .notify_observers = false });
+        const previous_root = old_child.getRootNode(.{});
+        frame.removeNode(self, old_child, .{ .reconnect_to = self, .notify_observers = false });
         if (next) |reference| {
             try frame.insertNodeRelative(self, old_child, .{ .before = reference }, .{
-                .child_already_connected = was_connected,
+                .previous_root = previous_root,
                 .notify_observers = false,
             });
         } else {
             try frame.appendNode(self, old_child, .{
-                .child_already_connected = was_connected,
+                .previous_root = previous_root,
                 .notify_observers = false,
             });
         }
@@ -893,15 +929,16 @@ pub fn replaceChild(self: *Node, new_child: *Node, old_child: *Node, frame: *Fra
         reference = new_child.nextSibling();
     }
 
-    const child_already_connected = new_child.isConnected();
+    const previous_root = new_child.getRootNode(.{});
     const child_owner = new_child.ownerDocument(frame);
     const parent_owner = self.ownerDocument(frame) orelse self.as(Document);
     const adopting = child_owner != null and child_owner.? != parent_owner;
-    const will_be_reconnected = self.isConnected() and !adopting;
 
     if (new_child.is(DocumentFragment) == null) {
         if (new_child._parent) |previous_parent| {
-            frame.removeNode(previous_parent, new_child, .{ .will_be_reconnected = will_be_reconnected });
+            frame.removeNode(previous_parent, new_child, .{
+                .reconnect_to = if (adopting) null else self,
+            });
         }
         if (adopting) {
             try frame.adoptNodeTree(new_child, child_owner.?, parent_owner);
@@ -920,7 +957,7 @@ pub fn replaceChild(self: *Node, new_child: *Node, old_child: *Node, frame: *Fra
         }
     }
 
-    frame.removeNode(self, old_child, .{ .will_be_reconnected = false, .notify_observers = false });
+    frame.removeNode(self, old_child, .{ .reconnect_to = null, .notify_observers = false });
 
     if (new_child.is(DocumentFragment)) |_| {
         try frame.moveAllChildren(new_child, self, reference, .silent_parent);
@@ -930,14 +967,14 @@ pub fn replaceChild(self: *Node, new_child: *Node, old_child: *Node, frame: *Fra
             new_child,
             .{ .before = ref },
             .{
-                .child_already_connected = child_already_connected,
+                .previous_root = previous_root,
                 .adopting_to_new_document = adopting,
                 .notify_observers = false,
             },
         );
     } else {
         try frame.appendNode(self, new_child, .{
-            .child_already_connected = child_already_connected,
+            .previous_root = previous_root,
             .adopting_to_new_document = adopting,
             .notify_observers = false,
         });
@@ -979,8 +1016,8 @@ pub fn moveBefore(self: *Node, node_val: js.Value, child_val: js.Value, frame: *
 
     if (self._type == .document) {
         switch (node._type) {
-            .cdata => |cd| {
-                if (cd._type == .text) {
+            .cdata => {
+                if (node.subtype(CData)._type == .text) {
                     // A Text node cannot be a child of a document.
                     return error.HierarchyError;
                 }
@@ -1016,21 +1053,23 @@ pub fn moveBefore(self: *Node, node_val: js.Value, child_val: js.Value, frame: *
 
     frame.domChanged();
 
-    // selfand node share a root, so the connectedness won't change. This API
-    // should appear atomic as much as possible. We can skip the id-map
-    // management (because it won't change) and custom elements shouldn't fire
-    // disconnect/connected callbacks. But MutationObservers and ranges still
-    // fire
+    // self and node share a *composed* root, so the connectedness won't
+    // change — but the move can still cross tree scopes (document <->
+    // shadow), moving ids between maps. This API should appear atomic as much
+    // as possible: custom elements don't fire disconnected/connected
+    // callbacks (they get connectedMoveCallback below). But MutationObservers
+    // and ranges still fire.
     const connected = node.isConnected();
+    const previous_root = node.getRootNode(.{});
 
     if (node._parent) |old_parent| {
-        frame.removeNode(old_parent, node, .{ .will_be_reconnected = connected });
+        frame.removeNode(old_parent, node, .{ .reconnect_to = self });
     }
 
     if (ref) |r| {
-        try frame.insertNodeRelative(self, node, .{ .before = r }, .{ .child_already_connected = connected });
+        try frame.insertNodeRelative(self, node, .{ .before = r }, .{ .previous_root = previous_root });
     } else {
-        try frame.appendNode(self, node, .{ .child_already_connected = connected });
+        try frame.appendNode(self, node, .{ .previous_root = previous_root });
     }
 
     if (connected) {
@@ -1046,8 +1085,8 @@ pub fn moveBefore(self: *Node, node_val: js.Value, child_val: js.Value, frame: *
 
 pub fn getNodeValue(self: *const Node) ?String {
     return switch (self._type) {
-        .cdata => |c| c.getData(),
-        .attribute => |attr| attr._value,
+        .cdata => self.subtype(CData).getData(),
+        .attribute => self.subtype(Element.Attribute)._value,
         .element => null,
         .document => null,
         .document_type => null,
@@ -1058,11 +1097,12 @@ pub fn getNodeValue(self: *const Node) ?String {
 pub fn setNodeValue(self: *const Node, value: ?String, frame: *Frame) !void {
     switch (self._type) {
         // Per spec, setting nodeValue on CharacterData runs replaceData(0, length, value)
-        .cdata => |c| {
+        .cdata => {
+            const c = self.subtype(CData);
             const new_value: []const u8 = if (value) |v| v.str() else "";
             try c.replaceData(0, c.getLength(), new_value, frame);
         },
-        .attribute => |attr| try attr.setValue(value, frame),
+        .attribute => try self.subtype(Element.Attribute).setValue(value, frame),
         .element => {},
         .document => {},
         .document_type => {},
@@ -1074,12 +1114,12 @@ pub fn format(self: *Node, writer: *std.Io.Writer) !void {
     // // If you need extra debugging:
     // return @import("../dump.zig").deep(self, .{}, writer);
     return switch (self._type) {
-        .cdata => |cd| cd.format(writer),
-        .element => |el| writer.print("{f}", .{el}),
+        .cdata => self.subtype(CData).format(writer),
+        .element => writer.print("{f}", .{self.subtype(Element)}),
         .document => writer.writeAll("<document>"),
         .document_type => writer.writeAll("<doctype>"),
         .document_fragment => writer.writeAll("<document_fragment>"),
-        .attribute => |attr| writer.print("{f}", .{attr}),
+        .attribute => writer.print("{f}", .{self.subtype(Element.Attribute)}),
     };
 }
 
@@ -1098,9 +1138,9 @@ pub fn getChildrenCount(self: *Node) usize {
 
 pub fn getLength(self: *Node) u32 {
     switch (self._type) {
-        .cdata => |cdata| {
+        .cdata => {
             // The node length of CharacterData is in UTF-16 code units.
-            return @intCast(cdata.getLength());
+            return @intCast(self.subtype(CData).getLength());
         },
         .element, .document, .document_fragment => {
             var count: u32 = 0;
@@ -1140,14 +1180,14 @@ pub fn getChildAt(self: *Node, index: u32) ?*Node {
 
 pub fn getData(self: *const Node) String {
     return switch (self._type) {
-        .cdata => |c| c.getData(),
+        .cdata => self.subtype(CData).getData(),
         else => .empty,
     };
 }
 
 pub fn setData(self: *Node, data: []const u8, frame: *Frame) !void {
     switch (self._type) {
-        .cdata => |c| try c.setData(data, frame),
+        .cdata => try self.subtype(CData).setData(data, frame),
         else => {},
     }
 }
@@ -1175,9 +1215,14 @@ const CloneError = error{
     ExecutionTerminated,
 };
 pub fn cloneNode(self: *Node, deep_: ?bool, frame: *Frame) CloneError!*Node {
+    if (self.is(ShadowRoot) != null) {
+        return error.NotSupported;
+    }
+
     const deep = deep_ orelse false;
     switch (self._type) {
-        .cdata => |cd| {
+        .cdata => {
+            const cd = self.subtype(CData);
             const data = cd.getData().str();
             return switch (cd._type) {
                 .text => Frame.node_factory.createTextNode(frame, data),
@@ -1186,8 +1231,9 @@ pub fn cloneNode(self: *Node, deep_: ?bool, frame: *Frame) CloneError!*Node {
                 .processing_instruction => Frame.node_factory.createProcessingInstruction(frame, cd.subtype(CData.ProcessingInstruction)._target, data),
             };
         },
-        .element => |el| return el.clone(deep, frame),
-        .document => |doc| {
+        .element => return self.subtype(Element).clone(deep, frame),
+        .document => {
+            const doc = self.subtype(Document);
             const cloned = switch (doc._type) {
                 .xml => (frame._factory.document(Document.XMLDocument{ ._proto = undefined }) catch return error.CloneError).asDocument(),
                 else => (frame._factory.document(Document.HTMLDocument{ ._proto = undefined }) catch return error.CloneError).asDocument(),
@@ -1205,14 +1251,14 @@ pub fn cloneNode(self: *Node, deep_: ?bool, frame: *Frame) CloneError!*Node {
             }
             return cloned.asNode();
         },
-        .document_type => |dt| {
-            const cloned = dt.clone(frame) catch return error.CloneError;
+        .document_type => {
+            const cloned = self.subtype(DocumentType).clone(frame) catch return error.CloneError;
             return cloned.asNode();
         },
-        .document_fragment => |frag| return frag.cloneFragment(deep, frame),
-        .attribute => |attr| {
-            const cloned = attr.clone(frame) catch return error.CloneError;
-            return cloned._proto;
+        .document_fragment => return self.subtype(DocumentFragment).cloneFragment(deep, frame),
+        .attribute => {
+            const cloned = self.subtype(Element.Attribute).clone(frame) catch return error.CloneError;
+            return cloned.asNode();
         },
     }
 }
@@ -1353,8 +1399,8 @@ fn _normalize(self: *Node, allocator: Allocator, buffer: *std.ArrayList(u8), fra
             continue;
         };
 
-        if (text_node._proto.getData().len == 0) {
-            frame.removeNode(self, current_node, .{ .will_be_reconnected = false });
+        if (text_node.asCData().getData().len == 0) {
+            frame.removeNode(self, current_node, .{ .reconnect_to = null });
             child = next_node;
             continue;
         }
@@ -1369,9 +1415,9 @@ fn _normalize(self: *Node, allocator: Allocator, buffer: *std.ArrayList(u8), fra
 
                     const to_remove = node_to_merge;
                     next_node = node_to_merge.nextSibling();
-                    frame.removeNode(self, to_remove, .{ .will_be_reconnected = false });
+                    frame.removeNode(self, to_remove, .{ .reconnect_to = null });
                 }
-                text_node._proto._data = try frame.dupeSSO(buffer.items);
+                text_node.asCData()._data = try frame.dupeSSO(buffer.items);
                 buffer.clearRetainingCapacity();
             }
         }
@@ -1543,14 +1589,13 @@ pub fn replaceChildren(self: *Node, nodes: []const NodeOrText, frame: *Frame) !v
     const removed = try self.removeAllChildrenCollecting(notify, frame);
 
     // Append new children
-    const parent_is_connected = self.isConnected();
     for (children_to_add.items) |child| {
-        var child_connected = false;
+        var previous_root: ?*Node = null;
         if (child._parent) |previous_parent| {
-            child_connected = child.isConnected();
-            frame.removeNode(previous_parent, child, .{ .will_be_reconnected = parent_is_connected });
+            previous_root = child.getRootNode(.{});
+            frame.removeNode(previous_parent, child, .{ .reconnect_to = self });
         }
-        try frame.appendNode(self, child, .{ .child_already_connected = child_connected, .notify_observers = false });
+        try frame.appendNode(self, child, .{ .previous_root = previous_root, .notify_observers = false });
     }
 
     if (notify and (removed.items.len > 0 or children_to_add.items.len > 0)) {
@@ -1568,7 +1613,7 @@ fn removeAllChildrenCollecting(self: *Node, notify: bool, frame: *Frame) !std.Ar
         if (notify) {
             try removed.append(frame.call_arena, child);
         }
-        frame.removeNode(self, child, .{ .will_be_reconnected = false, .notify_observers = false });
+        frame.removeNode(self, child, .{ .reconnect_to = null, .notify_observers = false });
     }
     return removed;
 }
@@ -1681,6 +1726,14 @@ pub fn unlink(self: *Node, child: *Node) void {
     child._prev = null;
 }
 
+pub fn assignedSlot(self: *Node, frame: *const Frame) ?*Element.Html.Slot {
+    // optimized with a flag because this is probed for every hop of every event path
+    if (!self._flags.assigned_slot) {
+        return null;
+    }
+    return frame._assigned_slots.get(self);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Node);
 
@@ -1728,8 +1781,8 @@ pub const JsApi = struct {
                 try self.getTextContent(&buf.writer);
                 return buf.written();
             },
-            .cdata => |cdata| return cdata._data.str(),
-            .attribute => |attr| return attr._value.str(),
+            .cdata => return self.subtype(CData)._data.str(),
+            .attribute => return self.subtype(Element.Attribute)._value.str(),
             .document => return null,
             .document_type => return null,
         }
@@ -1783,23 +1836,22 @@ pub const Build = struct {
     // Calls `func_name` with `args` on the most specific type where it is
     // implement. This could be on the Node itself (as a last-resort);
     pub fn call(self: *const Node, comptime func_name: []const u8, args: anytype) !void {
-        inline for (@typeInfo(Node.Type).@"union".fields) |f| {
-            // The inner type has its own "call" method. Defer to it.
-            if (@field(Node.Type, f.name) == self._type) {
-                const S = reflect.Struct(f.type);
+        switch (self._type) {
+            inline else => |tag| {
+                const S = Subtype(tag);
                 if (@hasDecl(S, "Build")) {
+                    // The inner type has its own "call" method. Defer to it.
                     if (@hasDecl(S.Build, "call")) {
-                        const sub = @field(self._type, f.name);
-                        if (try S.Build.call(sub, func_name, args)) {
+                        if (try S.Build.call(self.subtype(S), func_name, args)) {
                             return;
                         }
                     }
                     // The inner type implements this function. Call it and we're done.
                     if (@hasDecl(S, func_name)) {
-                        return @call(.auto, @field(f.type, func_name), args);
+                        return @call(.auto, @field(S, func_name), args);
                     }
                 }
-            }
+            },
         }
 
         if (@hasDecl(Node.Build, func_name)) {
@@ -1854,4 +1906,12 @@ pub const NodeOrText = union(enum) {
 const testing = @import("../../testing.zig");
 test "WebApi: Node" {
     try testing.htmlRunner("node", .{});
+}
+
+test "Node: text chain slot size" {
+    // Guard against accidental growth: new Node fields (e.g. _flags) must fit
+    // in existing padding. Debug is larger from the _proto_canary fields.
+    const Text = @import("cdata/Text.zig");
+    const slot = comptime Factory.chainOffsetOf(Text, Text) + @sizeOf(Text);
+    try testing.expectEqual(if (comptime lp.IS_DEBUG) 104 else 73, slot);
 }

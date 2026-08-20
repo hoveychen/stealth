@@ -36,6 +36,7 @@ const Factory = @import("../Factory.zig");
 const HttpClient = @import("../../network/HttpClient.zig");
 const EventManagerBase = @import("../EventManagerBase.zig");
 
+const Console = @import("../webapi/Console.zig");
 const Event = @import("../webapi/Event.zig");
 const EventTarget = @import("../webapi/EventTarget.zig");
 const Performance = @import("../webapi/Performance.zig");
@@ -86,9 +87,9 @@ pub fn getPinnedArena(self: *const Execution, size_or_bucket: anytype, debug: []
     return self.page.getPinnedArena(size_or_bucket, debug);
 }
 
-pub fn headersForRequest(self: *const Execution, headers: *HttpClient.Headers) !void {
+pub fn headersForRequest(self: *const Execution, transfer: *HttpClient.Transfer) !void {
     return switch (self.js.global) {
-        inline else => |g| g.headersForRequest(headers),
+        inline else => |g| g.headersForRequest(transfer),
     };
 }
 
@@ -185,6 +186,13 @@ pub fn getEventHandler(
 pub fn performance(self: *const Execution) *Performance {
     return switch (self.js.global) {
         inline else => |g| g.performance(),
+    };
+}
+
+pub fn console(self: *const Execution) *Console {
+    return switch (self.js.global) {
+        .frame => |frame| frame.window.getConsole(),
+        .worker => |worker| worker.getConsole(),
     };
 }
 

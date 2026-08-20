@@ -62,6 +62,15 @@ pub const Header = struct {
         value: []const u8,
     };
 
+    pub fn parse(header_str: []const u8) ?Header {
+        const colon_pos = std.mem.indexOfScalar(u8, header_str, ':') orelse return null;
+
+        const name = std.mem.trim(u8, header_str[0..colon_pos], " \t");
+        const value = std.mem.trim(u8, header_str[colon_pos + 1 ..], " \t");
+
+        return .{ .name = name, .value = value };
+    }
+
     // The header value up to the first ';', trimmed (e.g. "attachment" for a
     // Content-Disposition, "text/html" for a Content-Type).
     pub fn firstValue(self: Header) []const u8 {
@@ -111,120 +120,12 @@ pub const Header = struct {
     };
 };
 
-pub const Headers = struct {
-    headers: ?*libcurl.CurlSList,
-
-    /// The wire form of the values a CDP Emulation.setUserAgentOverride can
-    /// replace. Each is a full "Name: Value" string.
-    pub const Overridable = struct {
-        user_agent: [:0]const u8,
-        accept_language: [:0]const u8,
-        platform: [:0]const u8,
-    };
-
-    /// Baseline headers every page request carries. Emitted in the order real
-    /// Chrome uses (client hints, then User-Agent, then Accept-Language), since
-    /// header order is itself a fingerprint. The per-destination `Accept` and
-    /// the Sec-Fetch-* set are added later, by HttpClient.newRequest, which is
-    /// the only place that knows the request's destination and initiator.
-    pub fn init(http_headers: *const Config.HttpHeaders, over: Overridable) !Headers {
-        var self: Headers = .{ .headers = null };
-        errdefer self.deinit();
-
-        for ([_][:0]const u8{
-            http_headers.sec_ch_ua,
-            Config.HttpHeaders.sec_ch_ua_mobile,
-            over.platform,
-            over.user_agent,
-            // Omitting Accept-Language triggers bot-protection on some CDNs
-            // (Akamai) when Accept-Encoding is present.
-            over.accept_language,
-        }) |header| {
-            try self.add(header.ptr);
-        }
-
-        return self;
-    }
-
-    /// True when a header with this (case-insensitive) name is already present.
-    /// Used to let a caller-supplied header win over a default without
-    /// producing the duplicate that libcurl silently collapses.
-    pub fn has(self: *const Headers, name: []const u8) bool {
-        var node = self.headers;
-        while (node) |n| : (node = n.*.next) {
-            const data = @as([*:0]const u8, @ptrCast(n.*.data));
-            if (parseHeader(std.mem.span(data))) |existing| {
-                if (std.ascii.eqlIgnoreCase(existing.name, name)) return true;
-            }
-        }
-        return false;
-    }
-
-    pub fn deinit(self: *const Headers) void {
-        if (self.headers) |hdr| {
-            libcurl.curl_slist_free_all(hdr);
-        }
-    }
-
-    pub fn add(self: *Headers, header: [*c]const u8) !void {
-        // Copies the value
-        const updated_headers = libcurl.curl_slist_append(self.headers, header);
-        if (updated_headers == null) {
-            return error.OutOfMemory;
-        }
-
-        self.headers = updated_headers;
-    }
-
-    // Adds `header` ("Name: Value"), replacing any existing header with the
-    // same case-insensitive name. Caller-supplied headers (CDP
-    // Network.setExtraHTTPHeaders) must override built-in defaults like
-    // User-Agent; a plain append produces a duplicate that libcurl silently
-    // collapses to the first occurrence, so the override would be dropped.
-    pub fn set(self: *Headers, header: [*c]const u8) !void {
-        const new = parseHeader(std.mem.span(@as([*:0]const u8, @ptrCast(header)))) orelse {
-            // No colon: nothing to match against, fall back to append.
-            return self.add(header);
-        };
-
-        var rebuilt: ?*libcurl.CurlSList = null;
-        errdefer libcurl.curl_slist_free_all(rebuilt);
-
-        var node = self.headers;
-        while (node) |n| : (node = n.*.next) {
-            const data = @as([*:0]const u8, @ptrCast(n.*.data));
-            if (parseHeader(std.mem.span(data))) |existing| {
-                if (std.ascii.eqlIgnoreCase(existing.name, new.name)) continue;
-            }
-            rebuilt = libcurl.curl_slist_append(rebuilt, data) orelse return error.OutOfMemory;
-        }
-        rebuilt = libcurl.curl_slist_append(rebuilt, header) orelse return error.OutOfMemory;
-
-        libcurl.curl_slist_free_all(self.headers);
-        self.headers = rebuilt;
-    }
-
-    pub fn parseHeader(header_str: []const u8) ?Header {
-        const colon_pos = std.mem.indexOfScalar(u8, header_str, ':') orelse return null;
-
-        const name = std.mem.trim(u8, header_str[0..colon_pos], " \t");
-        const value = std.mem.trim(u8, header_str[colon_pos + 1 ..], " \t");
-
-        return .{ .name = name, .value = value };
-    }
-
-    pub fn iterator(self: Headers) HeaderIterator {
-        return .{ .curl_slist = .{ .header = self.headers } };
-    }
-};
-
-// In normal cases, the header iterator comes from the curl linked list.
+// In normal cases, the header iterator comes from the curl connection.
 // But it's also possible to inject a response, via `transfer.fulfill`. In that
 // case, the response headers are a list, []const Http.Header.
 // This union, is an iterator that exposes the same API for either case.
 pub const HeaderIterator = union(enum) {
     curl: CurlHeaderIterator,
-    curl_slist: CurlSListIterator,
     list: ListHeaderIterator,
 
     pub fn next(self: *HeaderIterator) ?Header {
@@ -259,16 +160,6 @@ pub const HeaderIterator = union(enum) {
                 .name = std.mem.span(header.name),
                 .value = std.mem.span(header.value),
             };
-        }
-    };
-
-    const CurlSListIterator = struct {
-        header: [*c]libcurl.CurlSList,
-
-        pub fn next(self: *CurlSListIterator) ?Header {
-            const h = self.header orelse return null;
-            self.header = h.*.next;
-            return Headers.parseHeader(std.mem.span(@as([*:0]const u8, @ptrCast(h.*.data))));
         }
     };
 
@@ -376,10 +267,20 @@ fn opensocketCallback(
     return fd;
 }
 
+// What we advertise in Accept-Encoding, and what curl is told to decode. One
+// constant because the two must not drift: HttpClient sends the header itself,
+// to control its position, while curl still does the decoding.
+pub const accept_encoding: [:0]const u8 = "gzip, deflate, br";
+
 pub const Connection = struct {
     _easy: *libcurl.Curl,
     transport: Transport,
     node: std.DoublyLinkedList.Node = .{},
+
+    // The curl_slist accumulated by addHeader/addRawHeader and handed to
+    // curl by commitHeaders. Owned here because curl reads it during
+    // perform; freed on reset/deinit or by the next clearHeaders.
+    _header_list: ?*libcurl.CurlSList = null,
 
     pub const Transport = union(enum) {
         none, // used for cases that manage their own connection, e.g. telemetry
@@ -401,7 +302,8 @@ pub const Connection = struct {
         return self;
     }
 
-    pub fn deinit(self: *const Connection) void {
+    pub fn deinit(self: *Connection) void {
+        self.clearHeaders();
         libcurl.curl_easy_cleanup(self._easy);
     }
 
@@ -458,8 +360,37 @@ pub const Connection = struct {
         try libcurl.curl_easy_setopt(self._easy, .http_get, true);
     }
 
-    pub fn setHeaders(self: *const Connection, headers: *Headers) !void {
-        try libcurl.curl_easy_setopt(self._easy, .http_header, headers.headers);
+    // Appends "name: value" to the connection's pending header list, or
+    // "name;" when the value is empty — curl reads "name:" as
+    // remove-this-header and the ";" form as send-an-empty-value. curl
+    // copies the string, so `allocator` only backs the transient join.
+    pub fn addHeader(self: *Connection, allocator: std.mem.Allocator, name: []const u8, value: []const u8) !void {
+        const joined = if (value.len == 0)
+            try std.fmt.allocPrintSentinel(allocator, "{s};", .{name}, 0)
+        else
+            try std.fmt.allocPrintSentinel(allocator, "{s}: {s}", .{ name, value }, 0);
+        return self.addRawHeader(joined);
+    }
+
+    // `header` is raw curl header syntax, e.g. "Expect:" to suppress a
+    // curl-generated header. curl copies the value.
+    pub fn addRawHeader(self: *Connection, header: [*c]const u8) !void {
+        const updated = libcurl.curl_slist_append(self._header_list, header);
+        if (updated == null) {
+            return error.OutOfMemory;
+        }
+        self._header_list = updated;
+    }
+
+    pub fn commitHeaders(self: *const Connection) !void {
+        try libcurl.curl_easy_setopt(self._easy, .http_header, self._header_list);
+    }
+
+    pub fn clearHeaders(self: *Connection) void {
+        if (self._header_list) |list| {
+            libcurl.curl_slist_free_all(list);
+            self._header_list = null;
+        }
     }
 
     pub fn setCookies(self: *const Connection, cookies: [*c]const u8) !void {
@@ -526,6 +457,7 @@ pub const Connection = struct {
     ) !void {
         libcurl.curl_easy_reset(self._easy);
         self.transport = .none;
+        self.clearHeaders();
 
         // timeouts
         try libcurl.curl_easy_setopt(self._easy, .timeout_ms, config.httpTimeout());
@@ -539,7 +471,7 @@ pub const Connection = struct {
         // "gzip, deflate, br, zstd". These three are named in Chrome's order;
         // zstd is left off deliberately, since advertising an encoding curl
         // wasn't built with means a response we can't decode.
-        try libcurl.curl_easy_setopt(self._easy, .accept_encoding, "gzip, deflate, br");
+        try libcurl.curl_easy_setopt(self._easy, .accept_encoding, accept_encoding.ptr);
 
         // proxy
         const http_proxy = config.httpProxy();
@@ -730,29 +662,14 @@ pub const Connection = struct {
     }
 
     // These are headers that may not be send to the users for inteception.
-    pub fn secretHeaders(_: *const Connection, headers: *Headers, http_headers: *const Config.HttpHeaders) !void {
+    pub fn secretHeaders(self: *Connection, http_headers: *const Config.HttpHeaders) !void {
         if (http_headers.proxy_bearer_header) |hdr| {
-            try headers.add(hdr);
+            try self.addRawHeader(hdr);
         }
     }
 
-    pub fn request(self: *const Connection, http_headers: *const Config.HttpHeaders) !u16 {
-        var header_list = try Headers.init(http_headers, .{
-            .user_agent = http_headers.user_agent_header,
-            .accept_language = http_headers.accept_language,
-            .platform = http_headers.sec_ch_ua_platform,
-        });
-        defer header_list.deinit();
-        try self.secretHeaders(&header_list, http_headers);
-        try self.setHeaders(&header_list);
-
-        try libcurl.curl_easy_perform(self._easy);
-        return self.getResponseCode();
-    }
-
-    // Synchronous transfer that adds no request headers. request() injects the
-    // browser User-Agent / sec-ch-ua machinery meant for page fetches; callers
-    // that manage their own connection (telemetry) use this leaner path.
+    // Synchronous transfer that adds no request headers; callers that manage
+    // their own connection (telemetry) use this leaner path.
     pub fn perform(self: *const Connection) !u16 {
         try libcurl.curl_easy_perform(self._easy);
         return self.getResponseCode();
@@ -1017,6 +934,50 @@ test "isBadPort" {
     }
 }
 
+test "Header.parse" {
+    {
+        const h = Header.parse("Content-Type: text/html; charset=utf-8").?;
+        try testing.expectEqualSlices(u8, "Content-Type", h.name);
+        try testing.expectEqualSlices(u8, "text/html; charset=utf-8", h.value);
+    }
+    {
+        // no space after the colon
+        const h = Header.parse("X-Custom:value").?;
+        try testing.expectEqualSlices(u8, "X-Custom", h.name);
+        try testing.expectEqualSlices(u8, "value", h.value);
+    }
+    {
+        // name and value are trimmed of spaces and tabs
+        const h = Header.parse(" \tAccept \t: \tapplication/json \t").?;
+        try testing.expectEqualSlices(u8, "Accept", h.name);
+        try testing.expectEqualSlices(u8, "application/json", h.value);
+    }
+    {
+        // only the first colon splits; later colons stay in the value
+        const h = Header.parse("Referer: http://example.com:8080/").?;
+        try testing.expectEqualSlices(u8, "Referer", h.name);
+        try testing.expectEqualSlices(u8, "http://example.com:8080/", h.value);
+    }
+    {
+        // empty value
+        const h = Header.parse("X-Empty:").?;
+        try testing.expectEqualSlices(u8, "X-Empty", h.name);
+        try testing.expectEqualSlices(u8, "", h.value);
+    }
+
+    {
+        // Splitting is all `parse` does; a name that isn't an HTTP token still
+        // parses. Callers validate what comes back.
+        const h = Header.parse("Foo Bar: value").?;
+        try testing.expectEqualSlices(u8, "Foo Bar", h.name);
+        try testing.expectEqualSlices(u8, "value", h.value);
+    }
+
+    // no colon, no header
+    try testing.expect(Header.parse("not-a-header") == null);
+    try testing.expect(Header.parse("") == null);
+}
+
 test "Header.firstValue" {
     try testing.expectEqualSlices(u8, "attachment", (Header{ .name = "Content-Disposition", .value = "attachment" }).firstValue());
     // firstValue trims but preserves case (callers compare case-insensitively).
@@ -1035,56 +996,6 @@ test "Header.param" {
     try testing.expect((Header{ .name = "Content-Disposition", .value = "attachment" }).param("filename") == null);
     // Empty values are skipped.
     try testing.expect((Header{ .name = "Content-Disposition", .value = "attachment; filename=\"\"" }).param("filename") == null);
-}
-
-fn findHeader(headers: Headers, name: []const u8) struct { count: usize, value: []const u8 } {
-    var count: usize = 0;
-    var value: []const u8 = "";
-    var it = headers.iterator();
-    while (it.next()) |h| {
-        if (std.ascii.eqlIgnoreCase(h.name, name)) {
-            count += 1;
-            value = h.value;
-        }
-    }
-    return .{ .count = count, .value = value };
-}
-
-test "Headers.set replaces an existing header instead of duplicating it" {
-    var headers = Headers{ .headers = null };
-    defer headers.deinit();
-    try headers.add("User-Agent: Lightpanda/1.0");
-
-    try headers.set("User-Agent: Custom/1.0");
-
-    const ua = findHeader(headers, "User-Agent");
-    try testing.expectEqual(@as(usize, 1), ua.count);
-    try testing.expectString("Custom/1.0", ua.value);
-}
-
-test "Headers.set matches header names case-insensitively" {
-    var headers = Headers{ .headers = null };
-    try headers.add("User-Agent: Lightpanda/1.0");
-    defer headers.deinit();
-
-    try headers.set("user-agent: Custom/1.0");
-
-    const ua = findHeader(headers, "User-Agent");
-    try testing.expectEqual(@as(usize, 1), ua.count);
-    try testing.expectString("Custom/1.0", ua.value);
-}
-
-test "Headers.set adds a new header and preserves the existing ones" {
-    var headers = Headers{ .headers = null };
-    defer headers.deinit();
-    try headers.add("User-Agent: Lightpanda/1.0");
-    try headers.add("Accept-Language: en-US,en;q=0.9");
-
-    try headers.set("X-Custom: yes");
-
-    try testing.expectEqual(@as(usize, 1), findHeader(headers, "X-Custom").count);
-    try testing.expectEqual(@as(usize, 1), findHeader(headers, "User-Agent").count);
-    try testing.expectEqual(@as(usize, 1), findHeader(headers, "Accept-Language").count);
 }
 
 test "opensocketCallback: private IPv4 returns CURL_SOCKET_BAD" {

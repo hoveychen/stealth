@@ -52,7 +52,7 @@ pub fn getStyle(self: *const FontData) []const u8 {
 }
 
 pub fn blob(_: *const FontData, exec: *const Execution) !js.Promise {
-    const empty = try Blob.initFromBytes("", "application/octet-stream", exec.page);
+    const empty = try Blob.initFromBytes("", "application/octet-stream", exec);
     return exec.js.local.?.resolvePromise(empty);
 }
 

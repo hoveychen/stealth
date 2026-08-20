@@ -147,7 +147,9 @@ pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js
     }
 
     const bytes = try png.encode(exec.call_arena, self._width, self._height, self.pixels());
-    const blob = try Blob.initFromBytes(bytes, "image/png", exec.page);
+    // Upstream's Blob.initFromBytes now takes the Execution (it pins its own
+    // arena), not the Page.
+    const blob = try Blob.initFromBytes(bytes, "image/png", exec);
     return exec.js.local.?.resolvePromise(blob);
 }
 

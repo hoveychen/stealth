@@ -17,7 +17,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-const builtin = @import("builtin");
 const lp = @import("lightpanda");
 
 const Frame = @import("Frame.zig");
@@ -93,8 +92,6 @@ pub fn init(frame: *Frame) !StyleManager {
 pub fn deinit(self: *StyleManager) void {
     self.arena.release();
 }
-
-const IS_DEBUG = builtin.mode == .Debug;
 
 /// Hard cap on `@media` / `@layer` nesting depth. CSS allows arbitrarily-deep
 /// at-rule nesting; without a cap a hostile inline stylesheet could blow the
@@ -297,7 +294,7 @@ fn registerLayerPath(self: *StyleManager, build_arena: Allocator, parent: u16, d
     var it = std.mem.splitScalar(u8, dotted, '.');
     while (it.next()) |component| {
         // should have been verified by the caller, via isValidLayerName
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             std.debug.assert(isValidLayerComponent(component));
         }
 
@@ -1359,6 +1356,8 @@ const CheckVisibilityOptions = struct {
 // its field max, so a real rule can never pack to all-ones.
 const INLINE_PRIORITY: u64 = std.math.maxInt(u64);
 
+// `frame` is the StyleManager's frame, which callers guarantee is el's owner
+// frame (el.ownerFrame) — the map where the materialized style lives.
 fn getInlineStyleProperty(el: *Element, property_name: String, frame: *Frame) ?*CSSStyleProperty {
     const style = frame._element_styles.get(el) orelse blk: {
         // No JS-set style object and no style attribute -> nothing inline to read.

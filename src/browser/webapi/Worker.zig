@@ -31,7 +31,6 @@ const ErrorEvent = @import("event/ErrorEvent.zig");
 const DedicatedWorkerGlobalScope = @import("DedicatedWorkerGlobalScope.zig");
 
 const log = lp.log;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 const Worker = @This();
 
@@ -166,7 +165,7 @@ fn httpHeaderCallback(transfer: *Transfer) !Transfer.HeaderResult {
     }
 
     if (transfer.getContentLength()) |cl| {
-        try self._script_buffer.ensureTotalCapacity(self._script_arena.?.allocator(), cl);
+        try self._script_buffer.ensureTotalCapacityPrecise(self._script_arena.?.allocator(), cl);
     }
 
     return .proceed;
@@ -185,7 +184,7 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
     const url = self._url;
     const script = self._script_buffer.items;
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.info(.browser, "worker fetch done", .{
             .url = url,
             .len = script.len,
@@ -360,7 +359,6 @@ pub fn receiveMessage(self: *Worker, data: js.Value) !void {
 
     try frame.js.scheduler.add(callback, ReceiveMessageCallback.run, 0, .{
         .name = "Worker.receiveMessage",
-        .low_priority = false,
         .finalizer = ReceiveMessageCallback.cancelled,
     });
 }

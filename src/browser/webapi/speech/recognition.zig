@@ -681,7 +681,6 @@ pub const SpeechRecognition = struct {
         });
         try exec.js.scheduler.add(task, PermissionTask.run, PERMISSION_LATENCY_MS, .{
             .name = "SpeechRecognition.start",
-            .low_priority = false,
             .finalizer = PermissionTask.cancelled,
         });
     }
@@ -707,7 +706,6 @@ pub const SpeechRecognition = struct {
         const task = try exec._factory.create(EndTask{ .recognition = self, .exec = exec });
         try exec.js.scheduler.add(task, EndTask.run, 0, .{
             .name = "SpeechRecognition.stop",
-            .low_priority = false,
             .finalizer = EndTask.cancelled,
         });
     }

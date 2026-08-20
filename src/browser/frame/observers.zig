@@ -299,10 +299,21 @@ pub fn deliverIntersections(frame: *Frame) void {
     }
     frame._intersection.delivery_scheduled = false;
 
-    // Iterate backwards to handle observers that disconnect during their callback
+    // Iterate backwards to handle observers that disconnect during their
+    // callback -- and re-check the length each time round, because a callback
+    // can disconnect observers other than its own. Backwards iteration alone
+    // only survives the current entry going away; two observers whose callback
+    // drops both take the list from 2 to 0 while i still has 0 to go, and the
+    // read is then out of bounds. That is not hypothetical: it is how pixiv
+    // aborted the process, and it read from the outside as a hang, because a
+    // dead engine and a stuck one both look like `Runtime.evaluate` timing out.
+    // deliverResizes above carries the same guard.
     var i = frame._intersection.observers.items.len;
     while (i > 0) {
         i -= 1;
+        if (i >= frame._intersection.observers.items.len) {
+            continue;
+        }
         const observer = frame._intersection.observers.items[i];
         observer.deliverEntries(frame) catch |err| {
             log.err(.frame, "frame.deliverIntersections", .{ .err = err, .type = frame._type, .url = frame.url });

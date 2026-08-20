@@ -534,7 +534,7 @@ fn appendAttributes(self: *Evaluator, node: *Node, out: *std.ArrayList(*Node)) E
         // (Capybara/Selenium polling) reuse the same *Attribute instead
         // of leaking fresh ones into page-lifetime storage on every call.
         const attribute = try el._attributes.getOrCreateAttribute(entry, el, self.frame);
-        try out.append(self.arena, attribute._proto);
+        try out.append(self.arena, attribute.asNode());
     }
 }
 
@@ -563,7 +563,7 @@ fn matchNameTest(node: *Node, name: []const u8, axis: ast.Axis, lowered_name: ?[
     if (axis == .attribute) {
         if (std.mem.eql(u8, name, "*")) return node._type == .attribute;
         const attr = switch (node._type) {
-            .attribute => |a| a,
+            .attribute => node.subtype(Element.Attribute),
             else => return false,
         };
         return std.mem.eql(u8, attr._name.str(), lowered_name.?);

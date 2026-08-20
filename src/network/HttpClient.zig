@@ -18,7 +18,6 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const Inbox = @import("../Inbox.zig");
 const ArenaPool = @import("../ArenaPool.zig");
@@ -27,6 +26,7 @@ const Notification = @import("../Notification.zig");
 const CDP = @import("../cdp/CDP.zig");
 const Watchdog = @import("../Watchdog.zig");
 const URL = @import("../browser/URL.zig");
+const referrer = @import("../browser/referrer.zig");
 const WebSocket = @import("../browser/webapi/net/WebSocket.zig");
 const CookieJar = @import("../browser/webapi/storage/Cookie.zig").Jar;
 
@@ -36,15 +36,14 @@ const Network = @import("Network.zig");
 const Cache = @import("cache/Cache.zig");
 const RobotsGate = @import("RobotsGate.zig");
 const UrlBlocklist = @import("UrlBlocklist.zig");
+
 pub const BlockPattern = UrlBlocklist.Pattern;
 
 const log = lp.log;
 const Allocator = std.mem.Allocator;
-const IS_DEBUG = builtin.mode == .Debug;
 
 pub const Method = http.Method;
 pub const Header = http.Header;
-pub const Headers = http.Headers;
 pub const HeaderIterator = http.HeaderIterator;
 
 // This is loosely tied to a browser Frame. Loading all the <scripts>, doing
@@ -139,20 +138,19 @@ use_proxy: bool,
 tls_verify: bool = true,
 
 // User agent override set via CDP Emulation.setUserAgentOverride.
-// When set, takes precedence over the config's http_headers values.
-// Both fields are allocated from self.allocator when set, null otherwise.
+// When set, takes precedence over the config's http_headers value.
+// Allocated from self.allocator when set, null otherwise.
 user_agent_override: ?[:0]const u8 = null,
-user_agent_header_override: ?[:0]const u8 = null,
 
 // Accept-Language / platform overrides, also from Emulation.setUserAgentOverride.
 // Kept alongside the UA override so all three move together: a Chrome UA next
 // to a stale platform hint is a worse fingerprint than either alone.
-// `*_header_override` holds the wire form, the other the bare value the JS side
-// reports.
 accept_language_override: ?[:0]const u8 = null,
-accept_language_header_override: ?[:0]const u8 = null,
 platform_override: ?[:0]const u8 = null,
-platform_header_override: ?[:0]const u8 = null,
+// The same platform, quoted, as the Sec-Ch-Ua-Platform hint carries it. The
+// override arrives bare (that is the form navigator.userAgentData reports), so
+// the quoted form is built once here rather than per request.
+platform_quoted_override: ?[:0]const u8 = null,
 
 // The CDP layer we dispatch inbox messages to. Set in CDP.init for
 // `serve` mode; null in all other modes. Since this is set early, BEFORE the
@@ -236,7 +234,10 @@ pub fn init(self: *Client, allocator: Allocator, network: *Network, cdp: ?*CDP) 
 
         .serve_mode = network.config.mode == .serve,
         .obey_robots = network.config.obeyRobots(),
-        .robots = .{ .allocator = allocator, .network = network },
+        .robots = .{
+            .network = network,
+            .single_flight = .init(allocator),
+        },
         .url_blocklist = url_blocklist,
         .arena_pool = &network.app.arena_pool,
     };
@@ -246,7 +247,7 @@ pub fn deinit(self: *Client) void {
     self.abort();
     self.processGraveyard();
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         lp.assert(
             self.dispatch_count == 0,
             "dispatch_count must be 0",
@@ -287,55 +288,44 @@ pub fn incrReqId(self: *Client) u32 {
     return id;
 }
 
-// Set a user agent override. Both the raw UA string and the pre-formatted
-// "User-Agent: <ua>" header string are allocated from self.allocator.
+// Set a user agent override, allocated from self.allocator.
 pub fn setUserAgentOverride(self: *Client, ua: []const u8) !void {
     self.clearUserAgentOverride();
-
-    const override = try self.allocator.dupeZ(u8, ua);
-    errdefer self.allocator.free(override);
-
-    const header = try std.fmt.allocPrintSentinel(self.allocator, "User-Agent: {s}", .{ua}, 0);
-    self.user_agent_override = override;
-    self.user_agent_header_override = header;
+    self.user_agent_override = try self.allocator.dupeZ(u8, ua);
 }
 
 pub fn setAcceptLanguageOverride(self: *Client, value: []const u8) !void {
     const bare = try self.allocator.dupeZ(u8, value);
-    errdefer self.allocator.free(bare);
-    const header = try std.fmt.allocPrintSentinel(self.allocator, "Accept-Language: {s}", .{value}, 0);
-
-    self.clearOverride(&self.accept_language_override, &self.accept_language_header_override);
+    self.clearOverride(&self.accept_language_override);
     self.accept_language_override = bare;
-    self.accept_language_header_override = header;
 }
 
 pub fn setPlatformOverride(self: *Client, value: []const u8) !void {
     const bare = try self.allocator.dupeZ(u8, value);
     errdefer self.allocator.free(bare);
-    const header = try std.fmt.allocPrintSentinel(self.allocator, "Sec-Ch-Ua-Platform: \"{s}\"", .{value}, 0);
+    const quoted = try std.fmt.allocPrintSentinel(self.allocator, "\"{s}\"", .{value}, 0);
 
-    self.clearOverride(&self.platform_override, &self.platform_header_override);
+    self.clearOverride(&self.platform_override);
+    self.clearOverride(&self.platform_quoted_override);
     self.platform_override = bare;
-    self.platform_header_override = header;
+    self.platform_quoted_override = quoted;
 }
 
-fn clearOverride(self: *Client, bare: *?[:0]const u8, header: *?[:0]const u8) void {
-    if (bare.*) |v| {
+fn clearOverride(self: *Client, field: *?[:0]const u8) void {
+    if (field.*) |v| {
         self.allocator.free(v);
-        bare.* = null;
-    }
-    if (header.*) |v| {
-        self.allocator.free(v);
-        header.* = null;
+        field.* = null;
     }
 }
 
 // Clear any user agent override, restoring the default from config.
 pub fn clearUserAgentOverride(self: *Client) void {
-    self.clearOverride(&self.user_agent_override, &self.user_agent_header_override);
-    self.clearOverride(&self.accept_language_override, &self.accept_language_header_override);
-    self.clearOverride(&self.platform_override, &self.platform_header_override);
+    // All three move together: a Chrome UA next to a stale platform hint is a
+    // worse fingerprint than either alone.
+    self.clearOverride(&self.user_agent_override);
+    self.clearOverride(&self.accept_language_override);
+    self.clearOverride(&self.platform_override);
+    self.clearOverride(&self.platform_quoted_override);
 }
 
 // Enable TLS verification on all connections.
@@ -350,6 +340,12 @@ pub fn setTlsVerify(self: *Client, verify: bool) !void {
     }
 
     self.tls_verify = verify;
+}
+
+pub fn obeyRobots(self: *Client, enable: bool) !void {
+    if (self.obey_robots == enable) return;
+    try self.ensureNoActiveConnection();
+    self.obey_robots = enable;
 }
 
 pub fn disableCache(self: *Client, disable: bool) void {
@@ -420,76 +416,26 @@ fn clearUrlBlocklist(self: *Client) void {
     }
 }
 
-fn isUrlBlocked(self: *const Client, url: []const u8, internal: bool) bool {
+/// Every reason a request is refused before it reaches the network:
+/// `--block-urls` patterns and the `--adblock-lists` filters both land here
+/// so that no call site can apply one without the other.
+fn isUrlBlocked(self: *const Client, url: [:0]const u8, internal: bool) bool {
     if (internal) return false;
-    const blocklist = self.url_blocklist orelse return false;
-    return blocklist.isBlocked(url);
+    if (self.url_blocklist) |*blocklist| {
+        if (blocklist.isBlocked(url)) return true;
+    }
+    return self.isHostAdblocked(url);
 }
 
-// Adds the destination's `Accept` plus the Sec-Fetch-* set, which real Chrome
-// sends on every request and which this engine previously sent on none.
-//
-// Sec-Fetch-* are forbidden header names: page JS cannot set them, so we always
-// win and use set(). `Accept` is different — fetch()/XHR may legitimately
-// specify it, so a caller-supplied value is left alone.
-fn addFetchMetadata(req: *Request) !void {
-    const H = Config.HttpHeaders;
-    const headers = &req.headers;
-
-    if (!headers.has("Accept")) {
-        try headers.add(switch (req.resource_type) {
-            .document => H.Accept.document,
-            .stylesheet => H.Accept.style,
-            .image => H.Accept.image,
-            .eventsource => H.Accept.event_stream,
-            .script, .fetch, .xhr => H.Accept.any,
-        });
-    }
-
-    // Chrome labels a subframe navigation "iframe" and a top-level one
-    // "document"; everything else is named after the destination.
-    try headers.set(switch (req.resource_type) {
-        .document => if (req.nav) |n| (if (n.subframe) "Sec-Fetch-Dest: iframe" else "Sec-Fetch-Dest: document") else "Sec-Fetch-Dest: document",
-        .stylesheet => "Sec-Fetch-Dest: style",
-        .image => "Sec-Fetch-Dest: image",
-        .script => "Sec-Fetch-Dest: script",
-        // fetch(), XHR and EventSource all report an empty destination.
-        .fetch, .xhr, .eventsource => "Sec-Fetch-Dest: empty",
-    });
-
-    try headers.set(switch (req.resource_type) {
-        .document => "Sec-Fetch-Mode: navigate",
-        // Subresources the parser pulls in are no-cors; script-issued fetches
-        // and XHR go through the CORS protocol.
-        .stylesheet, .script, .image => "Sec-Fetch-Mode: no-cors",
-        .fetch, .xhr, .eventsource => "Sec-Fetch-Mode: cors",
-    });
-
-    // "none" is not "unknown": it specifically means the request had no
-    // initiator document (address bar, bookmark). Anything with an initiator
-    // gets an origin comparison.
-    const initiator: ?[]const u8 = if (req.resource_type == .document)
-        if (req.nav) |n| n.initiator_origin else null
-    else
-        req.cookie_origin;
-
-    try headers.set(if (initiator) |origin|
-        switch (fetchSite(origin, req.url)) {
-            .same_origin => "Sec-Fetch-Site: same-origin",
-            .same_site => "Sec-Fetch-Site: same-site",
-            .cross_site => "Sec-Fetch-Site: cross-site",
-        }
-    else
-        "Sec-Fetch-Site: none");
-
-    // Only navigations carry these two, and Sec-Fetch-User only when the
-    // navigation came from a user gesture rather than from script.
-    if (req.resource_type == .document) {
-        try headers.set(H.upgrade_insecure_requests);
-        if (req.nav) |n| {
-            if (n.user_activated) try headers.set("Sec-Fetch-User: ?1");
-        }
-    }
+fn isHostAdblocked(self: *const Client, url: [:0]const u8) bool {
+    const blocker = if (self.network.adblocker) |*b| b else return false;
+    const host = URL.getHostname(url);
+    if (host.len == 0 or host.len > 253) return false;
+    // The trie expects normalized (lowercase) hostnames; URLs aren't
+    // guaranteed to arrive that way.
+    var buf: [253]u8 = undefined;
+    const hostname = std.ascii.lowerString(&buf, host);
+    return blocker.matchHostname(hostname) == .blocked;
 }
 
 const FetchSite = enum { same_origin, same_site, cross_site };
@@ -524,22 +470,13 @@ fn originOf(url: []const u8) Origin {
     return .{ .scheme = url[0..scheme_end], .host = rest[0..host_end] };
 }
 
-pub fn newHeaders(self: *const Client) !http.Headers {
-    const http_headers = &self.network.config.http_headers;
-    return http.Headers.init(http_headers, .{
-        .user_agent = self.user_agent_header_override orelse http_headers.user_agent_header,
-        .accept_language = self.accept_language_header_override orelse http_headers.accept_language,
-        .platform = self.platform_header_override orelse http_headers.sec_ch_ua_platform,
-    });
-}
-
 // Bare (non-header) values the JS side reports, with CDP overrides applied.
 pub fn getPlatform(self: *const Client) []const u8 {
     return self.platform_override orelse self.httpHeaders().platform;
 }
 
 pub fn getLanguages(self: *const Client) []const u8 {
-    return self.accept_language_override orelse self.httpHeaders().languages;
+    return self.accept_language_override orelse self.httpHeaders().accept_language;
 }
 
 pub fn getUserAgent(self: *const Client) [:0]const u8 {
@@ -553,6 +490,59 @@ pub fn getUserAgent(self: *const Client) [:0]const u8 {
 // louder signal than either value alone.
 pub fn httpHeaders(self: *const Client) *const Config.HttpHeaders {
     return &self.network.config.http_headers;
+}
+
+// Headers _all_ requests include, in the order this engine emits them. The
+// client hints come first, then the User-Agent, then Accept-Language; the
+// per-destination Accept and the Sec-Fetch-* set are added later, by
+// Transfer.seedFetchMetadata, which is the only place that knows the request's
+// destination and initiator.
+//
+// A Sec-* name is a forbidden header name, so the client hints go in at `.cdp`
+// rather than the default: page script (`.author`, a lower rank) cannot forge
+// one, while a CDP or CLI override still lands -- which is what a driver
+// setting Emulation.setUserAgentOverride or Network.setExtraHTTPHeaders
+// expects, and what this fork did before upstream's source ladder existed.
+// The User-Agent and Accept-Language are not forbidden names, so they stay at
+// the default rank and a page may legitimately set them.
+//
+// Note what is NOT here: Sec-Ch-Ua-Full-Version-List. It is a high-entropy
+// hint, and Chrome sends it only after a server asks via Accept-CH — sending it
+// unsolicited is itself a tell. The full versions are still reachable from JS,
+// through navigator.userAgentData.getHighEntropyValues.
+pub fn baselineHeaders(self: *const Client) [7]Transfer.RequestHeader {
+    const headers = self.httpHeaders();
+    return .{
+        // Chrome sends this on every HTTP/1.1 request, right after Host, and
+        // curl sends nothing at all. Emitted here rather than left implicit;
+        // the vendored curl places the field for us (its H1_HD_CONNECTION slot,
+        // moved to follow Host) and drops it entirely on HTTP/2, which is also
+        // what Chrome does.
+        .{ .name = "Connection", .value = "keep-alive", .source = .cdp },
+        .{ .name = "Sec-Ch-Ua", .value = headers.sec_ch_ua, .source = .cdp },
+        .{ .name = "Sec-Ch-Ua-Mobile", .value = Config.HttpHeaders.sec_ch_ua_mobile, .source = .cdp },
+        .{ .name = "Sec-Ch-Ua-Platform", .value = self.platformHeader(), .source = .cdp },
+        .{ .name = "User-Agent", .value = self.getUserAgent() },
+        // Sent from here rather than left to curl's CURLOPT_ACCEPT_ENCODING,
+        // which writes it second -- one position after Host -- where Chrome has
+        // it second to last. curl skips its own copy once the header list
+        // carries one (Curl_checkheaders in deps/curl-patched/lib/http.c), and
+        // response decoding is gated on CURLOPT_ACCEPT_ENCODING being *set*
+        // rather than on curl having written the header, so the body still
+        // arrives decompressed. The value must stay in step with what
+        // http.Connection.reset configures, or we would advertise an encoding
+        // the decoder was never told to accept -- hence the shared constant.
+        .{ .name = "Accept-Encoding", .value = http.accept_encoding, .source = .cdp },
+        // Omitting Accept-Language triggers bot-protection on some CDNs
+        // (Akamai) when Accept-Encoding is present.
+        .{ .name = "Accept-Language", .value = self.getLanguages() },
+    };
+}
+
+// The Sec-Ch-Ua-Platform value, quoted, with the CDP override applied. The
+// override arrives bare, so it is quoted here rather than at set time.
+fn platformHeader(self: *const Client) []const u8 {
+    return self.platform_quoted_override orelse self.httpHeaders().sec_ch_ua_platform;
 }
 
 pub fn abort(self: *Client) void {
@@ -578,7 +568,7 @@ pub fn abort(self: *Client) void {
     // catch the regression rather than silently leaking on next use.
     // ws_dispatch_queue drains through owner teardown (abortOwner -> kill),
     // which precedes Client.deinit.
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(self.transfers.size == 0);
         std.debug.assert(self.pending_queue.first == null);
         std.debug.assert(self.dispatch_queue.first == null);
@@ -587,7 +577,7 @@ pub fn abort(self: *Client) void {
         std.debug.assert(self.ws_dispatch_queue.first == null);
         // - self.robots.pending : each robots fetch's shutdown_callback
         //   drops its entry; parked waiters unlink in their own deinit.
-        std.debug.assert(self.robots.pending.count() == 0);
+        std.debug.assert(self.robots.single_flight.count() == 0);
     }
 }
 
@@ -615,7 +605,7 @@ pub fn abortOwner(self: *Client, owner: *Owner) void {
         const ws: *WebSocket = @fieldParentPtr("_owner_node", node);
         ws.kill();
     }
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(owner.websockets.first == null);
     }
 }
@@ -681,35 +671,31 @@ pub fn activity(self: *const Client) Activity {
 //                Cherry-pick only Fetch interception responses
 const DrainMode = enum { all, sync_wait };
 
-// One-shot convenience: create and submit in a single call. HttpClient takes
-// ownership of req.headers; do not pair with `errdefer headers.deinit()`.
-// Callers that have no headers of their own can leave req.headers at its
-// (empty) default — the client fills in its baseline headers (user agent,
-// etc.).
+// One-shot convenience: create and submit in a single call.
 pub fn request(self: *Client, req: Request, owner: ?*Owner) anyerror!void {
     const transfer = try self.newRequest(req, owner);
     return transfer.submit();
 }
 
 // Create a request without submitting it. The caller owns the returned
-// transfer until transfer.submit().  On error, header is freed. On success,
-// headers is owned by the transfer.
+// transfer until transfer.submit() consumes it (or until syncRequest, which
+// consumes it the same way): it can add headers and mutate transfer.req,
+// scoped as:
+//
+//   const transfer = try client.newRequest(.{...}, owner);
+//   {
+//       errdefer transfer.deinit();
+//       try transfer.setHeader("Blah", "x", .{});
+//   }
+//   try transfer.submit();
+//
+// The errdefer must cover the mutation only, never submit itself.
 pub fn newRequest(self: *Client, req: Request, owner: ?*Owner) anyerror!*Transfer {
-    const arena = self.arena_pool.acquire(.small, "Request.arena") catch |err| {
-        req.headers.deinit();
-        return err;
-    };
+    const arena = try self.arena_pool.acquire(.small, "Request.arena");
 
     const transfer = blk: {
         var owned = req;
-        errdefer {
-            owned.headers.deinit();
-            arena.release();
-        }
-
-        if (owned.headers.headers == null) {
-            owned.headers = try self.newHeaders();
-        }
+        errdefer arena.release();
 
         // Most of the time, the req data will outlive the transfer. But not
         // always. The most problematic case is with a QueuedNavigation which
@@ -731,24 +717,7 @@ pub fn newRequest(self: *Client, req: Request, owner: ?*Owner) anyerror!*Transfe
             if (req.body_outlives_request == false) {
                 owned.body = try arena.dupe(u8, b);
             }
-
-            // Browsers never send Expect: 100-continue; libcurl generates it
-            // for HTTP/1.1 requests whose body exceeds 1MB
-            // (EXPECT_100_THRESHOLD), which stalls the request ~1s against
-            // servers/proxies that never answer the interim response. An
-            // empty value ("Expect:") suppresses the generated header. Only
-            // requests with a body can trigger it, and over HTTP/2 curl never
-            // generates it, so the entry is inert there. Added here (not
-            // configureConn) so redirect/auth retries don't append duplicates.
-            try owned.headers.add("Expect:");
         }
-
-        // Fetch metadata + the destination's Accept. This is the only place
-        // that knows both the destination (resource_type) and the initiator
-        // (cookie_origin), which is what Sec-Fetch-Site needs. Doing it here
-        // rather than at each of the eight newHeaders() call sites also keeps
-        // the eight from drifting apart.
-        try addFetchMetadata(&owned);
 
         const t = try arena.create(Transfer);
         t.* = .{
@@ -764,6 +733,7 @@ pub fn newRequest(self: *Client, req: Request, owner: ?*Owner) anyerror!*Transfe
             .owner = null,
             .owner_node = .{},
         };
+        try t.seedHeaders();
         break :blk t;
     };
 
@@ -846,7 +816,7 @@ pub fn _tick(self: *Client, timeout_ms: u32, mode: DrainMode) !bool {
     // dispatch CDP commands
     try self.drainInbox(mode);
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         if (waited == false) {
             // we're about to tell our caller not to call us again without it
             // doing some work (e.g. running tasks). Let's assert that we were
@@ -872,7 +842,7 @@ pub fn _tick(self: *Client, timeout_ms: u32, mode: DrainMode) !bool {
 // over.
 fn dispatchCompleted(self: *Client, mode: DrainMode) bool {
     if (mode == .all) {
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             // .all never inside a syncRequest, so nothing can be gating requests.
             std.debug.assert(self.blocking_requests.count() == 0);
         }
@@ -1000,7 +970,7 @@ fn pipeline(self: *Client, transfer: *Transfer, from: SubmitFrom) !void {
         .start => {
             if (self.network.web_bot_auth) |wba| {
                 const authority = URL.getHost(transfer.req.url);
-                try wba.signRequest(transfer.arena.allocator(), &transfer.req.headers, authority);
+                try wba.signRequest(transfer, authority);
             }
 
             if (self.serve_mode) {
@@ -1018,7 +988,7 @@ fn pipeline(self: *Client, transfer: *Transfer, from: SubmitFrom) !void {
                     // / abortParked.
                     self.intercepted += 1;
                     transfer.park(.intercept_request);
-                    if (comptime IS_DEBUG) {
+                    if (comptime lp.IS_DEBUG) {
                         log.debug(.http, "wait for interception", .{ .intercepted = self.intercepted });
                     }
                     return;
@@ -1028,7 +998,7 @@ fn pipeline(self: *Client, transfer: *Transfer, from: SubmitFrom) !void {
         },
         .after_intercept => {
             if (self.isUrlBlocked(transfer.req.url, transfer.req.internal)) {
-                log.warn(.http, "blocked url", .{ .url = transfer.req.url });
+                log.info(.http, "blocked url", .{ .url = transfer.req.url });
                 return transfer.failAsync(error.UrlBlocked);
             }
             if (try self.cacheLookup(transfer)) {
@@ -1080,54 +1050,69 @@ fn cacheLookup(self: *Client, transfer: *Transfer) !bool {
         return false;
     }
 
+    // A request already carrying its own validators (e.g. a script-set
+    // If-None-Match) should reach the server as-is. The script may be doing its
+    // own caching, and if we inject our own headers and our own interpretation,
+    // we can cause issues for the script (e.g. we respond with a 200 from our
+    // cache, the server repaints the page because it didn't get the correct 304
+    // that the upstream would have returned).
+    if (transfer.findRequestHeader("If-None-Match") != null or transfer.findRequestHeader("If-Modified-Since") != null) {
+        return false;
+    }
+
     // Redirects rewrite req.url; the entry must be stored/renewed under the
     // URL this lookup ran against, not the final hop. req.url is arena-owned,
     // so the captured slice outlives any redirect rewrite.
     transfer._cache_key = req.url;
 
     const arena = transfer.arena;
-    var iter = req.headers.iterator();
-    const req_headers = try iter.collect(arena.allocator());
+    const req_headers = try arena.alloc(http.Header, transfer.req_headers.items.len);
+    for (transfer.req_headers.items, req_headers) |hdr, *out| {
+        out.* = .{ .name = hdr.name, .value = hdr.value };
+    }
 
-    const cached = cache.get(arena.allocator(), .{
+    const cache_result = cache.get(arena.allocator(), .{
         .url = req.url,
         .timestamp = lp.datetime.timestamp(.real),
-        .request_headers = req_headers.items,
-    }) orelse {
-        lp.metrics.http_cache.incr(.miss);
-        transfer._cache_intent = .store;
-        return false;
+        .request_headers = req_headers,
+    }) catch |e| blk: {
+        log.err(.cache, "failed to get", .{ .url = req.url, .err = e });
+        break :blk .miss;
     };
 
-    if (cached.expired == false) {
-        lp.metrics.http_cache.incr(.hit);
-        try transfer.bufferCached(cached);
-        return true;
+    switch (cache_result) {
+        .hit => |cached| {
+            lp.metrics.http_cache.incr(.hit);
+            try transfer.bufferCached(cached);
+            return true;
+        },
+        .revalidate => |cached| {
+            log.debug(.cache, "revalidate cache entry", .{
+                .url = req.url,
+                .etag = cached.etag,
+                .last_modified = cached.last_modified,
+            });
+            if (cached.etag) |etag| {
+                try transfer.setHeader("If-None-Match", etag, .{});
+            }
+            if (cached.last_modified) |lm| {
+                try transfer.setHeader("If-Modified-Since", lm, .{});
+            }
+            transfer._cache_intent = .{ .revalidate = cached };
+            return false;
+        },
+        .miss => {
+            lp.metrics.http_cache.incr(.miss);
+            transfer._cache_intent = .store;
+            return false;
+        },
+        .stale => {
+            lp.metrics.http_cache.incr(.miss);
+            cache.evict(req.url);
+            transfer._cache_intent = .store;
+            return false;
+        },
     }
-
-    if (cached.metadata.hasValidators() == false) {
-        // Expired and no validators
-        lp.metrics.http_cache.incr(.miss);
-        cached.data.deinit();
-        cache.evict(req.url);
-        transfer._cache_intent = .store;
-        return false;
-    }
-
-    // expired but with validators
-    log.debug(.cache, "revalidate with etag", .{
-        .url = req.url,
-        .etag = cached.metadata.etag,
-        .last_modified = cached.metadata.last_modified,
-    });
-    if (cached.metadata.etag) |etag| {
-        try req.headers.add(try std.fmt.allocPrintSentinel(arena.allocator(), "If-None-Match: {s}", .{etag}, 0));
-    }
-    if (cached.metadata.last_modified) |lm| {
-        try req.headers.add(try std.fmt.allocPrintSentinel(arena.allocator(), "If-Modified-Since: {s}", .{lm}, 0));
-    }
-    transfer._cache_intent = .{ .revalidate = cached };
-    return false;
 }
 
 // 304 on a revalidation: renew the stored entry from the fresh headers and
@@ -1184,7 +1169,7 @@ fn cacheStore(self: *Client, transfer: *Transfer) void {
     const headers = transfer.res.headers;
 
     const vary = findHeader(headers, "vary");
-    const maybe_cm = Cache.tryCache(
+    const maybe_req = Cache.tryCache(
         arena.allocator(),
         lp.datetime.timestamp(.real),
         transfer._cache_key,
@@ -1201,39 +1186,38 @@ fn cacheStore(self: *Client, transfer: *Transfer) void {
         log.warn(.http, "cache eligibility", .{ .err = err });
         return;
     };
-    var metadata = maybe_cm orelse return;
+    var req = maybe_req orelse return;
 
     var vary_headers: std.ArrayList(http.Header) = .empty;
     if (vary) |vary_str| {
-        var req_it = transfer.req.headers.iterator();
-        while (req_it.next()) |hdr| {
+        for (transfer.req_headers.items) |hdr| {
             var vary_iter = std.mem.splitScalar(u8, vary_str, ',');
             while (vary_iter.next()) |part| {
                 const name = std.mem.trim(u8, part, &std.ascii.whitespace);
                 if (std.ascii.eqlIgnoreCase(hdr.name, name)) {
-                    const owned: http.Header = .{
-                        .name = arena.dupe(u8, hdr.name) catch return,
-                        .value = arena.dupe(u8, hdr.value) catch return,
-                    };
-                    vary_headers.append(arena.allocator(), owned) catch return;
+                    // name/value already live in transfer.arena
+                    vary_headers.append(arena.allocator(), .{
+                        .name = hdr.name,
+                        .value = hdr.value,
+                    }) catch return;
                 }
             }
         }
     }
 
-    metadata.headers = headers;
-    metadata.vary_headers = vary_headers.items;
+    req.headers = headers;
+    req.vary_headers = vary_headers.items;
 
-    if (comptime IS_DEBUG) {
-        log.debug(.browser, "http cache", .{ .key = transfer._cache_key, .metadata = metadata });
+    if (comptime lp.IS_DEBUG) {
+        log.debug(.browser, "http cache", .{ .key = transfer._cache_key, .put = req });
     }
-    cache.put(metadata, transfer.res.buffer.items) catch |err| {
+    cache.put(req, transfer.res.buffer.items) catch |err| {
         log.warn(.http, "cache put failed", .{ .err = err });
     };
 }
 
 const SyncContext = struct {
-    allocator: Allocator,
+    client: *Client,
     completion: union(enum) {
         in_progress: void,
         done: void,
@@ -1244,19 +1228,35 @@ const SyncContext = struct {
     status: u16 = 0,
     body: std.ArrayList(u8),
 
+    // Acquired on the first byte we have to buffer, so a bodyless response
+    // never takes one. Ownership moves to the SyncResponse.
+    arena: ?*lp.Arena = null,
+
     fn headerCallback(transfer: *Transfer) anyerror!Transfer.HeaderResult {
         const self: *SyncContext = @ptrCast(@alignCast(transfer.req.ctx));
         lp.assert(transfer.responseStatus() != null, "HttpClient.SyncRequest.headerCallback", .{ .value = transfer.responseStatus() });
         self.status = transfer.responseStatus().?;
         if (transfer.getContentLength()) |cl| {
-            try self.body.ensureTotalCapacity(self.allocator, cl);
+            try self.body.ensureTotalCapacityPrecise(try self.bodyAllocator(cl), cl);
         }
         return .proceed;
     }
 
+    fn bodyAllocator(self: *SyncContext, content_length: ?usize) !Allocator {
+        if (self.arena) |arena| {
+            return arena.allocator();
+        }
+        const arena = if (content_length) |cl|
+            try self.client.arena_pool.acquire(cl, "syncRequest.body")
+        else
+            try self.client.arena_pool.acquire(.large, "syncRequest.body");
+        self.arena = arena;
+        return arena.allocator();
+    }
+
     fn dataCallback(transfer: *Transfer, data: []const u8) anyerror!void {
         const self: *SyncContext = @ptrCast(@alignCast(transfer.req.ctx));
-        try self.body.appendSlice(self.allocator, data);
+        try self.body.appendSlice(try self.bodyAllocator(null), data);
     }
 
     fn doneCallback(ctx: *anyopaque) anyerror!void {
@@ -1275,33 +1275,33 @@ const SyncContext = struct {
     }
 };
 
-pub fn syncRequest(self: *Client, allocator: Allocator, req: Request, owner: *Owner) !SyncResponse {
+// Synchronous submit for a transfer created with newRequest. Like `submit`,
+// `syncRequest` consuems the transfer unconditionally.
+// Caller must deinit SyncResponse or otherwise take ownership of its optional arena
+pub fn syncRequest(self: *Client, transfer: *Transfer) !SyncResponse {
     if (self.inbox.terminated) {
-        // request() takes ownership of req.headers on every path; we return
-        // before calling it, so free the curl_slist here to avoid leaking it.
-        req.deinit();
+        transfer.deinit();
         return error.ClientDisconnected;
     }
     // A parser can start another blocking script/style fetch while unwinding
     // a previous interrupted fetch. The first tickSync below would fail
-    // anyway; bail before creating the transfer and notifying CDP.
+    // anyway; bail before submitting and notifying CDP.
     if (self.hasPendingTeardown()) {
-        req.deinit();
+        transfer.deinit();
         return error.SyncWaitInterrupted;
     }
 
-    var sync_ctx = SyncContext{ .allocator = allocator, .body = .empty };
-    errdefer sync_ctx.body.deinit(allocator);
+    var sync_ctx = SyncContext{ .client = self, .body = .empty };
+    errdefer if (sync_ctx.arena) |arena| arena.release();
 
-    var r = req;
-    r.sync = true;
-    r.ctx = &sync_ctx;
-    r.header_callback = SyncContext.headerCallback;
-    r.data_callback = SyncContext.dataCallback;
-    r.done_callback = SyncContext.doneCallback;
-    r.error_callback = SyncContext.errorCallback;
-    r.shutdown_callback = SyncContext.shutdownCallback;
-    const transfer = try self.newRequest(r, owner);
+    const req = &transfer.req;
+    req.sync = true;
+    req.ctx = &sync_ctx;
+    req.header_callback = SyncContext.headerCallback;
+    req.data_callback = SyncContext.dataCallback;
+    req.done_callback = SyncContext.doneCallback;
+    req.error_callback = SyncContext.errorCallback;
+    req.shutdown_callback = SyncContext.shutdownCallback;
 
     const frame_id = req.frame_id;
     self.blocking_requests.putNoClobber(self.allocator, frame_id, transfer.id) catch |err| {
@@ -1332,6 +1332,7 @@ pub fn syncRequest(self: *Client, allocator: Allocator, req: Request, owner: *Ow
         .done, .shutdown => return .{
             .status = sync_ctx.status,
             .body = sync_ctx.body,
+            .arena = sync_ctx.arena,
         },
         .err => |e| return e,
     }
@@ -1593,7 +1594,7 @@ fn processOneMessage(self: *Client, msg: http.Handles.MultiMessage, transfer: *T
         );
         if (wait_for_interception) {
             self.intercepted += 1;
-            if (comptime IS_DEBUG) {
+            if (comptime lp.IS_DEBUG) {
                 log.debug(.http, "wait for auth interception", .{ .intercepted = self.intercepted });
             }
 
@@ -1612,22 +1613,69 @@ fn processOneMessage(self: *Client, msg: http.Handles.MultiMessage, transfer: *T
     // Handle redirects: reuse the same connection to preserve TCP state.
     // A redirect status without a Location header is not a redirect, it's a
     // final response and falls through so its body is delivered.
-    if (effective_err == null) {
+    // When the server closes the TLS connection without a close_notify alert,
+    // BoringSSL reports RecvError. If we already received valid HTTP headers,
+    // this is a normal end-of-body (the connection closure signals the end
+    // of the response per HTTP/1.1 when there is no Content-Length).
+    // We must check this before endTransfer, which may reset the easy handle.
+    const is_conn_close_recv = blk: {
+        const err = effective_err orelse break :blk false;
+        if (err != error.RecvError) break :blk false;
+        const hdr = msg.conn.getResponseHeader("connection", 0) orelse break :blk true;
+        break :blk std.ascii.eqlIgnoreCase(hdr.value, "close");
+    };
+
+    if (effective_err == null or is_conn_close_recv) {
         const status = try msg.conn.getResponseCode();
         if (isRedirectStatus(status)) {
             if (msg.conn.getResponseHeader("location", 0)) |location| switch (transfer.req.redirect) {
                 .follow => {
+                    transfer.restoreInterceptHeaders();
+                    // Preserve the completed 3xx response until the redirected
+                    // requestWillBeSent event has been serialized. reset() below
+                    // clears it before the next network attempt.
+                    try transfer.materializeResponse(msg.conn, .{ .check_content_length = false });
                     try transfer.handleRedirect(location.value);
 
+                    if (!transfer.req.internal) lp.metrics.http_redirects.incr();
+
+                    if (self.serve_mode) { // e.g. cdp
+                        // Chromium announces each redirect hop before pausing it
+                        // for Fetch interception. Playwright uses redirectResponse
+                        // to pair the new pause with a new Request.
+                        transfer.req.notification.dispatch(.http_request_start, &.{
+                            .transfer = transfer,
+                            .redirect_response = true,
+                        });
+                    }
+
                     if (self.isUrlBlocked(transfer.req.url, transfer.req.internal)) {
-                        log.warn(.http, "blocked url", .{ .url = transfer.req.url });
+                        log.info(.http, "blocked url", .{ .url = transfer.req.url });
                         self.removeConn(msg.conn);
                         transfer._conn = null;
                         transfer.failAsync(error.UrlBlocked);
                         return true;
                     }
 
-                    if (!transfer.req.internal) lp.metrics.http_redirects.incr();
+                    if (self.serve_mode) { // e.g. cdp
+                        var wait_for_interception = false;
+                        transfer.req.notification.dispatch(.http_request_intercept, &.{
+                            .transfer = transfer,
+                            .wait_for_interception = &wait_for_interception,
+                        });
+
+                        if (wait_for_interception) {
+                            // Same shape as the auth-interception park above:
+                            // give up the connection, wait for the CDP client.
+                            self.removeConn(msg.conn);
+                            transfer._conn = null;
+                            transfer.reset();
+                            transfer.state = .created;
+                            self.intercepted += 1;
+                            transfer.park(.intercept_request);
+                            return false;
+                        }
+                    }
 
                     const conn = transfer._conn.?;
 
@@ -1667,18 +1715,6 @@ fn processOneMessage(self: *Client, msg: http.Handles.MultiMessage, transfer: *T
     // transfer's arena, release the conn, and buffer the events — user
     // callbacks run later, from dispatch(), never from here.
 
-    // When the server closes the TLS onnection without a close_notify alert,
-    // BoringSSL reports RecvError. If we already received valid HTTP headers,
-    // this is a normal end-of-body (the connection closure signals the end
-    // of the response per HTTP/1.1 when there is no Content-Length).
-    // We must check this before endTransfer, which may reset the easy handle.
-    const is_conn_close_recv = blk: {
-        const err = effective_err orelse break :blk false;
-        if (err != error.RecvError) break :blk false;
-        const hdr = msg.conn.getResponseHeader("connection", 0) orelse break :blk true;
-        break :blk std.ascii.eqlIgnoreCase(hdr.value, "close");
-    };
-
     if (effective_err != null and !is_conn_close_recv) {
         self.removeConn(msg.conn);
         transfer._conn = null;
@@ -1686,7 +1722,7 @@ fn processOneMessage(self: *Client, msg: http.Handles.MultiMessage, transfer: *T
         return true;
     }
 
-    try transfer.materializeResponse(msg.conn);
+    try transfer.materializeResponse(msg.conn, .{});
 
     // Latency is only meaningful for responses that hit the network (cache
     // and synthetic responses never reach processOneMessage).
@@ -1811,9 +1847,6 @@ pub const Request = struct {
     loader_id: u32,
     method: Method,
     url: [:0]const u8,
-    // Empty by default; the client fills in its baseline headers (user
-    // agent, sec-ch-ua, accept-language) when none are supplied.
-    headers: http.Headers = .{ .headers = null },
     body: ?[]const u8 = null,
     cookie_jar: ?*CookieJar,
     cookie_origin: [:0]const u8,
@@ -1821,6 +1854,7 @@ pub const Request = struct {
     // Only meaningful when resource_type == .document.
     nav: ?Navigation = null,
     redirect: RedirectMode = .follow,
+    referrer_policy: ?referrer.Policy = null,
     credentials: ?[:0]const u8 = null,
     notification: *Notification,
     timeout_ms: u32 = 0,
@@ -1878,18 +1912,20 @@ pub const Request = struct {
         const written = aw.written();
         return written.ptr[0 .. written.len - 1 :0];
     }
-
-    pub fn deinit(self: *const Request) void {
-        self.headers.deinit();
-    }
 };
 
 pub const SyncResponse = struct {
     status: u16,
     body: std.ArrayList(u8),
 
-    pub fn deinit(self: *SyncResponse, allocator: Allocator) void {
-        self.body.deinit(allocator);
+    // Owns `body`. Null when the response had nothing to buffer. Callers that
+    // keep `body` past this call take the arena instead of releasing it.
+    arena: ?*lp.Arena,
+
+    pub fn deinit(self: *SyncResponse) void {
+        if (self.arena) |arena| {
+            arena.release();
+        }
     }
 };
 
@@ -1897,7 +1933,7 @@ pub const SyncResponse = struct {
 // challenge. The auth retry goes straight back to the network — it already
 // passed the request-side pipeline on its first attempt.
 pub fn continueTransfer(self: *Client, transfer: *Transfer) !void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.http, "continue transfer", .{ .intercepted = self.intercepted });
     }
 
@@ -1912,7 +1948,7 @@ pub fn continueTransfer(self: *Client, transfer: *Transfer) !void {
 // gate, re-entering the pipeline at the step after interception. The CDP
 // command may have mutated req (url / method / headers / body) first.
 pub fn continueIntercepted(self: *Client, transfer: *Transfer) !void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         lp.assert(self.intercepted > 0, "Client.continueIntercepted", .{ .value = self.intercepted });
     }
 
@@ -1934,7 +1970,7 @@ pub fn fulfillIntercepted(
     headers: []const http.Header,
     body: ?[]const u8,
 ) !void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         lp.assert(self.intercepted > 0, "Client.fulfillIntercepted", .{ .value = self.intercepted });
     }
 
@@ -2080,6 +2116,8 @@ pub const Transfer = struct {
     res: Response = .{},
     client: *Client,
 
+    req_headers: std.ArrayList(RequestHeader) = .empty,
+
     start_time: u64,
 
     _notified_fail: bool = false,
@@ -2095,6 +2133,10 @@ pub const Transfer = struct {
     // incremented by reset func.
     _tries: u8 = 0,
     _redirect_count: u8 = 0,
+
+    // Fetch.continueRequest header overrides apply to a single network hop. We
+    // need to restore (and hence capture) the original headers.
+    _intercept_original_headers: ?[]const RequestHeader = null,
 
     // Linked into client.pending_queue while .queued; reused to link the
     // retired transfer into client.graveyard (deinit unlinks it from the
@@ -2259,7 +2301,7 @@ pub const Transfer = struct {
         if (self._retired) {
             // transfer.deinit should be called once. But _retired and the graveyard
             // are a safety net born out of UAFs.
-            if (comptime IS_DEBUG) {
+            if (comptime lp.IS_DEBUG) {
                 lp.assert(false, "Transfer.deinit on retired transfer", .{ .id = self.id });
             }
             return;
@@ -2306,12 +2348,11 @@ pub const Transfer = struct {
         // Any concurrent CDP lookup by id will now see this transfer as gone.
         _ = self.client.transfers.remove(self.id);
 
-        self.req.deinit();
         if (self.owner) |o| {
             o.removeTransfer(self);
         }
 
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             // Any callback on a corpse is a bug — fail loudly instead of
             // silently running user code from a retired transfer.
             self.req.start_callback = null;
@@ -2481,7 +2522,7 @@ pub const Transfer = struct {
         if (self.state == .delivering) {
             return;
         }
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             lp.assert(
                 self.state == .created or self.state == .inflight,
                 "Transfer.scheduleDispatch",
@@ -2548,20 +2589,12 @@ pub const Transfer = struct {
     // Serve a cache entry as this transfer's response. Takes ownership of
     // `cached` (file-backed bodies are read into the arena and closed).
     fn bufferCached(self: *Transfer, cached: Cache.CachedResponse) !void {
-        const arena = self.arena;
-
         const body: []const u8 = switch (cached.data) {
             .buffer => |b| b,
-            .file => |f| blk: {
-                defer f.file.close(lp.io);
-                const buf = try arena.alloc(u8, f.len);
-                const n = try f.file.readPositionalAll(lp.io, buf, f.offset);
-                break :blk buf[0..n];
-            },
         };
 
-        self.setResponseHead(cached.metadata.status, cached.metadata.content_type);
-        self.res.headers = cached.metadata.headers;
+        self.setResponseHead(cached.status, cached.content_type);
+        self.res.headers = cached.headers;
         self._from_cache = true;
         self._content_length = body.len;
         try self.bufferEvents(body);
@@ -2596,7 +2629,11 @@ pub const Transfer = struct {
     // Copy everything the response needs out of the conn and into the
     // transfer arena. After this, delivery never touches libcurl state —
     // the conn can be released and reused before the consumer sees a byte.
-    fn materializeResponse(self: *Transfer, conn: *http.Connection) !void {
+    const MaterializeResponseOpts = struct {
+        check_content_length: bool = true,
+    };
+
+    fn materializeResponse(self: *Transfer, conn: *http.Connection, opts: MaterializeResponseOpts) !void {
         if (self.res.stream.started) {
             // Streaming: already materialized at the first delivered chunk.
             return;
@@ -2632,9 +2669,11 @@ pub const Transfer = struct {
             }
         }
 
-        if (self.getContentLength()) |cl| {
-            if (cl > self.client.max_response_size) {
-                return error.ResponseTooLarge;
+        if (opts.check_content_length) {
+            if (self.getContentLength()) |cl| {
+                if (cl > self.client.max_response_size) {
+                    return error.ResponseTooLarge;
+                }
             }
         }
     }
@@ -2657,9 +2696,24 @@ pub const Transfer = struct {
             try conn.setGetMode();
         }
 
-        var header_list = req.headers;
-        try conn.secretHeaders(&header_list, &client.network.config.http_headers);
-        try conn.setHeaders(&header_list);
+        // Build the conn's curl_slist from req_headers, fresh on every
+        // attempt so redirect/auth retries pick up mutations and never
+        // accumulate duplicates.
+        conn.clearHeaders();
+        const arena = self.arena.allocator();
+        try self.emitHeaders(conn, arena);
+        if (req.body != null) {
+            // Browsers never send Expect: 100-continue; libcurl generates it
+            // for HTTP/1.1 requests whose body exceeds 1MB
+            // (EXPECT_100_THRESHOLD), which stalls the request ~1s against
+            // servers/proxies that never answer the interim response. An
+            // empty value ("Expect:") suppresses the generated header. Only
+            // requests with a body can trigger it, and over HTTP/2 curl never
+            // generates it, so the entry is inert there.
+            try conn.addRawHeader("Expect:");
+        }
+        try conn.secretHeaders(&client.network.config.http_headers);
+        try conn.commitHeaders();
 
         // Add cookies from cookie jar.
         if (try self.req.getCookieString(self.arena.allocator())) |cookies| {
@@ -2705,7 +2759,7 @@ pub const Transfer = struct {
     }
 
     fn buildResponseHeader(self: *Transfer, conn: *const http.Connection) !void {
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             std.debug.assert(self.res.header == null);
         }
 
@@ -2746,13 +2800,18 @@ pub const Transfer = struct {
         const req = &transfer.req;
         const conn = transfer._conn.?;
 
-        // retrieve cookies from the redirect's response.
-        if (req.cookie_jar) |jar| {
-            var i: usize = 0;
-            while (conn.getResponseHeader("set-cookie", i)) |ct| : (i += 1) {
-                try jar.populateFromResponse(transfer.req.url, ct.value);
+        // Cookies were applied while materializing the redirect response.
 
-                if (i >= ct.amount) {
+        // A Referrer-Policy header on a redirect response applies to the
+        // remaining hops.
+        if (req.referrer_policy != null) {
+            // referrer-policy is re-applied on every hop.
+            var i: usize = 0;
+            while (conn.getResponseHeader("referrer-policy", i)) |hdr| : (i += 1) {
+                if (referrer.parseHeader(hdr.value)) |policy| {
+                    req.referrer_policy = policy;
+                }
+                if (i >= hdr.amount) {
                     break;
                 }
             }
@@ -2805,6 +2864,21 @@ pub const Transfer = struct {
             req.method = .GET;
             req.body = null;
         }
+
+        if (req.referrer_policy) |policy| {
+            // Referer header was applied based on the original target. It
+            // needs to be updated based on the redirect target. A redirect can
+            // only strip it (full -> origin -> none), so we can use whatever
+            // value we have now as the base
+            if (transfer.findRequestHeader("referer")) |current| {
+                const alloc = arena.allocator();
+                if (try referrer.compute(alloc, policy, try alloc.dupeZ(u8, current), req.url)) |value| {
+                    try transfer.setHeader("Referer", value, .{});
+                } else {
+                    transfer.removeHeader("Referer");
+                }
+            }
+        }
     }
 
     fn detectAuthChallenge(transfer: *Transfer, conn: *const http.Connection) void {
@@ -2833,27 +2907,298 @@ pub const Transfer = struct {
         self.req.credentials = userpwd;
     }
 
-    pub fn replaceRequestHeaders(self: *Transfer, allocator: Allocator, headers: []const http.Header) !void {
-        self.req.headers.deinit();
+    pub const RequestHeader = struct {
+        name: []const u8,
+        value: []const u8,
+        source: HeaderSource = .user_agent,
+    };
 
-        var buf: std.ArrayList(u8) = .empty;
-        var new_headers = try self.client.newHeaders();
-        for (headers) |hdr| {
-            // safe to re-use this buffer, because Headers.add because curl copies
-            // the value we pass into curl_slist_append.
-            defer buf.clearRetainingCapacity();
-            try std.fmt.format(buf.writer(allocator), "{s}: {s}", .{ hdr.name, hdr.value });
-            try buf.append(allocator, 0); // null terminated
-            try new_headers.add(buf.items[0 .. buf.items.len - 1 :0]);
+    // Who put the header on the request, ordered lowest priority first:
+    // setHeader/appendHeader let a source overwrite headers from its own or
+    // a lower layer, never a higher one. .fixed is hardcoded and can't be
+    // changed (Sec-Ch-Ua). For CORS, only script-set headers cause a preflight.
+    pub const HeaderSource = enum { user_agent, author, cdp, cli, fixed };
+
+    pub const HeaderOpts = struct {
+        source: HeaderSource = .user_agent,
+    };
+
+    fn addHeader(self: *Transfer, name: []const u8, value: []const u8, opts: HeaderOpts) !void {
+        const arena = self.arena.allocator();
+        try self.req_headers.append(arena, .{
+            .name = try arena.dupe(u8, name),
+            .value = try arena.dupe(u8, value),
+            .source = opts.source,
+        });
+    }
+
+    pub fn findRequestHeader(self: *const Transfer, name: []const u8) ?[]const u8 {
+        for (self.req_headers.items) |hdr| {
+            if (std.ascii.eqlIgnoreCase(hdr.name, name)) {
+                return hdr.value;
+            }
         }
-        self.req.headers = new_headers;
+        return null;
+    }
+
+    fn removeHeader(self: *Transfer, name: []const u8) void {
+        var i: usize = 0;
+        while (i < self.req_headers.items.len) {
+            if (std.ascii.eqlIgnoreCase(self.req_headers.items[i].name, name)) {
+                _ = self.req_headers.orderedRemove(i);
+                continue;
+            }
+            i += 1;
+        }
+    }
+
+    // Add or replace or noops the header based on the source layering priority
+    pub fn setHeader(self: *Transfer, name: []const u8, value: []const u8, opts: HeaderOpts) !void {
+        return self.putHeader(name, value, opts.source, .set);
+    }
+
+    // Add or append or noops the header based on the source layering priority
+    pub fn appendHeader(self: *Transfer, name: []const u8, value: []const u8, opts: HeaderOpts) !void {
+        return self.putHeader(name, value, opts.source, .append);
+    }
+
+    fn putHeader(self: *Transfer, name: []const u8, value: []const u8, source: HeaderSource, mode: enum { set, append }) !void {
+        if (verifyHeader(name, value) == false) {
+            return;
+        }
+
+        var found = false;
+        var i: usize = 0;
+        while (i < self.req_headers.items.len) {
+            const hdr = &self.req_headers.items[i];
+            if (std.ascii.eqlIgnoreCase(hdr.name, name) == false) {
+                i += 1;
+                continue;
+            }
+            if (found) {
+                _ = self.req_headers.orderedRemove(i);
+                continue;
+            }
+            found = true;
+
+            if (@intFromEnum(hdr.source) > @intFromEnum(source)) {
+                if (hdr.source == .fixed) {
+                    log.warn(.http, "ignore overriding fixed header", .{ .header = hdr.name });
+                }
+                return;
+            }
+            if (mode == .append and hdr.source == source) {
+                const sep = if (std.ascii.eqlIgnoreCase(name, "cookie")) "; " else ", ";
+                hdr.value = try std.fmt.allocPrint(self.arena.allocator(), "{s}{s}{s}", .{ hdr.value, sep, value });
+                return;
+            }
+            hdr.value = try self.arena.allocator().dupe(u8, value);
+            hdr.source = source;
+            i += 1;
+        }
+        if (!found) {
+            try self.addHeader(name, value, .{ .source = source });
+        }
+    }
+
+    // Central gate for every header entering req_headers; name-keyed
+    // restrictions live here so entry points don't need their own checks.
+    fn verifyHeader(name: []const u8, value: []const u8) bool {
+        if (std.ascii.eqlIgnoreCase(name, "user-agent")) {
+            lp.Config.validateUserAgent(value) catch |err| {
+                log.warn(.http, "invalid header dropped", .{ .name = name, .err = err });
+                return false;
+            };
+        }
+        return true;
+    }
+
+    // Chrome's header order, measured per destination rather than assumed --
+    // see the `localHeaders` step of tools/fingerprint/results/*-chrome-*.json.
+    // Order is a fingerprint in its own right, and it is NOT insertion order:
+    // a navigation leads with the three client hints, while a subresource
+    // leads with sec-ch-ua-platform and User-Agent and only then repeats
+    // sec-ch-ua / sec-ch-ua-mobile. Referer lands late, after the Sec-Fetch
+    // block, which insertion order cannot express either: it is added by
+    // Frame.headersForRequest after the transfer already exists.
+    //
+    // Anything not named here (author headers, CDP extras, Content-*) follows
+    // in insertion order.
+    const chrome_navigation_order = [_][]const u8{
+        "Sec-Ch-Ua",
+        "Sec-Ch-Ua-Mobile",
+        "Sec-Ch-Ua-Platform",
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-User",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+    };
+
+    const chrome_subresource_order = [_][]const u8{
+        "Sec-Ch-Ua-Platform",
+        "User-Agent",
+        "Sec-Ch-Ua",
+        "Sec-Ch-Ua-Mobile",
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+    };
+
+    // Materializes req_headers onto the connection in Chrome's order.
+    //
+    // One emission stays out of our hands: curl writes `Host` first, which is
+    // where Chrome has it anyway. `Connection: keep-alive` is the remaining
+    // gap -- Chrome sends it on HTTP/1.1, curl sends nothing, and we cannot add
+    // it from here because the same list is reused for an HTTP/2 attempt, where
+    // a connection header is a protocol error.
+    fn emitHeaders(self: *Transfer, conn: *http.Connection, arena: Allocator) !void {
+        const order: []const []const u8 = if (self.req.resource_type == .document)
+            &chrome_navigation_order
+        else
+            &chrome_subresource_order;
+
+        // Bitset of what the ordered pass already emitted, so the trailing
+        // pass can skip them without a second name comparison per header.
+        var emitted = [_]bool{false} ** 64;
+        const tracked = @min(self.req_headers.items.len, emitted.len);
+
+        for (order) |name| {
+            for (self.req_headers.items[0..tracked], 0..) |hdr, i| {
+                if (emitted[i]) continue;
+                if (std.ascii.eqlIgnoreCase(hdr.name, name) == false) continue;
+                try conn.addHeader(arena, hdr.name, hdr.value);
+                emitted[i] = true;
+                // No break: a name can legitimately appear once only, but if a
+                // duplicate ever survives putHeader's dedup, keeping it beside
+                // its twin is better than stranding it in the trailing pass.
+            }
+        }
+
+        for (self.req_headers.items, 0..) |hdr, i| {
+            if (i < tracked and emitted[i]) continue;
+            try conn.addHeader(arena, hdr.name, hdr.value);
+        }
+    }
+
+    // The client's baseline headers, added to every request at creation.
+    fn seedHeaders(self: *Transfer) !void {
+        for (self.client.baselineHeaders()) |hdr| {
+            try self.addHeader(hdr.name, hdr.value, .{ .source = hdr.source });
+        }
+
+        // --http-header extras; setHeader so a same-name header (e.g.
+        // Accept-Language) overrides the baseline instead of duplicating.
+        for (self.client.network.config.httpHeaders()) |hdr| {
+            try self.setHeader(hdr.name, hdr.value, .{ .source = .cli });
+        }
+
+        try self.seedFetchMetadata();
+    }
+
+    // The destination's `Accept` plus the Sec-Fetch-* set, which real Chrome
+    // sends on every request and which this engine sent on none before it
+    // existed. This is the only place that knows both the destination
+    // (resource_type) and the initiator (nav / cookie_origin), which is what
+    // Sec-Fetch-Site needs.
+    //
+    // Sec-Fetch-* are forbidden header names — page script cannot set them — so
+    // they enter at `.cdp`, above an author's reach but still replaceable by a
+    // driver. `Accept` is different: fetch()/XHR may legitimately specify it,
+    // so it enters at the default rank and a later author/CDP/CLI value wins.
+    fn seedFetchMetadata(self: *Transfer) !void {
+        const H = Config.HttpHeaders;
+        const req = &self.req;
+
+        try self.setHeader("Accept", switch (req.resource_type) {
+            .document => H.Accept.document,
+            .stylesheet => H.Accept.style,
+            .image => H.Accept.image,
+            .eventsource => H.Accept.event_stream,
+            .script, .fetch, .xhr => H.Accept.any,
+        }, .{});
+
+        // Chrome labels a subframe navigation "iframe" and a top-level one
+        // "document"; everything else is named after the destination.
+        try self.setHeader("Sec-Fetch-Dest", switch (req.resource_type) {
+            .document => if (req.nav) |n| (if (n.subframe) "iframe" else "document") else "document",
+            .stylesheet => "style",
+            .image => "image",
+            .script => "script",
+            // fetch(), XHR and EventSource all report an empty destination.
+            .fetch, .xhr, .eventsource => "empty",
+        }, .{ .source = .cdp });
+
+        try self.setHeader("Sec-Fetch-Mode", switch (req.resource_type) {
+            .document => "navigate",
+            // Subresources the parser pulls in are no-cors; script-issued
+            // fetches and XHR go through the CORS protocol.
+            .stylesheet, .script, .image => "no-cors",
+            .fetch, .xhr, .eventsource => "cors",
+        }, .{ .source = .cdp });
+
+        // "none" is not "unknown": it specifically means the request had no
+        // initiator document (address bar, bookmark). Anything with an
+        // initiator gets an origin comparison.
+        const initiator: ?[]const u8 = if (req.resource_type == .document)
+            if (req.nav) |n| n.initiator_origin else null
+        else
+            req.cookie_origin;
+
+        try self.setHeader("Sec-Fetch-Site", if (initiator) |origin|
+            switch (fetchSite(origin, req.url)) {
+                .same_origin => "same-origin",
+                .same_site => "same-site",
+                .cross_site => "cross-site",
+            }
+        else
+            "none", .{ .source = .cdp });
+
+        // Only navigations carry these two, and Sec-Fetch-User only when the
+        // navigation came from a user gesture rather than from script.
+        if (req.resource_type == .document) {
+            try self.setHeader("Upgrade-Insecure-Requests", H.upgrade_insecure_requests, .{ .source = .cdp });
+            if (req.nav) |n| {
+                if (n.user_activated) try self.setHeader("Sec-Fetch-User", "?1", .{ .source = .cdp });
+            }
+        }
+    }
+
+    // CDP Fetch.continueRequest: the intercepting client supplies the
+    // complete header set, replacing whatever the request carried.
+    pub fn replaceRequestHeaders(self: *Transfer, headers: []const http.Header) !void {
+        lp.assert(self._intercept_original_headers == null, "Transfer.replaceRequestHeaders", .{ .id = self.id });
+        self._intercept_original_headers = try self.arena.allocator().dupe(RequestHeader, self.req_headers.items);
+        self.req_headers.clearRetainingCapacity();
+        try self.seedHeaders();
+        for (headers) |hdr| {
+            try self.setHeader(hdr.name, hdr.value, .{ .source = .cdp });
+        }
+    }
+
+    fn restoreInterceptHeaders(self: *Transfer) void {
+        const headers = self._intercept_original_headers orelse return;
+        self.req_headers.clearRetainingCapacity();
+        // _intercept_original_headers.items.len MIGHT be larger than self.req_headers.items.len
+        // but the capacity never shrank from when _intercept_original_headers WAS req_headers.
+        self.req_headers.appendSliceAssumeCapacity(headers);
+        self._intercept_original_headers = null;
     }
 
     // abortAuthChallenge is called when an auth challenge interception is
     // abort. We don't call self.releaseConn here b/c it has been done
     // before interception process.
     pub fn abortAuthChallenge(self: *Transfer) void {
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             log.debug(.http, "abort auth transfer", .{ .intercepted = self.client.intercepted });
         }
 
@@ -2863,7 +3208,7 @@ pub const Transfer = struct {
 
     fn dataCallback(buffer: [*]const u8, chunk_count: usize, chunk_len: usize, data: *anyopaque) callconv(.c) usize {
         // libcurl should only ever emit 1 chunk at a time
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             std.debug.assert(chunk_count == 1);
         }
 
@@ -2894,7 +3239,7 @@ pub const Transfer = struct {
                     res.callback_error = error.ResponseTooLarge;
                     return http.writefunc_error;
                 }
-                res.buffer.ensureTotalCapacity(transfer.arena.allocator(), cl) catch {};
+                res.buffer.ensureTotalCapacityPrecise(transfer.arena.allocator(), cl) catch {};
             }
         }
 
@@ -2944,7 +3289,7 @@ pub const Transfer = struct {
         const res = &self.res;
         if (res.stream.started == false) {
             // we haven't delivered the start/header events yet
-            try self.materializeResponse(conn);
+            try self.materializeResponse(conn, .{});
             try self._events.ensureUnusedCapacity(self.arena.allocator(), 3);
             self._events.appendAssumeCapacity(.start);
             self._events.appendAssumeCapacity(.header);
@@ -2962,7 +3307,7 @@ pub const Transfer = struct {
             // deliver() is mid-batch on this transfer; its loop consumes
             // events appended behind its cursor.
             .delivering => {},
-            else => if (comptime IS_DEBUG) {
+            else => if (comptime lp.IS_DEBUG) {
                 lp.assert(false, "Transfer.scheduleStreamDispatch", .{ .state = self.state });
             },
         }
@@ -3258,6 +3603,11 @@ const Synthetic = struct {
 };
 
 const testing = @import("../testing.zig");
+const AdBlocker = @import("adblock/AdBlocker.zig");
+
+// The Network every test client points at: only the fields a test actually
+// exercises are ever set, by initTestClient or by the test itself.
+var test_network: Network = undefined;
 
 test "HttpClient: fetchSite classifies initiator against request URL" {
     try testing.expectEqual(FetchSite.same_origin, fetchSite("https://example.com/a", "https://example.com/b"));
@@ -3270,102 +3620,139 @@ test "HttpClient: fetchSite classifies initiator against request URL" {
     try testing.expectEqual(FetchSite.cross_site, fetchSite("https://example.com/a", "https://notexample.com/b"));
 }
 
-test "HttpClient: addFetchMetadata sends Chrome's set for a top-level navigation" {
-    var req: Request = undefined;
-    req.headers = .{ .headers = null };
-    defer req.headers.deinit();
-    req.resource_type = .document;
-    req.url = "https://example.com/";
-    req.cookie_origin = "https://example.com/";
-    // No initiator document: an address-bar navigation.
-    req.nav = .{ .initiator_origin = null, .subframe = false, .user_activated = true };
+// "" when absent, so a test can assert absence as well as a value.
+fn seededValue(transfer: *const Transfer, name: []const u8) []const u8 {
+    return transfer.findRequestHeader(name) orelse "";
+}
 
-    try addFetchMetadata(&req);
+test "HttpClient: seedFetchMetadata sends Chrome's set for a top-level navigation" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+    transfer.req.url = "https://example.com/";
+    // No initiator document: an address-bar navigation.
+    transfer.req.nav = .{ .initiator_origin = null, .subframe = false, .user_activated = true };
+    try transfer.seedFetchMetadata();
 
     try testing.expectString(
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        findHeaderValue(&req.headers, "Accept"),
+        seededValue(&transfer, "Accept"),
     );
-    try testing.expectString("document", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
-    try testing.expectString("navigate", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
-    try testing.expectString("none", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
-    try testing.expectString("?1", findHeaderValue(&req.headers, "Sec-Fetch-User"));
-    try testing.expectString("1", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+    try testing.expectString("document", seededValue(&transfer, "Sec-Fetch-Dest"));
+    try testing.expectString("navigate", seededValue(&transfer, "Sec-Fetch-Mode"));
+    try testing.expectString("none", seededValue(&transfer, "Sec-Fetch-Site"));
+    try testing.expectString("?1", seededValue(&transfer, "Sec-Fetch-User"));
+    try testing.expectString("1", seededValue(&transfer, "Upgrade-Insecure-Requests"));
 }
 
-test "HttpClient: addFetchMetadata labels a same-origin script and leaves a caller's Accept" {
-    var req: Request = undefined;
-    req.headers = .{ .headers = null };
-    defer req.headers.deinit();
-    req.resource_type = .script;
-    req.url = "https://example.com/app.js";
-    req.cookie_origin = "https://example.com/";
-    req.nav = null;
+test "HttpClient: seedFetchMetadata labels a subframe navigation" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
 
-    try addFetchMetadata(&req);
+    var transfer = testTransfer(arena);
+    transfer.req.url = "https://widget.example.com/frame";
+    transfer.req.nav = .{ .initiator_origin = "https://example.com/", .subframe = true, .user_activated = false };
+    try transfer.seedFetchMetadata();
 
-    try testing.expectString("*/*", findHeaderValue(&req.headers, "Accept"));
-    try testing.expectString("script", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
-    try testing.expectString("no-cors", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
-    try testing.expectString("same-origin", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
+    try testing.expectString("iframe", seededValue(&transfer, "Sec-Fetch-Dest"));
+    // Same registrable domain, different host: same-site, not same-origin.
+    try testing.expectString("same-site", seededValue(&transfer, "Sec-Fetch-Site"));
+    // Script-driven, so no user gesture to report.
+    try testing.expectString("", seededValue(&transfer, "Sec-Fetch-User"));
+}
+
+test "HttpClient: seedFetchMetadata labels a same-origin script" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+    transfer.req.resource_type = .script;
+    transfer.req.url = "https://example.com/app.js";
+    transfer.req.cookie_origin = "https://example.com/";
+    try transfer.seedFetchMetadata();
+
+    try testing.expectString("*/*", seededValue(&transfer, "Accept"));
+    try testing.expectString("script", seededValue(&transfer, "Sec-Fetch-Dest"));
+    try testing.expectString("no-cors", seededValue(&transfer, "Sec-Fetch-Mode"));
+    try testing.expectString("same-origin", seededValue(&transfer, "Sec-Fetch-Site"));
     // Subresources carry neither of the navigation-only headers.
-    try testing.expectString("", findHeaderValue(&req.headers, "Sec-Fetch-User"));
-    try testing.expectString("", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+    try testing.expectString("", seededValue(&transfer, "Sec-Fetch-User"));
+    try testing.expectString("", seededValue(&transfer, "Upgrade-Insecure-Requests"));
 }
 
-test "HttpClient: addFetchMetadata labels a cross-origin image" {
-    var req: Request = undefined;
-    req.headers = .{ .headers = null };
-    defer req.headers.deinit();
-    req.resource_type = .image;
-    req.url = "https://cdn.example.net/logo.png";
-    req.cookie_origin = "https://example.com/";
-    req.nav = null;
+test "HttpClient: seedFetchMetadata labels a cross-origin image" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
 
-    try addFetchMetadata(&req);
+    var transfer = testTransfer(arena);
+    transfer.req.resource_type = .image;
+    transfer.req.url = "https://cdn.example.net/logo.png";
+    transfer.req.cookie_origin = "https://example.com/";
+    try transfer.seedFetchMetadata();
 
     try testing.expectString(
         "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        findHeaderValue(&req.headers, "Accept"),
+        seededValue(&transfer, "Accept"),
     );
-    try testing.expectString("image", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
+    try testing.expectString("image", seededValue(&transfer, "Sec-Fetch-Dest"));
     // Parser-initiated, so no-cors rather than the cors an XHR would get.
-    try testing.expectString("no-cors", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
-    try testing.expectString("cross-site", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
-    try testing.expectString("", findHeaderValue(&req.headers, "Sec-Fetch-User"));
-    try testing.expectString("", findHeaderValue(&req.headers, "Upgrade-Insecure-Requests"));
+    try testing.expectString("no-cors", seededValue(&transfer, "Sec-Fetch-Mode"));
+    try testing.expectString("cross-site", seededValue(&transfer, "Sec-Fetch-Site"));
+    try testing.expectString("", seededValue(&transfer, "Sec-Fetch-User"));
+    try testing.expectString("", seededValue(&transfer, "Upgrade-Insecure-Requests"));
 }
 
 test "HttpClient: ResourceType.image reports Chrome's CDP name" {
     try testing.expectString("Image", Request.ResourceType.image.string());
 }
 
-test "HttpClient: addFetchMetadata does not clobber a caller-supplied Accept" {
-    var req: Request = undefined;
-    req.headers = .{ .headers = null };
-    defer req.headers.deinit();
-    try req.headers.add("Accept: application/json");
-    req.resource_type = .fetch;
-    req.url = "https://api.other.org/v1";
-    req.cookie_origin = "https://example.com/";
-    req.nav = null;
+test "HttpClient: seedFetchMetadata does not clobber an author's Accept" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
 
-    try addFetchMetadata(&req);
+    var transfer = testTransfer(arena);
+    transfer.req.resource_type = .fetch;
+    transfer.req.url = "https://api.other.org/v1";
+    transfer.req.cookie_origin = "https://example.com/";
+    try transfer.setHeader("Accept", "application/json", .{ .source = .author });
+    try transfer.seedFetchMetadata();
 
     // fetch() may legitimately set Accept, so ours must not win.
-    try testing.expectString("application/json", findHeaderValue(&req.headers, "Accept"));
-    try testing.expectString("empty", findHeaderValue(&req.headers, "Sec-Fetch-Dest"));
-    try testing.expectString("cors", findHeaderValue(&req.headers, "Sec-Fetch-Mode"));
-    try testing.expectString("cross-site", findHeaderValue(&req.headers, "Sec-Fetch-Site"));
+    try testing.expectString("application/json", seededValue(&transfer, "Accept"));
+    try testing.expectString("empty", seededValue(&transfer, "Sec-Fetch-Dest"));
+    try testing.expectString("cors", seededValue(&transfer, "Sec-Fetch-Mode"));
+    try testing.expectString("cross-site", seededValue(&transfer, "Sec-Fetch-Site"));
 }
 
-// "" when absent, so a test can assert absence as well as a value.
-fn findHeaderValue(headers: *const http.Headers, name: []const u8) []const u8 {
-    var it = headers.iterator();
-    while (it.next()) |h| {
-        if (std.ascii.eqlIgnoreCase(h.name, name)) return h.value;
-    }
-    return "";
+test "HttpClient: an author cannot forge a Sec-Fetch header" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+    transfer.req.resource_type = .fetch;
+    transfer.req.url = "https://api.other.org/v1";
+    transfer.req.cookie_origin = "https://example.com/";
+    try transfer.seedFetchMetadata();
+    try testing.expectString("cross-site", seededValue(&transfer, "Sec-Fetch-Site"));
+
+    // A Sec-* name is a forbidden header name; the author's value is refused
+    // and the engine's own reading stands.
+    testing.silenceLog(&.{.http});
+    try transfer.setHeader("Sec-Fetch-Site", "same-origin", .{ .source = .author });
+    try testing.expectString("cross-site", seededValue(&transfer, "Sec-Fetch-Site"));
 }
 
 test "HttpClient: isFetchInterceptionMethod matches the four Fetch methods" {
@@ -3535,8 +3922,15 @@ fn initTestClient(client: *Client, pool: *ArenaPool) void {
     client.cache = null;
     client.serve_mode = false;
     client.obey_robots = false;
-    client.robots = .{ .allocator = testing.allocator, .network = undefined };
+    client.robots = .{
+        .network = undefined,
+        .single_flight = .init(testing.allocator),
+    };
     client.url_blocklist = null;
+    // isUrlBlocked reaches through here for the adblocker; tests that want
+    // one assign it to `client.network` after this returns.
+    test_network.adblocker = null;
+    client.network = &test_network;
 }
 
 test "HttpClient: setBlockedUrls owns, replaces, and clears patterns" {
@@ -3560,6 +3954,32 @@ test "HttpClient: setBlockedUrls owns, replaces, and clears patterns" {
     try testing.expectEqual(null, client.url_blocklist);
 }
 
+test "HttpClient: adblock verdicts apply per request hostname" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    var client: Client = undefined;
+    initTestClient(&client, &pool);
+
+    var blocker: AdBlocker = try .init(testing.allocator);
+    defer blocker.deinit();
+    var list: std.Io.Reader = .fixed(
+        \\||ads.example.com^
+        \\@@||good.ads.example.com^
+    );
+    try blocker.parse(&list);
+    client.network.adblocker = blocker;
+    defer client.network.adblocker = null;
+
+    try testing.expect(client.isUrlBlocked("https://ads.example.com/pixel.gif", false));
+    // Hostnames are matched case-insensitively and without the port.
+    try testing.expect(client.isUrlBlocked("https://SUB.ADS.EXAMPLE.COM:8443/x", false));
+    try testing.expect(!client.isUrlBlocked("https://good.ads.example.com/app.js", false));
+    try testing.expect(!client.isUrlBlocked("https://example.com/", false));
+    // Internal transfers (robots.txt, ...) are never adblocked.
+    try testing.expect(!client.isUrlBlocked("https://ads.example.com/", true));
+}
+
 test "HttpClient: URL blocking exempts internal transfers" {
     var pool = ArenaPool.init(testing.allocator, .{});
     defer pool.deinit();
@@ -3571,6 +3991,157 @@ test "HttpClient: URL blocking exempts internal transfers" {
     try client.setBlockedUrls(&.{"*example.test*"});
     try testing.expect(client.isUrlBlocked("https://example.test/script.js", false));
     try testing.expect(!client.isUrlBlocked("https://example.test/robots.txt", true));
+}
+
+fn testTransfer(arena: *lp.Arena) Transfer {
+    return .{
+        .arena = arena,
+        .owner = null,
+        .req = .{
+            .frame_id = 0,
+            .loader_id = 0,
+            .method = .GET,
+            .url = "http://example.com/",
+            .cookie_jar = null,
+            .cookie_origin = "",
+            .resource_type = .document,
+            .notification = undefined,
+            .shutdown_callback = noopShutdown,
+        },
+        .client = undefined,
+        .id = 1,
+        .start_time = 0,
+    };
+}
+
+test "HttpClient: Transfer.setHeader replaces by case-insensitive name" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+
+    try transfer.setHeader("User-Agent", "Lightpanda/1.0", .{});
+    try transfer.setHeader("X-Twice", "a", .{});
+
+    // force a duplicated value manually
+    try transfer.req_headers.append(transfer.arena.allocator(), .{
+        .name = "x-twice",
+        .value = "b",
+        .source = .user_agent,
+    });
+
+    // replaces in place, collapsing duplicates
+    try transfer.setHeader("user-agent", "Custom/1.0", .{});
+    try transfer.setHeader("X-TWICE", "c", .{ .source = .author });
+    // no match: appends
+    try transfer.setHeader("X-New", "yes", .{});
+
+    const headers = transfer.req_headers.items;
+    try testing.expectEqual(3, headers.len);
+    try testing.expectEqual("User-Agent", headers[0].name);
+    try testing.expectEqual("Custom/1.0", headers[0].value);
+    try testing.expectEqual("X-Twice", headers[1].name);
+    try testing.expectEqual("c", headers[1].value);
+    try testing.expectEqual(.author, headers[1].source);
+    try testing.expectEqual("X-New", headers[2].name);
+    try testing.expectEqual("yes", headers[2].value);
+}
+
+test "HttpClient: Transfer.appendHeader combines same-source values" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+
+    // no match: appends a new header
+    try transfer.appendHeader("Accept-Language", "en-US", .{});
+    // a higher layer replaces rather than joins
+    try transfer.appendHeader("ACCEPT-LANGUAGE", "fr", .{ .source = .author });
+    // a same-source repeat joins onto the existing value
+    try transfer.appendHeader("accept-language", "de", .{ .source = .author });
+
+    // Cookie joins with its own separator
+    try transfer.appendHeader("Cookie", "a=1", .{ .source = .author });
+    try transfer.appendHeader("COOKIE", "b=2", .{ .source = .author });
+
+    const headers = transfer.req_headers.items;
+    try testing.expectEqual(2, headers.len);
+    try testing.expectEqual("Accept-Language", headers[0].name);
+    try testing.expectEqual("fr, de", headers[0].value);
+    try testing.expectEqual(.author, headers[0].source);
+    try testing.expectEqual("Cookie", headers[1].name);
+    try testing.expectEqual("a=1; b=2", headers[1].value);
+}
+
+test "HttpClient: Transfer header layering" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+
+    try transfer.setHeader("User-Agent", "Lightpanda/1.0", .{});
+    try transfer.setHeader("Sec-Ch-Ua", "\"Lightpanda\";v=\"1\"", .{ .source = .cdp });
+    try transfer.setHeader("If-None-Match", "\"author-etag\"", .{ .source = .author });
+
+    // a lower layer never takes back a header a higher one owns
+    try transfer.setHeader("If-None-Match", "\"cache-etag\"", .{});
+    try testing.expectEqual("\"author-etag\"", transfer.findRequestHeader("if-none-match").?);
+
+    // A client hint sits at the .cdp rank in this fork rather than .fixed: an
+    // author cannot forge one (a Sec-* name is a forbidden header name), but a
+    // driver's own override still lands.
+    try transfer.appendHeader("SEC-CH-UA", "\"Chromium\";v=\"140\"", .{ .source = .author });
+    try testing.expectEqual("\"Lightpanda\";v=\"1\"", transfer.findRequestHeader("sec-ch-ua").?);
+    try transfer.setHeader("sec-ch-ua", "\"Chromium\";v=\"140\"", .{ .source = .cdp });
+    try testing.expectEqual("\"Chromium\";v=\"140\"", transfer.findRequestHeader("sec-ch-ua").?);
+
+    // A User-Agent still has to be printable, but "Mozilla" is not reserved
+    // here the way it is upstream -- every real browser's UA starts with it.
+    testing.expectLog(&.{.http});
+    try transfer.setHeader("user-agent", "bad\x01ua", .{ .source = .author });
+    try testing.expectEqual("Lightpanda/1.0", transfer.findRequestHeader("user-agent").?);
+    try transfer.setHeader("user-agent", "Mozilla/5.0 (X11; Linux x86_64)", .{ .source = .author });
+    try testing.expectEqual("Mozilla/5.0 (X11; Linux x86_64)", transfer.findRequestHeader("user-agent").?);
+
+    // a valid author User-Agent replaces the default
+    try transfer.setHeader("User-Agent", "MyBot/2.0", .{ .source = .author });
+    try testing.expectEqual("MyBot/2.0", transfer.findRequestHeader("user-agent").?);
+}
+
+test "HttpClient: Fetch header overrides restore after one hop" {
+    const original = [_]Transfer.RequestHeader{
+        .{ .name = "User-Agent", .value = "original" },
+        .{ .name = "X-Original", .value = "yes" },
+    };
+    var overridden = [_]Transfer.RequestHeader{
+        .{ .name = "User-Agent", .value = "override" },
+        .{ .name = "X-Override", .value = "yes" },
+    };
+
+    var transfer: Transfer = undefined;
+    transfer.req_headers = .{ .items = &overridden, .capacity = overridden.len };
+    transfer._intercept_original_headers = &original;
+    transfer.restoreInterceptHeaders();
+
+    try testing.expectEqual(2, transfer.req_headers.items.len);
+    try testing.expectEqual("User-Agent", transfer.req_headers.items[0].name);
+    try testing.expectEqual("original", transfer.req_headers.items[0].value);
+    try testing.expectEqual("X-Original", transfer.req_headers.items[1].name);
+    try testing.expectEqual("yes", transfer.req_headers.items[1].value);
+    try testing.expectEqual(null, transfer._intercept_original_headers);
+
+    // idempotent once restored
+    transfer.restoreInterceptHeaders();
+    try testing.expectEqual(2, transfer.req_headers.items.len);
 }
 
 test "HttpClient: fulfillIntercepted survives a done_callback that tears down the owner" {
@@ -3653,8 +4224,8 @@ test "HttpClient: fulfillIntercepted survives a done_callback that tears down th
 }
 
 test "HttpClient: aborting a robots-parked transfer unlinks it from the gate" {
-    // Regression: RobotsGate.pending kept a raw *Transfer with nothing
-    // removing it when a parked transfer was aborted out-of-band
+    // Regression: RobotsGate's single-flight map kept a raw *Transfer with
+    // nothing removing it when a parked transfer was aborted out-of-band
     // (xhr.abort(), owner teardown). The robots.txt resolution would then
     // unpark freed memory.
     var pool = ArenaPool.init(testing.allocator, .{});
@@ -3669,7 +4240,7 @@ test "HttpClient: aborting a robots-parked transfer unlinks it from the gate" {
 
     const robots_url = "http://example.com/robots.txt";
 
-    var waiting: std.ArrayList(*Transfer) = .empty;
+    var transfers: [2]*Transfer = undefined;
     for (0..2) |i| {
         const arena = try pool.acquire(.small, "test");
         const transfer = try arena.create(Transfer);
@@ -3692,21 +4263,22 @@ test "HttpClient: aborting a robots-parked transfer unlinks it from the gate" {
             .start_time = 0,
         };
         try client.transfers.putNoClobber(testing.allocator, transfer.id, transfer);
-        try waiting.append(testing.allocator, transfer);
-        transfer.park(.robots);
+        transfers[i] = transfer;
     }
-    try client.robots.pending.putNoClobber(testing.allocator, robots_url, waiting);
 
-    const t1 = client.robots.pending.get(robots_url).?.items[0];
-    const t2 = client.robots.pending.get(robots_url).?.items[1];
+    _ = try client.robots.single_flight.enter(robots_url, transfers[0], .robots);
+    _ = try client.robots.single_flight.enter(robots_url, transfers[1], .robots);
+
+    const t1 = transfers[0];
+    const t2 = transfers[1];
 
     t1.abort(error.Abort);
-    try testing.expectEqual(1, client.robots.pending.get(robots_url).?.items.len);
-    try testing.expect(client.robots.pending.get(robots_url).?.items[0] == t2);
+    try testing.expectEqual(1, client.robots.single_flight.pending.get(robots_url).?.items.len);
+    try testing.expect(client.robots.single_flight.pending.get(robots_url).?.items[0] == t2);
     try testing.expectEqual(1, client.transfers.count());
 
     t2.abort(error.Abort);
-    try testing.expectEqual(0, client.robots.pending.get(robots_url).?.items.len);
+    try testing.expectEqual(0, client.robots.single_flight.pending.get(robots_url).?.items.len);
     try testing.expectEqual(0, client.transfers.count());
 }
 
@@ -3722,6 +4294,7 @@ test "HttpClient: fulfillIntercepted follows a 3xx redirect" {
     // network.cache and the (empty) connection pool are read on this path.
     var net: Network = undefined;
     net.cache = null;
+    net.adblocker = null;
     // An empty pool makes processTransfer queue the re-issued request
     // instead of putting it on the wire — the queue IS the capture.
     net.available = .{};

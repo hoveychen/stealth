@@ -23,11 +23,13 @@ const js = @import("../js/js.zig");
 
 const EventTarget = @import("EventTarget.zig");
 
-const IS_DEBUG = @import("builtin").mode == .Debug;
-
 const Key = struct {
     target: *EventTarget,
     handler: Handler,
+    // No `Key.fuse` here: upstream packs the handler tag into the top 7 bits of
+    // the target pointer, which caps `Handler` at 128 tags. Ours has 261 (the
+    // measured Chrome handler set), so `Context.hash` mixes instead of fusing --
+    // see the comment there.
 };
 
 const Context = struct {
@@ -39,7 +41,8 @@ const Context = struct {
     /// tags a u8 can hold -- the enum has since outgrown it.)
     pub fn hash(_: @This(), key: Key) u64 {
         const ptr = @intFromPtr(key.target);
-        if (comptime IS_DEBUG) {
+        // Upstream dropped this file's local IS_DEBUG for `lp.IS_DEBUG`.
+        if (comptime lp.IS_DEBUG) {
             lp.assert(ptr < (1 << 48), "Key.hash: pointer overflow", .{ .ptr = ptr });
         }
         return std.hash.int(ptr ^ (@as(u64, @intFromEnum(key.handler)) << 48));

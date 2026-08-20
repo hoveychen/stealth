@@ -4768,3 +4768,64 @@ fix it.
   this change, so the count of unattributed engine hangs went from one to two.
 - **indeed, discord and nowsecure are byte-for-byte unchanged**, which is the
   over-permissiveness check.
+
+## The two "wedges" were crashes
+
+pixiv and claude.ai were recorded above as stations that wedge the engine —
+`Runtime.evaluate` stops answering and never comes back. Both were aborting, and
+they are two different bugs. Full write-up in `results/engine-wedge.md`.
+
+**A dead engine and a stuck one are the same reading from a CDP client.** That is
+the whole reason this sat mis-called across three runs, including a `--fresh`
+re-run added specifically to rule out interference. Polling the process itself
+alongside the page settles it in two samples:
+
+```
+  5s http=200          eval(1+1)=TIMEOUT  cpu=gone
+ 10s http=fetch failed eval(1+1)=TIMEOUT  cpu=gone
+```
+
+`antibot-sweep.mjs` records the child's exit code and signal per station now, and
+prints `CRASHED SIGABRT` where it used to print only the client-side timeout. The
+signal was available on the first sweep; nobody was reading it.
+
+### pixiv — fixed
+
+```
+reason: index out of bounds: index 0, len 0
+src/browser/frame/observers.zig:306 in deliverIntersections
+```
+
+`deliverIntersections` iterates backwards, which handles an observer
+disconnecting *itself* mid-delivery, and its comment says as much. A callback can
+disconnect *other* observers too: two of them dropping both takes the list from 2
+to 0 while the loop still has `i = 0` to go. `deliverResizes`, twenty lines
+above, already carried the length re-check that fixes it — the sibling having the
+guard and this one not is the entire bug.
+
+`intersection_observer/disconnect_all_during_callback.html` reproduces it locally
+and aborts the test binary with the same reason and line as pixiv did.
+
+| | before | after |
+|---|---|---|
+| pixiv | `SIGABRT` mid-load | **pass, 311 nodes — the same 311 Chrome reads** |
+| suite | — | 1264/1264 |
+
+### claude.ai — attributed, not fixed
+
+Survives that fix, and crashes elsewhere:
+
+```
+src/browser/webapi/PerformanceObserver.zig:195 in hasRecords
+    return self._entries.items.len > 0;
+src/browser/js/Scheduler.zig:132 in runQueue
+```
+
+`Performance.scheduleDelivery` queues a task that walks `perf._observers.items`
+calling `hasRecords()` on each; the crash is that read on an observer whose
+memory is gone. `disconnect()` does unregister, so this is not that path — it is
+an observer dying some other way (its arena going with a navigation being the
+obvious candidate) while the longer-lived `Performance` keeps pointing at it, and
+the queued `Performance.deliverObservers` task then runs. A lifetime question
+rather than a bounds check, so it is recorded rather than guessed at. It
+reproduces on every run of the station.

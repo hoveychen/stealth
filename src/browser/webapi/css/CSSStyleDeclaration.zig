@@ -38,6 +38,7 @@ const CSSStyleDeclaration = @This();
 _element: ?*Element = null,
 _properties: std.DoublyLinkedList = .{},
 _is_computed: bool = false,
+_syncing: bool = false,
 /// The frame this declaration belongs to. A computed view's indexed list has
 /// to resolve the element's custom properties through the style manager, and
 /// the accessors behind it (`cs.length`, `cs[0]`, the iterator) are not all
@@ -72,11 +73,14 @@ pub fn parseInlineStyle(self: *CSSStyleDeclaration, frame: *Frame) !void {
         return;
     }
     const el = self._element orelse return;
-    if (el.getAttributeSafe(comptime .wrap("style"))) |attr_value| {
-        var it = CssParser.parseDeclarationsList(attr_value);
-        while (it.next()) |declaration| {
-            try self.applyParsedDeclaration(declaration, frame);
-        }
+    const attr_value = el.getAttributeSafe(comptime .wrap("style")) orelse return;
+    try self.applyDeclarations(attr_value, frame);
+}
+
+fn applyDeclarations(self: *CSSStyleDeclaration, text: []const u8, frame: *Frame) !void {
+    var it = CssParser.parseDeclarationsList(text);
+    while (it.next()) |declaration| {
+        try self.applyParsedDeclaration(declaration, frame);
     }
 }
 
@@ -202,8 +206,9 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
 
     if (self._is_computed) {
         if (self._element) |element| {
+            const style_manager = &element.ownerFrame(frame)._style_manager;
             if (wrapped.eql(comptime .wrap("display"))) {
-                if (frame._style_manager.hasDisplayNone(element)) return "none";
+                if (style_manager.hasDisplayNone(element)) return "none";
                 return resolvedDisplay(element, frame);
             } else if (wrapped.eql(comptime .wrap("visibility"))) {
                 // The cascade, not the style attribute: an `!important` rule
@@ -211,8 +216,10 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
                 // `visibility:hidden` under `.tv{visibility:visible!important}`
                 // computes to `visible`). This is the same answer innerText
                 // reads, so the two cannot disagree, and it keeps `collapse`
-                // distinct from `hidden` the way Chrome reports it.
-                const value = frame._style_manager.computedVisibility(element) orelse
+                // distinct from `hidden` the way Chrome reports it. Upstream's
+                // hasVisibilityHiddenInherited() cannot express the !important
+                // case or tell `collapse` from `hidden`, so it is not used here.
+                const value = style_manager.computedVisibility(element) orelse
                     StyleManager.Visibility.visible;
                 return value.keyword();
             }
@@ -225,14 +232,19 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
             if (self._element) |element| {
                 // Resolve inline `style=` declarations through the element's
                 // parsed inline style, so computed values match `el.style`.
-                if (frame._style_manager.inlineStyleValue(element, wrapped)) |value| {
-                    return frame._style_manager.substituteVars(element, value) orelse "";
+                const style_manager = &element.ownerFrame(frame)._style_manager;
+                if (style_manager.inlineStyleValue(element, wrapped)) |value| {
+                    // var() is substituted at computed-value time; the
+                    // specified value `el.style` hands out keeps its var() text.
+                    return style_manager.substituteVars(element, value) orelse "";
                 }
 
                 // Computed width/height must agree with the synthetic layout
-                // metrics (offsetWidth/getBoundingClientRect). Returning ""
-                // makes measurement code see contradictory sizes — jQuery's
-                // "shrink text until it fits" loops then never terminate.
+                // metrics. Returning "" makes measurement code see
+                // contradictory sizes — jQuery's "shrink text until it fits"
+                // loops then never terminate. jQuery's .width() reads this
+                // value, so it must also carry clientWidth's content fallback
+                // or append-until-wide marquee loops never terminate.
                 if (wrapped.eql(comptime .wrap("width"))) {
                     return resolvedDimension(element, .width, frame);
                 }
@@ -263,13 +275,13 @@ pub fn resolvedDisplay(element: *Element, frame: *Frame) []const u8 {
 }
 
 fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame: *Frame) []const u8 {
-    if (!element.checkVisibilityCached(null, frame)) {
+    var visibility_cache: Element.VisibilityCache = .{};
+    if (!element.checkVisibilityCached(&visibility_cache, frame)) {
         return "auto";
     }
-    const dims = element.getElementDimensions(frame);
     const value = switch (dimension) {
-        .width => dims.width,
-        .height => dims.height,
+        .width => element.getClientWidthWithCache(frame, &visibility_cache),
+        .height => element.getClientHeightWithCache(frame, &visibility_cache),
     };
     return std.fmt.allocPrint(frame.local_arena, "{d}px", .{value}) catch "auto";
 }
@@ -369,7 +381,34 @@ fn removePropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, fra
 fn syncStyleAttribute(self: *CSSStyleDeclaration, frame: *Frame) !void {
     const element = self._element orelse return;
     const css_text = try self.getCssText(frame);
+    self._syncing = true;
+    defer self._syncing = false;
     try element.setAttributeSafe(comptime .wrap("style"), .wrap(css_text), frame);
+}
+
+// The element's style attribute changed (null: removed)
+pub fn styleAttributeChanged(self: *CSSStyleDeclaration, text: ?[]const u8, frame: *Frame) !void {
+    if (self._syncing) {
+        // this was us making the change internally, automatically in-sync
+        return;
+    }
+    // ok, this change was from the outside, e.g. via setAttribute('style', ....)
+    // we need to get this declaration back in sync
+    self.clearProperties(frame);
+    if (text) |t| {
+        try self.applyDeclarations(t, frame);
+    }
+}
+
+fn clearProperties(self: *CSSStyleDeclaration, frame: *Frame) void {
+    var node = self._properties.first;
+    while (node) |n| {
+        const next = n.next;
+        const prop = Property.fromNodeLink(n);
+        self._properties.remove(n);
+        frame._factory.destroy(prop);
+        node = next;
+    }
 }
 
 pub fn getFloat(self: *const CSSStyleDeclaration, frame: *Frame) []const u8 {
@@ -388,21 +427,9 @@ pub fn getCssText(self: *const CSSStyleDeclaration, frame: *Frame) ![]const u8 {
 }
 
 pub fn setCssText(self: *CSSStyleDeclaration, text: []const u8, frame: *Frame) !void {
-    // Clear existing properties
-    var node = self._properties.first;
-    while (node) |n| {
-        const next = n.next;
-        const prop = Property.fromNodeLink(n);
-        self._properties.remove(n);
-        frame._factory.destroy(prop);
-        node = next;
-    }
+    self.clearProperties(frame);
 
-    // Parse and set new properties
-    var it = CssParser.parseDeclarationsList(text);
-    while (it.next()) |declaration| {
-        try self.applyParsedDeclaration(declaration, frame);
-    }
+    try self.applyDeclarations(text, frame);
     try self.syncStyleAttribute(frame);
 }
 
@@ -1036,8 +1063,8 @@ fn borderWidth(surface: Surface) []const u8 {
 
 fn getDefaultDisplay(element: *const Element) []const u8 {
     switch (element._type) {
-        .html => |html| {
-            return switch (html._type) {
+        .html => {
+            return switch (element.subtype(Element.Html)._type) {
                 .anchor, .br, .span, .label, .time, .font, .mod, .quote => "inline",
                 .body, .div, .dl, .p, .heading, .form, .button, .canvas, .details, .dialog, .embed, .head, .html, .hr, .iframe, .img, .input, .li, .link, .meta, .ol, .option, .script, .select, .slot, .style, .template, .textarea, .title, .ul, .media, .area, .base, .datalist, .directory, .menu, .frame_element, .fieldset, .frameset, .legend, .map, .marquee, .meter, .object, .optgroup, .output, .param, .picture, .pre, .progress, .source, .table, .table_caption, .table_cell, .table_col, .table_row, .table_section, .track => "block",
                 .generic, .custom, .unknown, .data => blk: {
@@ -1072,8 +1099,8 @@ fn isInlineTag(tag_name: []const u8) bool {
 
 fn getDefaultColor(element: *const Element) []const u8 {
     switch (element._type) {
-        .html => |html| {
-            return switch (html._type) {
+        .html => {
+            return switch (element.subtype(Element.Html)._type) {
                 .anchor => "rgb(0, 0, 238)", // blue
                 else => "rgb(0, 0, 0)",
             };

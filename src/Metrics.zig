@@ -31,8 +31,10 @@ script_errors: Counter = .{},
 js_errors: CounterEnum("kind", enum { js_exception, other }) = .{},
 arena_hit: CounterEnum("size", @import("ArenaPool.zig").BucketSize) = .{},
 arena_miss: CounterEnum("size", @import("ArenaPool.zig").BucketSize) = .{},
+arena_inflight: GaugeEnum("size", @import("ArenaPool.zig").BucketSize) = .{},
 arena_memory_bytes: Gauge = .{},
 navigate: CounterEnum("type", @import("telemetry/telemetry.zig").Event.Navigate.Context) = .{},
+js_heap_physical_bytes: Gauge = .{},
 js_heap_size_bytes: Histogram(&.{
     4 * 1024 * 1024,
     8 * 1024 * 1024,
@@ -87,8 +89,10 @@ const help = .{
     .js_errors = "Uncaught JS errors (script exceptions, listener/callback throws, unhandled promise rejections); kind=js_exception is a thrown JS value, other is an internal failure (e.g. compilation error, terminated execution)",
     .arena_hit = "Arena pool acquisitions served from the free list",
     .arena_miss = "Arena pool acquisitions that had to allocate a new arena",
+    .arena_inflight = "Arenas currently checked out of the pool. Above the bucket's max, every acquisition is a miss and every release is discarded",
     .arena_memory_bytes = "Backing memory held by pooled arenas, including capacity retained on the free list",
     .navigate = "Navigations by initiating frame type",
+    .js_heap_physical_bytes = "V8 heap physical size summed over every live isolate (one per CDP connection).",
     .js_heap_size_bytes = "V8 heap physical size, sampled when a page is closed",
     .http_requests = "HTTP requests submitted, by dispatch mode (excludes internal requests like robots.txt)",
     .http_status = "Final HTTP response status category (redirects counted once, at the final hop)",
@@ -158,11 +162,45 @@ const Gauge = struct {
         _ = @atomicRmw(isize, &self.value, .Sub, @intCast(n), .monotonic);
     }
 
+    // For callers that track an absolute value and report the change since
+    // their last report. There's no set(): the gauge is a sum over threads,
+    // so a caller can only move its own contribution.
+    pub fn add(self: *Gauge, n: i64) void {
+        _ = @atomicRmw(isize, &self.value, .Add, @intCast(n), .monotonic);
+    }
+
     fn write(self: *const Gauge, comptime name: []const u8, comptime help_text: []const u8, writer: *std.Io.Writer) !void {
         try writer.writeAll("# HELP " ++ name ++ " " ++ help_text ++ "\n" ++ "# TYPE " ++ name ++ " gauge\n");
         try writer.print(name ++ " {d}\n", .{@atomicLoad(isize, &self.value, .monotonic)});
     }
 };
+
+fn GaugeEnum(comptime label: []const u8, comptime T: type) type {
+    return struct {
+        values: std.enums.EnumArray(T, Gauge) = .initFill(.{}),
+
+        pub const Tag = T;
+        pub const label_name = label;
+
+        const Self = @This();
+
+        pub fn incr(self: *Self, tag: T) void {
+            self.values.getPtr(tag).incr();
+        }
+
+        pub fn decr(self: *Self, tag: T) void {
+            self.values.getPtr(tag).decr();
+        }
+
+        fn write(self: *const Self, comptime name: []const u8, comptime help_text: []const u8, writer: *std.Io.Writer) !void {
+            try writer.writeAll("# HELP " ++ name ++ " " ++ help_text ++ "\n" ++ "# TYPE " ++ name ++ " gauge\n");
+            inline for (comptime std.enums.values(Tag)) |tag| {
+                const value = @atomicLoad(isize, &self.values.getPtrConst(tag).value, .monotonic);
+                try writer.print(name ++ "{{" ++ label ++ "=\"" ++ @tagName(tag) ++ "\"}} {d}\n", .{value});
+            }
+        }
+    };
+}
 
 fn CounterEnum(comptime label: []const u8, comptime T: type) type {
     return struct {

@@ -25,11 +25,11 @@ const Node = @import("../webapi/Node.zig");
 const Element = @import("../webapi/Element.zig");
 const CData = @import("../webapi/CData.zig");
 
+pub const QualName = h5e.QualName;
 pub const AttributeIterator = h5e.AttributeIterator;
 
 const Allocator = std.mem.Allocator;
 const TERMINATE_CHECK_INTERVAL = 1024;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 pub const ParsedNode = struct {
     node: *Node,
@@ -77,6 +77,7 @@ buf: std.ArrayList(u8),
 // innerHTML and DOMParser (per spec). Set from Options at init.
 allow_declarative_shadow: bool = false,
 
+xml_error: bool = false,
 terminated: bool = false,
 appends_until_terminate_check: u16 = TERMINATE_CHECK_INTERVAL,
 
@@ -134,7 +135,7 @@ fn appendTextChunk(self: *Parser, parent: *Node, txt: []const u8) !void {
             // Existing text sibling without a matching pending_text. Seed the
             // buf from its _data and register pending so subsequent chunks
             // accumulate cheaply.
-            const cdata = tn._proto;
+            const cdata = tn.asCData();
             const existing = cdata.getData().str();
             try self.buf.ensureTotalCapacity(self.arena, existing.len + txt.len);
             self.buf.appendSliceAssumeCapacity(existing);
@@ -150,7 +151,7 @@ fn appendTextChunk(self: *Parser, parent: *Node, txt: []const u8) !void {
     try self.frame.appendNew(parent, new_text);
     self.pending_text = .{
         .parent = parent,
-        .text_node = new_text.is(CData.Text).?._proto,
+        .text_node = new_text.is(CData.Text).?.asCData(),
     };
 }
 
@@ -253,7 +254,7 @@ pub fn parseXML(self: *Parser, xml: []const u8) void {
         createXMLElementCallback,
         getDataCallback,
         appendCallback,
-        parseErrorCallback,
+        xmlParseErrorCallback,
         popCallback,
         createCommentCallback,
         createProcessingInstruction,
@@ -440,6 +441,21 @@ fn parseErrorCallback(ctx: *anyopaque, err: h5e.StringSlice) callconv(.c) void {
     // std.debug.print("PEC: {s}\n", .{err.slice()});
 }
 
+// xml5ever xml error callback indicating a well-formedness violating.
+fn xmlParseErrorCallback(ctx: *anyopaque, err: h5e.StringSlice) callconv(.c) void {
+    const self: *Parser = @ptrCast(@alignCast(ctx));
+    const msg = err.slice();
+    if (std.mem.startsWith(u8, msg, "Bad character") and msg.len > "Bad character".len) {
+        // discouraged by legal code point
+        return;
+    }
+    if (std.mem.startsWith(u8, msg, "Invalid character reference")) {
+        // xml5ever doesn't know about this entity, but it could be valid
+        return;
+    }
+    self.xml_error = true;
+}
+
 fn popCallback(ctx: *anyopaque, node_ref: *anyopaque) callconv(.c) void {
     const self: *Parser = @ptrCast(@alignCast(ctx));
     if (self.terminated) {
@@ -501,10 +517,17 @@ fn _createElementCallbackWithDefaultnamespace(ctx: *anyopaque, data: *anyopaque,
 }
 fn _createElementCallback(self: *Parser, data: *anyopaque, qname: h5e.QualName, attributes: h5e.AttributeIterator, default_namespace: Element.Namespace) !*anyopaque {
     const frame = self.frame;
-    const name = qname.local.slice();
+    // The LOCAL name, not the qualified one: it is what picks the element's
+    // type out of the factory's dispatch table below, so `<s:clipPath>` has to
+    // arrive as `clipPath` or it resolves to an unknown element. The prefix the
+    // document wrote is filed separately, further down, for `tagName` and
+    // `prefix` to read back -- upstream instead passes the qualified name and
+    // keeps no side table, which both loses the type and, with the table still
+    // in place, would compose the prefix twice (`s:s:clipPath`).
+    const local = qname.local.slice();
     const namespace_string = qname.ns.slice();
     const namespace = if (namespace_string.len == 0) default_namespace else Element.Namespace.parse(namespace_string);
-    const node = try Frame.node_factory.createElementNS(frame, namespace, name, attributes);
+    const node = try Frame.node_factory.createElementNS(frame, namespace, local, attributes);
 
     // `Namespace` has no room for a uri it does not know, so a declared one has
     // to go in the frame lookup that `Element.getNamespaceUri` falls back to --
@@ -636,7 +659,7 @@ fn getTemplateContentsCallback(ctx: *anyopaque, target_ref: *anyopaque) callconv
 
 fn _getTemplateContentsCallback(self: *Parser, node: *Node) !*anyopaque {
     const element = node.as(Element);
-    const template = element._type.html.is(Element.Html.Template) orelse unreachable;
+    const template = element.subtype(Element.Html).is(Element.Html.Template) orelse unreachable;
     const content_node = template.getContent().asNode();
 
     // Create a ParsedNode wrapper for the content DocumentFragment
@@ -717,10 +740,10 @@ fn _appendCallback(self: *Parser, parent: *Node, node_or_text: h5e.NodeOrText) !
                 // in the wild, and I'm not sure why. In debug, let's crash so
                 // we can try to figure it out. In release, let's disconnect
                 // the child first.
-                if (comptime IS_DEBUG) {
+                if (comptime lp.IS_DEBUG) {
                     unreachable;
                 }
-                self.frame.removeNode(previous_parent, child, .{ .will_be_reconnected = parent.isConnected() });
+                self.frame.removeNode(previous_parent, child, .{ .reconnect_to = parent });
             }
             try self.frame.appendNew(parent, child);
         },
@@ -793,7 +816,7 @@ fn _appendBeforeSiblingCallback(self: *Parser, sibling: *Node, node_or_text: h5e
                 // A custom element constructor may have inserted the node into the
                 // DOM before the parser officially places it (e.g. via foster
                 // parenting). Detach it first so insertNodeRelative's assertion holds.
-                self.frame.removeNode(previous_parent, child, .{ .will_be_reconnected = parent.isConnected() });
+                self.frame.removeNode(previous_parent, child, .{ .reconnect_to = parent });
             }
             break :blk child;
         },

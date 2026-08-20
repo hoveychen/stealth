@@ -430,7 +430,7 @@ pub const TaskSignal = struct {
             AbortSignal{ ._proto = undefined },
             TaskSignal{ ._proto = undefined, ._priority = priority },
         });
-        signal._proto._proto._type = .{ .abort_signal = signal._proto };
+        signal._proto._proto._type = .abort_signal;
         signal._proto._type = .{ .task_signal = signal };
         return signal;
     }

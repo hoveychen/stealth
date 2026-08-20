@@ -18,22 +18,22 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const js = @import("../../js/js.zig");
-const reflect = @import("../../reflect.zig");
 
-const global_event_handlers = @import("../global_event_handlers.zig");
-const GlobalEventHandler = global_event_handlers.Handler;
+const js = @import("../../js/js.zig");
+const Factory = @import("../../Factory.zig");
 
 const Frame = @import("../../Frame.zig");
 const StyleManager = @import("../../StyleManager.zig");
+const reflection = @import("reflection.zig");
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
-const popover = @import("popover.zig");
 const dictionary = @import("../dictionary.zig");
 const EditContext = @import("../EditContext.zig");
 const ElementInternals = @import("ElementInternals.zig");
+const global_event_handlers = @import("../global_event_handlers.zig");
 const CustomElementDefinition = @import("../CustomElementDefinition.zig");
 
+const popover = @import("popover.zig");
 pub const Anchor = @import("html/Anchor.zig");
 pub const Area = @import("html/Area.zig");
 pub const Base = @import("html/Base.zig");
@@ -107,14 +107,14 @@ pub const Unknown = @import("html/Unknown.zig");
 
 const log = lp.log;
 const String = lp.String;
-const IS_DEBUG = @import("builtin").mode == .Debug;
+const GlobalEventHandler = global_event_handlers.Handler;
 
 const HtmlElement = @This();
 
 pub const Proto = Element;
 
 _type: Type,
-_proto: *Element,
+_proto_canary: if (lp.IS_DEBUG) *Element else void = undefined,
 
 // Special constructor for custom elements (autonomous, `extends HTMLElement`).
 // Two paths:
@@ -124,6 +124,10 @@ _proto: *Element,
 //    which custom element class was invoked; look it up in the registry.
 pub fn construct(new_target: js.Function, frame: *Frame) !*Element {
     if (frame._upgrading_element) |node| {
+        if (frame._upgrading_consumed) {
+            return error.TypeError;
+        }
+        frame._upgrading_consumed = true;
         return node.is(Element) orelse return error.IllegalConstructor;
     }
     return Frame.node_factory.constructCustomElement(frame, new_target);
@@ -135,102 +139,190 @@ pub fn construct(new_target: js.Function, frame: *Frame) !*Element {
 // constructors routed here.
 pub fn upgradeConstruct(frame: *Frame) !*Element {
     const node = frame._upgrading_element orelse return error.TypeError;
+    if (frame._upgrading_consumed) {
+        return error.TypeError;
+    }
+    frame._upgrading_consumed = true;
     return node.is(Element) orelse return error.TypeError;
 }
 
-pub const Type = union(enum) {
-    anchor: *Anchor,
-    area: *Area,
-    base: *Base,
-    body: *Body,
-    br: *BR,
-    button: *Button,
-    canvas: *Canvas,
-    custom: *Custom,
-    data: *Data,
-    datalist: *DataList,
-    details: *Details,
-    dialog: *Dialog,
-    directory: *Directory,
-    menu: *Menu,
-    frame_element: *FrameElement,
-    div: *Div,
-    dl: *DList,
-    embed: *Embed,
-    fieldset: *FieldSet,
-    font: *Font,
-    form: *Form,
-    frameset: *FrameSet,
-    generic: *Generic,
-    heading: *Heading,
-    head: *Head,
-    html: *Html,
-    hr: *HR,
-    img: *Image,
-    iframe: *IFrame,
-    input: *Input,
-    label: *Label,
-    legend: *Legend,
-    li: *LI,
-    link: *Link,
-    map: *Map,
-    marquee: *Marquee,
-    media: *Media,
-    meta: *Meta,
-    meter: *Meter,
-    mod: *Mod,
-    object: *Object,
-    ol: *OL,
-    optgroup: *OptGroup,
-    option: *Option,
-    output: *Output,
-    p: *Paragraph,
-    picture: *Picture,
-    param: *Param,
-    pre: *Pre,
-    progress: *Progress,
-    quote: *Quote,
-    script: *Script,
-    select: *Select,
-    slot: *Slot,
-    source: *Source,
-    span: *Span,
-    style: *Style,
-    table: *Table,
-    table_caption: *TableCaption,
-    table_cell: *TableCell,
-    table_col: *TableCol,
-    table_row: *TableRow,
-    table_section: *TableSection,
-    template: *Template,
-    textarea: *TextArea,
-    time: *Time,
-    title: *Title,
-    track: *Track,
-    ul: *UL,
-    unknown: *Unknown,
+pub const Type = enum(u8) {
+    anchor,
+    area,
+    base,
+    body,
+    br,
+    button,
+    canvas,
+    custom,
+    data,
+    datalist,
+    details,
+    dialog,
+    directory,
+    menu,
+    frame_element,
+    div,
+    dl,
+    embed,
+    fieldset,
+    font,
+    form,
+    frameset,
+    generic,
+    heading,
+    head,
+    html,
+    hr,
+    img,
+    iframe,
+    input,
+    label,
+    legend,
+    li,
+    link,
+    map,
+    marquee,
+    media,
+    meta,
+    meter,
+    mod,
+    object,
+    ol,
+    optgroup,
+    option,
+    output,
+    p,
+    picture,
+    param,
+    pre,
+    progress,
+    quote,
+    script,
+    select,
+    slot,
+    source,
+    span,
+    style,
+    table,
+    table_caption,
+    table_cell,
+    table_col,
+    table_row,
+    table_section,
+    template,
+    textarea,
+    time,
+    title,
+    track,
+    ul,
+    unknown,
 };
 
+pub fn Subtype(comptime tag: Type) type {
+    return switch (tag) {
+        .anchor => Anchor,
+        .area => Area,
+        .base => Base,
+        .body => Body,
+        .br => BR,
+        .button => Button,
+        .canvas => Canvas,
+        .custom => Custom,
+        .data => Data,
+        .datalist => DataList,
+        .details => Details,
+        .dialog => Dialog,
+        .directory => Directory,
+        .menu => Menu,
+        .frame_element => FrameElement,
+        .div => Div,
+        .dl => DList,
+        .embed => Embed,
+        .fieldset => FieldSet,
+        .font => Font,
+        .form => Form,
+        .frameset => FrameSet,
+        .generic => Generic,
+        .heading => Heading,
+        .head => Head,
+        .html => Html,
+        .hr => HR,
+        .img => Image,
+        .iframe => IFrame,
+        .input => Input,
+        .label => Label,
+        .legend => Legend,
+        .li => LI,
+        .link => Link,
+        .map => Map,
+        .marquee => Marquee,
+        .media => Media,
+        .meta => Meta,
+        .meter => Meter,
+        .mod => Mod,
+        .object => Object,
+        .ol => OL,
+        .optgroup => OptGroup,
+        .option => Option,
+        .output => Output,
+        .p => Paragraph,
+        .picture => Picture,
+        .param => Param,
+        .pre => Pre,
+        .progress => Progress,
+        .quote => Quote,
+        .script => Script,
+        .select => Select,
+        .slot => Slot,
+        .source => Source,
+        .span => Span,
+        .style => Style,
+        .table => Table,
+        .table_caption => TableCaption,
+        .table_cell => TableCell,
+        .table_col => TableCol,
+        .table_row => TableRow,
+        .table_section => TableSection,
+        .template => Template,
+        .textarea => TextArea,
+        .time => Time,
+        .title => Title,
+        .track => Track,
+        .ul => UL,
+        .unknown => Unknown,
+    };
+}
+
+pub fn subtype(self: *const HtmlElement, comptime T: type) *T {
+    const offset = comptime Factory.chainOffsetOf(T, T) - Factory.chainOffsetOf(T, HtmlElement);
+    const sub: *T = @ptrFromInt(@intFromPtr(self) + offset);
+    if (comptime lp.IS_DEBUG) {
+        // This pointer dance only works because the factory allocates the chain
+        // in a contiguous block of memory. In debug, we assert this holds via
+        // the _proto_canary back pointer.
+        std.debug.assert(Factory.protoOf(sub) == self);
+    }
+    return sub;
+}
+
 pub fn is(self: *HtmlElement, comptime T: type) ?*T {
-    inline for (@typeInfo(Type).@"union".fields) |f| {
-        if (@field(Type, f.name) == self._type) {
-            if (f.type == T) {
-                return &@field(self._type, f.name);
+    switch (self._type) {
+        inline else => |tag| {
+            if (Subtype(tag) == T) {
+                return self.subtype(T);
             }
-            if (f.type == *T) {
-                return @field(self._type, f.name);
-            }
-        }
+        },
     }
     return null;
 }
 
 pub fn asElement(self: *HtmlElement) *Element {
-    return self._proto;
+    return Factory.protoOf(self);
 }
 
 pub fn asNode(self: *HtmlElement) *Node {
-    return self._proto.asNode();
+    return self.asElement().asNode();
 }
 
 pub fn asEventTarget(self: *HtmlElement) *@import("../EventTarget.zig") {
@@ -332,7 +424,7 @@ pub fn attachInternals(self: *HtmlElement, exec: *const js.Execution) !*ElementI
         .worker => unreachable,
     };
 
-    const element = self._proto;
+    const element = Factory.protoOf(self);
     const definition = definitionOf(element, frame) orelse return dictionary.throwDom(
         "NotSupportedError",
         "Failed to execute 'attachInternals' on 'HTMLElement': " ++
@@ -369,13 +461,20 @@ fn definitionOf(element: *Element, frame: *Frame) ?*CustomElementDefinition {
 
 pub fn click(self: *HtmlElement, frame: *Frame) !void {
     switch (self._type) {
-        inline .button, .input, .textarea, .select => |i| {
-            if (i.getDisabled()) {
+        inline .button, .input, .textarea, .select => |tag| {
+            if (self.subtype(Subtype(tag)).getDisabled()) {
                 return;
             }
         },
         else => {},
     }
+
+    const flags = &self.asElement()._flags;
+    if (flags.click_in_progress) {
+        return;
+    }
+    flags.click_in_progress = true;
+    defer flags.click_in_progress = false;
 
     const event = (try @import("../event/MouseEvent.zig").init("click", .{
         .bubbles = true,
@@ -395,8 +494,8 @@ pub fn click(self: *HtmlElement, frame: *Frame) !void {
     if (event._prevent_default == false) {
         // toggle the popover_target
         const explicit: ?*Element = switch (self._type) {
-            .button => |b| b._popover_target,
-            .input => |i| i._popover_target,
+            .button => self.subtype(Button)._popover_target,
+            .input => self.subtype(Input)._popover_target,
             else => null,
         };
         try popover.runInvokerActivation(self, explicit, frame);
@@ -496,9 +595,11 @@ pub fn setTabIndex(self: *HtmlElement, value: i32, frame: *Frame) !void {
 }
 
 pub fn getDir(self: *HtmlElement) []const u8 {
-    return reflectEnumerated(self.asElement().getAttributeSafe(comptime .wrap("dir")), &.{ "ltr", "rtl", "auto" }, "", "").?;
+    return reflection.enumeratedValue(self.asElement().getAttributeSafe(comptime .wrap("dir")), &.{ "ltr", "rtl", "auto" }, "", "").?;
 }
 
+// An enumerated attribute reflects the value it was given, invalid or not --
+// the keyword folding happens on the way out, in getDir.
 pub fn setDir(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("dir"), .wrap(value), frame);
 }
@@ -668,7 +769,7 @@ pub fn getAutocapitalize(self: *HtmlElement) []const u8 {
     if (value.len == 0) return "";
     if (std.ascii.eqlIgnoreCase(value, "off")) return "none";
     if (std.ascii.eqlIgnoreCase(value, "on")) return "sentences";
-    return reflectEnumerated(value, &.{ "none", "sentences", "words", "characters" }, "", "sentences").?;
+    return reflection.enumeratedValue(value, &.{ "none", "sentences", "words", "characters" }, "", "sentences").?;
 }
 
 pub fn setAutocapitalize(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
@@ -677,7 +778,7 @@ pub fn setAutocapitalize(self: *HtmlElement, value: []const u8, frame: *Frame) !
 
 pub fn getEnterKeyHint(self: *HtmlElement) []const u8 {
     const value = self.asElement().getAttributeSafe(comptime .wrap("enterkeyhint"));
-    return reflectEnumerated(value, &.{ "enter", "done", "go", "next", "previous", "search", "send" }, "", "").?;
+    return reflection.enumeratedValue(value, &.{ "enter", "done", "go", "next", "previous", "search", "send" }, "", "").?;
 }
 
 pub fn setEnterKeyHint(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
@@ -686,7 +787,7 @@ pub fn setEnterKeyHint(self: *HtmlElement, value: []const u8, frame: *Frame) !vo
 
 pub fn getInputMode(self: *HtmlElement) []const u8 {
     const value = self.asElement().getAttributeSafe(comptime .wrap("inputmode"));
-    return reflectEnumerated(value, &.{ "none", "text", "tel", "url", "email", "numeric", "decimal", "search" }, "", "").?;
+    return reflection.enumeratedValue(value, &.{ "none", "text", "tel", "url", "email", "numeric", "decimal", "search" }, "", "").?;
 }
 
 pub fn setInputMode(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
@@ -695,7 +796,7 @@ pub fn setInputMode(self: *HtmlElement, value: []const u8, frame: *Frame) !void 
 
 pub fn getVirtualKeyboardPolicy(self: *HtmlElement) []const u8 {
     const value = self.asElement().getAttributeSafe(.wrap("virtualkeyboardpolicy"));
-    return reflectEnumerated(value, &.{ "auto", "manual" }, "", "").?;
+    return reflection.enumeratedValue(value, &.{ "auto", "manual" }, "", "").?;
 }
 
 pub fn setVirtualKeyboardPolicy(self: *HtmlElement, value: []const u8, frame: *Frame) !void {
@@ -711,7 +812,7 @@ const CONTENT_EDITABLE = "contenteditable";
 pub fn getContentEditable(self: *HtmlElement) []const u8 {
     const value = self.asElement().getAttributeSafe(.wrap(CONTENT_EDITABLE)) orelse return "inherit";
     if (value.len == 0) return "true";
-    return reflectEnumerated(value, &.{ "true", "false", "plaintext-only" }, "inherit", "inherit").?;
+    return reflection.enumeratedValue(value, &.{ "true", "false", "plaintext-only" }, "inherit", "inherit").?;
 }
 
 // The setter validates: "inherit" removes the attribute, the three keywords
@@ -819,9 +920,9 @@ fn setAttributeListener(
     listener_callback: ?js.Function.Global,
     frame: *Frame,
 ) !void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.event, "Html.setAttributeListener", .{
-            .type = std.meta.activeTag(self._type),
+            .type = self._type,
             .listener_type = listener_type,
         });
     }
@@ -1700,55 +1801,14 @@ pub fn getOnWebkitTransitionEnd(self: *HtmlElement, frame: *Frame) !?js.Function
     return self.getAttributeFunction(.onwebkittransitionend, frame);
 }
 
-// HTML integer parsing is lax
+// HTML "rules for parsing integers", for callers that want an i32 (tabindex);
+// out-of-range values parse as failure.
 pub fn parseInteger(input: []const u8) ?i32 {
-    var normalized = std.mem.trimStart(u8, input, "\t\n\r\x0c ");
-    if (normalized.len == 0) {
-        return null;
-    }
-
-    var negative = false;
-    if (normalized[0] == '-') {
-        negative = true;
-        normalized = normalized[1..];
-    } else if (normalized[0] == '+') {
-        normalized = normalized[1..];
-    }
-
-    if (normalized.len == 0 or std.ascii.isDigit(normalized[0]) == false) {
-        return null;
-    }
-
-    var i: usize = 0;
-    var value: i64 = 0;
-    while (i < normalized.len and std.ascii.isDigit(normalized[i])) : (i += 1) {
-        value = value * 10 + (normalized[i] - '0');
-        if (value > 2147483648) {
-            return null;
-        }
-    }
-
-    if (negative) {
-        value = -value;
-    }
-
-    if (value < -2147483648 or value > 2147483647) {
+    const value = reflection.parseInteger(input) orelse return null;
+    if (value < std.math.minInt(i32) or value > std.math.maxInt(i32)) {
         return null;
     }
     return @intCast(value);
-}
-
-pub fn reflectEnumerated(
-    value: ?[]const u8,
-    keywords: []const []const u8,
-    missing: ?[]const u8,
-    invalid: ?[]const u8,
-) ?[]const u8 {
-    const v = value orelse return missing;
-    for (keywords) |keyword| {
-        if (std.ascii.eqlIgnoreCase(v, keyword)) return keyword;
-    }
-    return invalid;
 }
 
 const InnerTextState = struct {
@@ -1885,30 +1945,36 @@ fn collectInnerText(self: *HtmlElement, state: *InnerTextState) std.Io.Writer.Er
     var it = el.asNode().childrenIterator();
     while (it.next()) |child| {
         switch (child._type) {
-            .element => |e| switch (e._type) {
-                .svg, .mathml, .plain => {},
-                .html => |he| {
-                    const tag = e.getTag();
-                    switch (child_filter) {
-                        .none => {},
-                        .select => if (tag != .option and tag != .optgroup) continue,
-                        .optgroup => if (tag != .option) continue,
-                    }
-                    try handleChildElement(he, tag, state, &saw_cell, &saw_row);
-                },
+            .element => {
+                const e = child.subtype(Node.Element);
+                switch (e._type) {
+                    .svg, .mathml, .plain => {},
+                    .html => {
+                        const tag = e.getTag();
+                        switch (child_filter) {
+                            .none => {},
+                            .select => if (tag != .option and tag != .optgroup) continue,
+                            .optgroup => if (tag != .option) continue,
+                        }
+                        try handleChildElement(e.subtype(HtmlElement), tag, state, &saw_cell, &saw_row);
+                    },
+                }
             },
-            .cdata => |c| switch (c._type) {
-                .text => {
-                    if (child_filter != .none) {
-                        // Text directly inside <select>/<optgroup> is skipped
-                        continue;
-                    }
-                    if (table_ctx and isAllAsciiWhitespace(c.getData().str())) {
-                        continue;
-                    }
-                    try writeText(c, state);
-                },
-                .comment, .cdata_section, .processing_instruction => {},
+            .cdata => {
+                const c = child.subtype(Node.CData);
+                switch (c._type) {
+                    .text => {
+                        if (child_filter != .none) {
+                            // Text directly inside <select>/<optgroup> is skipped
+                            continue;
+                        }
+                        if (table_ctx and isAllAsciiWhitespace(c.getData().str())) {
+                            continue;
+                        }
+                        try writeText(c, state);
+                    },
+                    .comment, .cdata_section, .processing_instruction => {},
+                }
             },
             else => {},
         }
@@ -2303,7 +2369,7 @@ fn mergeTextNodes(left_node: *Node, right_node: *Node, frame: *Frame) !bool {
 
     if (right_node.parentNode()) |p| {
         // remove right node
-        frame.removeNode(p, right_node, .{ .will_be_reconnected = false });
+        frame.removeNode(p, right_node, .{ .reconnect_to = null });
     }
     return true;
 }
@@ -2555,17 +2621,17 @@ pub const Build = struct {
     // Calls `func_name` with `args` on the most specific type where it is
     // implement. This could be on the HtmlElement itself.
     pub fn call(self: *const HtmlElement, comptime func_name: []const u8, args: anytype) !bool {
-        inline for (@typeInfo(HtmlElement.Type).@"union".fields) |f| {
-            if (@field(HtmlElement.Type, f.name) == self._type) {
+        switch (self._type) {
+            inline else => |tag| {
+                const S = Subtype(tag);
                 // The inner type implements this function. Call it and we're done.
-                const S = reflect.Struct(f.type);
                 if (@hasDecl(S, "Build")) {
                     if (@hasDecl(S.Build, func_name)) {
                         try @call(.auto, @field(S.Build, func_name), args);
                         return true;
                     }
                 }
-            }
+            },
         }
 
         if (@hasDecl(HtmlElement.Build, func_name)) {

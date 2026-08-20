@@ -489,7 +489,7 @@ pub const RelativeOrientationSensor = Leaf("RelativeOrientationSensor", Orientat
 // Ties a freshly chained sensor to its EventTarget and records which concrete
 // sensor it is, so both levels resolve down to the leaf's JS object.
 fn link(sensor: *Sensor, typ: Sensor.Type) void {
-    sensor._proto._type = .{ .sensor = sensor };
+    sensor._proto._type = .sensor;
     sensor._type = typ;
 }
 

@@ -73,10 +73,6 @@ const Dependend = union(enum) {
 // A TaskSignal is an AbortSignal, and a script can reach one through
 // AbortSignal-typed surfaces (a prioritychange event's target, TaskSignal.any).
 // This is what lets those come back as the TaskSignal they are.
-pub const Type = union(enum) {
-    generic: void,
-    task_signal: *@import("scheduler.zig").TaskSignal,
-};
 
 _proto: *EventTarget,
 _type: Type = .generic,
@@ -85,6 +81,11 @@ _is_dependent: bool = false,
 _reason: Reason = .undefined,
 _dependents: std.ArrayList(Dependend) = .empty,
 _source_signals: std.ArrayList(*AbortSignal) = .empty,
+
+pub const Type = union(enum) {
+    generic: void,
+    task_signal: *@import("scheduler.zig").TaskSignal,
+};
 
 pub fn init(exec: *const Execution) !*AbortSignal {
     return exec._factory.eventTarget(AbortSignal{
@@ -146,17 +147,25 @@ fn markAborted(self: *AbortSignal, reason_: ?Reason, exec: *const Execution) !vo
         dom.* = DOMException.init(NO_REASON, "AbortError");
         self._reason = .{ .dom = dom };
     }
+
+    // Unlike the loop in abort(), this runs for dependent signals too, so a
+    // task registered on an any() signal still gets rejected.
+    for (self._dependents.items) |dep| {
+        switch (dep) {
+            else => {},
+        }
+    }
 }
 
 fn dispatchAbortEvent(self: *AbortSignal, exec: *const Execution) !void {
     const target = self.asEventTarget();
-    switch (exec.js.global) {
-        inline else => |g| {
-            if (g._event_manager.hasDirectListeners(target, "abort", null)) {
-                const event = try Event.initTrusted(comptime .wrap("abort"), .{}, g._page);
-                try g.dispatch(target, event, null, .{ .context = "abort signal" });
-            }
-        },
+    // Upstream keeps `onabort` in an `_on_abort` field and hands it to the
+    // dispatch as the handler. We keep it in the event manager's handler store
+    // instead, so the listener standing for it is already in the target's list
+    // in dispatch order -- hence `null` here rather than a handler.
+    if (exec.hasDirectListeners(target, "abort", null)) {
+        const event = try Event.initTrusted(comptime .wrap("abort"), .{}, exec.page);
+        try exec.dispatch(target, event, null, .{ .context = "abort signal" });
     }
 }
 
@@ -246,12 +255,22 @@ pub fn throwIfAborted(self: *const AbortSignal, exec: *const Execution) !ThrowIf
     return .undefined;
 }
 
-const Reason = union(enum) {
+pub const Reason = union(enum) {
     js_val: js.Value.Global,
     dom: *DOMException,
     string: []const u8,
     undefined: void,
 };
+
+// The reason as a JS value, e.g. to reject a promise with it.
+pub fn reasonJsValue(reason: Reason, local: *const js.Local) !js.Value {
+    return switch (reason) {
+        .dom => |dom| local.zigValueToJs(dom, .{}),
+        .string => |str| local.zigValueToJs(str, .{}),
+        .js_val => |global| local.toLocal(global),
+        .undefined => local.zigValueToJs(DOMException.fromError(error.AbortError).?, .{}),
+    };
+}
 
 const TimeoutCallback = struct {
     exec: *const Execution,

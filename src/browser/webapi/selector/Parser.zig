@@ -28,7 +28,6 @@ const Part = Selector.Part;
 const Segment = Selector.Segment;
 const Combinator = Selector.Combinator;
 const Allocator = std.mem.Allocator;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 const Parser = @This();
 
@@ -407,7 +406,7 @@ fn consumeUntilCommaOrParen(self: *Parser) []const u8 {
 }
 
 fn pseudoClass(self: *Parser, arena: Allocator) !Selector.PseudoClass {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // Should have been verified by caller
         std.debug.assert(self.peek() == ':');
     }
@@ -795,7 +794,7 @@ fn parseNthPattern(self: *Parser) !Selector.NthPattern {
 }
 
 pub fn id(self: *Parser, arena: Allocator) ![]const u8 {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // should have been verified by caller
         std.debug.assert(self.peek() == '#');
     }
@@ -805,7 +804,7 @@ pub fn id(self: *Parser, arena: Allocator) ![]const u8 {
 }
 
 fn class(self: *Parser, arena: Allocator) ![]const u8 {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // should have been verified by caller
         std.debug.assert(self.peek() == '.');
     }
@@ -973,7 +972,7 @@ fn tag(self: *Parser) ![]const u8 {
 }
 
 fn attribute(self: *Parser, arena: Allocator) !Selector.Attribute {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // should have been verified by caller
         std.debug.assert(self.peek() == '[');
     }

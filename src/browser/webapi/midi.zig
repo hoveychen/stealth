@@ -294,7 +294,7 @@ fn PortMap(comptime interface: []const u8) type {
         pub fn forEach(self: *Self, cb_: js.Function, js_this_: ?js.Object) !void {
             const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
             for (self._ports) |pair| {
-                var caught: js.TryCatch.Caught = undefined;
+                var caught: js.TryCatch.Caught = .{};
                 cb.tryCall(void, .{ pair[1], pair[0], self }, &caught) catch {
                     log.debug(.js, "forEach callback", .{ .caught = caught, .source = interface });
                 };

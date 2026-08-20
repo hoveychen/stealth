@@ -144,7 +144,7 @@ fn PointerSet(comptime type_name: []const u8, comptime Item: type) type {
             );
             const cb = if (js_this_) |js_this| try given.withThis(js_this) else given;
             for (self._items) |item| {
-                var caught: js.TryCatch.Caught = undefined;
+                var caught: js.TryCatch.Caught = .{};
                 cb.tryCall(void, .{ item, item, self }, &caught) catch {};
             }
         }

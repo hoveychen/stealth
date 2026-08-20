@@ -36,6 +36,10 @@ app: *App,
 max_connections: usize,
 json_version_response: []const u8,
 
+// Number of active CDP conns, used to enforce the cdp-max-connections limit.
+active_conns: std.atomic.Value(u32) = .init(0),
+// Number of existing threads, used to deinit correctly.
+// It can be higher than active_conns b/c we free conn slots early.
 active_threads: std.atomic.Value(u32) = .init(0),
 
 cdps: std.ArrayList(*CDP) = .empty,
@@ -147,7 +151,7 @@ fn spawnWorker(self: *Server, socket: posix.socket_t) !void {
         return error.ShuttingDown;
     }
 
-    // Atomically increment active_threads only if below max_connections.
+    // Atomically increment active_conns only if below max_connections.
     // Uses CAS loop to avoid race between checking the limit and incrementing.
     //
     // cmpxchgWeak may fail for two reasons:
@@ -155,18 +159,21 @@ fn spawnWorker(self: *Server, socket: posix.socket_t) !void {
     // 2. Spurious failure on some architectures (e.g. ARM)
     //
     // We use Weak instead of Strong because we need a retry loop anyway:
-    // if CAS fails because a thread finished (counter decreased), we should
+    // if CAS fails because a conn slot was freed (counter decreased), we should
     // retry rather than return an error - there may now be room for a new connection.
     //
     // On failure, cmpxchgWeak returns the actual value, which we reuse to avoid
     // an extra load on the next iteration.
-    var current = self.active_threads.load(.monotonic);
+    var current = self.active_conns.load(.monotonic);
     while (current < self.max_connections) {
-        current = self.active_threads.cmpxchgWeak(current, current + 1, .monotonic, .monotonic) orelse break;
+        current = self.active_conns.cmpxchgWeak(current, current + 1, .monotonic, .monotonic) orelse break;
     } else {
         lp.metrics.cdp_connection_limit.incr();
-        return error.MaxThreadsReached;
+        return error.MaxConnectionsReached;
     }
+    errdefer _ = self.active_conns.fetchSub(1, .monotonic);
+
+    _ = self.active_threads.fetchAdd(1, .monotonic);
     errdefer _ = self.active_threads.fetchSub(1, .monotonic);
 
     const thread = try std.Thread.spawn(.{}, handleConnection, .{ self, socket });
@@ -174,6 +181,12 @@ fn spawnWorker(self: *Server, socket: posix.socket_t) !void {
 }
 
 fn handleConnection(self: *Server, socket: posix.socket_t) void {
+    var active_conns_early_release = false;
+    defer {
+        if (!active_conns_early_release) {
+            _ = self.active_conns.fetchSub(1, .monotonic);
+        }
+    }
     defer _ = self.active_threads.fetchSub(1, .monotonic);
     defer _ = std.c.close(socket);
 
@@ -278,13 +291,21 @@ fn handleConnection(self: *Server, socket: posix.socket_t) void {
         };
         if (!next) break;
     }
+
+    // try to release the connection as soon as possible.
+    active_conns_early_release = true;
+    _ = self.active_conns.fetchSub(1, .monotonic);
 }
 
 fn buildJSONVersionResponse(app: *const App, port: u16) ![]const u8 {
     const host = app.config.advertiseHost();
-    if (std.mem.eql(u8, host, "0.0.0.0")) {
-        log.info(.cdp, "unreachable advertised host", .{
-            .message = "when --host is set to 0.0.0.0 consider setting --advertise-host to a reachable address",
+    if (app.config.bindIsWildcard()) {
+        // Serve is bound to INADDR_ANY but no --advertise-host was given;
+        // advertiseHost() falls back to 127.0.0.1 so clients can still
+        // connect locally. Surface the trade-off so users running
+        // outside the same host know they have to opt in.
+        log.note(.cdp, "advertising loopback for wildcard bind", .{
+            .message = "--host is a wildcard (0.0.0.0 / ::) without --advertise-host; clients on other hosts will need --advertise-host to reach the CDP endpoint",
         });
     }
     // User-Agent has to be the one we actually send: drivers read it from here
@@ -405,12 +426,86 @@ test "Client: http invalid handshake" {
     );
 }
 
+test "Client: http handshake origin" {
+    testing.silenceLog(&.{.cdp});
+
+    const with_origin =
+        "GET / HTTP/1.1\r\n" ++
+        "Connection: upgrade\r\n" ++
+        "Upgrade: websocket\r\n" ++
+        "sec-websocket-version:13\r\n" ++
+        "sec-websocket-key: this is my key\r\n" ++
+        "Origin: {s}\r\n\r\n";
+
+    for ([_][]const u8{
+        "https://evil.com",
+        // Being served from loopback yourself doesn't make you trusted.
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        // Sandboxed iframes and data: URLs.
+        "null",
+    }) |origin| {
+        var c = try createTestClient();
+        defer c.deinit();
+
+        var buf: [256]u8 = undefined;
+        const res = try c.httpRequest(try std.fmt.bufPrint(&buf, with_origin, .{origin}));
+        try testing.expectEqual("HTTP/1.1 403 \r\n" ++
+            "Connection: Close\r\n" ++
+            "Content-Length: 18\r\n\r\n" ++
+            "Origin not allowed", res);
+    }
+
+    // The first one is enough; we never get far enough to see the second.
+    try assertHTTPError(
+        403,
+        "Origin not allowed",
+        "GET / HTTP/1.1\r\n" ++
+            "Connection: upgrade\r\n" ++
+            "Upgrade: websocket\r\n" ++
+            "sec-websocket-version:13\r\n" ++
+            "sec-websocket-key: this is my key\r\n" ++
+            "Origin: https://evil.com\r\n" ++
+            "Origin: https://evil.com\r\n\r\n",
+    );
+}
+
+test "Client: http handshake host" {
+    testing.silenceLog(&.{.cdp});
+
+    // Any name in Host means something resolved to us that shouldn't
+    // have (rebinding); only an IP literal gets through.
+    const with_host =
+        "GET / HTTP/1.1\r\n" ++
+        "Connection: upgrade\r\n" ++
+        "Upgrade: websocket\r\n" ++
+        "sec-websocket-version:13\r\n" ++
+        "sec-websocket-key: this is my key\r\n" ++
+        "Host: {s}\r\n\r\n";
+
+    for ([_][]const u8{
+        "rebind.evil.com:9583",
+        // Not even the name that resolves to loopback on every machine.
+        "localhost:9583",
+    }) |host| {
+        var buf: [256]u8 = undefined;
+        try assertHTTPError(
+            403,
+            "Host not allowed",
+            try std.fmt.bufPrint(&buf, with_host, .{host}),
+        );
+    }
+}
+
 test "Client: http valid handshake" {
     var c = try createTestClient();
     defer c.deinit();
 
+    // No Origin (i.e. not a browser) and a Host we're reachable at: what
+    // every CDP driver sends.
     const request =
         "GET /   HTTP/1.1\r\n" ++
+        "Host: 127.0.0.1:9583\r\n" ++
         "Connection: upgrade\r\n" ++
         "Upgrade: websocket\r\n" ++
         "sec-websocket-version:13\r\n" ++
@@ -579,6 +674,34 @@ test "server: get /json/version" {
     }
 }
 
+test "server: get /json/protocol" {
+    var c = try createTestClient();
+    defer c.deinit();
+
+    const res = try c.httpRequestAlloc("GET /json/protocol HTTP/1.1\r\n\r\n");
+    defer testing.allocator.free(res);
+
+    try testing.expect(std.mem.startsWith(u8, res, "HTTP/1.1 200 OK\r\n"));
+    try testing.expect(std.mem.indexOf(u8, res, "Content-Type: application/json") != null);
+
+    const body_start = std.mem.indexOf(u8, res, "\r\n\r\n").? + 4;
+    const parsed = try std.json.parseFromSlice(std.json.Value, testing.allocator, res[body_start..], .{});
+    defer parsed.deinit();
+
+    const domains = parsed.value.object.get("domains").?.array;
+    try testing.expectEqual(20, domains.items.len);
+
+    var found_dom = false;
+    var found_lp = false;
+    for (domains.items) |domain| {
+        const name = domain.object.get("domain").?.string;
+        if (std.mem.eql(u8, name, "DOM")) found_dom = true;
+        if (std.mem.eql(u8, name, "LP")) found_lp = true;
+    }
+    try testing.expect(found_dom);
+    try testing.expect(found_lp);
+}
+
 test "server: get /metrics" {
     var c = try createTestClient();
     defer c.deinit();
@@ -739,6 +862,22 @@ const TestClient = struct {
                     return error.DataExceedsContentLength;
                 }
             }
+        }
+    }
+
+    // Reads until the server closes the connection, for responses larger
+    // than buf (e.g. /json/protocol).
+    fn httpRequestAlloc(self: *TestClient, req: []const u8) ![]const u8 {
+        try sys_net.writeAll(self.socket, req);
+
+        var response: std.ArrayList(u8) = .empty;
+        defer response.deinit(testing.allocator);
+        while (true) {
+            const n = try posix.read(self.socket, &self.buf);
+            if (n == 0) {
+                return response.toOwnedSlice(testing.allocator);
+            }
+            try response.appendSlice(testing.allocator, self.buf[0..n]);
         }
     }
 

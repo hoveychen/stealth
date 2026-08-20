@@ -18,7 +18,6 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const Arena = @import("Arena.zig");
 
@@ -28,12 +27,12 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 
 const ArenaPool = @This();
 
-const IS_DEBUG = builtin.mode == .Debug;
 const SAFETY = Arena.SAFETY;
 
 pub const BucketSize = enum { tiny, small, medium, large };
 
 pub const Bucket = struct {
+    size: BucketSize,
     free_list: ?*Arena = null,
     free_list_len: u16 = 0,
     free_list_max: u16,
@@ -60,21 +59,21 @@ allocator: Allocator,
 mutex: std.Io.Mutex = .init,
 entry_pool: std.heap.MemoryPool(Arena),
 
-_leak_track: if (IS_DEBUG) std.StringHashMapUnmanaged(isize) else void = if (IS_DEBUG) .empty else {},
+_leak_track: if (lp.IS_DEBUG) std.StringHashMapUnmanaged(isize) else void = if (lp.IS_DEBUG) .empty else {},
 
 pub fn init(allocator: Allocator, config: Config) ArenaPool {
     return .{
         .allocator = allocator,
         .entry_pool = .empty,
-        .tiny = .{ .free_list_max = config.tiny.max, .retain_bytes = config.tiny.retain },
-        .small = .{ .free_list_max = config.small.max, .retain_bytes = config.small.retain },
-        .medium = .{ .free_list_max = config.medium.max, .retain_bytes = config.medium.retain },
-        .large = .{ .free_list_max = config.large.max, .retain_bytes = config.large.retain },
+        .tiny = .{ .size = .tiny, .free_list_max = config.tiny.max, .retain_bytes = config.tiny.retain },
+        .small = .{ .size = .small, .free_list_max = config.small.max, .retain_bytes = config.small.retain },
+        .medium = .{ .size = .medium, .free_list_max = config.medium.max, .retain_bytes = config.medium.retain },
+        .large = .{ .size = .large, .free_list_max = config.large.max, .retain_bytes = config.large.retain },
     };
 }
 
 pub fn deinit(self: *ArenaPool) void {
-    if (IS_DEBUG) {
+    if (lp.IS_DEBUG) {
         var has_leaks = false;
         var it = self._leak_track.iterator();
         while (it.next()) |kv| {
@@ -100,6 +99,13 @@ pub fn deinit(self: *ArenaPool) void {
     self.entry_pool.deinit(self.allocator);
 }
 
+pub fn bucketFor(self: *const ArenaPool, size: usize) BucketSize {
+    if (size <= self.tiny.retain_bytes) return .tiny;
+    if (size <= self.small.retain_bytes) return .small;
+    if (size <= self.medium.retain_bytes) return .medium;
+    return .large;
+}
+
 // Acquire an arena from the pool.
 // - Pass a BucketSize (.tiny, .small, .medium, .large) for explicit bucket selection
 // - Pass a usize for automatic bucket selection based on expected size
@@ -120,10 +126,7 @@ fn _acquire(self: *ArenaPool, account: ?*Arena.Account, size_or_bucket: anytype,
             break :blk @as(BucketSize, size_or_bucket);
         }
         if (T == usize or T == comptime_int) {
-            if (size_or_bucket <= self.tiny.retain_bytes) break :blk .tiny;
-            if (size_or_bucket <= self.small.retain_bytes) break :blk .small;
-            if (size_or_bucket <= self.medium.retain_bytes) break :blk .medium;
-            break :blk .large;
+            break :blk self.bucketFor(size_or_bucket);
         }
         @compileError("acquire expects BucketSize or usize, got " ++ @typeName(T));
     };
@@ -135,13 +138,15 @@ fn _acquire(self: *ArenaPool, account: ?*Arena.Account, size_or_bucket: anytype,
         .large => &self.large,
     };
 
+    lp.metrics.arena_inflight.incr(bucket_size);
+
     self.mutex.lockUncancelable(lp.io);
     defer self.mutex.unlock(lp.io);
 
     if (bucket.free_list) |entry| {
         bucket.free_list = entry.next;
         bucket.free_list_len -= 1;
-        if (IS_DEBUG) {
+        if (lp.IS_DEBUG) {
             entry.debug = debug;
             const gop = try self._leak_track.getOrPut(self.allocator, debug);
             if (!gop.found_existing) {
@@ -164,14 +169,14 @@ fn _acquire(self: *ArenaPool, account: ?*Arena.Account, size_or_bucket: anytype,
         .bytes = 0,
         .account = account,
         .reported = 0,
-        .debug = if (IS_DEBUG) debug else {},
+        .debug = if (lp.IS_DEBUG) debug else {},
         ._arena = undefined,
     };
     // Routed through the entry so it sees every node the arena takes and gives
     // back. entry is pool-allocated, so this pointer is stable.
     entry._arena = ArenaAllocator.init(entry.backing());
 
-    if (IS_DEBUG) {
+    if (lp.IS_DEBUG) {
         const gop = try self._leak_track.getOrPut(self.allocator, debug);
         if (!gop.found_existing) {
             gop.value_ptr.* = 0;
@@ -186,7 +191,9 @@ pub fn release(self: *ArenaPool, entry: *Arena) void {
     const arena = &entry._arena;
     const bucket = entry.bucket;
 
-    if (IS_DEBUG) {
+    lp.metrics.arena_inflight.decr(bucket.size);
+
+    if (lp.IS_DEBUG) {
         self.mutex.lockUncancelable(lp.io);
         defer self.mutex.unlock(lp.io);
         if (self._leak_track.getPtr(entry.debug)) |count| {

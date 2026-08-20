@@ -2839,6 +2839,12 @@ static CURLcode http_add_connection_hd(struct Curl_easy *data,
 typedef enum {
   H1_HD_REQUEST,
   H1_HD_HOST,
+  /* LIGHTPANDA: Connection right after Host. Upstream emits it second to last;
+     Chrome sends "Connection: keep-alive" immediately after Host on HTTP/1.1,
+     and header order is a fingerprint. Nothing depends on the position -- the
+     values written here are the same ones, and for HTTP/2 the whole field is
+     dropped by h2_permissible_field, which is also what Chrome does. */
+  H1_HD_CONNECTION,
 #ifndef CURL_DISABLE_PROXY
   H1_HD_PROXY_AUTH,
 #endif
@@ -2861,7 +2867,6 @@ typedef enum {
   H1_HD_CONDITIONALS,
   H1_HD_CUSTOM,
   H1_HD_CONTENT,
-  H1_HD_CONNECTION,
   H1_HD_LAST  /* the last, empty header line */
 } http_hd_t;
 

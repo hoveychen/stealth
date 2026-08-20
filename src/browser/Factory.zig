@@ -18,7 +18,6 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const reflect = @import("reflect.zig");
 
@@ -32,6 +31,7 @@ const MouseEvent = @import("webapi/event/MouseEvent.zig");
 const Element = @import("webapi/Element.zig");
 const Document = @import("webapi/Document.zig");
 const EventTarget = @import("webapi/EventTarget.zig");
+const AbortSignal = @import("webapi/AbortSignal.zig");
 const XMLHttpRequestEventTarget = @import("webapi/net/XMLHttpRequestEventTarget.zig");
 const Blob = @import("webapi/Blob.zig");
 const AbstractRange = @import("webapi/AbstractRange.zig");
@@ -44,7 +44,6 @@ const log = lp.log;
 const String = lp.String;
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
-const IS_DEBUG = builtin.mode == .Debug;
 
 // Shared across all frames of a Page.
 const Factory = @This();
@@ -71,7 +70,7 @@ pub fn eventTargetWithAllocator(_: *const Factory, allocator: Allocator, child: 
 
     const event_ptr = chain.get(0);
     event_ptr.* = .{
-        ._type = unionInit(EventTarget.Type, chain.get(1)),
+        ._type = typeInit(EventTarget, chain.get(1)),
     };
     chain.setLeaf(1, child);
 
@@ -100,7 +99,7 @@ pub fn uiEvent(_: *const Factory, arena: *lp.Arena, typ: String, child: anytype)
     // Special case: Event has a _type_string field, so we need manual setup
     const event_ptr = chain.get(0);
     event_ptr.* = try eventInit(arena, typ, chain.get(1));
-    chain.setMiddle(1, UIEvent.Type);
+    chain.setMiddle(1);
     chain.setLeaf(2, child);
 
     return chain.get(2);
@@ -163,7 +162,7 @@ pub fn mouseEvent(_: *const Factory, arena: *lp.Arena, typ: String, mouse: Mouse
     // Special case: Event has a _type_string field, so we need manual setup
     const event_ptr = chain.get(0);
     event_ptr.* = try eventInit(arena, typ, chain.get(1));
-    chain.setMiddle(1, UIEvent.Type);
+    chain.setMiddle(1);
 
     // Set MouseEvent with all its fields
     const mouse_ptr = chain.get(2);
@@ -230,31 +229,20 @@ fn PrototypeChain(comptime types: []const type) type {
             ptr.* = value;
         }
 
-        fn setRoot(self: *const Self, comptime T: type) void {
+        fn setRoot(self: *const Self) void {
             const ptr = self.get(0);
-            ptr.* = .{ ._type = unionInit(T, self.get(1)) };
+            ptr.* = .{ ._type = typeInit(types[0], self.get(1)) };
         }
 
-        fn setMiddle(self: *const Self, comptime index: usize, comptime T: type) void {
+        fn setMiddle(self: *const Self, comptime index: usize) void {
             assert(index >= 1);
             assert(index < types.len);
 
             const ptr = self.get(index);
             ptr.* = if (comptime @hasField(types[index], "_proto"))
-                .{ ._proto = undefined, ._type = unionInit(T, self.get(index + 1)) }
+                .{ ._proto = undefined, ._type = typeInit(types[index], self.get(index + 1)) }
             else
-                .{ ._type = unionInit(T, self.get(index + 1)) };
-            setProto(ptr, self.get(index - 1));
-        }
-
-        fn setMiddleWithValue(self: *const Self, comptime index: usize, comptime T: type, value: anytype) void {
-            assert(index >= 1);
-
-            const ptr = self.get(index);
-            ptr.* = if (comptime @hasField(types[index], "_proto"))
-                .{ ._proto = undefined, ._type = unionInit(T, value) }
-            else
-                .{ ._type = unionInit(T, value) };
+                .{ ._type = typeInit(types[index], self.get(index + 1)) };
             setProto(ptr, self.get(index - 1));
         }
 
@@ -273,12 +261,10 @@ fn AutoPrototypeChain(comptime types: []const type) type {
         fn create(allocator: std.mem.Allocator, leaf_value: anytype) !*@TypeOf(leaf_value) {
             const chain = try PrototypeChain(types).allocate(allocator);
 
-            const RootType = types[0];
-            chain.setRoot(RootType.Type);
+            chain.setRoot();
 
             inline for (1..types.len - 1) |i| {
-                const MiddleType = types[i];
-                chain.setMiddle(i, MiddleType.Type);
+                chain.setMiddle(i);
             }
 
             chain.setLeaf(types.len - 1, leaf_value);
@@ -410,8 +396,8 @@ pub fn cdataNode(self: *Factory, cd: Node.CData, leaf: anytype) !*Node.CData {
     comptime assert(types[0] == EventTarget and types[1] == Node and types[2] == Node.CData);
 
     const chain = try PrototypeChain(types).allocate(self._slab.allocator());
-    chain.setRoot(EventTarget.Type);
-    chain.setMiddle(1, Node.Type);
+    chain.setRoot();
+    chain.setMiddle(1);
 
     const cd_ptr = chain.get(2);
     cd_ptr.* = cd;
@@ -419,7 +405,9 @@ pub fn cdataNode(self: *Factory, cd: Node.CData, leaf: anytype) !*Node.CData {
 
     // only the CDATASection chain has a middle here (its Text)
     inline for (3..types.len - 1) |i| {
-        chain.set(i, .{ ._proto = chain.get(i - 1) });
+        const ptr = chain.get(i);
+        ptr.* = .{};
+        setProto(ptr, chain.get(i - 1));
     }
     chain.setLeaf(types.len - 1, leaf);
     return cd_ptr;
@@ -463,7 +451,7 @@ pub fn protoOffset(comptime T: type) usize {
 pub fn protoOf(value: anytype) *reflect.Proto(reflect.Struct(@TypeOf(value))).? {
     const T = reflect.Struct(@TypeOf(value));
     const proto: *reflect.Proto(T).? = @ptrFromInt(@intFromPtr(value) - comptime protoOffset(T));
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // In debug, we'll assert that our offset and the _proto field agree.
         std.debug.assert(proto == if (comptime hasStoredProto(T)) value._proto else value._proto_canary);
     }
@@ -475,7 +463,7 @@ fn setProto(ptr: anytype, proto: anytype) void {
     const T = reflect.Struct(@TypeOf(ptr));
     if (comptime hasStoredProto(T)) {
         ptr._proto = proto;
-    } else if (comptime IS_DEBUG and @hasField(T, "_proto_canary")) {
+    } else if (comptime lp.IS_DEBUG and @hasField(T, "_proto_canary")) {
         ptr._proto_canary = proto;
     }
 }
@@ -572,17 +560,18 @@ pub fn svgElement(self: *Factory, tag_name: []const u8, child: anytype) !*@TypeO
     const types = comptime svgPrototypeTypes(@TypeOf(child));
     const chain = try PrototypeChain(types).allocate(self._slab.allocator());
 
-    chain.setRoot(EventTarget.Type);
+    chain.setRoot();
     inline for (1..types.len - 1) |i| {
         const T = types[i];
         if (T == Element.Svg) {
-            chain.set(i, .{
-                ._proto = chain.get(i - 1),
+            const svg_ptr = chain.get(i);
+            svg_ptr.* = .{
                 ._tag_name = try String.init(self._arena, tag_name, .{}),
-                ._type = unionInit(Element.Svg.Type, chain.get(i + 1)),
-            });
+                ._type = typeInit(Element.Svg, chain.get(i + 1)),
+            };
+            setProto(svg_ptr, chain.get(i - 1));
         } else {
-            chain.setMiddle(i, T.Type);
+            chain.setMiddle(i);
         }
     }
     chain.setLeaf(types.len - 1, child);
@@ -622,7 +611,7 @@ pub fn idbOpenRequest(self: *Factory, child: anytype) !*@TypeOf(child) {
         &.{ EventTarget, IDBRequest, @TypeOf(child) },
     ).allocate(self._slab.allocator());
 
-    chain.setRoot(EventTarget.Type);
+    chain.setRoot();
     chain.get(1).* = .{ ._proto = chain.get(0) };
     chain.setLeaf(2, child);
 
@@ -662,6 +651,12 @@ pub fn audioWorklet(self: *Factory, child: anytype) !*@TypeOf(child) {
     ).create(self._slab.allocator(), child);
 }
 
+pub fn taskSignal(self: *Factory, child: anytype) !*@TypeOf(child) {
+    return try AutoPrototypeChain(
+        &.{ EventTarget, AbortSignal, @TypeOf(child) },
+    ).create(self._slab.allocator(), child);
+}
+
 pub fn textTrackCue(self: *Factory, child: anytype) !*@TypeOf(child) {
     const allocator = self._slab.allocator();
     const TextTrackCue = @import("webapi/media/TextTrackCue.zig");
@@ -674,14 +669,12 @@ pub fn textTrackCue(self: *Factory, child: anytype) !*@TypeOf(child) {
 pub fn destroy(self: *Factory, value: anytype) void {
     const S = reflect.Struct(@TypeOf(value));
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // We should always destroy from the leaf down.
-        if (@hasDecl(S, "_prototype_root")) {
-            // A Event{._type == .generic} (or any other similar types)
-            // _should_ be destroyed directly. The _type = .generic is a pseudo
-            // child
-            if (S != Event or value._type != .generic) {
-                log.fatal(.bug, "factory.destroy.event", .{ .type = @typeName(S) });
+        if (comptime @hasDecl(S, "_prototype_root")) {
+            const is_leaf = if (comptime @hasField(S, "_type")) value._type == .generic else false;
+            if (!is_leaf) {
+                log.fatal(.bug, "factory.destroy.root", .{ .type = @typeName(S) });
                 unreachable;
             }
         }
@@ -742,6 +735,25 @@ fn unionInit(comptime T: type, value: anytype) T {
     const V = @TypeOf(value);
     const field_name = comptime unionFieldName(T, V);
     return @unionInit(T, field_name, value);
+}
+
+// Initializes Parent._type for the chain member laid out after Parent. For a
+// tagged-union _type the member's pointer is the payload; for a bare-tag _type
+// (e.g. Node, CData) the member is reached by arithmetic and only its tag is
+// stored.
+fn typeInit(comptime Parent: type, value: anytype) Parent.Type {
+    if (comptime @typeInfo(Parent.Type) == .@"enum") {
+        return comptime subtypeTag(Parent, reflect.Struct(@TypeOf(value)));
+    }
+    return unionInit(Parent.Type, value);
+}
+
+fn subtypeTag(comptime Parent: type, comptime V: type) Parent.Type {
+    for (@typeInfo(Parent.Type).@"enum".fields) |f| {
+        const tag: Parent.Type = @enumFromInt(f.value);
+        if (Parent.Subtype(tag) == V) return tag;
+    }
+    @compileError(@typeName(V) ++ " is not a subtype of " ++ @typeName(Parent));
 }
 
 // There can be friction between comptime and runtime. Comptime has to

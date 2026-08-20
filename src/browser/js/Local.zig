@@ -36,7 +36,6 @@ const v8 = js.v8;
 const log = lp.log;
 const CallOpts = Caller.CallOpts;
 const FinalizerCallback = js.FinalizerCallback;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 // Where js.Context has a lifetime tied to the frame, and holds the
 // v8::Global<v8::Context>, this has a much shorter lifetime and holds a
@@ -1309,7 +1308,18 @@ pub fn resolveValue(value: anytype) Resolved {
     // (e.g. CData); the type maps the tag to the member's type.
     if (comptime @typeInfo(@TypeOf(value._type)) == .@"enum" and @hasDecl(T, "Subtype")) {
         switch (value._type) {
-            inline else => |tag| return resolveValue(value.subtype(T.Subtype(tag))),
+            inline else => |tag| {
+                const S = T.Subtype(tag);
+                if (S == T or S == void) {
+                    // A tag can map to the type itself (e.g. Media.generic), or
+                    // to nothing at all (Element.plain -- a namespace with no
+                    // interface of its own, which Chrome brands `[object
+                    // Element]`). Either way the value is already as specific
+                    // as it gets.
+                    return resolveT(T, value);
+                }
+                return resolveValue(value.subtype(S));
+            },
         }
     }
 
@@ -1337,7 +1347,7 @@ pub fn resolveValue(value: anytype) Resolved {
 }
 
 fn resolveT(comptime T: type, value: *T) Resolved {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         assertChainContiguity(T, value);
     }
     const Meta = T.JsApi.Meta;
@@ -1403,7 +1413,7 @@ fn resolveT(comptime T: type, value: *T) Resolved {
                             prev = n;
                             node = n.next;
                         } else {
-                            if (comptime IS_DEBUG) {
+                            if (comptime lp.IS_DEBUG) {
                                 std.debug.assert(false);
                             }
                         }

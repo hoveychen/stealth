@@ -182,7 +182,7 @@ pub const XRReferenceSpace = struct {
             XRReferenceSpace{ ._proto = undefined, ._kind = kind, ._offset = base },
         });
         space._proto._type = .{ .reference = space };
-        space._proto._proto._type = .{ .xr_space = space._proto };
+        space._proto._proto._type = .xr_space;
         return space;
     }
 

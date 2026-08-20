@@ -19,14 +19,14 @@
 const std = @import("std");
 const zenai = @import("zenai");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const cli = @import("cli.zig");
 const dump = @import("browser/dump.zig");
 const claimed_platform = @import("claimed_platform.zig");
+const Mime = @import("browser/Mime.zig");
 
-const Storage = @import("storage/Storage.zig");
 const WebBotAuthConfig = @import("network/WebBotAuth.zig").Config;
+const HttpHeader = @import("network/http.zig").Header;
 
 const log = lp.log;
 const crypto = @import("sys/libcrypto.zig");
@@ -86,6 +86,36 @@ fn logLevelValidator(_: Allocator, args: *std.process.Args.Iterator, target: *?l
         log.fatal(.app, "invalid option choice", .{ .arg = "--log-level", .value = str });
         return error.InvalidArgument;
     };
+}
+
+fn httpHeaderValidator(allocator: Allocator, args: *std.process.Args.Iterator, list: *std.ArrayList(HttpHeader)) !void {
+    const str = args.next() orelse return error.MissingArgument;
+    const header = HttpHeader.parse(str) orelse {
+        log.fatal(.app, "invalid option value", .{ .arg = "--http-header", .value = str, .hint = "expected \"Name: Value\"" });
+        return error.InvalidArgument;
+    };
+
+    // The same shape script-set headers go through in `Headers`: a name that
+    // is an HTTP token, a value that is a CR/LF-free byte string.
+    if (Mime.isHttpToken(header.name) == false) {
+        log.fatal(.app, "invalid option value", .{ .arg = "--http-header", .value = str, .hint = "name must be a non-empty HTTP token" });
+        return error.InvalidArgument;
+    }
+
+    if (Mime.isHttpHeaderValue(header.value) == false) {
+        log.fatal(.app, "invalid option value", .{ .arg = "--http-header", .value = str, .hint = "value must be Latin-1 text without CR, LF or NUL" });
+        return error.InvalidArgument;
+    }
+
+    // Upstream refused User-Agent and Sec-Ch-Ua here outright. This fork
+    // parameterises both (--user-agent, --sec-ch-ua), and a caller who wants a
+    // different identity than the flags express has nowhere else to put it, so
+    // there is nothing to reserve: the header goes through like any other and
+    // the later-applied source wins.
+    try list.append(allocator, .{
+        .name = try allocator.dupe(u8, header.name),
+        .value = try allocator.dupe(u8, header.value),
+    });
 }
 
 const Cert = struct {
@@ -186,6 +216,7 @@ const CommonOptions = .{
     .{ .name = "http_max_host_open", .type = ?u8 },
     .{ .name = "http_timeout", .type = ?u31 },
     .{ .name = "http_connect_timeout", .type = ?u31 },
+    .{ .name = "http_header", .type = HttpHeader, .multiple = true, .validator = httpHeaderValidator },
     .{ .name = "http_max_response_size", .type = ?usize },
     .{ .name = "ws_max_concurrent", .type = ?u8 },
     .{ .name = "insecure_disable_tls_host_verification", .type = bool },
@@ -194,20 +225,20 @@ const CommonOptions = .{
     .{ .name = "log_filter_scopes", .type = log.FilterRule, .multiple = true, .validator = logFilterScopesValidator },
     .{ .name = "user_agent_suffix", .type = ?[]const u8 },
     .{ .name = "http_cache_dir", .type = ?[]const u8 },
+    .{ .name = "http_cache_entry_limit", .type = ?u32, .default = 1000 },
     .{ .name = "web_bot_auth_key_file", .type = ?[]const u8 },
     .{ .name = "web_bot_auth_keyid", .type = ?[]const u8 },
     .{ .name = "web_bot_auth_domain", .type = ?[]const u8 },
-    .{ .name = "user_agent", .type = ?[]const u8 },
+    .{ .name = "user_agent", .type = ?[]const u8, .validator = userAgentValidator },
     .{ .name = "sec_ch_ua", .type = ?[]const u8 },
     .{ .name = "sec_ch_ua_platform", .type = ?[]const u8 },
     .{ .name = "accept_language", .type = ?[]const u8 },
     .{ .name = "block_private_networks", .type = bool },
     .{ .name = "block_cidrs", .type = ?[]const u8 },
     .{ .name = "block_urls", .type = ?[]const u8 },
+    .{ .name = "adblock_lists", .type = ?[]const u8 },
     .{ .name = "cookie", .type = ?[]const u8 },
     .{ .name = "cookie_jar", .type = ?[]const u8 },
-    .{ .name = "storage_engine", .type = ?Storage.EngineType },
-    .{ .name = "storage_sqlite_path", .type = ?[:0]const u8 },
     .{ .name = "disable_subframes", .type = bool },
     .{ .name = "disable_workers", .type = bool },
     .{ .name = "disable_external_stylesheets", .type = bool },
@@ -517,6 +548,13 @@ pub fn httpProxy(self: *const Config) ?[:0]const u8 {
     };
 }
 
+pub fn httpHeaders(self: *const Config) []const HttpHeader {
+    return switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_header.items,
+        else => &.{},
+    };
+}
+
 pub fn proxyBearerToken(self: *const Config) ?[:0]const u8 {
     return switch (self.mode) {
         inline .serve, .fetch, .mcp, .agent => |opts| opts.proxy_bearer_token,
@@ -670,6 +708,13 @@ pub fn httpCacheDir(self: *const Config) ?[]const u8 {
     };
 }
 
+pub fn httpCacheEntryLimit(self: *const Config) u32 {
+    return switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.http_cache_entry_limit.?,
+        else => 1000,
+    };
+}
+
 pub fn cookieFile(self: *const Config) ?[]const u8 {
     return switch (self.mode) {
         inline .serve, .fetch, .mcp, .agent => |opts| opts.cookie,
@@ -694,10 +739,39 @@ pub fn port(self: *const Config) u16 {
 
 pub fn advertiseHost(self: *const Config) []const u8 {
     return switch (self.mode) {
-        .serve => |opts| opts.advertise_host orelse opts.host,
+        .serve => |opts| opts.advertise_host orelse advertiseHostFallback(opts.host),
         .mcp => "127.0.0.1",
         else => unreachable,
     };
+}
+
+// Wildcard bind addresses (0.0.0.0, ::) are not routable for clients
+// resolving /json/version. Fall back to a loopback address so the
+// advertised webSocketDebuggerUrl is at least connectable from the same
+// host (covers the official Docker image, which exposes 9222 via the
+// container's published port, and the WSL localhost bridge).
+// For remote hosts, users can still pin the URL with --advertise-host.
+// See issue #1922.
+fn advertiseHostFallback(host: []const u8) []const u8 {
+    if (isHostWildcard(host)) {
+        return "127.0.0.1";
+    }
+    return host;
+}
+
+// True when serve is binding a wildcard address (e.g. Docker --host
+// 0.0.0.0) without an explicit --advertise-host. /json/version replaces
+// the wildcard with 127.0.0.1 in advertiseHostFallback so the URL stays
+// resolvable, but the caller still benefits from emitting a guidance log.
+pub fn bindIsWildcard(self: *const Config) bool {
+    return switch (self.mode) {
+        .serve => |opts| opts.advertise_host == null and isHostWildcard(opts.host),
+        else => false,
+    };
+}
+
+fn isHostWildcard(host: []const u8) bool {
+    return std.mem.eql(u8, host, "0.0.0.0") or std.mem.eql(u8, host, "::");
 }
 
 pub fn webBotAuth(self: *const Config) ?WebBotAuthConfig {
@@ -731,6 +805,14 @@ pub fn blockedUrlPatterns(self: *const Config) ?std.mem.SplitIterator(u8, .scala
         else => unreachable,
     } orelse return null;
     return std.mem.splitScalar(u8, patterns, ',');
+}
+
+pub fn adblockLists(self: *const Config) ?std.mem.SplitIterator(u8, .scalar) {
+    const paths = switch (self.mode) {
+        inline .serve, .fetch, .mcp, .agent => |opts| opts.adblock_lists,
+        else => unreachable,
+    } orelse return null;
+    return std.mem.splitScalar(u8, paths, ',');
 }
 
 pub fn maxConnections(self: *const Config) u16 {
@@ -778,20 +860,6 @@ pub fn cdpMaxHTTPMessageSize(self: *const Config) u14 {
     };
 }
 
-pub fn storageEngine(self: *const Config) ?Storage.EngineType {
-    return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.storage_engine,
-        else => unreachable,
-    };
-}
-
-pub fn storageSqlitePath(self: *const Config) ?[:0]const u8 {
-    return switch (self.mode) {
-        inline .serve, .fetch, .mcp, .agent => |opts| opts.storage_sqlite_path,
-        else => unreachable,
-    };
-}
-
 /// Returns the user-supplied certificate store (`--ca-cert`/`--ca-path`),
 /// if any was loaded during argument parsing. The caller takes ownership.
 pub fn customCertStore(self: *const Config) ?*crypto.X509_STORE {
@@ -822,7 +890,7 @@ pub const WaitUntil = enum {
     done,
 };
 
-/// Pre-formatted HTTP headers for reuse across Http and Client.
+/// HTTP header values shared across Http and Client.
 /// Must be initialized with an allocator that outlives all HTTP connections.
 pub const HttpHeaders = struct {
     /// The version we claim to be. One constant so the User-Agent's
@@ -897,22 +965,21 @@ pub const HttpHeaders = struct {
     /// rather than recalled — see tools/fingerprint/results/reference-chrome-*.json
     /// for the capture these came from.
     pub const Accept = struct {
-        pub const document: [:0]const u8 = "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
-        pub const style: [:0]const u8 = "Accept: text/css,*/*;q=0.1";
-        pub const image: [:0]const u8 = "Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
-        pub const event_stream: [:0]const u8 = "Accept: text/event-stream";
+        pub const document: [:0]const u8 = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
+        pub const style: [:0]const u8 = "text/css,*/*;q=0.1";
+        pub const image: [:0]const u8 = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
+        pub const event_stream: [:0]const u8 = "text/event-stream";
         /// script, fetch and xhr all send this.
-        pub const any: [:0]const u8 = "Accept: */*";
+        pub const any: [:0]const u8 = "*/*";
     };
 
     /// Chrome sends this on every top-level and iframe navigation.
-    pub const upgrade_insecure_requests: [:0]const u8 = "Upgrade-Insecure-Requests: 1";
+    pub const upgrade_insecure_requests: [:0]const u8 = "1";
 
     /// Mobile-ness of the client hint. Desktop Chrome sends "?0".
-    pub const sec_ch_ua_mobile: [:0]const u8 = "Sec-Ch-Ua-Mobile: ?0";
+    pub const sec_ch_ua_mobile: [:0]const u8 = "?0";
 
     user_agent: [:0]const u8, // Full User-Agent value
-    user_agent_header: [:0]const u8,
 
     /// Source of truth for client-hints brand data. Both the Sec-Ch-Ua HTTP
     /// header and navigator.userAgentData.brands derive from this list, so the
@@ -932,9 +999,9 @@ pub const HttpHeaders = struct {
     // stream when a client sends Accept-Encoding without Accept-Language,
     // treating it as a bot signal. Ship a neutral default so we look like a
     // normal client.
+    /// Bare value (e.g. "en-US,en;q=0.9"). Doubles as navigator.languages,
+    /// so the header and the JS list cannot name different languages.
     accept_language: [:0]const u8,
-    /// Bare value (e.g. "en-US,en;q=0.9"), for navigator.languages.
-    languages: []const u8,
 
     proxy_bearer_header: ?[:0]const u8,
 
@@ -952,9 +1019,6 @@ pub const HttpHeaders = struct {
         else
             user_agent_base;
         errdefer if (user_agent.ptr != user_agent_base.ptr) allocator.free(user_agent);
-
-        const user_agent_header = try std.fmt.allocPrintSentinel(allocator, "User-Agent: {s}", .{user_agent}, 0);
-        errdefer allocator.free(user_agent_header);
 
         // --sec-ch-ua takes the header's own wire syntax, so one flag drives
         // both the header and navigator.userAgentData without a bespoke format
@@ -975,11 +1039,10 @@ pub const HttpHeaders = struct {
         errdefer allocator.free(sec_ch_ua);
 
         const platform = config.secChUaPlatform() orelse default_platform;
-        const sec_ch_ua_platform = try std.fmt.allocPrintSentinel(allocator, "Sec-Ch-Ua-Platform: \"{s}\"", .{platform}, 0);
+        const sec_ch_ua_platform = try std.fmt.allocPrintSentinel(allocator, "\"{s}\"", .{platform}, 0);
         errdefer allocator.free(sec_ch_ua_platform);
 
-        const languages = config.acceptLanguage() orelse default_languages;
-        const accept_language = try std.fmt.allocPrintSentinel(allocator, "Accept-Language: {s}", .{languages}, 0);
+        const accept_language = try allocator.dupeZ(u8, config.acceptLanguage() orelse default_languages);
         errdefer allocator.free(accept_language);
 
         const proxy_bearer_header: ?[:0]const u8 = if (config.proxyBearerToken()) |token|
@@ -989,14 +1052,12 @@ pub const HttpHeaders = struct {
 
         return .{
             .user_agent = user_agent,
-            .user_agent_header = user_agent_header,
             .brands = brands,
             .full_version_brands = full_version_brands,
             .sec_ch_ua = sec_ch_ua,
             .sec_ch_ua_platform = sec_ch_ua_platform,
             .platform = platform,
             .accept_language = accept_language,
-            .languages = languages,
             .proxy_bearer_header = proxy_bearer_header,
         };
     }
@@ -1070,9 +1131,8 @@ pub const HttpHeaders = struct {
     fn formatSecChUa(allocator: Allocator, brands: []const Brand) ![:0]const u8 {
         var aw: std.Io.Writer.Allocating = .init(allocator);
         defer aw.deinit();
-        try aw.writer.writeAll("Sec-Ch-Ua:");
         for (brands, 0..) |b, i| {
-            try aw.writer.print("{s}\"{s}\";v=\"{s}\"", .{ if (i == 0) " " else ", ", b.brand, b.version });
+            try aw.writer.print("{s}\"{s}\";v=\"{s}\"", .{ if (i == 0) "" else ", ", b.brand, b.version });
         }
         return aw.toOwnedSliceSentinel(0);
     }
@@ -1090,7 +1150,6 @@ pub const HttpHeaders = struct {
         if (self.full_version_brands.ptr != &default_full_version_brands) {
             freeBrands(allocator, self.full_version_brands);
         }
-        allocator.free(self.user_agent_header);
         if (self.user_agent.ptr != user_agent_base.ptr) {
             allocator.free(self.user_agent);
         }
@@ -1100,9 +1159,8 @@ pub const HttpHeaders = struct {
 pub fn printUsageAndExit(self: *const Config, allocator: Allocator, help_for: RunMode, success: bool) !void {
     const exec_name = self.exec_name;
     const Help = @import("help.zon");
-    const is_debug = builtin.mode == .Debug;
-    const info_or_warn = if (comptime is_debug) "info" else "warn";
-    const pretty_or_logfmt = if (comptime is_debug) "pretty" else "logfmt";
+    const info_or_warn = if (comptime lp.IS_DEBUG) "info" else "warn";
+    const pretty_or_logfmt = if (comptime lp.IS_DEBUG) "pretty" else "logfmt";
     const comptimePrint = std.fmt.comptimePrint;
 
     const text = switch (help_for) {
@@ -1234,6 +1292,18 @@ test "Config: external stylesheets load by default" {
     try std.testing.expectEqual(false, off.enableExternalStylesheets());
 }
 
+test "Config: adblockLists splits comma-separated paths" {
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .adblock_lists = "easylist.txt,easyprivacy.txt",
+    } });
+    defer config.deinit(std.testing.allocator);
+
+    var paths = config.adblockLists().?;
+    try std.testing.expectEqualStrings("easylist.txt", paths.next().?);
+    try std.testing.expectEqualStrings("easyprivacy.txt", paths.next().?);
+    try std.testing.expectEqual(null, paths.next());
+}
+
 test "Config: blockedUrlPatterns splits comma-separated patterns" {
     var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
         .block_urls = "*doubleclick*,*://*/*.png",
@@ -1252,10 +1322,10 @@ test "Config: HttpHeaders default to Chrome's identity" {
 
     const h = config.http_headers;
     try std.testing.expectEqualStrings(
-        "Sec-Ch-Ua: \"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
         h.sec_ch_ua,
     );
-    try std.testing.expectEqualStrings("Accept-Language: en-US,en;q=0.9", h.accept_language);
+    try std.testing.expectEqualStrings("en-US,en;q=0.9", h.accept_language);
     try std.testing.expectEqual(@as(usize, 3), h.brands.len);
     try std.testing.expectEqualStrings("Not=A?Brand", h.brands[0].brand);
     try std.testing.expectEqualStrings("Chromium", h.brands[2].brand);
@@ -1294,11 +1364,11 @@ test "Config: --sec-ch-ua drives both the header and the brand list" {
     // goes on the wire -- including a major that is deliberately not the one
     // this build claims by default, which is the whole point of the override.
     try std.testing.expectEqualStrings(
-        "Sec-Ch-Ua: \"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
+        "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"",
         h.sec_ch_ua,
     );
-    try std.testing.expectEqualStrings("Sec-Ch-Ua-Platform: \"Windows\"", h.sec_ch_ua_platform);
-    try std.testing.expectEqualStrings("Accept-Language: de-DE,de;q=0.9", h.accept_language);
+    try std.testing.expectEqualStrings("\"Windows\"", h.sec_ch_ua_platform);
+    try std.testing.expectEqualStrings("de-DE,de;q=0.9", h.accept_language);
 
     // ...and navigator.userAgentData.brands reads this same list.
     try std.testing.expectEqual(@as(usize, 3), h.brands.len);
@@ -1336,6 +1406,127 @@ test "Config: a Chrome User-Agent is accepted" {
 // browser's UA starts with "Mozilla/5.0", and forbidding it forbids the goal.
 // The non-printable check stays — that one is wire safety (header injection),
 // not policy.
+// /json/version must never advertise a wildcard bind address because
+// clients (Chromedp, Playwright MCP, etc.) cannot dial 0.0.0.0/::. See
+// issue #1922.
+test "Config: advertiseHost falls back to loopback for wildcard binds" {
+    {
+        var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+            .host = "0.0.0.0",
+        } });
+        defer config.deinit(std.testing.allocator);
+        try std.testing.expect(config.bindIsWildcard());
+        try std.testing.expectEqualStrings("127.0.0.1", config.advertiseHost());
+    }
+    {
+        var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+            .host = "::",
+        } });
+        defer config.deinit(std.testing.allocator);
+        try std.testing.expect(config.bindIsWildcard());
+        try std.testing.expectEqualStrings("127.0.0.1", config.advertiseHost());
+    }
+}
+
+test "Config: advertiseHost honors explicit --advertise-host override" {
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .host = "0.0.0.0",
+        .advertise_host = "192.168.0.5",
+    } });
+    defer config.deinit(std.testing.allocator);
+    // The explicit --advertise-host silences the wildcard guidance log.
+    try std.testing.expect(!config.bindIsWildcard());
+    try std.testing.expectEqualStrings("192.168.0.5", config.advertiseHost());
+}
+
+test "Config: advertiseHost preserves concrete host when not a wildcard" {
+    var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+        .host = "127.0.0.1",
+    } });
+    defer config.deinit(std.testing.allocator);
+    try std.testing.expect(!config.bindIsWildcard());
+    try std.testing.expectEqualStrings("127.0.0.1", config.advertiseHost());
+}
+
+test "Config: parseArgs refuses an invalid --http-header" {
+    const invalid = [_][*:0]const u8{
+        // no colon to split on
+        "not-a-header",
+        // empty name
+        ": value",
+        // names that aren't HTTP tokens
+        "Foo Bar: value",
+        "X(Foo)=a: value",
+        // CR/LF in the value would smuggle a second header onto the wire
+        "X-A: b\r\nX-B: c",
+        "X-A: b\n",
+    };
+
+    for (invalid) |header| {
+        log.expectLog(&.{.app});
+        const argv = [_][*:0]const u8{ "lightpanda", "fetch", "--http-header", header };
+        const proc_args: std.process.Args = .{ .vector = &argv };
+        try std.testing.expectError(error.InvalidArgument, parseArgs(std.testing.allocator, proc_args));
+    }
+}
+
+test "Config: parseArgs collects --http-header" {
+    // The parsed headers are owned by the allocator for the process lifetime;
+    // an arena stands in for main's.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const argv = [_][*:0]const u8{
+        "lightpanda",         "fetch",
+        "--http-header",      "Accept-Language: fr-FR,fr;q=0.9",
+        "--http-header",      " \tX-Empty \t: \t",
+        "http://example.com",
+    };
+    const proc_args: std.process.Args = .{ .vector = &argv };
+    const config = try parseArgs(arena.allocator(), proc_args);
+
+    const headers = config.httpHeaders();
+    try std.testing.expectEqual(2, headers.len);
+    try std.testing.expectEqualStrings("Accept-Language", headers[0].name);
+    try std.testing.expectEqualStrings("fr-FR,fr;q=0.9", headers[0].value);
+    // Name and value are trimmed; an empty value is legal.
+    try std.testing.expectEqualStrings("X-Empty", headers[1].name);
+    try std.testing.expectEqualStrings("", headers[1].value);
+}
+
+test "Config: httpHeaders accessor" {
+    {
+        var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{} });
+        defer config.deinit(std.testing.allocator);
+        try std.testing.expectEqual(0, config.httpHeaders().len);
+    }
+    {
+        var list: std.ArrayList(HttpHeader) = .empty;
+        defer list.deinit(std.testing.allocator);
+        try list.append(std.testing.allocator, .{ .name = "X-Extra", .value = "1" });
+
+        var config = try Config.init(std.testing.allocator, "test", .{ .serve = .{
+            .http_header = list,
+        } });
+        defer config.deinit(std.testing.allocator);
+
+        const headers = config.httpHeaders();
+        try std.testing.expectEqual(1, headers.len);
+        try std.testing.expectEqualStrings("X-Extra", headers[0].name);
+        try std.testing.expectEqualStrings("1", headers[0].value);
+    }
+}
+
+fn userAgentValidator(allocator: Allocator, args: *std.process.Args.Iterator, ua: *?[]const u8) !void {
+    const str = args.next() orelse return error.MissingArgument;
+    validateUserAgent(str) catch |err| {
+        log.fatal(.app, "invalid user-agent", .{ .err = err, .hint = "must be printable ASCII" });
+        return error.InvalidArgument;
+    };
+
+    ua.* = try allocator.dupe(u8, str);
+}
+
 pub fn validateUserAgent(ua: []const u8) !void {
     for (ua) |c| {
         if (!std.ascii.isPrint(c)) {

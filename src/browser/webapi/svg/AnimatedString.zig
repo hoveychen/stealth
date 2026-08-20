@@ -85,8 +85,25 @@ pub fn getAnimVal(self: *const AnimatedString) []const u8 {
 
 fn attributeName(self: *const AnimatedString) String {
     return switch (self._kind) {
-        .href => comptime .wrap("href"),
         .class => comptime .wrap("class"),
+        // Upstream's shape, adopted over ours (which always wrote the plain
+        // `href`): a write updates the attribute that is actually set, so
+        // `<use xlink:href>` keeps writing into xlink:href instead of growing
+        // a second attribute -- which is what Chrome reports. The locals are
+        // not named `href` because that would shadow the reader below.
+        .href => {
+            const plain: String = comptime .wrap("href");
+            if (self._element.hasAttributeSafe(plain)) {
+                return plain;
+            }
+
+            const legacy: String = comptime .wrap("xlink:href");
+            if (self._element.hasAttributeSafe(legacy)) {
+                // legacy attribute, returned if it exists and href doesn't
+                return legacy;
+            }
+            return plain;
+        },
         // The IDL attribute is `in1`; the content attribute is `in`.
         .in1 => comptime .wrap("in"),
         .in2 => comptime .wrap("in2"),

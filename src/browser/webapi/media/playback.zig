@@ -97,7 +97,7 @@ pub const RemotePlayback = struct {
             ._proto = undefined,
             ._media = media,
         });
-        self._proto._type = .{ .remote_playback = self };
+        self._proto._type = .remote_playback;
         return self;
     }
 

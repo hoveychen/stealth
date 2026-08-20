@@ -119,7 +119,7 @@ pub const CanvasCaptureMediaStreamTrack = struct {
             CanvasCaptureMediaStreamTrack{ ._proto = undefined, ._canvas = canvas },
         });
         self._proto._type = .{ .canvas_capture = self };
-        self._proto._proto._type = .{ .canvas_capture_media_stream_track = self };
+        self._proto._proto._type = .canvas_capture_media_stream_track;
         return self;
     }
 
