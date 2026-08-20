@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!--
+  A callback that disconnects more than just its own observer.
+
+  deliverIntersections walks the observer list backwards so that an observer
+  disconnecting *itself* mid-delivery is safe. That is not enough: the callback
+  can disconnect any observer, and once the list is shorter than the index
+  already reached, the next read is out of bounds. Two observers, and the one
+  delivered first drops both, is the smallest case -- len goes 2 -> 0 while the
+  loop still has i = 0 to go.
+
+  pixiv does this, and it crashed the engine rather than throwing: from a client
+  the process is simply gone, and `Runtime.evaluate` times out, which is how it
+  was written down as a hang three times before anyone read the exit signal
+  (tools/fingerprint/results/antibot-2026-08-20-vs-chrome.md, the pixiv row).
+
+  deliverResizes already carries the length re-check this needs; this file is
+  the intersection half of the same guard.
+-->
+<script src="../testing.js"></script>
+<div id="target_all" style="width: 100px; height: 100px;">Target Element</div>
+
+<script id="disconnect_all_during_callback">
+    const target = document.getElementById('target_all');
+    let firstFired = 0;
+    let secondFired = 0;
+
+    // Both observe in the same tick, so both are pending in one delivery pass.
+    const first = new IntersectionObserver(() => {
+        firstFired++;
+        first.disconnect();
+        second.disconnect();
+    });
+    const second = new IntersectionObserver(() => {
+        secondFired++;
+        first.disconnect();
+        second.disconnect();
+    });
+
+    first.observe(target);
+    second.observe(target);
+
+    testing.onload(() => {
+        // Whichever of the two the delivery pass reaches first drops both, so
+        // exactly one callback runs and the other is cancelled before its turn.
+        // The assertion worth having is not which one: it is that the pass
+        // survives the list going empty underneath it.
+        testing.expectEqual(1, firstFired + secondFired);
+    });
+</script>
