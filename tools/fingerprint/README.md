@@ -792,7 +792,7 @@ first: `ByteLengthQueuingStrategy`, `CountQueuingStrategy`,
 `ReadableStreamBYOBRequest`, `CompressionStream`, `DecompressionStream`,
 `WebTransport`, `WebTransportBidirectionalStream`,
 `WebTransportDatagramDuplexStream`, `WebTransportError`. The ground truth is in
-`scratch/win-batch/`: `win20` for the shapes, `win22` and
+`results/probes/`: `win20` for the shapes, `win22` and
 `win26` for the behaviour, `win27` for the worker scope.
 
 CreepJS after the batch: window missing keys **185 → 163**, window spans
@@ -848,7 +848,7 @@ the window-and-navigation leftovers (`URLPattern`, `Option`, `Profiler`,
 `NavigationTransition`, `IDBOpenDBRequest`). Nine of them are also in the worker
 scope, which is exactly the nine Chrome's workers carry.
 
-Ground truth is in `scratch/win-batch/`: `win28` for the shapes
+Ground truth is in `results/probes/`: `win28` for the shapes
 of all forty-seven, `win29` for the behaviour, `win30` for the worker scope, and
 `win31`–`win36` for the pieces that needed a second pass (the Sanitizer config
 algebra, the Highlight iterators, the Option constructor cases, the
@@ -951,7 +951,7 @@ context are all reachable from script.
 The reason it could be built for real rather than stubbed is that the reference
 machine has a working WebGPU: every number, every default and every error string
 below was read off a headed Chrome 150 on it (Apple GPU, `metal-3`), not off the
-spec. The probes are `scratch/win-batch/probe-win37.js` (shapes
+spec. The probes are `probes/probe-win37.js` (shapes
 of all forty-one), `-win38` (adapter and device behaviour), `-win39` (the
 resource `create*` defaults and refusals), `-win40`/`-win40b`/`-win40c` (the
 pipeline and encoder half), `-win41` (the error family), `-win42`/`-win42b`
@@ -1053,7 +1053,7 @@ The whole WebCodecs family — twelve globals, all new: `VideoFrame`,
 Like batch 16 it is not shape-only, and for the same reason: the reference
 machine has a real implementation to read. Every default, every refusal string
 and the whole codec matrix below came off a headed Chrome 150 on it, not off the
-spec. The probes are `scratch/win-batch/probe-win43.js` (shapes
+spec. The probes are `probes/probe-win43.js` (shapes
 and entry points for all twelve), `-win45` (the sample containers), `-win46`,
 `-win46b`, `-win46c`, `-win48`, `-win49`, `-win50` (the four codec classes), and
 `-win47`, `-win51` (the image half). `win46-findings.md`, `win48-findings.md`,
@@ -1169,7 +1169,7 @@ named 34 `XR*` keys, because CreepJS's key table is frozen at Chrome 115.
 `Object.getOwnPropertyNames(window)` on the reference Chrome 150 carries **50**;
 this engine had exactly one, `XRSystem`. The batch closes all 49.
 
-The probes are `scratch/win-batch/probe-win52.js` (the whole
+The probes are `probes/probe-win52.js` (the whole
 family's shapes, the entry point, and the two constructible types), `-win53`
 (the fifteen globals CreepJS's table predates, plus a live session end to end),
 `-win54` (the frame loop), `-win55` (the collections and `end`), and `-win56`
@@ -1298,7 +1298,7 @@ from that table in both directions: `ManagedMediaSource`, `ManagedSourceBuffer`,
 Chrome 150 too, so they are not added. Shipping a global a real Chrome does not
 have is as loud as missing one.
 
-The probes are `scratch/win-batch/probe-win57.js` (the whole
+The probes are `probes/probe-win57.js` (the whole
 family's shapes, the entry points, MSE end to end and a full EME chain),
 `-win60` (canvas capture, ImageCapture, VideoPlaybackQuality and RemotePlayback
 behaviour), `-win61` (the branches this engine can reach that -win60 did not
@@ -1416,7 +1416,7 @@ Note the fifth row: the prefixed name aliases an interface with a *different*
 name. `SpeechRecognitionPhrase` is a global on Chrome 150 and not in CreepJS's
 table, so it was added on the same measured-not-tabulated grounds.
 
-Probes are `scratch/win-batch/probe-win63.js` (every target's
+Probes are `probes/probe-win63.js` (every target's
 shape), `-win64` (the ElementInternals and misc behaviour), `-win65`
 (recognition lifecycle), `-win66` (coercion and the filesystem), `-win67`
 (data-URI encoding and the Entry family). `win63-findings.md` is the readable
@@ -1598,7 +1598,7 @@ were visibly short: 122 of Chrome 150's 144 own properties on
 `HTMLElement.prototype`, 8 of 32 on `HTMLBodyElement.prototype`.
 
 Everything below was measured on a headed Chrome 150 over `http://localhost`
-with the `probe-g20*` scripts in `scratch/win-batch`, not read
+with the `probe-g20*` scripts in `results/probes/`, not read
 off the spec. The mappings the two disagree on are the point of the exercise.
 
 ### Result
@@ -1749,7 +1749,7 @@ iphey swallows the error and alerts `String(err)`, which throws away the stack �
 but `String(err)` on an `Error` routes through `Error.prototype.toString`, and
 that is reachable. Patching it from
 `Page.addScriptToEvaluateOnNewDocument` records `this.stack` before the message
-is flattened (`run-iphey.mjs` in `scratch/win-batch`):
+is flattened (`run-iphey.mjs` in `results/probes/`):
 
 ```
 TypeError: Illegal invocation

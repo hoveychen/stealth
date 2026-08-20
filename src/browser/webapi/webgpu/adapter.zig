@@ -24,7 +24,7 @@
 //
 // The values the getters return are not filler: every one was read off a headed
 // Chrome 150 on the reference machine (Apple / metal-3) with
-// tools/fingerprint/scratch/win-batch/probe-win38.js, whose output is recorded
+// tools/fingerprint/probes/probe-win38.js, whose output is recorded
 // in win38-chrome.json. The feature *set* is Chrome's; its iteration order is
 // not a fingerprint at all, because Chrome's own order is unstable -- see the
 // note on GPUSupportedFeatures.adapter below.

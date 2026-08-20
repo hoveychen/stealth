@@ -5,9 +5,9 @@
 //
 // Shapes, member order, brands, argument counts, serialisations, unit
 // conversions and the error each rejection path throws were all measured on a
-// headed Chrome 150 over http://localhost (probes probe-css1.js and
-// probe-css7.js .. probe-css10.js in
-// tools/fingerprint/scratch/css-batch). Where Chrome disagrees
+// headed Chrome 150 over http://localhost (probes probe-css1.js,
+// probe-css7.js and probe-css8.js in
+// tools/fingerprint/probes/). Where Chrome disagrees
 // with the CSS Typed OM spec the comment says so and Chrome wins.
 //
 // Declaration order inside each JsApi is Chrome's own

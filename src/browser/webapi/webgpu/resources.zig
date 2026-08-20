@@ -21,7 +21,7 @@
 // the descriptor it was given decides what it reports back.
 //
 // Shapes, arities and member order are Chrome 150's, read with
-// tools/fingerprint/scratch/win-batch/probe-win37.js. The order is not
+// tools/fingerprint/probes/probe-win37.js. The order is not
 // alphabetical and in GPUTexture's case not even grouped: Chrome carries
 // `get textureBindingViewDimension` *after* createView and destroy, and that is
 // how it is written here.

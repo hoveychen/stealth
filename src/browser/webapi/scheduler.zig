@@ -18,7 +18,7 @@
 //! first, and a yield() continuation outranks every pending task. That order
 //! is what a script can observe, and it is what was measured on a headed
 //! Chrome 150 over http://localhost (the win10 probes in
-//! tools/fingerprint/scratch/win-batch/).
+//! tools/fingerprint/results/probes/).
 //!
 //! Every argument error on postTask is a rejection rather than a synchronous
 //! throw -- measured, all seven of them -- while setPriority, TaskSignal.any

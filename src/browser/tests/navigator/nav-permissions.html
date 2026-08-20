@@ -3,9 +3,10 @@
 
 <!--
   navigator.permissions. Every name, state, message and shape below was
-  measured on a headed Chrome 150 over http://localhost; the snapshots live in
-  tools/fingerprint/scratch/win-batch/ (probe-perm1.js with
-  perm1-chrome.json, and probe-perm2.js for the gated descriptors).
+  measured on a headed Chrome 150 over http://localhost, with
+  tools/fingerprint/probes/probe-perm1.js and probe-perm2.js (the latter for
+  the gated descriptors); the snapshot is
+  tools/fingerprint/results/probes/perm1-chrome.json.
 
   The point of the exercise: query() used to answer 'prompt' for absolutely
   any name, including names no browser has ever heard of. Chrome rejects those,

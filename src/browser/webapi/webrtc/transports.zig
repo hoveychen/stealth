@@ -22,8 +22,9 @@
 // RTCDtlsTransport is not a shape any real Chrome has.
 //
 // Everything below was read off a headed Chrome 150
-// (/tmp/webrtc-protochain-chrome.json, tools/fingerprint/scratch/
-// webrtc-protochain.mjs): the prototype member set, the accessor/method split,
+// (tools/fingerprint/webrtc-protochain.mjs, recorded in
+// tools/fingerprint/results/probes/webrtc-protochain-chrome.json): the
+// prototype member set, the accessor/method split,
 // each method's arity, the EventTarget prototype link, and the fact that `new`
 // on any of them throws "Illegal constructor" — which is what omitting a
 // `constructor` decl gets us here.
