@@ -858,3 +858,76 @@
   }
 }
 </script>
+
+<script id=getElementsByTagName-qualified-xml>
+{
+  // getElementsByTagName compares the *qualified* name -- the same string
+  // tagName reads back -- and folds ASCII case only in an HTML document. So an
+  // XHTML `<p>` answers to `p` and not to `P`, and `<s:clipPath/>` answers to
+  // `s:clipPath` and not to `clipPath`. getElementsByTagNameNS is unaffected:
+  // it takes a local name, which never carried the prefix. Chrome 151
+  // readings, probe expr-g2-p67.js.
+  const parser = new DOMParser();
+  const XHTML = 'http://www.w3.org/1999/xhtml';
+  const SVG = 'http://www.w3.org/2000/svg';
+  const names = (list) => Array.from(list).map((e) => e.tagName);
+
+  {
+    // No namespace: each spelling reaches only its own element.
+    const doc = parser.parseFromString('<Root><kid/><KID/></Root>', 'text/xml');
+    testing.expectEqual(['Root'], names(doc.getElementsByTagName('Root')));
+    testing.expectEqual([], names(doc.getElementsByTagName('root')));
+    testing.expectEqual(['kid'], names(doc.getElementsByTagName('kid')));
+    testing.expectEqual(['KID'], names(doc.getElementsByTagName('KID')));
+    testing.expectEqual(['Root', 'kid', 'KID'], names(doc.getElementsByTagName('*')));
+    testing.expectEqual(['kid'], names(doc.getElementsByTagNameNS('*', 'kid')));
+    testing.expectEqual(['KID'], names(doc.getElementsByTagNameNS('*', 'KID')));
+    testing.expectEqual(['kid'], names(doc.getElementsByTagNameNS(null, 'kid')));
+  }
+
+  {
+    // XHTML: HTML-namespaced and still exact-only, which cuts both ways --
+    // `P` misses the lowercase element, and `DIV` is the only way to the
+    // capitalised one.
+    const doc = parser.parseFromString(
+      '<html xmlns="' + XHTML + '"><body><p/><DIV/></body></html>', 'application/xhtml+xml');
+    testing.expectEqual(['p'], names(doc.getElementsByTagName('p')));
+    testing.expectEqual([], names(doc.getElementsByTagName('P')));
+    testing.expectEqual(['DIV'], names(doc.getElementsByTagName('DIV')));
+    testing.expectEqual([], names(doc.getElementsByTagName('div')));
+    testing.expectEqual(['body'], names(doc.getElementsByTagName('body')));
+    testing.expectEqual([], names(doc.getElementsByTagName('BODY')));
+    testing.expectEqual(['p'], names(doc.getElementsByTagNameNS(XHTML, 'p')));
+    testing.expectEqual([], names(doc.getElementsByTagNameNS(XHTML, 'P')));
+    testing.expectEqual(['DIV'], names(doc.getElementsByTagNameNS(XHTML, 'DIV')));
+  }
+
+  {
+    // A prefixed element is named by its qualified name here, and by its local
+    // name through the NS variant.
+    const doc = parser.parseFromString(
+      '<root xmlns:s="' + SVG + '"><s:clipPath/><s:g/></root>', 'text/xml');
+    testing.expectEqual(['s:clipPath'], names(doc.getElementsByTagName('s:clipPath')));
+    testing.expectEqual([], names(doc.getElementsByTagName('clipPath')));
+    testing.expectEqual(['s:g'], names(doc.getElementsByTagName('s:g')));
+    testing.expectEqual([], names(doc.getElementsByTagName('g')));
+    testing.expectEqual([], names(doc.getElementsByTagName('s:clippath')));
+    testing.expectEqual(['s:clipPath'], names(doc.getElementsByTagNameNS(SVG, 'clipPath')));
+    testing.expectEqual([], names(doc.getElementsByTagNameNS(SVG, 's:clipPath')));
+    testing.expectEqual(['s:clipPath'], names(doc.getElementsByTagNameNS('*', 'clipPath')));
+  }
+
+  {
+    // The HTML document is the one that folds, and only for its own namespace:
+    // a foreign element there stays exact. Guards the half that was already
+    // aligned.
+    const doc = parser.parseFromString('<p>x</p><svg><clipPath/></svg>', 'text/html');
+    testing.expectEqual(['P'], names(doc.getElementsByTagName('p')));
+    testing.expectEqual(['P'], names(doc.getElementsByTagName('P')));
+    testing.expectEqual(['clipPath'], names(doc.getElementsByTagName('clipPath')));
+    testing.expectEqual([], names(doc.getElementsByTagName('clippath')));
+    testing.expectEqual(['clipPath'], names(doc.getElementsByTagNameNS(SVG, 'clipPath')));
+    testing.expectEqual([], names(doc.getElementsByTagNameNS(SVG, 'clippath')));
+  }
+}
+</script>
