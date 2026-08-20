@@ -343,7 +343,7 @@ pub const ViewTransitionTypeSet = struct {
     pub fn forEach(self: *ViewTransitionTypeSet, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (self._types.items) |name| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ name, name, self }, &caught) catch {};
         }
     }

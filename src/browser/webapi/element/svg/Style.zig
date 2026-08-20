@@ -32,6 +32,7 @@ const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
+const Factory = @import("../../../Factory.zig");
 const CSSStyleSheet = @import("../../css/CSSStyleSheet.zig");
 
 const Svg = @import("../Svg.zig");
@@ -46,7 +47,7 @@ pub fn asElement(self: *Style) *Element {
     return self._proto.asElement();
 }
 pub fn asConstElement(self: *const Style) *const Element {
-    return self._proto._proto;
+    return Factory.protoOf(self._proto);
 }
 pub fn asNode(self: *Style) *Node {
     return self.asElement().asNode();

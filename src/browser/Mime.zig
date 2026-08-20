@@ -550,7 +550,7 @@ pub fn serialize(arena: Allocator, input: []const u8) ![]const u8 {
 
     // The serialized output is the input length plus quoting overhead; reserve
     // the input length so the common (no-escape) case appends without growing.
-    try out.ensureTotalCapacity(arena, trimmed.len);
+    try out.ensureTotalCapacityPrecise(arena, trimmed.len);
 
     // Lowercased names already emitted, for first-wins dedupe.
     var seen: std.ArrayList([]const u8) = .empty;
@@ -644,6 +644,24 @@ pub fn isHttpToken(s: []const u8) bool {
         if (HTTP_TOKEN[b] == false) {
             return false;
         }
+    }
+    return true;
+}
+
+pub fn isHttpHeaderValue(value: []const u8) bool {
+    var i: usize = 0;
+    while (i < value.len) {
+        const n = std.unicode.utf8ByteSequenceLength(value[i]) catch return false;
+        if (i + n > value.len) {
+            return false;
+        }
+
+        const cp = std.unicode.utf8Decode(value[i..][0..n]) catch return false;
+
+        if (cp > 0xFF or cp == 0x00 or cp == 0x0A or cp == 0x0D) {
+            return false;
+        }
+        i += n;
     }
     return true;
 }

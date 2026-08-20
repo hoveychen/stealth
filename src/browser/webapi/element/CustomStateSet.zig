@@ -77,7 +77,7 @@ pub fn forEach(self: *CustomStateSet, cb_: js.Function, js_this_: ?js.Object) !v
     const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
 
     for (self._states.items) |state| {
-        var caught: js.TryCatch.Caught = undefined;
+        var caught: js.TryCatch.Caught = .{};
         // A setlike hands the value twice: (value, key, set).
         cb.tryCall(void, .{ state, state, self }, &caught) catch {
             lp.log.debug(.js, "forEach callback", .{ .caught = caught, .source = "CustomStateSet" });

@@ -141,7 +141,7 @@ fn list(slot: *?*SourceBufferList, page: *Page) !*SourceBufferList {
         return existing;
     }
     const created = try page.factory.eventTarget(SourceBufferList{ ._proto = undefined });
-    created._proto._type = .{ .source_buffer_list = created };
+    created._proto._type = .source_buffer_list;
     slot.* = created;
     return created;
 }

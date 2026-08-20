@@ -222,7 +222,7 @@ pub const Highlight = struct {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
 
         for (self._ranges.items) |range| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             // A setlike hands the value twice: (value, key, set).
             cb.tryCall(void, .{ range, range, self }, &caught) catch {
                 log.debug(.js, "forEach callback", .{ .caught = caught, .source = "Highlight" });
@@ -407,7 +407,7 @@ pub const HighlightRegistry = struct {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
 
         for (self._entries.items) |entry| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ entry.highlight, entry.name.str(), self }, &caught) catch {
                 log.debug(.js, "forEach callback", .{ .caught = caught, .source = "HighlightRegistry" });
             };

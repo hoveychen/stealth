@@ -656,3 +656,59 @@
     });
   }
 </script>
+
+<script id=xhr_request_headers type=module>
+  {
+    // setRequestHeader can add and merge author headers, but a Sec-* name is a
+    // forbidden header name, so the author's client hint never reaches the
+    // wire and the engine's own goes out instead.
+    const state = await testing.async();
+    const req = new XMLHttpRequest();
+    req.onload = () => state.resolve();
+    req.open('GET', 'http://127.0.0.1:9582/echo_headers');
+    req.setRequestHeader('Accept-Language', 'fr');
+    req.setRequestHeader('X-Multi', 'a');
+    req.setRequestHeader('X-Multi', 'b');
+    req.setRequestHeader('User-Agent', 'Mozilla/5.0 (X11; Linux x86_64)');
+    req.setRequestHeader('Sec-Ch-Ua', '"Chromium";v="140"');
+    req.send();
+
+    await state.done(() => {
+      const got = {};
+      for (const line of req.responseText.trim().split('\n')) {
+        const sep = line.indexOf(': ');
+        got[line.slice(0, sep).toLowerCase()] = line.slice(sep + 2);
+      }
+      testing.expectEqual('fr', got['accept-language']);
+      testing.expectEqual('a, b', got['x-multi']);
+      testing.expectEqual(false, got['sec-ch-ua'] === '"Chromium";v="140"');
+      testing.expectEqual(true, got['sec-ch-ua'].includes('Google Chrome'));
+    });
+  }
+</script>
+
+<script id=xhr_header_order type=module>
+  {
+    // Header ORDER is a fingerprint, not just the set. Measured on a headed
+    // Chrome 151 against the same local echo server
+    // (tools/fingerprint/results/regression-2026-08-20-probe-chrome.json, the
+    // localHeaders step): a subresource leads with sec-ch-ua-platform and
+    // User-Agent and only then repeats sec-ch-ua / sec-ch-ua-mobile, which is a
+    // different order from the one a navigation uses.
+    const state = await testing.async();
+    const req = new XMLHttpRequest();
+    req.onload = () => state.resolve();
+    req.open('GET', 'http://127.0.0.1:9582/echo_headers');
+    req.send();
+
+    await state.done(() => {
+      const names = req.responseText.trim().split('\n')
+        .map(l => l.slice(0, l.indexOf(':')).toLowerCase());
+      testing.expectEqual([
+        'host', 'connection', 'sec-ch-ua-platform', 'user-agent', 'sec-ch-ua',
+        'sec-ch-ua-mobile', 'accept', 'sec-fetch-site', 'sec-fetch-mode',
+        'sec-fetch-dest', 'referer', 'accept-encoding', 'accept-language',
+      ], names);
+    });
+  }
+</script>

@@ -17,7 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-
+const lp = @import("lightpanda");
 const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 const text_measure = @import("../../../text_measure.zig");
@@ -26,6 +26,7 @@ const font_metrics = @import("../../../font_metrics.zig");
 const Node = @import("../../Node.zig");
 const SvgRect = @import("../../svg/Rect.zig");
 const Element = @import("../../Element.zig");
+const Factory = @import("../../../Factory.zig");
 
 const AnimatedEnumeration = @import("../../svg/AnimatedEnumeration.zig");
 const AnimatedLength = @import("../../svg/AnimatedLength.zig");
@@ -39,26 +40,47 @@ pub const TextPath = @import("TextPath.zig");
 const TextContent = @This();
 
 pub const Proto = Graphics;
-_proto: *Graphics,
 _type: Type,
+_proto_canary: if (lp.IS_DEBUG) *Graphics else void = undefined,
 
-pub const Type = union(enum) {
-    positioning: *TextPositioning,
-    text_path: *TextPath,
+pub const Type = enum(u8) {
+    positioning,
+    text_path,
 };
 
-pub fn is(self: *TextContent, comptime T: type) ?*T {
-    inline for (@typeInfo(Type).@"union".fields) |field| {
-        if (@field(Type, field.name) == self._type) {
-            if (field.type == *T) return @field(self._type, field.name);
-        }
+pub fn Subtype(comptime tag: Type) type {
+    return switch (tag) {
+        .positioning => TextPositioning,
+        .text_path => TextPath,
+    };
+}
+
+pub fn subtype(self: *const TextContent, comptime T: type) *T {
+    const offset = comptime Factory.chainOffsetOf(T, T) - Factory.chainOffsetOf(T, TextContent);
+    const sub: *T = @ptrFromInt(@intFromPtr(self) + offset);
+    if (comptime lp.IS_DEBUG) {
+        // This pointer dance only works because the factory allocates the chain
+        // in a contiguous block of memory. In debug, we assert this holds via
+        // the _proto_canary back pointer.
+        std.debug.assert(Factory.protoOf(sub) == self);
     }
-    if (self._type == .positioning) return self._type.positioning.is(T);
+    return sub;
+}
+
+pub fn is(self: *TextContent, comptime T: type) ?*T {
+    switch (self._type) {
+        inline else => |tag| {
+            if (Subtype(tag) == T) {
+                return self.subtype(T);
+            }
+        },
+    }
+    if (self._type == .positioning) return self.subtype(TextPositioning).is(T);
     return null;
 }
 
 pub fn asElement(self: *TextContent) *Element {
-    return self._proto.asElement();
+    return Factory.protoOf(self).asElement();
 }
 pub fn asNode(self: *TextContent) *Node {
     return self.asElement().asNode();
@@ -69,7 +91,8 @@ fn text(self: *TextContent, frame: *Frame) []const u8 {
 }
 
 fn fontSize(self: *TextContent, frame: *Frame) f64 {
-    return frame._style_manager.computedFontSize(self.asElement());
+    const element = self.asElement();
+    return element.ownerFrame(frame)._style_manager.computedFontSize(element);
 }
 
 /// The first family in the cascaded `font-family` list we have a table for.

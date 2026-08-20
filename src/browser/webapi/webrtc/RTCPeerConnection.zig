@@ -301,7 +301,6 @@ pub fn setLocalDescription(self: *RTCPeerConnection, description: ?RTCSessionDes
         const task = try exec._factory.create(GatherTask{ .connection = self, .exec = exec });
         try exec.js.scheduler.add(task, GatherTask.run, GATHER_DELAY_MS, .{
             .name = "RTCPeerConnection.gather",
-            .low_priority = false,
             .finalizer = GatherTask.cancelled,
         });
     }

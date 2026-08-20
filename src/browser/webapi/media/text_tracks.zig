@@ -107,7 +107,7 @@ pub const TextTrack = struct {
             ._cues = try factory.create(TextTrackCueList{}),
             ._active_cues = try factory.create(TextTrackCueList{}),
         });
-        track._proto._type = .{ .text_track = track };
+        track._proto._type = .text_track;
         return track;
     }
 

@@ -840,7 +840,6 @@ pub const FileWriter = struct {
         });
         try exec.js.scheduler.add(task, WriteTask.run, 0, .{
             .name = "FileWriter.write",
-            .low_priority = false,
             .finalizer = WriteTask.cancelled,
         });
     }
@@ -935,7 +934,6 @@ fn callLater(exec: *Execution, callback_: ?js.Function, argument: anytype) !void
     });
     try exec.js.scheduler.add(task, CallbackTask(@TypeOf(argument)).run, 0, .{
         .name = "filesystem.callback",
-        .low_priority = false,
         .finalizer = CallbackTask(@TypeOf(argument)).cancelled,
     });
 }

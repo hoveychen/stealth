@@ -177,7 +177,6 @@ pub fn close(self: *RTCDataChannel, exec: *Execution) !void {
     const task = try exec._factory.create(CloseTask{ .channel = self, .exec = exec });
     try exec.js.scheduler.add(task, CloseTask.run, 0, .{
         .name = "RTCDataChannel.close",
-        .low_priority = false,
         .finalizer = CloseTask.cancelled,
     });
 }

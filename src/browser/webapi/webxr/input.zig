@@ -143,7 +143,7 @@ pub const XRInputSourceArray = struct {
     pub fn forEach(self: *XRInputSourceArray, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (self._sources, 0..) |source, index| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ source, @as(u32, @intCast(index)), self }, &caught) catch {};
         }
     }
@@ -226,7 +226,7 @@ pub const XRHand = struct {
     pub fn forEach(self: *XRHand, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (self._joints) |joint| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ joint.space, joint.name, self }, &caught) catch {};
         }
     }

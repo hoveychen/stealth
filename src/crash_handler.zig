@@ -2,8 +2,6 @@ const std = @import("std");
 const lp = @import("lightpanda");
 const builtin = @import("builtin");
 
-const IS_DEBUG = builtin.mode == .Debug;
-
 const abort = std.process.abort;
 
 // tracks how deep within a panic we're panicling
@@ -72,7 +70,7 @@ pub noinline fn crash(
 }
 
 fn report(reason: []const u8, begin_addr: usize, args: anytype) !void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         return;
     }
 
@@ -103,6 +101,11 @@ fn report(reason: []const u8, begin_addr: usize, args: anytype) !void {
     const body = blk: {
         var writer: std.Io.Writer = .fixed(body_buffer[0..8191]); // reserve 1 space
         inline for (@typeInfo(@TypeOf(args)).@"struct".fields) |f| {
+            // remove url value from the crash report.
+            if (comptime std.mem.eql(u8, f.name, "url")) {
+                writer.writeAll("url: REDACTED\n") catch break;
+                continue;
+            }
             writer.writeAll(f.name ++ ": ") catch break;
             lp.log.writeValue(.pretty, @field(args, f.name), &writer) catch {};
             writer.writeByte('\n') catch {};

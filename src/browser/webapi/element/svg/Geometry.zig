@@ -17,12 +17,18 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 
 const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
+const Factory = @import("../../../Factory.zig");
+// Not upstream's DOMPoint: Chrome still answers getPointAtLength() with the
+// legacy SVGPoint (float coordinates, no z/w), which is a distinct interface
+// from DOMPoint -- see tests/element/svg/geometry.html asserting
+// `point instanceof SVGPoint` and `!(point instanceof DOMPoint)`.
 const SvgPoint = @import("../../svg/Point.zig");
 
 const Graphics = @import("Graphics.zig");
@@ -40,32 +46,56 @@ pub const Polyline = @import("Polyline.zig");
 const Geometry = @This();
 
 pub const Proto = Graphics;
-_proto: *Graphics,
 _type: Type,
+_proto_canary: if (lp.IS_DEBUG) *Graphics else void = undefined,
 
-pub const Type = union(enum) {
-    rect: *Rect,
-    circle: *Circle,
-    ellipse: *Ellipse,
-    line: *Line,
-    path: *Path,
-    polygon: *Polygon,
-    polyline: *Polyline,
+pub const Type = enum(u8) {
+    rect,
+    circle,
+    ellipse,
+    line,
+    path,
+    polygon,
+    polyline,
 };
 
+pub fn Subtype(comptime tag: Type) type {
+    return switch (tag) {
+        .rect => Rect,
+        .circle => Circle,
+        .ellipse => Ellipse,
+        .line => Line,
+        .path => Path,
+        .polygon => Polygon,
+        .polyline => Polyline,
+    };
+}
+
+pub fn subtype(self: *const Geometry, comptime T: type) *T {
+    const offset = comptime Factory.chainOffsetOf(T, T) - Factory.chainOffsetOf(T, Geometry);
+    const sub: *T = @ptrFromInt(@intFromPtr(self) + offset);
+    if (comptime lp.IS_DEBUG) {
+        // This pointer dance only works because the factory allocates the chain
+        // in a contiguous block of memory. In debug, we assert this holds via
+        // the _proto_canary back pointer.
+        std.debug.assert(Factory.protoOf(sub) == self);
+    }
+    return sub;
+}
+
 pub fn is(self: *Geometry, comptime T: type) ?*T {
-    inline for (@typeInfo(Type).@"union".fields) |f| {
-        if (@field(Type, f.name) == self._type) {
-            if (f.type == *T) {
-                return @field(self._type, f.name);
+    switch (self._type) {
+        inline else => |tag| {
+            if (Subtype(tag) == T) {
+                return self.subtype(T);
             }
-        }
+        },
     }
     return null;
 }
 
 pub fn asElement(self: *Geometry) *Element {
-    return self._proto.asElement();
+    return Factory.protoOf(self).asElement();
 }
 pub fn asNode(self: *Geometry) *Node {
     return self.asElement().asNode();
@@ -105,16 +135,16 @@ pub fn getPointAtLength(self: *Geometry, distance: f64, frame: *Frame) !*SvgPoin
 
 pub fn buildPath(self: *Geometry, frame: *Frame) !PathData.Path {
     return switch (self._type) {
-        .rect => |rect| buildRect(rect, frame),
-        .circle => |circle| buildCircle(circle, frame),
-        .ellipse => |ellipse| buildEllipse(ellipse, frame),
-        .line => |line| buildLine(line, frame),
-        .path => |path| PathData.parse(
-            path.asElement().getAttributeSafe(comptime .wrap("d")) orelse "",
+        .rect => buildRect(self.subtype(Rect), frame),
+        .circle => buildCircle(self.subtype(Circle), frame),
+        .ellipse => buildEllipse(self.subtype(Ellipse), frame),
+        .line => buildLine(self.subtype(Line), frame),
+        .path => PathData.parse(
+            self.subtype(Path).asElement().getAttributeSafe(comptime .wrap("d")) orelse "",
             frame.local_arena,
         ),
-        .polygon => |polygon| buildPoints(try polygon.getPoints(frame), true, frame),
-        .polyline => |polyline| buildPoints(try polyline.getPoints(frame), false, frame),
+        .polygon => buildPoints(try self.subtype(Polygon).getPoints(frame), true, frame),
+        .polyline => buildPoints(try self.subtype(Polyline).getPoints(frame), false, frame),
     };
 }
 

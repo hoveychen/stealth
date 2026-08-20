@@ -35,7 +35,6 @@ const log = lp.log;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const CALL_ARENA_RETAIN = 1024 * 16;
 const LOCAL_ARENA_RETAIN = 1024 * 16;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 const Caller = @This();
 
@@ -110,7 +109,7 @@ pub fn deinit(self: *Caller) void {
     // to avoid realloc churn.
     {
         const local_arena: *ArenaAllocator = @ptrCast(@alignCast(ctx.local_arena.ptr));
-        _ = local_arena.reset(if (comptime IS_DEBUG) .free_all else .{ .retain_with_limit = LOCAL_ARENA_RETAIN });
+        _ = local_arena.reset(if (comptime lp.IS_DEBUG) .free_all else .{ .retain_with_limit = LOCAL_ARENA_RETAIN });
     }
 
     ctx.call_depth = call_depth;
@@ -209,7 +208,7 @@ fn _constructor(self: *Caller, func: anytype, info: FunctionCallbackInfo, compti
         const prototype_handle = v8.v8__Object__GetPrototype(new_this_handle).?;
         var out: v8.MaybeBool = undefined;
         v8.v8__Object__SetPrototype(this.handle, self.local.handle, prototype_handle, &out);
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             std.debug.assert(out.has_value and out.value);
         }
     }
@@ -564,7 +563,7 @@ fn errorLocal(comptime T: type, local: *const Local, info: anytype) Local {
     const node = protoNode(T, instance);
 
     const doc: *Document = node.ownerDocument(frame) orelse switch (node._type) {
-        .document => |d| d,
+        .document => node.subtype(Document),
         else => return local.*,
     };
     const doc_frame = doc._frame orelse return local.*;
@@ -603,7 +602,7 @@ fn interfaceName(comptime T: type) []const u8 {
 fn handleError(comptime T: type, comptime F: type, local: *const Local, err: anyerror, info: anytype) void {
     const isolate = local.isolate;
 
-    if (comptime IS_DEBUG and @TypeOf(info) == FunctionCallbackInfo) {
+    if (comptime lp.IS_DEBUG and @TypeOf(info) == FunctionCallbackInfo) {
         if (log.enabled(.js, .debug)) {
             const DOMException = @import("../webapi/DOMException.zig");
             if (DOMException.fromError(err) == null) {
@@ -646,8 +645,27 @@ fn handleError(comptime T: type, comptime F: type, local: *const Local, err: any
         };
     };
 
+    if (comptime returnsPromise(F) and @TypeOf(info) == FunctionCallbackInfo) {
+        // An operation that returns a promise must not throw. It rejects.
+        const resolver = js.PromiseResolver.init(&err_local);
+        resolver.rejectValue(.{ .local = &err_local, .handle = js_err }) catch |reject_err| {
+            log.err(.bug, "handleError reject", .{ .err = reject_err });
+        };
+        info.getReturnValue().set(resolver.promise().toValue());
+        return;
+    }
+
     const js_exception = isolate.throwException(js_err);
     info.getReturnValue().setValueHandle(js_exception);
+}
+
+fn returnsPromise(comptime F: type) bool {
+    const R = @typeInfo(F).@"fn".return_type orelse return false;
+    const payload = switch (@typeInfo(R)) {
+        .error_union => |eu| eu.payload,
+        else => R,
+    };
+    return payload == js.Promise;
 }
 
 // Convert a Zig error to a DOMException. If the error is unknown, return null.
@@ -966,7 +984,7 @@ pub const Function = struct {
                 // the receiver doesn't have expected internal fields (e.g., global
                 // proxy vs global object, cross-context scenarios).
                 if (v8.v8__Object__InternalFieldCount(js_this) <= idx) {
-                    if (comptime IS_DEBUG) {
+                    if (comptime lp.IS_DEBUG) {
                         std.debug.assert(false);
                     }
                     return false;

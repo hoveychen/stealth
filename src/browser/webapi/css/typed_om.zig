@@ -1166,7 +1166,7 @@ pub const CSSNumericArray = struct {
     pub fn forEach(self: *CSSNumericArray, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (self._items, 0..) |value, index| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ value, index, self }, &caught) catch {};
         }
     }
@@ -1677,7 +1677,7 @@ pub const CSSUnparsedValue = struct {
     pub fn forEach(self: *CSSUnparsedValue, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (self._items, 0..) |member, index| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ member, index, self }, &caught) catch {};
         }
     }
@@ -2674,7 +2674,7 @@ pub const CSSTransformValue = struct {
     pub fn forEach(self: *CSSTransformValue, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (self._items.items, 0..) |component, index| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ component, index, self }, &caught) catch {};
         }
     }
@@ -3013,7 +3013,7 @@ pub const StylePropertyMapReadOnly = struct {
         while (index < count) : (index += 1) {
             const name = self._style.item(index);
             const list = try self.getAll(name);
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ list, name, self }, &caught) catch {};
         }
     }

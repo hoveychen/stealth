@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
@@ -23,6 +24,7 @@ const Frame = @import("../../Frame.zig");
 
 const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
+const Factory = @import("../../Factory.zig");
 const AnimatedString = @import("../svg/AnimatedString.zig");
 pub const Generic = @import("svg/Generic.zig");
 pub const Graphics = @import("svg/Graphics.zig");
@@ -47,106 +49,168 @@ const Svg = @This();
 
 pub const Proto = Element;
 _type: Type,
-_proto: *Element,
 _tag_name: String, // Svg elements are case-preserving
+_proto_canary: if (lp.IS_DEBUG) *Element else void = undefined,
 
-pub const Type = union(enum) {
-    graphics: *Graphics,
-    view: *View,
-    title: *Title,
-    desc: *Desc,
-    metadata: *Metadata,
-    gradient: *GradientElement,
-    clip_path: *ClipPath,
-    marker: *Marker,
-    mask: *Mask,
-    pattern: *Pattern,
-    stop: *Stop,
+pub const Type = enum(u8) {
+    graphics,
+    view,
+    title,
+    desc,
+    metadata,
+    gradient,
+    clip_path,
+    marker,
+    mask,
+    pattern,
+    stop,
     // <filter> and its primitives. Each primitive derives straight from
     // SVGElement in Chrome, so each is its own variant rather than a nested
     // union under a shared base that does not exist.
-    filter: *filter.Filter,
-    component_transfer_function: *filter.ComponentTransferFunction,
-    fe_blend: *filter.FEBlend,
-    fe_color_matrix: *filter.FEColorMatrix,
-    fe_convolve_matrix: *filter.FEConvolveMatrix,
-    fe_turbulence: *filter.FETurbulence,
-    fe_component_transfer: *filter.FEComponentTransfer,
-    fe_composite: *filter.FEComposite,
-    fe_diffuse_lighting: *filter.FEDiffuseLighting,
-    fe_displacement_map: *filter.FEDisplacementMap,
-    fe_distant_light: *filter.FEDistantLight,
-    fe_drop_shadow: *filter.FEDropShadow,
-    fe_flood: *filter.FEFlood,
-    fe_gaussian_blur: *filter.FEGaussianBlur,
-    fe_image: *filter.FEImage,
-    fe_merge: *filter.FEMerge,
-    fe_merge_node: *filter.FEMergeNode,
-    fe_morphology: *filter.FEMorphology,
-    fe_offset: *filter.FEOffset,
-    fe_point_light: *filter.FEPointLight,
-    fe_specular_lighting: *filter.FESpecularLighting,
-    fe_spot_light: *filter.FESpotLight,
-    fe_tile: *filter.FETile,
+    filter,
+    component_transfer_function,
+    fe_blend,
+    fe_color_matrix,
+    fe_convolve_matrix,
+    fe_turbulence,
+    fe_component_transfer,
+    fe_composite,
+    fe_diffuse_lighting,
+    fe_displacement_map,
+    fe_distant_light,
+    fe_drop_shadow,
+    fe_flood,
+    fe_gaussian_blur,
+    fe_image,
+    fe_merge,
+    fe_merge_node,
+    fe_morphology,
+    fe_offset,
+    fe_point_light,
+    fe_specular_lighting,
+    fe_spot_light,
+    fe_tile,
     // The SMIL elements. <animate>, <animateMotion>, <animateTransform> and
     // <set> share SVGAnimationElement; <mpath>, <script> and <style> each
     // derive straight from SVGElement.
-    animation: *animation.Animation,
-    mpath: *animation.MPath,
-    script: *Script,
-    style: *Style,
-    generic: *Generic,
+    animation,
+    mpath,
+    script,
+    style,
+    generic,
 };
 
+pub fn Subtype(comptime tag: Type) type {
+    return switch (tag) {
+        .graphics => Graphics,
+        .view => View,
+        .title => Title,
+        .desc => Desc,
+        .metadata => Metadata,
+        .gradient => GradientElement,
+        .clip_path => ClipPath,
+        .marker => Marker,
+        .mask => Mask,
+        .pattern => Pattern,
+        .stop => Stop,
+        .filter => filter.Filter,
+        .component_transfer_function => filter.ComponentTransferFunction,
+        .fe_blend => filter.FEBlend,
+        .fe_color_matrix => filter.FEColorMatrix,
+        .fe_convolve_matrix => filter.FEConvolveMatrix,
+        .fe_turbulence => filter.FETurbulence,
+        .fe_component_transfer => filter.FEComponentTransfer,
+        .fe_composite => filter.FEComposite,
+        .fe_diffuse_lighting => filter.FEDiffuseLighting,
+        .fe_displacement_map => filter.FEDisplacementMap,
+        .fe_distant_light => filter.FEDistantLight,
+        .fe_drop_shadow => filter.FEDropShadow,
+        .fe_flood => filter.FEFlood,
+        .fe_gaussian_blur => filter.FEGaussianBlur,
+        .fe_image => filter.FEImage,
+        .fe_merge => filter.FEMerge,
+        .fe_merge_node => filter.FEMergeNode,
+        .fe_morphology => filter.FEMorphology,
+        .fe_offset => filter.FEOffset,
+        .fe_point_light => filter.FEPointLight,
+        .fe_specular_lighting => filter.FESpecularLighting,
+        .fe_spot_light => filter.FESpotLight,
+        .fe_tile => filter.FETile,
+        .animation => animation.Animation,
+        .mpath => animation.MPath,
+        .script => Script,
+        .style => Style,
+        .generic => Generic,
+    };
+}
+
+pub fn subtype(self: *const Svg, comptime T: type) *T {
+    const offset = comptime Factory.chainOffsetOf(T, T) - Factory.chainOffsetOf(T, Svg);
+    const sub: *T = @ptrFromInt(@intFromPtr(self) + offset);
+    if (comptime lp.IS_DEBUG) {
+        // This pointer dance only works because the factory allocates the chain
+        // in a contiguous block of memory. In debug, we assert this holds via
+        // the _proto_canary back pointer.
+        std.debug.assert(Factory.protoOf(sub) == self);
+    }
+    return sub;
+}
+
 pub fn is(self: *Svg, comptime T: type) ?*T {
-    inline for (@typeInfo(Type).@"union".fields) |field| {
-        if (@field(Type, field.name) == self._type) {
-            if (field.type == *T) {
-                return @field(self._type, field.name);
+    switch (self._type) {
+        inline else => |tag| {
+            if (Subtype(tag) == T) {
+                return self.subtype(T);
             }
-        }
+        },
     }
     if (self._type == .graphics) {
-        return self._type.graphics.is(T);
+        return self.subtype(Graphics).is(T);
     }
     if (self._type == .gradient) {
-        return self._type.gradient.is(T);
+        return self.subtype(GradientElement).is(T);
     }
     if (self._type == .component_transfer_function) {
-        return self._type.component_transfer_function.is(T);
+        return self.subtype(filter.ComponentTransferFunction).is(T);
     }
     if (self._type == .animation) {
-        return self._type.animation.is(T);
+        return self.subtype(animation.Animation).is(T);
     }
     return null;
 }
 
 pub fn getTag(self: *const Svg) Element.Tag {
     return switch (self._type) {
-        .graphics => |g| switch (g._type) {
-            .svg => .svg,
-            .g => .g,
-            // No dedicated Element.Tag values; tag-name matching falls back
-            // to _tag_name, like it does for generic SVG elements.
-            .a, .use, .image, .defs, .symbol, .switch_element, .foreign_object => .unknown,
-            .text_content => |content| switch (content._type) {
-                .positioning => |positioning| switch (positioning._type) {
-                    .text => .text,
-                    .tspan => .unknown,
+        .graphics => blk: {
+            const g = self.subtype(Graphics);
+            break :blk switch (g._type) {
+                .svg => .svg,
+                .g => .g,
+                // No dedicated Element.Tag values; tag-name matching falls back
+                // to _tag_name, like it does for generic SVG elements.
+                .a, .use, .image, .defs, .symbol, .switch_element, .foreign_object => .unknown,
+                .text_content => tc: {
+                    const content = g.subtype(Graphics.TextContent);
+                    break :tc switch (content._type) {
+                        .positioning => switch (content.subtype(Graphics.TextContent.TextPositioning)._type) {
+                            .text => .text,
+                            .tspan => .unknown,
+                        },
+                        .text_path => .unknown,
+                    };
                 },
-                .text_path => .unknown,
-            },
-            .geometry => |geo| switch (geo._type) {
-                .rect => .rect,
-                .circle => .circle,
-                .ellipse => .ellipse,
-                .line => .line,
-                .path => .path,
-                .polygon => .polygon,
-                .polyline => .polyline,
-            },
+                .geometry => switch (g.subtype(Graphics.Geometry)._type) {
+                    .rect => .rect,
+                    .circle => .circle,
+                    .ellipse => .ellipse,
+                    .line => .line,
+                    .path => .path,
+                    .polygon => .polygon,
+                    .polyline => .polyline,
+                },
+            };
         },
-        .generic => |g| g._tag,
+        .generic => self.subtype(Generic)._tag,
         .title => .title,
         .view,
         .desc,
@@ -189,7 +253,7 @@ pub fn getTag(self: *const Svg) Element.Tag {
 }
 
 pub fn asElement(self: *Svg) *Element {
-    return self._proto;
+    return Factory.protoOf(self);
 }
 pub fn asNode(self: *Svg) *Node {
     return self.asElement().asNode();
@@ -254,6 +318,5 @@ pub const JsApi = struct {
 
 const testing = @import("../../../testing.zig");
 test "WebApi: Svg" {
-    testing.expectLog(&.{ .not_implemented, .not_implemented });
     try testing.htmlRunner("element/svg", .{});
 }

@@ -32,23 +32,6 @@ _counts: std.StringHashMapUnmanaged(u64) = .{},
 
 pub const init: Console = .{};
 
-/// The calling realm's console namespace object.
-///
-/// console is a namespace, not an interface, and Chrome's members do no brand
-/// check on `this`: `console.log.call(undefined, x)`, `const f = console.log;
-/// f(x)` and `Object(console.log)(x)` all log (measured on a headed Chrome
-/// 150, probe-g8a). iphey's `dep-reg-to-string` devtools probe takes the last
-/// of those shapes, and answering it `Illegal invocation` was tripping the
-/// detector. So every member is bound `.static` -- no receiver to unwrap and
-/// no v8 Signature to fail -- and the two stateful tables are reached through
-/// the global scope instead of through `self`.
-fn realm(exec: *const js.Execution) *Console {
-    return switch (exec.js.global) {
-        .frame => |frame| &frame.window._console,
-        .worker => |worker| &worker._console,
-    };
-}
-
 fn dispatchConsoleMessage(values: []js.Value, console_type: Notification.ConsoleMessageType, exec: *js.Execution) void {
     const notification = exec.session.notification;
     const ts = lp.datetime.timestamp(.boot);
@@ -96,24 +79,11 @@ pub fn warn(values: []js.Value, exec: *js.Execution) void {
     dispatchConsoleMessage(values, .warning, exec);
 }
 
-/// console.dir / console.dirxml. Chrome logs the value like console.log does
-/// and returns undefined; the interactive object/DOM tree they draw in devtools
-/// has no headless equivalent.
-pub fn dir(values: []js.Value, exec: *js.Execution) void {
-    logger.info(.js, "console.dir", .{ValueWriter{ .values = values }});
-    dispatchConsoleMessage(values, .log, exec);
-}
-
-pub fn dirxml(values: []js.Value, exec: *js.Execution) void {
-    logger.info(.js, "console.dirxml", .{ValueWriter{ .values = values }});
-    dispatchConsoleMessage(values, .log, exec);
-}
-
 pub fn clear() void {}
 
-pub fn assert(assertion: ?js.Value, values: []js.Value, exec: *js.Execution) void {
-    if (assertion) |a| {
-        if (a.toBool()) {
+pub fn assert(assertion_: ?js.Value, values: []js.Value, exec: *js.Execution) void {
+    if (assertion_) |assertion| {
+        if (assertion.toBool()) {
             return;
         }
     }
@@ -139,8 +109,27 @@ pub fn profileEnd(_: ?[]const u8) void {}
 
 pub fn timeStamp(_: ?[]const u8) void {}
 
+/// console.dir / console.dirxml. Chrome logs the value like console.log does
+/// and returns undefined; the interactive object/DOM tree they draw in devtools
+/// has no headless equivalent. `dir` takes only `(item, options)`, so anything
+/// past the first argument is dropped the way Chrome drops it.
+pub fn dir(item_: ?js.Value, _: ?js.Value, exec: *js.Execution) void {
+    var buf: [1]js.Value = undefined;
+    const values: []js.Value = if (item_) |item| blk: {
+        buf[0] = item;
+        break :blk buf[0..1];
+    } else buf[0..0];
+    logger.info(.js, "console.dir", .{ValueWriter{ .values = values }});
+    dispatchConsoleMessage(values, .dir, exec);
+}
+
+pub fn dirxml(values: []js.Value, exec: *js.Execution) void {
+    logger.info(.js, "console.dirxml", .{ValueWriter{ .values = values }});
+    dispatchConsoleMessage(values, .dirxml, exec);
+}
+
 pub fn count(label_: ?[]const u8, exec: *js.Execution) !void {
-    const self = realm(exec);
+    const self = exec.console();
     const label = label_ orelse "default";
     const gop = try self._counts.getOrPut(exec.arena, label);
 
@@ -158,7 +147,7 @@ pub fn count(label_: ?[]const u8, exec: *js.Execution) !void {
 }
 
 pub fn countReset(label_: ?[]const u8, exec: *js.Execution) !void {
-    const self = realm(exec);
+    const self = exec.console();
     const label = label_ orelse "default";
     const kv = self._counts.fetchRemove(label) orelse {
         logger.info(.js, "console.countReset", .{ .label = label, .err = "invalid label" });
@@ -168,7 +157,7 @@ pub fn countReset(label_: ?[]const u8, exec: *js.Execution) !void {
 }
 
 pub fn time(label_: ?[]const u8, exec: *js.Execution) !void {
-    const self = realm(exec);
+    const self = exec.console();
     const label = label_ orelse "default";
     const gop = try self._timers.getOrPut(exec.arena, label);
 
@@ -181,7 +170,7 @@ pub fn time(label_: ?[]const u8, exec: *js.Execution) !void {
 }
 
 pub fn timeLog(label_: ?[]const u8, exec: *js.Execution) void {
-    const self = realm(exec);
+    const self = exec.console();
     const elapsed = lp.datetime.timestamp(.boot);
     const label = label_ orelse "default";
     const start = self._timers.get(label) orelse {
@@ -192,7 +181,7 @@ pub fn timeLog(label_: ?[]const u8, exec: *js.Execution) void {
 }
 
 pub fn timeEnd(label_: ?[]const u8, exec: *js.Execution) void {
-    const self = realm(exec);
+    const self = exec.console();
     const elapsed = lp.datetime.timestamp(.boot);
     const label = label_ orelse "default";
     const kv = self._timers.fetchRemove(label) orelse {
@@ -357,8 +346,21 @@ pub const JsApi = struct {
     // Object.getOwnPropertyNames(console) -- it is neither alphabetical nor the
     // Console Standard's IDL order, so it can only be copied.
     //
-    // Every member is `.static`: see `Console.realm` for why console does no
-    // receiver check. Every one also reports length 0, because a variadic
+    // Every member is `.static`, because console is a namespace, not an
+    // interface, and Chrome's members do no brand check on `this`:
+    // `console.log.call(undefined, x)`, `const f = console.log; f(x)` and
+    // `Object(console.log)(x)` all log (measured on a headed Chrome 150,
+    // probe-g8a). iphey's `dep-reg-to-string` devtools probe takes the last of
+    // those shapes, and answering it `Illegal invocation` was tripping the
+    // detector. `.static` means no receiver to unwrap and no v8 Signature to
+    // fail; the two stateful tables are reached through `exec.console()`
+    // instead of through `self`.
+    //
+    // Upstream also exposes `exception` as an alias of `error`; Chrome has no
+    // such member, so it is deliberately not re-added here (see the
+    // `no_exception_member` block of tests/console/console.html).
+    //
+    // Every member also reports length 0, because a variadic
     // argument contributes nothing to a function's length and every console
     // operation but `context` is variadic (measured: even console.assert, whose
     // IDL declares a required `condition`, is 0).
@@ -396,5 +398,6 @@ pub const JsApi = struct {
 
 const testing = @import("../../testing.zig");
 test "WebApi: Console" {
+    testing.expectLog(&.{ .js, .js, .js });
     try testing.htmlRunner("console", .{});
 }

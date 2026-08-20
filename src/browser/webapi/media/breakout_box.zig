@@ -130,7 +130,7 @@ pub const MediaStreamTrackGenerator = struct {
             },
         });
         self._proto._type = .{ .generator = self };
-        self._proto._proto._type = .{ .media_stream_track_generator = self };
+        self._proto._proto._type = .media_stream_track_generator;
         return self;
     }
 

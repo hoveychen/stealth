@@ -30,6 +30,7 @@ const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Window = @import("../../Window.zig");
 const Element = @import("../../Element.zig");
+const Factory = @import("../../../Factory.zig");
 const Document = @import("../../Document.zig");
 const HtmlElement = @import("../Html.zig");
 
@@ -40,7 +41,7 @@ pub const Proto = HtmlElement;
 _proto: *HtmlElement,
 
 pub fn asElement(self: *FrameElement) *Element {
-    return self._proto._proto;
+    return Factory.protoOf(self._proto);
 }
 pub fn asNode(self: *FrameElement) *Node {
     return self.asElement().asNode();

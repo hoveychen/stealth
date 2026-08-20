@@ -608,7 +608,7 @@ pub const MediaKeys = struct {
         }
         _ = self;
         const session = try exec._factory.eventTarget(MediaKeySession{ ._proto = undefined });
-        session._proto._type = .{ .media_key_session = session };
+        session._proto._type = .media_key_session;
         return session;
     }
 
@@ -880,7 +880,7 @@ pub const MediaKeyStatusMap = struct {
     pub fn forEach(self: *MediaKeyStatusMap, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (self._entries) |pair| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ pair[1], pair[0], self }, &caught) catch {
                 lp.log.debug(.js, "forEach callback", .{ .caught = caught, .source = "MediaKeyStatusMap" });
             };

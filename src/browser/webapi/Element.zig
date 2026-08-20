@@ -20,10 +20,10 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
+const dump = @import("../dump.zig");
 const Frame = @import("../Frame.zig");
 const Factory = @import("../Factory.zig");
 const StyleManager = @import("../StyleManager.zig");
-const reflect = @import("../reflect.zig");
 
 const CSS = @import("CSS.zig");
 const CData = @import("CData.zig");
@@ -33,7 +33,6 @@ const text_measure = @import("../text_measure.zig");
 const ShadowRoot = @import("ShadowRoot.zig");
 const EventTarget = @import("EventTarget.zig");
 const collections = @import("collections.zig");
-pub const DOMRect = @import("DOMRect.zig");
 const DOMRectList = @import("collections/DOMRectList.zig");
 
 const Selector = @import("selector/Selector.zig");
@@ -43,17 +42,24 @@ const global_event_handlers = @import("global_event_handlers.zig");
 const document_services = @import("document/services.zig");
 const typed_om = @import("css/typed_om.zig");
 const CustomElementRegistry = @import("CustomElementRegistry.zig");
+// Both `element.style` and getComputedStyle() hand out a CSSStyleDeclaration.
+// Upstream splits a CSSStyleProperties off it; we do not, because Chrome has no
+// such global -- `typeof CSSStyleProperties === 'undefined'` (measured off
+// HeadlessChrome/151, see css/chrome_properties.zig and the
+// tests/css/declaration_surface.html pin), so exposing one is itself a signal.
 const CSSStyleDeclaration = @import("css/CSSStyleDeclaration.zig");
 
+const slotting = @import("element/slotting.zig");
+const DOMStringMap = @import("element/DOMStringMap.zig");
+
+pub const DOMRect = @import("DOMRect.zig");
 pub const Svg = @import("element/Svg.zig");
 pub const MathML = @import("element/MathML.zig");
 pub const Html = @import("element/Html.zig");
-const slotting = @import("element/slotting.zig");
 pub const Attribute = @import("element/Attribute.zig");
-const DOMStringMap = @import("element/DOMStringMap.zig");
+pub const Reflect = @import("element/reflection.zig").Reflect;
 
 const log = lp.log;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 const String = lp.String;
 
 const Element = @This();
@@ -62,6 +68,32 @@ pub const Proto = Node;
 
 pub const DatasetLookup = std.AutoHashMapUnmanaged(*Element, *DOMStringMap);
 pub const StyleLookup = std.AutoHashMapUnmanaged(*Element, *CSSStyleDeclaration);
+pub const ComputedStyleLookup = std.AutoHashMapUnmanaged(ComputedStyleKey, *CSSStyleDeclaration);
+
+pub const ComputedStyleKey = struct {
+    element: *Element,
+    pseudo: PseudoElement,
+};
+
+pub const PseudoElement = enum {
+    none,
+    before,
+    after,
+    other,
+
+    // Named `selector` rather than `pseudo`: Element declares a `pseudo()`
+    // method of its own further down, and a parameter of that name shadows it.
+    pub fn parse(selector: []const u8) PseudoElement {
+        if (selector.len == 0 or selector[0] != ':') {
+            return .none;
+        }
+        const name = if (std.mem.startsWith(u8, selector, "::")) selector[2..] else selector[1..];
+        if (std.ascii.eqlIgnoreCase(name, "before")) return .before;
+        if (std.ascii.eqlIgnoreCase(name, "after")) return .after;
+        return .other;
+    }
+};
+
 pub const ClassListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
 pub const RelListLookup = std.AutoHashMapUnmanaged(*Element, *collections.DOMTokenList);
 pub const ShadowRootLookup = std.AutoHashMapUnmanaged(*Element, *ShadowRoot);
@@ -111,9 +143,10 @@ pub const Namespace = enum(u8) {
             return .null;
         }
         if (std.mem.eql(u8, namespace, "http://www.w3.org/1999/xhtml")) {
-            // Common case. The comparison cannot be skipped on length alone:
-            // an XML document can declare any uri at all, and a 28-character
-            // one is not the XHTML namespace just because it is 28 characters.
+            // Common case. The comparison cannot be skipped on length alone
+            // (as upstream does): an XML document can declare any uri at all,
+            // and a 28-character one is not the XHTML namespace just because
+            // it is 28 characters.
             @branchHint(.likely);
             return .html;
         }
@@ -130,8 +163,26 @@ pub const Namespace = enum(u8) {
     }
 };
 
+pub const Flags = packed struct(u8) {
+    shadow_host: bool = false,
+    customized_builtin: bool = false,
+
+    // Prevents nested clicks (which have a specific spec-compliant behavior
+    // compared to other events). If this bit can be more useful for something
+    // else, a stack in EventManager (for click-specifically) is an alterantive
+    // approach
+    click_in_progress: bool = false,
+
+    _unused: u5 = 0,
+};
+
 _type: Type,
 _namespace: Namespace = .html,
+// Presence hints for the frame's element-keyed side tables: a set bit means
+// "maybe in the map" (the map stays the authority), a clear bit skips the
+// lookup. Turns the per-element map probe in tree walks into a bit test on
+// memory the walk already touches. Fits in existing struct padding.
+_flags: Flags = .{},
 _attributes: Attribute.List = .{},
 // The tag name of a `.plain` element. Html, Svg and MathML each keep their own
 // copy on the subtype, which is where this would belong -- but a `.plain`
@@ -142,26 +193,50 @@ _plain_tag_name: String = .empty,
 // In debug, set so that we can check that we have a proper contiguous block
 // of memory for the entire chain (and thus, simple pointer arithmetics will
 // work to resolve the proto).
-_proto_canary: if (IS_DEBUG) *Node else void = undefined,
+_proto_canary: if (lp.IS_DEBUG) *Node else void = undefined,
 
-pub const Type = union(enum) {
-    html: *Html,
-    svg: *Svg,
+pub const Type = enum(u8) {
+    html,
+    svg,
     // The whole MathML namespace is one interface, so there is nothing under
     // this the way there is under Html and Svg.
-    mathml: *MathML,
+    mathml,
     // A namespace with no interface of its own -- null, XML, or anything
     // unrecognised. Measured on Chrome 150: `createElementNS('urn:x', 'thing')`
     // is `[object Element]` sitting straight on Element.prototype, with no
-    // style, no dataset and no constructor of its own. The payload is `void`
-    // rather than a pointer for exactly that reason (see `_plain_tag_name`).
-    plain: void,
+    // style, no dataset and no constructor of its own. There is no subtype at
+    // all for exactly that reason (see `_plain_tag_name`).
+    plain,
 };
+
+pub fn Subtype(comptime tag: Type) type {
+    return switch (tag) {
+        .html => Html,
+        .svg => Svg,
+        .mathml => MathML,
+        // A `.plain` element's chain stops at Element: it has no subtype to
+        // name. Callers that dispatch over Subtype() must skip `void`.
+        .plain => void,
+    };
+}
+
+pub fn subtype(self: *const Element, comptime T: type) *T {
+    const offset = comptime Factory.chainOffsetOf(T, T) - Factory.chainOffsetOf(T, Element);
+    const sub: *T = @ptrFromInt(@intFromPtr(self) + offset);
+    if (comptime lp.IS_DEBUG) {
+        // This pointer dance only works because the factory allocates the chain
+        // in a contiguous block of memory. In debug, we assert this holds via
+        // the _proto_canary back pointer.
+        std.debug.assert(Factory.protoOf(sub) == self);
+    }
+    return sub;
+}
 
 pub fn is(self: *Element, comptime T: type) ?*T {
     const type_name = @typeName(T);
     switch (self._type) {
-        .html => |el| {
+        .html => {
+            const el = self.subtype(Html);
             if (T == Html) {
                 return el;
             }
@@ -169,7 +244,8 @@ pub fn is(self: *Element, comptime T: type) ?*T {
                 return el.is(T);
             }
         },
-        .svg => |svg| {
+        .svg => {
+            const svg = self.subtype(Svg);
             if (T == Svg) {
                 return svg;
             }
@@ -177,9 +253,9 @@ pub fn is(self: *Element, comptime T: type) ?*T {
                 return svg.is(T);
             }
         },
-        .mathml => |mathml| {
+        .mathml => {
             if (T == MathML) {
-                return mathml;
+                return self.subtype(MathML);
             }
         },
         // No subtype to hand back, by construction.
@@ -223,91 +299,94 @@ pub fn isEqualNode(self: *Element, other: *Element) bool {
 
 pub fn getTagNameLower(self: *const Element) []const u8 {
     switch (self._type) {
-        .html => |he| switch (he._type) {
-            .custom => |ce| {
-                @branchHint(.unlikely);
-                return ce._tag_name.str();
-            },
-            else => return switch (he._type) {
-                .anchor => "a",
-                .area => "area",
-                .base => "base",
-                .body => "body",
-                .br => "br",
-                .button => "button",
-                .canvas => "canvas",
-                .custom => |e| e._tag_name.str(),
-                .data => "data",
-                .datalist => "datalist",
-                .details => "details",
-                .dialog => "dialog",
-                .directory => "dir",
-                .menu => "menu",
-                .frame_element => "frame",
-                .div => "div",
-                .dl => "dl",
-                .embed => "embed",
-                .fieldset => "fieldset",
-                .font => "font",
-                .frameset => "frameset",
-                .form => "form",
-                .generic => |e| e._tag_name.str(),
-                .heading => |e| e._tag_name.str(),
-                .head => "head",
-                .html => "html",
-                .hr => "hr",
-                .iframe => "iframe",
-                .img => "img",
-                .input => "input",
-                .label => "label",
-                .legend => "legend",
-                .li => "li",
-                .link => "link",
-                .map => "map",
-                .marquee => "marquee",
-                .media => |m| switch (m._type) {
-                    .audio => "audio",
-                    .video => "video",
-                    .generic => "media",
+        .html => {
+            const he = self.subtype(Html);
+            switch (he._type) {
+                .custom => {
+                    @branchHint(.unlikely);
+                    return he.subtype(Html.Custom)._tag_name.str();
                 },
-                .meta => "meta",
-                .meter => "meter",
-                .mod => |e| e._tag_name.str(),
-                .object => "object",
-                .ol => "ol",
-                .optgroup => "optgroup",
-                .option => "option",
-                .output => "output",
-                .p => "p",
-                .picture => "picture",
-                .param => "param",
-                .pre => "pre",
-                .progress => "progress",
-                .quote => |e| e._tag_name.str(),
-                .script => "script",
-                .select => "select",
-                .slot => "slot",
-                .source => "source",
-                .span => "span",
-                .style => "style",
-                .table => "table",
-                .table_caption => "caption",
-                .table_cell => |e| e._tag_name.str(),
-                .table_col => |e| e._tag_name.str(),
-                .table_row => "tr",
-                .table_section => |e| e._tag_name.str(),
-                .template => "template",
-                .textarea => "textarea",
-                .time => "time",
-                .title => "title",
-                .track => "track",
-                .ul => "ul",
-                .unknown => |e| e._tag_name.str(),
-            },
+                else => return switch (he._type) {
+                    .anchor => "a",
+                    .area => "area",
+                    .base => "base",
+                    .body => "body",
+                    .br => "br",
+                    .button => "button",
+                    .canvas => "canvas",
+                    .custom => he.subtype(Html.Custom)._tag_name.str(),
+                    .data => "data",
+                    .datalist => "datalist",
+                    .details => "details",
+                    .dialog => "dialog",
+                    .directory => "dir",
+                    .menu => "menu",
+                    .frame_element => "frame",
+                    .div => "div",
+                    .dl => "dl",
+                    .embed => "embed",
+                    .fieldset => "fieldset",
+                    .font => "font",
+                    .frameset => "frameset",
+                    .form => "form",
+                    .generic => he.subtype(Html.Generic)._tag_name.str(),
+                    .heading => he.subtype(Html.Heading)._tag_name.str(),
+                    .head => "head",
+                    .html => "html",
+                    .hr => "hr",
+                    .iframe => "iframe",
+                    .img => "img",
+                    .input => "input",
+                    .label => "label",
+                    .legend => "legend",
+                    .li => "li",
+                    .link => "link",
+                    .map => "map",
+                    .marquee => "marquee",
+                    .media => switch (he.subtype(Html.Media)._type) {
+                        .audio => "audio",
+                        .video => "video",
+                        .generic => "media",
+                    },
+                    .meta => "meta",
+                    .meter => "meter",
+                    .mod => he.subtype(Html.Mod)._tag_name.str(),
+                    .object => "object",
+                    .ol => "ol",
+                    .optgroup => "optgroup",
+                    .option => "option",
+                    .output => "output",
+                    .p => "p",
+                    .picture => "picture",
+                    .param => "param",
+                    .pre => "pre",
+                    .progress => "progress",
+                    .quote => he.subtype(Html.Quote)._tag_name.str(),
+                    .script => "script",
+                    .select => "select",
+                    .slot => "slot",
+                    .source => "source",
+                    .span => "span",
+                    .style => "style",
+                    .table => "table",
+                    .table_caption => "caption",
+                    .table_cell => he.subtype(Html.TableCell)._tag_name.str(),
+                    .table_col => he.subtype(Html.TableCol)._tag_name.str(),
+                    .table_row => "tr",
+                    .table_section => he.subtype(Html.TableSection)._tag_name.str(),
+                    .template => "template",
+                    .textarea => "textarea",
+                    .time => "time",
+                    .title => "title",
+                    .track => "track",
+                    .ul => "ul",
+                    .unknown => he.subtype(Html.Unknown)._tag_name.str(),
+                },
+            }
         },
-        .svg => |svg| return svg._tag_name.str(),
+        .svg => return self.subtype(Svg)._tag_name.str(),
         // Case-preserving, like SVG: 'mSpace' stays 'mSpace'.
-        .mathml => |mathml| return mathml._tag_name.str(),
+        .mathml => return self.subtype(MathML)._tag_name.str(),
         .plain => return self._plain_tag_name.str(),
     }
 }
@@ -374,87 +453,90 @@ pub fn inHtmlDocument(self: *Element, frame: *const Frame) bool {
 
 fn tagNameFolded(self: *const Element, buf: []u8) []const u8 {
     return switch (self._type) {
-        .html => |he| switch (he._type) {
-            .anchor => "A",
-            .area => "AREA",
-            .base => "BASE",
-            .body => "BODY",
-            .br => "BR",
-            .button => "BUTTON",
-            .canvas => "CANVAS",
-            .custom => |e| upperTagName(&e._tag_name, buf),
-            .data => "DATA",
-            .datalist => "DATALIST",
-            .details => "DETAILS",
-            .dialog => "DIALOG",
-            .directory => "DIR",
-            .menu => "MENU",
-            .frame_element => "FRAME",
-            .div => "DIV",
-            .dl => "DL",
-            .embed => "EMBED",
-            .fieldset => "FIELDSET",
-            .font => "FONT",
-            .frameset => "FRAMESET",
-            .form => "FORM",
-            .generic => |e| upperTagName(&e._tag_name, buf),
-            .heading => |e| upperTagName(&e._tag_name, buf),
-            .head => "HEAD",
-            .html => "HTML",
-            .hr => "HR",
-            .iframe => "IFRAME",
-            .img => "IMG",
-            .input => "INPUT",
-            .label => "LABEL",
-            .legend => "LEGEND",
-            .li => "LI",
-            .link => "LINK",
-            .map => "MAP",
-            .marquee => "MARQUEE",
-            .meta => "META",
-            .media => |m| switch (m._type) {
-                .audio => "AUDIO",
-                .video => "VIDEO",
-                .generic => "MEDIA",
-            },
-            .meter => "METER",
-            .mod => |e| upperTagName(&e._tag_name, buf),
-            .object => "OBJECT",
-            .ol => "OL",
-            .optgroup => "OPTGROUP",
-            .option => "OPTION",
-            .output => "OUTPUT",
-            .p => "P",
-            .picture => "PICTURE",
-            .param => "PARAM",
-            .pre => "PRE",
-            .progress => "PROGRESS",
-            .quote => |e| upperTagName(&e._tag_name, buf),
-            .script => "SCRIPT",
-            .select => "SELECT",
-            .slot => "SLOT",
-            .source => "SOURCE",
-            .span => "SPAN",
-            .style => "STYLE",
-            .table => "TABLE",
-            .table_caption => "CAPTION",
-            .table_cell => |e| upperTagName(&e._tag_name, buf),
-            .table_col => |e| upperTagName(&e._tag_name, buf),
-            .table_row => "TR",
-            .table_section => |e| upperTagName(&e._tag_name, buf),
-            .template => "TEMPLATE",
-            .textarea => "TEXTAREA",
-            .time => "TIME",
-            .title => "TITLE",
-            .track => "TRACK",
-            .ul => "UL",
-            .unknown => |e| switch (self._namespace) {
-                .html => upperTagName(&e._tag_name, buf),
-                .svg, .xml, .mathml, .unknown, .null => e._tag_name.str(),
-            },
+        .html => blk: {
+            const he = self.subtype(Html);
+            break :blk switch (he._type) {
+                .anchor => "A",
+                .area => "AREA",
+                .base => "BASE",
+                .body => "BODY",
+                .br => "BR",
+                .button => "BUTTON",
+                .canvas => "CANVAS",
+                .custom => upperTagName(&he.subtype(Html.Custom)._tag_name, buf),
+                .data => "DATA",
+                .datalist => "DATALIST",
+                .details => "DETAILS",
+                .dialog => "DIALOG",
+                .directory => "DIR",
+                .menu => "MENU",
+                .frame_element => "FRAME",
+                .div => "DIV",
+                .dl => "DL",
+                .embed => "EMBED",
+                .fieldset => "FIELDSET",
+                .font => "FONT",
+                .frameset => "FRAMESET",
+                .form => "FORM",
+                .generic => upperTagName(&he.subtype(Html.Generic)._tag_name, buf),
+                .heading => upperTagName(&he.subtype(Html.Heading)._tag_name, buf),
+                .head => "HEAD",
+                .html => "HTML",
+                .hr => "HR",
+                .iframe => "IFRAME",
+                .img => "IMG",
+                .input => "INPUT",
+                .label => "LABEL",
+                .legend => "LEGEND",
+                .li => "LI",
+                .link => "LINK",
+                .map => "MAP",
+                .marquee => "MARQUEE",
+                .meta => "META",
+                .media => switch (he.subtype(Html.Media)._type) {
+                    .audio => "AUDIO",
+                    .video => "VIDEO",
+                    .generic => "MEDIA",
+                },
+                .meter => "METER",
+                .mod => upperTagName(&he.subtype(Html.Mod)._tag_name, buf),
+                .object => "OBJECT",
+                .ol => "OL",
+                .optgroup => "OPTGROUP",
+                .option => "OPTION",
+                .output => "OUTPUT",
+                .p => "P",
+                .picture => "PICTURE",
+                .param => "PARAM",
+                .pre => "PRE",
+                .progress => "PROGRESS",
+                .quote => upperTagName(&he.subtype(Html.Quote)._tag_name, buf),
+                .script => "SCRIPT",
+                .select => "SELECT",
+                .slot => "SLOT",
+                .source => "SOURCE",
+                .span => "SPAN",
+                .style => "STYLE",
+                .table => "TABLE",
+                .table_caption => "CAPTION",
+                .table_cell => upperTagName(&he.subtype(Html.TableCell)._tag_name, buf),
+                .table_col => upperTagName(&he.subtype(Html.TableCol)._tag_name, buf),
+                .table_row => "TR",
+                .table_section => upperTagName(&he.subtype(Html.TableSection)._tag_name, buf),
+                .template => "TEMPLATE",
+                .textarea => "TEXTAREA",
+                .time => "TIME",
+                .title => "TITLE",
+                .track => "TRACK",
+                .ul => "UL",
+                .unknown => switch (self._namespace) {
+                    .html => upperTagName(&he.subtype(Html.Unknown)._tag_name, buf),
+                    .svg, .xml, .mathml, .unknown, .null => he.subtype(Html.Unknown)._tag_name.str(),
+                },
+            };
         },
-        .svg => |svg| svg._tag_name.str(),
-        .mathml => |mathml| mathml._tag_name.str(),
+        .svg => self.subtype(Svg)._tag_name.str(),
+        .mathml => self.subtype(MathML)._tag_name.str(),
         // Only the HTML namespace uppercases, and a plain element is never in
         // it.
         .plain => self._plain_tag_name.str(),
@@ -464,8 +546,8 @@ fn tagNameFolded(self: *const Element, buf: []u8) []const u8 {
 pub fn getTagNameDump(self: *const Element) []const u8 {
     switch (self._type) {
         .html => return self.getTagNameLower(),
-        .svg => |svg| return svg._tag_name.str(),
-        .mathml => |mathml| return mathml._tag_name.str(),
+        .svg => return self.subtype(Svg)._tag_name.str(),
+        .mathml => return self.subtype(MathML)._tag_name.str(),
         .plain => return self._plain_tag_name.str(),
     }
 }
@@ -581,7 +663,6 @@ pub fn insertAdjacentHTML(
 }
 
 pub fn getOuterHTML(self: *Element, writer: *std.Io.Writer, frame: *Frame) !void {
-    const dump = @import("../dump.zig");
     return dump.deep(self.asNode(), .{ .shadow = .skip }, writer, frame);
 }
 
@@ -620,7 +701,6 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
     const next_sibling = node.nextSibling();
 
     if (fragment) |frag| {
-        const dest_connected = parent.isConnected();
         var it = frag.childrenIterator();
         while (it.next()) |child| {
             if (node._parent != parent) {
@@ -629,7 +709,7 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
             if (notify) {
                 try added.append(frame.call_arena, child);
             }
-            frame.removeNode(frag, child, .{ .will_be_reconnected = dest_connected, .notify_observers = false });
+            frame.removeNode(frag, child, .{ .reconnect_to = parent, .notify_observers = false });
             try frame.insertNodeRelative(parent, child, .{ .before = node }, .{ .notify_observers = false });
         }
     }
@@ -637,7 +717,7 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
     if (node._parent != parent) {
         return error.NotFound;
     }
-    frame.removeNode(parent, node, .{ .will_be_reconnected = false, .notify_observers = false });
+    frame.removeNode(parent, node, .{ .reconnect_to = null, .notify_observers = false });
 
     if (notify) {
         const removed = [_]*Node{node};
@@ -646,8 +726,11 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
 }
 
 pub fn getInnerHTML(self: *Element, writer: *std.Io.Writer, frame: *Frame) !void {
-    const dump = @import("../dump.zig");
     return dump.children(self.asNode(), .{ .shadow = .skip }, writer, frame);
+}
+
+pub fn getHTML(self: *Element, opts: dump.Opts.Shadow.Declarative, writer: *std.Io.Writer, frame: *Frame) !void {
+    return dump.getHTML(self.asNode(), opts, writer, frame);
 }
 
 pub fn setInnerHTML(self: *Element, html: []const u8, frame: *Frame) !void {
@@ -685,31 +768,6 @@ pub fn setDir(self: *Element, value: []const u8, frame: *Frame) !void {
     return self.setAttributeSafe(comptime .wrap("dir"), .wrap(value), frame);
 }
 
-// ARIAMixin - ARIA attribute reflection
-pub fn getAriaAtomic(self: *const Element) ?[]const u8 {
-    return self.getAttributeSafe(comptime .wrap("aria-atomic"));
-}
-
-pub fn setAriaAtomic(self: *Element, value: ?[]const u8, frame: *Frame) !void {
-    if (value) |v| {
-        try self.setAttributeSafe(comptime .wrap("aria-atomic"), .wrap(v), frame);
-    } else {
-        try self.removeAttribute(comptime .wrap("aria-atomic"), frame);
-    }
-}
-
-pub fn getAriaLive(self: *const Element) ?[]const u8 {
-    return self.getAttributeSafe(comptime .wrap("aria-live"));
-}
-
-pub fn setAriaLive(self: *Element, value: ?[]const u8, frame: *Frame) !void {
-    if (value) |v| {
-        try self.setAttributeSafe(comptime .wrap("aria-live"), .wrap(v), frame);
-    } else {
-        try self.removeAttribute(comptime .wrap("aria-live"), frame);
-    }
-}
-
 pub fn getClassName(self: *const Element) []const u8 {
     return self.getAttributeSafe(comptime .wrap("class")) orelse "";
 }
@@ -727,20 +785,38 @@ pub fn getAttribute(self: *const Element, name: String, frame: *Frame) !?String 
     return self._attributes.get(name, frame);
 }
 
-/// For simplicity, the namespace is currently ignored and only the local name is used.
 pub fn getAttributeNS(
     self: *const Element,
-    maybe_namespace: ?[]const u8,
+    namespace_: ?[]const u8,
     local_name: String,
     frame: *Frame,
 ) !?String {
-    if (maybe_namespace) |namespace| {
-        if (!std.mem.eql(u8, namespace, "http://www.w3.org/1999/xhtml")) {
-            log.warn(.not_implemented, "Element.getAttributeNS", .{ .namespace = namespace });
+    if (namespace_) |namespace| {
+        // we don't really support namespaces, but if the namespace has a fixed
+        // prefix, we can try to fetch the attribute with it
+        if (try prefixedAttributeName(namespace, local_name.str(), frame)) |prefixed| {
+            if (try self.getAttribute(.wrap(prefixed), frame)) |value| {
+                return value;
+            }
         }
     }
-
     return self.getAttribute(local_name, frame);
+}
+
+fn prefixedAttributeName(namespace: []const u8, local_name: []const u8, frame: *Frame) !?[]const u8 {
+    const prefix = blk: {
+        if (std.mem.eql(u8, namespace, "http://www.w3.org/1999/xlink")) {
+            break :blk "xlink";
+        }
+        if (std.mem.eql(u8, namespace, "http://www.w3.org/XML/1998/namespace")) {
+            break :blk "xml";
+        }
+        if (std.mem.eql(u8, namespace, "http://www.w3.org/2000/xmlns/")) {
+            break :blk "xmlns";
+        }
+        return null;
+    };
+    return try std.fmt.allocPrint(frame.local_arena, "{s}:{s}", .{ prefix, local_name });
 }
 
 pub fn getAttributeSafe(self: *const Element, name: String) ?[]const u8 {
@@ -752,20 +828,13 @@ pub fn hasAttribute(self: *const Element, name: String, frame: *Frame) !bool {
     return value != null;
 }
 
-/// Like getAttributeNS, the namespace is currently ignored.
 pub fn hasAttributeNS(
     self: *const Element,
-    maybe_namespace: ?[]const u8,
+    namespace_: ?[]const u8,
     local_name: String,
     frame: *Frame,
 ) !bool {
-    if (maybe_namespace) |namespace| {
-        if (!std.mem.eql(u8, namespace, "http://www.w3.org/1999/xhtml")) {
-            log.warn(.not_implemented, "Element.hasAttributeNS", .{ .namespace = namespace });
-        }
-    }
-
-    return self.hasAttribute(local_name, frame);
+    return try self.getAttributeNS(namespace_, local_name, frame) != null;
 }
 
 pub fn hasAttributeSafe(self: *const Element, name: String) bool {
@@ -844,30 +913,24 @@ pub fn setAttribute(self: *Element, name: String, value: String, frame: *Frame) 
 
 pub fn setAttributeNS(
     self: *Element,
-    maybe_namespace: ?[]const u8,
+    namespace_: ?[]const u8,
     qualified_name: []const u8,
     value: String,
     frame: *Frame,
 ) !void {
-    const attr_name = if (maybe_namespace) |namespace| blk: {
-        // For xmlns namespace, store the full qualified name (e.g. "xmlns:bar")
-        // so lookupNamespaceURI can find namespace declarations.
-        if (std.mem.eql(u8, namespace, "http://www.w3.org/2000/xmlns/")) {
-            break :blk qualified_name;
+    const local_start = if (std.mem.indexOfScalarPos(u8, qualified_name, 0, ':')) |idx| blk: {
+        if (idx == 0 or idx == qualified_name.len - 1) {
+            // cannot be at the start or end of the qname
+            return error.InvalidCharacterError;
         }
-        if (!std.mem.eql(u8, namespace, "http://www.w3.org/1999/xhtml")) {
-            log.warn(.not_implemented, "Element.setAttributeNS", .{ .namespace = namespace });
+        if (std.mem.indexOfScalarPos(u8, qualified_name, idx + 1, ':') != null) {
+            // and can only have one
+            return error.InvalidCharacterError;
         }
-        break :blk if (std.mem.indexOfScalarPos(u8, qualified_name, 0, ':')) |idx|
-            qualified_name[idx + 1 ..]
-        else
-            qualified_name;
-    } else blk: {
-        break :blk if (std.mem.indexOfScalarPos(u8, qualified_name, 0, ':')) |idx|
-            qualified_name[idx + 1 ..]
-        else
-            qualified_name;
-    };
+        break :blk idx + 1;
+    } else 0;
+
+    const attr_name = if (namespace_ != null) qualified_name else qualified_name[local_start..];
     return self.setAttribute(.wrap(attr_name), value, frame);
 }
 
@@ -876,7 +939,7 @@ pub fn setAttributeSafe(self: *Element, name: String, value: String, frame: *Fra
 }
 
 pub fn getShadowRoot(self: *Element, frame: *Frame) ?*ShadowRoot {
-    const shadow_root = frame._element_shadow_roots.get(self) orelse return null;
+    const shadow_root = self.hostedShadowRoot(frame) orelse return null;
     if (shadow_root._mode == .closed) return null;
     return shadow_root;
 }
@@ -913,7 +976,7 @@ pub fn attachShadow(self: *Element, opts: ShadowRoot.AttachOptions, frame: *Fram
         }
     }
 
-    if (frame._element_shadow_roots.get(self)) |existing| {
+    if (self.hostedShadowRoot(frame)) |existing| {
         // Imperative attachShadow over a declarative shadow root with a matching
         // mode empties it and returns the same root. The parser
         // (opts.declarative) never replaces an existing root.
@@ -927,7 +990,18 @@ pub fn attachShadow(self: *Element, opts: ShadowRoot.AttachOptions, frame: *Fram
 
     const shadow_root = try ShadowRoot.init(self, opts, frame);
     try frame._element_shadow_roots.put(frame.arena, self, shadow_root);
+    self._flags.shadow_host = true;
     return shadow_root;
+}
+
+// The shadow root this element hosts, closed ones included (the JS-facing
+// getShadowRoot filters those). The flag check skips the map probe for the
+// overwhelming majority of elements, which host nothing.
+pub fn hostedShadowRoot(self: *Element, frame: *const Frame) ?*ShadowRoot {
+    if (!self._flags.shadow_host) {
+        return null;
+    }
+    return frame._element_shadow_roots.get(self);
 }
 
 pub fn insertAdjacentElement(
@@ -1062,16 +1136,20 @@ pub fn setAttributeListener(
     return frame.setEventHandler(self.asEventTarget(), listener_type, listener_callback);
 }
 
+// The materialized style lives in the map of the element's own frame, not
+// the caller's: attributeChange (which resyncs it) is dispatched on the owner
+// frame, and a same-origin script can reach an element in another frame.
 pub fn getOrCreateStyle(self: *Element, frame: *Frame) !*CSSStyleDeclaration {
-    const gop = try frame._element_styles.getOrPut(frame.arena, self);
+    const owner = self.ownerFrame(frame);
+    const gop = try owner._element_styles.getOrPut(owner.arena, self);
     if (!gop.found_existing) {
-        gop.value_ptr.* = try CSSStyleDeclaration.init(self, false, frame);
+        gop.value_ptr.* = try CSSStyleDeclaration.init(self, false, owner);
     }
     return gop.value_ptr.*;
 }
 
 fn getStyle(self: *Element, frame: *Frame) ?*CSSStyleDeclaration {
-    return frame._element_styles.get(self);
+    return self.ownerFrame(frame)._element_styles.get(self);
 }
 
 pub fn setStyle(self: *Element, value: []const u8, frame: *Frame) !void {
@@ -1245,12 +1323,9 @@ pub fn startViewTransition(self: *Element, _: ?js.Object, frame: *Frame) !*docum
 }
 
 // getHTML is the modern name for getInnerHTML. The options dictionary selects
-// whether shadow roots are included, and we have nothing to include.
-pub fn getHTML(self: *Element, _: ?js.Object, frame: *Frame) ![]const u8 {
-    var buf = std.Io.Writer.Allocating.init(frame.local_arena);
-    try self.getInnerHTML(&buf.writer, frame);
-    return buf.written();
-}
+// which shadow roots are serialized; upstream's `Element.getHTML` above (which
+// takes a writer and a dump.Opts) implements it, and the JsApi member wraps it.
+// The duplicate that ignored the dictionary lived here and is gone.
 
 // setHTML parses with sanitization: measured in Chrome,
 // '<b onclick="x()">hi</b><script>bad()</script>' becomes '<b>hi</b>'. Event
@@ -1296,8 +1371,6 @@ pub fn replaceWith(self: *Element, nodes: []const Node.NodeOrText, frame: *Frame
     const parent = ref_node._parent orelse return;
     frame.domChanged();
 
-    const parent_is_connected = parent.isConnected();
-
     // Detect if the ref_node must be removed (by default) or kept.
     // We kept it when ref_node is present into the nodes list.
     var rm_ref_node = true;
@@ -1317,22 +1390,24 @@ pub fn replaceWith(self: *Element, nodes: []const Node.NodeOrText, frame: *Frame
             continue;
         }
 
+        var previous_root: ?*Node = null;
         if (child._parent) |current_parent| {
-            frame.removeNode(current_parent, child, .{ .will_be_reconnected = parent_is_connected });
+            previous_root = child.getRootNode(.{});
+            frame.removeNode(current_parent, child, .{ .reconnect_to = parent });
         }
 
         try frame.insertNodeRelative(
             parent,
             child,
             .{ .before = ref_node },
-            .{ .child_already_connected = child.isConnected() },
+            .{ .previous_root = previous_root },
         );
     }
 
     // Re-check parent after insertNodeRelative since callbacks (e.g. connectedCallback)
     // could have already removed ref_node from parent.
     if (rm_ref_node and ref_node._parent == parent) {
-        frame.removeNode(parent, ref_node, .{ .will_be_reconnected = false });
+        frame.removeNode(parent, ref_node, .{ .reconnect_to = null });
     }
 }
 
@@ -1340,7 +1415,7 @@ pub fn remove(self: *Element, frame: *Frame) void {
     const node = self.asNode();
     const parent = node._parent orelse return;
     frame.domChanged();
-    frame.removeNode(parent, node, .{ .will_be_reconnected = false });
+    frame.removeNode(parent, node, .{ .reconnect_to = null });
 }
 
 pub fn focus(self: *Element, frame: *Frame) !void {
@@ -1557,12 +1632,15 @@ pub const VisibilityCache = StyleManager.VisibilityCache;
 /// Cache for pointer-events checks - re-exported from StyleManager for convenience.
 pub const PointerEventsCache = StyleManager.PointerEventsCache;
 
+// Style checks go through the StyleManager of the element's own frame, not
+// the caller's: its stylesheets and materialized inline styles are per-frame,
+// and a same-origin script can reach an element in another frame.
 pub fn hasPointerEventsNone(self: *Element, cache: ?*PointerEventsCache, frame: *Frame) bool {
-    return frame._style_manager.hasPointerEventsNone(self, cache);
+    return self.ownerFrame(frame)._style_manager.hasPointerEventsNone(self, cache);
 }
 
 pub fn checkVisibilityCached(self: *Element, cache: ?*VisibilityCache, frame: *Frame) bool {
-    return !frame._style_manager.isHidden(self, cache, .{ .boxless_hidden = true });
+    return !self.ownerFrame(frame)._style_manager.isHidden(self, cache, .{ .boxless_hidden = true });
 }
 
 const CheckVisibilityOpts = struct {
@@ -1573,7 +1651,7 @@ const CheckVisibilityOpts = struct {
 };
 pub fn checkVisibility(self: *Element, opts_: ?CheckVisibilityOpts, frame: *Frame) bool {
     const opts = opts_ orelse CheckVisibilityOpts{};
-    return !frame._style_manager.isHidden(self, null, .{
+    return !self.ownerFrame(frame)._style_manager.isHidden(self, null, .{
         .check_opacity = opts.checkOpacity or opts.opacityProperty,
         .check_visibility = opts.visibilityProperty or opts.checkVisibilityCSS,
         .boxless_hidden = true,
@@ -1644,7 +1722,7 @@ fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 }
             return null;
         }
         if (node.is(CData.Text)) |text| {
-            total_text += text._proto._data.str().len;
+            total_text += Factory.protoOf(text)._data.str().len;
         }
     }
     if (total_text == 0) {
@@ -1656,7 +1734,7 @@ fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 }
     child = self.asNode().firstChild();
     while (child) |node| : (child = node.nextSibling()) {
         if (node.is(CData.Text)) |text| {
-            width += text_measure.measure(font.family, text._proto._data.str(), font.size).width;
+            width += text_measure.measure(font.family, Factory.protoOf(text)._data.str(), font.size).width;
         }
     }
 
@@ -1667,17 +1745,29 @@ fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 }
     return .{ .width = @round(width), .height = @round(box.ascent + box.descent) };
 }
 
-pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, height: f64 } {
-    var width: f64 = 5.0;
-    var height: f64 = 5.0;
+pub const Dimensions = struct {
+    width: f64,
+    height: f64,
+    // if the value is explicit (e.g. inline style, width attribute, ...) or defaulted
+    explicit_width: bool = false,
+    explicit_height: bool = false,
+};
+
+pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
+    var dims: Dimensions = .{ .width = 5.0, .height = 5.0 };
 
     if (self.getStyle(frame)) |style| {
-        const decl = style;
-        width = CSS.parseDimensionViewport(decl.getPropertyValue("width", frame), frame) orelse 5.0;
-        height = CSS.parseDimensionViewport(decl.getPropertyValue("height", frame), frame) orelse 5.0;
+        if (CSS.parseDimensionViewport(style.getPropertyValue("width", frame), frame)) |w| {
+            dims.width = w;
+            dims.explicit_width = true;
+        }
+        if (CSS.parseDimensionViewport(style.getPropertyValue("height", frame), frame)) |h| {
+            dims.height = h;
+            dims.explicit_height = true;
+        }
     }
 
-    if (width == 5.0 or height == 5.0) {
+    if (dims.width == 5.0 or dims.height == 5.0) {
         const tag = self.getTag();
 
         // Root containers get large default size to contain descendant positions.
@@ -1685,14 +1775,20 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, 
         // even very deep trees (100 levels) stay within 10,000px.
         // 100M pixels is plausible for very long documents.
         if (tag == .html or tag == .body) {
-            if (width == 5.0) width = 1920.0;
-            if (height == 5.0) height = 100_000_000.0;
+            if (dims.width == 5.0) dims.width = 1920.0;
+            if (dims.height == 5.0) dims.height = 100_000_000.0;
         } else if (tag == .img or tag == .iframe) {
             if (self.getAttributeSafe(comptime .wrap("width"))) |w| {
-                width = std.fmt.parseFloat(f64, w) catch width;
+                if (std.fmt.parseFloat(f64, w)) |parsed| {
+                    dims.width = parsed;
+                    dims.explicit_width = true;
+                } else |_| {}
             }
             if (self.getAttributeSafe(comptime .wrap("height"))) |h| {
-                height = std.fmt.parseFloat(f64, h) catch height;
+                if (std.fmt.parseFloat(f64, h)) |parsed| {
+                    dims.height = parsed;
+                    dims.explicit_height = true;
+                } else |_| {}
             }
         }
     }
@@ -1700,31 +1796,61 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) struct { width: f64, 
     // An element with no box of its own gets one from its text. Without this
     // every font-enumeration probe — all of which lay out one of these twice
     // and compare — reports that no font is installed, which no real browser
-    // does.
-    if (width == 5.0 or height == 5.0) {
+    // does. The text-derived size is not `explicit`: it is a measurement, not
+    // a declared value, and clientWidth/clientHeight still take the max with
+    // the (zero, for a text-only element) content extent.
+    if (dims.width == 5.0 or dims.height == 5.0) {
         if (self.textLayout(frame)) |text| {
-            if (width == 5.0) width = text.width;
-            if (height == 5.0) height = text.height;
+            if (dims.width == 5.0) dims.width = text.width;
+            if (dims.height == 5.0) dims.height = text.height;
         }
     }
 
-    return .{ .width = width, .height = height };
+    return dims;
 }
 
+// We can't do this correctly without full styles and more rendering. We also
+// can't just ignore the children since some sites append nodes until a certain
+// width / height treshold is reached. If the size isn't explicit, we fallback
+// to contentWidth/contentHeight
 pub fn getClientWidth(self: *Element, frame: *Frame) f64 {
-    if (!self.checkVisibilityCached(null, frame)) {
+    var visibility_cache: VisibilityCache = .{};
+    return self.getClientWidthWithCache(frame, &visibility_cache);
+}
+
+pub fn getClientWidthWithCache(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache) f64 {
+    if (!self.checkVisibilityCached(visibility_cache, frame)) {
         return 0.0;
     }
+
     const dims = self.getElementDimensions(frame);
-    return dims.width;
+
+    const tag = self.getTag();
+    if (tag == .html or tag == .body or dims.explicit_width) {
+        return dims.width;
+    }
+
+    return @max(dims.width, self.contentWidth(frame, visibility_cache));
 }
 
 pub fn getClientHeight(self: *Element, frame: *Frame) f64 {
-    if (!self.checkVisibilityCached(null, frame)) {
+    var visibility_cache: VisibilityCache = .{};
+    return self.getClientHeightWithCache(frame, &visibility_cache);
+}
+
+pub fn getClientHeightWithCache(self: *Element, frame: *Frame, visibility_cache: *VisibilityCache) f64 {
+    if (!self.checkVisibilityCached(visibility_cache, frame)) {
         return 0.0;
     }
+
     const dims = self.getElementDimensions(frame);
-    return dims.height;
+
+    const tag = self.getTag();
+    if (tag == .html or tag == .body or dims.explicit_height) {
+        return dims.height;
+    }
+
+    return @max(dims.height, self.contentHeight(frame, visibility_cache));
 }
 
 pub fn getBoundingClientRect(self: *Element, frame: *Frame) !*DOMRect {
@@ -2116,7 +2242,7 @@ pub fn clone(self: *Element, deep: bool, frame: *Frame) !*Node {
 
     // Per spec, a clonable shadow root is cloned along with its host — its
     // children always deep-cloned, even when the host clone is shallow.
-    if (frame._element_shadow_roots.get(self)) |shadow| {
+    if (self.hostedShadowRoot(frame)) |shadow| {
         if (shadow._clonable) {
             const cloned_shadow = node.as(Element).attachShadow(.{
                 .mode = shadow._mode,
@@ -2131,7 +2257,7 @@ pub fn clone(self: *Element, deep: bool, frame: *Frame) !*Node {
             var shadow_child_it = shadow.asNode().childrenIterator();
             while (shadow_child_it.next()) |child| {
                 if (try child.cloneNodeForAppending(true, frame)) |cloned_child| {
-                    try frame.appendNode(cloned_shadow_node, cloned_child, .{ .child_already_connected = true });
+                    try frame.appendNode(cloned_shadow_node, cloned_child, .{});
                 }
             }
         }
@@ -2141,10 +2267,7 @@ pub fn clone(self: *Element, deep: bool, frame: *Frame) !*Node {
         var child_it = self.asNode().childrenIterator();
         while (child_it.next()) |child| {
             if (try child.cloneNodeForAppending(true, frame)) |cloned_child| {
-                // We pass `true` to `child_already_connected` as a hacky optimization
-                // We _know_ this child isn't connected (Because the parent isn't connected)
-                // setting this to `true` skips all connection checks.
-                try frame.appendNode(node, cloned_child, .{ .child_already_connected = true });
+                try frame.appendNode(node, cloned_child, .{});
             }
         }
     }
@@ -2254,7 +2377,7 @@ fn scheduleScrollEvents(self: *Element, frame: *Frame) !void {
     }
     try frame.js.scheduler.add(task, ScrollEventTask.run, 10, .{
         .name = "element.scrollEvents",
-        .low_priority = true,
+        .blocks_done = false,
         .finalizer = ScrollEventTask.cancelled,
     });
 }
@@ -2343,83 +2466,86 @@ fn upperTagName(tag_name: *String, buf: []u8) []const u8 {
 
 pub fn getTag(self: *const Element) Tag {
     return switch (self._type) {
-        .html => |he| switch (he._type) {
-            .anchor => .anchor,
-            .area => .area,
-            .base => .base,
-            .div => .div,
-            .dl => .dl,
-            .embed => .embed,
-            .form => .form,
-            .p => .p,
-            .custom => .custom,
-            .data => .data,
-            .datalist => .datalist,
-            .details => .details,
-            .dialog => .dialog,
-            .directory => .directory,
-            .menu => .menu,
-            .frame_element => .frame,
-            .iframe => .iframe,
-            .img => .img,
-            .br => .br,
-            .button => .button,
-            .canvas => .canvas,
-            .fieldset => .fieldset,
-            .font => .font,
-            .frameset => .frameset,
-            .heading => |h| h._tag,
-            .label => .label,
-            .legend => .legend,
-            .li => .li,
-            .map => .map,
-            .marquee => .marquee,
-            .ul => .ul,
-            .ol => .ol,
-            .object => .object,
-            .optgroup => .optgroup,
-            .output => .output,
-            .picture => .picture,
-            .param => .param,
-            .pre => .pre,
-            .generic => |g| g._tag,
-            .media => |m| switch (m._type) {
-                .audio => .audio,
-                .video => .video,
-                .generic => .media,
-            },
-            .meter => .meter,
-            .mod => |m| m._tag,
-            .progress => .progress,
-            .quote => |q| q._tag,
-            .script => .script,
-            .select => .select,
-            .slot => .slot,
-            .source => .source,
-            .span => .span,
-            .option => .option,
-            .table => .table,
-            .table_caption => .caption,
-            .table_cell => |tc| tc._tag,
-            .table_col => |tc| tc._tag,
-            .table_row => .tr,
-            .table_section => |ts| ts._tag,
-            .template => .template,
-            .textarea => .textarea,
-            .time => .time,
-            .track => .track,
-            .input => .input,
-            .link => .link,
-            .meta => .meta,
-            .hr => .hr,
-            .style => .style,
-            .title => .title,
-            .body => .body,
-            .html => .html,
-            .head => .head,
-            .unknown => .unknown,
+        .html => blk: {
+            const he = self.subtype(Html);
+            break :blk switch (he._type) {
+                .anchor => .anchor,
+                .area => .area,
+                .base => .base,
+                .div => .div,
+                .dl => .dl,
+                .embed => .embed,
+                .form => .form,
+                .p => .p,
+                .custom => .custom,
+                .data => .data,
+                .datalist => .datalist,
+                .details => .details,
+                .dialog => .dialog,
+                .directory => .directory,
+                .menu => .menu,
+                .frame_element => .frame,
+                .iframe => .iframe,
+                .img => .img,
+                .br => .br,
+                .button => .button,
+                .canvas => .canvas,
+                .fieldset => .fieldset,
+                .font => .font,
+                .frameset => .frameset,
+                .heading => he.subtype(Html.Heading)._tag,
+                .label => .label,
+                .legend => .legend,
+                .li => .li,
+                .map => .map,
+                .marquee => .marquee,
+                .ul => .ul,
+                .ol => .ol,
+                .object => .object,
+                .optgroup => .optgroup,
+                .output => .output,
+                .picture => .picture,
+                .param => .param,
+                .pre => .pre,
+                .generic => he.subtype(Html.Generic)._tag,
+                .media => switch (he.subtype(Html.Media)._type) {
+                    .audio => .audio,
+                    .video => .video,
+                    .generic => .media,
+                },
+                .meter => .meter,
+                .mod => he.subtype(Html.Mod)._tag,
+                .progress => .progress,
+                .quote => he.subtype(Html.Quote)._tag,
+                .script => .script,
+                .select => .select,
+                .slot => .slot,
+                .source => .source,
+                .span => .span,
+                .option => .option,
+                .table => .table,
+                .table_caption => .caption,
+                .table_cell => he.subtype(Html.TableCell)._tag,
+                .table_col => he.subtype(Html.TableCol)._tag,
+                .table_row => .tr,
+                .table_section => he.subtype(Html.TableSection)._tag,
+                .template => .template,
+                .textarea => .textarea,
+                .time => .time,
+                .track => .track,
+                .input => .input,
+                .link => .link,
+                .meta => .meta,
+                .hr => .hr,
+                .style => .style,
+                .title => .title,
+                .body => .body,
+                .html => .html,
+                .head => .head,
+                .unknown => .unknown,
+            };
         },
-        .svg => |se| se.getTag(),
+        .svg => self.subtype(Svg).getTag(),
         // No MathML tag is in Element.Tag; tag-name matching falls back to
         // _tag_name, the way it does for generic SVG elements. Same for a
         // plain element, whose name is arbitrary by definition.
@@ -2686,6 +2812,22 @@ pub const JsApi = struct {
     fn _removeAttributeNS(self: *Element, _: ?[]const u8, local_name: String, frame: *Frame) !void {
         return self.removeAttribute(local_name, frame);
     }
+    // getHTML's options dictionary actually selects which shadow roots are
+    // serialized (upstream's mechanism); the member itself is declared below,
+    // in Chrome's own-property order.
+    const GetHTMLOpts = struct {
+        serializableShadowRoots: bool = false,
+        shadowRoots: []const *ShadowRoot = &.{},
+    };
+    fn _getHTML(self: *Element, opts_: ?GetHTMLOpts, frame: *Frame) ![]const u8 {
+        const opts = opts_ orelse GetHTMLOpts{};
+        var buf = std.Io.Writer.Allocating.init(frame.local_arena);
+        try self.getHTML(.{
+            .shadow_roots = opts.shadowRoots,
+            .serializable_shadow_roots = opts.serializableShadowRoots,
+        }, &buf.writer, frame);
+        return buf.written();
+    }
 
     fn _setAttribute(self: *Element, name: String, value: js.Value, frame: *Frame) !void {
         return self.setAttribute(name, .wrap(try value.toStringSlice()), frame);
@@ -2758,7 +2900,7 @@ pub const JsApi = struct {
     pub const onwebkitfullscreenchange = bridge.accessor(handlerAccessor(.onwebkitfullscreenchange).get, handlerAccessor(.onwebkitfullscreenchange).set, .{});
     pub const onwebkitfullscreenerror = bridge.accessor(handlerAccessor(.onwebkitfullscreenerror).get, handlerAccessor(.onwebkitfullscreenerror).set, .{});
     pub const role = bridge.accessor(reflectedAttribute("role").get, reflectedAttribute("role").set, .{ .ce_reactions = true });
-    pub const ariaAtomic = bridge.accessor(Element.getAriaAtomic, Element.setAriaAtomic, .{ .ce_reactions = true });
+    pub const ariaAtomic = bridge.accessor(reflectedAttribute("aria-atomic").get, reflectedAttribute("aria-atomic").set, .{ .ce_reactions = true });
     pub const ariaAutoComplete = bridge.accessor(reflectedAttribute("aria-autocomplete").get, reflectedAttribute("aria-autocomplete").set, .{ .ce_reactions = true });
     pub const ariaBusy = bridge.accessor(reflectedAttribute("aria-busy").get, reflectedAttribute("aria-busy").set, .{ .ce_reactions = true });
     pub const ariaBrailleLabel = bridge.accessor(reflectedAttribute("aria-braillelabel").get, reflectedAttribute("aria-braillelabel").set, .{ .ce_reactions = true });
@@ -2777,7 +2919,7 @@ pub const JsApi = struct {
     pub const ariaKeyShortcuts = bridge.accessor(reflectedAttribute("aria-keyshortcuts").get, reflectedAttribute("aria-keyshortcuts").set, .{ .ce_reactions = true });
     pub const ariaLabel = bridge.accessor(reflectedAttribute("aria-label").get, reflectedAttribute("aria-label").set, .{ .ce_reactions = true });
     pub const ariaLevel = bridge.accessor(reflectedAttribute("aria-level").get, reflectedAttribute("aria-level").set, .{ .ce_reactions = true });
-    pub const ariaLive = bridge.accessor(Element.getAriaLive, Element.setAriaLive, .{ .ce_reactions = true });
+    pub const ariaLive = bridge.accessor(reflectedAttribute("aria-live").get, reflectedAttribute("aria-live").set, .{ .ce_reactions = true });
     pub const ariaModal = bridge.accessor(reflectedAttribute("aria-modal").get, reflectedAttribute("aria-modal").set, .{ .ce_reactions = true });
     pub const ariaMultiLine = bridge.accessor(reflectedAttribute("aria-multiline").get, reflectedAttribute("aria-multiline").set, .{ .ce_reactions = true });
     pub const ariaMultiSelectable = bridge.accessor(reflectedAttribute("aria-multiselectable").get, reflectedAttribute("aria-multiselectable").set, .{ .ce_reactions = true });
@@ -2824,7 +2966,7 @@ pub const JsApi = struct {
     pub const getElementsByClassName = bridge.function(Element.getElementsByClassName, .{});
     pub const getElementsByTagName = bridge.function(Element.getElementsByTagName, .{});
     pub const getElementsByTagNameNS = bridge.function(Element.getElementsByTagNameNS, .{});
-    pub const getHTML = bridge.function(Element.getHTML, .{});
+    pub const getHTML = bridge.function(_getHTML, .{});
     pub const hasAttribute = bridge.function(Element.hasAttribute, .{});
     pub const hasAttributeNS = bridge.function(Element.hasAttributeNS, .{});
     pub const hasAttributes = bridge.function(Element.hasAttributes, .{});
@@ -2883,24 +3025,26 @@ pub const Build = struct {
     // Calls `func_name` with `args` on the most specific type where it is
     // implement. This could be on the Element itself.
     pub fn call(self: *const Element, comptime func_name: []const u8, args: anytype) !bool {
-        inline for (@typeInfo(Element.Type).@"union".fields) |f| {
-            // `.plain` carries no subtype to dispatch to; it falls through to
-            // Element.Build below like any type that implements nothing.
-            if (f.type != void and @field(Element.Type, f.name) == self._type) {
-                // The inner type implements this function. Call it and we're done.
-                const S = reflect.Struct(f.type);
-                if (@hasDecl(S, "Build")) {
-                    if (@hasDecl(S.Build, "call")) {
-                        const sub = @field(self._type, f.name);
-                        return S.Build.call(sub, func_name, args);
-                    }
+        switch (self._type) {
+            inline else => |tag| {
+                const S = Subtype(tag);
+                // `.plain` carries no subtype to dispatch to (Subtype is
+                // `void`); it falls through to Element.Build below like any
+                // type that implements nothing.
+                if (S != void) {
+                    if (@hasDecl(S, "Build")) {
+                        // The inner type has its own "call" method. Defer to it.
+                        if (@hasDecl(S.Build, "call")) {
+                            return S.Build.call(self.subtype(S), func_name, args);
+                        }
 
-                    // The inner type implements this function. Call it and we're done.
-                    if (@hasDecl(f.type, func_name)) {
-                        return @call(.auto, @field(f.type, func_name), args);
+                        // The inner type implements this function. Call it and we're done.
+                        if (@hasDecl(S, func_name)) {
+                            return @call(.auto, @field(S, func_name), args);
+                        }
                     }
                 }
-            }
+            },
         }
 
         if (@hasDecl(Element.Build, func_name)) {
@@ -2918,4 +3062,18 @@ pub const Build = struct {
 const testing = @import("../../testing.zig");
 test "WebApi: Element" {
     try testing.htmlRunner("element", .{});
+}
+
+test "Element: div chain slot size" {
+    // Guard against accidental growth: new Element fields (e.g. _flags) must
+    // fit in existing padding. Debug is larger from the _proto_canary fields.
+    //
+    // MERGE NOTE: these two numbers come from upstream, measured on an Element
+    // without our `_plain_tag_name: String`. That field is a deliberate 16-byte
+    // cost (a `.plain` element has no subtype to keep its tag name on, see
+    // Element.Type.plain), so the expected values have to be re-measured once
+    // the tree builds -- the failure prints the actual slot size.
+    const Div = @import("element/html/Div.zig");
+    const slot = comptime Factory.chainOffsetOf(Div, Div) + @sizeOf(Div);
+    try testing.expectEqual(if (comptime lp.IS_DEBUG) 120 else 74, slot);
 }

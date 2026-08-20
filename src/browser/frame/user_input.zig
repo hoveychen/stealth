@@ -24,7 +24,6 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const Frame = @import("../Frame.zig");
 const js = @import("../js/js.zig");
@@ -38,7 +37,6 @@ const WheelEvent = @import("../webapi/event/WheelEvent.zig");
 const KeyboardEvent = @import("../webapi/event/KeyboardEvent.zig");
 
 const log = lp.log;
-const IS_DEBUG = builtin.mode == .Debug;
 
 // DOM MouseEvent.button values.
 // https://developer.mozilla.org/en-US/docs/Web/API/MouseEvent/button
@@ -68,7 +66,7 @@ fn dispatchMouseEventOn(frame: *Frame, target: *Element, comptime typ: []const u
 
 pub fn triggerMousePress(frame: *Frame, x: f64, y: f64, button: i32) !void {
     const target = (try frame.window._document.elementFromPoint(x, y, frame)) orelse return;
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.frame, "frame mouse press", .{
             .url = frame.url,
             .node = target,
@@ -84,7 +82,7 @@ pub fn triggerMousePress(frame: *Frame, x: f64, y: f64, button: i32) !void {
 
 pub fn triggerMouseMove(frame: *Frame, x: f64, y: f64) !void {
     const target = (try frame.window._document.elementFromPoint(x, y, frame)) orelse return;
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.frame, "frame mouse move", .{
             .url = frame.url,
             .node = target,
@@ -122,7 +120,7 @@ pub fn triggerMouseMove(frame: *Frame, x: f64, y: f64) !void {
 
 pub fn triggerMouseRelease(frame: *Frame, x: f64, y: f64, button: i32, click_count: i32) !void {
     const target = (try frame.window._document.elementFromPoint(x, y, frame)) orelse return;
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.frame, "frame mouse release", .{
             .url = frame.url,
             .node = target,
@@ -154,7 +152,7 @@ pub fn triggerMouseRelease(frame: *Frame, x: f64, y: f64, button: i32, click_cou
 
 pub fn triggerMouseWheel(frame: *Frame, x: f64, y: f64, delta_x: f64, delta_y: f64) !void {
     const target = (try frame.window._document.elementFromPoint(x, y, frame)) orelse return;
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.frame, "frame mouse wheel", .{
             .url = frame.url,
             .node = target,
@@ -206,13 +204,25 @@ fn deltaToScroll(d: f64) i32 {
 // implements.
 fn hasClickActivationBehavior(node: *Node) bool {
     const element = node.is(Element) orelse return false;
-    const html_element = element.is(Element.Html) orelse return false;
+
+    const html_element = element.is(Element.Html) orelse {
+        if (element.is(Element.Svg.Graphics.A) != null) {
+            return svgAnchorHref(element) != null;
+        }
+        return false;
+    };
+
     return switch (html_element._type) {
         .anchor => element.getAttributeSafe(comptime .wrap("href")) != null,
         .input, .button, .select, .textarea, .label => true,
-        .generic => |generic| generic._tag == .summary,
+        .generic => html_element.subtype(Element.Html.Generic)._tag == .summary,
         else => false,
     };
+}
+
+// SVG 2 <a> links via `href`; xlink:href is the deprecated SVG 1.1 spelling.
+fn svgAnchorHref(element: *Element) ?[]const u8 {
+    return element.getAttributeSafe(comptime .wrap("href")) orelse element.getAttributeSafe(comptime .wrap("xlink:href"));
 }
 
 // Clicks on editable content are for editing: they don't activate the
@@ -324,48 +334,30 @@ const JavascriptUrlTask = struct {
     }
 };
 
-pub fn handleClick(frame: *Frame, target: *Node) !void {
+// event_target is the element that was actually clicked
+// target is the element that's being activated. Imagine a span inside an anchor
+// the span is clicked (event_target), but it's the anchor that we're activating
+// (target).
+pub fn handleClick(frame: *Frame, target: *Node, event_target: *Node) !void {
     // TODO: Also support <area> elements when implement
     const element = target.is(Element) orelse return;
+
+    if (element.is(Element.Svg.Graphics.A) != null) {
+        const href = svgAnchorHref(element) orelse return;
+        const target_name = element.getAttributeSafe(comptime .wrap("target")) orelse "";
+        return followLink(frame, target, element, href, target_name);
+    }
+
     const html_element = element.is(Element.Html) orelse return;
 
     switch (html_element._type) {
-        .anchor => |anchor| {
+        .anchor => {
+            const anchor = html_element.subtype(Element.Html.Anchor);
             const href = element.getAttributeSafe(comptime .wrap("href")) orelse return;
-            if (href.len == 0) {
-                return;
-            }
-
-            if (std.mem.startsWith(u8, href, "javascript:")) {
-                // Navigating to a javascript: URL evaluates the script in the
-                // node's frame as a queued task. (A string completion value
-                // would replace the document; we ignore results.)
-                return runJavascriptUrl(target.ownerFrame(frame), href["javascript:".len..]);
-            }
-
-            if (try element.hasAttribute(comptime .wrap("download"), frame)) {
-                log.warn(.browser, "a.download", .{ .type = frame._type, .url = frame.url });
-                return;
-            }
-
-            const target_frame = blk: {
-                const target_name = anchor.getTarget();
-                if (target_name.len == 0) {
-                    break :blk target.ownerFrame(frame);
-                }
-                break :blk frame.resolveTargetFrame(target_name) orelse {
-                    log.warn(.not_implemented, "target", .{ .type = frame._type, .url = frame.url, .target = target_name });
-                    return;
-                };
-            };
-
-            try element.focus(frame);
-            try frame.scheduleNavigation(href, .{
-                .reason = .script,
-                .kind = .{ .push = null },
-            }, .{ .anchor = target_frame });
+            return followLink(frame, target, element, href, anchor.getTarget());
         },
-        .input => |input| {
+        .input => {
+            const input = html_element.subtype(Element.Html.Input);
             try element.focus(frame);
             // Per HTML §4.10.18.6.4 "Image Button state (type=image)", clicking an
             // image button submits its form. The form-data set already gets the
@@ -375,23 +367,31 @@ pub fn handleClick(frame: *Frame, target: *Node) !void {
                 return frame.submitForm(element, input.getForm(frame), .{});
             }
         },
-        .button => |button| {
+        .button => {
+            const button = html_element.subtype(Element.Html.Button);
             try element.focus(frame);
             if (std.mem.eql(u8, button.getType(), "submit")) {
                 return frame.submitForm(element, button.getForm(frame), .{});
             }
         },
         .select, .textarea => try element.focus(frame),
-        .label => |label| {
+        .label => {
+            const label = html_element.subtype(Element.Html.Label);
             // Per HTML §4.10.4 "The label element", a label's activation
             // behavior is to run the synthetic click activation steps on the
             // labeled control. Mirrors Chrome's HTMLLabelElement::DefaultEventHandler.
             const control = label.getControl(frame) orelse return;
+            if (control.asNode().contains(event_target)) {
+                // label is the only control that synthesizes another click, so
+                // we need to guard against that activation re-triggering the
+                // label (into an infinite loop)
+                return;
+            }
             const control_html = control.is(Element.Html) orelse return;
             try control_html.click(frame);
         },
-        .generic => |generic| {
-            switch (generic._tag) {
+        .generic => {
+            switch (html_element.subtype(Element.Html.Generic)._tag) {
                 .summary => {
                     const parent_el = target.parentElement() orelse return;
                     const details = parent_el.is(Element.Html.Details) orelse return;
@@ -412,6 +412,41 @@ pub fn handleClick(frame: *Frame, target: *Node) !void {
     }
 }
 
+// Follow a link on activation. Shared by HTML <a> and SVG <a>.
+fn followLink(frame: *Frame, target: *Node, element: *Element, href: []const u8, target_name: []const u8) !void {
+    if (href.len == 0) {
+        return;
+    }
+
+    if (std.mem.startsWith(u8, href, "javascript:")) {
+        // Navigating to a javascript: URL evaluates the script in the
+        // node's frame as a queued task. (A string completion value
+        // would replace the document; we ignore results.)
+        return runJavascriptUrl(target.ownerFrame(frame), href["javascript:".len..]);
+    }
+
+    if (try element.hasAttribute(comptime .wrap("download"), frame)) {
+        log.warn(.browser, "a.download", .{ .type = frame._type, .url = frame.url });
+        return;
+    }
+
+    const target_frame = blk: {
+        if (target_name.len == 0) {
+            break :blk target.ownerFrame(frame);
+        }
+        break :blk frame.resolveTargetFrame(target_name) orelse {
+            log.warn(.not_implemented, "target", .{ .type = frame._type, .url = frame.url, .target = target_name });
+            return;
+        };
+    };
+
+    try element.focus(frame);
+    try frame.scheduleNavigation(href, .{
+        .reason = .script,
+        .kind = .{ .push = null },
+    }, .{ .anchor = target_frame });
+}
+
 pub fn triggerKeyboard(frame: *Frame, keyboard_event: *KeyboardEvent) !void {
     const event = keyboard_event.asEvent();
     // Dispatch to the effective active element. When nothing is explicitly
@@ -423,7 +458,7 @@ pub fn triggerKeyboard(frame: *Frame, keyboard_event: *KeyboardEvent) !void {
         return;
     };
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.frame, "frame keydown", .{
             .url = frame.url,
             .node = element,

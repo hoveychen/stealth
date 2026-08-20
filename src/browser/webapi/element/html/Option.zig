@@ -20,6 +20,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../../js/js.zig");
+const Factory = @import("../../../Factory.zig");
 const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
@@ -35,11 +36,10 @@ const Option = @This();
 
 pub const Proto = HtmlElement;
 
-_proto: *HtmlElement,
+_proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _value: ?[]const u8 = null,
 _selected: bool = false,
 _default_selected: bool = false,
-_disabled: bool = false,
 
 /// The legacy factory function `Option`, which is a second global name for
 /// this same interface. Every argument is optional, so `Option.length` is 0.
@@ -90,10 +90,10 @@ pub fn constructor(
 }
 
 pub fn asElement(self: *Option) *Element {
-    return self._proto._proto;
+    return Factory.protoOf(self).asElement();
 }
 pub fn asConstElement(self: *const Option) *const Element {
-    return self._proto._proto;
+    return Factory.protoOf(self).asElement();
 }
 pub fn asNode(self: *Option) *Node {
     return self.asElement().asNode();
@@ -137,16 +137,20 @@ pub fn setSelected(self: *Option, selected: bool, frame: *Frame) !void {
 }
 
 pub fn getDefaultSelected(self: *const Option) bool {
-    return self._default_selected;
+    return self.asConstElement().hasAttributeSafe(comptime .wrap("selected"));
 }
 
 /// Reflects the `selected` content attribute. Adding or removing it also moves
-/// selectedness, which is what Build.attributeChange/attributeRemove do.
-pub fn setDefaultSelected(self: *Option, default_selected: bool, frame: *Frame) !void {
-    if (default_selected) {
-        return self.asElement().setAttributeSafe(comptime .wrap("selected"), comptime .wrap(""), frame);
+/// selectedness, which is what Build.attributeChange/attributeRemove do; the
+/// field is written here too so a set-to-the-same-value (which fires no
+/// attribute callback) still leaves the two consistent.
+pub fn setDefaultSelected(self: *Option, value: bool, frame: *Frame) !void {
+    self._default_selected = value;
+    if (value) {
+        try self.asElement().setAttributeSafe(comptime .wrap("selected"), .wrap(""), frame);
+    } else {
+        try self.asElement().removeAttribute(comptime .wrap("selected"), frame);
     }
-    return self.asElement().removeAttribute(comptime .wrap("selected"), frame);
 }
 
 /// The form owner of the select this option belongs to, and null for an option
@@ -178,19 +182,6 @@ fn owningSelect(self: *Option) ?*Select {
     return grand_parent.is(Select);
 }
 
-pub fn getDisabled(self: *const Option) bool {
-    return self._disabled;
-}
-
-pub fn setDisabled(self: *Option, disabled: bool, frame: *Frame) !void {
-    self._disabled = disabled;
-    if (disabled) {
-        try self.asElement().setAttributeSafe(comptime .wrap("disabled"), .wrap(""), frame);
-    } else {
-        try self.asElement().removeAttribute(comptime .wrap("disabled"), frame);
-    }
-}
-
 // https://html.spec.whatwg.org/multipage/form-elements.html#dom-option-label
 // On getting, return the `label` content attribute if present and non-empty,
 // otherwise the value of the `text` IDL attribute. On setting, reflect to the
@@ -218,10 +209,14 @@ pub const JsApi = struct {
 
     pub const constructor = bridge.constructor(Option.constructor, .{ .arity = 0 });
 
-    // Chrome's own member order (measured, probe-win28). There is no `name`
-    // here: HTMLOptionElement is one of the form-associated interfaces that
-    // does not reflect it, so exposing one was a tell.
-    pub const disabled = bridge.accessor(Option.getDisabled, Option.setDisabled, .{ .ce_reactions = true });
+    const reflect = Element.Reflect(Option);
+
+    // Chrome's own member order (measured, probe-win28; asserted by
+    // element/html/option.html #option_prototype_shape). There is no `name`
+    // here -- HTMLOptionElement is one of the form-associated interfaces that
+    // does not reflect it, so upstream's `reflect.string("name")` is
+    // deliberately not taken: an extra own property is a tell.
+    pub const disabled = reflect.boolean("disabled");
     pub const form = bridge.accessor(Option.getForm, null, .{});
     pub const label = bridge.accessor(Option.getLabel, Option.setLabel, .{ .ce_reactions = true });
     pub const defaultSelected = bridge.accessor(
@@ -246,9 +241,6 @@ pub const Build = struct {
         // Check for selected attribute
         self._default_selected = element.getAttributeSafe(comptime .wrap("selected")) != null;
         self._selected = self._default_selected;
-
-        // Check for disabled attribute
-        self._disabled = element.getAttributeSafe(comptime .wrap("disabled")) != null;
     }
 
     pub fn attributeChange(element: *Element, name: String, _: String, _: *Frame) !void {

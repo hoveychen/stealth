@@ -17,13 +17,11 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
-const builtin = @import("builtin");
+const lp = @import("lightpanda");
 
 const crypto = @import("libcrypto.zig");
 
 const c = @import("curl");
-
-const IS_DEBUG = builtin.mode == .Debug;
 
 pub const Curl = c.CURL;
 pub const CurlM = c.CURLM;
@@ -339,7 +337,7 @@ pub const Error = error{
 };
 
 pub fn errorFromCode(code: c.CURLcode) Error {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(code != c.CURLE_OK);
     }
 
@@ -457,7 +455,7 @@ pub const ErrorHeader = error{
 };
 
 pub fn errorMFromCode(code: c.CURLMcode) ErrorMulti {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(code != c.CURLM_OK);
     }
 
@@ -479,7 +477,7 @@ pub fn errorMFromCode(code: c.CURLMcode) ErrorMulti {
 }
 
 pub fn errorHFromCode(code: c.CURLHcode) ErrorHeader {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(code != c.CURLHE_OK);
     }
 

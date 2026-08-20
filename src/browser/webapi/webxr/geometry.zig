@@ -85,7 +85,7 @@ fn persistMatrix(m: [16]f64, exec: *const Execution) !Float32Array.Global {
 /// arena they share.
 fn ownedPoint(arena: *lp.Arena, x: f64, y: f64, z: f64, w: f64) !*DOMPointReadOnly {
     const point = try arena.create(DOMPointReadOnly);
-    point.* = DOMPointReadOnly.buildValue(arena, x, y, z, w);
+    point.* = DOMPointReadOnly.buildValue(x, y, z, w);
     point.acquireRef();
     return point;
 }

@@ -17,11 +17,13 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
+const Factory = @import("../../../Factory.zig");
 const HtmlElement = @import("../Html.zig");
 const Event = @import("../../Event.zig");
 pub const Audio = @import("Audio.zig");
@@ -55,14 +57,36 @@ pub const NetworkState = enum(u16) {
     NETWORK_NO_SOURCE = 3,
 };
 
-pub const Type = union(enum) {
+pub const Type = enum(u8) {
     generic,
-    audio: *Audio,
-    video: *Video,
+    audio,
+    video,
 };
 
+// `.generic` maps to Media itself: a bare <media> chain ends at Media, so the
+// tag has no chain member of its own.
+pub fn Subtype(comptime tag: Type) type {
+    return switch (tag) {
+        .generic => Media,
+        .audio => Audio,
+        .video => Video,
+    };
+}
+
+pub fn subtype(self: *const Media, comptime T: type) *T {
+    const offset = comptime Factory.chainOffsetOf(T, T) - Factory.chainOffsetOf(T, Media);
+    const sub: *T = @ptrFromInt(@intFromPtr(self) + offset);
+    if (comptime lp.IS_DEBUG) {
+        // This pointer dance only works because the factory allocates the chain
+        // in a contiguous block of memory. In debug, we assert this holds via
+        // the _proto_canary back pointer.
+        std.debug.assert(Factory.protoOf(sub) == self);
+    }
+    return sub;
+}
+
 _type: Type,
-_proto: *HtmlElement,
+_proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _text_tracks: ?*text_tracks.TextTrackList = null,
 _paused: bool = true,
 _current_time: f64 = 0,
@@ -88,28 +112,20 @@ _media_keys: ?*eme.MediaKeys = null,
 _remote: ?*playback.RemotePlayback = null,
 
 pub fn asElement(self: *Media) *Element {
-    return self._proto._proto;
+    return Factory.protoOf(self).asElement();
 }
 pub fn asConstElement(self: *const Media) *const Element {
-    return self._proto._proto;
+    return Factory.protoOf(@constCast(self)).asElement();
 }
 pub fn asNode(self: *Media) *Node {
     return self.asElement().asNode();
 }
 
 pub fn is(self: *Media, comptime T: type) ?*T {
-    const type_name = @typeName(T);
     switch (self._type) {
-        .audio => |a| {
-            if (T == *Audio) return a;
-            if (comptime std.mem.startsWith(u8, type_name, "browser.webapi.element.html.Audio")) {
-                return a;
-            }
-        },
-        .video => |v| {
-            if (T == *Video) return v;
-            if (comptime std.mem.startsWith(u8, type_name, "browser.webapi.element.html.Video")) {
-                return v;
+        inline .audio, .video => |tag| {
+            if (Subtype(tag) == T) {
+                return self.subtype(T);
             }
         },
         .generic => {},
@@ -234,49 +250,11 @@ pub fn setSrc(self: *Media, value: []const u8, frame: *Frame) !void {
     try self.asElement().setAttributeSafe(comptime .wrap("src"), .wrap(value), frame);
 }
 
-pub fn getAutoplay(self: *const Media) bool {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("autoplay")) != null;
-}
-
-pub fn setAutoplay(self: *Media, value: bool, frame: *Frame) !void {
-    if (value) {
-        try self.asElement().setAttributeSafe(comptime .wrap("autoplay"), .wrap(""), frame);
-    } else {
-        try self.asElement().removeAttribute(comptime .wrap("autoplay"), frame);
-    }
-}
-
-pub fn getControls(self: *const Media) bool {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("controls")) != null;
-}
-
-pub fn setControls(self: *Media, value: bool, frame: *Frame) !void {
-    if (value) {
-        try self.asElement().setAttributeSafe(comptime .wrap("controls"), .wrap(""), frame);
-    } else {
-        try self.asElement().removeAttribute(comptime .wrap("controls"), frame);
-    }
-}
-
-pub fn getLoop(self: *const Media) bool {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("loop")) != null;
-}
-
-pub fn setLoop(self: *Media, value: bool, frame: *Frame) !void {
-    if (value) {
-        try self.asElement().setAttributeSafe(comptime .wrap("loop"), .wrap(""), frame);
-    } else {
-        try self.asElement().removeAttribute(comptime .wrap("loop"), frame);
-    }
-}
-
-pub fn getPreload(self: *const Media) []const u8 {
-    return self.asConstElement().getAttributeSafe(comptime .wrap("preload")) orelse "auto";
-}
-
-pub fn setPreload(self: *Media, value: []const u8, frame: *Frame) !void {
-    try self.asElement().setAttributeSafe(comptime .wrap("preload"), .wrap(value), frame);
-}
+// autoplay/controls/loop/preload moved to the `Element.Reflect` helpers in
+// JsApi below: `reflect.boolean` is the same attribute-presence reflection our
+// hand-written pairs did, and `reflect.enumerated("preload", ...)` additionally
+// canonicalizes an unknown keyword to the "auto" missing/invalid default, which
+// is what Blink's HTMLMediaElement::preload() does.
 
 // No media is ever loaded, so all three ranges are empty -- which is also what
 // a real Chrome answers for an element that was never given a src (measured:
@@ -304,8 +282,9 @@ pub fn getTextTracks(self: *Media, page: *Page) !*text_tracks.TextTrackList {
     if (self._text_tracks) |list| {
         return list;
     }
+    // The factory tags the EventTarget from the leaf type (Factory.typeInit),
+    // so there is no `_type` to assign by hand any more.
     const list = try page.factory.eventTarget(text_tracks.TextTrackList{ ._proto = undefined });
-    list._proto._type = .{ .text_track_list = list };
     self._text_tracks = list;
     return list;
 }
@@ -422,6 +401,10 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
+    const reflect = Element.Reflect(Media);
+    pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
+    pub const defaultMuted = reflect.boolean("muted");
+
     pub const NETWORK_EMPTY = bridge.property(@intFromEnum(NetworkState.NETWORK_EMPTY), .{ .template = true });
     pub const NETWORK_IDLE = bridge.property(@intFromEnum(NetworkState.NETWORK_IDLE), .{ .template = true });
     pub const NETWORK_LOADING = bridge.property(@intFromEnum(NetworkState.NETWORK_LOADING), .{ .template = true });
@@ -435,11 +418,11 @@ pub const JsApi = struct {
 
     pub const src = bridge.accessor(Media.getSrc, Media.setSrc, .{ .ce_reactions = true });
     pub const currentSrc = bridge.accessor(Media.getSrc, null, .{});
-    pub const autoplay = bridge.accessor(Media.getAutoplay, Media.setAutoplay, .{ .ce_reactions = true });
-    pub const controls = bridge.accessor(Media.getControls, Media.setControls, .{ .ce_reactions = true });
-    pub const loop = bridge.accessor(Media.getLoop, Media.setLoop, .{ .ce_reactions = true });
+    pub const autoplay = reflect.boolean("autoplay");
+    pub const controls = reflect.boolean("controls");
+    pub const loop = reflect.boolean("loop");
     pub const muted = bridge.accessor(Media.getMuted, Media.setMuted, .{});
-    pub const preload = bridge.accessor(Media.getPreload, Media.setPreload, .{ .ce_reactions = true });
+    pub const preload = reflect.enumerated("preload", &.{ "none", "metadata", "auto" }, .{ .missing = "auto" });
     pub const volume = bridge.accessor(Media.getVolume, Media.setVolume, .{});
     pub const playbackRate = bridge.accessor(Media.getPlaybackRate, Media.setPlaybackRate, .{});
     pub const currentTime = bridge.accessor(Media.getCurrentTime, Media.setCurrentTime, .{});

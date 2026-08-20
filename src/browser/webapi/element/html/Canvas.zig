@@ -16,8 +16,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const lp = @import("lightpanda");
 const std = @import("std");
 const js = @import("../../../js/js.zig");
+const Factory = @import("../../../Factory.zig");
 const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
@@ -39,14 +41,14 @@ const Execution = js.Execution;
 const Canvas = @This();
 
 pub const Proto = HtmlElement;
-_proto: *HtmlElement,
+_proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _cached: ?DrawingContext = null,
 
 pub fn asElement(self: *Canvas) *Element {
-    return self._proto._proto;
+    return Factory.protoOf(self).asElement();
 }
 pub fn asConstElement(self: *const Canvas) *const Element {
-    return self._proto._proto;
+    return Factory.protoOf(self).asElement();
 }
 pub fn asNode(self: *Canvas) *Node {
     return self.asElement().asNode();
@@ -201,7 +203,9 @@ pub fn toBlob(self: *Canvas, callback: js.Function.Global, _: ?[]const u8, _: ?f
 
     const blob: ?*Blob = if (width == 0 or height == 0) null else blk: {
         const bytes = try png.encode(exec.call_arena, width, height, self.pixels());
-        break :blk try Blob.initFromBytes(bytes, "image/png", exec.page);
+        // Upstream's Blob.initFromBytes now takes the Execution (it pins its
+        // own arena), not the Page.
+        break :blk try Blob.initFromBytes(bytes, "image/png", exec);
     };
 
     const argument = try exec.js.local.?.zigValueToJs(blob, .{});
@@ -243,6 +247,10 @@ pub const JsApi = struct {
 
     // Chrome's prototype order, which puts captureStream straight after the two
     // dimensions and toBlob before toDataURL (measured).
+    //
+    // Upstream's `reflect.unsignedLong("width"/"height", ...)` is not taken
+    // here: assigning to either IDL attribute has to drop the bitmap
+    // (`resetSurface`), which the generic reflection helper knows nothing about.
     pub const width = bridge.accessor(Canvas.getWidth, Canvas.setWidth, .{ .ce_reactions = true });
     pub const height = bridge.accessor(Canvas.getHeight, Canvas.setHeight, .{ .ce_reactions = true });
     // Arity 0: the frame rate is optional, so it does not count.

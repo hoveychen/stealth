@@ -18,7 +18,6 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const js = @import("js/js.zig");
 const Page = @import("Page.zig");
@@ -30,7 +29,6 @@ const global_event_handlers = @import("webapi/global_event_handlers.zig");
 const log = lp.log;
 const String = lp.String;
 const Allocator = std.mem.Allocator;
-const IS_DEBUG = builtin.mode == .Debug;
 
 const EventKey = struct {
     event_target: usize,
@@ -105,7 +103,7 @@ pub const Callback = union(enum) {
 // unless they need the resulting *Listener (e.g. Frame's load-listener
 // tracking).
 pub fn register(self: *EventManagerBase, target: *EventTarget, typ: []const u8, callback: Callback, opts: RegisterOptions) !?*Listener {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.event, "EventManager.register", .{
             .type = typ,
             .capture = opts.capture,
@@ -353,6 +351,7 @@ pub const DispatchError = error{
 pub const DispatchDirectOptions = struct {
     context: []const u8 = "dispatchDirect",
     inject_target: bool = true,
+    run_microtasks: bool = true,
 };
 
 /// Direct dispatch for non-DOM targets. No propagation - just calls the property
@@ -368,7 +367,7 @@ pub fn dispatchDirect(
     page: *Page,
     comptime opts: DispatchDirectOptions,
 ) DispatchError!void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.event, "dispatchDirect", .{ .type = event._type_string, .context = opts.context });
     }
 
@@ -383,7 +382,9 @@ pub fn dispatchDirect(
     var ls: js.Local.Scope = undefined;
     ctx.localScope(&ls);
     defer {
-        ls.local.runMicrotasks();
+        if (comptime opts.run_microtasks) {
+            ls.local.runMicrotasks();
+        }
         ls.deinit();
     }
 
@@ -428,7 +429,7 @@ pub fn dispatchDirect(
     // Call the property handler (e.g., onmessage) if present
     if (getFunction(handler, &ls.local)) |func| {
         event._current_target = target;
-        var caught: js.TryCatch.Caught = undefined;
+        var caught: js.TryCatch.Caught = .{};
         _ = func.tryCallWithThis(void, target, .{event}, &caught) catch |err| {
             if (err == error.ExecutionTerminated) {
                 return error.ExecutionTerminated;
@@ -572,7 +573,7 @@ fn resolveHandler(local: *const js.Local, target: *EventTarget, handler: global_
 
     const Element = @import("webapi/Element.zig");
     const element = switch (target._type) {
-        .node => |n| n.is(Element) orelse return null,
+        .node => target.subtype(@import("webapi/Node.zig")).is(Element) orelse return null,
         else => return null,
     };
     return element.getAttributeFunction(handler, frame) catch |err| {
@@ -698,7 +699,7 @@ pub const Listener = struct {
                     target._type == .window and
                     event.is(@import("webapi/event/ErrorEvent.zig")) != null;
 
-                var caught: js.TryCatch.Caught = undefined;
+                var caught: js.TryCatch.Caught = .{};
                 const handler_return: ?js.Value = blk: {
                     const result = if (special_error) res: {
                         const error_event = event.is(@import("webapi/event/ErrorEvent.zig")).?;
