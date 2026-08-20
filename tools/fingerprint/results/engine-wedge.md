@@ -77,3 +77,53 @@ here rather than guessed at. It reproduces on every run of the claude.ai station
 station's verdict. Every reading in this file was available on the first sweep;
 nobody was looking at the one channel that distinguishes `error` from `crash`,
 and three runs' worth of "wedges the engine" would have said `SIGABRT` instead.
+
+## claude.ai, narrowed further (same day)
+
+Three facts on top of the attribution above, none of them yet a fix.
+
+**The memory is poisoned, not merely stale.** With `--log_level debug` the abort
+reads:
+
+```
+DEBUG scheduler : scheduler.runTask   name = Performance.deliverObservers
+Segmentation fault at address 0xaaaaaaaaaaaaaac2
+```
+
+`0xaa` is Zig's debug fill for freed/undefined memory, so the pointer being
+walked is inside a region that has been released — the `*Performance` the task
+carries, or its `_observers` buffer, is dead memory rather than a live object
+with a stale entry. That rules out the first reading of this crash, which assumed
+a live `_observers` list holding one dangling observer.
+
+**Nothing cancels a queued task when its subject dies.** `Scheduler` exposes
+`init`, `deinit`, `reset`, `add`, `run`, `hasReadyTasks`, `msToNext` — there is no
+removal keyed by `ctx`. And `reset()` has exactly three callers:
+`DedicatedWorkerGlobalScope`, `SharedWorkerGlobalScope`, and `Window`'s
+`window.close()` path. **No navigation resets it.** So a
+`Performance.deliverObservers` task queued before a teardown is still in the queue
+after it, holding the only pointer it was given.
+
+**A second `frame.init` precedes the crash.** The timeline is main frame at
++114ms, its navigation, several successful `Performance.deliverObservers` runs,
+then a second `frame.init` at +1413ms (the iframe whose
+`reason = initialFrameNavigation` appears in the CSP traces), then more delivery
+tasks interleaved with `type = reset` events, then the abort on one of them.
+
+What is still not established is which teardown or arena reset poisons it.
+`Window` is *reused* across navigations (`Frame.zig`'s `opts.reuse_window`
+overwrites it in place, and `._performance = .init()` empties `_observers`), so a
+plain same-window navigation should leave the task's pointer valid and its list
+empty rather than poisoned. Something else is releasing that memory, and naming
+it needs the engine instrumented — a log at `Performance.init` and at task entry,
+comparing addresses — rather than more reading.
+
+Two fix shapes, once it is named:
+
+1. **Give `Scheduler` removal keyed by `ctx`** and call it wherever a
+   `Performance` (or any task-owning object) goes away. Touches shared
+   infrastructure and fixes the whole class; `web_transport`, `EventSource`,
+   `XRSession` and `sensor` all queue tasks with themselves as `ctx` and have the
+   same exposure.
+2. **Make the delivery task revalidate** instead of trusting its pointer —
+   cheaper, narrower, and leaves the class open.
