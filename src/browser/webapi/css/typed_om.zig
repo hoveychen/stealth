@@ -3165,7 +3165,9 @@ pub const StylePropertyMapReadOnly = struct {
     pub fn get(self: *StylePropertyMapReadOnly, property: []const u8) !?*CSSStyleValue {
         if (!isKnownProperty(property)) return invalidProperty(self._frame, "get", "StylePropertyMapReadOnly", property);
         const frame = self._frame;
-        const value = self._style.getPropertyValue(property, frame);
+        // The computed value, not the used one: measured, Chrome's Typed OM and
+        // its getComputedStyle disagree on an undeclared border width.
+        const value = self._style.getComputedValue(property, frame);
         if (value.len == 0) return null;
         // frame.arena, not local_arena: the value outlives this call.
         return dispatch(property, try frame.arena.dupe(u8, value), frame);

@@ -944,3 +944,40 @@ function attach(el) {
         errorText(() => el.computedStyleMap().get('nope')));
 }
 </script>
+
+<script id="typedom_computed_initial_values">
+{
+    const el = attach(document.createElement('div'));
+    // Measured on the local Chrome 151: computedStyleMap() reports the *computed*
+    // border width -- `medium`, which is 3px -- while getComputedStyle() reports
+    // the *used* width, which border-style:none collapses to 0px. Two different
+    // answers off the same declaration, so the two surfaces cannot share one
+    // initial value.
+    testing.expectEqual('CSSUnitValue|3px', brand(el.computedStyleMap().get('border-top-width')));
+    testing.expectEqual('CSSUnitValue|3px', brand(el.computedStyleMap().get('border-right-width')));
+    testing.expectEqual('CSSUnitValue|3px', brand(el.computedStyleMap().get('border-bottom-width')));
+    testing.expectEqual('CSSUnitValue|3px', brand(el.computedStyleMap().get('border-left-width')));
+    testing.expectEqual('0px', getComputedStyle(el).borderTopWidth);
+
+    // The other five agree across both surfaces.
+    testing.expectEqual('CSSUnitValue|0', brand(el.computedStyleMap().get('flex-grow')));
+    testing.expectEqual('CSSStyleValue|Times', brand(el.computedStyleMap().get('font-family')));
+    testing.expectEqual('CSSKeywordValue|normal', brand(el.computedStyleMap().get('line-height')));
+    testing.expectEqual('CSSUnitValue|0s', brand(el.computedStyleMap().get('transition-duration')));
+    testing.expectEqual('CSSKeywordValue|auto', brand(el.computedStyleMap().get('z-index')));
+
+    testing.expectEqual('0', getComputedStyle(el).flexGrow);
+    testing.expectEqual('Times', getComputedStyle(el).fontFamily);
+    testing.expectEqual('normal', getComputedStyle(el).lineHeight);
+    testing.expectEqual('0s', getComputedStyle(el).transitionDuration);
+    testing.expectEqual('auto', getComputedStyle(el).zIndex);
+
+    // A declared value still wins over the initial one, on both surfaces.
+    el.style.zIndex = '4';
+    testing.expectEqual('CSSUnitValue|4', brand(el.computedStyleMap().get('z-index')));
+    testing.expectEqual('4', getComputedStyle(el).zIndex);
+    el.style.borderTopWidth = '5px';
+    testing.expectEqual('CSSUnitValue|5px', brand(el.computedStyleMap().get('border-top-width')));
+    testing.expectEqual('5px', getComputedStyle(el).borderTopWidth);
+}
+</script>
