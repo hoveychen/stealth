@@ -94,6 +94,8 @@ const keep = (d) => {
 };
 
 let proc, profile;
+// The child's own exit, if it had one before we killed it.
+let exit = null;
 async function launch() {
     if (ENDPOINT) return;
     if (engine === 'chrome') {
@@ -115,6 +117,17 @@ async function launch() {
     }
     proc.stdout.on('data', keep);
     proc.stderr.on('data', keep);
+    // A dead engine and a stuck one are the same reading from a CDP client:
+    // `Runtime.evaluate` stops answering either way. pixiv and claude.ai were
+    // both written down as stations that "wedge the engine" across three runs
+    // for exactly that reason, and both were aborting -- one on an out-of-bounds
+    // read in deliverIntersections, one on a stale PerformanceObserver pointer
+    // (results/engine-wedge.md). Record the signal so the next one is not
+    // mis-called.
+    exit = null;
+    proc.on('exit', (code, signal) => {
+        exit = { code, signal };
+    });
 }
 
 async function teardown() {
@@ -274,6 +287,8 @@ try {
                 await teardown();
             }
         }
+        // Set before teardown kills the child, so a null here means it was alive.
+        if (exit) row.engineExit = exit;
         row.documents = docs.slice(0, 12);
         if (trace) row.wire = wire.slice(0, 400);
         Object.assign(row, verdict(station, reading, docs));
@@ -290,7 +305,9 @@ try {
         console.log(
             `${String(row.ms).padStart(6)}ms ${station.name.padEnd(18)} ${String(row.verdict).padEnd(19)} ` +
             `doc=${row.first ?? '-'}${row.last !== row.first ? `->${row.last}` : ''} ` +
-            `nodes=${String(row.nodes ?? '-').padStart(5)} ${row.error ? `ERR ${row.error}` : `"${(row.title ?? '').slice(0, 40)}"`}`,
+            `nodes=${String(row.nodes ?? '-').padStart(5)} ` +
+            (row.engineExit ? `CRASHED ${row.engineExit.signal ?? `exit ${row.engineExit.code}`} ` : '') +
+            `${row.error ? `ERR ${row.error}` : `"${(row.title ?? '').slice(0, 40)}"`}`,
         );
     }
     live?.cdp.close();
