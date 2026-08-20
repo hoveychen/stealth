@@ -101,8 +101,8 @@ pub const FileSystemFileHandle = struct {
         return exec.js.local.?.resolvePromise({});
     }
 
-    pub fn getFile(_: *const FileSystemFileHandle, exec: *const Execution) !js.Promise {
-        const empty = try File.init(null, "", null, exec.page);
+    pub fn getFile(_: *const FileSystemFileHandle, exec: *Execution) !js.Promise {
+        const empty = try File.init(null, "", null, exec);
         return exec.js.local.?.resolvePromise(empty);
     }
 

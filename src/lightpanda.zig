@@ -22,6 +22,7 @@ pub const log = @import("log.zig");
 pub const datetime = @import("datetime.zig");
 pub const App = @import("App.zig");
 pub const Arena = @import("Arena.zig");
+pub const ArenaPool = @import("ArenaPool.zig");
 pub const Network = @import("network/Network.zig");
 pub const Server = @import("Server.zig");
 pub const Config = @import("Config.zig");
@@ -62,6 +63,9 @@ pub const core_dump = @import("core_dump.zig");
 pub const Updater = @import("Updater.zig");
 
 pub var metrics = @import("Metrics.zig"){};
+
+pub const IS_TEST = @import("builtin").is_test;
+pub const IS_DEBUG = @import("builtin").mode == .Debug;
 
 /// Process-wide Io instance for blocking syscalls (fs, net, time, futex).
 /// Single-threaded-init only disables Io.async/Io.concurrent task spawning;
@@ -185,10 +189,22 @@ pub const FetchOpts = struct {
     writer: ?*std.Io.Writer = null,
     json: bool = false,
 };
+
+/// `.load`, not `.done`: pages with constant background activity never go
+/// quiescent, so `.done` just rides the `wait_ms` cap. A lone
+/// `wait_selector`/`wait_script` is itself the wait, so no level applies
+/// unless given explicitly.
+fn resolveWaitUntil(opts: FetchOpts) ?Config.WaitUntil {
+    if (opts.wait_until) |wu| return wu;
+    if (opts.wait_selector == null and opts.wait_script == null) return .load;
+    return null;
+}
 /// Loads each url in `urls` in a fresh session and waits per `opts`.
 ///
 /// Errors:
-///   - `error.Timeout` if the wait deadline (`opts.wait_ms`) expires.
+///   - `error.Timeout` if the deadline expires while a `wait_selector` or
+///     `wait_script` is still unmet. The `wait_until` phase never raises it:
+///     when the budget runs out the page is dumped as-is.
 ///   - `error.Cancelled` if the embedder installed a `Session.cancel_hook`
 ///     that returned true during the wait. The hook is opt-in via
 ///     `session.cancel_hook = .{...}`; without it, this error never fires.
@@ -231,17 +247,54 @@ pub fn fetch(app: *App, browser: *Browser, urls: []const [:0]const u8, opts: Fet
         pages.appendAssumeCapacity(page);
     }
 
+    // // Both profilers are debug-only (`@compileError` in the start functions)
+    // // and cover pages.items[0], so pass a single url.
+
+    // // Uncomment to get a profile of the JS code. You can open this in
+    // // Chrome's profiler. I've seen it generate invalid JSON, but I'm not
+    // // sure why. It happens rarely, and I manually fix the file.
+    // pages.items[0].frame().?.js.startCpuProfiler();
+    // defer {
+    //     if (pages.items[0].frame().?.js.stopCpuProfiler()) |profile| {
+    //         std.Io.Dir.cwd().writeFile(io, .{
+    //             .sub_path = ".lp-cache/cpu_profile.json",
+    //             .data = profile,
+    //         }) catch |err| {
+    //             log.err(.app, "profile write error", .{ .err = err });
+    //         };
+    //     } else |err| {
+    //         log.err(.app, "profile error", .{ .err = err });
+    //     }
+    // }
+
+    // // Uncomment to get a V8 heap profile. The snapshot opens in Chrome's
+    // // Memory tab, which is where the retainer breakdown lives.
+    // pages.items[0].frame().?.js.startHeapProfiler();
+    // defer {
+    //     if (pages.items[0].frame().?.js.stopHeapProfiler()) |profile| {
+    //         std.Io.Dir.cwd().writeFile(io, .{
+    //             .sub_path = ".lp-cache/allocating.heapprofile",
+    //             .data = profile.@"0",
+    //         }) catch |err| {
+    //             log.err(.app, "allocating write error", .{ .err = err });
+    //         };
+    //         std.Io.Dir.cwd().writeFile(io, .{
+    //             .sub_path = ".lp-cache/snapshot.heapsnapshot",
+    //             .data = profile.@"1",
+    //         }) catch |err| {
+    //             log.err(.app, "heapsnapshot write error", .{ .err = err });
+    //         };
+    //     } else |err| {
+    //         log.err(.app, "profile error", .{ .err = err });
+    //     }
+    // }
+
     var runner = session.runner(.{});
 
     var timer: std.Io.Timestamp = .now(io, .boot);
 
-    if (opts.wait_until) |wu| {
+    if (resolveWaitUntil(opts)) |wu| {
         try runner.waitForAll(opts.wait_ms, .{ .until = wu });
-    } else if (opts.wait_selector == null and opts.wait_script == null) {
-        // We default to .done if both wait_selector and wait_script are null
-        // This allows the caller to ONLY --wait-selector or ONLY --wait-script
-        // or combine --wait-until WITH --wait-selector/script
-        try runner.waitForAll(opts.wait_ms, .{ .until = .done });
     }
 
     if (opts.wait_selector) |selector| {
@@ -502,6 +555,17 @@ test "writeJsonEnvelope: null frame with dump mode and content" {
         .dump = "html",
         .content = "<html><body>hello</body></html>",
     }, aw.written());
+}
+
+test "fetch: resolveWaitUntil" {
+    try testing.expectEqual(.load, resolveWaitUntil(.{ .dump = .{} }));
+    try testing.expectEqual(.done, resolveWaitUntil(.{ .dump = .{}, .wait_until = .done }));
+    try testing.expectEqual(null, resolveWaitUntil(.{ .dump = .{}, .wait_selector = "#main" }));
+    try testing.expectEqual(null, resolveWaitUntil(.{ .dump = .{}, .wait_script = "true" }));
+    try testing.expectEqual(
+        .networkidle,
+        resolveWaitUntil(.{ .dump = .{}, .wait_until = .networkidle, .wait_selector = "#main" }),
+    );
 }
 
 test {

@@ -198,7 +198,7 @@ pub const XRWebGLLayer = struct {
             XRWebGLLayer{ ._proto = undefined, ._width = size[0], ._height = size[1] },
         });
         layer._proto._type = .{ .webgl = layer };
-        layer._proto._proto._type = .{ .xr_layer = layer._proto };
+        layer._proto._proto._type = .xr_layer;
         return layer;
     }
 

@@ -722,9 +722,12 @@ fn matchesPseudoClass(el: *Node.Element, pseudo: Selector.PseudoClass, scope: *N
             var it = node.childrenIterator();
             while (it.next()) |child| {
                 switch (child._type) {
-                    .cdata => |cdata| switch (cdata._type) {
-                        .comment, .processing_instruction => {},
-                        else => if (cdata.getLength() > 0) return false,
+                    .cdata => {
+                        const cdata = child.subtype(Node.CData);
+                        switch (cdata._type) {
+                            .comment, .processing_instruction => {},
+                            else => if (cdata.getLength() > 0) return false,
+                        }
                     },
                     else => return false,
                 }
@@ -766,8 +769,8 @@ fn matchesPseudoClass(el: *Node.Element, pseudo: Selector.PseudoClass, scope: *N
                 var current: ?*Node = node;
                 while (current) |cur| : (current = cur.parentNode()) {
                     switch (cur._type) {
-                        .element => |ancestor| {
-                            if (ancestor.getAttributeSafe(comptime .wrap("lang"))) |value| {
+                        .element => {
+                            if (cur.subtype(Node.Element).getAttributeSafe(comptime .wrap("lang"))) |value| {
                                 break :blk value;
                             }
                         },

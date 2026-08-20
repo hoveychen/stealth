@@ -35,8 +35,6 @@ const PageJsApis = bridge.PageJsApis;
 const SharedWorkerJsApis = bridge.SharedWorkerJsApis;
 const DedicatedWorkerJsApis = bridge.DedicatedWorkerJsApis;
 
-const IS_DEBUG = @import("builtin").mode == .Debug;
-
 const Snapshot = @This();
 
 const Caller = @import("Caller.zig");
@@ -582,7 +580,7 @@ fn countExternalReferences() comptime_int {
         }
     }
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         inline for (JsApis) |JsApi| {
             if (!hasNamedIndexedGetter(JsApi)) {
                 count += 1;
@@ -700,7 +698,7 @@ fn collectExternalReferences() [countExternalReferences()]isize {
         }
     }
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         inline for (JsApis) |JsApi| {
             if (!hasNamedIndexedGetter(JsApi)) {
                 references[idx] = @bitCast(@intFromPtr(bridge.unknownObjectPropertyCallback(JsApi)));
@@ -945,8 +943,9 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                     continue;
                 }
 
-                // For non-static functions, use the signature to validate the receiver
-                const func_signature = if (value.static) null else signature;
+                // For non-static functions, use the signature to validate the
+                // receiver, unless the operation has to reject rather than throw.
+                const func_signature = if (value.static or value.rejects_bad_receiver) null else signature;
                 const function_template = v8.v8__FunctionTemplate__New__Config(isolate, &.{
                     .callback = value.func,
                     .length = value.arity,
@@ -1056,7 +1055,14 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
         v8.v8__ObjectTemplate__SetCallAsFunctionHandler(instance, JsApi.Meta.callable.func);
     }
 
-    if (comptime IS_DEBUG) {
+    // Upstream's @@toStringTag block went here, keyed off `Meta.class_string`.
+    // It is not taken: the brand is already emitted above, before the member
+    // loop, off `Meta.to_string_tag` -- which is the measured shape. Upstream's
+    // version always writes the symbol on `instance`, which would give every
+    // ordinary interface's instances an own @@toStringTag; Chrome has none
+    // (`Object.getOwnPropertySymbols(document.createElement('div'))` is empty),
+    // and it would sort the brand after @@iterator instead of before it.
+    if (comptime lp.IS_DEBUG) {
         if (!has_named_index_getter) {
             var configuration: v8.NamedPropertyHandlerConfiguration = .{
                 .getter = bridge.unknownObjectPropertyCallback(JsApi),

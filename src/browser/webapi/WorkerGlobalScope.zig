@@ -39,6 +39,11 @@ const Crypto = @import("Crypto.zig");
 const Console = @import("Console.zig");
 const Navigator = @import("Navigator.zig");
 const Timers = @import("Timers.zig");
+// This fork keeps Scheduler, TaskSignal, TaskController and
+// TaskPriorityChangeEvent in one module; `Scheduler.zig` and `scheduler.zig`
+// are the same file on a case-insensitive filesystem, and importing it under
+// two spellings makes two distinct types, only one of which is registered.
+const scheduler = @import("scheduler.zig");
 const EventTarget = @import("EventTarget.zig");
 const Performance = @import("Performance.zig");
 const WorkerLocation = @import("WorkerLocation.zig");
@@ -49,9 +54,6 @@ const CookieStore = @import("storage/CookieStore.zig");
 const MessagePort = @import("MessagePort.zig");
 const SharedWorkerGlobalScope = @import("SharedWorkerGlobalScope.zig");
 const DedicatedWorkerGlobalScope = @import("DedicatedWorkerGlobalScope.zig");
-
-const builtin = @import("builtin");
-const IS_DEBUG = builtin.mode == .Debug;
 
 const log = lp.log;
 const Allocator = std.mem.Allocator;
@@ -119,6 +121,7 @@ _cookie_store: ?*CookieStore = null,
 _location: WorkerLocation,
 
 _timers: Timers = .{},
+_scheduler: scheduler.Scheduler = .init,
 
 pub const Type = union(enum) {
     shared: *SharedWorkerGlobalScope,
@@ -145,7 +148,7 @@ pub fn init(
 
     const factory = frame._factory;
     const leaf = try Factory.chainedWithAllocator(arena, .{
-        EventTarget{ ._type = undefined },
+        EventTarget{ ._type = .worker_global_scope },
         WorkerGlobalScope{
             .url = url,
             .arena = arena,
@@ -175,7 +178,6 @@ pub fn init(
     });
     const self = leaf._proto;
     self._type = @unionInit(Type, @tagName(tag), leaf);
-    self._proto._type = .{ .worker_global_scope = self };
 
     self._http_owner = .init(&frame._page.blob_urls, &self.origin);
 
@@ -281,21 +283,22 @@ pub fn getEventHandler(
 
 // Workers don't have their own Referer; per spec, dedicated worker requests
 // use the parent document's URL. Delegate to the owning frame.
-pub fn headersForRequest(self: *WorkerGlobalScope, headers: *HttpClient.Headers) !void {
-    return self._frame.headersForRequest(headers);
+pub fn headersForRequest(self: *WorkerGlobalScope, transfer: *HttpClient.Transfer) !void {
+    return self._frame.headersForRequest(transfer);
 }
 
 pub fn isSameOrigin(self: *const WorkerGlobalScope, url: [:0]const u8) bool {
     const current_origin = self.origin orelse return false;
-
-    if (!std.mem.startsWith(u8, url, current_origin)) {
-        return false;
-    }
-    return std.mem.eql(u8, URL.getHost(url), URL.getHost(current_origin));
+    return URL.isSameOrigin(url, current_origin);
 }
 
 pub fn makeRequest(self: *WorkerGlobalScope, req: HttpClient.Request) !void {
-    return self._session.browser.http_client.request(req, &self._http_owner);
+    const transfer = try self._session.browser.http_client.newRequest(req, &self._http_owner);
+    {
+        errdefer transfer.deinit();
+        try self.headersForRequest(transfer);
+    }
+    return transfer.submit();
 }
 
 // Two-phase variant; see HttpClient.newRequest for the ownership contract.
@@ -327,6 +330,10 @@ pub fn getCrypto(self: *WorkerGlobalScope) *Crypto {
 
 pub fn getNavigator(self: *WorkerGlobalScope) *Navigator {
     return &self._navigator;
+}
+
+pub fn getScheduler(self: *WorkerGlobalScope) *scheduler.Scheduler {
+    return &self._scheduler;
 }
 
 pub fn performance(self: *WorkerGlobalScope) *Performance {
@@ -383,7 +390,7 @@ pub fn structuredClone(_: *const WorkerGlobalScope, value: JS.Value) !JS.Value {
 }
 
 pub fn unhandledPromiseRejection(self: *WorkerGlobalScope, no_handler: bool, rejection: JS.PromiseRejection) !void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         log.debug(.js, "unhandled rejection", .{
             .target = "worker",
             .value = rejection.reason(),
@@ -420,7 +427,8 @@ pub fn importScripts(self: *WorkerGlobalScope, urls: []const [:0]const u8) !void
     }
 
     const session = self._session;
-    const arena = try session.getArena(.large, "importScript");
+    // HttpClient will take out a larger arena for the body, if necessary
+    const arena = try session.getArena(.small, "importScript");
     defer arena.release();
 
     for (urls) |url| {
@@ -436,16 +444,12 @@ fn importScript(self: *WorkerGlobalScope, arena: Allocator, url: [:0]const u8) !
 
     const http_client = &session.browser.http_client;
 
-    var headers = try http_client.newHeaders();
-    try self.headersForRequest(&headers);
-
-    const response = http_client.syncRequest(arena, .{
+    const transfer = http_client.newRequest(.{
         .url = resolved_url,
         .method = .GET,
         .frame_id = self._frame_id,
         .document_frame_id = self._frame._frame_id,
         .loader_id = self._loader_id,
-        .headers = headers,
         .cookie_jar = &session.cookie_jar,
         .cookie_origin = self.url,
         .resource_type = .script,
@@ -455,6 +459,16 @@ fn importScript(self: *WorkerGlobalScope, arena: Allocator, url: [:0]const u8) !
         log.warn(.http, "importScript", .{ .url = resolved_url, .err = err });
         return error.NetworkError;
     };
+    {
+        errdefer transfer.deinit();
+        try self.headersForRequest(transfer);
+    }
+
+    var response = http_client.syncRequest(transfer) catch |err| {
+        log.warn(.http, "importScript", .{ .url = resolved_url, .err = err });
+        return error.NetworkError;
+    };
+    defer response.deinit();
 
     if (response.status != 200) {
         log.warn(.http, "importScript", .{ .url = resolved_url, .status = response.status });
@@ -519,7 +533,7 @@ pub fn reportError(self: *WorkerGlobalScope, err: JS.Value) !void {
     // We still dispatch so that addEventListener('error', ...) listeners fire.
     try self.dispatch(self.asEventTarget(), event, null, .{});
 
-    if (comptime builtin.is_test == false) {
+    if (comptime lp.IS_TEST == false) {
         if (!event._prevent_default) {
             log.warn(.js, "worker.reportError", .{
                 .message = error_event._message,
@@ -607,6 +621,7 @@ pub const JsApi = struct {
     pub const console = bridge.accessor(WorkerGlobalScope.getConsole, WorkerGlobalScope.setConsole, .{});
     pub const crypto = bridge.accessor(WorkerGlobalScope.getCrypto, null, .{});
     pub const navigator = bridge.accessor(WorkerGlobalScope.getNavigator, null, .{});
+    pub const scheduler = bridge.accessor(WorkerGlobalScope.getScheduler, null, .{});
     pub const performance = bridge.accessor(struct {
         // Unnecessary, But, our WebAPI getters are ALWAYS `fn getPerformance()...`.
         // But for performance, we _need_ to have fn performance() *Performance to

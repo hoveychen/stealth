@@ -108,7 +108,6 @@ pub fn getVoices(self: *SpeechSynthesis, exec: *Execution) ![]*SpeechSynthesisVo
             const task = try exec._factory.create(VoicesReadyTask{ .synthesis = self, .exec = exec });
             try exec.js.scheduler.add(task, VoicesReadyTask.run, VOICE_LIST_LATENCY_MS, .{
                 .name = "speechSynthesis.voiceschanged",
-                .low_priority = false,
                 .finalizer = VoicesReadyTask.cancelled,
             });
         }
@@ -169,7 +168,6 @@ pub fn speak(self: *SpeechSynthesis, utterance: *SpeechSynthesisUtterance, exec:
     });
     try exec.js.scheduler.add(task, SpeakTask.run, 0, .{
         .name = "SpeechSynthesis.speak",
-        .low_priority = false,
         .finalizer = SpeakTask.cancelled,
     });
 }

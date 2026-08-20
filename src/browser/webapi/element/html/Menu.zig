@@ -2,6 +2,7 @@ const js = @import("../../../js/js.zig");
 const Frame = @import("../../../Frame.zig");
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
+const Factory = @import("../../../Factory.zig");
 const HtmlElement = @import("../Html.zig");
 
 // <menu>. One of G17's window keys, and the smallest of them: Chrome 150 gives
@@ -17,7 +18,7 @@ pub const Proto = HtmlElement;
 _proto: *HtmlElement,
 
 pub fn asElement(self: *Menu) *Element {
-    return self._proto._proto;
+    return Factory.protoOf(self._proto);
 }
 pub fn asNode(self: *Menu) *Node {
     return self.asElement().asNode();

@@ -283,6 +283,14 @@ pub fn getBody(self: *Request, exec: *const Execution) !?*ReadableStream {
     return ReadableStream.initWithData(body, exec);
 }
 
+/// Whether this request carries a body at all. A GET with no body must not
+/// reach curl with an empty-but-present one: curl then adds `Content-Length: 0`
+/// and its own `Content-Type: application/x-www-form-urlencoded`, neither of
+/// which a real fetch() GET sends.
+pub fn hasBody(self: *const Request) bool {
+    return self._body != null or self._body_stream != null;
+}
+
 /// The body as bytes, draining a streaming one on first read. Chrome streams
 /// it to the wire instead; we buffer, which is visible only in how much of a
 /// slow stream has to exist before the request goes out.
@@ -319,7 +327,7 @@ pub fn blob(self: *Request, exec: *const Execution) !js.Promise {
     const headers = try self.getHeaders(exec);
     const content_type = try headers.get("content-type", exec) orelse "";
 
-    const b = try Blob.initFromBytes(body, content_type, exec.page);
+    const b = try Blob.initFromBytes(body, content_type, exec);
     return local.resolvePromise(b);
 }
 

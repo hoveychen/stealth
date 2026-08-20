@@ -78,7 +78,6 @@ pub fn constructor(options: ?js.Value, exec: *const Execution) !*EditContext {
         ._selection_start = @min(try uint32Member(reader, "selectionStart"), length),
         ._selection_end = @min(try uint32Member(reader, "selectionEnd"), length),
     });
-    self._proto._type = .{ .edit_context = self };
     return self;
 }
 

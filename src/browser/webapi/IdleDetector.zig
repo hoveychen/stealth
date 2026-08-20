@@ -45,7 +45,6 @@ _started: bool = false,
 
 pub fn constructor(page: *Page) !*IdleDetector {
     const self = try page.factory.eventTarget(IdleDetector{ ._proto = undefined });
-    self._proto._type = .{ .idle_detector = self };
     return self;
 }
 

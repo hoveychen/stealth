@@ -494,7 +494,7 @@ pub const WGSLLanguageFeatures = struct {
     pub fn forEach(self: *WGSLLanguageFeatures, cb_: js.Function, js_this_: ?js.Object) !void {
         const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
         for (features) |feature| {
-            var caught: js.TryCatch.Caught = undefined;
+            var caught: js.TryCatch.Caught = .{};
             cb.tryCall(void, .{ feature, feature, self }, &caught) catch {};
         }
     }

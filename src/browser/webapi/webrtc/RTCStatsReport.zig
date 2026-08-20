@@ -102,7 +102,7 @@ pub fn entries(self: *RTCStatsReport, frame: *Frame) !*EntryIterator {
 pub fn forEach(self: *RTCStatsReport, cb_: js.Function, js_this_: ?js.Object) !void {
     const cb = if (js_this_) |js_this| try cb_.withThis(js_this) else cb_;
 
-    var caught: js.TryCatch.Caught = undefined;
+    var caught: js.TryCatch.Caught = .{};
     cb.tryCall(void, .{ self.record(), PEER_CONNECTION_ID, self }, &caught) catch {
         lp.log.debug(.js, "forEach callback", .{ .caught = caught, .source = "RTCStatsReport" });
     };

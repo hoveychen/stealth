@@ -28,6 +28,7 @@ const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
 const Element = @import("../../Element.zig");
+const Factory = @import("../../../Factory.zig");
 const AnimatedString = @import("../../svg/AnimatedString.zig");
 
 const Svg = @import("../Svg.zig");
@@ -41,7 +42,7 @@ pub fn asElement(self: *Script) *Element {
     return self._proto.asElement();
 }
 pub fn asConstElement(self: *const Script) *const Element {
-    return self._proto._proto;
+    return Factory.protoOf(self._proto);
 }
 pub fn asNode(self: *Script) *Node {
     return self.asElement().asNode();

@@ -24,7 +24,6 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const ArenaPool = @import("ArenaPool.zig");
 
@@ -33,10 +32,8 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 
 const Arena = @This();
 
-const IS_DEBUG = builtin.mode == .Debug;
-
 // In Debug, don't pool and don't retain capacity. Both can mask UAF.
-pub const SAFETY = IS_DEBUG == true and builtin.is_test == false;
+pub const SAFETY = lp.IS_DEBUG == true and lp.IS_TEST == false;
 
 // Amount of memory the arena hasn't reported to v8 yet. This is only tracked
 // when account != null.
@@ -62,7 +59,7 @@ account: ?*Account,
 // `bytes` as of the last report() — what the account has already been told.
 reported: usize,
 
-debug: if (IS_DEBUG) []const u8 else void = if (IS_DEBUG) "" else {},
+debug: if (lp.IS_DEBUG) []const u8 else void = if (lp.IS_DEBUG) "" else {},
 
 pub fn allocator(self: *Arena) Allocator {
     return self._arena.allocator();
@@ -131,7 +128,9 @@ fn shrank(self: *Arena, n: usize) void {
 }
 
 fn resized(self: *Arena, old_len: usize, new_len: usize) void {
-    if (new_len >= old_len) self.grew(new_len - old_len) else self.shrank(old_len - new_len);
+    // self.bytes always contains old_len, so this can't wrap
+    self.bytes = self.bytes - old_len + new_len;
+    lp.metrics.arena_memory_bytes.add(@as(i64, @intCast(new_len)) - @as(i64, @intCast(old_len)));
 }
 
 const vtable = Allocator.VTable{

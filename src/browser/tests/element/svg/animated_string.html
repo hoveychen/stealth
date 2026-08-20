@@ -45,33 +45,40 @@
   testing.expectEqual(true, use1.href === use1.href);
   testing.expectEqual(null, use1.getAttribute('href'));
   testing.expectEqual('#icon', use1.getAttribute('xlink:href'));
+  testing.expectEqual('#icon', use1.getAttributeNS('http://www.w3.org/1999/xlink', 'href'));
   // A plain href wins over the legacy one.
   testing.expectEqual('#modern', $('#use2').href.baseVal);
   testing.expectEqual('#legacy', $('#use2').getAttribute('xlink:href'));
 
-  // Writes land in href for us; Chrome leaves the attribute list alone and
-  // still reports the new value. Assert the common observable.
+  // Only xlink:href present: the write lands in the xlink attribute, not in
+  // a new href, which is what Chrome reports -- it leaves the attribute list
+  // alone. (Firefox drops the prefix on that write, so only assert the
+  // namespaced lookup.)
   use1.href.baseVal = '#other';
   testing.expectEqual('#other', use1.href.baseVal);
+  testing.expectEqual('#other', use1.getAttributeNS('http://www.w3.org/1999/xlink', 'href'));
+  testing.expectEqual(false, use1.hasAttributeNS(null, 'href'));
 
-  // setAttributeNS stores under the local name, so a runtime xlink:href
-  // lands in href and reflects like the parsed variant. (Chrome names the
-  // attribute xlink:href and reflects it the same way.)
+  // Runtime setAttributeNS keeps the qualified name and reflects the same way,
+  // as Chrome does: it too names the attribute xlink:href.
   const use3 = document.createElementNS('http://www.w3.org/2000/svg', 'use');
   use3.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#runtime');
   testing.expectEqual('#runtime', use3.href.baseVal);
+  testing.expectEqual('#runtime', use3.getAttribute('xlink:href'));
 
   // A namespace-less setAttribute('xlink:href') is a literal attribute in no
   // namespace, which Chrome does not reflect ('' there). We have no namespace
   // on an attribute, so it is indistinguishable from the parsed one and does
   // reflect -- the residual half of the xlink deviation, and the reason the
-  // parsed case above works at all.
+  // parsed case above works at all. The write follows the same rule and lands
+  // in the literal attribute; Chrome, seeing no xlink-namespaced href, would
+  // create a plain one instead.
   const use4 = document.createElementNS('http://www.w3.org/2000/svg', 'use');
   use4.setAttribute('xlink:href', '#literal');
   testing.expectEqual('#literal', use4.href.baseVal);
   use4.href.baseVal = '#written';
-  testing.expectEqual('#written', use4.getAttribute('href'));
-  testing.expectEqual(true, use4.hasAttribute('xlink:href'));
+  testing.expectEqual('#written', use4.getAttribute('xlink:href'));
+  testing.expectEqual(null, use4.getAttribute('href'));
 
   // No href attribute at all: set writes to href.
   const link = $('#link1');

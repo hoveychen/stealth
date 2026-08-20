@@ -709,6 +709,31 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    if (std.mem.eql(u8, path, "/redirect-cross-origin-x-hop")) {
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "http://localhost:9582/echo-x-hop" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/echo-x-hop")) {
+        var it = req.iterateHeaders();
+        var value: []const u8 = "NONE";
+        while (it.next()) |header| {
+            if (std.ascii.eqlIgnoreCase(header.name, "x-hop")) {
+                value = header.value;
+                break;
+            }
+        }
+        return req.respond(value, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/plain; charset=utf-8" },
+            },
+        });
+    }
+
     if (std.mem.eql(u8, path, "/redirect-target")) {
         return req.respond("<!DOCTYPE html><title>landed</title>", .{
             .extra_headers = &.{
@@ -1027,6 +1052,45 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         return req.respond(body, .{
             .extra_headers = &.{
                 .{ .name = "Content-Type", .value = "text/plain; charset=utf-8" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/echo_headers")) {
+        // Echo every request header back as "name: value" lines, so tests
+        // can assert on the headers a request actually sent.
+        var buf: [8192]u8 = undefined;
+        var pos: usize = 0;
+        var it = req.iterateHeaders();
+        while (it.next()) |header| {
+            const line = try std.fmt.bufPrint(buf[pos..], "{s}: {s}\n", .{ header.name, header.value });
+            pos += line.len;
+        }
+        return req.respond(buf[0..pos], .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/plain; charset=utf-8" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/redirect_same_echo_referer")) {
+        // Same-origin 302 to /echo_referer: the full Referer must survive the hop.
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "/echo_referer" },
+            },
+        });
+    }
+
+    if (std.mem.eql(u8, path, "/redirect_cross_echo_referer")) {
+        // 302 to /echo_referer on the localhost alias — a cross-origin hop, so
+        // the Referer must be recomputed at the redirect (stripped to origin
+        // under the default policy) rather than re-sent in full.
+        return req.respond("", .{
+            .status = .found,
+            .extra_headers = &.{
+                .{ .name = "Location", .value = "http://localhost:9582/echo_referer" },
             },
         });
     }

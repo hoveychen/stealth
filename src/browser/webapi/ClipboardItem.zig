@@ -86,7 +86,7 @@ pub fn constructor(items: js.Value, exec: *const Execution) !*ClipboardItem {
             // A string (or anything that stringifies) becomes a Blob of the
             // entry's own type.
             const text = try value.toStringSlice();
-            break :blk try Blob.initFromBytes(text, key, exec.page);
+            break :blk try Blob.initFromBytes(text, key, exec);
         };
         blob.acquireRef();
         try self._entries.append(allocator, .{

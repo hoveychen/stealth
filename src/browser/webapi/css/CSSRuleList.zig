@@ -2,6 +2,7 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 const Frame = @import("../../Frame.zig");
 const CSSRule = @import("CSSRule.zig");
+const GenericIterator = @import("../collections/iterator.zig").Entry;
 
 const CSSRuleList = @This();
 
@@ -40,26 +41,24 @@ pub fn clear(self: *CSSRuleList) void {
     self._rules.clearRetainingCapacity();
 }
 
-pub fn values(self: *CSSRuleList, exec: *js.Execution) !*ValueIterator {
-    return .init(.{ .list = self }, exec);
+fn values(self: *CSSRuleList, frame: *Frame) !*ValueIterator {
+    return .init(.{ .list = self }, frame);
 }
 
 const Iterator = struct {
     index: u32 = 0,
     list: *CSSRuleList,
 
-    const Entry = struct { u32, *CSSRule };
-
-    pub fn next(self: *Iterator, _: *js.Execution) ?Entry {
-        const index = self.index;
-        const value = self.list.item(index) orelse return null;
-        self.index = index + 1;
-        return .{ index, value };
+    pub fn next(self: *Iterator, _: *Frame) ?*CSSRule {
+        const rule = self.list.item(self.index) orelse return null;
+        self.index += 1;
+        return rule;
     }
 };
 
-const GenericIterator = @import("../collections/iterator.zig").Entry;
-pub const ValueIterator = GenericIterator(Iterator, "1");
+// Registered centrally in css/iterators.zig, next to the other CSSOM iterators,
+// so this type stays public and the file declares no registerTypes() of its own.
+pub const ValueIterator = GenericIterator(Iterator, null);
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(CSSRuleList);

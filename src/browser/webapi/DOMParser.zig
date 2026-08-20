@@ -41,15 +41,9 @@ pub fn parseFromString(
     mime_type: []const u8,
     frame: *Frame,
 ) !*Document {
-    const target_mime = std.meta.stringToEnum(enum {
-        @"text/html",
-        @"text/xml",
-        @"application/xml",
-        @"application/xhtml+xml",
-        @"image/svg+xml",
-    }, mime_type) orelse return error.NotSupported;
+    const target_mime = std.meta.stringToEnum(SupportedType, mime_type) orelse return error.NotSupported;
 
-    return switch (target_mime) {
+    switch (target_mime) {
         .@"text/html" => {
             const arena = try frame.getArena(.medium, "DOMParser.parseFromString");
             defer arena.release();
@@ -89,9 +83,17 @@ pub fn parseFromString(
             return doc.asDocument();
         },
         else => {
+            // Upstream builds the error document node by node
+            // (`parserErrorDocument`, dropped below), which files the namespace
+            // in the side table and so leaves no declaration attribute behind.
+            // We parse the `<parsererror>` markup itself, because the
+            // declaration then survives as an ordinary attribute and shows up
+            // in the serialization -- which is what Chrome 151 prints for that
+            // same markup (probe expr-g5-p67.js; asserted by the `basic` block
+            // of tests/domparser.html).
             const doc = (try Frame.parse.xmlDocument(frame, html)) orelse blk: {
                 // Return a document with a <parsererror> element per spec.
-                break :blk (try Frame.parse.xmlDocument(frame, "<parsererror xmlns=\"http://www.mozilla.org/newlayout/xml/parsererror.xml\">error</parsererror>")).?;
+                break :blk (try Frame.parse.xmlDocument(frame, "<parsererror xmlns=\"" ++ parsererror_ns ++ "\">error</parsererror>")).?;
             };
             const document = doc.asDocument();
             // `contentType` reports the mime the document was parsed as, the way
@@ -102,8 +104,20 @@ pub fn parseFromString(
             document._content_type = @tagName(target_mime);
             return document;
         },
-    };
+    }
 }
+
+const SupportedType = enum {
+    @"text/html",
+    @"text/xml",
+    @"application/xml",
+    @"application/xhtml+xml",
+    @"image/svg+xml",
+};
+
+// Per spec, a well-formedness error yields a document whose only child is
+// <parsererror> in the Mozilla error namespace.
+const parsererror_ns = "http://www.mozilla.org/newlayout/xml/parsererror.xml";
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(DOMParser);

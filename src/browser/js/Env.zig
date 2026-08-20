@@ -18,7 +18,6 @@
 
 const std = @import("std");
 const lp = @import("lightpanda");
-const builtin = @import("builtin");
 
 const js = @import("js.zig");
 const bridge = @import("bridge.zig");
@@ -39,9 +38,10 @@ const log = lp.log;
 
 const JsApis = bridge.JsApis;
 const Allocator = std.mem.Allocator;
-const IS_DEBUG = builtin.mode == .Debug;
 
 const MAX_CONTEXTS = if (lp.build_config.wpt_extensions) 8192 else 128;
+
+const GC_HINT_FLOOR = 1 * 1024 * 1024;
 
 fn initClassIds() void {
     inline for (JsApis, 0..) |JsApi, i| {
@@ -109,7 +109,7 @@ pub const InitOpts = struct {
 };
 
 pub fn init(app: *App, opts: InitOpts) !Env {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         comptime {
             // V8 requirement for any data using SetAlignedPointerInInternalField
             const a = @alignOf(@import("TaggedOpaque.zig"));
@@ -151,7 +151,7 @@ pub fn init(app: *App, opts: InitOpts) !Env {
     v8.v8__Isolate__SetFatalErrorHandler(isolate_handle, fatalCallback);
     v8.v8__Isolate__SetOOMErrorHandler(isolate_handle, oomCallback);
 
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         v8.v8__Isolate__SetCaptureStackTraceForUncaughtExceptions(isolate_handle, true, 64);
     }
 
@@ -209,7 +209,7 @@ pub fn init(app: *App, opts: InitOpts) !Env {
 }
 
 pub fn deinit(self: *Env) void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(self.contexts.items.len == 0);
     }
     for (self.contexts.items) |ctx| {
@@ -437,7 +437,7 @@ pub fn destroyContext(self: *Env, context: *Context) void {
             break;
         }
     } else {
-        if (comptime IS_DEBUG) {
+        if (comptime lp.IS_DEBUG) {
             @panic("Tried to remove unknown context");
         }
     }
@@ -460,10 +460,7 @@ pub fn runMicrotasks(self: *Env) void {
 
         const v8_isolate = self.isolate.handle;
 
-        // terminatePending: once a forcible terminate is requested (and not
-        // canceled), refuse to start new work — IsExecutionTerminating alone
-        // goes false again as soon as the killed script finishes unwinding.
-        if (v8.v8__Isolate__IsExecutionTerminating(v8_isolate) or self.terminatePending()) {
+        if (self.terminatePending()) {
             return;
         }
 
@@ -476,12 +473,26 @@ pub fn runMicrotasks(self: *Env) void {
         while (i < self.contexts.items.len) : (i += 1) {
             const ctx = self.contexts.items[i];
             v8.v8__MicrotaskQueue__PerformCheckpoint(ctx.microtask_queue, v8_isolate);
+
+            if (self.terminatePending()) {
+                if (v8.v8__Isolate__IsExecutionTerminating(v8_isolate)) {
+                    for (self.contexts.items) |c| {
+                        if (c.call_depth > 0) {
+                            return;
+                        }
+                    }
+                    // None of the contexts are "entered", it's safe to
+                    // clear the termination flag.
+                    v8.v8__Isolate__CancelTerminateExecution(v8_isolate);
+                }
+                return;
+            }
         }
     }
 }
 
 pub fn runMacrotasks(self: *Env) !void {
-    if (v8.v8__Isolate__IsExecutionTerminating(self.isolate.handle) or self.terminatePending()) {
+    if (self.terminatePending()) {
         return;
     }
 
@@ -490,7 +501,7 @@ pub fn runMacrotasks(self: *Env) !void {
     var i: usize = 0;
     while (i < self.contexts.items.len) : (i += 1) {
         const ctx = self.contexts.items[i];
-        if (comptime builtin.is_test == false) {
+        if (comptime lp.IS_TEST == false) {
             // I hate this comptime check as much as you do. But we have tests
             // which rely on short execution before shutdown. In real world, it's
             // underterministic whether a timer will or won't run before the
@@ -509,7 +520,7 @@ pub fn runMacrotasks(self: *Env) !void {
 
 pub fn hasMacrotasks(self: *Env) bool {
     for (self.contexts.items) |ctx| {
-        if (ctx.scheduler.high_priority.count() > 0) {
+        if (ctx.scheduler.blocksCompletion()) {
             return true;
         }
     }
@@ -560,10 +571,12 @@ pub fn runIdleTasks(self: *const Env) void {
 // a Context, it's managed by the garbage collector. We use the
 // `memoryPressureNotification` call on the isolate to encourage v8 to free
 // any contexts which have been freed.
-// The level indicates the aggressivity of the GC required:
-// moderate speeds up incremental GC
-// critical runs one full GC
+// Skips if there's little to reclaim
 pub fn memoryPressureNotification(self: *Env, level: Isolate.MemoryPressureLevel) void {
+    const stats = self.isolate.getHeapStatistics();
+    if (stats.used_heap_size + stats.external_memory < GC_HINT_FLOOR) {
+        return;
+    }
     var handle_scope: js.HandleScope = undefined;
     handle_scope.init(self.isolate);
     defer handle_scope.deinit();
@@ -591,14 +604,11 @@ pub fn dumpMemoryStats(self: *Env) void {
     , .{ stats.total_heap_size, stats.total_heap_size_executable, stats.total_physical_size, stats.total_available_size, stats.used_heap_size, stats.heap_size_limit, stats.malloced_memory, stats.external_memory, stats.peak_malloced_memory, stats.number_of_native_contexts, stats.number_of_detached_contexts, stats.total_global_handles_size, stats.used_global_handles_size, stats.does_zap_garbage });
 }
 
-pub fn isExecutionTerminating(self: *const Env) bool {
-    return v8.v8__Isolate__IsExecutionTerminating(self.isolate.handle);
-}
-
-// Whether a forcible terminate has been requested (and not yet cleared by
-// cancelTerminate). Unlike isExecutionTerminating, this is our own sticky
-// flag, so it stays true after V8 consumes the terminate on the JSEntry
-// unwind. Callers about to enter a fresh eval use it to refuse to run.
+// The single "must not run JS" predicate. We're the only ones who ever call
+// TerminateExecution (here and in terminateInterrupt) and both set this flag,
+// so it's always at least as true as v8__Isolate__IsExecutionTerminating —
+// and it stays true after V8 consumes the terminate on the JSEntry unwind,
+// which is what stops a fresh eval from re-entering mid-teardown.
 pub fn terminatePending(self: *const Env) bool {
     return self.terminate_requested.load(.acquire);
 }
@@ -606,6 +616,7 @@ pub fn terminatePending(self: *const Env) bool {
 pub fn terminate(self: *Env) void {
     self.terminate_mutex.lockUncancelable(lp.io);
     defer self.terminate_mutex.unlock(lp.io);
+    self.terminate_requested.store(true, .release);
     v8.v8__Isolate__TerminateExecution(self.isolate.handle);
 }
 
@@ -680,7 +691,7 @@ pub fn cancelTerminate(self: *Env) void {
 pub fn performIsolateMicrotasks(self: *Env) void {
     self.terminate_mutex.lockUncancelable(lp.io);
     defer self.terminate_mutex.unlock(lp.io);
-    if (v8.v8__Isolate__IsExecutionTerminating(self.isolate.handle)) return;
+    if (self.terminatePending()) return;
     v8.v8__Isolate__PerformMicrotaskCheckpoint(self.isolate.handle);
 }
 

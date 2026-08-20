@@ -91,7 +91,7 @@ pub const CaptureController = struct {
 
     pub fn constructor(page: *Page) !*CaptureController {
         const self = try page.factory.eventTarget(CaptureController{ ._proto = undefined });
-        self._proto._type = .{ .capture_controller = self };
+        self._proto._type = .capture_controller;
         return self;
     }
 

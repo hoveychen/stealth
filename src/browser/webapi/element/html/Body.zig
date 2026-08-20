@@ -18,6 +18,7 @@
 const lp = @import("lightpanda");
 
 const js = @import("../../../js/js.zig");
+const Factory = @import("../../../Factory.zig");
 const Frame = @import("../../../Frame.zig");
 
 const Node = @import("../../Node.zig");
@@ -32,31 +33,14 @@ const Body = @This();
 
 pub const Proto = HtmlElement;
 
-_proto: *HtmlElement,
+_pad: bool = false,
+_proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 
 pub fn asElement(self: *Body) *Element {
-    return self._proto._proto;
+    return Factory.protoOf(self).asElement();
 }
 pub fn asNode(self: *Body) *Node {
     return self.asElement().asNode();
-}
-
-// The presentational attributes are plain string reflections -- no colour
-// parsing on the five colour ones and no URL resolution on background.
-// Measured on a headed Chrome 150 (probe-g20k): `body.background` hands back
-// the raw "x.png" even once the body is in the document. The five colour ones
-// are [LegacyNullToEmptyString], background is not, which is the only way they
-// differ.
-fn presentational(comptime attribute: []const u8, comptime null_to_empty: bool) type {
-    return struct {
-        fn get(self: *Body) []const u8 {
-            return self.asElement().getAttributeSafe(.wrap(attribute)) orelse "";
-        }
-        fn set(self: *Body, value: js.Value, frame: *Frame) !void {
-            const text = if (null_to_empty and value.isNull()) "" else try value.toZig([]const u8);
-            return self.asElement().setAttributeSafe(.wrap(attribute), .wrap(text), frame);
-        }
-    };
 }
 
 // The "window-reflecting body element event handler set": these are aliases
@@ -106,13 +90,28 @@ pub const JsApi = struct {
     };
 
     // Chrome 150's own-property order (probe-g20a); the bridge emits members
-    // in declaration order and that order is a fingerprint surface.
-    pub const text = bridge.accessor(presentational("text", true).get, presentational("text", true).set, .{ .ce_reactions = true });
-    pub const link = bridge.accessor(presentational("link", true).get, presentational("link", true).set, .{ .ce_reactions = true });
-    pub const vLink = bridge.accessor(presentational("vlink", true).get, presentational("vlink", true).set, .{ .ce_reactions = true });
-    pub const aLink = bridge.accessor(presentational("alink", true).get, presentational("alink", true).set, .{ .ce_reactions = true });
-    pub const bgColor = bridge.accessor(presentational("bgcolor", true).get, presentational("bgcolor", true).set, .{ .ce_reactions = true });
-    pub const background = bridge.accessor(presentational("background", false).get, presentational("background", false).set, .{ .ce_reactions = true });
+    // in declaration order and that order is a fingerprint surface. Upstream
+    // declares the six presentational attributes in a different order; ours is
+    // the measured one, so only the helper is taken, not the order.
+    //
+    // The presentational attributes are plain string reflections -- no colour
+    // parsing on the five colour ones and no URL resolution on background
+    // (`reflect.string`, not `reflect.url`). Measured on a headed Chrome 150
+    // (probe-g20k): `body.background` hands back the raw "x.png" even once the
+    // body is in the document. The five colour ones are
+    // [LegacyNullToEmptyString], background is not, which is the only way they
+    // differ.
+    const reflect = Element.Reflect(Body);
+    pub const text = reflect.stringNullToEmpty("text");
+    pub const link = reflect.stringNullToEmpty("link");
+    pub const vLink = reflect.stringNullToEmpty("vlink");
+    pub const aLink = reflect.stringNullToEmpty("alink");
+    pub const bgColor = reflect.stringNullToEmpty("bgcolor");
+    pub const background = reflect.string("background");
+
+    // Upstream has only the six window-reflecting handlers here, each with its
+    // own get/setOnX pair. Ours keeps the full measured HTMLBodyElement handler
+    // set (probe-g20a) driven off `global_event_handlers.Handler`.
     pub const onblur = bridge.accessor(reflected(.onblur).get, reflected(.onblur).set, .{ .null_as_undefined = false });
     pub const onerror = bridge.accessor(reflected(.onerror).get, reflected(.onerror).set, .{ .null_as_undefined = false });
     pub const onfocus = bridge.accessor(reflected(.onfocus).get, reflected(.onfocus).set, .{ .null_as_undefined = false });

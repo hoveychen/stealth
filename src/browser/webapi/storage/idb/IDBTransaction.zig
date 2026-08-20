@@ -36,7 +36,6 @@ const DOMStringList = @import("../../collections.zig").DOMStringList;
 const log = lp.log;
 const Execution = js.Execution;
 const FunctionSetter = idb.FunctionSetter;
-const IS_DEBUG = @import("builtin").mode == .Debug;
 
 const IDBTransaction = @This();
 
@@ -171,7 +170,7 @@ pub fn initVersionChange(db: *IDBDatabase, exec: *Execution) !*IDBTransaction {
 }
 
 pub fn deinit(self: *IDBTransaction, _: *Page) void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // Pins hold refs, so the last release can't happen while parked (nor
         // while a drain task is scheduled).
         std.debug.assert(self._parked == false);
@@ -291,7 +290,7 @@ pub fn settle(self: *IDBTransaction, exec: *Execution) void {
 // enqueue more) and, once the queue stays empty, commit and fire `complete`.
 // Returns true while more batches remain.
 pub fn settleStep(self: *IDBTransaction, exec: *Execution) bool {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         // non versionchange mode goes through the scheduler + drain
         std.debug.assert(self._mode == .versionchange);
     }
@@ -551,7 +550,7 @@ fn drainInner(self: *IDBTransaction) ?u32 {
 }
 
 fn unpark(self: *IDBTransaction) void {
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(self._parked);
     }
     self._parked = false;
@@ -561,7 +560,7 @@ fn unpark(self: *IDBTransaction) void {
 // Scheduler wake-up: the gate was handed to us, so run the drain again.
 fn resumeDrain(waiter: *Engine.GateWaiter) void {
     const self: *IDBTransaction = @fieldParentPtr("_gate_waiter", waiter);
-    if (comptime IS_DEBUG) {
+    if (comptime lp.IS_DEBUG) {
         std.debug.assert(self._mode != .versionchange);
     }
 
