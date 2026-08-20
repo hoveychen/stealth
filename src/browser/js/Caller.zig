@@ -113,6 +113,13 @@ pub fn deinit(self: *Caller) void {
         _ = local_arena.reset(if (comptime IS_DEBUG) .free_all else .{ .retain_with_limit = LOCAL_ARENA_RETAIN });
     }
 
+    // Backstop for the pending exception message: handleError consumes it on
+    // the throwing path, so anything still here belongs to a call that swallowed
+    // the error and would otherwise leak onto an unrelated exception later.
+    if (call_depth == 0) {
+        ctx.pending_error_message = null;
+    }
+
     ctx.call_depth = call_depth;
     ctx.local = self.prev_local;
     ctx.global.setJs(self.prev_context);
@@ -603,6 +610,14 @@ fn interfaceName(comptime T: type) []const u8 {
 fn handleError(comptime T: type, comptime F: type, local: *const Local, err: anyerror, info: anytype) void {
     const isolate = local.isolate;
 
+    // Read before anything else: the debug logging below serialises the
+    // arguments, which can re-enter JS (a value's toString), and a nested call
+    // resets the arena a formatted message may live in. Whatever throws next
+    // owns the message, and nothing after it should -- an unclaimed message
+    // would end up on the next exception from any interface.
+    const pending_message = local.ctx.pending_error_message orelse "";
+    local.ctx.pending_error_message = null;
+
     if (comptime IS_DEBUG and @TypeOf(info) == FunctionCallbackInfo) {
         if (log.enabled(.js, .debug)) {
             const DOMException = @import("../webapi/DOMException.zig");
@@ -637,12 +652,12 @@ fn handleError(comptime T: type, comptime F: type, local: *const Local, err: any
 
         break :blk switch (err) {
             error.InvalidArgument => isolate.createTypeError("invalid argument"),
-            error.TypeError => isolate.createTypeError(""),
-            error.RangeError => isolate.createRangeError(""),
+            error.TypeError => isolate.createTypeError(pending_message),
+            error.RangeError => isolate.createRangeError(pending_message),
             error.OutOfMemory => isolate.createError("out of memory"),
             error.IllegalConstructor => isolate.createError("Illegal Constructor"),
             error.TryCatchRethrow, error.JsException => unreachable, // early exited a few lines up
-            else => domExceptionToJs(&err_local, err) orelse isolate.createError(@errorName(err)),
+            else => domExceptionToJs(&err_local, err, pending_message) orelse isolate.createError(@errorName(err)),
         };
     };
 
@@ -651,9 +666,13 @@ fn handleError(comptime T: type, comptime F: type, local: *const Local, err: any
 }
 
 // Convert a Zig error to a DOMException. If the error is unknown, return null.
-fn domExceptionToJs(local: *const Local, err: anyerror) ?*const v8.Value {
+// A `message` overrides the code's stock text, so `error.SyntaxError` can carry
+// Blink's own sentence rather than "The string did not match the expected
+// pattern".
+fn domExceptionToJs(local: *const Local, err: anyerror, message: []const u8) ?*const v8.Value {
     const DOMException = @import("../webapi/DOMException.zig");
-    const ex = DOMException.fromError(err) orelse return null;
+    var ex = DOMException.fromError(err) orelse return null;
+    if (message.len != 0) ex._custom_message = message;
     const value = local.zigValueToJs(ex, .{}) catch return local.isolate.createError("internal error");
     return value.handle;
 }

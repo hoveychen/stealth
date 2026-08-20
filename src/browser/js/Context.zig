@@ -125,6 +125,15 @@ call_depth: usize = 0,
 // context.localScope
 local: ?*const js.Local = null,
 
+// The message the exception Caller.handleError is about to throw should carry.
+// Blink names the interface and the member on every one of these ("Failed to
+// construct 'CSSUnitValue': Invalid unit: bogus"), and a bare `TypeError:` with
+// nothing after the colon is itself a fingerprint. Set through `fail` below,
+// which pairs setting the message with returning the error so a message can
+// never be left behind by a call that then succeeded; consumed and cleared by
+// handleError, and cleared again when a top-level call unwinds.
+pending_error_message: ?[]const u8 = null,
+
 origin: *Origin,
 
 // Identity tracking for this context. For main world contexts, this points to
@@ -190,6 +199,19 @@ const ModuleEntry = struct {
 
 pub fn fromC(c_context: *const v8.Context) ?*Context {
     return @ptrCast(@alignCast(v8.v8__Context__GetAlignedPointerFromEmbedderData(c_context, 1)));
+}
+
+/// Records the message the exception should carry and hands `err` straight back,
+/// so a rejection reads `return frame.js.fail(error.TypeError, "Failed to ...")`.
+/// Returning the error here rather than in the caller is the point: it makes it
+/// impossible to set a message on a path that does not then throw.
+///
+/// `message` has to outlive the call, not the context -- handleError copies it
+/// into a v8 string before the arenas unwind -- so a literal or anything from
+/// `local_arena` will do.
+pub fn fail(self: *Context, err: anytype, message: []const u8) @TypeOf(err) {
+    self.pending_error_message = message;
+    return err;
 }
 
 /// Returns the Context and v8::Context for the given isolate.

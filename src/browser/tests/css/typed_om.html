@@ -31,6 +31,17 @@ function errorName(fn) {
     }
     return null;
 }
+// `name: message`, the pair probe-css7.js compared. Blink's wording is the
+// detectable half: an empty message on the right error type still reads as
+// "not Chrome".
+function errorText(fn) {
+    try {
+        fn();
+    } catch (e) {
+        return `${e.name}: ${e.message}`;
+    }
+    return null;
+}
 // brand + serialisation, the pair the probes compared.
 function brand(v) {
     if (v === null) return 'null';
@@ -696,5 +707,240 @@ function attach(el) {
     // value for it -- a pre-existing getComputedStyle gap, not a Typed OM one.
     testing.expectEqual('undefined', brand(el.computedStyleMap().get('align-items')));
     testing.expectFalse(el.computedStyleMap().has('--nope'));
+}
+</script>
+
+<!--
+  Blink's exception wording. Every string below was measured on the local
+  Chrome 151 over http://127.0.0.1 (tools/fingerprint/probes/probe-css7.js plus
+  the sibling-site sweep recorded in the same batch). Blink's own texts are
+  inconsistent -- "an number unit" next to "a number unit", "Invalid
+  propertyName" for get/set but "Invalid property name" for delete, three
+  different phrasings for CSSTranslate's x/y/z setters -- so these are quoted,
+  not derived.
+-->
+<script id="typedom_message_constructors">
+{
+    testing.expectEqual("TypeError: Failed to construct 'CSSUnitValue': Invalid unit: bogus",
+        errorText(() => U(5, 'bogus')));
+    testing.expectEqual("TypeError: Failed to construct 'CSSUnitValue': Invalid unit: ",
+        errorText(() => U(5, '')));
+    // Measured: the unit is echoed back exactly as passed, not normalised.
+    testing.expectEqual("TypeError: Failed to construct 'CSSUnitValue': Invalid unit: BOGUS",
+        errorText(() => U(5, 'BOGUS')));
+    testing.expectEqual("TypeError: Failed to construct 'CSSUnitValue': The provided double value is non-finite.",
+        errorText(() => U(NaN, 'px')));
+    testing.expectEqual("TypeError: Failed to construct 'CSSUnitValue': The provided double value is non-finite.",
+        errorText(() => U(Infinity, 'px')));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSKeywordValue': CSSKeywordValue does not support empty strings",
+        errorText(() => new CSSKeywordValue('')));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSVariableReferenceValue': Invalid custom property name",
+        errorText(() => new CSSVariableReferenceValue('x')));
+
+    // An empty argument list is a SyntaxError (a DOMException, code 12), while a
+    // type clash on the same constructor is a plain TypeError.
+    testing.expectEqual("SyntaxError: Failed to construct 'CSSMathSum': Arguments can't be empty",
+        errorText(() => new CSSMathSum()));
+    testing.expectEqual("SyntaxError: Failed to construct 'CSSMathProduct': Arguments can't be empty",
+        errorText(() => new CSSMathProduct()));
+    testing.expectEqual("SyntaxError: Failed to construct 'CSSMathMin': Arguments can't be empty",
+        errorText(() => new CSSMathMin()));
+    testing.expectEqual("SyntaxError: Failed to construct 'CSSMathMax': Arguments can't be empty",
+        errorText(() => new CSSMathMax()));
+    testing.expectEqual("TypeError: Failed to construct 'CSSMathSum': Incompatible types",
+        errorText(() => new CSSMathSum(U(1, 'px'), U(2, 'deg'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSMathMin': Incompatible types",
+        errorText(() => new CSSMathMin(U(1, 'px'), U(2, 'deg'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSMathClamp': Incompatible types",
+        errorText(() => new CSSMathClamp(U(1, 'px'), U(2, 'deg'), U(3, 'px'))));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSTransformValue': CSSTransformValue must have at least one component",
+        errorText(() => new CSSTransformValue([])));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSTranslate': Must pass length or percentage to X and Y of CSSTranslate",
+        errorText(() => new CSSTranslate(U(1, 'deg'), U(2, 'px'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSTranslate': Must pass length or percentage to X and Y of CSSTranslate",
+        errorText(() => new CSSTranslate(U(1, 'px'), U(2, 'deg'))));
+    // Measured: the three-argument form names Z as well.
+    testing.expectEqual("TypeError: Failed to construct 'CSSTranslate': Must pass length or percentage to X, Y and Z of CSSTranslate",
+        errorText(() => new CSSTranslate(U(1, 'px'), U(2, 'px'), U(3, 'deg'))));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSRotate': Must pass an angle to CSSRotate",
+        errorText(() => new CSSRotate(U(45, 'px'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSRotate': Must pass an angle to CSSRotate",
+        errorText(() => new CSSRotate(1, 2, 3, U(45, 'px'))));
+    // Measured: the axis check in the 3D form borrows CSSScale's wording, typo
+    // and all.
+    testing.expectEqual("TypeError: Failed to construct 'CSSRotate': Must specify an number unit",
+        errorText(() => new CSSRotate(U(1, 'px'), 2, 3, U(45, 'deg'))));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSScale': Must specify an number unit",
+        errorText(() => new CSSScale(U(2, 'px'), 3)));
+    testing.expectEqual("TypeError: Failed to construct 'CSSScale': Must specify an number unit",
+        errorText(() => new CSSScale(2, U(3, 'px'))));
+    // Measured: only the three-argument form switches to this wording.
+    testing.expectEqual("TypeError: Failed to construct 'CSSScale': Must specify a number for X, Y and Z",
+        errorText(() => new CSSScale(2, 3, U(4, 'px'))));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSSkew': CSSSkew does not support non-angles",
+        errorText(() => new CSSSkew(U(1, 'px'), U(2, 'deg'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSSkew': CSSSkew does not support non-angles",
+        errorText(() => new CSSSkew(U(1, 'deg'), U(2, 'px'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSSkewX': CSSSkewX does not support non-angles",
+        errorText(() => new CSSSkewX(U(1, 'px'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSSkewY': CSSSkewY does not support non-angles",
+        errorText(() => new CSSSkewY(U(1, 'px'))));
+
+    // Measured: a percentage is rejected with the same text as an angle, and so
+    // is any keyword other than `none`.
+    testing.expectEqual("TypeError: Failed to construct 'CSSPerspective': Must pass length or none to CSSPerspective",
+        errorText(() => new CSSPerspective(U(10, 'deg'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSPerspective': Must pass length or none to CSSPerspective",
+        errorText(() => new CSSPerspective(U(10, 'percent'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSPerspective': Must pass length or none to CSSPerspective",
+        errorText(() => new CSSPerspective(new CSSKeywordValue('auto'))));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSPositionValue': Must pass length or percentage to x in CSSPositionValue",
+        errorText(() => new CSSPositionValue(U(1, 'deg'), U(2, 'px'))));
+    testing.expectEqual("TypeError: Failed to construct 'CSSPositionValue': Must pass length or percentage to y in CSSPositionValue",
+        errorText(() => new CSSPositionValue(U(1, 'px'), U(2, 'deg'))));
+
+    testing.expectEqual("TypeError: Failed to construct 'CSSMatrixComponent': parameter 1 is not of type 'DOMMatrixReadOnly'.",
+        errorText(() => new CSSMatrixComponent(1)));
+}
+</script>
+
+<script id="typedom_message_accessors">
+{
+    testing.expectEqual("TypeError: Failed to set the 'value' property on 'CSSKeywordValue': CSSKeywordValue does not support empty strings",
+        errorText(() => { new CSSKeywordValue('auto').value = ''; }));
+    testing.expectEqual("TypeError: Failed to set the 'value' property on 'CSSUnitValue': The provided double value is non-finite.",
+        errorText(() => { U(5, 'px').value = NaN; }));
+    testing.expectEqual("TypeError: Failed to set the 'variable' property on 'CSSVariableReferenceValue': Invalid custom property name",
+        errorText(() => { new CSSVariableReferenceValue('--x').variable = 'y'; }));
+
+    // Measured: CSSTranslate words its three setters three different ways.
+    testing.expectEqual("TypeError: Failed to set the 'x' property on 'CSSTranslate': Must pass length or percentage to X of CSSTranslate",
+        errorText(() => { new CSSTranslate(U(1, 'px'), U(2, 'px')).x = U(1, 'deg'); }));
+    testing.expectEqual("TypeError: Failed to set the 'y' property on 'CSSTranslate': Must pass length or percent to Y of CSSTranslate",
+        errorText(() => { new CSSTranslate(U(1, 'px'), U(2, 'px')).y = U(1, 'deg'); }));
+    testing.expectEqual("TypeError: Failed to set the 'z' property on 'CSSTranslate': Must pass length to Z of CSSTranslate",
+        errorText(() => { new CSSTranslate(U(1, 'px'), U(2, 'px')).z = U(1, 'deg'); }));
+
+    testing.expectEqual("TypeError: Failed to set the 'angle' property on 'CSSRotate': Must pass an angle to CSSRotate",
+        errorText(() => { new CSSRotate(U(45, 'deg')).angle = U(1, 'px'); }));
+    // Measured: the axis setters drop the constructor's typo.
+    testing.expectEqual("TypeError: Failed to set the 'x' property on 'CSSRotate': Must specify a number unit",
+        errorText(() => { new CSSRotate(U(45, 'deg')).x = U(1, 'px'); }));
+
+    testing.expectEqual("TypeError: Failed to set the 'x' property on 'CSSScale': Must specify a number unit",
+        errorText(() => { new CSSScale(2, 3).x = U(1, 'px'); }));
+    testing.expectEqual("TypeError: Failed to set the 'z' property on 'CSSScale': Must specify a number unit",
+        errorText(() => { new CSSScale(2, 3).z = U(1, 'px'); }));
+
+    // Measured: the skew setters say "Must specify an angle unit" where their
+    // constructors say "does not support non-angles".
+    testing.expectEqual("TypeError: Failed to set the 'ax' property on 'CSSSkew': Must specify an angle unit",
+        errorText(() => { new CSSSkew(U(1, 'deg'), U(2, 'deg')).ax = U(1, 'px'); }));
+    testing.expectEqual("TypeError: Failed to set the 'ay' property on 'CSSSkew': Must specify an angle unit",
+        errorText(() => { new CSSSkew(U(1, 'deg'), U(2, 'deg')).ay = U(1, 'px'); }));
+    testing.expectEqual("TypeError: Failed to set the 'ax' property on 'CSSSkewX': Must specify an angle unit",
+        errorText(() => { new CSSSkewX(U(1, 'deg')).ax = U(1, 'px'); }));
+    testing.expectEqual("TypeError: Failed to set the 'ay' property on 'CSSSkewY': Must specify an angle unit",
+        errorText(() => { new CSSSkewY(U(1, 'deg')).ay = U(1, 'px'); }));
+
+    testing.expectEqual("TypeError: Failed to set the 'length' property on 'CSSPerspective': Must pass length or none to CSSPerspective",
+        errorText(() => { new CSSPerspective(U(10, 'px')).length = U(1, 'deg'); }));
+
+    testing.expectEqual("TypeError: Failed to set the 'x' property on 'CSSPositionValue': Must pass length or percentage to x in CSSPositionValue",
+        errorText(() => { new CSSPositionValue(U(1, 'px'), U(2, 'px')).x = U(1, 'deg'); }));
+    testing.expectEqual("TypeError: Failed to set the 'y' property on 'CSSPositionValue': Must pass length or percentage to y in CSSPositionValue",
+        errorText(() => { new CSSPositionValue(U(1, 'px'), U(2, 'px')).y = U(1, 'deg'); }));
+}
+</script>
+
+<script id="typedom_message_operations">
+{
+    testing.expectEqual("TypeError: Failed to execute 'add' on 'CSSNumericValue': Incompatible types",
+        errorText(() => U(1, 'px').add(U(2, 'deg'))));
+    testing.expectEqual("TypeError: Failed to execute 'sub' on 'CSSNumericValue': Incompatible types",
+        errorText(() => U(1, 'px').sub(U(2, 'deg'))));
+    testing.expectEqual("TypeError: Failed to execute 'min' on 'CSSNumericValue': Incompatible types",
+        errorText(() => U(1, 'px').min(U(2, 'deg'))));
+    testing.expectEqual("TypeError: Failed to execute 'max' on 'CSSNumericValue': Incompatible types",
+        errorText(() => U(1, 'px').max(U(2, 'deg'))));
+
+    // Measured: a zero divisor is a RangeError, not a TypeError.
+    testing.expectEqual("RangeError: Failed to execute 'div' on 'CSSNumericValue': Can't divide-by-zero",
+        errorText(() => U(6, 'px').div(0)));
+    testing.expectEqual("RangeError: Failed to execute 'div' on 'CSSNumericValue': Can't divide-by-zero",
+        errorText(() => U(6, 'px').div(U(0, 'number'))));
+
+    // Measured: an unknown target unit is a SyntaxError while an unconvertible
+    // one is a TypeError that echoes the requested unit verbatim.
+    testing.expectEqual("SyntaxError: Failed to execute 'to' on 'CSSNumericValue': Invalid unit for conversion",
+        errorText(() => U(1, 'px').to('bogus')));
+    testing.expectEqual("TypeError: Failed to execute 'to' on 'CSSNumericValue': Cannot convert to deg",
+        errorText(() => U(1, 'px').to('deg')));
+    testing.expectEqual("TypeError: Failed to execute 'to' on 'CSSNumericValue': Cannot convert to DEG",
+        errorText(() => U(1, 'px').to('DEG')));
+    testing.expectEqual("TypeError: Failed to execute 'to' on 'CSSNumericValue': Cannot convert to deg",
+        errorText(() => new CSSMathSum(U(1, 'px'), U(2, 'em')).to('deg')));
+
+    testing.expectEqual("SyntaxError: Failed to execute 'toSum' on 'CSSNumericValue': Invalid unit for conversion",
+        errorText(() => U(1, 'px').toSum('bogus')));
+    testing.expectEqual("TypeError: Failed to execute 'toSum' on 'CSSNumericValue': There were leftover terms that were not converted",
+        errorText(() => U(1, 'px').toSum('em')));
+
+    // Measured: everything CSSNumericValue.parse rejects is the same sentence.
+    testing.expectEqual("SyntaxError: Failed to execute 'parse' on 'CSSNumericValue': Invalid math expression",
+        errorText(() => CSSNumericValue.parse('auto')));
+    testing.expectEqual("SyntaxError: Failed to execute 'parse' on 'CSSNumericValue': Invalid math expression",
+        errorText(() => CSSNumericValue.parse('')));
+    testing.expectEqual("SyntaxError: Failed to execute 'parse' on 'CSSNumericValue': Invalid math expression",
+        errorText(() => CSSNumericValue.parse('var(--x)')));
+
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': Invalid property name",
+        errorText(() => CSSStyleValue.parse('nope', '1px')));
+}
+</script>
+
+<script id="typedom_message_style_maps">
+{
+    const el = attach(document.createElement('div'));
+    el.style.width = '10px';
+    // Measured: get/has/getAll/set/append say "propertyName", delete says
+    // "property name", and each names the interface the member is declared on.
+    testing.expectEqual("TypeError: Failed to execute 'get' on 'StylePropertyMapReadOnly': Invalid propertyName: nope",
+        errorText(() => el.attributeStyleMap.get('nope')));
+    testing.expectEqual("TypeError: Failed to execute 'get' on 'StylePropertyMapReadOnly': Invalid propertyName: NOPE",
+        errorText(() => el.attributeStyleMap.get('NOPE')));
+    testing.expectEqual("TypeError: Failed to execute 'has' on 'StylePropertyMapReadOnly': Invalid propertyName: nope",
+        errorText(() => el.attributeStyleMap.has('nope')));
+    testing.expectEqual("TypeError: Failed to execute 'getAll' on 'StylePropertyMapReadOnly': Invalid propertyName: nope",
+        errorText(() => el.attributeStyleMap.getAll('nope')));
+    testing.expectEqual("TypeError: Failed to execute 'set' on 'StylePropertyMap': Invalid propertyName: nope",
+        errorText(() => el.attributeStyleMap.set('nope', '1px')));
+    testing.expectEqual("TypeError: Failed to execute 'append' on 'StylePropertyMap': Invalid propertyName: nope",
+        errorText(() => el.attributeStyleMap.append('nope', '1px')));
+    testing.expectEqual("TypeError: Failed to execute 'delete' on 'StylePropertyMap': Invalid property name: nope",
+        errorText(() => el.attributeStyleMap.delete('nope')));
+
+    // Measured: append always throws, with a different sentence for a known
+    // property and for a custom one.
+    testing.expectEqual("TypeError: Failed to execute 'append' on 'StylePropertyMap': Property does not support multiple values",
+        errorText(() => el.attributeStyleMap.append('width', U(1, 'px'))));
+    testing.expectEqual("TypeError: Failed to execute 'append' on 'StylePropertyMap': Appending to custom properties is not supported",
+        errorText(() => el.attributeStyleMap.append('--c', '1')));
+
+    testing.expectEqual("TypeError: Failed to execute 'set' on 'StylePropertyMap': Invalid type for property",
+        errorText(() => el.attributeStyleMap.set('left', U(3, 'deg'))));
+    testing.expectEqual("TypeError: Failed to execute 'set' on 'StylePropertyMap': Invalid type for property",
+        errorText(() => el.attributeStyleMap.set('width')));
+
+    testing.expectEqual("TypeError: Failed to execute 'get' on 'StylePropertyMapReadOnly': Invalid propertyName: nope",
+        errorText(() => el.computedStyleMap().get('nope')));
 }
 </script>
