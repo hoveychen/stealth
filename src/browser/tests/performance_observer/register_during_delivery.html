@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<!--
+  A delivery callback that registers more observers.
+
+  Performance.deliverObservers used to walk `_observers.items` as a slice
+  snapshot. Registering an observer from inside a callback appends to that same
+  list, and once the append outgrows the arena node the buffer moves: the
+  snapshot the pass is still iterating points at memory that has been released.
+  The next iteration reads a poisoned pointer and dereferences it in
+  hasRecords(). Re-reading `_observers.items[i]` each iteration is what makes
+  the pass safe -- that is the shape this file pins.
+
+  claude.ai does this, and the engine aborted rather than throwing: from a
+  client the process is simply gone and `Runtime.evaluate` times out, which is
+  how it was written down as a hang three times before anyone read the exit
+  signal (tools/fingerprint/results/engine-wedge.md).
+
+  Two observers are the smallest case that can see it: the first one's callback
+  has to grow the list while the pass still has index 1 left to read. Against
+  the snapshot loop this file aborts with the production crash verbatim --
+  `0xaaaaaaaaaaaaaac2` in hasRecords, called from Scheduler.runQueue.
+-->
+<script src="../testing.js"></script>
+
+<script id="register_during_delivery">
+{
+  let firstFired = 0;
+  let secondFired = 0;
+  const extra = [];
+
+  // Both observe in the same tick, so both are pending in one delivery pass.
+  const first = new PerformanceObserver(() => {
+    firstFired++;
+    // Enough registrations to outgrow whatever the list had reserved for two.
+    for (let i = 0; i < 128; i++) {
+      const o = new PerformanceObserver(() => {});
+      o.observe({ type: "mark" });
+      extra.push(o);
+    }
+  });
+  const second = new PerformanceObserver(() => {
+    secondFired++;
+  });
+
+  first.observe({ type: "mark" });
+  second.observe({ type: "mark" });
+  performance.mark("rdd");
+
+  testing.onload(() => {
+    // The pass survives the list moving underneath it, and still reaches the
+    // second observer. The observers registered mid-callback have no records
+    // of their own, so they are not delivered to in this pass.
+    testing.expectEqual(1, firstFired);
+    testing.expectEqual(1, secondFired);
+    testing.expectEqual(128, extra.length);
+  });
+}
+</script>

@@ -96,6 +96,8 @@ const keep = (d) => {
 let proc, profile;
 // The child's own exit, if it had one before we killed it.
 let exit = null;
+// Set by teardown, so the SIGKILL we send ourselves is not read as a crash.
+let killed = false;
 async function launch() {
     if (ENDPOINT) return;
     if (engine === 'chrome') {
@@ -125,12 +127,17 @@ async function launch() {
     // (results/engine-wedge.md). Record the signal so the next one is not
     // mis-called.
     exit = null;
+    killed = false;
     proc.on('exit', (code, signal) => {
-        exit = { code, signal };
+        // Our own teardown kill is not a finding: reporting it turned every
+        // healthy station into `CRASHED SIGKILL`, which is the same signal
+        // going unread as before, only louder.
+        if (!killed) exit = { code, signal };
     });
 }
 
 async function teardown() {
+    killed = true;
     proc?.kill('SIGKILL');
     proc = undefined;
     if (profile) {
@@ -287,7 +294,8 @@ try {
                 await teardown();
             }
         }
-        // Set before teardown kills the child, so a null here means it was alive.
+        // Only the child's own death lands here -- see the `killed` guard on
+        // the exit handler.
         if (exit) row.engineExit = exit;
         row.documents = docs.slice(0, 12);
         if (trace) row.wire = wire.slice(0, 400);

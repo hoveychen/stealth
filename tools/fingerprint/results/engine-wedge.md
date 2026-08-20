@@ -49,7 +49,7 @@ same line as pixiv, which is as close to the production crash as a test gets.
 | pixiv | `SIGABRT`, `Runtime.evaluate` never returns | **pass, 311 nodes — Chrome reads 311 too** |
 | whole suite | — | 1264/1264 |
 
-## claude.ai: a stale observer pointer — attributed, not fixed
+## claude.ai: a delivery pass walking a list that moved — fixed
 
 Same shape, different bug, and it survives the fix above:
 
@@ -60,16 +60,31 @@ src/browser/js/Scheduler.zig:132 in runQueue
 ```
 
 `Performance.scheduleDelivery` queues a task that walks `perf._observers.items`
-and calls `hasRecords()` on each. The crash is that read, on an observer whose
-memory is gone — so `Performance._observers` is holding a pointer past its
-referent's life. `disconnect()` does unregister, so this is not the disconnect
-path; it is an observer dying some other way (its arena going with a navigation
-is the obvious candidate) while the longer-lived `Performance` keeps pointing at
-it, and the already-queued `Performance.deliverObservers` task then runs.
+and calls `hasRecords()` on each. The crash is that read — and the thing that is
+gone is not the observer and not the `Performance`, it is **the list's buffer**.
+The task's loop was
 
-That is a lifetime question rather than a bounds check, so it is written down
-here rather than guessed at. It reproduces on every run of the claude.ai station
-(`wedge-claude-after.json`, 86s then `SIGABRT`), which is enough to work from.
+```zig
+for (perf._observers.items) |observer| {
+```
+
+which snapshots the slice once. A delivery callback that constructs a
+`PerformanceObserver` and calls `observe()` appends to that same list; past the
+capacity the arena had reserved, the append moves the buffer and releases the old
+one. The snapshot keeps walking the released copy, and the next element it reads
+is Zig's `0xaa` fill, dereferenced one line later in `hasRecords`. claude.ai's
+login page registers observers from inside a delivery callback, which is why it
+was the station that found this.
+
+Re-reading `perf._observers.items[i]` each iteration is the whole fix, and this
+fork already carries it: upstream `a4b258305` ("fix: UAF when Performance
+Observer disconnects in callback", 2026-08-17, PR #3213) rewrote the loop and
+added the `_delivering` flag, and it reached us with the 295-commit upstream
+merge (`e7ef95431`). Upstream was chasing the *disconnect* case; what claude.ai
+does is the opposite mutation — it registers, the list grows, and only the loop
+half of that commit is what stops the crash (see the isolation table below). So
+the engine needed no change here. What W3 adds is the test that pins it, and the
+attribution below, which the two earlier readings of this crash got wrong.
 
 ## What to change in the harness
 
@@ -78,52 +93,55 @@ station's verdict. Every reading in this file was available on the first sweep;
 nobody was looking at the one channel that distinguishes `error` from `crash`,
 and three runs' worth of "wedges the engine" would have said `SIGABRT` instead.
 
-## claude.ai, narrowed further (same day)
+It does now — and it counted its own teardown as one. `teardown()` sends
+`SIGKILL` and then sleeps 600ms waiting for the port, which is long enough for
+the exit handler to fire, so **every healthy station printed `CRASHED SIGKILL`**.
+The handler ignores the kill we sent ourselves now. Verified both directions on
+the same station: the fixed binary prints no exit at all, the `9d117e371` binary
+still prints `CRASHED SIGABRT`.
 
-Three facts on top of the attribution above, none of them yet a fix.
+## claude.ai, named by isolation (same day)
 
-**The memory is poisoned, not merely stale.** With `--log_level debug` the abort
-reads:
+Two earlier readings of this crash were wrong, and both were wrong the same way:
+they reasoned from the code about *lifetimes* — an observer dying with a
+navigation's arena, a queued task outliving its subject — because the poisoned
+address said "released memory" and nothing said which release. The address said
+more than that. `0xaaaaaaaaaaaaaac2` is `0xaaaaaaaaaaaaaaaa + 0x18`, and `0x18`
+is the offset of `_entries.items.len` in `PerformanceObserver`: the *observer
+pointer* was the poison, read out of the list, so the list's buffer was the dead
+allocation and both the `Performance` and its `len` were alive. Instrumenting the
+loop said it outright, one line before the abort:
 
 ```
-DEBUG scheduler : scheduler.runTask   name = Performance.deliverObservers
-Segmentation fault at address 0xaaaaaaaaaaaaaac2
+PROBE.deliver.item  obs = 12297829382473034410  live_ptr = 5335940992  live_len = 13
 ```
 
-`0xaa` is Zig's debug fill for freed/undefined memory, so the pointer being
-walked is inside a region that has been released — the `*Performance` the task
-carries, or its `_observers` buffer, is dead memory rather than a live object
-with a stale entry. That rules out the first reading of this crash, which assumed
-a live `_observers` list holding one dangling observer.
+`12297829382473034410` is `0xaaaaaaaaaaaaaaaa`. The live list had grown to 13
+entries at a new address while the pass was still reading the old one.
 
-**Nothing cancels a queued task when its subject dies.** `Scheduler` exposes
-`init`, `deinit`, `reset`, `add`, `run`, `hasReadyTasks`, `msToNext` — there is no
-removal keyed by `ctx`. And `reset()` has exactly three callers:
-`DedicatedWorkerGlobalScope`, `SharedWorkerGlobalScope`, and `Window`'s
-`window.close()` path. **No navigation resets it.** So a
-`Performance.deliverObservers` task queued before a teardown is still in the queue
-after it, holding the only pointer it was given.
+**The isolation experiment.** Three runs of the station per column, same
+afternoon, same site, `--fresh` each time:
 
-**A second `frame.init` precedes the crash.** The timeline is main frame at
-+114ms, its navigation, several successful `Performance.deliverObservers` runs,
-then a second `frame.init` at +1413ms (the iframe whose
-`reason = initialFrameNavigation` appears in the CSP traces), then more delivery
-tasks interleaved with `type = reset` events, then the abort on one of them.
+| binary | result |
+|---|---|
+| `9d117e371` (the commit the crash was first recorded on) | `SIGABRT` 3/3, 86s |
+| `9d117e371` + the index-based re-read, nothing else | pass 3/3, 28s |
+| `main` (`172d6d2fd`, carries that re-read) | pass 4/4, 28s |
 
-What is still not established is which teardown or arena reset poisons it.
-`Window` is *reused* across navigations (`Frame.zig`'s `opts.reuse_window`
-overwrites it in place, and `._performance = .init()` empties `_observers`), so a
-plain same-window navigation should leave the task's pointer valid and its list
-empty rather than poisoned. Something else is releasing that memory, and naming
-it needs the engine instrumented — a log at `Performance.init` and at task entry,
-comparing addresses — rather than more reading.
+One loop's worth of difference, both directions. That is the fix named, not a
+candidate.
 
-Two fix shapes, once it is named:
+**The regression test.**
+`src/browser/tests/performance_observer/register_during_delivery.html` — two
+observers pending in one pass, the first one's callback registering 128 more.
+Against `9d117e371` it aborts the *test binary* with the production crash
+verbatim (`0xaaaaaaaaaaaaaac2` in `hasRecords`, from `Scheduler.runQueue`); on
+`main` it passes, suite 1361/1361.
 
-1. **Give `Scheduler` removal keyed by `ctx`** and call it wherever a
-   `Performance` (or any task-owning object) goes away. Touches shared
-   infrastructure and fixes the whole class; `web_transport`, `EventSource`,
-   `XRSession` and `sensor` all queue tasks with themselves as `ctx` and have the
-   same exposure.
-2. **Make the delivery task revalidate** instead of trusting its pointer —
-   cheaper, narrower, and leaves the class open.
+**What was not established, and stays open.** `Scheduler` still has no removal
+keyed by `ctx`, and `reset()` is still called only by the two worker global
+scopes and `window.close()` — so a task queued against an object that dies before
+its turn is still a shape this engine allows. `web_transport`, `EventSource`,
+`XRSession` and `sensor` all queue tasks with themselves as `ctx`. Nothing here
+demonstrates that any of them actually crashes; it was this list's buffer, not a
+dead subject. Left alone deliberately: no evidence, no fix.
