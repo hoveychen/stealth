@@ -4274,3 +4274,72 @@ deviceinfo differ by that much between runs of one binary too, which is what mak
 them noise. No verdict-word count moved. browserscan is
 unchanged at 100% with no problems, no warnings, 0 skeletons (`mainTotal` 845,
 `docTotal` 1871).
+
+## The rest of the XML-document deviations (G1–G6)
+
+The two plans above fixed the selector half of the XML-document story. The
+"adjacent readings" table listed five more that were measured but left alone. G1
+re-measures them against `dev.323+53eee4b0a` -- the merge of the attribute-name
+fix -- because those readings were taken several commits ago and because the
+table's rows were written narrowly enough to hide three further deviations.
+Chrome 151, probe `expr-g1.js`, readings in `g1.cr.txt` / `g1.lp.txt`.
+
+### Still there, as recorded
+
+| what | Chrome | this engine |
+|---|---|---|
+| `contentType` after `text/xml` / `application/xhtml+xml` / `image/svg+xml` | echoes the parse mime | always `application/xml` |
+| `tagName` of `<p>` in an XHTML document | `p` | `P` |
+| `tagName` of `<s:clipPath/>` | `s:clipPath` (`prefix` `s`) | `clipPath` (`prefix` null) |
+| `getElementsByTagName('P')` in an XHTML document holding only `<p>` | 0 | 1 |
+| the `xmlns` / `xmlns:s` attribute on a parsed XML root | in `attributes` | dropped |
+
+`contentType` is right for `text/html`, for `createHTMLDocument` and for
+`createDocument`; only the parsed-XML mimes are wrong. `localName` and
+`namespaceURI` of a prefixed element are both right -- it is `tagName` and
+`nodeName` that drop the prefix. `createDocument`'s `application/xml` is Chrome's
+answer too.
+
+### Three the table did not say
+
+The `namespaceURI` row said `<root>` with no `xmlns` reads
+`http://www.w3.org/XML/1998/namespace` where Chrome reads `null`. It does, but the
+row only covered the *undeclared* case, and the declared one is wrong in the
+opposite direction:
+
+| what | Chrome | this engine |
+|---|---|---|
+| `namespaceURI` of `<root>` with no `xmlns` | `null` | `http://www.w3.org/XML/1998/namespace` |
+| `namespaceURI` of `<root xmlns="urn:x">` | `urn:x` | **`null`** |
+| `namespaceURI` of a child of `<root xmlns="urn:x">` | `urn:x` | **`null`** |
+
+So a declared default namespace is not merely mis-defaulted, it is discarded, and
+an undeclared one is filled in with a namespace that is never a default. The two
+readings are inversions of each other, which suggests one place gets it wrong
+rather than two.
+
+That inversion is what the two remaining new rows fall out of:
+
+| what | Chrome | this engine |
+|---|---|---|
+| `getElementsByTagNameNS(null, 'Thing')` in a `text/xml` document | 1 | **0** |
+| `getElementsByTagName('DIV')` in an XHTML document holding `<DIV/>` | 1 | **0** (and `'div'` 0) |
+
+The first follows from the namespace inversion: a bare XML element does not answer
+to the null namespace because we do not put it there. The second is its own bug in
+the collections comparison -- the argument is lowercased for an HTML-namespaced
+element and compared against a stored `DIV`, so *neither* spelling finds it and
+the element is unreachable by `getElementsByTagName` at all.
+
+`getElementsByTagName` in an HTML document is unaffected throughout: `div` / `DIV`
+both 1, `clipPath` 1 with `clippath` and `CLIPPATH` 0, `*` 7 -- identical to
+Chrome, which is the behaviour `element/svg/type_selector_case.html` already pins.
+`getElementsByTagNameNS` agrees with Chrome everywhere except the null-namespace
+row above.
+
+### What this implies about the order
+
+The five are not independent. `getElementsByTagName('s:clipPath')` cannot be right
+until `tagName` carries the prefix, and `getElementsByTagNameNS(null, …)` cannot be
+right until a bare XML element sits in the null namespace. So the namespace and
+`tagName` work comes before the collections comparison, not after it.
