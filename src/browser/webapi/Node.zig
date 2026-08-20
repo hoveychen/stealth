@@ -477,9 +477,10 @@ pub fn setTextContent(self: *Node, data: []const u8, frame: *Frame) !void {
     }
 }
 
-pub fn getNodeName(self: *const Node, buf: []u8) []const u8 {
+// `frame` is optional: see `Element.getTagNameSpec`, the only arm that reads it.
+pub fn getNodeName(self: *const Node, frame: ?*const Frame, buf: []u8) []const u8 {
     return switch (self._type) {
-        .element => |el| el.getTagNameSpec(buf),
+        .element => |el| el.getTagNameSpec(frame, buf),
         .cdata => |cd| switch (cd._type) {
             .text => "#text",
             .cdata_section => "#cdata-section",
@@ -1688,7 +1689,7 @@ pub const JsApi = struct {
 
     pub const nodeName = bridge.accessor(struct {
         fn wrap(self: *const Node, frame: *Frame) []const u8 {
-            return self.getNodeName(&frame.buf);
+            return self.getNodeName(frame, &frame.buf);
         }
     }.wrap, null, .{});
     pub const nodeType = bridge.accessor(Node.getNodeType, null, .{});

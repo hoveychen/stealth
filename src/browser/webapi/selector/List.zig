@@ -481,12 +481,10 @@ fn tagNameMatches(el: *Node.Element, lowercase_name: []const u8, original_name: 
 }
 
 /// Both the type selector and the attribute name fold case in an HTML document
-/// and not in an XML one, whatever the element's own namespace. A detached node
-/// with no owner falls back to the frame's document, which is how
-/// `ownerDocument` already reads it.
+/// and not in an XML one, whatever the element's own namespace -- the same rule
+/// `tagName` follows, so the same reader.
 fn inHtmlDocument(el: *Node.Element, frame: *Frame) bool {
-    const doc = el.asNode().ownerDocument(frame) orelse return true;
-    return doc._type == .html;
+    return el.inHtmlDocument(frame);
 }
 
 fn matchesAttribute(el: *Node.Element, attr: Selector.Attribute, frame: *Frame) bool {

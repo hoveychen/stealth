@@ -790,3 +790,71 @@
   }
 }
 </script>
+
+<script id=tagNameCase-xml>
+{
+  // tagName uppercases only for an HTML-namespaced element in an *HTML*
+  // document; an XML document hands back the qualified name as written, and a
+  // prefix stays on it. Chrome 151 readings, probe expr-g4-p67.js.
+  //
+  // What the serializer does with those names is a separate deviation and not
+  // asserted here: Chrome prints `<s:clipPath xmlns:s="...">` and
+  // `<p xmlns="...">` where we print no declaration.
+  const parser = new DOMParser();
+  const XHTML = 'http://www.w3.org/1999/xhtml';
+  const SVG = 'http://www.w3.org/2000/svg';
+  // [tagName, nodeName, localName, prefix, namespaceURI]
+  const info = (el) => [el.tagName, el.nodeName, el.localName, el.prefix, el.namespaceURI];
+
+  {
+    // No namespace at all: both spellings survive, and they are distinct.
+    const doc = parser.parseFromString('<Root><kid/><KID/></Root>', 'text/xml');
+    testing.expectEqual(['Root', 'Root', 'Root', null, null], info(doc.documentElement));
+    testing.expectEqual(['kid', 'kid', 'kid', null, null], info(doc.documentElement.children[0]));
+    testing.expectEqual(['KID', 'KID', 'KID', null, null], info(doc.documentElement.children[1]));
+  }
+
+  {
+    // XHTML: HTML-namespaced, and still not uppercased.
+    const doc = parser.parseFromString(
+      '<html xmlns="' + XHTML + '"><body><p>x</p><DIV/></body></html>', 'application/xhtml+xml');
+    testing.expectEqual(['html', 'html', 'html', null, XHTML], info(doc.documentElement));
+    testing.expectEqual(['body', 'body', 'body', null, XHTML],
+      info(doc.getElementsByTagNameNS(XHTML, 'body')[0]));
+    testing.expectEqual(['p', 'p', 'p', null, XHTML],
+      info(doc.getElementsByTagNameNS(XHTML, 'p')[0]));
+    // A capitalised spelling is its own name in XML, so it never matched the
+    // HTML table to begin with.
+    testing.expectEqual(['DIV', 'DIV', 'DIV', null, XHTML],
+      info(doc.getElementsByTagNameNS(XHTML, 'DIV')[0]));
+  }
+
+  {
+    // A prefix rides along in tagName / nodeName, and splits off into
+    // prefix / localName.
+    const doc = parser.parseFromString(
+      '<root xmlns:s="' + SVG + '"><s:clipPath/><s:g/></root>', 'text/xml');
+    testing.expectEqual(['s:clipPath', 's:clipPath', 'clipPath', 's', SVG],
+      info(doc.documentElement.children[0]));
+    testing.expectEqual(['s:g', 's:g', 'g', 's', SVG],
+      info(doc.documentElement.children[1]));
+  }
+
+  {
+    // A default declaration leaves no prefix behind.
+    const doc = parser.parseFromString('<svg xmlns="' + SVG + '"><clipPath/></svg>', 'image/svg+xml');
+    testing.expectEqual(['svg', 'svg', 'svg', null, SVG], info(doc.documentElement));
+    testing.expectEqual(['clipPath', 'clipPath', 'clipPath', null, SVG],
+      info(doc.documentElement.children[0]));
+  }
+
+  {
+    // The HTML document is the one that uppercases, and only for its own
+    // namespace: a foreign element there is case-preserving as ever.
+    const doc = parser.parseFromString('<p>x</p><svg><clipPath/></svg>', 'text/html');
+    testing.expectEqual(['P', 'P', 'p', null, XHTML], info(doc.querySelector('p')));
+    testing.expectEqual(['clipPath', 'clipPath', 'clipPath', null, SVG],
+      info(doc.querySelector('clipPath')));
+  }
+}
+</script>

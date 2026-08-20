@@ -325,7 +325,9 @@ pub const Writer = struct {
 
         try w.objectField("nodeName");
         var name_buf: [Frame.BUF_SIZE]u8 = undefined;
-        try w.write(dom_node.getNodeName(&name_buf));
+        // No frame reaches this writer, so the name reads as it would in an
+        // HTML document -- which is the document the inspector walks.
+        try w.write(dom_node.getNodeName(null, &name_buf));
 
         try w.objectField("nodeValue");
         if (dom_node.getNodeValue()) |nv| {

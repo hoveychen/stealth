@@ -515,6 +515,18 @@ fn _createElementCallback(self: *Parser, data: *anyopaque, qname: h5e.QualName, 
         try frame._element_namespace_uris.put(frame.arena, node.as(Element), duped);
     }
 
+    // The tag name has to stay the local name -- it is what picked the element's
+    // type out of the factory above -- so a prefix the XML document wrote goes
+    // in a side table for `tagName` / `prefix` to read back. The HTML parser
+    // never sets one: its foreign-attribute table gives prefixes to attributes,
+    // not to tag names.
+    if (qname.prefix.unwrap()) |prefix| {
+        if (prefix.len > 0) {
+            const duped = try frame.dupeString(prefix.slice());
+            try frame._element_prefixes.put(frame.arena, node.as(Element), duped);
+        }
+    }
+
     const pn = try self.arena.create(ParsedNode);
     pn.* = .{
         .data = data,

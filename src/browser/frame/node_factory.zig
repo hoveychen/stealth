@@ -1061,7 +1061,7 @@ fn createHtmlElementT(frame: *Frame, comptime E: type, namespace: Element.Namesp
     const node = element.asNode();
     if (@hasDecl(E, "Build") and @hasDecl(E.Build, "created")) {
         @call(.auto, @field(E.Build, "created"), .{ node, frame }) catch |err| {
-            log.err(.frame, "build.created", .{ .tag = node.getNodeName(&frame.buf), .err = err, .type = frame._type, .url = frame.url });
+            log.err(.frame, "build.created", .{ .tag = node.getNodeName(frame, &frame.buf), .err = err, .type = frame._type, .url = frame.url });
             return err;
         };
     }
