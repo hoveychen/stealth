@@ -4785,7 +4785,7 @@ and aborts the test binary with the same reason and line as pixiv did.
 | pixiv | `SIGABRT` mid-load | **pass, 311 nodes — the same 311 Chrome reads** |
 | suite | — | 1264/1264 |
 
-### claude.ai — attributed, not fixed
+### claude.ai — fixed, and the first two attributions were wrong
 
 Survives that fix, and crashes elsewhere:
 
@@ -4795,11 +4795,23 @@ src/browser/webapi/PerformanceObserver.zig:195 in hasRecords
 src/browser/js/Scheduler.zig:132 in runQueue
 ```
 
-`Performance.scheduleDelivery` queues a task that walks `perf._observers.items`
-calling `hasRecords()` on each; the crash is that read on an observer whose
-memory is gone. `disconnect()` does unregister, so this is not that path — it is
-an observer dying some other way (its arena going with a navigation being the
-obvious candidate) while the longer-lived `Performance` keeps pointing at it, and
-the queued `Performance.deliverObservers` task then runs. A lifetime question
-rather than a bounds check, so it is recorded rather than guessed at. It
-reproduces on every run of the station.
+`Performance.scheduleDelivery` queued a task that walked `perf._observers.items`
+as a **slice snapshot**. A delivery callback that constructs a
+`PerformanceObserver` and calls `observe()` appends to that same list; past the
+capacity the arena reserved, the append moves the buffer and releases the old
+one, and the pass keeps reading the released copy. The next pointer it reads is
+Zig's `0xaa` fill and `hasRecords` dereferences it. claude.ai's login page
+registers observers from inside a delivery callback.
+
+The crash address said this from the start and two write-ups read it as a
+lifetime bug anyway: `0xaaaaaaaaaaaaaac2` is `0xaaaaaaaaaaaaaaaa + 0x18`, and
+`0x18` is where `_entries.items.len` sits in `PerformanceObserver` — so the
+poison *was* the observer pointer, read out of a dead buffer, with the
+`Performance` and its `len` both alive.
+
+Re-reading `_observers.items[i]` each iteration is the fix, and the fork already
+had it: upstream `a4b258305` (PR #3213), in via the 295-commit merge. Isolation,
+three station runs a column: `9d117e371` `SIGABRT` 3/3 → same commit plus that
+one loop change, pass 3/3 → `main` pass 4/4.
+`performance_observer/register_during_delivery.html` pins it — against the
+snapshot loop it aborts the test binary with the production crash verbatim.
