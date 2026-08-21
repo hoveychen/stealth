@@ -5207,10 +5207,17 @@ fourth finally says something, and what it says is about the address.
 | layer | headed Chrome 151 | this engine |
 |---|---|---|
 | CF **passive**, production sites (chatgpt, claude, indeed, nowsecure, discord, pixiv) | 6/6 | **6/6** |
-| unattributed edge (sony, zillow) | 2/2 | **2/2** |
+| Akamai (sony) and PerimeterX (zillow) | 2/2 | **2/2** |
 | CF **managed challenge** (scrapingcourse) | pass, 34n | **stuck, 43n `Just a moment...`** |
 | CF managed challenge (nopecha, zeroclover) | stuck | stuck |
 | DataDome (4 stations) | **0/4** | **0/4** |
+
+Both of the two stations this file has carried as "unattributed edge" name their
+own vendor on the page they serve a client they dislike, so they are labelled
+now: sony answers Akamai's `Access Denied … Reference 0.…` and zillow answers
+PerimeterX's Press & Hold, with `_pxAppId` set and a `#px-captcha` in the DOM
+(both measured live). Neither is unattributed; both were only ever unattributed
+in the *headers*.
 
 The passive layer and the unattributed edge are the controls and both are clean:
 every production site behind Cloudflare serves this engine the real page, and
@@ -5228,20 +5235,25 @@ neither column is about the client:
 
 | run | order | Chrome | this engine |
 |---|---|---|---|
-| 08-20 re-run | engine first | 0/4 | **2/4** (datadome.co, hermes) |
-| 08-21, non-fresh | engine first | 0/4 | **2/4** (datadome.co, hermes) |
+| 08-20 re-run | engine first | 0/4 | **3/4** (datadome.co, hermes, leboncoin) |
+| 08-21, non-fresh | engine first | 0/4 | **3/4** (datadome.co, hermes, leboncoin) |
 | 08-21, `--fresh` | engine second | — | **0/4** |
 | 08-21, `--fresh` | Chrome first | 0/4 | 0/4 |
 
-**The two passes did not reproduce twenty minutes later from the same address.**
-Same binary, same stations, same route: datadome.co and hermes served this engine
-2044 and 2042 nodes of their real pages, and then challenged it. So the 10/15
-that reads better than headed Chrome's 9/15 was two rows of IP reputation, not
-two rows of fingerprint, and this engine's DataDome column has never been a
-result. What the address does now is challenge everything: 0/4 for both clients
-in both orders, which is at least a *stable* control -- the previous open item
-was that the control moved between runs. Measuring DataDome as a property of the
-client needs an address these sixty-odd requests have not already spent.
+(Three, not the two this section first recorded: leboncoin served 1440 and 1488
+nodes of its real French site on those two runs and was scored a challenge for
+carrying `captcha-delivery.com` in the markup. That rule is fixed below.)
+
+**The three passes did not reproduce twenty minutes later from the same address.**
+Same binary, same stations, same route: datadome.co, hermes and leboncoin served
+this engine 2044, 2042 and 1440 nodes of their real pages, and then challenged
+it. So the 11/15 that reads better than headed Chrome's 9/15 was three rows of IP
+reputation, not three rows of fingerprint, and this engine's DataDome column has
+never been a result. What the address does now is challenge everything: 0/4 for
+both clients in both orders, which is at least a *stable* control -- the previous
+open item was that the control moved between runs. Measuring DataDome as a
+property of the client needs an address these sixty-odd requests have not
+already spent.
 
 ### Two things to fix in the harness before trusting it again
 
@@ -5251,29 +5263,50 @@ six clean-looking refusals out of one wedged station. Nothing cascaded this time
 (pixiv passed in both columns), but the DataDome re-checks above are the only
 readings of the day taken the way the harness asks.
 
-**`verdict()` scores a denial page as a pass, and a served page as a challenge.**
-Both directions appeared in one day of data:
+**`verdict()` scored a denial page as a pass, and a served page as a challenge.
+Fixed.** Both directions appeared in one day of data:
 
 * headless Chrome at zillow -- `pass`, `doc=403->200`, title **"Access to this
-  page has been denied"**. The rule asks for a final status under 400, a
-  non-empty body and no Cloudflare or DataDome mark; a denial page from an
-  unattributed edge that answers 200 and names no vendor satisfies all three.
+  page has been denied"**, body "Press & Hold to confirm you are a human". The
+  rule asked for a final status under 400, a non-empty body and no Cloudflare or
+  DataDome mark, and a PerimeterX challenge that answers 200 once its widget has
+  loaded satisfies all three. It is not a generic "denied" string that separates
+  it: `#px-captcha` and `_pxAppId` are in the document, so it gets a vendor mark
+  of its own like the other two.
 * this engine at leboncoin -- `datadome-challenge`, `doc=200`, **1440 nodes of
-  the real site**. `captcha-delivery.com` appears in the markup of a page that
-  was served, which is the same over-counting the `_cf_chl_opt` rule was fixed
-  for on the Cloudflare side and has not been fixed on this one.
+  the real site**, in French, with its real title. `captcha-delivery.com` is in
+  the markup of pages that *were served* -- DataDome's exact analogue of
+  `_cf_chl_opt`, which this same function was already fixed for on the Cloudflare
+  side. DataDome's interstitial arrives as a 4xx and renders the captcha after,
+  so the refusal is the first document and the mark only qualifies it.
 
-Neither changes a conclusion above -- zillow passes in both engines when headed,
-leboncoin is inside the burned DataDome column -- but a pass count out of this
-sweep is worth exactly as much as the rule behind it, and this rule is wrong in
-both directions.
+The rules now read `dd.blockText || (dd.captchaDelivery && first >= 400)` for
+DataDome, a `px` mark (Press & Hold, or a denied title plus a reference id, or a
+`#px-captcha`) for PerimeterX, and an `akamai` mark recorded below the status
+rule so a 200-cloaked Akamai denial cannot read as a pass while sony's bare 403
+keeps its `refused-403`.
+
+**Replayed over every reading of both days before being trusted** -- 53 archived
+station rows re-judged offline, deriving the new marks from the archived title
+and body, plus a live run of each new mark's own station to prove the code path
+agrees with the replay. **Exactly two verdicts moved**, the two above. The
+corrected counts, which supersede every pass count in this section and the one
+above it:
+
+| | 08-20 (`--fresh`) | 08-21 |
+|---|---|---|
+| this engine | **11/15** | **11/15** |
+| headed Chrome | 9/15 | 9/15 |
+| headless Chrome | — | **2/15** |
 
 ### And the number nobody had measured: what headlessness alone costs
 
 The Chrome column was run twice, headless and headed, minutes apart on one
-address: **3/15 headless against 9/15 headed.** Six stations that serve a headed
+address: **2/15 headless against 9/15 headed.** Seven stations that serve a headed
 Chrome refuse the same binary with `--headless=new` -- chatgpt, claude, indeed,
-pixiv, datadome.co, hermes -- and one (sony) answers `403 Access Denied` outright.
+pixiv, datadome.co, hermes and zillow -- and one (sony) answers `403 Access
+Denied` outright. Headless clears exactly the two Cloudflare-fronted controls,
+nowsecure and discord, and nothing else.
 Worth keeping in view whenever a comparison in this file says "Chrome": a headless
 baseline is not a lenient one, it is a *different client*, and one that most of
 these guards already know.

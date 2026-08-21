@@ -196,15 +196,29 @@ function verdict(station, r, documents) {
     if (!r) return { verdict: 'error', ...base };
     const cf = r.cf ?? {};
     const dd = r.dd ?? {};
+    const px = r.px ?? {};
+    const akamai = r.akamai ?? {};
     const jsDetect = !!(cf.chlOpt || cf.platformScript);
     const out = { ...base, jsDetect };
     if (cf.blocked) return { verdict: 'cf-blocked', ...out };
     if (cf.justAMoment || cf.challengeDom) return { verdict: 'cf-challenge', ...out };
-    if (dd.captchaDelivery || dd.blockText) return { verdict: 'datadome-challenge', ...out };
+    // `captcha-delivery.com` in the markup is DataDome's equivalent of
+    // `_cf_chl_opt`: it rides along on pages that were served. leboncoin handed
+    // this engine 1440 nodes of its real site, in French, with the mark set, and
+    // scored as a challenge for it. DataDome's interstitial arrives as a 4xx and
+    // *then* renders the captcha, so the refusal is the first document, not the
+    // mark -- and `blockText` is the interstitial's own wording either way.
+    if (dd.blockText || (dd.captchaDelivery && first !== null && first >= 400)) {
+        return { verdict: 'datadome-challenge', ...out };
+    }
+    if (px.pressAndHold || px.captchaDom || (px.deniedTitle && px.refId)) {
+        return { verdict: 'px-challenge', ...out };
+    }
     // No interstitial. A 4xx/5xx document with nothing rendered over it is still
     // a refusal -- some guards answer a bare 403 with no page at all -- and an
     // empty document behind a 200 is the engine failing to render, not a pass.
     if (last !== null && last >= 400) return { verdict: `refused-${last}`, ...out };
+    if (akamai.accessDenied && akamai.reference) return { verdict: 'akamai-denied', ...out };
     if (r.empty) return { verdict: 'empty-document', ...out };
     return { verdict: 'pass', ...out };
 }
@@ -306,7 +320,7 @@ try {
             row.nodes = reading.nodes;
             row.textLength = reading.textLength;
             row.snippet = reading.text.replace(/\s+/g, ' ').slice(0, 200);
-            row.marks = { ...reading.cf, ...reading.dd };
+            row.marks = { ...reading.cf, ...reading.dd, ...reading.px, ...reading.akamai };
         }
         row.ms = Date.now() - started;
         snapshot.stations.push(row);
