@@ -48,8 +48,13 @@
   // Surprisingly, these don't fail but silently ignored.
   clearTimeout(-1);
   clearInterval(-2);
-  clearImmediate(-3);
   testing.expectEqual(true, true);
+
+  // clearImmediate used to be part of this list. It is Node's API, not a
+  // browser's, and it is off the window surface now -- so the assertion is that
+  // it is gone, which is what Chrome answers.
+  testing.expectEqual('undefined', typeof clearImmediate);
+  testing.expectEqual('undefined', typeof setImmediate);
 </script>
 
 <script id=setTimeout-string-handler>
