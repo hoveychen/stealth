@@ -5572,6 +5572,76 @@ Cloudflare rotated something of their own. Two lessons, both cheap:
 * A remote party's opaque output is only an oracle for as long as they leave it
   alone, and they do not announce when they stop.
 
+### Found it: the cross-origin proxy answers undefined where Chrome throws
+
+`reading 'call'` is reproduced, exactly, off a local page — and the mechanism is
+not a missing member on any prototype in the main realm. It is the **cross-origin
+window proxy denying a property by answering `undefined` instead of throwing**.
+
+The wire log from `antibot-sweep --only cf-scrapingcourse --trace` puts the error
+immediately after the widget's own document arrives, with no request ever coming
+*from* that document:
+
+```
+res 200  https://challenges.cloudflare.com/.../turnstile/f/av0/rch/<id>/.../new/normal   Document
+console.error   [Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call')
+console.warning [Cloudflare Turnstile] Cannot find Widget cf-chl-widget-<id>
+```
+
+That document is `challenges.cloudflare.com` against the site's own origin, so
+what `api.js` holds is the cross-origin proxy. `probes/probe-cross-origin-surface.js`
+reads a denied name off one and then reads `.call` on the result:
+
+| expression | headed Chrome 150 | this engine |
+|---|---|---|
+| `w.document.call` | `SecurityError: Failed to read a named property 'document' from 'Window': Blocked a frame…` | `TypeError: Cannot read properties of undefined (reading 'call')` |
+| `w.eval.call` | same SecurityError | same TypeError |
+| `w.addEventListener.call` | same SecurityError | same TypeError |
+| `w.getComputedStyle.call` | same SecurityError | same TypeError |
+| `w.navigator.call` | same SecurityError | same TypeError |
+
+Byte for byte the string Turnstile prints. All 24 must-deny names tested throw in
+Chrome and all 24 answer `undefined` here, so any `w.<denied>.call(...)` in the
+widget's code raises a `SecurityError` there — a throw the widget is written to
+expect and handle — and an *unhandled* `TypeError` here. Which is also why the
+message names `'call'` rather than the property: the denial happened one level up,
+silently.
+
+**What this does and does not establish.** It establishes that this engine
+produces that exact message, from that exact realm, through a mechanism whose
+timing matches the wire log. It does not prove Turnstile's failing line is one of
+these five; the widget's payload is obfuscated and `api.js` itself contains only
+`toString.call` and `valueOf.call` literally, the rest being 13 bare `X.call(` on
+minified locals. What makes this the leading candidate rather than one of many is
+that nothing else found so far reproduces the string at all.
+
+**The proxy differs in more than that.** Same probe, same sitting:
+
+| | headed Chrome 150 | this engine |
+|---|---|---|
+| `Object.prototype.toString.call(w)` | `[object Object]` | `[object Window]` |
+| own property names | 14 — `window self location closed frames length top opener parent blur close focus postMessage then` | **0** |
+| own symbols | `toStringTag`, `hasInstance`, `isConcatSpreadable` (all undefined-valued) | none |
+| `[[Prototype]]` | **null** | `Window.prototype` |
+| safelisted names | own properties on the proxy (`get` / `method`) | inherited, none own |
+| `location` | present, accessor, `[object Object]`, own names `href replace then` | **absent** |
+| `location.href` read | `SecurityError` | n/a — no `location` |
+| `location.replace` | callable method | n/a |
+| denied names | `SecurityError` on read, and on `in` | `undefined`, `in` false |
+
+Chrome's design is one exotic object: null prototype, the safelist as own
+properties, `then` present-but-undefined so awaiting it does not hang, and a
+hard throw for everything else. This engine's is an ordinary object with a
+`Window` prototype and no own properties at all. Fixing the throw is the part
+with a known consumer; the rest is the same shape question one level out.
+
+This also corrects a reading in `probes/probe-internal-globals.js`: it recorded
+Chrome's cross-origin brand as `[object Window]`, measured **synchronously after
+appendChild**, when the frame is still on its same-origin `about:blank`. That is
+the same-origin answer. The correction is noted in that file's header, and the
+`to_string_tag = "Window"` it produced on `CrossOriginWindow` is a placeholder,
+not Chrome's value — `Window.zig` says so at the declaration.
+
 ### What is left, and why it is a short list
 
 The two closed classes bound the remaining one tightly. "Cannot read properties
@@ -5588,18 +5658,45 @@ called `.call` on it. So:
   message, even though they are still worth having.
 
 What is left is `X.y.call(...)` where **`y` is a missing member** -- most likely a
-method, since that is what gets `.call`ed directly. `probe-descriptor-kind` cannot
-see it: it reduces properties that exist, and a name that is absent has no kind.
-The probe that would is a set difference -- Chrome's
-`Object.getOwnPropertyNames` for each of the 130 prototypes minus ours -- and it
-has not been written yet. That is the next measurement, not another round of
-converting properties.
+method, since that is what gets `.call`ed directly.
 
-One caveat on where to look: the TypeError follows the widget document being
-fetched as a `type=Document`, so the failing read may be happening in the
-**iframe's realm** rather than the main one. A cross-origin child realm being
-thinner than the top-level one would not show up in any probe in this directory,
-all of which measure the main realm.
+**That set difference needed no new probe.** It was recorded as the next
+measurement to take, but `probe-descriptor-kind`'s own readings already carry it:
+`out.protos[iface]` is a name → kind map of every own property, so Chrome's keys
+minus ours *is* the missing-member list. Subtracting the two stored readings gives
+**138 members Chrome's 132 prototypes carry and ours do not** — 53 accessors, 44
+getters and **41 methods**, the last being the `.call`-able ones:
+
+```
+Blob.textStream                     HTMLInputElement.stepDown           Range.expand
+CustomElementRegistry.getName       HTMLInputElement.stepUp             Request.textStream
+CustomElementRegistry.initialize    Headers.getSetCookie                Response.textStream
+EventTarget.when                    IDBFactory.databases                ScreenOrientation.lock
+FontFaceSet.clear                   MessageEvent.initMessageEvent       ScreenOrientation.unlock
+FontFaceSet.delete                  NamedNodeMap.getNamedItemNS         Selection.getComposedRanges
+FontFaceSet.entries                 NamedNodeMap.removeNamedItemNS      ShadowRoot.elementFromPoint
+FontFaceSet.forEach                 NamedNodeMap.setNamedItemNS         ShadowRoot.elementsFromPoint
+FontFaceSet.has                     PointerEvent.getCoalescedEvents     ShadowRoot.getAnimations
+FontFaceSet.keys                    PointerEvent.getPredictedEvents     ShadowRoot.getSelection
+FontFaceSet.values                  HTMLIFrameElement.getSVGDocument    ShadowRoot.setHTML
+HTMLFormElement.reset               HTMLImageElement.decode             SubtleCrypto.unwrapKey
+HTMLInputElement.setRangeText       HTMLInputElement.showPicker         SubtleCrypto.wrapKey
+                                                                        XMLHttpRequest.setAttributionReporting
+                                                                        XMLHttpRequest.setPrivateToken
+```
+
+The same subtraction says the readings are current: **0 wrong kinds**, which is
+what `prd/descriptor-kind-accessors` left behind.
+
+None of the 41 turned out to be the cause. Turnstile's `api.js` contains no
+literal `.<name>.call(` for any of them -- only `toString.call` and `valueOf.call`
+-- and the section above reproduces the exact message from a different mechanism
+entirely. The 41 are still worth having; they are just not this bug.
+
+The caveat about *where* to look is the one that paid off: the TypeError follows
+the widget document being fetched as a `type=Document`, so the failing read is in
+the **cross-origin frame's realm** rather than the main one, which no probe in
+this directory measured until `probe-cross-origin-surface`. See the section above.
 
 ### The 97 missing accessors, sorted by what it would take to add each
 

@@ -1,0 +1,231 @@
+{
+ "href": "http://127.0.0.1:53935/",
+ "out": {
+  "committedBy": "load",
+  "sameOrigin": {
+   "how": "load",
+   "document": "object",
+   "ownNameCount": 1203,
+   "location": "object"
+  },
+  "proxy": {
+   "tag": "[object Window]",
+   "ownNames": "",
+   "ownSymbols": "",
+   "proto": "[object Window]",
+   "isFrozen": false,
+   "toStringTagDesc": "absent",
+   "hasInstanceDesc": "absent",
+   "then": "undefined"
+  },
+  "safelisted": {
+   "window": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "self": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "location": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "close": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   },
+   "closed": {
+    "in": true,
+    "type": "boolean",
+    "desc": "absent"
+   },
+   "focus": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   },
+   "blur": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   },
+   "frames": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "length": {
+    "in": true,
+    "type": "number",
+    "desc": "absent"
+   },
+   "top": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "opener": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "parent": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "postMessage": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   }
+  },
+  "mustDeny": {
+   "document": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "navigator": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "localStorage": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "sessionStorage": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "name": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "origin": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "history": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "screen": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "performance": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "innerWidth": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "innerHeight": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "devicePixelRatio": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "alert": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "fetch": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "addEventListener": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "getComputedStyle": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "isSecureContext": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "crypto": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "indexedDB": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "caches": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "onload": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "onerror": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "eval": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   },
+   "Function": {
+    "in": false,
+    "type": "undefined",
+    "desc": "absent"
+   }
+  },
+  "location": {
+   "tag": "undefined",
+   "ownNames": null,
+   "props": {}
+  },
+  "twoLevel": {
+   "w.postMessage.call": "function",
+   "w.location.replace.call": "THREW TypeError: Cannot read properties of undefined (reading 'replace')",
+   "w.location.href": "THREW TypeError: Cannot read properties of undefined (reading 'href')",
+   "w.close.call": "function",
+   "w.focus.call": "function",
+   "w.blur.call": "function"
+  },
+  "deniedThenCall": {
+   "w.document.call": "TypeError: Cannot read properties of undefined (reading 'call')",
+   "w.eval.call": "TypeError: Cannot read properties of undefined (reading 'call')",
+   "w.addEventListener.call": "TypeError: Cannot read properties of undefined (reading 'call')",
+   "w.getComputedStyle.call": "TypeError: Cannot read properties of undefined (reading 'call')",
+   "w.navigator.call": "TypeError: Cannot read properties of undefined (reading 'call')"
+  }
+ }
+}

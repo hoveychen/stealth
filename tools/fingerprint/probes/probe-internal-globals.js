@@ -12,7 +12,19 @@
 //   WEBGL_lose_context               undefined       [object WebGLLoseContext]
 //   SVGGenericElement                undefined       [object SVGElement]      <- and the prototype is SVGElement
 //   ReadableStreamAsyncIterator      undefined       [object ReadableStream AsyncIterator]   <- note the space
-//   CrossOriginWindow                undefined       [object Window]
+//   CrossOriginWindow                undefined       [object Window]          <- WRONG, see below
+//
+// CORRECTION. That last row is a measurement bug in this file, kept visible
+// rather than quietly edited because the wrong number reached a source comment
+// before it was caught. The cross-origin read below happens synchronously right
+// after appendChild, when the frame is still on its initial *same-origin*
+// about:blank -- so '[object Window]' is the same-origin answer, not the
+// cross-origin one. Waiting for the load event first (probe-cross-origin-surface,
+// same headed Chrome) gives '[object Object]', because Chrome's proxy is a
+// null-prototype object whose own Symbol.toStringTag has an undefined value.
+// The other four rows are unaffected: getExtension, createElementNS and
+// [Symbol.asyncIterator] are all synchronous and realm-local, with no navigation
+// to wait for.
 //
 // Two more findings fell out of it: Chrome's extension prototypes have no
 // `constructor` own property (there is no interface object to point at) and ours

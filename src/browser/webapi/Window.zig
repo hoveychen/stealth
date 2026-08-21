@@ -1829,11 +1829,27 @@ const CrossOriginWindow = struct {
         pub const Meta = struct {
             pub const name = "CrossOriginWindow";
 
-            // The cross-origin window proxy is not an interface of its own: Chrome
-            // names nothing on the global for it and brands it '[object Window]',
-            // exactly as it brands a same-origin window (both measured on a headed
-            // Chrome 150 against an https://example.com/ iframe).
+            // The cross-origin window proxy is not an interface of its own, so
+            // Chrome names nothing on the global for it. That half is measured
+            // and settled.
             pub const no_interface_object = true;
+
+            // The brand is *not* settled, and "Window" here is a placeholder.
+            // An earlier reading recorded Chrome's answer as '[object Window]',
+            // but it was taken synchronously right after appendChild, when the
+            // frame is still on its same-origin about:blank -- so it measured a
+            // same-origin window. Re-measured after the navigation commits
+            // (probe-cross-origin-surface, headed Chrome 150), Chrome answers
+            // '[object Object]': the proxy is a null-prototype object carrying an
+            // own Symbol.toStringTag whose *value is undefined*, which sends
+            // Object.prototype.toString all the way back to "Object".
+            //
+            // Reaching that needs the null prototype, which this class does not
+            // have, so neither value is Chrome's. "Window" is kept over the
+            // default "CrossOriginWindow" only because it is a string a real
+            // browser does print somewhere, while the class name is one no
+            // browser ever prints. The real fix is the proxy shape -- see the
+            // cross-origin section in tools/fingerprint/README.md.
             pub const to_string_tag = "Window";
 
             pub const prototype_chain = bridge.prototypeChain();
