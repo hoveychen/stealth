@@ -4798,12 +4798,51 @@ three `page-break-*` aliases are a longhand to `parse` and not to a style map.
 Measured on 39 (surface, property, value) readings against headed Chrome 151,
 this area is now **0 diffs**.
 
-What is left there is a third axis of the same table, recorded in
-`tests/css/typed_om.html`: a property can be modelled for some of its values and
-not for others. `accent-color: auto` is a CSSKeywordValue on both engines, but
-`accent-color: ButtonFace` is a `CSSStyleValue|ButtonFace` in Chrome, because a
-named or system colour parses to a colour rather than to an identifier -- and
-this engine has no notion of which identifiers are colours.
+**The third axis was a property of the value, not of the property.** A property
+can be modelled for some of its values and not for others: `accent-color: auto`
+is a CSSKeywordValue, but `accent-color: ButtonFace` is a
+`CSSStyleValue|ButtonFace`, because a named or system colour parses to a *colour*
+rather than to an identifier. The tempting reading -- another per-property table
+-- is the wrong one, and the sweep says so: over all 14264 (property, keyword)
+pairs the tables carry, **every** colour-named keyword answers a bare
+CSSStyleValue, on all 61 properties that take one, with `currentcolor` the only
+exception in either direction. So it is a property of the identifier, and the
+list of colour names is the one the `color` property accepts -- read out of the
+keyword table rather than kept a second time.
+
+Two smaller things came with it, both measured over the keyword table's 682
+property names rather than the 475 computed ones, which is how they were reached
+at all: `-webkit-text-emphasis-color` belongs in the `currentcolor` keyword set
+and `-webkit-column-rule-color` in its style-map-only half. And one genuine Blink
+oddity, reproduced twice: on a style map `row-rule-color` answers a
+CSSKeywordValue for *any* colour name, where its own sibling
+`column-rule-color` does so only for `currentcolor` and `row-rule-color` through
+`parse` answers a CSSStyleValue like every other colour property.
+
+The colour axis is closed: the 61 colour-accepting properties crossed with six
+colour values went from 24 diffs to 14, and every one of the 10 that closed was
+a colour reading. What the remaining 14 are -- and the 79 left in the wider
+475-longhand version of the same probe -- is three other axes, recorded here so
+the next pass does not have to re-measure them:
+
+- **Which any-identifier properties are modelled at all.** `container-name`,
+  `counter-increment` / `-reset` / `-set`, `view-transition-class` and
+  `will-change` answer a bare CSSStyleValue for *every* identifier, where
+  `animation-name`, `transition-property`, the `grid-*-start` / `-end` four and
+  `view-transition-group` / `-name` answer a CSSKeywordValue. This engine answers
+  a keyword for all of them.
+- **An any-identifier property still canonicalises a keyword it recognises.**
+  `parse('animation-name', 'ButtonFace')` answers `buttonface` where
+  `parse('animation-name', 'MyAnim')` answers `MyAnim`: Blink turns an identifier
+  that is a known keyword id anywhere into a CSSIdentifierValue, and only a
+  genuine custom ident keeps its case.
+- **The per-value half of the unmodelled set.** `caret-color: auto` is a
+  CSSKeywordValue in Chrome (a CSSStyleValue here) even though every colour on
+  that property is a CSSStyleValue, and `grid-template-columns: auto`,
+  `offset-rotate: auto`, `ruby-overhang: auto` and `text-decoration` go the same
+  way. A style map also reads a *shorthand* by reconstructing it from longhands
+  (`border: currentColor` reads back `undefined`, `column-rule: currentColor`
+  reads back `medium`) rather than by echoing what was declared.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.

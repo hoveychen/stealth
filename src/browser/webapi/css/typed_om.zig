@@ -3012,14 +3012,32 @@ const currentcolor_keyword_properties = [_][]const u8{
     "stop-color",
     "text-decoration-color",
     "text-emphasis-color",
+    // An alias, so the sweep over the 475 computed names could not reach it; the
+    // sweep over the keyword table's 682 property names did.
+    "-webkit-text-emphasis-color",
 };
 
-/// The two that answer a keyword through a style map and a bare CSSStyleValue
-/// through `parse` -- the only place the two surfaces were measured to disagree.
+/// The ones that answer a keyword through a style map and a bare CSSStyleValue
+/// through `parse`.
 const currentcolor_keyword_style_map_only = [_][]const u8{
     "column-rule-color",
     "row-rule-color",
+    "-webkit-column-rule-color",
 };
+
+/// Whether the identifier is one Blink parses as a colour. Measured: this is a
+/// property of the identifier rather than of the property it sits in -- over all
+/// 14264 (property, keyword) pairs the tables carry, every colour-named keyword
+/// answers a bare CSSStyleValue and `currentcolor` is the only exception in
+/// either direction. So the names are the ones the `color` property accepts,
+/// read out of the keyword table rather than kept a second time here.
+fn isColourName(keyword: []const u8) bool {
+    const names = chrome_keywords.keywords.get("color") orelse return false;
+    for (names) |name| {
+        if (std.mem.eql(u8, name, keyword)) return true;
+    }
+    return false;
+}
 
 fn isCurrentcolorKeyword(property: []const u8, surface: Surface) bool {
     for (currentcolor_keyword_properties) |name| {
@@ -3132,16 +3150,17 @@ pub fn isKnownProperty(property: []const u8) bool {
     return CSSStyleDeclaration.isKnownPropertyName(property);
 }
 
-/// The subclass a value string maps onto. Reproduces every one of the 474
-/// computed longhands measured in probe-css9.js plus the explicit-value cases
-/// in probe-css10.js; see the module docs for the two rows that do not match.
-/// Which surface asked. Measured: the two disagree on exactly two properties --
+/// Which surface asked. Measured: the two disagree on a handful of properties --
 /// `column-rule-color` and `row-rule-color` answer a CSSKeywordValue for
-/// `currentcolor` through a style map and a bare CSSStyleValue through `parse`
-/// -- so the caller has to say which it is. (`parse` already had one
-/// surface-only behaviour, the per-property rejection above.)
+/// `currentcolor` through a style map and a bare CSSStyleValue through `parse`,
+/// and the three `page-break-*` aliases are a longhand to `parse` only -- so the
+/// caller has to say which it is. (`parse` already had one surface-only
+/// behaviour, the per-property rejection above.)
 pub const Surface = enum { parse, style_map };
 
+/// The subclass a value string maps onto. Reproduces every one of the 474
+/// computed longhands measured in probe-css9.js plus the explicit-value cases
+/// in probe-css10.js; see the module docs for the rows that do not match.
 pub fn dispatch(
     property: []const u8,
     value: []const u8,
@@ -3162,6 +3181,18 @@ pub fn dispatch(
             return (try CSSKeywordValue.create(keyword, frame))._proto;
         }
         return CSSStyleValue.init(value, frame);
+    }
+    // A measured Blink oddity, reproduced twice: on a style map
+    // `row-rule-color` answers a CSSKeywordValue for *any* colour name, where
+    // its own sibling `column-rule-color` does so only for `currentcolor`, and
+    // `row-rule-color` through `parse` answers a CSSStyleValue like every other
+    // colour property. It sits above the branches below because it outranks
+    // both of them.
+    if (surface == .style_map and std.mem.eql(u8, property, "row-rule-color")) {
+        switch (lookupIdentifier(property, value)) {
+            .canonical => |keyword| return (try CSSKeywordValue.create(keyword, frame))._proto,
+            else => {},
+        }
     }
     // A shorthand (and anything that is not a computed longhand) is not
     // modelled, exactly as Blink leaves it -- except that `currentcolor` keeps
@@ -3192,7 +3223,21 @@ pub fn dispatch(
         // A recognised keyword comes back in its canonical spelling; anything
         // the table cannot vouch for is kept as written.
         const text = switch (lookupIdentifier(property, value)) {
-            .canonical => |keyword| keyword,
+            .canonical => |keyword| blk: {
+                // An identifier Blink parses as a *colour* is a colour value
+                // rather than a keyword, so it answers a bare CSSStyleValue
+                // holding the text as written -- `accent-color: ButtonFace` is
+                // `CSSStyleValue|ButtonFace` even though `accent-color: auto` is
+                // a CSSKeywordValue. `currentcolor` is the one colour that stays
+                // a keyword, and only where it was measured to.
+                if (isColourName(keyword)) {
+                    const currentcolor = std.mem.eql(u8, keyword, "currentcolor");
+                    if (!currentcolor or !isCurrentcolorKeyword(property, surface)) {
+                        return CSSStyleValue.init(value, frame);
+                    }
+                }
+                break :blk keyword;
+            },
             else => value,
         };
         return (try CSSKeywordValue.create(text, frame))._proto;
