@@ -516,7 +516,7 @@ pub const CSSStyleValue = struct {
             "Failed to execute '" ++ member ++ "' on 'CSSStyleValue': The value provided ('{s}') could not be parsed as a '{s}'.",
             .{ value, property },
         );
-        return dispatch(name, value, frame);
+        return dispatch(name, value, .parse, frame);
     }
 
     pub const JsApi = struct {
@@ -2923,6 +2923,116 @@ pub const CSSTransformValue = struct {
 // Value -> subclass dispatch
 // ---------------------------------------------------------------------------
 
+/// A CSS-wide keyword is answered as a CSSKeywordValue exactly when the property
+/// is a longhand in Blink's property tree -- whatever else that property's values
+/// do, so `parse('color', 'inherit')` is a CSSKeywordValue where
+/// `parse('color', 'red')` is not, and every shorthand answers a bare
+/// CSSStyleValue even for `inherit`.
+///
+/// Chrome's computed-style list is nearly that set but not quite, and both
+/// corrections are measured (all 475 computed names and the 297 other names
+/// Chrome answers to, each written `inherit` / `unset` and read back): six of
+/// the names it enumerates are shorthands, and thirteen longhands it does not
+/// enumerate at all.
+const css_wide_shorthands = [_][]const u8{
+    "background-position",
+    "contain-intrinsic-size",
+    "font-variant",
+    "mask-position",
+    "text-decoration",
+    "-webkit-mask-box-image",
+};
+
+const unlisted_longhands = [_][]const u8{
+    "all",
+    "background-position-x",
+    "background-position-y",
+    "grid-column-gap",
+    "grid-row-gap",
+    "page",
+    "page-margin-safety",
+    "page-orientation",
+    "size",
+    "word-wrap",
+};
+
+/// The three that count as a longhand for `parse` and not for a style map --
+/// measured, and the only ones of the thirteen where the two surfaces disagree.
+const parse_only_longhands = [_][]const u8{
+    "page-break-after",
+    "page-break-before",
+    "page-break-inside",
+};
+
+fn isBlinkLonghand(property: []const u8, surface: Surface) bool {
+    for (unlisted_longhands) |name| {
+        if (std.mem.eql(u8, name, property)) return true;
+    }
+    if (surface == .parse) {
+        for (parse_only_longhands) |name| {
+            if (std.mem.eql(u8, name, property)) return true;
+        }
+    }
+    if (!isComputedLonghand(property)) {
+        return false;
+    }
+    for (css_wide_shorthands) |name| {
+        if (std.mem.eql(u8, name, property)) return false;
+    }
+    return true;
+}
+
+/// The CSS-wide keyword `value` spells, in its canonical spelling.
+fn cssWideKeyword(value: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, value, " \t\r\n");
+    for (chrome_keywords.css_wide) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return keyword;
+    }
+    return null;
+}
+
+/// The colour properties where `currentcolor` is still modelled as a keyword
+/// even though nothing else about their values is. Measured by sweeping all 475
+/// computed longhands with `currentColor`: fourteen answer a CSSKeywordValue,
+/// and the logical border colours, `fill`, `stroke` and the `-webkit-` ones do
+/// not. No other colour keyword behaves this way -- `transparent`, `red` and the
+/// system colours answer a bare CSSStyleValue on every one of them.
+const currentcolor_keyword_properties = [_][]const u8{
+    "accent-color",
+    "background-color",
+    "border-bottom-color",
+    "border-left-color",
+    "border-right-color",
+    "border-top-color",
+    "caret-color",
+    "color",
+    "flood-color",
+    "lighting-color",
+    "outline-color",
+    "stop-color",
+    "text-decoration-color",
+    "text-emphasis-color",
+};
+
+/// The two that answer a keyword through a style map and a bare CSSStyleValue
+/// through `parse` -- the only place the two surfaces were measured to disagree.
+const currentcolor_keyword_style_map_only = [_][]const u8{
+    "column-rule-color",
+    "row-rule-color",
+};
+
+fn isCurrentcolorKeyword(property: []const u8, surface: Surface) bool {
+    for (currentcolor_keyword_properties) |name| {
+        if (std.mem.eql(u8, name, property)) return true;
+    }
+    if (surface == .style_map) {
+        for (currentcolor_keyword_style_map_only) |name| {
+            if (std.mem.eql(u8, name, property)) return true;
+        }
+    }
+    return false;
+}
+
 /// The properties Blink's Typed OM does not model. Measured by sweeping all 474
 /// computed longhands on a headed Chrome 150 (probe-css9.js) and keeping the
 /// ones that answered a bare CSSStyleValue: every one of them answers
@@ -3025,7 +3135,19 @@ pub fn isKnownProperty(property: []const u8) bool {
 /// The subclass a value string maps onto. Reproduces every one of the 474
 /// computed longhands measured in probe-css9.js plus the explicit-value cases
 /// in probe-css10.js; see the module docs for the two rows that do not match.
-pub fn dispatch(property: []const u8, value: []const u8, frame: *Frame) !*CSSStyleValue {
+/// Which surface asked. Measured: the two disagree on exactly two properties --
+/// `column-rule-color` and `row-rule-color` answer a CSSKeywordValue for
+/// `currentcolor` through a style map and a bare CSSStyleValue through `parse`
+/// -- so the caller has to say which it is. (`parse` already had one
+/// surface-only behaviour, the per-property rejection above.)
+pub const Surface = enum { parse, style_map };
+
+pub fn dispatch(
+    property: []const u8,
+    value: []const u8,
+    surface: Surface,
+    frame: *Frame,
+) !*CSSStyleValue {
     if (isCustomProperty(property)) {
         // Measured: the segment is the trimmed value -- `--v: " 1px "` yields
         // a CSSUnparsedValue that prints `1px`.
@@ -3033,9 +3155,23 @@ pub fn dispatch(property: []const u8, value: []const u8, frame: *Frame) !*CSSSty
         const unparsed = try CSSUnparsedValue.create(&.{.{ .text = trimmed }}, frame);
         return unparsed._proto;
     }
+    // A CSS-wide keyword is answered as a CSSKeywordValue whatever else the
+    // property's values do, as long as the property is a Blink longhand.
+    if (cssWideKeyword(value)) |keyword| {
+        if (isBlinkLonghand(property, surface)) {
+            return (try CSSKeywordValue.create(keyword, frame))._proto;
+        }
+        return CSSStyleValue.init(value, frame);
+    }
     // A shorthand (and anything that is not a computed longhand) is not
-    // modelled, exactly as Blink leaves it.
+    // modelled, exactly as Blink leaves it -- except that `currentcolor` keeps
+    // the keyword treatment on the colour properties measured below.
     if (!isComputedLonghand(property) or isUnsupported(property)) {
+        if (isCurrentcolorKeyword(property, surface) and
+            std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, " \t\r\n"), "currentcolor"))
+        {
+            return (try CSSKeywordValue.create("currentcolor", frame))._proto;
+        }
         return CSSStyleValue.init(value, frame);
     }
     if (isPositionProperty(property)) {
@@ -3279,7 +3415,7 @@ pub const StylePropertyMapReadOnly = struct {
         const value = self._style.getComputedValue(name, frame);
         if (value.len == 0) return null;
         // frame.arena, not local_arena: the value outlives this call.
-        return dispatch(name, try frame.arena.dupe(u8, value), frame);
+        return dispatch(name, try frame.arena.dupe(u8, value), .style_map, frame);
     }
 
     /// A property can hold a list of values, so getAll returns a sequence where

@@ -65,6 +65,14 @@ const PAGE = 'data:text/html,<!doctype html><title>keywords</title><body>';
 const CHUNK = 40; // properties per Runtime.evaluate
 
 const zigString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+// zig fmt drops the inner spaces of an empty or one-element list, and the
+// generated file has to come out of here already formatted -- `zig build`
+// depends on the fmt step, so a file needing a pass afterwards fails the build.
+const zigList = (names) => {
+    if (names.length === 0) return '&.{}';
+    if (names.length === 1) return `&.{${zigString(names[0])}}`;
+    return `&.{ ${names.map(zigString).join(', ')} }`;
+};
 
 // Every bare identifier in a value syntax. Type references (`<length>`) and
 // function names (`fit-content(`) are stripped: neither is a keyword a property
@@ -93,15 +101,59 @@ async function candidatePool() {
 const PROBE = (properties, candidates) => `(() => {
   const props = ${JSON.stringify(properties)};
   const cands = ${JSON.stringify(candidates)};
-  const out = {};
+  const sentinels = ${JSON.stringify(SENTINELS)};
+  const el = document.createElement('div');
+  document.body.appendChild(el);
+  // Acceptance says a property takes the keyword; it does not say how Chrome
+  // spells it back, and the candidate pool is spelled the way the *spec* spells
+  // it (\`currentColor\`, \`ButtonFace\`, \`crispEdges\`, \`A4\`). So the spelling is
+  // read off a real declaration rather than taken from the candidate. Measured
+  // rather than lowercased on the way out, so a keyword Chrome ever does answer
+  // with a capital would keep it.
+  const spelling = (prop, keyword) => {
+    el.style.removeProperty(prop);
+    el.style.setProperty(prop, keyword);
+    const readback = el.style.getPropertyValue(prop);
+    for (const m of readback.matchAll(/[a-zA-Z][a-zA-Z0-9_-]*/g)) {
+      const before = m.index > 0 ? readback[m.index - 1] : ' ';
+      const after = readback[m.index + m[0].length] || ' ';
+      // A whole identifier: not the unit of a dimension, not a function name.
+      if (/[a-zA-Z0-9_#-]/.test(before) || after === '(') continue;
+      if (m[0].toLowerCase() === keyword.toLowerCase()) return m[0];
+    }
+    // A shorthand can answer without the keyword in it at all -- \`display:
+    // flow\` answers \`block\`, \`flex: none\` answers \`0 0 auto\`, \`border: none\`
+    // answers nothing at all -- so this property cannot say how the keyword is
+    // spelled. Another one will: measured over all 14392 accepted pairs, no
+    // keyword is spelled two ways, so the spelling belongs to the keyword and
+    // not to the property it sits in.
+    return null;
+  };
+  const accepted = {};
+  const spellings = {};
   for (const p of props) {
+    // A property taking an arbitrary <custom-ident> answers every identifier as
+    // written, so it can say nothing about a keyword's spelling -- and it is the
+    // *first* property to accept most of them (\`animation-name\` before
+    // \`color-interpolation\`), so learning from it would freeze the candidate's
+    // own capitals. Same sentinel test the table itself is built on.
+    const anyIdent = sentinels.some((sentinel) => {
+      try { CSSStyleValue.parse(p, sentinel); return true; } catch (e) { return false; }
+    });
     const ok = [];
     for (const c of cands) {
-      try { CSSStyleValue.parse(p, c); ok.push(c); } catch (e) {}
+      try { CSSStyleValue.parse(p, c); } catch (e) { continue; }
+      ok.push(c);
+      if (!anyIdent && spellings[c] === undefined) {
+        const spelled = spelling(p, c);
+        // A shorthand that answers without the keyword in it says nothing about
+        // the spelling either; some other property will.
+        if (spelled !== null) spellings[c] = spelled;
+      }
     }
-    out[p] = ok;
+    accepted[p] = ok;
   }
-  return JSON.stringify(out);
+  return JSON.stringify({ accepted, spellings });
 })()`;
 
 // The property universe: the computed longhands plus the shorthands and legacy
@@ -157,9 +209,14 @@ try {
     process.stderr.write(`properties: ${listed.computed.length} computed longhands + ${listed.extra.length} shorthands/aliases\n`);
 
     const accepted = {};
+    const spellings = {};
     for (let i = 0; i < computed.length; i += CHUNK) {
         const slice = computed.slice(i, i + CHUNK);
-        Object.assign(accepted, JSON.parse(await evaluate(cdp, sessionId, PROBE(slice, candidates))));
+        const got = JSON.parse(await evaluate(cdp, sessionId, PROBE(slice, candidates)));
+        Object.assign(accepted, got.accepted);
+        for (const [candidate, spelled] of Object.entries(got.spellings)) {
+            spellings[candidate] ??= spelled;
+        }
         process.stderr.write(`  measured ${Math.min(i + CHUNK, computed.length)}/${computed.length}\n`);
     }
     cdp.close();
@@ -186,7 +243,16 @@ try {
     // is a rejection, where an uncovered name has to stay permissive.
     const perProperty = computed
         .filter((p) => !anySet.has(p))
-        .map((p) => [p, accepted[p].filter((k) => !CSS_WIDE.includes(k) && !SENTINELS.includes(k))]);
+        // Sorted here rather than relying on the candidate pool's order: the
+        // spelling written out is Chrome's, and lowercasing a spec-spelled
+        // candidate moves it (`ButtonFace` sorted before `aliceblue`,
+        // `buttonface` does not).
+        // The candidate is what Chrome accepted; the spelling is what it
+        // answers with, and two candidates can spell one keyword (`Menu` and
+        // `menu` are both in mdn-data's colour list), so the list is deduped.
+        .map((p) => [p, [...new Set(accepted[p]
+            .filter((k) => !CSS_WIDE.includes(k) && !SENTINELS.includes(k))
+            .map((k) => spellings[k] ?? k))].sort()]);
     const pairs = perProperty.reduce((n, [, ks]) => n + ks.length, 0);
     const noKeywords = perProperty.filter(([, ks]) => ks.length === 0).length;
 
@@ -204,7 +270,10 @@ try {
         '// identifier, so no list is kept for them.',
         '//',
         '// This is what `CSSStyleValue.parse(property, value)` accepts, which is',
-        '// Chrome\'s real per-property value parser. Absence from this table is only',
+        '// Chrome\'s real per-property value parser, spelled the way Chrome answers a',
+        '// declaration rather than the way mdn-data offered it: the pool is spec-spelled',
+        '// (`currentColor`, `ButtonFace`, `crispEdges`, `A4`) and every one of those 59',
+        '// keywords comes back in lower case. Absence from this table is only',
         '// evidence that Chrome rejected the identifier when it was measured -- a',
         '// keyword Chrome takes but mdn-data does not list was never offered to it and',
         '// would read as rejected here, so regenerate against a newer mdn-data rather',
@@ -222,7 +291,7 @@ try {
         '// answers to here.',
         'pub const keywords = std.StaticStringMap([]const []const u8).initComptime(.{',
         ...perProperty.map(([p, ks]) =>
-            `    .{ ${zigString(p)}, &.{ ${ks.map(zigString).join(', ')} } },`),
+            `    .{ ${zigString(p)}, ${zigList(ks)} },`),
         '});',
         '',
         '// Properties whose value may be an arbitrary <custom-ident> (a font family,',

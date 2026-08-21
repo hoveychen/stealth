@@ -396,12 +396,9 @@ function withStyle(text) {
     // to rgb(), and a colour whose arguments are not plain numbers.
     testing.expectEqual('color: rebeccapurple;', round('color: rebeccapurple'));
     testing.expectEqual('color: transparent;', round('color: transparent'));
-    // `currentColor` is a keyword rather than a colour to fold, and this engine
-    // answers it with the capital its keyword table carries. Measured: Chrome
-    // answers `currentcolor`, and lowercases all 52 of that table's
-    // capitalised keywords -- a keyword-table difference, recorded rather than
-    // fixed here.
-    testing.expectEqual('color: currentColor;', round('color: currentColor'));
+    // `currentColor` is a keyword rather than a colour to fold, and a keyword's
+    // canonical spelling is its lower case one -- see the block below.
+    testing.expectEqual('color: currentcolor;', round('color: currentColor'));
     testing.expectEqual('color: oklch(0.5 0.1 200);', round('color: oklch(0.5 0.1 200)'));
     testing.expectEqual('color: color(srgb 1 0 0);', round('color: color(srgb 1 0 0)'));
     testing.expectEqual('color: color-mix(in srgb, red, blue);', round('color: color-mix(in srgb, red, blue)'));
@@ -415,6 +412,39 @@ function withStyle(text) {
     // already-recorded difference the value-case table has.
     testing.expectEqual('color: #12345;', round('color: #12345'));
     testing.expectEqual('color: #AABBCCDDEE;', round('color: #AABBCCDDEE'));
+}
+</script>
+
+<script id="a_keywords_canonical_spelling_is_its_lower_case_one">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured over all 14392 (property, keyword) pairs the keyword table
+    // carries: whatever case a keyword is written in, Chrome answers the lower
+    // case spelling. 59 of those keywords are spelled with a capital in the
+    // table -- it is generated from mdn-data, whose spelling is the *pool* and
+    // not the answer -- and Chrome lowercases every one.
+    testing.expectEqual('color: currentcolor;', round('color: currentColor'));
+    testing.expectEqual('color: currentcolor;', round('color: CURRENTCOLOR'));
+    testing.expectEqual('color: buttonface;', round('color: ButtonFace'));
+    testing.expectEqual('color: buttonface;', round('color: bUtToNfAcE'));
+    testing.expectEqual('caret-color: threeddarkshadow;', round('caret-color: ThreeDDarkShadow'));
+    testing.expectEqual('shape-rendering: crispedges;', round('shape-rendering: crispEdges'));
+    testing.expectEqual('pointer-events: visiblepainted;', round('pointer-events: visiblePainted'));
+    testing.expectEqual('color-interpolation: srgb;', round('color-interpolation: sRGB'));
+    testing.expectEqual('text-rendering: optimizelegibility;', round('text-rendering: optimizeLegibility'));
+    testing.expectEqual('size: a4;', round('size: A4'));
+
+    // And the other direction, which is what made this worth fixing rather than
+    // recording: a page writing the keyword the way Chrome answers it must get
+    // that back, not the table's capital.
+    testing.expectEqual('pointer-events: visiblepainted;', round('pointer-events: visiblepainted'));
+    testing.expectEqual('color: buttonface;', round('color: buttonface'));
+
+    // A <custom-ident> still keeps its capitals: it is not a keyword, so no
+    // table vouches for it.
+    testing.expectEqual('font-family: MyOwnFont;', round('font-family: MyOwnFont'));
+    testing.expectEqual('animation-name: MyAnim;', round('animation-name: MyAnim'));
 }
 </script>
 
