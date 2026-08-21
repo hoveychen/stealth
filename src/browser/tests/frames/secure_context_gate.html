@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+WebIDL [SecureContext]: Chrome only puts these interfaces and Window members on
+the global when the document's origin is potentially trustworthy. Measured on a
+headed Chrome 151, one page served from http://localhost:8777 and from
+http://192.168.68.78:8777 -- same scheme, same server, same port, so the only
+difference is whether the host is loopback:
+
+  Object.getOwnPropertyNames(window).length   1237 secure   985 insecure
+
+252 names, and this engine used to expose 234 of them either way (the other 18
+it does not have at all). The insecure origin used here is 0.0.0.0: connecting
+to it lands on the loopback listener, so it reaches the test server, but it is
+not a loopback *host*, so it is not potentially trustworthy -- Chrome answers
+isSecureContext false there and hands out the 985-name surface. It is the only
+insecure origin this suite can reach without a second listener.
+-->
+
+<script id=insecure_origin_hides_gated_globals type=module>
+  {
+    const state = await testing.async();
+    const CHILD = 'frames/support/report_global_surface.html';
+    const INSECURE = testing.BASE_URL.replace('127.0.0.1', '0.0.0.0') + CHILD;
+    const SECURE = testing.BASE_URL + CHILD;
+
+    // Keyed on the reported href: both children report the same shape, and a
+    // resolve-on-first-message listener happily hands the second load the
+    // first frame's message.
+    const load = (src) => new Promise((resolve) => {
+      const onmsg = (e) => {
+        if (!e.data || e.data.href !== src) return;
+        window.removeEventListener('message', onmsg);
+        resolve(e.data);
+      };
+      window.addEventListener('message', onmsg);
+      const f = document.createElement('iframe');
+      f.src = src;
+      document.documentElement.appendChild(f);
+    });
+
+    const [insecure, secure] = await Promise.all([load(INSECURE), load(SECURE)]);
+    state.resolve({ insecure, secure });
+
+    await state.done(({ insecure, secure }) => {
+      // The control: 127.0.0.1 is loopback, so nothing is gated away.
+      testing.expectEqual(true, secure.secure);
+      testing.expectEqual(16, secure.gated.length);
+      testing.expectEqual(6, secure.ungated.length);
+      testing.expectEqual(1167, secure.count);
+
+      // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
+      // that are not gated stay.
+      testing.expectEqual(false, insecure.secure);
+      testing.expectEqual('', insecure.gated.join(' '));
+      testing.expectEqual(6, insecure.ungated.length);
+
+      // The gate only removes: 234 names off a surface of 1167.
+      testing.expectEqual(933, insecure.count);
+    });
+  }
+</script>
+
+<script id=an_insecure_ancestor_gates_a_trustworthy_child type=module>
+  {
+    // A document is a secure context only if every ancestor is one. Measured on
+    // a headed Chrome 151: an http://localhost:8777 iframe -- loopback, so
+    // trustworthy on its own -- inside an http://192.168.68.78:8777 page
+    // answers isSecureContext false and gets the 985-name surface. Here the
+    // middle frame is the insecure origin and the grandchild is back on
+    // 127.0.0.1; the middle frame relays, since the top page cannot script
+    // across either hop.
+    const state = await testing.async();
+    const CHILD = testing.BASE_URL + 'frames/support/report_global_surface.html';
+    const MIDDLE = testing.BASE_URL.replace('127.0.0.1', '0.0.0.0') +
+      'frames/support/embed_and_relay.html?src=' + encodeURIComponent(CHILD);
+
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.relayed) state.resolve(e.data.relayed);
+    });
+    const f = document.createElement('iframe');
+    f.src = MIDDLE;
+    document.documentElement.appendChild(f);
+
+    await state.done((grandchild) => {
+      testing.expectEqual(CHILD, grandchild.href);
+      // Trustworthy URL, untrustworthy ancestor.
+      testing.expectEqual(false, grandchild.secure);
+      testing.expectEqual('', grandchild.gated.join(' '));
+      testing.expectEqual(933, grandchild.count);
+    });
+  }
+</script>
+
+<script id=a_worker_takes_its_owners_answer type=module>
+  {
+    // The gate reaches the worker realm too, and a worker's owner is the frame
+    // that spawned it -- so a worker inside the insecure frame is insecure even
+    // though this page is not. Measured on a headed Chrome 151: 336 own names
+    // for a worker owned by http://localhost:8777, 243 for one owned by
+    // http://192.168.68.78:8777.
+    const state = await testing.async();
+    const INSECURE = testing.BASE_URL.replace('127.0.0.1', '0.0.0.0') +
+      'frames/support/worker_surface.html';
+
+    window.addEventListener('message', (e) => {
+      if (e.data && (e.data.worker_report || e.data.worker_error)) state.resolve(e.data);
+    });
+    const f = document.createElement('iframe');
+    f.src = INSECURE;
+    document.documentElement.appendChild(f);
+
+    await state.done((got) => {
+      testing.expectEqual(undefined, got.worker_error);
+      const w = got.worker_report;
+      testing.expectEqual(false, w.secure);
+      testing.expectEqual('', w.gated.join(' '));
+      testing.expectEqual(6, w.ungated.length);
+      // 233 own names on a secure owner, less the 8 gated ones this engine has
+      // in the worker realm plus the three it exposes that Chrome's worker does
+      // not have at all (CookieStore, CookieChangeEvent, cookieStore) and that
+      // are [SecureContext] in the window realm.
+      testing.expectEqual(222, w.count);
+    });
+  }
+</script>

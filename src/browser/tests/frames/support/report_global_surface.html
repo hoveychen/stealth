@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<script>
+  // Reports its own secure-context state and which parts of the global surface
+  // it can see, for a parent that is loading this from another origin on
+  // purpose and so cannot read the frame directly.
+  //
+  // `in` rather than hasOwnProperty: the interface objects are own properties
+  // of the global, but the Window members among them are own properties of the
+  // interface prototype object too, and a page that reads `'caches' in window`
+  // must not find one the gate left behind up there.
+  const GATED = [
+    'GPU', 'GPUBufferUsage', 'XRSession', 'SubtleCrypto', 'Cache', 'CacheStorage',
+    'BatteryManager', 'ServiceWorker', 'WebTransport', 'EyeDropper',
+    'caches', 'cookieStore', 'showOpenFilePicker', 'queryLocalFonts',
+    'ondevicemotion', 'onpointerrawupdate',
+  ];
+  // Not [SecureContext] in Chrome: present whatever the origin.
+  const UNGATED = ['Document', 'CSS', 'fetch', 'localStorage', 'onclick', 'crypto'];
+
+  const present = (names) => names.filter((n) => n in self);
+
+  parent.postMessage({
+    href: location.href,
+    secure: self.isSecureContext,
+    count: Object.getOwnPropertyNames(self).length,
+    gated: present(GATED),
+    ungated: present(UNGATED),
+  }, '*');
+</script>

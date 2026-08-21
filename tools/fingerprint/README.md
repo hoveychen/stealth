@@ -4580,15 +4580,230 @@ property, where Chrome runs its real per-property parser; `dump-css-keywords.mjs
 now measures that parser one (property, identifier) pair at a time into
 `src/browser/webapi/css/chrome_keywords.zig`.
 
-Two `probe-css7`-adjacent gaps stayed open on purpose, both recorded in
-`src/browser/tests/css/typed_om.html`: property names are matched
-case-sensitively here where Chrome is case-insensitive (that is
-`CSSStyleDeclaration.isKnownPropertyName`, which every style map member
-consults, not the Typed OM), and `parse` still accepts non-identifier values
-Chrome rejects (`parse('width', 'abc def')`), which would need the
-per-property grammars this engine does not have. Separately, and larger than
-either: an invalid inline value sticks here (`el.style.width = 'notalength'`
-reads back `notalength`) where Chrome drops it.
+One `probe-css7`-adjacent gap stays open on purpose, recorded in
+`src/browser/tests/css/typed_om.html`: `parse` still accepts non-identifier
+values Chrome rejects (`parse('width', 'abc def')`), which would need the
+per-property grammars this engine does not have. Separately, and larger: an
+invalid inline value sticks here (`el.style.width = 'notalength'` reads back
+`notalength`) where Chrome drops it.
+
+**Property-name case was the other one, and it is closed** (`probe-css12`,
+39 readings, both engines against the same host on Chrome 151). It had been
+written down as `CSSStyleDeclaration.isKnownPropertyName` being
+case-sensitive; measuring it says otherwise. The CSSOM half was already
+case-insensitive -- `getPropertyValue` / `setProperty` / `removeProperty` /
+`item` / `getComputedStyle().getPropertyValue` all normalise on entry -- and
+all 24 differing readings were in the Typed OM, which looked every name up as
+written: `attributeStyleMap.get('WIDTH')` threw `Invalid propertyName: WIDTH`
+where Chrome answers `CSSUnitValue|10px`. Ten members were affected
+(get / has / getAll / set / delete / append on both maps, plus
+`CSSStyleValue.parse` and `parseAll`), and each now normalises on entry.
+
+The gate was not the whole fix, which is why the note above was cheap to write
+and wrong to act on directly: `dispatch`, `StylePropertyMap.validateFor` and
+`append`'s custom-property branch all compare property names too, so
+normalising only `isKnownProperty` would have turned
+`computedStyleMap().get('DISPLAY')` from a throw into a bare `CSSStyleValue`
+where Chrome answers a `CSSKeywordValue` -- a silently wrong value in place of
+a loud wrong one. Two things came out of the same measurement: a custom
+property name stays case-sensitive (`--Case` and `--case` are two properties,
+on both engines), and `parseAll`'s messages name `parseAll` rather than
+borrowing the wording of the `parse` the two share.
+
+The one reading that still differed afterwards was not about case: deleting a
+property that is not there reserialised the style attribute here (`--Case:
+1px;`, trailing semicolon) where Chrome leaves the authored text alone. That is
+closed too, below, and `probe-css12` is now **0 of 39**.
+
+**The declaration side is closed** (`probe-css13`, 42 readings, headed Chrome 151
+against this engine on the same host). It started at 27 of 42 and is now **1**,
+and that one is a shape deliberately left out of scope. Six separate findings,
+none guessable:
+
+*What rewrites the attribute text.* The style attribute is rewritten only when
+the declaration block actually changed. Removing a property that was never
+there, removing a custom property under the wrong case, setting a property to
+the value it already holds, setting an absent property to `""` -- Chrome treats
+all of them as no-ops and the authored text survives byte for byte, down to the
+semicolon it was written without. This engine resynced on every one, and since
+its own serialisation always ends in `; `, the tell was an attribute that grew a
+semicolon no author typed just from being *read at* by a script.
+
+*What rewrites the value's case.* Chrome re-cases exactly four things -- a
+keyword the property takes, a CSS-wide keyword, a dimension's unit and a
+function name -- and leaves the rest as authored. It is four rules and not one:
+a `<custom-ident>` (`font-family: MyOwnFont`, `grid-area: MyArea`), a string, a
+custom property's value and **anything containing `var()` / `attr()` / `env()`**
+all keep their capitals, the last of those freezing the whole value with it
+(`width: CALC(1PX + VAR(--a))` reads back byte for byte, because its content is
+substituted later). And the four take the *canonical spelling*, not lowercase:
+`TranslateX(1PX)` answers `translateX(1px)`.
+
+So the spellings are measured rather than derived, by
+`dump-css-value-case.mjs` -> `src/browser/webapi/css/chrome_value_case.zig`:
+each candidate unit and function name is written to a real declaration in upper
+case and read back. That is how `Q` turned out to serialise as `q`, which the
+spec's own spelling of the unit would have got wrong. The same run answers a
+question `chrome_keywords.zig` structurally cannot: a property that accepts an
+arbitrary identifier still *has* keywords, and since Chrome accepts both
+`MyOwnFont` and `sans-serif` for `font-family`, acceptance is no signal there --
+re-casing is. 218 such keywords over 29 properties.
+
+*How a url() is serialised.* Chrome answers a `url()` with its path in double
+quotes however it was written, and the quoting is the only thing it adds: an
+unquoted path gains quotes, a single-quoted one is requoted, the whitespace
+around it goes, the escapes an unquoted path needs are resolved (`url(a\ b)` is
+`url("a b")`, `url(a\28 b)` is `url("a(b")`) and the two characters a quoted
+path cannot hold bare are escaped back. The path itself is untouched -- case,
+query string and fragment all survive, and it is not resolved against the
+document base. This one reaches past the inline style: `@font-face { src:
+url(foo.woff2) }` reads back quoted too, which is why
+`tests/css/rule_hierarchy.html` and `tests/css/stylesheet.html` each had a
+recorded "Chrome answers X, we answer Y" caveat that is now just X.
+
+*When a font family keeps its quotes.* A quoted family name is unquoted when
+its decoded content is a single identifier that is not a keyword, and left
+quoted otherwise -- `"MyOwnFont"` answers `MyOwnFont`, `"a b"` and `"1a"` and
+`"--a"` stay. The keyword check is what the quotes are *for*: they tell a family
+called `monospace` from the generic one, so `"monospace"` keeps them. And that
+comparison is **case-sensitive** -- `"MONOSPACE"` comes out bare and is *not*
+then re-cased into the keyword, which is the one place in this whole area where
+Chrome does not fold case. A name that keeps its quotes gets double ones
+(`'a b'` -> `"a b"`), escapes resolved first (`"\31 a"` -> `"1a"`). The `font`
+shorthand carries a family too, and is treated the same.
+
+*How a number is printed.* A number in a declaration is not echoed back:
+Chrome reprints it through printf `%g` -- six significant digits, trailing zeros
+dropped, scientific notation once the exponent leaves [-4, 6) -- over a value
+clamped to the float range. That one rule covers a pile of separate-looking
+readings: `1E2px` -> `100px`, `1.50px` -> `1.5px`, `+1px` -> `1px`,
+`3.14159265358979px` -> `3.14159px`, `999999.9px` -> `1e+06px`, `1e100px` ->
+`3.40282e+38px` (FLT_MAX). The clamp is to the *range* and not to float
+precision, which took a denormal to establish: `1e-40px` keeps all six digits
+no float can hold (a real f32 round-trip would answer `9.99995e-41`), and
+`1e-46px` is not flushed to zero either. So the value is a double that the
+parser clamps, not a float that the parser stores.
+
+An `<integer>` is printed as an integer instead, and that distinction is
+per-property rather than per-value: `z-index: 1000000` answers `1000000` where
+`flex-grow: 1000000` answers `1e+06`, and `width: 1234567px` answers
+`1.23457e+06px`. Which properties those are is not derivable, so it was
+measured -- `1000000` written to each of the 772 property names Chrome knows,
+19 answering an integer and 72 answering `1e+06` -- plus the four whose integer
+sits after an identifier or a string (`counter-increment: c 1000000`,
+`font-feature-settings: "liga" 1000000`) and the two functions whose first
+argument is one wherever they appear (`repeat()`, `steps()`). A dimension is
+never one: `columns: 1000000` answers `1000000`, `columns: 1000000px` answers
+`1e+06px`. Integers clamp to the 32-bit range Blink parses them into
+(`z-index: 3000000000` -> `2147483647`, measured over ten integer positions).
+
+*How a colour is folded.* A 3/4/6/8 digit hash answers an `rgb()` -- or an
+`rgba()` when its alpha is not opaque, the short forms doubling each nibble --
+and `rgb()` / `rgba()` / `hsl()` / `hsla()` / `hwb()` all answer the legacy
+comma form, so hsl and hwb are converted here rather than passed through. Each
+channel is rounded to a byte (half away from zero, from a percentage of 255 when
+written as one) and clamped there.
+
+The alpha text was the part worth measuring: it is not "three decimals rounded"
+but **the shortest one, two or three decimal number that rounds back to the same
+alpha byte**. That is why 221/255 is `0.867`, 158/255 is `0.62`, 128/255 is
+plain `0.5`, and 22/255 is `0.086` where rounding the fraction would have said
+`0.087`. The model was checked against fifty measured alphas and reproduces
+every one.
+
+What is left as written is measured too: a named colour, `oklch()`, `lab()`,
+`lch()`, `oklab()`, `color()`, `color-mix()`, `light-dark()`, a relative colour
+(`rgb(from red r g b)`), any call with a nested function in it (Chrome
+*computes* `rgb(calc(1 + 1) 2 3)`; this engine has no calc evaluator), a channel
+count or separator mix Chrome rejects (`rgb(50%, 25, 0%)`), and a hash of any
+other length. So no Lab or OKLab colour-space maths is needed at all.
+
+Two smaller things came out of the same pass. The percentage inside the colour
+spaces Chrome keeps is still folded by it -- `lab(50% 40 59.5)` -> `lab(50 40
+59.5)`, `oklch(50% 0.1 200)` -> `oklch(0.5 0.1 200)`, `oklch(0.5 25% 200)` ->
+`oklch(0.5 0.1 200)` (chroma's full scale is 0.4) -- which is a per-channel
+conversion rather than a `%` strip, and is not done here. And the number pass
+replaced a leading-zero inserter that had been reaching into places a value
+never goes: `content: ".5"` answered `"0.5"` and `var(--a, .5px)` answered
+`var(--a, 0.5px)`, where Chrome leaves both alone.
+
+The one reading that still differs is `setProperty('height', 'notalength')`
+sticking here, which is the invalid-inline-value difference recorded above --
+closing it needs the per-property grammars this engine deliberately does not
+have, since a grammar written one notch too narrow drops declarations Chrome
+renders.
+
+**A keyword's canonical spelling is the one Chrome answers with, and that is
+always the lower case one.** This one no probe here reaches: it was found by the
+tests written for the colour fold, when `color: currentColor` answered
+`currentColor`. `chrome_keywords.zig` is generated from mdn-data as an
+*acceptance* table, and its spelling came from the candidate pool -- which is
+spelled the way the spec spells it. So 59 keywords carried a capital Chrome does
+not use: 41 system colours (`ButtonFace`), `currentColor`, nine SVG keywords
+(`visiblePainted`, `sRGB`, `crispEdges`, `optimizeLegibility`) and the seven page
+sizes (`A4`, `JIS-B4`).
+
+The measurement is the whole table: all 14392 (property, keyword) pairs written
+to a real declaration and read back. 2590 pairs differ, every one of them only
+by case and every one lower; not a single keyword is answered with a capital,
+and no keyword is spelled two ways across the properties that take it. It also
+ran the wrong way, which is what made it more than a fingerprint: a page writing
+`pointer-events: visiblepainted` -- the spelling Chrome itself answers -- read
+back `visiblePainted` here, because the table's spelling was returned for any
+case-insensitive match.
+
+So the generator now reads the spelling off a declaration rather than taking the
+candidate. Two traps in doing that, both worth writing down: a property taking an
+arbitrary `<custom-ident>` echoes every identifier as written *and* is the first
+property to accept most candidates (`animation-name` sorts before
+`color-interpolation`), so learning a spelling there freezes the candidate's own
+capitals -- 21 keywords came back wrong that way before those properties were
+skipped. And a shorthand can answer without the keyword in it at all (`display:
+flow` answers `block`, `border: none` answers nothing), so it cannot say how the
+keyword is spelled; since the spelling belongs to the keyword and not the
+property, those take whatever another property measured, which is what closed
+the last 54 shorthand pairs. Acceptance is unchanged and checked either way: the
+same 682 properties, zero keywords gained or lost case-insensitively.
+
+The Typed OM keeps its own answer, measured: a property Blink does not model has
+no canonical spelling to give, so `CSSStyleValue.parse('color', 'bUtToNfAcE')`
+echoes the text as written, where a style map reads the declaration and gets the
+lower case one.
+
+**Two keyword shapes get through an unmodelled property, and one of them told the
+two Typed OM surfaces apart.** Chasing the last subclass difference the spelling
+work left behind turned up a rule wider than the difference: a CSS-wide keyword
+is answered as a CSSKeywordValue whenever the property is a longhand in Blink's
+property tree, whatever else that property's values do. `parse('color',
+'inherit')` is a CSSKeywordValue where `parse('color', 'red')` is not, and every
+shorthand answers a bare CSSStyleValue even for `inherit`. Chrome's
+computed-style list is nearly that longhand set, and the two places it is not are
+each measured rather than reasoned about: six of the names it enumerates are
+shorthands (`background-position`, `font-variant`, `text-decoration`,
+`mask-position`, `contain-intrinsic-size`, `-webkit-mask-box-image`), and
+thirteen longhands are not enumerated at all (`all`, `size`, `word-wrap`, the
+`background-position-x/y` pair, `grid-column-gap` / `grid-row-gap`, and the
+`page*` family).
+
+`currentcolor` is the other shape, on the fourteen colour properties swept as
+answering a keyword for it -- and not on the logical border colours, `fill`,
+`stroke` or the `-webkit-` ones. It is specific to that one keyword:
+`transparent`, `red` and the system colours answer a bare CSSStyleValue on every
+one of them.
+
+The surfaces disagree on five properties, which is why `dispatch` now takes the
+one that asked: `column-rule-color` and `row-rule-color` answer a keyword for
+`currentcolor` through a style map and a CSSStyleValue through `parse`, and the
+three `page-break-*` aliases are a longhand to `parse` and not to a style map.
+Measured on 39 (surface, property, value) readings against headed Chrome 151,
+this area is now **0 diffs**.
+
+What is left there is a third axis of the same table, recorded in
+`tests/css/typed_om.html`: a property can be modelled for some of its values and
+not for others. `accent-color: auto` is a CSSKeywordValue on both engines, but
+`accent-color: ButtonFace` is a `CSSStyleValue|ButtonFace` in Chrome, because a
+named or system colour parses to a colour rather than to an identifier -- and
+this engine has no notion of which identifiers are colours.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
@@ -4617,14 +4832,20 @@ on status alone.
 The full table and the caveats that go with each row are
 `results/antibot-2026-08-20-vs-chrome.md`. The short version:
 
-| | Chrome (headed 151) | this engine (`dev.340+3d96734f2`) |
-|---|---|---|
-| Cloudflare **managed challenge** (3 stations) | scrapingcourse solved, 403→200 | **all three stuck on the interstitial, 403, `Just a moment...`** |
-| Cloudflare **passive scoring**, production sites | indeed 1216n, discord 1196n, nowsecure 51n | **indeed 1211n, discord 1531n, nowsecure 51n — passed** |
-| claude.ai | 1086n sign-in page | empty document, 121n |
-| chatgpt.com | 722n | 40n `Application Error!` |
-| pixiv | 311n | wedges the engine, 73s then no answer |
-| DataDome (4 stations) | 0/4 in this run, 3/4 in the run before | not attributable — see below |
+| | Chrome (headed 151) | `dev.340+3d96734f2` | re-run, `dev.664+8fc2ac1d0` |
+|---|---|---|---|
+| Cloudflare **managed challenge** (3 stations) | scrapingcourse solved, 403→200 | **all three stuck on the interstitial, 403, `Just a moment...`**, 16n | still 0/3, 403 — but **46n, the same DOM Chrome renders** |
+| Cloudflare **passive scoring**, production sites | indeed 1216n, discord 1196n, nowsecure 51n | **indeed 1211n, discord 1531n, nowsecure 51n — passed** | indeed 1208n, discord 1531n, nowsecure 51n — passed |
+| claude.ai | 1086n sign-in page | empty document, 121n | **pass, 1066n** |
+| chatgpt.com | 722n | 40n `Application Error!` | **pass, 491n** — renders, still short of Chrome's 725n |
+| pixiv | 311n | wedges the engine, 73s then no answer | **pass, 311n — Chrome's 311 exactly** |
+| DataDome (4 stations) | 0/4 in this run, 3/4 in the run before | not attributable — see below | 2/4 (datadome.co, hermes), Chrome 0/4 again — still not attributable |
+
+The re-run is the second table in `results/antibot-2026-08-20-vs-chrome.md`: same
+route, same egress, eight hours later, with the two crashes fixed. It reads
+**10/15 against headed Chrome's 9/15**, and that is not a claim about beating
+Chrome — the whole lead is DataDome's policy toward each client on a residential
+IP. The managed challenge is still 0/3, and that is the row that measures us.
 
 ### The Cloudflare challenge is refused by us, not by Cloudflare
 
@@ -4785,6 +5006,8 @@ fix it.
   script; it loads now, the app runs, and the engine stops answering
   `Runtime.evaluate` after 86s. Same shape as pixiv, which wedges regardless of
   this change, so the count of unattributed engine hangs went from one to two.
+  *(Both were crashes, both are fixed — the next section, and the re-run row in
+  the table above: claude.ai passes at 1066 nodes.)*
 - **indeed, discord and nowsecure are byte-for-byte unchanged**, which is the
   over-permissiveness check.
 
@@ -4860,3 +5083,164 @@ three station runs a column: `9d117e371` `SIGABRT` 3/3 → same commit plus that
 one loop change, pass 3/3 → `main` pass 4/4.
 `performance_observer/register_during_delivery.html` pins it — against the
 snapshot loop it aborts the test binary with the production crash verbatim.
+
+## The window global surface, against a headed baseline (2026-08-20)
+
+A headless reading had put this engine 247 globals *ahead* of Chrome, which
+would be the worst kind of miss -- a name no browser has is a positive signal,
+where a missing name is only an absence. The number came with a caveat
+attached: the baseline was headless, and this file already records five probes
+where a headless Chrome 151 does not reproduce the headed one. So it was
+re-measured against both.
+
+`probe-globals.js` dumps `Object.getOwnPropertyNames(window)` and nothing else
+-- values, descriptors and prototype shapes are what the `probe-win*` batches
+are for; this one only answers which globals exist. Same probe, same host
+(`http://127.0.0.1`), three runs: this engine, Chrome 151 headless, Chrome 151
+headed.
+
+**The headless baseline was not the problem.** Headless and headed Chrome
+answer the *same 1237 names, byte for byte* -- 0 headless-only, 0 headed-only.
+Whatever produced 247 was not counting this. Every way of counting a "global"
+that both engines can answer puts it in single or low double digits: window own
+names 13, `for...in` 3, the union along the whole prototype chain 10. The
+engine has 1167 own names to Chrome's 1237.
+
+**What we have that headed Chrome does not, all 13, each confirmed by a
+`typeof` on both engines:**
+
+* `setImmediate` / `clearImmediate` -- no browser has these. A page reading
+  `typeof setImmediate` gets `"function"` here and `"undefined"` in Chrome,
+  which is the Node-shaped tell this whole exercise exists to remove.
+* `addEventListener` / `removeEventListener` / `dispatchEvent` as window **own**
+  properties. Chrome has them once, on `EventTarget.prototype`; we have them in
+  both places (`hasOwnProperty(window, 'addEventListener')` is true here, false
+  in Chrome). Same root as the prototype-chain shape below.
+* `Css` -- an interface object beside the real `CSS` namespace, which Chrome has
+  as an object with no `Css` anywhere. Exposing an interface Chrome lacks is why
+  `CSSStyleProperties` was deleted in G16.
+* `SVGGenericElement` -- this engine's catch-all for unrecognised SVG tags,
+  named as a global.
+* `CrossOriginWindow`, `ReadableStreamAsyncIterator`,
+  `WEBGL_debug_renderer_info`, `WEBGL_lose_context` -- internals and WebGL
+  extension objects Chrome keeps unnamed.
+* `ModelContext` / `ModelContextClient` -- this fork's WebMCP surface, kept
+  deliberately (G14 records the same call for `navigator.modelContext`).
+
+Five of those thirteen are already being removed on `prd/window-surface-extras`
+(`8a7202dbe`): `Css` becomes `[LegacyNoInterfaceObject]`, `setImmediate` /
+`clearImmediate` come off the window surface while their implementations stay
+for internal callers, and `Snapshot`'s `[Global]` flattening stops copying
+`EventTarget`'s three members onto the global. That branch reached the same
+13-and-83 split independently from its own headed run, which is the reason to
+trust either reading. The counts above are as of `bbf32fc9d`, before it lands.
+
+**The other direction is the larger one: 83 globals headed Chrome has and we do
+not** (`CSSFunctionRule`, `CloseWatcher`, `Temporal`, `Observable`,
+`PressureObserver`, the SharedStorage family, `LanguageModel` / `Summarizer` /
+`Translator`, the fenced-frame family, ...). The full lists are in
+`results/probes/probe-globals.{chrome,chrome-headless,lightpanda}.json`.
+
+**And the prototype chain still differs**, which G19 measured and G17 owns:
+`Object.getPrototypeOf(window) === Window.prototype` is `true` in Chrome and
+`false` here. Chrome's chain is `Window(1237 own) <- Window.prototype(3) <-
+EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours is
+`Window(1167) <- Window(1) <- Window(239) <- EventTarget(4) <-
+Object.prototype(12)`. That extra intermediate is where the three duplicated
+`EventTarget` members come from.
+
+## The 234 globals that were not behind the secure-context gate (2026-08-20)
+
+The section above counts the window surface against one origin. It is not one
+surface. WebIDL marks a large slice of the platform `[SecureContext]`, and a
+browser only puts those names on the global when the document's origin is
+potentially trustworthy — which the previous count could not see, because
+`http://127.0.0.1` is loopback and therefore trustworthy. This engine had no
+gate at all: it handed out the same 1167 names to every origin.
+
+**Measured by serving one page from two origins that differ in nothing else.**
+Not https-vs-http, which also changes the scheme; not a different port or path.
+Same `python3 -m http.server`, same port, same bytes — only the host differs, so
+the only variable is whether that host is loopback:
+
+|                                   | headed Chrome 151 | this engine, before | after |
+|-----------------------------------|------:|------:|------:|
+| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 |
+| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |
+| names behind the gate               |  252 |    0 |  234 |
+| worker realm, secure owner          |  336 |  232 |  233 |
+| worker realm, insecure owner        |  243 |  232 |  222 |
+
+252 names in Chrome. 234 of them are names this engine has, and it leaked all
+234 on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
+HID / Serial / Bluetooth / MIDI, credentials, payments, presentation, the
+file-system-access handles, `ServiceWorker`, `WebTransport`, `caches`,
+`cookieStore`, `showOpenFilePicker`, `queryLocalFonts`, `ondevicemotion`,
+`onpointerrawupdate`. The other 18 of Chrome's 252 it does not implement at all,
+so they belong to the 83-missing count above, not here.
+
+After the gate: **0 of Chrome's 252 still leak, and 0 names are gated that
+Chrome does not gate.** The residual difference is the same one the section
+above records, which is the cross-check that the secure surface was not
+disturbed: 13 extra / 83 missing on a trustworthy origin, 13 extra / 65 missing
+on an untrustworthy one (the 18 gated names we lack stop counting as missing
+once Chrome hides them too).
+
+**Two things the gate turned up that the value of `isSecureContext` had been
+getting wrong.**
+
+*An about: child inherits.* `isSecureContext` was derived from the document's
+own URL, so every `about:blank` and `about:srcdoc` child answered false —
+including inside an https page, where Chrome answers true. Each child reported
+for itself, both parents measured:
+
+| parent | `about:blank` | `about:srcdoc` | `sandbox="allow-scripts"` srcdoc | `data:` |
+|---|---|---|---|---|
+| `http://localhost:8777`     | true  | true  | true  | false |
+| `http://192.168.68.78:8777` | false | false | false | false |
+
+The about: URLs inherit their creator's answer and a sandbox flag is not part of
+it; a `data:` URL inherits nothing, because it is simply not a potentially
+trustworthy URL. Worth pinning: reading that as "an opaque origin inherits"
+gets `data:` wrong in the direction that hands a page 252 extra names.
+
+*Every ancestor has to be secure.* An `http://localhost:8777` iframe — loopback,
+trustworthy entirely on its own — inside an `http://192.168.68.78:8777` page
+answers **false** in Chrome and gets the 985-name surface. This engine answered
+true. So the determination is `own URL is trustworthy AND every ancestor is a
+secure context`, and only a *parent* counts: an opener is not an ancestor, so it
+is consulted for `about:blank` inheritance and never as a gate on a popup that
+navigates somewhere trustworthy.
+
+*And a worker takes its owner's answer*, where this engine returned a hardcoded
+false with a comment claiming workers have no secure-context-only APIs. They do:
+Chrome's worker realm gates 93 names. Chrome holds the property as an
+enumerable, configurable getter on `WorkerGlobalScope.prototype`; here it was a
+read-only, non-configurable data property.
+
+**Mechanics, and the one gap.** The gate deletes from the global once per
+committed document and never puts anything back — each committed document gets
+its surface restored from the V8 snapshot, verified directly by deleting
+`window.GPU` alongside a marker property, navigating, and finding GPU back with
+the marker gone. Restoring would also append the 234 names to the end of
+`getOwnPropertyNames`, which is its own tell. The eleven Window members among
+the 234 are own properties of the Window interface prototype object here as well
+as of the global, so those walk the chain — deleting only the global's copy left
+`'caches' in window` true.
+
+The gap: a frame that **never navigates** keeps the full surface, because the
+gate hangs off document commit. In practice that is the bare `about:blank` CDP
+target — no page script observes it, and every document that loads content
+commits. So a reading of this engine taken on `about:blank` still reports 1167;
+pass a url. Gating at frame init instead would strip the surface off a root
+frame, which is born at `about:blank` and navigates to its real URL inside the
+same context.
+
+The probe is `probes/probe-secure-context.js`, with the two-origin recipe in its
+header; the four readings are in
+`results/probes/probe-secure-context.{chrome,lightpanda}-{secure,insecure}.json`.
+The Zig suite reaches an untrustworthy origin through `0.0.0.0`: connecting to
+it lands on the loopback listener, so it reaches the test server on 9582, but it
+is not a loopback *host* — Chrome answers false there and hands out the same 985
+names as the LAN address (measured). It is the only insecure origin the suite
+can reach without binding a second interface.

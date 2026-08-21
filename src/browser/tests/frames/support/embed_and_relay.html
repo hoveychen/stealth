@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<script>
+  // Embeds the URL in ?src= and relays whatever that child reports up to its
+  // own parent, so a page can read a grandchild it has no way to script --
+  // this frame is loaded from another origin on purpose.
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.href) {
+      parent.postMessage({ relayed: e.data, via: location.href }, '*');
+    }
+  });
+
+  const f = document.createElement('iframe');
+  f.src = new URL(location.href).searchParams.get('src');
+  document.documentElement.appendChild(f);
+</script>

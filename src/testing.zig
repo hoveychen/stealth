@@ -528,9 +528,63 @@ var sse_reconnect_hits = std.atomic.Value(usize).init(0);
 
 var test_config: Config = undefined;
 
+// The three test servers bind fixed ports (9582 HTTP, 9583 CDP, 9584 WS), so two
+// test binaries on one machine are two binaries wanting the same three ports.
+// That used to go unnoticed rather than fail: std's `reuse_address` sets
+// SO_REUSEPORT as well as SO_REUSEADDR, and SO_REUSEPORT lets a second process
+// bind a live port and have the kernel split incoming connections between the
+// two listeners. A fixture then comes back out of the *other* checkout's tree,
+// which reads as a scatter of unrelated failures — a `testing.js` that 404s, an
+// assertion carrying an expectation that does not exist in this branch — and
+// says nothing at all about ports.
+//
+// So the servers bind exclusively now, and the whole run takes an advisory lock
+// first: a second run waits its turn instead of interleaving. `flock` is
+// released by the kernel when the fd goes away, so a killed run cannot leave the
+// lock held behind it.
+const test_port_lock_path = "/tmp/lightpanda-test-servers.lock";
+var test_port_lock: ?std.Io.File = null;
+
+fn lockTestPorts() void {
+    if (@import("builtin").target.os.tag == .windows) {
+        return;
+    }
+    const file = std.Io.Dir.cwd().createFile(lp.io, test_port_lock_path, .{ .truncate = false }) catch |err| {
+        std.debug.print("test port lock: cannot open {s}: {}\n", .{ test_port_lock_path, err });
+        return;
+    };
+    if (std.c.flock(file.handle, std.posix.LOCK.EX | std.posix.LOCK.NB) != 0) {
+        std.debug.print("another test run holds {s} — waiting for it to finish\n", .{test_port_lock_path});
+        while (true) {
+            const rc = std.c.flock(file.handle, std.posix.LOCK.EX);
+            if (rc == 0) {
+                break;
+            }
+            // A signal is the only failure worth retrying; anything else would
+            // spin, so give up and let the bind report the collision instead.
+            if (std.posix.errno(rc) != .INTR) {
+                std.debug.print("test port lock: flock failed, continuing unlocked\n", .{});
+                file.close(lp.io);
+                return;
+            }
+        }
+    }
+    test_port_lock = file;
+}
+
+fn unlockTestPorts() void {
+    const file = test_port_lock orelse return;
+    test_port_lock = null;
+    // Closing the fd drops the lock; the explicit unlock is for clarity.
+    _ = std.c.flock(file.handle, std.posix.LOCK.UN);
+    file.close(lp.io);
+}
+
 test "tests:beforeAll" {
     log.opts.level = .warn;
     log.opts.format = .pretty;
+
+    lockTestPorts();
 
     const test_allocator = @import("root").tracking_allocator;
 
@@ -594,6 +648,9 @@ test "tests:afterAll" {
         thread.join();
     }
 
+    // Ports are free again, so the next run may start.
+    unlockTestPorts();
+
     @import("root").v8_peak_memory = test_browser.env.isolate.getHeapStatistics().total_physical_size;
 
     // Browser must be deinit'd before the notification — Session/Frame
@@ -610,6 +667,10 @@ fn serveCDP(wg: *lp.WaitGroup) !void {
 
     test_cdp_server = Server.init(test_app, address) catch |err| {
         std.debug.print("CDP server error: {}", .{err});
+        // Release beforeAll rather than deadlocking it: the tests that need this
+        // server will fail with a clear connection error, which is readable, and
+        // a hung `wg.wait()` is not.
+        wg.finish();
         return err;
     };
     wg.finish();

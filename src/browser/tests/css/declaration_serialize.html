@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  What a `style=` attribute reads back as after the CSSOM has been asked to
+  change it. Every expectation was measured on a headed Chrome 151 over
+  http://127.0.0.1 by tools/fingerprint/probes/probe-css13.js.
+
+  The rule the probe found: the attribute is rewritten only when the
+  declaration block actually changed. A change that changes nothing -- removing
+  a property that was never there, removing a custom property under the wrong
+  case, setting a property to the value it already holds -- leaves the authored
+  text alone, down to the semicolon it was written without. Chrome's own
+  serialisation always ends in `; `, so a resync on a no-op is visible: the
+  attribute grows a semicolon no author typed.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+const authored = 'width: 10px; display: block; --Case: 1px';
+function withStyle(text) {
+    const el = document.createElement('div');
+    el.setAttribute('style', text);
+    (document.body || document.documentElement).appendChild(el);
+    return el;
+}
+</script>
+
+<script id="no_op_mutations_leave_the_attribute_alone">
+{
+    // Reading never rewrites.
+    const read = withStyle(authored);
+    void read.style.width;
+    void read.style.cssText;
+    void read.style.length;
+    void read.attributeStyleMap.get('width');
+    testing.expectEqual(authored, read.getAttribute('style'));
+
+    // Removing a property that is not there.
+    const absent = withStyle(authored);
+    testing.expectEqual('', absent.style.removeProperty('height'));
+    testing.expectEqual(authored, absent.getAttribute('style'));
+
+    // Removing a custom property that is not there, and one that is there
+    // under a different case -- custom property names are case-sensitive.
+    const absent_custom = withStyle(authored);
+    absent_custom.style.removeProperty('--nope');
+    testing.expectEqual(authored, absent_custom.getAttribute('style'));
+    const wrong_case = withStyle(authored);
+    wrong_case.style.removeProperty('--case');
+    testing.expectEqual(authored, wrong_case.getAttribute('style'));
+
+    // Setting a property to the value it already holds.
+    const same = withStyle(authored);
+    same.style.setProperty('width', '10px');
+    testing.expectEqual(authored, same.getAttribute('style'));
+
+    // Setting a property that is not there to the empty string, which is the
+    // spec's spelling of "remove it".
+    const empty = withStyle(authored);
+    empty.style.setProperty('height', '');
+    testing.expectEqual(authored, empty.getAttribute('style'));
+
+    // The Typed OM's delete takes the same path.
+    const map_delete = withStyle(authored);
+    map_delete.attributeStyleMap.delete('height');
+    testing.expectEqual(authored, map_delete.getAttribute('style'));
+}
+</script>
+
+<script id="real_mutations_do_rewrite_the_attribute">
+{
+    // A property that was there comes out, and the rewrite is Chrome's own
+    // serialisation -- every declaration followed by "; ", so the text now
+    // ends in a semicolon the authored text did not have.
+    const removed = withStyle(authored);
+    testing.expectEqual('10px', removed.style.removeProperty('width'));
+    testing.expectEqual('display: block; --Case: 1px;', removed.getAttribute('style'));
+
+    // A new property, and a changed value.
+    const added = withStyle(authored);
+    added.style.setProperty('height', '5px');
+    testing.expectEqual('width: 10px; display: block; --Case: 1px; height: 5px;', added.getAttribute('style'));
+    const changed = withStyle(authored);
+    changed.style.setProperty('width', '20px');
+    testing.expectEqual('width: 20px; display: block; --Case: 1px;', changed.getAttribute('style'));
+
+    // Assigning cssText rewrites even when the text is what it already was.
+    const round = withStyle(authored);
+    round.style.cssText = round.style.cssText;
+    testing.expectEqual('width: 10px; display: block; --Case: 1px;', round.getAttribute('style'));
+}
+</script>
+
+<script id="value_case_is_canonicalised_in_four_places">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // A keyword the property takes, from the measured per-property table.
+    testing.expectEqual('display: block;', round('display: BLOCK'));
+    testing.expectEqual('position: absolute;', round('position: Absolute'));
+    testing.expectEqual('color: red;', round('color: RED'));
+    testing.expectEqual('overflow: hidden visible;', round('overflow: HIDDEN Visible'));
+
+    // A CSS-wide keyword, which every property takes.
+    testing.expectEqual('width: inherit;', round('width: INHERIT'));
+    testing.expectEqual('display: unset;', round('display: Unset'));
+
+    // A dimension's unit, wherever the dimension sits in the value.
+    testing.expectEqual('width: 10px;', round('width: 10PX'));
+    testing.expectEqual('width: 10em;', round('width: 10EM'));
+    testing.expectEqual('margin: 1px 2px;', round('margin: 1PX 2Px'));
+
+    // A function name, in Chrome's spelling rather than lowercased: the
+    // transform functions are the reason a blanket toLowerCase() is wrong.
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: RGB(1, 2, 3)'));
+    testing.expectEqual('background-color: rgba(1, 2, 3, 0.5);', round('background-color: RGBA(1, 2, 3, 0.5)'));
+    testing.expectEqual('transform: translateX(1px);', round('transform: TranslateX(1PX)'));
+
+    // !important is not part of the value, and was already lowercased.
+    testing.expectEqual('color: red !important;', round('color: RED !IMPORTANT'));
+
+    // setProperty and the camelCase attribute take the same path as parsing
+    // the attribute text.
+    const set = withStyle('');
+    set.style.setProperty('color', 'RED');
+    testing.expectEqual('red', set.style.color);
+    testing.expectEqual('color: red;', set.getAttribute('style'));
+    const camel = withStyle('');
+    camel.style.color = 'RED';
+    testing.expectEqual('red', camel.style.color);
+    testing.expectEqual('color: red;', camel.getAttribute('style'));
+}
+</script>
+
+<script id="value_case_is_left_alone_everywhere_else">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // A <custom-ident>: the property takes any identifier, so none of them is
+    // a keyword to canonicalise.
+    testing.expectEqual('font-family: MyOwnFont;', round('font-family: MyOwnFont'));
+    // ... but a generic family is a keyword even there, and it is measured by
+    // the re-casing rather than by acceptance: Chrome accepts both.
+    testing.expectEqual('font-family: sans-serif;', round('font-family: SANS-SERIF'));
+    testing.expectEqual('animation-name: MyAnim;', round('animation-name: MyAnim'));
+    testing.expectEqual('grid-area: MyArea;', round('grid-area: MyArea'));
+    testing.expectEqual('counter-reset: MyCounter 3;', round('counter-reset: MyCounter 3'));
+    const family = withStyle('');
+    family.style.setProperty('font-family', 'MyOwnFont');
+    testing.expectEqual('MyOwnFont', family.style.fontFamily);
+
+    // A string is content, not syntax.
+    testing.expectEqual('content: "MiXeD";', round('content: "MiXeD"'));
+
+    // A custom property is stored as written, name and value both.
+    testing.expectEqual('--Case: MiXeD Value;', round('--Case: MiXeD Value'));
+    testing.expectEqual('MiXeD Value', withStyle('--Case: MiXeD Value').style.getPropertyValue('--Case'));
+
+    // A value whose real content is substituted later is frozen whole: the
+    // function name is not re-cased and neither is anything around it.
+    testing.expectEqual('width: VAR(--Foo);', round('width: VAR(--Foo)'));
+    testing.expectEqual('content: ATTR(Data-X);', round('content: ATTR(Data-X)'));
+    testing.expectEqual('width: CALC(1PX + VAR(--a));', round('width: CALC(1PX + VAR(--a))'));
+}
+</script>
+
+<script id="a_font_family_loses_quotes_it_does_not_need">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured: a quoted family name is unquoted when its content is one
+    // identifier, and left quoted otherwise. The quotes are what tell a family
+    // called "monospace" from the generic keyword, so a name that spells a
+    // keyword keeps them -- and that comparison is case-sensitive, which is why
+    // "MONOSPACE" comes out bare and is not then re-cased into the keyword.
+    testing.expectEqual('font-family: MyOwnFont;', round('font-family: "MyOwnFont"'));
+    testing.expectEqual('font-family: MyOwnFont;', round("font-family: 'MyOwnFont'"));
+    testing.expectEqual('font-family: Arial;', round('font-family: "Arial"'));
+    testing.expectEqual('font-family: a-b;', round('font-family: "a-b"'));
+    testing.expectEqual('font-family: -a;', round('font-family: "-a"'));
+    testing.expectEqual('font-family: a1;', round('font-family: "a1"'));
+    testing.expectEqual('font-family: a_b;', round('font-family: "a_b"'));
+    testing.expectEqual('font-family: MONOSPACE;', round('font-family: "MONOSPACE"'));
+
+    // Not one identifier, or one that would read as something else bare.
+    testing.expectEqual('font-family: "a b";', round('font-family: "a b"'));
+    testing.expectEqual('font-family: "a,b";', round('font-family: "a,b"'));
+    testing.expectEqual('font-family: "1a";', round('font-family: "1a"'));
+    testing.expectEqual('font-family: "--a";', round('font-family: "--a"'));
+    testing.expectEqual('font-family: "";', round('font-family: ""'));
+    testing.expectEqual('font-family: "monospace";', round('font-family: "monospace"'));
+    testing.expectEqual('font-family: "inherit";', round('font-family: "inherit"'));
+
+    // A name that stays quoted is quoted with double quotes, and its escapes
+    // are resolved first -- `\31 a` is the name `1a`, which cannot go bare.
+    testing.expectEqual('font-family: "a b";', round("font-family: 'a b'"));
+    testing.expectEqual('font-family: "1a";', round('font-family: "\\31 a"'));
+
+    // Every name in a list is judged on its own, and the font shorthand
+    // carries a family too.
+    testing.expectEqual(
+        'font-family: MyOwnFont, "Other One", monospace;',
+        round('font-family: "MyOwnFont", "Other One", monospace'));
+    testing.expectEqual('font: 12px MyFont;', round('font: 12px "MyFont"'));
+    testing.expectEqual('font: 12px "My Font";', round('font: 12px "My Font"'));
+
+    // Only a family name: a string anywhere else is content.
+    testing.expectEqual('content: "MiXeD";', round('content: "MiXeD"'));
+    testing.expectEqual('content: "monospace";', round('content: "monospace"'));
+}
+</script>
+
+<script id="a_number_is_reprinted_by_chromes_printer">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured: a number in a declaration is reprinted rather than echoed. The
+    // printer is printf `%g` -- six significant digits, trailing zeros dropped,
+    // scientific notation once the exponent leaves [-4, 6) with the exponent
+    // padded to two digits -- over a value clamped to the float range.
+    testing.expectEqual('width: 100px;', round('width: 1E2px'));
+    testing.expectEqual('width: 100px;', round('width: 1e2px'));
+    testing.expectEqual('width: 100px;', round('width: 1E+2px'));
+    testing.expectEqual('width: 0.01px;', round('width: 1E-2px'));
+    testing.expectEqual('width: 1.5px;', round('width: 1.50px'));
+    testing.expectEqual('width: 1px;', round('width: 1.0px'));
+    testing.expectEqual('width: 0.5px;', round('width: 0.50000px'));
+    testing.expectEqual('width: 1.5px;', round('width: 01.5px'));
+    testing.expectEqual('width: 1px;', round('width: +1px'));
+    testing.expectEqual('width: 0.5px;', round('width: .5px'));
+    testing.expectEqual('width: 0px;', round('width: -0px'));
+    testing.expectEqual('width: 0px;', round('width: +0.0px'));
+
+    // Six significant digits, and the exponent thresholds either side.
+    testing.expectEqual('width: 100px;', round('width: 100.000001px'));
+    testing.expectEqual('width: 3.14159px;', round('width: 3.14159265358979px'));
+    testing.expectEqual('width: 33.3333%;', round('width: 33.333333333%'));
+    testing.expectEqual('width: 1e+06px;', round('width: 999999.9px'));
+    testing.expectEqual('width: 1e-06px;', round('width: 0.000001px'));
+    testing.expectEqual('width: 1e-07px;', round('width: 0.0000001px'));
+
+    // The clamp is to the float range, not to float precision: 1e100 comes
+    // back as FLT_MAX, while 1e-40 -- which no float can hold to six digits --
+    // keeps all of them.
+    testing.expectEqual('width: 3.40282e+38px;', round('width: 1e100px'));
+    testing.expectEqual('width: 3.40282e+38px;', round('width: 3.4028236e38px'));
+    testing.expectEqual('width: 1e-40px;', round('width: 1e-40px'));
+    testing.expectEqual('width: 1e-46px;', round('width: 1e-46px'));
+
+    // Every dimension in the value, inside a function or a shorthand alike.
+    testing.expectEqual('margin: 10px 20px;', round('margin: 1E1px 2E1px'));
+    testing.expectEqual('margin: 1.5px -2px 3px 0.5px;', round('margin: 1.500px -2.0px +3px .5px'));
+    testing.expectEqual('transform: scale(10);', round('transform: scale(1E1)'));
+    testing.expectEqual('transform: translateX(1.5px);', round('transform: translateX(1.50px)'));
+    testing.expectEqual('width: calc(100px);', round('width: calc(1E2px)'));
+    testing.expectEqual('grid-template-columns: 10fr;', round('grid-template-columns: 1E1fr'));
+    testing.expectEqual('transition-duration: 1000ms;', round('transition-duration: 1E3ms'));
+    testing.expectEqual('opacity: 0.5;', round('opacity: 0.500'));
+    testing.expectEqual('line-height: 1;', round('line-height: 1.0'));
+
+    // An <integer> is printed as an integer rather than through %g, so it keeps
+    // its digits past the sixth -- and it is clamped to the 32-bit range, which
+    // is what Blink parses it into.
+    testing.expectEqual('z-index: 1000000;', round('z-index: 1000000'));
+    testing.expectEqual('z-index: 2147483647;', round('z-index: 2147483647'));
+    testing.expectEqual('z-index: 2147483647;', round('z-index: 3000000000'));
+    testing.expectEqual('z-index: -2147483648;', round('z-index: -3000000000'));
+    testing.expectEqual('order: 10;', round('order: 010'));
+    testing.expectEqual('order: 1;', round('order: +1'));
+    testing.expectEqual('counter-increment: c 1000000;', round('counter-increment: c 1000000'));
+    testing.expectEqual('font-feature-settings: "liga" 1000000;', round('font-feature-settings: "liga" 1000000'));
+    // ... including the two functions whose first argument is one.
+    testing.expectEqual(
+        'grid-template-columns: repeat(1000000, 1px);',
+        round('grid-template-columns: repeat(1000000, 1px)'));
+    testing.expectEqual(
+        'transition-timing-function: steps(1000000, jump-start);',
+        round('transition-timing-function: steps(1000000, jump-start)'));
+    // Anywhere else the same digits are a <number>, and go through %g.
+    testing.expectEqual('flex-grow: 1e+06;', round('flex-grow: 1000000'));
+    testing.expectEqual('width: 1.23457e+06px;', round('width: 1234567px'));
+    testing.expectEqual('transform: scale(1e+06);', round('transform: scale(1000000)'));
+    // A dimension is a <number> even in a property whose bare value is an
+    // <integer>: only the unitless token is the integer.
+    testing.expectEqual('columns: 1e+06px;', round('columns: 1000000px'));
+
+    // A number that is not a value is left alone: inside a string, inside a
+    // url(), inside a substituted value, and in a custom property.
+    testing.expectEqual('content: ".5";', round('content: ".5"'));
+    testing.expectEqual('content: "1.50px";', round('content: "1.50px"'));
+    testing.expectEqual('background-image: url(".5");', round('background-image: url(.5)'));
+    testing.expectEqual('width: var(--a, .5px);', round('width: var(--a, .5px)'));
+    testing.expectEqual('width: env(safe-area-inset-top, .5px);', round('width: env(safe-area-inset-top, .5px)'));
+    testing.expectEqual('--c: 01.50;', round('--c: 01.50'));
+}
+</script>
+
+<script id="a_colour_folds_to_rgb_or_rgba">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured: a hex colour is answered as rgb(), or as rgba() when its alpha
+    // is not opaque. Three and four digit forms double each nibble.
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #AABBCC'));
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #abc'));
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #ABC'));
+    testing.expectEqual('color: rgb(0, 0, 0);', round('color: #000'));
+    testing.expectEqual('color: rgb(255, 255, 255);', round('color: #FFFFFF'));
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #AABBCCFF'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0);', round('color: #AABBCC00'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0.867);', round('color: #AABBCCDD'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0.498);', round('color: #AABBCC7F'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0.867);', round('color: #ABCD'));
+    testing.expectEqual('color: rgba(17, 34, 51, 0.267);', round('color: #1234'));
+
+    // The alpha is the shortest one, two or three decimal number that rounds
+    // back to the same 8-bit alpha byte -- which is why 221/255 is `0.867` but
+    // 158/255 is `0.62`, and why an alpha under half a byte is plain `0`.
+    const alpha = (a) => round(`color: rgba(1, 2, 3, ${a})`);
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', alpha('0.5'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.25);', alpha('0.25'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.125);', alpha('0.125'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.063);', alpha('0.0625'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.62);', alpha('0.618'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.12);', alpha('0.1235'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.086);', alpha('0.08666667'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.008);', alpha('0.008666667'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.004);', alpha('0.002'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', alpha('0.001'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', alpha('0.0005'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', alpha('-1'));
+    testing.expectEqual('color: rgb(1, 2, 3);', alpha('0.999'));
+    testing.expectEqual('color: rgb(1, 2, 3);', alpha('1'));
+    testing.expectEqual('color: rgb(1, 2, 3);', alpha('1.5'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', alpha('50%'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.333);', alpha('0.3333333'));
+
+    // rgb() and rgba() are one function: the space separated form becomes the
+    // comma separated one, an alpha of 1 drops back to rgb(), and a component
+    // is rounded to a byte -- from a percentage of 255 when it is written as
+    // one -- and clamped there.
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgb(1 2 3)'));
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgb( 1 , 2 , 3 )'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', round('color: rgb(1 2 3 / 50%)'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', round('color: rgb(1,2,3,0.5)'));
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgba(1,2,3,1)'));
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgb(1 2 3 / 1)'));
+    testing.expectEqual('color: rgb(255, 0, 3);', round('color: rgb(300, -5, 2.6)'));
+    testing.expectEqual('color: rgb(2, 3, 4);', round('color: rgb(2.4, 2.5, 3.5)'));
+    testing.expectEqual('color: rgb(1, 2, 255);', round('color: rgb(0.5 1.5 254.5)'));
+    testing.expectEqual('color: rgb(128, 64, 0);', round('color: rgb(50%, 25%, 0%)'));
+    testing.expectEqual('color: rgb(85, 3, 1);', round('color: rgb(33.333%, 1%, 0.4%)'));
+    testing.expectEqual('color: rgb(2, 255, 255);', round('color: rgb(0.6% 99.9% 100.4%)'));
+    testing.expectEqual('color: rgb(100, 2, 3);', round('color: rgb(1e2 2 3)'));
+    testing.expectEqual('color: rgb(0, 2, 3);', round('color: rgb(none 2 3)'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', round('color: rgb(1 2 3 / none)'));
+
+    // hsl() and hwb() are answered as rgb() too, so the conversion is ours to
+    // do. A hue takes any angle unit and wraps; a saturation, lightness,
+    // whiteness or blackness clamps; a whiteness and blackness summing past
+    // 100% is the grey between them.
+    testing.expectEqual('color: rgb(64, 191, 64);', round('color: hsl(120, 50%, 50%)'));
+    testing.expectEqual('color: rgba(64, 191, 64, 0.5);', round('color: hsl(120deg 50% 50% / 0.5)'));
+    testing.expectEqual('color: rgba(64, 191, 64, 0.25);', round('color: hsla(120, 50%, 50%, 0.25)'));
+    testing.expectEqual('color: rgb(64, 191, 191);', round('color: hsl(0.5turn 50% 50%)'));
+    testing.expectEqual('color: rgb(128, 191, 64);', round('color: hsl(100grad 50% 50%)'));
+    testing.expectEqual('color: rgb(75, 191, 64);', round('color: hsl(2rad 50% 50%)'));
+    testing.expectEqual('color: rgb(191, 149, 64);', round('color: hsl(400 50% 50%)'));
+    testing.expectEqual('color: rgb(191, 64, 128);', round('color: hsl(-30 50% 50%)'));
+    testing.expectEqual('color: rgb(191, 64, 64);', round('color: hsl(none 50% 50%)'));
+    testing.expectEqual('color: rgb(128, 128, 128);', round('color: hsl(120 0% 50%)'));
+    testing.expectEqual('color: rgb(128, 128, 128);', round('color: hsl(120 -50% 50%)'));
+    testing.expectEqual('color: rgb(0, 255, 0);', round('color: hsl(120 200% 50%)'));
+    testing.expectEqual('color: rgb(255, 255, 255);', round('color: hsl(120 50% 150%)'));
+    testing.expectEqual('color: rgb(65, 193, 65);', round('color: hsl(120 50.5% 50.5%)'));
+    testing.expectEqual('color: rgb(51, 179, 51);', round('color: hwb(120 20% 30%)'));
+    testing.expectEqual('color: rgb(51, 179, 51);', round('color: hwb(120deg 20% 30%)'));
+    testing.expectEqual('color: rgba(51, 179, 51, 0.5);', round('color: hwb(120 20% 30% / 0.5)'));
+    testing.expectEqual('color: rgb(116, 116, 116);', round('color: hwb(120 50% 60%)'));
+    testing.expectEqual('color: rgb(0, 255, 0);', round('color: hwb(120 0% 0%)'));
+    testing.expectEqual('color: rgb(179, 51, 51);', round('color: hwb(none 20% 30%)'));
+
+    // Wherever the colour sits, and whatever case it was written in.
+    testing.expectEqual('border: 1px solid rgb(170, 187, 204);', round('border: 1px solid #ABC'));
+    testing.expectEqual('background-color: rgb(1, 2, 3);', round('background-color: RGB(1, 2, 3)'));
+    testing.expectEqual(
+        'text-decoration-color: rgba(64, 191, 64, 0.25);',
+        round('text-decoration-color: HSLA(120, 50%, 50%, 0.25)'));
+    testing.expectEqual(
+        'background-image: linear-gradient(rgb(170, 187, 204), rgb(18, 52, 86));',
+        round('background-image: linear-gradient(#AABBCC, #123456)'));
+
+    // What is left alone: a named colour, a colour space Chrome does not fold
+    // to rgb(), and a colour whose arguments are not plain numbers.
+    testing.expectEqual('color: rebeccapurple;', round('color: rebeccapurple'));
+    testing.expectEqual('color: transparent;', round('color: transparent'));
+    // `currentColor` is a keyword rather than a colour to fold, and a keyword's
+    // canonical spelling is its lower case one -- see the block below.
+    testing.expectEqual('color: currentcolor;', round('color: currentColor'));
+    testing.expectEqual('color: oklch(0.5 0.1 200);', round('color: oklch(0.5 0.1 200)'));
+    testing.expectEqual('color: color(srgb 1 0 0);', round('color: color(srgb 1 0 0)'));
+    testing.expectEqual('color: color-mix(in srgb, red, blue);', round('color: color-mix(in srgb, red, blue)'));
+    testing.expectEqual('color: light-dark(red, blue);', round('color: light-dark(red, blue)'));
+    testing.expectEqual('color: rgb(from red r g b);', round('color: rgb(from red r g b)'));
+    testing.expectEqual('color: VAR(--a, #AABBCC);', round('color: VAR(--a, #AABBCC)'));
+    testing.expectEqual('--c: #AABBCC;', round('--c: #AABBCC'));
+
+    // A hex of any other length is not a colour at all. Chrome drops the whole
+    // declaration; this engine keeps invalid values, which is the same
+    // already-recorded difference the value-case table has.
+    testing.expectEqual('color: #12345;', round('color: #12345'));
+    testing.expectEqual('color: #AABBCCDDEE;', round('color: #AABBCCDDEE'));
+}
+</script>
+
+<script id="a_keywords_canonical_spelling_is_its_lower_case_one">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured over all 14392 (property, keyword) pairs the keyword table
+    // carries: whatever case a keyword is written in, Chrome answers the lower
+    // case spelling. 59 of those keywords are spelled with a capital in the
+    // table -- it is generated from mdn-data, whose spelling is the *pool* and
+    // not the answer -- and Chrome lowercases every one.
+    testing.expectEqual('color: currentcolor;', round('color: currentColor'));
+    testing.expectEqual('color: currentcolor;', round('color: CURRENTCOLOR'));
+    testing.expectEqual('color: buttonface;', round('color: ButtonFace'));
+    testing.expectEqual('color: buttonface;', round('color: bUtToNfAcE'));
+    testing.expectEqual('caret-color: threeddarkshadow;', round('caret-color: ThreeDDarkShadow'));
+    testing.expectEqual('shape-rendering: crispedges;', round('shape-rendering: crispEdges'));
+    testing.expectEqual('pointer-events: visiblepainted;', round('pointer-events: visiblePainted'));
+    testing.expectEqual('color-interpolation: srgb;', round('color-interpolation: sRGB'));
+    testing.expectEqual('text-rendering: optimizelegibility;', round('text-rendering: optimizeLegibility'));
+    testing.expectEqual('size: a4;', round('size: A4'));
+
+    // And the other direction, which is what made this worth fixing rather than
+    // recording: a page writing the keyword the way Chrome answers it must get
+    // that back, not the table's capital.
+    testing.expectEqual('pointer-events: visiblepainted;', round('pointer-events: visiblepainted'));
+    testing.expectEqual('color: buttonface;', round('color: buttonface'));
+
+    // A <custom-ident> still keeps its capitals: it is not a keyword, so no
+    // table vouches for it.
+    testing.expectEqual('font-family: MyOwnFont;', round('font-family: MyOwnFont'));
+    testing.expectEqual('animation-name: MyAnim;', round('animation-name: MyAnim'));
+}
+</script>
+
+<script id="a_url_is_always_serialised_quoted">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Chrome answers a url() with the path in double quotes however it was
+    // written, and the quoting is the only thing it adds: the path keeps its
+    // case, its query string and its fragment.
+    testing.expectEqual('background-image: url("Foo/Bar.PNG");', round('background-image: URL(Foo/Bar.PNG)'));
+    testing.expectEqual('background-image: url("a");', round('background-image: url(a)'));
+    testing.expectEqual('background-image: url("a");', round('background-image: url("a")'));
+    testing.expectEqual('background-image: url("a");', round("background-image: url('a')"));
+    testing.expectEqual('background-image: url("a");', round('background-image: url(  a  )'));
+    testing.expectEqual('background-image: url("");', round('background-image: url()'));
+    testing.expectEqual('background-image: url("#frag");', round('background-image: url(#frag)'));
+    testing.expectEqual(
+        'background-image: url("A.PNG?X=Y&Z=1PX");',
+        round('background-image: URL(A.PNG?X=Y&Z=1PX)'));
+
+    // One per url(), wherever they sit.
+    testing.expectEqual(
+        'background-image: url("A.PNG"), url("B.PNG");',
+        round('background-image: url(A.PNG), url(B.PNG)'));
+    testing.expectEqual(
+        'background-image: image-set(url("A.PNG") 1x);',
+        round('background-image: image-set(URL(A.PNG) 1x)'));
+    testing.expectEqual('cursor: url("A.PNG"), auto;', round('cursor: URL(A.PNG), auto'));
+
+    // The escapes an unquoted path needs are resolved, and the two characters
+    // a quoted one cannot hold bare are escaped back.
+    testing.expectEqual('background-image: url("a b");', round('background-image: url(a\\ b)'));
+    testing.expectEqual('background-image: url("a(b");', round('background-image: url(a\\28 b)'));
+    testing.expectEqual('background-image: url("a\\"b");', round("background-image: url('a\"b')"));
+    testing.expectEqual('background-image: url("a\\\\b");', round('background-image: url(a\\\\b)'));
+
+    // A url() inside a substituted value is frozen with the rest of it.
+    testing.expectEqual(
+        'background-image: VAR(--a, URL(A.PNG));',
+        round('background-image: VAR(--a, URL(A.PNG))'));
+}
+</script>
+</body>
+</html>

@@ -20,6 +20,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../../js/js.zig");
+const color = @import("../../../color.zig");
 const Factory = @import("../../../Factory.zig");
 const Frame = @import("../../../Frame.zig");
 
@@ -89,12 +90,34 @@ pub const Type = enum {
     pub fn toString(self: Type) []const u8 {
         return @tagName(self);
     }
+
+    // How the `value` IDL attribute relates to the `value` content attribute.
+    // Only `.value` keeps its own state: in the other two the attribute *is*
+    // the value, so assigning to .value writes the attribute and removing the
+    // attribute drops the value. `.default_on` differs from `.default` only in
+    // reading "on" instead of "" when the attribute is absent.
+    pub const ValueMode = enum { value, default, default_on, filename };
+
+    pub fn valueMode(self: Type) ValueMode {
+        return switch (self) {
+            .hidden, .submit, .reset, .button, .image => .default,
+            .checkbox, .radio => .default_on,
+            .file => .filename,
+            else => .value,
+        };
+    }
 };
 
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _default_value: ?[]const u8 = null,
 _default_checked: bool = false,
 _value: ?[]const u8 = null,
+// The spec's dirty value flag. Only an assignment raises it; while it is down
+// the `value` content attribute keeps seeding `_value` through the sanitizer.
+// It is not "`_value` is non-null": a rejected assignment leaves `_value` empty
+// and still dirty, which is what detaches `type=number` from a later
+// `setAttribute("value", "12")`.
+_value_dirty: bool = false,
 _checked: bool = false,
 _checked_dirty: bool = false,
 _input_type: Type = .text,
@@ -142,11 +165,71 @@ pub fn setType(self: *Input, typ: []const u8, frame: *Frame) !void {
 }
 
 pub fn getValue(self: *const Input) []const u8 {
-    if (self._input_type == .file) return "";
-    return self._value orelse self._default_value orelse switch (self._input_type) {
-        .checkbox, .radio => "on",
-        else => "",
+    return switch (self._input_type.valueMode()) {
+        .filename => "",
+        // The attribute is the value here, so a dirty _value cannot outlive it.
+        .default => self._default_value orelse "",
+        .default_on => self._default_value orelse "on",
+        // `_value` is kept seeded from the attribute by `seedValue`, so there is
+        // no falling back to `_default_value` here: that fallback would hand
+        // back the raw attribute and skip the sanitizer.
+        .value => self._value orelse "",
     };
+}
+
+/// Re-run the value sanitization algorithm over the `value` content attribute
+/// and adopt the result, per the spec's "value sanitization algorithm ... when
+/// the value content attribute is added, changed, or removed". A dirty value
+/// outranks the attribute, and the other value modes read the attribute
+/// directly, so both are left alone.
+fn seedValue(self: *Input, frame: *Frame) !void {
+    if (self._value_dirty) return;
+    if (self._input_type.valueMode() != .value) return;
+    // Sanitizing the empty string rather than short-circuiting on it is what
+    // gives `type=color` its "#000000" and `type=range` its midpoint without an
+    // attribute to seed from.
+    self._value = try self.sanitizeValue(false, self._default_value orelse "", frame);
+}
+
+/// Re-run the sanitizer after a bound moved. Only `range` cares: it is the one
+/// type whose sanitizer reads min/max/step, and it clamps rather than rejects,
+/// so `<input type=range>` materializing at 50 and then meeting `max=20` reads
+/// 20 — not the 15 the midpoint of 10..20 would give. The dirty flag does not
+/// gate this: an assigned 90 is pulled down by a later max just the same.
+fn reclamp(self: *Input, frame: *Frame) !void {
+    if (self._input_type != .range) return;
+    self._value = try self.sanitizeValue(false, self._value orelse "", frame);
+}
+
+/// Adopt a new input type, moving the value across the value-mode boundary the
+/// way the spec's "type attribute has changed" steps do. The sanitizer then
+/// runs over whatever the value now *is*, rather than re-reading the attribute:
+/// `type=number value=TOK` has already dropped the "TOK", so switching on to
+/// `text` reads "" and not "TOK" back out of the attribute.
+fn retype(self: *Input, new_type: Type, frame: *Frame) !void {
+    const was = self._input_type.valueMode();
+    self._input_type = new_type;
+    const now = self._input_type.valueMode();
+
+    if (was == .value and now != .value) {
+        // Only a dirty value is banked into the attribute. A pristine one came
+        // out of the attribute to begin with, so writing it back would clobber
+        // the raw attribute with its sanitized form.
+        if (self._value_dirty) {
+            if (self._value) |dirty| {
+                try self.asElement().setAttributeSafe(comptime .wrap("value"), .wrap(dirty), frame);
+            }
+        }
+        self._value = null;
+        self._value_dirty = false;
+    } else if (was != .value and now == .value) {
+        self._value = self._default_value;
+        self._value_dirty = false;
+    }
+
+    if (self._value) |current| {
+        self._value = try self.sanitizeValue(false, current, frame);
+    }
 }
 
 // Spec-compliant `getValue` exposes the raw password to JS, FormData, CSS
@@ -158,13 +241,23 @@ pub fn getRedactedValue(self: *const Input) []const u8 {
 }
 
 pub fn setValue(self: *Input, value: []const u8, frame: *Frame) !void {
-    // File inputs: setting to empty string is a no-op, anything else throws
-    if (self._input_type == .file) {
-        if (value.len == 0) return;
-        return error.InvalidStateError;
+    switch (self._input_type.valueMode()) {
+        // File inputs: setting to empty string is a no-op, anything else throws
+        .filename => {
+            if (value.len == 0) return;
+            return error.InvalidStateError;
+        },
+        // The attribute is the value, so write it there and keep no dirty copy.
+        .default, .default_on => {
+            try self.asElement().setAttributeSafe(comptime .wrap("value"), .wrap(value), frame);
+            self._value = null;
+        },
+        // This should _not_ call setAttribute. It updates the current state only
+        .value => {
+            self._value = try self.sanitizeValue(true, value, frame);
+            self._value_dirty = true;
+        },
     }
-    // This should _not_ call setAttribute. It updates the current state only
-    self._value = try self.sanitizeValue(true, value, frame);
 }
 
 pub fn getDefaultValue(self: *const Input) []const u8 {
@@ -358,8 +451,10 @@ pub fn suffersValueMissing(self: *Input, frame: *Frame) bool {
         .checkbox => !self._checked,
         .radio => !self.radioGroupHasChecked(frame),
         .file => if (self._files) |fl| fl._files.len == 0 else true,
+        // All value-mode types, so `_value` is already seeded from the
+        // attribute — no falling back to the raw `_default_value`.
         .text, .password, .email, .url, .tel, .search, .number, .date, .time, .@"datetime-local", .month, .week, .color => blk: {
-            const v = self._value orelse self._default_value orelse "";
+            const v: []const u8 = self._value orelse "";
             break :blk v.len == 0;
         },
         // submit/reset/button/hidden/image/range never participate in valueMissing.
@@ -409,9 +504,10 @@ pub fn suffersPatternMismatch(self: *const Input, frame: *Frame) bool {
 }
 
 pub fn suffersTooLong(self: *const Input) bool {
-    // Per spec, only the dirty value flag triggers tooLong / tooShort. We treat
-    // the presence of an explicit _value (vs. attribute-derived _default_value)
-    // as an approximation of dirty.
+    // Per spec only a dirty value triggers tooLong / tooShort, so a value the
+    // `value` content attribute seeded never does — `_value` is non-null for
+    // those too, which is why this reads the flag and not the value.
+    if (!self._value_dirty) return false;
     const value = self._value orelse return false;
     const max = self.getMaxLength();
     if (max < 0) return false;
@@ -419,6 +515,7 @@ pub fn suffersTooLong(self: *const Input) bool {
 }
 
 pub fn suffersTooShort(self: *const Input) bool {
+    if (!self._value_dirty) return false;
     const value = self._value orelse return false;
     if (value.len == 0) return false;
     const min = self.getMinLength();
@@ -808,6 +905,33 @@ pub fn setFormNoValidate(self: *Input, value: bool, frame: *Frame) !void {
     }
 }
 
+/// What `type=color` accepts. The spec's sanitizer only takes the 7-character
+/// lowercase hex "simple color", but Chrome runs the CSS color parser and
+/// serializes back to that form, so the short and alpha hex forms, the named
+/// colors and `rgb()`/`hsl()` all come through.
+///
+/// Surrounding whitespace is tolerated around the hex and function forms but
+/// *not* around a bare name — `"#aabbcc "` reads `#aabbcc` while `"red "` reads
+/// `#000000`. That asymmetry is measured, not derived
+/// (tools/fingerprint/probes/probe-input-color.js, the `padding` group).
+fn parseColorValue(value: []const u8) ?color.RGBA {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+
+    if (trimmed[0] == '#') {
+        return color.RGBA.parse(trimmed) catch null;
+    }
+    if (std.mem.indexOfScalar(u8, trimmed, '(') != null) {
+        return color.RGBA.parseFunction(trimmed);
+    }
+
+    // A name, which the trim must not have changed.
+    if (trimmed.len != value.len) return null;
+    var buf: [32]u8 = undefined;
+    if (trimmed.len > buf.len) return null;
+    return color.RGBA.find(std.ascii.lowerString(buf[0..trimmed.len], trimmed));
+}
+
 /// Sanitize the value according to the current input type
 fn sanitizeValue(self: *Input, comptime dupe: bool, value: []const u8, frame: *Frame) ![]const u8 {
     switch (self._input_type) {
@@ -846,29 +970,13 @@ fn sanitizeValue(self: *Input, comptime dupe: bool, value: []const u8, frame: *F
             return try sanitizeRange(dupe, value, self.getMin(), self.getMax(), self.getStep(), value_attr, frame);
         },
         .color => {
-            if (value.len == 7 and value[0] == '#') {
-                var needs_lower = false;
-                for (value[1..]) |c| {
-                    if (!std.ascii.isHex(c)) {
-                        return "#000000";
-                    }
-                    if (c >= 'A' and c <= 'F') {
-                        needs_lower = true;
-                    }
-                }
-                if (!needs_lower) {
-                    return if (comptime dupe) try frame.dupeString(value) else value;
-                }
-
-                // Normalize to lowercase per spec
-                const result = try frame.arena.alloc(u8, 7);
-                result[0] = '#';
-                for (value[1..], 1..) |c, j| {
-                    result[j] = std.ascii.toLower(c);
-                }
-                return result;
+            const rgba = parseColorValue(value) orelse return "#000000";
+            const hex = rgba.toHex();
+            // Already in the canonical form, so keep the caller's slice.
+            if (std.mem.eql(u8, value, &hex)) {
+                return if (comptime dupe) try frame.dupeString(value) else value;
             }
-            return "#000000";
+            return try frame.arena.dupe(u8, &hex);
         },
         .file => return "", // File: always empty
         .checkbox, .radio, .submit, .image, .reset, .button, .hidden => return if (comptime dupe) try frame.dupeString(value) else value, // no sanitization
@@ -1090,14 +1198,17 @@ fn sanitizeRange(
     value_attr: []const u8,
     frame: *Frame,
 ) ![]const u8 {
+    _ = dupe; // range always re-serializes the number, so nothing is kept
     const min: f64 = if (isValidFloatingPoint(min_attr))
         std.fmt.parseFloat(f64, min_attr) catch 0
     else
         0;
-    const max: f64 = if (isValidFloatingPoint(max_attr))
+    // A max below the min collapses the range onto the min rather than letting
+    // the clamp read its bounds backwards.
+    const max: f64 = @max(min, if (isValidFloatingPoint(max_attr))
         std.fmt.parseFloat(f64, max_attr) catch 100
     else
-        100;
+        100);
     const step_base: f64 = if (isValidFloatingPoint(min_attr))
         std.fmt.parseFloat(f64, min_attr) catch 0
     else if (isValidFloatingPoint(value_attr))
@@ -1105,21 +1216,43 @@ fn sanitizeRange(
     else
         0;
 
-    if (!isValidFloatingPoint(value)) {
-        return try formatFloat(frame.arena, snapToStep(min + (max - min) / 2, min, max, step_base, step_attr));
-    }
+    // Unlike every other numeric type, range has no empty state: an
+    // unrepresentable value becomes the midpoint of the range.
+    const v0 = if (isValidFloatingPoint(value))
+        std.fmt.parseFloat(f64, value) catch unreachable // grammar already validated
+    else
+        min + (max - min) / 2;
 
-    const v0 = std.fmt.parseFloat(f64, value) catch unreachable; // grammar already validated
-    var v = v0;
-    if (v < min) v = min;
-    if (v > max) v = max;
-    const snapped = snapToStep(v, min, max, step_base, step_attr);
-    if (v == v0 and snapped == v) {
-        // Already valid and on the ladder — preserve the original string so
-        // assignments like `el.value = "1.0"` round-trip without canonicalizing.
-        return if (comptime dupe) try frame.dupeString(value) else value;
-    }
-    return try formatFloat(frame.arena, snapped);
+    const clamped = std.math.clamp(v0, min, max);
+    const snapped = snapToStep(clamped, min, max, step_base, step_attr);
+    return try formatFloat(frame.arena, roundToLadderPrecision(snapped, step_base, step_attr));
+}
+
+/// Blink holds the range value in a decimal type, so a ladder of `0 + n * 0.1`
+/// serializes as "0.3" where the same arithmetic in binary floating point gives
+/// 0.30000000000000004. Rounding to the decimal places the ladder's own inputs
+/// carry reproduces that without a decimal type, since a rung can never need
+/// more places than its base and step do.
+fn roundToLadderPrecision(value: f64, step_base: f64, step_attr: []const u8) f64 {
+    if (std.ascii.eqlIgnoreCase(step_attr, "any")) return value;
+    const places = @max(decimalPlaces(step_attr), decimalPlaces(formatFloatBuf(step_base)));
+    if (places == 0) return value;
+    const scale = std.math.pow(f64, 10, @floatFromInt(places));
+    return @round(value * scale) / scale;
+}
+
+/// Digits after the decimal point, or 0 for a spelling this cannot answer for
+/// (exponential notation, or no fraction at all).
+fn decimalPlaces(text: []const u8) usize {
+    if (std.mem.indexOfAny(u8, text, "eE") != null) return 0;
+    const dot = std.mem.indexOfScalar(u8, text, '.') orelse return 0;
+    return text.len - dot - 1;
+}
+
+/// `decimalPlaces` needs the step base as text, and the base came from an f64.
+threadlocal var float_buf: [32]u8 = undefined;
+fn formatFloatBuf(value: f64) []const u8 {
+    return std.fmt.bufPrint(&float_buf, "{d}", .{value}) catch "0";
 }
 
 /// Snap `value` (already clamped to `[min, max]`) to the nearest value on the
@@ -1330,11 +1463,7 @@ pub const Build = struct {
             .text;
 
         // Sanitize initial value per input type (e.g. date rejects "invalid-date").
-        if (self._default_value) |dv| {
-            self._value = try self.sanitizeValue(false, dv, frame);
-        } else {
-            self._value = null;
-        }
+        try self.seedValue(frame);
 
         // If this is a checked radio button, uncheck others in its group
         if (self._checked and self._input_type == .radio) {
@@ -1343,21 +1472,15 @@ pub const Build = struct {
     }
 
     pub fn attributeChange(element: *Element, name: String, value: String, frame: *Frame) !void {
-        const attribute = std.meta.stringToEnum(enum { type, value, checked }, name.str()) orelse return;
+        const attribute = std.meta.stringToEnum(enum { type, value, checked, min, max, step }, name.str()) orelse return;
         const self = element.as(Input);
         switch (attribute) {
-            .type => {
-                self._input_type = Type.fromString(value.str());
-                // Sanitize the current value according to the new type
-                if (self._value) |current_value| {
-                    self._value = try self.sanitizeValue(false, current_value, frame);
-                    // Apply default value for checkbox/radio if value is now empty
-                    if (self._value.?.len == 0 and (self._input_type == .checkbox or self._input_type == .radio)) {
-                        self._value = "on";
-                    }
-                }
+            .type => try self.retype(Type.fromString(value.str()), frame),
+            .value => {
+                self._default_value = try frame.arena.dupe(u8, value.str());
+                try self.seedValue(frame);
             },
-            .value => self._default_value = try frame.arena.dupe(u8, value.str()),
+            .min, .max, .step => try self.reclamp(frame),
             .checked => {
                 self._default_checked = true;
                 // Only update checked state if it hasn't been manually modified
@@ -1372,12 +1495,16 @@ pub const Build = struct {
         }
     }
 
-    pub fn attributeRemove(element: *Element, name: String, _: *Frame) !void {
-        const attribute = std.meta.stringToEnum(enum { type, value, checked }, name.str()) orelse return;
+    pub fn attributeRemove(element: *Element, name: String, frame: *Frame) !void {
+        const attribute = std.meta.stringToEnum(enum { type, value, checked, min, max, step }, name.str()) orelse return;
         const self = element.as(Input);
         switch (attribute) {
-            .type => self._input_type = .text,
-            .value => self._default_value = null,
+            .type => try self.retype(.text, frame),
+            .value => {
+                self._default_value = null;
+                try self.seedValue(frame);
+            },
+            .min, .max, .step => try self.reclamp(frame),
             .checked => {
                 self._default_checked = false;
                 // Only update checked state if it hasn't been manually modified
@@ -1395,6 +1522,7 @@ pub const Build = struct {
 
         // Copy runtime state from source to clone
         clone._value = source._value;
+        clone._value_dirty = source._value_dirty;
         clone._checked = source._checked;
         clone._checked_dirty = source._checked_dirty;
         clone._selection_direction = source._selection_direction;
@@ -1414,6 +1542,10 @@ test "WebApi: HTML.Input" {
     try testing.htmlRunner("element/html/input-attrs.html", .{});
     try testing.htmlRunner("element/html/input-validity.html", .{});
     try testing.htmlRunner("element/html/input_file.html", .{});
+    try testing.htmlRunner("element/html/input_value_mode.html", .{});
+    try testing.htmlRunner("element/html/input_value_sanitize.html", .{});
+    try testing.htmlRunner("element/html/input_color_value.html", .{});
+    try testing.htmlRunner("element/html/input_range_value.html", .{});
 }
 
 test "isValidFloatingPoint" {

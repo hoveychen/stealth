@@ -5,6 +5,13 @@
 // The WebCodecs codec classes are [SecureContext], so about:blank is not enough
 // for them -- pass an https url to measure those.
 //
+// Since the [SecureContext] gate landed, the *url* decides how much of the
+// global surface either engine shows: an untrustworthy origin hides 234 names
+// here and 252 in Chrome. http://127.0.0.1 and http://localhost are loopback
+// and therefore trustworthy; a LAN address or 0.0.0.0 is not. A reading taken
+// on the bare about:blank target is ungated in this engine and gated in Chrome,
+// so it is the one url not to compare across engines.
+//
 // This engine does not run scheduled tasks while an awaitPromise evaluate is
 // outstanding, so a probe that awaits a setTimeout hangs here -- use
 // `run-page-probe.mjs` for those. Chrome handles both.

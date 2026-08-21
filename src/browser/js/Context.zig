@@ -24,6 +24,7 @@ const Env = @import("Env.zig");
 const Origin = @import("Origin.zig");
 const Scheduler = @import("Scheduler.zig");
 const Execution = @import("Execution.zig");
+const secure_context = @import("secure_context.zig");
 
 const Frame = @import("../Frame.zig");
 const Page = @import("../Page.zig");
@@ -311,6 +312,39 @@ pub fn setOrigin(self: *Context, key: ?[]const u8) !void {
         // one context to access another.
         const token_local = v8.v8__Global__Get(&origin.security_token, isolate.handle);
         v8.v8__Context__SetSecurityToken(ls.local.handle, token_local);
+    }
+}
+
+// Takes the WebIDL [SecureContext] names off this context's global, for a
+// document whose origin is not potentially trustworthy. Called once per
+// committed document, from the frame, which owns the determination.
+//
+// Delete-only, and it never has to put anything back: every committed document
+// gets its global surface restored from the V8 snapshot. Verified directly --
+// `delete window.GPU` on one document, then navigate, and GPU is there again
+// while a marker property set alongside it is gone.
+pub fn hideSecureContextGlobals(self: *Context) void {
+    var ls: js.Local.Scope = undefined;
+    self.localScope(&ls);
+    defer ls.deinit();
+
+    const global = self.globalObject(&ls.local);
+    for (secure_context.gated_interfaces) |name| {
+        _ = global.delete(name);
+    }
+
+    // The members live on the interface prototype object as well, so walk up
+    // rather than trusting the chain's shape -- what matters is that `name in
+    // window` comes back false, not which link held it. The chain is five deep
+    // and ends at Object.prototype, which holds none of these names.
+    for (secure_context.gated_members) |name| {
+        var target = global;
+        while (true) {
+            _ = target.delete(name);
+            const proto = v8.v8__Object__GetPrototype(target.handle) orelse break;
+            if (v8.v8__Value__IsObject(proto) == false) break;
+            target = .{ .local = &ls.local, .handle = @ptrCast(proto) };
+        }
     }
 }
 

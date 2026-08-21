@@ -479,9 +479,25 @@ pub const CSSStyleValue = struct {
     /// `CSSStyleValue.parse(property, value)` runs the same property-aware
     /// dispatch a style map does.
     pub fn parse(property: []const u8, value: []const u8, frame: *Frame) !*CSSStyleValue {
-        if (!isKnownProperty(property)) return frame.js.fail(
+        return parseFor("parse", property, value, frame);
+    }
+
+    /// Measured: parseAll never splits, it hands back a one-element sequence
+    /// even for a shorthand or a comma list.
+    pub fn parseAll(property: []const u8, value: []const u8, frame: *Frame) ![]const *CSSStyleValue {
+        const list = try frame.local_arena.alloc(*CSSStyleValue, 1);
+        // Measured: parseAll's messages name parseAll, they do not borrow the
+        // wording of the parse the two share.
+        list[0] = try parseFor("parseAll", property, value, frame);
+        return list;
+    }
+
+    fn parseFor(comptime member: []const u8, property: []const u8, value: []const u8, frame: *Frame) !*CSSStyleValue {
+        var buf: NameBuf = undefined;
+        const name = normalizeProperty(property, &buf);
+        if (!isKnownProperty(name)) return frame.js.fail(
             error.TypeError,
-            "Failed to execute 'parse' on 'CSSStyleValue': Invalid property name",
+            "Failed to execute '" ++ member ++ "' on 'CSSStyleValue': Invalid property name",
         );
         // Measured: `parse` runs Chrome's real per-property value parser, so a
         // bare identifier the property does not take is a TypeError --
@@ -492,22 +508,15 @@ pub const CSSStyleValue = struct {
         // absent property there.
         //
         // Both the value and the property are echoed exactly as passed, neither
-        // trimmed nor lowercased.
-        if (lookupIdentifier(property, value) == .rejected) return failFmt(
+        // trimmed nor lowercased -- `parse('WIDTH', 'notalength')` names
+        // 'WIDTH'.
+        if (lookupIdentifier(name, value) == .rejected) return failFmt(
             frame,
             error.TypeError,
-            "Failed to execute 'parse' on 'CSSStyleValue': The value provided ('{s}') could not be parsed as a '{s}'.",
+            "Failed to execute '" ++ member ++ "' on 'CSSStyleValue': The value provided ('{s}') could not be parsed as a '{s}'.",
             .{ value, property },
         );
-        return dispatch(property, value, frame);
-    }
-
-    /// Measured: parseAll never splits, it hands back a one-element sequence
-    /// even for a shorthand or a comma list.
-    pub fn parseAll(property: []const u8, value: []const u8, frame: *Frame) ![]const *CSSStyleValue {
-        const list = try frame.local_arena.alloc(*CSSStyleValue, 1);
-        list[0] = try CSSStyleValue.parse(property, value, frame);
-        return list;
+        return dispatch(name, value, .parse, frame);
     }
 
     pub const JsApi = struct {
@@ -2914,6 +2923,116 @@ pub const CSSTransformValue = struct {
 // Value -> subclass dispatch
 // ---------------------------------------------------------------------------
 
+/// A CSS-wide keyword is answered as a CSSKeywordValue exactly when the property
+/// is a longhand in Blink's property tree -- whatever else that property's values
+/// do, so `parse('color', 'inherit')` is a CSSKeywordValue where
+/// `parse('color', 'red')` is not, and every shorthand answers a bare
+/// CSSStyleValue even for `inherit`.
+///
+/// Chrome's computed-style list is nearly that set but not quite, and both
+/// corrections are measured (all 475 computed names and the 297 other names
+/// Chrome answers to, each written `inherit` / `unset` and read back): six of
+/// the names it enumerates are shorthands, and thirteen longhands it does not
+/// enumerate at all.
+const css_wide_shorthands = [_][]const u8{
+    "background-position",
+    "contain-intrinsic-size",
+    "font-variant",
+    "mask-position",
+    "text-decoration",
+    "-webkit-mask-box-image",
+};
+
+const unlisted_longhands = [_][]const u8{
+    "all",
+    "background-position-x",
+    "background-position-y",
+    "grid-column-gap",
+    "grid-row-gap",
+    "page",
+    "page-margin-safety",
+    "page-orientation",
+    "size",
+    "word-wrap",
+};
+
+/// The three that count as a longhand for `parse` and not for a style map --
+/// measured, and the only ones of the thirteen where the two surfaces disagree.
+const parse_only_longhands = [_][]const u8{
+    "page-break-after",
+    "page-break-before",
+    "page-break-inside",
+};
+
+fn isBlinkLonghand(property: []const u8, surface: Surface) bool {
+    for (unlisted_longhands) |name| {
+        if (std.mem.eql(u8, name, property)) return true;
+    }
+    if (surface == .parse) {
+        for (parse_only_longhands) |name| {
+            if (std.mem.eql(u8, name, property)) return true;
+        }
+    }
+    if (!isComputedLonghand(property)) {
+        return false;
+    }
+    for (css_wide_shorthands) |name| {
+        if (std.mem.eql(u8, name, property)) return false;
+    }
+    return true;
+}
+
+/// The CSS-wide keyword `value` spells, in its canonical spelling.
+fn cssWideKeyword(value: []const u8) ?[]const u8 {
+    const trimmed = std.mem.trim(u8, value, " \t\r\n");
+    for (chrome_keywords.css_wide) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return keyword;
+    }
+    return null;
+}
+
+/// The colour properties where `currentcolor` is still modelled as a keyword
+/// even though nothing else about their values is. Measured by sweeping all 475
+/// computed longhands with `currentColor`: fourteen answer a CSSKeywordValue,
+/// and the logical border colours, `fill`, `stroke` and the `-webkit-` ones do
+/// not. No other colour keyword behaves this way -- `transparent`, `red` and the
+/// system colours answer a bare CSSStyleValue on every one of them.
+const currentcolor_keyword_properties = [_][]const u8{
+    "accent-color",
+    "background-color",
+    "border-bottom-color",
+    "border-left-color",
+    "border-right-color",
+    "border-top-color",
+    "caret-color",
+    "color",
+    "flood-color",
+    "lighting-color",
+    "outline-color",
+    "stop-color",
+    "text-decoration-color",
+    "text-emphasis-color",
+};
+
+/// The two that answer a keyword through a style map and a bare CSSStyleValue
+/// through `parse` -- the only place the two surfaces were measured to disagree.
+const currentcolor_keyword_style_map_only = [_][]const u8{
+    "column-rule-color",
+    "row-rule-color",
+};
+
+fn isCurrentcolorKeyword(property: []const u8, surface: Surface) bool {
+    for (currentcolor_keyword_properties) |name| {
+        if (std.mem.eql(u8, name, property)) return true;
+    }
+    if (surface == .style_map) {
+        for (currentcolor_keyword_style_map_only) |name| {
+            if (std.mem.eql(u8, name, property)) return true;
+        }
+    }
+    return false;
+}
+
 /// The properties Blink's Typed OM does not model. Measured by sweeping all 474
 /// computed longhands on a headed Chrome 150 (probe-css9.js) and keeping the
 /// ones that answered a bare CSSStyleValue: every one of them answers
@@ -2985,8 +3104,28 @@ fn isComputedLonghand(property: []const u8) bool {
     return false;
 }
 
+/// Scratch for one normalised property name. Every name the tables hold fits;
+/// a longer one is not a property Chrome knows either, so it comes back as
+/// written and is rejected a line later.
+const NameBuf = [128]u8;
+
+/// Measured (probe-css12.js): the Typed OM matches a property name
+/// case-insensitively, exactly as the CSSOM half does -- `map.get('WIDTH')`
+/// answers the `width` value and `parse('DISPLAY', 'BLOCK')` answers the
+/// `block` keyword. A custom property name is the exception, it stays as
+/// written: `--Case` and `--case` are two different properties.
+///
+/// Every member normalises on entry and passes the normalised name to the
+/// tables below, because they are all keyed on the lowercase dash-case
+/// spelling. The messages keep echoing the name as passed, so each caller holds
+/// on to the original too.
+const normalizeProperty = CSSStyleDeclaration.normalizePropertyName;
+
 /// Whether a style map answers this name at all. A name Chrome has never heard
-/// of is a TypeError from every accessor, not a null.
+/// of is a TypeError from every accessor, not a null. Expects a normalised
+/// name, as do `isComputedLonghand` / `isUnsupported` / `isPositionProperty` /
+/// `dispatch` (`lookupIdentifier` normalises again on its own, it is reached
+/// from `dispatch` as well).
 pub fn isKnownProperty(property: []const u8) bool {
     if (isCustomProperty(property)) return true;
     if (isComputedLonghand(property)) return true;
@@ -2996,7 +3135,19 @@ pub fn isKnownProperty(property: []const u8) bool {
 /// The subclass a value string maps onto. Reproduces every one of the 474
 /// computed longhands measured in probe-css9.js plus the explicit-value cases
 /// in probe-css10.js; see the module docs for the two rows that do not match.
-pub fn dispatch(property: []const u8, value: []const u8, frame: *Frame) !*CSSStyleValue {
+/// Which surface asked. Measured: the two disagree on exactly two properties --
+/// `column-rule-color` and `row-rule-color` answer a CSSKeywordValue for
+/// `currentcolor` through a style map and a bare CSSStyleValue through `parse`
+/// -- so the caller has to say which it is. (`parse` already had one
+/// surface-only behaviour, the per-property rejection above.)
+pub const Surface = enum { parse, style_map };
+
+pub fn dispatch(
+    property: []const u8,
+    value: []const u8,
+    surface: Surface,
+    frame: *Frame,
+) !*CSSStyleValue {
     if (isCustomProperty(property)) {
         // Measured: the segment is the trimmed value -- `--v: " 1px "` yields
         // a CSSUnparsedValue that prints `1px`.
@@ -3004,9 +3155,23 @@ pub fn dispatch(property: []const u8, value: []const u8, frame: *Frame) !*CSSSty
         const unparsed = try CSSUnparsedValue.create(&.{.{ .text = trimmed }}, frame);
         return unparsed._proto;
     }
+    // A CSS-wide keyword is answered as a CSSKeywordValue whatever else the
+    // property's values do, as long as the property is a Blink longhand.
+    if (cssWideKeyword(value)) |keyword| {
+        if (isBlinkLonghand(property, surface)) {
+            return (try CSSKeywordValue.create(keyword, frame))._proto;
+        }
+        return CSSStyleValue.init(value, frame);
+    }
     // A shorthand (and anything that is not a computed longhand) is not
-    // modelled, exactly as Blink leaves it.
+    // modelled, exactly as Blink leaves it -- except that `currentcolor` keeps
+    // the keyword treatment on the colour properties measured below.
     if (!isComputedLonghand(property) or isUnsupported(property)) {
+        if (isCurrentcolorKeyword(property, surface) and
+            std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, " \t\r\n"), "currentcolor"))
+        {
+            return (try CSSKeywordValue.create("currentcolor", frame))._proto;
+        }
         return CSSStyleValue.init(value, frame);
     }
     if (isPositionProperty(property)) {
@@ -3235,19 +3400,22 @@ pub const StylePropertyMapReadOnly = struct {
     }
 
     pub fn has(self: *StylePropertyMapReadOnly, property: []const u8) !bool {
-        if (!isKnownProperty(property)) return invalidProperty(self._frame, "has", "StylePropertyMapReadOnly", property);
+        var buf: NameBuf = undefined;
+        if (!isKnownProperty(normalizeProperty(property, &buf))) return invalidProperty(self._frame, "has", "StylePropertyMapReadOnly", property);
         return (try self.get(property)) != null;
     }
 
     pub fn get(self: *StylePropertyMapReadOnly, property: []const u8) !?*CSSStyleValue {
-        if (!isKnownProperty(property)) return invalidProperty(self._frame, "get", "StylePropertyMapReadOnly", property);
+        var buf: NameBuf = undefined;
+        const name = normalizeProperty(property, &buf);
+        if (!isKnownProperty(name)) return invalidProperty(self._frame, "get", "StylePropertyMapReadOnly", property);
         const frame = self._frame;
         // The computed value, not the used one: measured, Chrome's Typed OM and
         // its getComputedStyle disagree on an undeclared border width.
-        const value = self._style.getComputedValue(property, frame);
+        const value = self._style.getComputedValue(name, frame);
         if (value.len == 0) return null;
         // frame.arena, not local_arena: the value outlives this call.
-        return dispatch(property, try frame.arena.dupe(u8, value), frame);
+        return dispatch(name, try frame.arena.dupe(u8, value), .style_map, frame);
     }
 
     /// A property can hold a list of values, so getAll returns a sequence where
@@ -3256,7 +3424,8 @@ pub const StylePropertyMapReadOnly = struct {
     pub fn getAll(self: *StylePropertyMapReadOnly, property: []const u8) ![]const *CSSStyleValue {
         // Its own check rather than letting `get` reject: the message names the
         // member the script called.
-        if (!isKnownProperty(property)) return invalidProperty(self._frame, "getAll", "StylePropertyMapReadOnly", property);
+        var buf: NameBuf = undefined;
+        if (!isKnownProperty(normalizeProperty(property, &buf))) return invalidProperty(self._frame, "getAll", "StylePropertyMapReadOnly", property);
         const single = try self.get(property) orelse return &.{};
         const list = try self._frame.local_arena.alloc(*CSSStyleValue, 1);
         list[0] = single;
@@ -3353,11 +3522,14 @@ pub const StylePropertyMap = struct {
     /// same TypeError.
     pub fn append(self: *StylePropertyMap, property: []const u8, _: []const Value) !void {
         const frame = self._proto._frame;
+        // A custom property name is case-sensitive, so this branch reads it as
+        // written.
         if (isCustomProperty(property)) return frame.js.fail(
             error.TypeError,
             "Failed to execute 'append' on 'StylePropertyMap': Appending to custom properties is not supported",
         );
-        if (!isKnownProperty(property)) return StylePropertyMapReadOnly.invalidProperty(frame, "append", "StylePropertyMap", property);
+        var buf: NameBuf = undefined;
+        if (!isKnownProperty(normalizeProperty(property, &buf))) return StylePropertyMapReadOnly.invalidProperty(frame, "append", "StylePropertyMap", property);
         return frame.js.fail(
             error.TypeError,
             "Failed to execute 'append' on 'StylePropertyMap': Property does not support multiple values",
@@ -3371,7 +3543,8 @@ pub const StylePropertyMap = struct {
 
     pub fn delete(self: *StylePropertyMap, property: []const u8, frame: *Frame) !void {
         // Measured: `delete` is the one member that spells it "property name".
-        if (!isKnownProperty(property)) return failFmt(
+        var buf: NameBuf = undefined;
+        if (!isKnownProperty(normalizeProperty(property, &buf))) return failFmt(
             frame,
             error.TypeError,
             "Failed to execute 'delete' on 'StylePropertyMap': Invalid property name: {s}",
@@ -3381,20 +3554,23 @@ pub const StylePropertyMap = struct {
     }
 
     pub fn set(self: *StylePropertyMap, property: []const u8, values: []const Value, frame: *Frame) !void {
-        if (!isKnownProperty(property)) return StylePropertyMapReadOnly.invalidProperty(frame, "set", "StylePropertyMap", property);
+        var buf: NameBuf = undefined;
+        const name = normalizeProperty(property, &buf);
+        if (!isKnownProperty(name)) return StylePropertyMapReadOnly.invalidProperty(frame, "set", "StylePropertyMap", property);
         // Measured: a missing value is "Invalid type for property", a TypeError.
         if (values.len != 1) return frame.js.fail(error.TypeError, invalid_type);
         const text = switch (values[0]) {
             .text => |t| t,
             .typed => |typed| try typed.toString(frame),
         };
-        try self.validateFor(property, values[0], frame);
+        try self.validateFor(name, values[0], frame);
         try self._proto._style.setProperty(property, text, null, frame);
     }
 
     /// Measured: `set('left', CSS.deg(3))` is "Invalid type for property". Only
     /// the numeric case can be checked without per-property grammars, which is
-    /// where Chrome's check lives.
+    /// where Chrome's check lives. Takes the normalised name: `set('WIDTH',
+    /// CSS.deg(3))` is the same type error as the lowercase spelling.
     fn validateFor(_: *StylePropertyMap, property: []const u8, value: Value, frame: *Frame) !void {
         const typed = switch (value) {
             .text => return,

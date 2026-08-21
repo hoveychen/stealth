@@ -1,0 +1,219 @@
+{
+  "engine": "lightpanda",
+  "pageUrl": "http://127.0.0.1:64372/",
+  "sitekey": "1x00000000000000000000AA",
+  "render": "implicit",
+  "settleMs": 6000,
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.674+dbce66dc9",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9227/"
+  },
+  "samples": [
+    {
+      "at": 1000,
+      "readyState": "complete",
+      "turnstile": "object",
+      "turnstileKeys": [
+        "_private",
+        "execute",
+        "getResponse",
+        "isExpired",
+        "ready",
+        "remove",
+        "render",
+        "reset"
+      ],
+      "renderReturned": null,
+      "apiScripts": 1,
+      "container": {
+        "childElementCount": 1,
+        "innerHTMLLength": 95,
+        "id": null,
+        "innerHTML": "<div><input type=\"hidden\" name=\"cf-turnstile-response\" id=\"cf-chl-widget-14u7e_response\"></div>"
+      },
+      "widgetIds": [
+        "cf-chl-widget-14u7e_response"
+      ],
+      "iframes": [],
+      "shadowIframes": [
+        {
+          "hostTag": "div",
+          "hostConnected": true,
+          "id": "cf-chl-widget-14u7e",
+          "srcAttr": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/av0/rch/14u7e/1x00000000000000000000AA/auto/fbE/new/normal?lang=auto",
+          "srcProp": null,
+          "sandbox": "allow-same-origin allow-scripts allow-popups",
+          "isConnected": true,
+          "contentWindow": false,
+          "contentDocumentUrl": null
+        }
+      ],
+      "shadowHTMLLength": [
+        471
+      ],
+      "inputs": [
+        {
+          "name": "cf-turnstile-response",
+          "type": "hidden",
+          "valueLength": 0
+        }
+      ],
+      "shadowRoots": [
+        "div"
+      ],
+      "bodyChildTags": [
+        "div",
+        "script"
+      ],
+      "docLength": 556
+    },
+    {
+      "at": 3000,
+      "readyState": "complete",
+      "turnstile": "object",
+      "turnstileKeys": [
+        "_private",
+        "execute",
+        "getResponse",
+        "isExpired",
+        "ready",
+        "remove",
+        "render",
+        "reset"
+      ],
+      "renderReturned": null,
+      "apiScripts": 1,
+      "container": {
+        "childElementCount": 1,
+        "innerHTMLLength": 95,
+        "id": null,
+        "innerHTML": "<div><input type=\"hidden\" name=\"cf-turnstile-response\" id=\"cf-chl-widget-14u7e_response\"></div>"
+      },
+      "widgetIds": [
+        "cf-chl-widget-14u7e_response"
+      ],
+      "iframes": [],
+      "shadowIframes": [
+        {
+          "hostTag": "div",
+          "hostConnected": true,
+          "id": "cf-chl-widget-14u7e",
+          "srcAttr": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/av0/rch/14u7e/1x00000000000000000000AA/auto/fbE/new/normal?lang=auto",
+          "srcProp": null,
+          "sandbox": "allow-same-origin allow-scripts allow-popups",
+          "isConnected": true,
+          "contentWindow": false,
+          "contentDocumentUrl": null
+        }
+      ],
+      "shadowHTMLLength": [
+        471
+      ],
+      "inputs": [
+        {
+          "name": "cf-turnstile-response",
+          "type": "hidden",
+          "valueLength": 0
+        }
+      ],
+      "shadowRoots": [
+        "div"
+      ],
+      "bodyChildTags": [
+        "div",
+        "script"
+      ],
+      "docLength": 556
+    },
+    {
+      "at": 6000,
+      "readyState": "complete",
+      "turnstile": "object",
+      "turnstileKeys": [
+        "_private",
+        "execute",
+        "getResponse",
+        "isExpired",
+        "ready",
+        "remove",
+        "render",
+        "reset"
+      ],
+      "renderReturned": null,
+      "apiScripts": 1,
+      "container": {
+        "childElementCount": 1,
+        "innerHTMLLength": 95,
+        "id": null,
+        "innerHTML": "<div><input type=\"hidden\" name=\"cf-turnstile-response\" id=\"cf-chl-widget-14u7e_response\"></div>"
+      },
+      "widgetIds": [
+        "cf-chl-widget-14u7e_response"
+      ],
+      "iframes": [],
+      "shadowIframes": [
+        {
+          "hostTag": "div",
+          "hostConnected": true,
+          "id": "cf-chl-widget-14u7e",
+          "srcAttr": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/av0/rch/14u7e/1x00000000000000000000AA/auto/fbE/new/normal?lang=auto",
+          "srcProp": null,
+          "sandbox": "allow-same-origin allow-scripts allow-popups",
+          "isConnected": true,
+          "contentWindow": false,
+          "contentDocumentUrl": null
+        }
+      ],
+      "shadowHTMLLength": [
+        471
+      ],
+      "inputs": [
+        {
+          "name": "cf-turnstile-response",
+          "type": "hidden",
+          "valueLength": 0
+        }
+      ],
+      "shadowRoots": [
+        "div"
+      ],
+      "bodyChildTags": [
+        "div",
+        "script"
+      ],
+      "docLength": 556
+    }
+  ],
+  "console": [],
+  "requests": [
+    "> http://127.0.0.1:64372/",
+    "> https://challenges.cloudflare.com/turnstile/v0/api.js",
+    "> https://challenges.cloudflare.com/turnstile/v0/g/aae2b9a1c261/api.js",
+    "> http://127.0.0.1:64372/favicon.ico"
+  ],
+  "engineLog": [
+    "\u001b[0;32mNOTE\u001b[0m  app : server running . . . . . . . . . . . . . . . . . . \u001b[0m[+0ms]",
+    "      address = 127.0.0.1:9227",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+215ms]",
+    "      ip = 127.0.0.1:64377",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+235ms]",
+    "      ip = 127.0.0.1:64378",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+239ms]",
+    "      ip = 127.0.0.1:64379",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+250ms]",
+    "      url = http://127.0.0.1:64372/",
+    "      method = GET",
+    "      reason = address_bar",
+    "      body = false",
+    "      type = root",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+265ms]",
+    "      src = http://127.0.0.1:64372/",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+363ms]",
+    "      src = https://challenges.cloudflare.com/turnstile/v0/api.js",
+    "      kind = javascript"
+  ]
+}
