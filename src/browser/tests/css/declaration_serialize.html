@@ -551,6 +551,14 @@ function withStyle(text) {
         values(initial).join(','));
     testing.expectEqual('', initial.style.getPropertyValue('border'));
 
+    // Dropping is not the same as holding the filler: `text-decoration`
+    // stores `currentcolor` on its colour and still answers `none`, because
+    // that is one of the values that component is left out at.
+    const dropped = withStyle('text-decoration: currentColor');
+    testing.expectEqual('initial,initial,initial,currentcolor', values(dropped).join(','));
+    testing.expectEqual('none', dropped.style.getPropertyValue('text-decoration'));
+    testing.expectEqual('none', String(dropped.attributeStyleMap.get('text-decoration')));
+
     // `column-rule` in the same state answers its width instead of nothing.
     const rule = withStyle('column-rule: currentColor');
     testing.expectEqual(3, rule.style.length);

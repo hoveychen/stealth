@@ -369,7 +369,7 @@ function boxForm(v) {
 // and Blink leaves an initial component out. Which value that is per slot is
 // forced by the readings rather than assumed, and a slot two rows disagree
 // about means the rule does not hold here.
-function serialisation(name, chosen, longhands, plain, empty) {
+function serialisation(name, chosen, longhands, plain) {
     const { kind, group, groups, blocked } = chosen;
     const at = (v, slot) => v[blocked ? slot * groups : slot];
     if (kind === 'alias') {
@@ -418,9 +418,16 @@ function serialisation(name, chosen, longhands, plain, empty) {
     const keptOf = (r, order) => order
         .filter((s) => !omit[s].has(at(r.v, s).toLowerCase()))
         .map((s) => at(r.v, s));
+    // What the shorthand answers once every component has been dropped, which
+    // is not the same as every longhand holding its filler: `text-decoration:
+    // currentColor` stores a colour and still answers `none`, because
+    // `currentcolor` is one of the values that slot is dropped at. Taken from
+    // the rows that reach it rather than reasoned about.
+    let empty = null;
     const check = (order) => {
         for (const [value, r] of plain) {
             const kept = keptOf(r, order);
+            if (kept.length === 0 && empty === null) empty = r.read;
             const want = kept.length ? kept.join(' ') : (empty ?? r.read);
             if (!sameValue(r.read, want)) {
                 return `serialises ${JSON.stringify(r.read)} for ${JSON.stringify(value)}` +
@@ -430,13 +437,25 @@ function serialisation(name, chosen, longhands, plain, empty) {
         return null;
     };
 
+    // The reading whose components all dropped also says what cssText writes
+    // instead when the shorthand cannot be written at all.
+    const record = () => {
+        chosen.omit = omit.map((set) => [...set].sort());
+        chosen.empty = empty;
+        if (empty === '') {
+            const row = plain.find(([, r]) => r.read === '');
+            chosen.fallback = [...row[1].cssText.matchAll(/(^|; )([-a-z]+):/g)].map((m) => m[2]);
+        }
+    };
+
     const identity = [...Array(group).keys()];
     let failure = check(identity);
     if (!failure) {
-        chosen.omit = omit.map((set) => [...set].sort());
+        record();
         chosen.order = [];
         return null;
     }
+    empty = null;
     // The order components come back in is not always the order the longhands
     // are stored in: `transition` stores its behaviour first and writes its
     // property first. No single reading shows the whole order -- each shows two
@@ -463,7 +482,7 @@ function serialisation(name, chosen, longhands, plain, empty) {
     if (derived.length !== group) return failure;
     failure = check(derived);
     if (failure) return failure;
-    chosen.omit = omit.map((set) => [...set].sort());
+    record();
     chosen.order = derived;
     return null;
 }
@@ -638,25 +657,9 @@ async function measure() {
             }
         }
 
-        // What the shorthand serialises to once every longhand holds its filler
-        // -- measured, because Blink is not consistent: `column-rule` answers
-        // its width (`medium`), `text-decoration` answers its line (`none`) and
-        // `border` answers nothing at all and falls back to sub-shorthands.
-        let empty = null, fallback = [];
         // A rename has no shorthand serialisation of its own: cssText names the
-        // longhand it renamed to, so there is no all-filler case to record.
+        // longhand it renamed to, so it has no fillers worth recording either.
         if (chosen && chosen.kind === 'alias') chosen.fill = new Array(width).fill('initial');
-        if (chosen && chosen.kind !== 'alias') {
-            const allFiller = plain.find(([, r]) =>
-                r.v.every((x, i) => sameValue(x, chosen.fill[i])));
-            if (allFiller) {
-                empty = allFiller[1].read;
-                if (empty === '') {
-                    fallback = [...allFiller[1].cssText.matchAll(/(^|; )([-a-z]+):/g)]
-                        .map((m) => m[2]);
-                }
-            }
-        }
 
         // Expanding is only half of it: `getPropertyValue('border-top')` and
         // cssText have to put the longhands back together, and a model that
@@ -664,7 +667,7 @@ async function measure() {
         // not expanding at all. So the rule is derived and checked here, and a
         // shorthand it fails on is demoted with the rest.
         if (chosen && chosen.kind !== 'unmodelled') {
-            const bad = serialisation(name, chosen, longhands, plain, empty);
+            const bad = serialisation(name, chosen, longhands, plain);
             if (bad) {
                 demoted.push([name, bad]);
                 chosen = null;
@@ -673,7 +676,7 @@ async function measure() {
 
         const wide = wideOrder.join(',') === longhands.join(',') ? [] : wideOrder;
         shorthands[name] = chosen
-            ? { ...chosen, longhands, wide, empty, fallback }
+            ? { empty: null, fallback: [], ...chosen, longhands, wide }
             : { kind: 'unmodelled', longhands, wide, group: 0, groups: 0, fill: [], empty: null, fallback: [] };
     }
 
