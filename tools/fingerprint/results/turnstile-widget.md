@@ -83,6 +83,14 @@ both. With both fixed it issues `new/normal` and fills `cf-turnstile-response`
 with a 21-character token at the same 3s mark Chrome does. Regression tests:
 `frames/src_attribute.html`, `frames/shadow_root_iframe.html`.
 
+One byte-level difference outlived that fix and has since been closed
+separately: the container's innerHTML stayed 95 characters where Chrome's went
+to 125, because `input.value = token` never reached the `value` content
+attribute. For `type=hidden` the value IDL attribute is in "default" mode, where
+the attribute *is* the value — see `probes/probe-input-value.js` and
+`element/html/input_value_mode.html`. Both engines now read
+95/0 → 125/21 on the same ladder.
+
 ## On the real interstitial: one step forward, door still shut
 
 The local page uses Cloudflare's always-pass test key, so a token there proves
