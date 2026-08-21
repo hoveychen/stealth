@@ -4580,15 +4580,42 @@ property, where Chrome runs its real per-property parser; `dump-css-keywords.mjs
 now measures that parser one (property, identifier) pair at a time into
 `src/browser/webapi/css/chrome_keywords.zig`.
 
-Two `probe-css7`-adjacent gaps stayed open on purpose, both recorded in
-`src/browser/tests/css/typed_om.html`: property names are matched
-case-sensitively here where Chrome is case-insensitive (that is
-`CSSStyleDeclaration.isKnownPropertyName`, which every style map member
-consults, not the Typed OM), and `parse` still accepts non-identifier values
-Chrome rejects (`parse('width', 'abc def')`), which would need the
-per-property grammars this engine does not have. Separately, and larger than
-either: an invalid inline value sticks here (`el.style.width = 'notalength'`
-reads back `notalength`) where Chrome drops it.
+One `probe-css7`-adjacent gap stays open on purpose, recorded in
+`src/browser/tests/css/typed_om.html`: `parse` still accepts non-identifier
+values Chrome rejects (`parse('width', 'abc def')`), which would need the
+per-property grammars this engine does not have. Separately, and larger: an
+invalid inline value sticks here (`el.style.width = 'notalength'` reads back
+`notalength`) where Chrome drops it.
+
+**Property-name case was the other one, and it is closed** (`probe-css12`,
+39 readings, both engines against the same host on Chrome 151). It had been
+written down as `CSSStyleDeclaration.isKnownPropertyName` being
+case-sensitive; measuring it says otherwise. The CSSOM half was already
+case-insensitive -- `getPropertyValue` / `setProperty` / `removeProperty` /
+`item` / `getComputedStyle().getPropertyValue` all normalise on entry -- and
+all 24 differing readings were in the Typed OM, which looked every name up as
+written: `attributeStyleMap.get('WIDTH')` threw `Invalid propertyName: WIDTH`
+where Chrome answers `CSSUnitValue|10px`. Ten members were affected
+(get / has / getAll / set / delete / append on both maps, plus
+`CSSStyleValue.parse` and `parseAll`), and each now normalises on entry.
+
+The gate was not the whole fix, which is why the note above was cheap to write
+and wrong to act on directly: `dispatch`, `StylePropertyMap.validateFor` and
+`append`'s custom-property branch all compare property names too, so
+normalising only `isKnownProperty` would have turned
+`computedStyleMap().get('DISPLAY')` from a throw into a bare `CSSStyleValue`
+where Chrome answers a `CSSKeywordValue` -- a silently wrong value in place of
+a loud wrong one. Two things came out of the same measurement: a custom
+property name stays case-sensitive (`--Case` and `--case` are two properties,
+on both engines), and `parseAll`'s messages name `parseAll` rather than
+borrowing the wording of the `parse` the two share.
+
+One reading still differs, and it is not about case: deleting a property that
+is not there reserialises the style attribute here (`--Case: 1px;`, trailing
+semicolon) where Chrome leaves the authored text alone. Same family as the
+declaration-side keyword normalisation this file records elsewhere
+(`cssText = 'WIDTH: 2px; Color: RED'` reads back `color: red` in Chrome,
+`color: RED` here).
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
