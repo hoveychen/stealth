@@ -40,10 +40,16 @@
     // so long as it's the correct data.
     testing.expectEqual(expected_urls.sort(), captures.map((c) => {return c.url}).sort());
     captures.forEach((c) => {
+      // postMessage is on the cross-origin safelist, so it answers either way.
+      testing.expectEqual('function', c.postMessage.value, { desc: c.url + ' postMessage' });
       if (c.url.includes(testing.BASE_URL)) {
-        testing.expectEqual(false, c.document_is_undefined);
+        // Same origin: nothing is denied.
+        testing.expectEqual('object', c.document.value, { desc: c.url + ' document' });
       } else {
-        testing.expectEqual(true, c.document_is_undefined);
+        // Cross origin: the read throws. It used to answer undefined here,
+        // which is the bug that broke Turnstile -- see frames/cross_origin_deny.html
+        // and the cross-origin section of tools/fingerprint/README.md.
+        testing.expectEqual('SecurityError', c.document.threw, { desc: c.url + ' document' });
       }
     });
   });

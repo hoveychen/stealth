@@ -1,0 +1,231 @@
+{
+ "href": "http://127.0.0.1:62290/",
+ "out": {
+  "committedBy": "load",
+  "sameOrigin": {
+   "how": "load",
+   "document": "object",
+   "ownNameCount": 1203,
+   "location": "object"
+  },
+  "proxy": {
+   "tag": "[object Window]",
+   "ownNames": "",
+   "ownSymbols": "",
+   "proto": "[object Window]",
+   "isFrozen": false,
+   "toStringTagDesc": "absent",
+   "hasInstanceDesc": "absent",
+   "then": "undefined"
+  },
+  "safelisted": {
+   "window": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "self": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "location": {
+    "in": true,
+    "type": "undefined",
+    "desc": "value"
+   },
+   "close": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   },
+   "closed": {
+    "in": true,
+    "type": "boolean",
+    "desc": "absent"
+   },
+   "focus": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   },
+   "blur": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   },
+   "frames": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "length": {
+    "in": true,
+    "type": "number",
+    "desc": "absent"
+   },
+   "top": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "opener": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "parent": {
+    "in": true,
+    "type": "object",
+    "desc": "absent"
+   },
+   "postMessage": {
+    "in": true,
+    "type": "function",
+    "desc": "absent"
+   }
+  },
+  "mustDeny": {
+   "document": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "navigator": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "localStorage": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "sessionStorage": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "name": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "origin": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "history": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "screen": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "performance": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "innerWidth": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "innerHeight": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "devicePixelRatio": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "alert": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "fetch": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "addEventListener": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "getComputedStyle": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "isSecureContext": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "crypto": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "indexedDB": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "caches": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "onload": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "onerror": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "eval": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "Function": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   }
+  },
+  "location": {
+   "tag": "undefined",
+   "ownNames": null,
+   "props": {}
+  },
+  "twoLevel": {
+   "w.postMessage.call": "function",
+   "w.location.replace.call": "THREW TypeError: Cannot read properties of undefined (reading 'replace')",
+   "w.location.href": "THREW TypeError: Cannot read properties of undefined (reading 'href')",
+   "w.close.call": "function",
+   "w.focus.call": "function",
+   "w.blur.call": "function"
+  },
+  "deniedThenCall": {
+   "w.document.call": "SecurityError: The operation is insecure",
+   "w.eval.call": "SecurityError: The operation is insecure",
+   "w.addEventListener.call": "SecurityError: The operation is insecure",
+   "w.getComputedStyle.call": "SecurityError: The operation is insecure",
+   "w.navigator.call": "SecurityError: The operation is insecure"
+  }
+ }
+}

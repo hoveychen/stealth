@@ -5648,6 +5648,108 @@ Cloudflare rotated something of their own. Two lessons, both cheap:
 * A remote party's opaque output is only an oracle for as long as they leave it
   alone, and they do not announce when they stop.
 
+### The cross-origin proxy answered undefined where Chrome throws — fixed, and it was not Turnstile's line
+
+**Read the last subsection before using this as the root cause.** The mechanism
+below reproduces Turnstile's exact message byte for byte and has been fixed, which
+is a real repair to a realm nothing here had measured. It is *not* what breaks
+Turnstile: with the fix in, the widget still prints the same TypeError.
+
+
+`reading 'call'` is reproduced, exactly, off a local page — and the mechanism is
+not a missing member on any prototype in the main realm. It is the **cross-origin
+window proxy denying a property by answering `undefined` instead of throwing**.
+
+The wire log from `antibot-sweep --only cf-scrapingcourse --trace` puts the error
+immediately after the widget's own document arrives, with no request ever coming
+*from* that document:
+
+```
+res 200  https://challenges.cloudflare.com/.../turnstile/f/av0/rch/<id>/.../new/normal   Document
+console.error   [Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call')
+console.warning [Cloudflare Turnstile] Cannot find Widget cf-chl-widget-<id>
+```
+
+That document is `challenges.cloudflare.com` against the site's own origin, so
+what `api.js` holds is the cross-origin proxy. `probes/probe-cross-origin-surface.js`
+reads a denied name off one and then reads `.call` on the result:
+
+| expression | headed Chrome 150 | this engine |
+|---|---|---|
+| `w.document.call` | `SecurityError: Failed to read a named property 'document' from 'Window': Blocked a frame…` | `TypeError: Cannot read properties of undefined (reading 'call')` |
+| `w.eval.call` | same SecurityError | same TypeError |
+| `w.addEventListener.call` | same SecurityError | same TypeError |
+| `w.getComputedStyle.call` | same SecurityError | same TypeError |
+| `w.navigator.call` | same SecurityError | same TypeError |
+
+Byte for byte the string Turnstile prints. All 24 must-deny names tested throw in
+Chrome and all 24 answer `undefined` here, so any `w.<denied>.call(...)` in the
+widget's code raises a `SecurityError` there — a throw the widget is written to
+expect and handle — and an *unhandled* `TypeError` here. Which is also why the
+message names `'call'` rather than the property: the denial happened one level up,
+silently.
+
+**And then the fix refuted it.** `CrossOriginWindow` now carries a
+`[[NonMasking]]` named-property interceptor that returns `error.SecurityError` for
+every name off the safelist, so the reproduction above is gone -- the five
+expressions raise `SecurityError` here now, in both directions (a page reading a
+cross-origin child and a child reading its cross-origin parent; Chrome throws on
+both, measured). `frames/cross_origin_deny.html` pins it.
+
+With that in, **Turnstile prints the identical TypeError**. Four alternating
+`--only cf-scrapingcourse` runs, patched against `main`, same sitting: all four
+`cf-challenge`, and the traced console line is unchanged down to the debug-info
+blob. So the mechanism is real, was worth fixing, and **is not the failing line**.
+The lesson is the narrow one: reproducing a remote party's exact error string from
+a plausible mechanism is not evidence that it is *their* mechanism. Only removing
+it and watching the string survive settles that, and it took one run to find out.
+
+Two exemptions in the interceptor, both because Chrome does not deny these:
+`then` (an own property whose value is undefined, so `await w` does not throw) and
+`location` (a real CrossOriginLocation there). This engine has no such Location
+object, so `location` keeps answering `undefined` -- wrong in the direction it was
+already wrong in, rather than newly throwing on a name a browser lets through.
+The message text still differs too: `SecurityError: The operation is insecure`
+here against Chrome's `Failed to read a named property 'document' from 'Window':
+Blocked a frame with origin … from accessing a cross-origin frame.`
+
+**Where that leaves the hunt.** `api.js` contains no literal `.<name>.call(` for
+any of the 138 missing members; it has `toString.call`, `valueOf.call` and 13 bare
+`X.call(` on minified locals, so the read is off a local whose provenance needs
+the obfuscated payload traced. The widget's own document is fetched (`Document`
+200) and nothing is ever requested *from* it, which says its scripts may not run
+here at all -- if so the failing read is in `api.js` in the parent realm, and the
+next measurement is which of those 13 locals is undefined at that point. A CDP
+`Debugger.scriptParsed` + `getScriptSource` capture with a `pause on caught
+exception` would name the frame outright; no tool in this directory does that yet.
+
+**The proxy differs in more than that.** Same probe, same sitting:
+
+| | headed Chrome 150 | this engine |
+|---|---|---|
+| `Object.prototype.toString.call(w)` | `[object Object]` | `[object Window]` |
+| own property names | 14 — `window self location closed frames length top opener parent blur close focus postMessage then` | **0** |
+| own symbols | `toStringTag`, `hasInstance`, `isConcatSpreadable` (all undefined-valued) | none |
+| `[[Prototype]]` | **null** | `Window.prototype` |
+| safelisted names | own properties on the proxy (`get` / `method`) | inherited, none own |
+| `location` | present, accessor, `[object Object]`, own names `href replace then` | **absent** |
+| `location.href` read | `SecurityError` | n/a — no `location` |
+| `location.replace` | callable method | n/a |
+| denied names | `SecurityError` on read, and on `in` | `undefined`, `in` false |
+
+Chrome's design is one exotic object: null prototype, the safelist as own
+properties, `then` present-but-undefined so awaiting it does not hang, and a
+hard throw for everything else. This engine's is an ordinary object with a
+`Window` prototype and no own properties at all. Fixing the throw is the part
+with a known consumer; the rest is the same shape question one level out.
+
+This also corrects a reading in `probes/probe-internal-globals.js`: it recorded
+Chrome's cross-origin brand as `[object Window]`, measured **synchronously after
+appendChild**, when the frame is still on its same-origin `about:blank`. That is
+the same-origin answer. The correction is noted in that file's header, and the
+`to_string_tag = "Window"` it produced on `CrossOriginWindow` is a placeholder,
+not Chrome's value — `Window.zig` says so at the declaration.
+
 ### What is left, and why it is a short list
 
 The two closed classes bound the remaining one tightly. "Cannot read properties
@@ -5664,18 +5766,45 @@ called `.call` on it. So:
   message, even though they are still worth having.
 
 What is left is `X.y.call(...)` where **`y` is a missing member** -- most likely a
-method, since that is what gets `.call`ed directly. `probe-descriptor-kind` cannot
-see it: it reduces properties that exist, and a name that is absent has no kind.
-The probe that would is a set difference -- Chrome's
-`Object.getOwnPropertyNames` for each of the 130 prototypes minus ours -- and it
-has not been written yet. That is the next measurement, not another round of
-converting properties.
+method, since that is what gets `.call`ed directly.
 
-One caveat on where to look: the TypeError follows the widget document being
-fetched as a `type=Document`, so the failing read may be happening in the
-**iframe's realm** rather than the main one. A cross-origin child realm being
-thinner than the top-level one would not show up in any probe in this directory,
-all of which measure the main realm.
+**That set difference needed no new probe.** It was recorded as the next
+measurement to take, but `probe-descriptor-kind`'s own readings already carry it:
+`out.protos[iface]` is a name → kind map of every own property, so Chrome's keys
+minus ours *is* the missing-member list. Subtracting the two stored readings gives
+**138 members Chrome's 132 prototypes carry and ours do not** — 53 accessors, 44
+getters and **41 methods**, the last being the `.call`-able ones:
+
+```
+Blob.textStream                     HTMLInputElement.stepDown           Range.expand
+CustomElementRegistry.getName       HTMLInputElement.stepUp             Request.textStream
+CustomElementRegistry.initialize    Headers.getSetCookie                Response.textStream
+EventTarget.when                    IDBFactory.databases                ScreenOrientation.lock
+FontFaceSet.clear                   MessageEvent.initMessageEvent       ScreenOrientation.unlock
+FontFaceSet.delete                  NamedNodeMap.getNamedItemNS         Selection.getComposedRanges
+FontFaceSet.entries                 NamedNodeMap.removeNamedItemNS      ShadowRoot.elementFromPoint
+FontFaceSet.forEach                 NamedNodeMap.setNamedItemNS         ShadowRoot.elementsFromPoint
+FontFaceSet.has                     PointerEvent.getCoalescedEvents     ShadowRoot.getAnimations
+FontFaceSet.keys                    PointerEvent.getPredictedEvents     ShadowRoot.getSelection
+FontFaceSet.values                  HTMLIFrameElement.getSVGDocument    ShadowRoot.setHTML
+HTMLFormElement.reset               HTMLImageElement.decode             SubtleCrypto.unwrapKey
+HTMLInputElement.setRangeText       HTMLInputElement.showPicker         SubtleCrypto.wrapKey
+                                                                        XMLHttpRequest.setAttributionReporting
+                                                                        XMLHttpRequest.setPrivateToken
+```
+
+The same subtraction says the readings are current: **0 wrong kinds**, which is
+what `prd/descriptor-kind-accessors` left behind.
+
+None of the 41 turned out to be the cause. Turnstile's `api.js` contains no
+literal `.<name>.call(` for any of them -- only `toString.call` and `valueOf.call`
+-- and the section above reproduces the exact message from a different mechanism
+entirely. The 41 are still worth having; they are just not this bug.
+
+The caveat about *where* to look is the one that paid off: the TypeError follows
+the widget document being fetched as a `type=Document`, so the failing read is in
+the **cross-origin frame's realm** rather than the main one, which no probe in
+this directory measured until `probe-cross-origin-surface`. See the section above.
 
 ### The 97 missing accessors, sorted by what it would take to add each
 
@@ -5868,11 +5997,64 @@ window surface while their implementations stayed for internal callers, and
 `Snapshot`'s `[Global]` flattening stopped copying `EventTarget`'s three members
 onto the global. That branch reached the same 13-and-83 split independently from
 its own headed run, which is the reason to trust either reading. The 1167 above
-is the pre-merge count; the surface is **1208** now — 1161 after that merge, plus
+is the pre-merge count; the surface was **1208** at that point — 1161 after that merge, plus
 the 47 names `prd/window-surface-shells` landed — so the own-name excess is 7,
 not 13, and the three counts that moved with it are in the secure-context table
 below. The other direction moved with it: the 83 is **36** now, because those 47
 came out of it.
+
+**The remaining five are gone too** (`prd/window-surface-internals`), which takes
+the own-name excess from 7 to **2** — only the WebMCP pair, kept on purpose. All
+five became `no_interface_object`, and that flag alone would have been half a fix:
+it takes the name off the window and *keeps* the `Symbol.toStringTag`, and every
+one of the five has a different brand in Chrome than the global name we were
+exposing. So each also carries an explicit `to_string_tag`. Measured on a headed
+Chrome 150, same page and port — reading in
+`results/probes/probe-internal-globals.{chrome,lightpanda}.json`:
+
+| our old global | Chrome's global | Chrome's brand |
+|---|---|---|
+| `WEBGL_debug_renderer_info` | undefined | `[object WebGLDebugRendererInfo]` |
+| `WEBGL_lose_context` | undefined | `[object WebGLLoseContext]` |
+| `ReadableStreamAsyncIterator` | undefined | `[object ReadableStream AsyncIterator]` (note the space) |
+| `SVGGenericElement` | undefined | `[object SVGElement]` |
+| `CrossOriginWindow` | undefined | `[object Window]` |
+
+The last two looked like they needed a name a real interface already holds, which
+would have been a registry conflict. They did not: `Meta.to_string_tag` is
+independent of `Meta.name`, so the brand can say `SVGElement` while the class
+stays `SVGGenericElement` internally. Dropping the interface object also drops the
+`constructor` back-reference — which is the other half of the same tell, since
+Chrome's extension prototypes own no `constructor` either, and it is what makes an
+unknown SVG tag's `constructor` resolve up the chain to `SVGElement` the way it
+does there. What is *not* fixed is prototype identity:
+`Object.getPrototypeOf(unknownSvgEl) === SVGElement.prototype` is true in Chrome
+and false here, because the class is still its own. Three of the five are reachable
+from a worker (`WebGLRenderingContext.zig` and `ReadableStream.zig` are both in
+`worker_common_apis`), so the worker realm dropped 3 and the window realm 5.
+
+One finding fell out of the same probe that no globals diff could ever show:
+`gl.getExtension('WEBGL_debug_shaders')` answers an object in Chrome (brand
+`[object WebGLDebugShaders]`, one member `getTranslatedShaderSource`) and
+`undefined` here. Chrome does not name that extension on the window either, so it
+is invisible to a name-set comparison — a missing extension, not a surface excess.
+
+**The commercial guards did not notice.** `antibot-sweep.mjs --fresh` was run
+twice back to back on one address, the patched binary against the pre-change one
+from `main` — the same-sitting control the section above insists on. First pass
+read 11/15 for the patch and 10/15 for the control, the single difference being
+`dd-hermes`. Six alternating re-runs of that one station (`--only dd-hermes`) then
+answered `datadome-challenge` on **both** binaries every time: the flip was
+DataDome noise, not the fix. `cf-chatgpt` differed too and was also noise — the
+control's `Application Error!` at 200 nodes=39 is OpenAI's own error page, and
+four alternating re-runs put the real page on both sides. So the honest reading is
+**10/15 either way, the same five stations failing**: `cf-scrapingcourse`,
+`cf-nopecha`, `cf-zeroclover`, `dd-g2`, `dd-hermes`. Removing five global-name
+tells is measurable on the surface (7 excess names → 2) and worth nothing at the
+door, which is consistent with where the Cloudflare failure actually lives: the
+`reading 'call'` TypeError is a *missing member* being read off some prototype,
+not a name Chrome lacks. Raw readings in
+`results/antibot-lp-{new,control}.json`.
 
 **The other direction is still the larger one: 36 globals headed Chrome has and
 we do not** (`CloseWatcher`, `Temporal`, `Observable`, `PressureObserver`, the
@@ -5895,7 +6077,7 @@ EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours was
 Object.prototype(12)`, and the extra intermediate is where the three duplicated
 `EventTarget` members came from. The duplicates are gone (the flattening skips
 that level now, so the global reads `addEventListener` through the chain, as
-Chrome's does) and the head of the chain is 1208; the extra level itself is
+Chrome's does) and the head of the chain is 1203; the extra level itself is
 still there, so this is still a difference a detector can walk.
 
 ## The 234 globals that were not behind the secure-context gate (2026-08-20)
@@ -5912,25 +6094,29 @@ Not https-vs-http, which also changes the scheme; not a different port or path.
 Same `python3 -m http.server`, same port, same bytes — only the host differs, so
 the only variable is whether that host is loopback:
 
-|                                   | headed Chrome 151 | this engine, before | gate landed | now |
-|-----------------------------------|------:|------:|------:|------:|
-| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 | 1208 |
-| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |  973 |
-| names behind the gate               |  252 |    0 |  234 |  235 |
-| worker realm, secure owner          |  336 |  232 |  233 |  233 |
-| worker realm, insecure owner        |  243 |  232 |  222 |  222 |
+|                                   | headed Chrome 151 | this engine, before | gate landed | shells | now |
+|-----------------------------------|------:|------:|------:|------:|------:|
+| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 | 1208 | 1203 |
+| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |  973 |  968 |
+| names behind the gate               |  252 |    0 |  234 |  235 |  235 |
+| worker realm, secure owner          |  336 |  232 |  233 |  233 |  230 |
+| worker realm, insecure owner        |  243 |  232 |  222 |  222 |  219 |
 
 The "gate landed" column is the gate on its own, measured before
 `prd/window-surface-extras` took six names off the surface (both totals moved by
-those same six, none of which is `[SecureContext]`). The "now" column is after
+those same six, none of which is `[SecureContext]`). The "shells" column is after
 `prd/window-surface-shells` added 47: the secure surface takes all 47 and the
 insecure one 46, because exactly one of them — `ClipboardChangeEvent` — is
 `[SecureContext]` in Chrome, which is why the gated count went 234 → 235. The
-worker realm holds still at the *frame* level because only three of the 47 exist
+worker realm held still at the *frame* level because only three of the 47 exist
 there at all (`ReportBody`, `Origin`, `WebGLObject`), and those moved
-`worker/secure_context.html` from 230 to **233**. The suite pins every one of
-these: `frames/secure_context_gate.html` asserts **1208** secure / **973**
-insecure and **222** for a worker with an insecure owner.
+`worker/secure_context.html` from 230 to 233. The "now" column is
+`prd/window-surface-internals` hiding the last five interface objects Chrome names
+nowhere: −5 on both frame totals (none of the five is `[SecureContext]`, so the
+gated count does not move) and −3 in both worker totals, the three of the five a
+worker can reach. The suite pins every one of these:
+`frames/secure_context_gate.html` asserts **1203** secure / **968** insecure and
+**219** for a worker with an insecure owner.
 
 252 names in Chrome. 235 of them are names this engine has, and before the gate
 it leaked all of them on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
@@ -5946,9 +6132,10 @@ they belong to the 36-missing count above, not here. It was 18 until
 After the gate: **0 of Chrome's 252 still leak, and 0 names are gated that
 Chrome does not gate** (re-measured on all four readings after the 47 landed).
 The residual difference is the same one the section above records, which is the
-cross-check that the secure surface was not disturbed: 7 extra / 36 missing on a
-trustworthy origin, 7 extra / 19 missing on an untrustworthy one (the 17 gated
-names we lack stop counting as missing once Chrome hides them too).
+cross-check that the secure surface was not disturbed: 2 extra / 36 missing on a
+trustworthy origin, 2 extra / 19 missing on an untrustworthy one (the 17 gated
+names we lack stop counting as missing once Chrome hides them too). It was 7 extra
+on both until `prd/window-surface-internals` hid the five.
 
 **Two things the gate turned up that the value of `isSecureContext` had been
 getting wrong.**
@@ -5996,7 +6183,7 @@ The gap: a frame that **never navigates** keeps the full surface, because the
 gate hangs off document commit. In practice that is the bare `about:blank` CDP
 target — no page script observes it, and every document that loads content
 commits. So a reading of this engine taken on `about:blank` still reports the
-full ungated surface (1167 when this was written, 1208 now); pass a url. Gating at frame init instead would strip the surface off a root
+full ungated surface (1167 when this was written, 1203 now); pass a url. Gating at frame init instead would strip the surface off a root
 frame, which is born at `about:blank` and navigates to its real URL inside the
 same context.
 

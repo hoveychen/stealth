@@ -1,7 +1,13 @@
 <!DOCTYPE html>
 <script>
+  // Same as frame1.html, through `window.top` instead of `window.parent`: a
+  // denied read on a cross-origin window throws whichever handle reaches it.
+  function probe(fn) {
+    try { return { value: String(fn()) }; } catch (e) { return { threw: e.name }; }
+  }
   window.top.postMessage({
     url: location.toString(),
-    document_is_undefined: window.top.document === undefined,
+    document: probe(() => typeof window.top.document),
+    postMessage: probe(() => typeof window.top.postMessage),
   }, '*')
 </script>

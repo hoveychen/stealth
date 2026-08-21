@@ -43,6 +43,17 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "SVGGenericElement";
+
+        // Chrome has no interface for an unknown SVG tag: it lands on SVGElement
+        // itself, so there is no global name to expose and the brand is plain
+        // '[object SVGElement]' (measured on a headed Chrome 150 with
+        // createElementNS(svgns, 'notarealtag')). Dropping the interface object
+        // also drops the `constructor` back-reference, which makes
+        // el.constructor resolve up the chain to SVGElement the way it does
+        // there. The prototype object stays this engine's own.
+        pub const no_interface_object = true;
+        pub const to_string_tag = "SVGElement";
+
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };

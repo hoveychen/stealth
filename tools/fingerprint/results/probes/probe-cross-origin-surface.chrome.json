@@ -1,0 +1,312 @@
+{
+ "href": "http://127.0.0.1:8777/",
+ "out": {
+  "committedBy": "load",
+  "sameOrigin": {
+   "how": "load",
+   "document": "object",
+   "ownNameCount": 1237,
+   "location": "object"
+  },
+  "proxy": {
+   "tag": "[object Object]",
+   "ownNames": "window self location closed frames length top opener parent blur close focus postMessage then",
+   "ownSymbols": "Symbol(Symbol.toStringTag) Symbol(Symbol.hasInstance) Symbol(Symbol.isConcatSpreadable)",
+   "proto": "null",
+   "isFrozen": false,
+   "toStringTagDesc": {
+    "value": "undefined",
+    "valueType": "undefined",
+    "get": false,
+    "writable": false,
+    "enumerable": false,
+    "configurable": true
+   },
+   "hasInstanceDesc": {
+    "valueType": "undefined",
+    "get": false
+   },
+   "then": "undefined"
+  },
+  "safelisted": {
+   "window": {
+    "in": true,
+    "type": "object",
+    "desc": "get"
+   },
+   "self": {
+    "in": true,
+    "type": "object",
+    "desc": "get"
+   },
+   "location": {
+    "in": true,
+    "type": "object",
+    "desc": "accessor"
+   },
+   "close": {
+    "in": true,
+    "type": "function",
+    "desc": "method"
+   },
+   "closed": {
+    "in": true,
+    "type": "boolean",
+    "desc": "get"
+   },
+   "focus": {
+    "in": true,
+    "type": "function",
+    "desc": "method"
+   },
+   "blur": {
+    "in": true,
+    "type": "function",
+    "desc": "method"
+   },
+   "frames": {
+    "in": true,
+    "type": "object",
+    "desc": "get"
+   },
+   "length": {
+    "in": true,
+    "type": "number",
+    "desc": "get"
+   },
+   "top": {
+    "in": true,
+    "type": "object",
+    "desc": "get"
+   },
+   "opener": {
+    "in": true,
+    "type": "object",
+    "desc": "get"
+   },
+   "parent": {
+    "in": true,
+    "type": "object",
+    "desc": "get"
+   },
+   "postMessage": {
+    "in": true,
+    "type": "function",
+    "desc": "method"
+   }
+  },
+  "mustDeny": {
+   "document": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "navigator": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "localStorage": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "sessionStorage": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "name": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "origin": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "history": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "screen": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "performance": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "innerWidth": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "innerHeight": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "devicePixelRatio": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "alert": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "fetch": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "addEventListener": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "getComputedStyle": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "isSecureContext": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "crypto": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "indexedDB": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "caches": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "onload": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "onerror": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "eval": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   },
+   "Function": {
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
+   }
+  },
+  "location": {
+   "tag": "[object Object]",
+   "ownNames": "href replace then",
+   "props": {
+    "href": {
+     "in": true,
+     "type": "THREW SecurityError",
+     "desc": "value"
+    },
+    "replace": {
+     "in": true,
+     "type": "function",
+     "desc": "method"
+    },
+    "ancestorOrigins": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "protocol": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "host": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "hostname": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "port": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "pathname": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "search": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "hash": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "origin": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "assign": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "reload": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    },
+    "toString": {
+     "in": "THREW SecurityError",
+     "type": "THREW SecurityError",
+     "desc": "THREW SecurityError"
+    }
+   }
+  },
+  "twoLevel": {
+   "w.postMessage.call": "function",
+   "w.location.replace.call": "function",
+   "w.location.href": "THREW SecurityError: Failed to read a named property 'href' from 'Location': Blocked a frame with origin \"http://127.0.0.1:8777\" from accessing a cross-origin frame.",
+   "w.close.call": "function",
+   "w.focus.call": "function",
+   "w.blur.call": "function"
+  },
+  "deniedThenCall": {
+   "w.document.call": "SecurityError: Failed to read a named property 'document' from 'Window': Blocked a frame with origin \"http://127.0.0.1:8777\" from accessing a cross-origin frame.",
+   "w.eval.call": "SecurityError: Failed to read a named property 'eval' from 'Window': Blocked a frame with origin \"http://127.0.0.1:8777\" from accessing a cross-origin frame.",
+   "w.addEventListener.call": "SecurityError: Failed to read a named property 'addEventListener' from 'Window': Blocked a frame with origin \"http://127.0.0.1:8777\" from accessing a cross-origin frame.",
+   "w.getComputedStyle.call": "SecurityError: Failed to read a named property 'getComputedStyle' from 'Window': Blocked a frame with origin \"http://127.0.0.1:8777\" from accessing a cross-origin frame.",
+   "w.navigator.call": "SecurityError: Failed to read a named property 'navigator' from 'Window': Blocked a frame with origin \"http://127.0.0.1:8777\" from accessing a cross-origin frame."
+  }
+ }
+}

@@ -41,6 +41,14 @@ both must satisfy event.source === iframe.contentWindow.
     testing.expectFalse(cross.event.source === null);
     testing.expectTrue(cross.event.source === cross.iframe.contentWindow);
 
+    // The cross-origin proxy is branded '[object Window]', the same as a
+    // same-origin one, and nothing on the global names its interface. Measured
+    // on a headed Chrome 150 -- reading in
+    // tools/fingerprint/results/probes/probe-internal-globals.chrome.json.
+    testing.expectEqual('[object Window]', Object.prototype.toString.call(cross.iframe.contentWindow));
+    testing.expectEqual('[object Window]', Object.prototype.toString.call(window));
+    testing.expectEqual(undefined, globalThis.CrossOriginWindow);
+
     testing.expectEqual('hello', same.event.data);
     testing.expectEqual(testing.ORIGIN, same.event.origin);
     testing.expectTrue(same.event.source === same.iframe.contentWindow);
