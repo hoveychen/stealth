@@ -571,12 +571,12 @@ fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []cons
         return value;
     }
 
-    // A property taking an arbitrary `<custom-ident>` has no keyword to
-    // canonicalise: `font-family: MyOwnFont` and `grid-area: MyArea` keep their
-    // capitals. Units and function names are still rewritten there, since
-    // neither shape can be a custom ident.
+    // A property taking an arbitrary `<custom-ident>` still has keywords --
+    // `font-family` takes `MyOwnFont` and `sans-serif` both -- so it gets the
+    // table measured by re-casing rather than by acceptance. Everything the
+    // measurement did not name there is a custom ident and keeps its capitals.
     const keywords: ?[]const []const u8 = if (chrome_keywords.any_identifier.has(property_name))
-        null
+        chrome_value_case.any_identifier_keywords.get(property_name)
     else
         chrome_keywords.keywords.get(property_name);
 
@@ -1723,6 +1723,8 @@ test "normalizePropertyValue: value case" {
         // Initial` is `initial`, where `font-family: MyFont, Initial` is not a
         // list with a lowercased tail -- Chrome drops the declaration whole.
         .{ "font-family", "Initial", "initial" },
+        .{ "font-family", "SANS-SERIF", "sans-serif" },
+        .{ "font-family", "MyOwnFont", "MyOwnFont" },
         .{ "font-family", "MyFont, Initial", "MyFont, Initial" },
         // A keyword the property is not measured as taking is left alone.
         // (Chrome drops this declaration; this engine keeps invalid values, a

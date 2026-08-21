@@ -175,3 +175,41 @@ pub const verbatim_functions = [_][]const u8{
     "env",
     "var",
 };
+
+// The keywords of a property that also takes an arbitrary <custom-ident>.
+// chrome_keywords.zig has to leave those properties' keyword lists empty --
+// Chrome accepts every identifier there, so acceptance says nothing -- but it
+// still re-cases the real keywords, and that is the signal: `font-family:
+// SANS-SERIF` answers `sans-serif` where `font-family: MyOwnFont` keeps its
+// capitals. 218 keywords over 29 of the 29 properties.
+pub const any_identifier_keywords = std.StaticStringMap([]const []const u8).initComptime(.{
+    .{ "-webkit-animation", &.{ "alternate", "alternate-reverse", "auto", "backwards", "both", "ease", "ease-in", "ease-in-out", "ease-out", "forwards", "infinite", "linear", "none", "normal", "paused", "reverse", "running", "step-end", "step-start" } },
+    .{ "-webkit-animation-name", &.{"none"} },
+    .{ "-webkit-transition", &.{ "all", "allow-discrete", "background", "border", "bottom", "clear", "clip", "color", "contain", "content", "ease-in", "ease-in-out", "ease-out", "fill", "fill-opacity", "flex", "grid", "height", "inline-size", "inset", "left", "linear", "none", "overlay", "padding", "page", "position", "right", "size", "step-end", "step-start", "stroke", "stroke-opacity", "top", "width", "x", "y", "zoom" } },
+    .{ "-webkit-transition-property", &.{ "all", "background", "border", "bottom", "clear", "clip", "color", "contain", "content", "fill", "fill-opacity", "flex", "grid", "height", "inline-size", "inset", "left", "none", "overlay", "padding", "page", "position", "right", "size", "stroke", "stroke-opacity", "top", "width", "x", "y", "zoom" } },
+    .{ "animation", &.{ "alternate", "alternate-reverse", "auto", "backwards", "both", "ease", "ease-in", "ease-in-out", "ease-out", "forwards", "infinite", "linear", "none", "normal", "paused", "reverse", "running", "step-end", "step-start" } },
+    .{ "animation-name", &.{"none"} },
+    .{ "color-scheme", &.{ "dark", "light", "normal" } },
+    .{ "container", &.{"none"} },
+    .{ "container-name", &.{"none"} },
+    .{ "counter-increment", &.{"none"} },
+    .{ "counter-reset", &.{"none"} },
+    .{ "counter-set", &.{"none"} },
+    .{ "font-family", &.{ "cursive", "fantasy", "math", "monospace", "sans-serif", "serif", "system-ui" } },
+    .{ "grid-area", &.{"auto"} },
+    .{ "grid-column", &.{"auto"} },
+    .{ "grid-column-end", &.{"auto"} },
+    .{ "grid-column-start", &.{"auto"} },
+    .{ "grid-row", &.{"auto"} },
+    .{ "grid-row-end", &.{"auto"} },
+    .{ "grid-row-start", &.{"auto"} },
+    .{ "list-style", &.{ "circle", "inside", "none", "outside", "square" } },
+    .{ "list-style-type", &.{ "circle", "none", "square" } },
+    .{ "page", &.{"auto"} },
+    .{ "transition", &.{ "all", "allow-discrete", "background", "border", "bottom", "clear", "clip", "color", "contain", "content", "ease-in", "ease-in-out", "ease-out", "fill", "fill-opacity", "flex", "grid", "height", "inline-size", "inset", "left", "linear", "none", "overlay", "padding", "page", "position", "right", "size", "step-end", "step-start", "stroke", "stroke-opacity", "top", "width", "x", "y", "zoom" } },
+    .{ "transition-property", &.{ "all", "background", "border", "bottom", "clear", "clip", "color", "contain", "content", "fill", "fill-opacity", "flex", "grid", "height", "inline-size", "inset", "left", "none", "overlay", "padding", "page", "position", "right", "size", "stroke", "stroke-opacity", "top", "width", "x", "y", "zoom" } },
+    .{ "view-transition-class", &.{"none"} },
+    .{ "view-transition-group", &.{ "contain", "nearest", "normal" } },
+    .{ "view-transition-name", &.{ "match-element", "none" } },
+    .{ "will-change", &.{ "auto", "contents", "scroll-position" } },
+});

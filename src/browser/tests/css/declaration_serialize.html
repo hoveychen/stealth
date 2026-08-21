@@ -141,6 +141,9 @@ function withStyle(text) {
     // A <custom-ident>: the property takes any identifier, so none of them is
     // a keyword to canonicalise.
     testing.expectEqual('font-family: MyOwnFont;', round('font-family: MyOwnFont'));
+    // ... but a generic family is a keyword even there, and it is measured by
+    // the re-casing rather than by acceptance: Chrome accepts both.
+    testing.expectEqual('font-family: sans-serif;', round('font-family: SANS-SERIF'));
     testing.expectEqual('animation-name: MyAnim;', round('animation-name: MyAnim'));
     testing.expectEqual('grid-area: MyArea;', round('grid-area: MyArea'));
     testing.expectEqual('counter-reset: MyCounter 3;', round('counter-reset: MyCounter 3'));

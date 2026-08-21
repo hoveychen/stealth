@@ -114,6 +114,14 @@ const FN_ARGS = [
 ];
 
 const PAGE = 'data:text/html,<!doctype html><title>value case</title><body>';
+const keywordList = (names) =>
+    [...new Set(names)].filter((k) => !CSS_WIDE.includes(k)).sort();
+// zig fmt writes a one-element list without the inner spaces, and the generated
+// file has to come out of here already formatted.
+const zigList = (names) => names.length === 1
+    ? `&.{${zigString(names[0])}}`
+    : `&.{ ${names.map(zigString).join(', ')} }`;
+const CSS_WIDE = ['inherit', 'initial', 'revert', 'revert-layer', 'unset'];
 const zigString = (s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 // Every function name appearing in any mdn-data value syntax. The keyword
@@ -143,7 +151,40 @@ async function candidatePool() {
     return [...pool].sort();
 }
 
-const PROBE = (units, functions, hosts, args) => `(() => {
+// Every bare identifier in any value syntax, the same pool the keyword
+// generator draws from -- and the same ceiling caveat.
+async function identifierPool() {
+    const base = `https://unpkg.com/mdn-data@${MDN_DATA}/css/`;
+    const pool = new Set();
+    for (const file of MDN_FILES) {
+        const res = await fetch(base + file);
+        if (!res.ok) throw new Error(`${base}${file}: HTTP ${res.status}`);
+        for (const entry of Object.values(await res.json())) {
+            if (typeof entry?.syntax !== 'string') continue;
+            const bare = entry.syntax
+                .replace(/<[^>]*>/g, ' ')
+                .replace(/[a-zA-Z-]+\s*\(/g, ' ');
+            for (const m of bare.matchAll(/[a-zA-Z][a-zA-Z0-9-]*/g)) pool.add(m[0]);
+        }
+    }
+    return [...pool].sort();
+}
+
+// The properties chrome_keywords.zig marks as taking an arbitrary
+// <custom-ident>, read out of the table rather than re-measured: they are
+// exactly the properties whose keyword list that table has to leave empty, so
+// they are exactly the ones needing this one. Both tables come off the same
+// Chrome, so regenerate that one first if it looks stale.
+async function anyIdentifierProperties() {
+    const source = await fs.readFile(
+        path.join(repo, 'src/browser/webapi/css/chrome_keywords.zig'), 'utf8');
+    const start = source.indexOf('pub const any_identifier');
+    if (start < 0) throw new Error('chrome_keywords.zig has no any_identifier table');
+    const end = source.indexOf('});', start);
+    return [...source.slice(start, end).matchAll(/\.\{ "([^"]+)", \{\} \}/g)].map((m) => m[1]);
+}
+
+const PROBE = (units, functions, hosts, args, anyIdentProperties, identCandidates) => `(() => {
   const el = document.createElement('div');
   document.body.appendChild(el);
   const set = (prop, value) => {
@@ -198,7 +239,35 @@ const PROBE = (units, functions, hosts, args) => `(() => {
     verbatim[fn] = { written: written, readback: set('width', written) };
   }
 
-  return JSON.stringify({ userAgent: navigator.userAgent, units, functions, verbatim });
+  // A property that accepts an arbitrary <custom-ident> still has keywords --
+  // \`font-family\` takes \`MyOwnFont\` *and* \`sans-serif\` -- and the keyword table
+  // cannot tell them apart, because acceptance is not the signal there: Chrome
+  // accepts both. Re-casing is the signal. Whatever comes back in a different
+  // case than it went in was a keyword.
+  // A whole identifier, not one buried in a dimension (the \`s\` of \`0s\`) or a
+  // function name (the \`ease\` of \`ease-in(\`).
+  const identSpelled = (readback, want) => {
+    for (const m of readback.matchAll(/[a-zA-Z][a-zA-Z0-9-]*/g)) {
+      const before = m.index > 0 ? readback[m.index - 1] : ' ';
+      const after = readback[m.index + m[0].length] || ' ';
+      if (/[a-zA-Z0-9_#-]/.test(before) || after === '(') continue;
+      if (m[0].toLowerCase() === want.toLowerCase()) return m[0];
+    }
+    return null;
+  };
+  const idents = {};
+  for (const prop of ${JSON.stringify(anyIdentProperties)}) {
+    const hits = [];
+    for (const cand of ${JSON.stringify(identCandidates)}) {
+      const readback = set(prop, cand.toUpperCase());
+      if (!readback) continue;
+      const got = identSpelled(readback, cand);
+      if (got && got !== cand.toUpperCase()) hits.push(got);
+    }
+    if (hits.length) idents[prop] = hits;
+  }
+
+  return JSON.stringify({ userAgent: navigator.userAgent, units, functions, verbatim, idents });
 })()`;
 
 const prof = await fs.mkdtemp(path.join(os.tmpdir(), 'cssvc-'));
@@ -213,7 +282,11 @@ proc.stderr.pipe(log);
 
 try {
     const candidates = await candidatePool();
+    const identCandidates = await identifierPool();
+    const anyIdent = await anyIdentifierProperties();
     process.stderr.write(`candidate functions: ${candidates.length}\n`);
+    process.stderr.write(`any-identifier properties: ${anyIdent.length}` +
+        ` against ${identCandidates.length} candidate identifiers\n`);
 
     await sleep(1600);
     const cdp = await Cdp.connect(`http://127.0.0.1:${PORT}`);
@@ -222,10 +295,11 @@ try {
     await sleep(1200);
 
     const hosts = UNIT_HOSTS.map(([prop, wrap]) => [prop, wrap('%V%')]);
-    const measured = JSON.parse(await evaluate(cdp, sessionId, PROBE(UNITS, candidates, hosts, FN_ARGS)));
+    const measured = JSON.parse(await evaluate(cdp, sessionId,
+        PROBE(UNITS, candidates, hosts, FN_ARGS, anyIdent, identCandidates)));
     cdp.close();
 
-    const { userAgent, units, functions, verbatim } = measured;
+    const { userAgent, units, functions, verbatim, idents } = measured;
 
     // A function Chrome echoed back in the case it was written in is one it does
     // not re-case at all; the measurement above says whether the rest of the
@@ -251,6 +325,14 @@ try {
     process.stderr.write(`units measured: ${unitNames.length}/${UNITS.length}\n`);
     process.stderr.write(`functions measured: ${Object.keys(functions).length}/${candidates.length}` +
         ` (${frozen.length} kept verbatim)\n`);
+    // A CSS-wide keyword is only one when it is the whole value, so it is
+    // matched separately and does not belong in a per-property list.
+    for (const prop of Object.keys(idents)) {
+        if (!keywordList(idents[prop]).length) delete idents[prop];
+    }
+    const identHits = Object.values(idents).reduce((n, ks) => n + keywordList(ks).length, 0);
+    process.stderr.write(`any-identifier keywords: ${identHits}` +
+        ` over ${Object.keys(idents).length} properties\n`);
 
     const lines = [
         '// GENERATED by tools/fingerprint/dump-css-value-case.mjs — do not hand-edit.',
@@ -289,6 +371,17 @@ try {
         'pub const verbatim_functions = [_][]const u8{',
         ...frozen.sort().map((fn) => `    ${zigString(fn.toLowerCase())},`),
         '};',
+        '',
+        '// The keywords of a property that also takes an arbitrary <custom-ident>.',
+        '// chrome_keywords.zig has to leave those properties\' keyword lists empty --',
+        '// Chrome accepts every identifier there, so acceptance says nothing -- but it',
+        '// still re-cases the real keywords, and that is the signal: `font-family:',
+        '// SANS-SERIF` answers `sans-serif` where `font-family: MyOwnFont` keeps its',
+        `// capitals. ${identHits} keywords over ${Object.keys(idents).length} of the ${anyIdent.length} properties.`,
+        'pub const any_identifier_keywords = std.StaticStringMap([]const []const u8).initComptime(.{',
+        ...Object.keys(idents).sort().map((p) =>
+            `    .{ ${zigString(p)}, ${zigList(keywordList(idents[p]))} },`),
+        '});',
         '',
     ].join('\n');
 

@@ -4610,12 +4610,52 @@ property name stays case-sensitive (`--Case` and `--case` are two properties,
 on both engines), and `parseAll`'s messages name `parseAll` rather than
 borrowing the wording of the `parse` the two share.
 
-One reading still differs, and it is not about case: deleting a property that
-is not there reserialises the style attribute here (`--Case: 1px;`, trailing
-semicolon) where Chrome leaves the authored text alone. Same family as the
-declaration-side keyword normalisation this file records elsewhere
-(`cssText = 'WIDTH: 2px; Color: RED'` reads back `color: red` in Chrome,
-`color: RED` here).
+The one reading that still differed afterwards was not about case: deleting a
+property that is not there reserialised the style attribute here (`--Case:
+1px;`, trailing semicolon) where Chrome leaves the authored text alone. That is
+closed too, below, and `probe-css12` is now **0 of 39**.
+
+**The declaration side is closed to the four re-casing rules** (`probe-css13`,
+42 readings, headed Chrome 151 against this engine on the same host).
+It started at 27 of 42 and is now **5**, every one of them a shape deliberately
+left out of scope. Two separate findings, neither guessable:
+
+*What rewrites the attribute text.* The style attribute is rewritten only when
+the declaration block actually changed. Removing a property that was never
+there, removing a custom property under the wrong case, setting a property to
+the value it already holds, setting an absent property to `""` -- Chrome treats
+all of them as no-ops and the authored text survives byte for byte, down to the
+semicolon it was written without. This engine resynced on every one, and since
+its own serialisation always ends in `; `, the tell was an attribute that grew a
+semicolon no author typed just from being *read at* by a script.
+
+*What rewrites the value's case.* Chrome re-cases exactly four things -- a
+keyword the property takes, a CSS-wide keyword, a dimension's unit and a
+function name -- and leaves the rest as authored. It is four rules and not one:
+a `<custom-ident>` (`font-family: MyOwnFont`, `grid-area: MyArea`), a string, a
+custom property's value and **anything containing `var()` / `attr()` / `env()`**
+all keep their capitals, the last of those freezing the whole value with it
+(`width: CALC(1PX + VAR(--a))` reads back byte for byte, because its content is
+substituted later). And the four take the *canonical spelling*, not lowercase:
+`TranslateX(1PX)` answers `translateX(1px)`.
+
+So the spellings are measured rather than derived, by
+`dump-css-value-case.mjs` -> `src/browser/webapi/css/chrome_value_case.zig`:
+each candidate unit and function name is written to a real declaration in upper
+case and read back. That is how `Q` turned out to serialise as `q`, which the
+spec's own spelling of the unit would have got wrong. The same run answers a
+question `chrome_keywords.zig` structurally cannot: a property that accepts an
+arbitrary identifier still *has* keywords, and since Chrome accepts both
+`MyOwnFont` and `sans-serif` for `font-family`, acceptance is no signal there --
+re-casing is. 218 such keywords over 29 properties.
+
+The five readings that still differ are all cases where Chrome rewrites the
+value past a case change, which needs a colour parser and a number normaliser
+this engine does not have: `#AABBCC` -> `rgb(170, 187, 204)`, `1E2px` ->
+`100px`, `url(Foo/Bar.PNG)` -> `url("Foo/Bar.PNG")` (the name is re-cased, the
+quoting is not added), a quoted font family losing its quotes -- plus
+`setProperty('height', 'notalength')` sticking here, which is the
+invalid-inline-value difference recorded above.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
