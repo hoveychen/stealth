@@ -584,19 +584,32 @@ fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []cons
     // the same word can be a family name.
     const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
 
+    // The two properties whose value carries a font family.
+    const is_font_family = std.mem.eql(u8, property_name, "font-family") or
+        std.mem.eql(u8, property_name, "font");
+
     var buf = std.Io.Writer.Allocating.init(arena);
     errdefer buf.deinit();
     var changed = false;
     var i: usize = 0;
     while (i < value.len) {
         const c = value[i];
+        const before_i = i;
 
         // A string is content rather than syntax: `content: "MiXeD"` keeps its
-        // case, quotes and escapes.
+        // case, quotes and escapes. A font family is the exception -- there the
+        // quotes are punctuation around a name, and Chrome drops the ones the
+        // name does not need.
         if (c == '"' or c == '\'') {
             const end = stringEnd(value, i);
-            try buf.writer.writeAll(value[i..end]);
-            i = end;
+            if (is_font_family) {
+                const before = buf.written().len;
+                i = try writeFontFamily(&buf.writer, value, i);
+                changed = changed or !std.mem.eql(u8, buf.written()[before..], value[before_i..i]);
+            } else {
+                try buf.writer.writeAll(value[i..end]);
+                i = end;
+            }
             continue;
         }
 
@@ -684,58 +697,130 @@ fn writeUrl(writer: *std.Io.Writer, value: []const u8, open: usize) !usize {
     while (i < value.len and value[i] != ')') : (i += 1) {}
 
     try writer.writeAll("(\"");
-    try writeUrlContent(writer, content);
+    try writeEscaped(writer, content);
     try writer.writeAll("\")");
     return if (i < value.len) i + 1 else i;
 }
 
-fn writeUrlContent(writer: *std.Io.Writer, content: []const u8) !void {
-    var i: usize = 0;
-    while (i < content.len) {
-        if (content[i] != '\\') {
-            try writeUrlCodepoint(writer, content[i]);
-            i += 1;
-            continue;
+/// The code points a url path or a string is really made of: `a\28 b` is
+/// `a(b`, `a\ b` is `a b`. Chrome resolves these before it decides anything
+/// about the text -- whether a font family can go unquoted, what a url()
+/// serialises as -- so the decision and the output both read through here.
+const Escapes = struct {
+    raw: []const u8,
+    index: usize = 0,
+
+    fn next(self: *Escapes) ?u32 {
+        if (self.index == self.raw.len) {
+            return null;
         }
-        i += 1;
-        if (i == content.len) {
+        const c = self.raw[self.index];
+        if (c != '\\') {
+            self.index += 1;
+            return c;
+        }
+        self.index += 1;
+        if (self.index == self.raw.len) {
             // A trailing backslash escapes nothing.
-            break;
+            return null;
         }
-        if (std.fmt.charToDigit(content[i], 16) catch null == null) {
+        if (std.fmt.charToDigit(self.raw[self.index], 16) catch null == null) {
             // `\x` is whatever x is, escape or no escape.
-            try writeUrlCodepoint(writer, content[i]);
-            i += 1;
-            continue;
+            defer self.index += 1;
+            return self.raw[self.index];
         }
         var code: u32 = 0;
         var digits: usize = 0;
-        while (i < content.len and digits < 6) : (digits += 1) {
-            const digit = std.fmt.charToDigit(content[i], 16) catch break;
+        while (self.index < self.raw.len and digits < 6) : (digits += 1) {
+            const digit = std.fmt.charToDigit(self.raw[self.index], 16) catch break;
             code = code * 16 + digit;
-            i += 1;
+            self.index += 1;
         }
         // A single whitespace may follow, to say where the escape stops.
-        if (i < content.len and std.ascii.isWhitespace(content[i])) {
-            i += 1;
+        if (self.index < self.raw.len and std.ascii.isWhitespace(self.raw[self.index])) {
+            self.index += 1;
         }
-        try writeUrlCodepoint(writer, code);
+        return code;
+    }
+};
+
+/// Write the decoded text back out, escaping the two characters a quoted one
+/// cannot hold bare.
+fn writeEscaped(writer: *std.Io.Writer, raw: []const u8) !void {
+    var escapes: Escapes = .{ .raw = raw };
+    while (escapes.next()) |code| {
+        if (code == '"' or code == '\\') {
+            try writer.writeByte('\\');
+        }
+        if (code < 0x80) {
+            try writer.writeByte(@intCast(code));
+            continue;
+        }
+        var utf8: [4]u8 = undefined;
+        // A zero, a surrogate half or anything past the last code point is the
+        // replacement character, which is what the tokeniser is specified to do.
+        const len = std.unicode.utf8Encode(std.math.cast(u21, code) orelse 0xFFFD, &utf8) catch
+            std.unicode.utf8Encode(0xFFFD, &utf8) catch unreachable;
+        try writer.writeAll(utf8[0..len]);
     }
 }
 
-fn writeUrlCodepoint(writer: *std.Io.Writer, code: u32) !void {
-    if (code == '"' or code == '\\') {
-        try writer.writeByte('\\');
+/// A quoted font family loses its quotes when it does not need them. Measured:
+/// that is when the decoded name is a single identifier which is not a keyword
+/// -- the quotes are what tell a family *called* `monospace` from the generic
+/// one, so a name spelling one keeps them. That comparison is case-sensitive:
+/// `"MONOSPACE"` comes out bare, and is not then re-cased into the keyword.
+fn writeFontFamily(writer: *std.Io.Writer, value: []const u8, start: usize) !usize {
+    const end = stringEnd(value, start);
+    const quote = value[start];
+    const terminated = end > start + 1 and value[end - 1] == quote;
+    const raw = value[start + 1 .. if (terminated) end - 1 else end];
+
+    var buf: [128]u8 = undefined;
+    if (decodeInto(&buf, raw)) |name| {
+        if (isBareFamilyName(name)) {
+            try writer.writeAll(name);
+            return end;
+        }
     }
-    if (code < 0x80) {
-        return writer.writeByte(@intCast(code));
+    // Whatever keeps its quotes gets Chrome's: `'a b'` answers `"a b"`.
+    try writer.writeByte('"');
+    try writeEscaped(writer, raw);
+    try writer.writeByte('"');
+    return end;
+}
+
+fn decodeInto(buf: []u8, raw: []const u8) ?[]const u8 {
+    var escapes: Escapes = .{ .raw = raw };
+    var len: usize = 0;
+    while (escapes.next()) |code| {
+        if (code >= 0x80 or len == buf.len) {
+            // A name needing more room than this, or holding anything outside
+            // ASCII, is not one that could go bare anyway.
+            return null;
+        }
+        buf[len] = @intCast(code);
+        len += 1;
     }
-    var utf8: [4]u8 = undefined;
-    // A zero, a surrogate half or anything past the last code point is the
-    // replacement character, which is what the tokeniser is specified to do.
-    const len = std.unicode.utf8Encode(std.math.cast(u21, code) orelse 0xFFFD, &utf8) catch
-        std.unicode.utf8Encode(0xFFFD, &utf8) catch unreachable;
-    try writer.writeAll(utf8[0..len]);
+    return buf[0..len];
+}
+
+fn isBareFamilyName(name: []const u8) bool {
+    if (name.len == 0 or !isIdentStart(name, 0) or identEnd(name, 0) != name.len) {
+        return false;
+    }
+    // Measured: `-a` goes bare but `--a` does not.
+    if (std.mem.startsWith(u8, name, "--")) {
+        return false;
+    }
+    for (chrome_keywords.css_wide) |keyword| {
+        if (std.mem.eql(u8, keyword, name)) return false;
+    }
+    const generic = chrome_value_case.any_identifier_keywords.get("font-family") orelse return true;
+    for (generic) |keyword| {
+        if (std.mem.eql(u8, keyword, name)) return false;
+    }
+    return true;
 }
 
 /// The canonical spelling of a bare identifier, or the one it was written with

@@ -4617,8 +4617,8 @@ closed too, below, and `probe-css12` is now **0 of 39**.
 
 **The declaration side is closed to the four re-casing rules** (`probe-css13`,
 42 readings, headed Chrome 151 against this engine on the same host).
-It started at 27 of 42 and is now **4**, every one of them a shape deliberately
-left out of scope. Three separate findings, none guessable:
+It started at 27 of 42 and is now **3**, every one of them a shape deliberately
+left out of scope. Four separate findings, none guessable:
 
 *What rewrites the attribute text.* The style attribute is rewritten only when
 the declaration block actually changed. Removing a property that was never
@@ -4661,12 +4661,22 @@ url(foo.woff2) }` reads back quoted too, which is why
 `tests/css/rule_hierarchy.html` and `tests/css/stylesheet.html` each had a
 recorded "Chrome answers X, we answer Y" caveat that is now just X.
 
-The four readings that still differ are all cases where Chrome rewrites the
+*When a font family keeps its quotes.* A quoted family name is unquoted when
+its decoded content is a single identifier that is not a keyword, and left
+quoted otherwise -- `"MyOwnFont"` answers `MyOwnFont`, `"a b"` and `"1a"` and
+`"--a"` stay. The keyword check is what the quotes are *for*: they tell a family
+called `monospace` from the generic one, so `"monospace"` keeps them. And that
+comparison is **case-sensitive** -- `"MONOSPACE"` comes out bare and is *not*
+then re-cased into the keyword, which is the one place in this whole area where
+Chrome does not fold case. A name that keeps its quotes gets double ones
+(`'a b'` -> `"a b"`), escapes resolved first (`"\31 a"` -> `"1a"`). The `font`
+shorthand carries a family too, and is treated the same.
+
+The three readings that still differ are the cases where Chrome rewrites the
 value past a case change, which needs a colour parser and a number normaliser
-this engine does not have: `#AABBCC` -> `rgb(170, 187, 204)`, `1E2px` ->
-`100px`, a quoted font family losing its quotes -- plus
-`setProperty('height', 'notalength')` sticking here, which is the
-invalid-inline-value difference recorded above.
+this engine does not have: `#AABBCC` -> `rgb(170, 187, 204)` and `1E2px` ->
+`100px` -- plus `setProperty('height', 'notalength')` sticking here, which is
+the invalid-inline-value difference recorded above.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.

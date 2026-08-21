@@ -166,6 +166,52 @@ function withStyle(text) {
 }
 </script>
 
+<script id="a_font_family_loses_quotes_it_does_not_need">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured: a quoted family name is unquoted when its content is one
+    // identifier, and left quoted otherwise. The quotes are what tell a family
+    // called "monospace" from the generic keyword, so a name that spells a
+    // keyword keeps them -- and that comparison is case-sensitive, which is why
+    // "MONOSPACE" comes out bare and is not then re-cased into the keyword.
+    testing.expectEqual('font-family: MyOwnFont;', round('font-family: "MyOwnFont"'));
+    testing.expectEqual('font-family: MyOwnFont;', round("font-family: 'MyOwnFont'"));
+    testing.expectEqual('font-family: Arial;', round('font-family: "Arial"'));
+    testing.expectEqual('font-family: a-b;', round('font-family: "a-b"'));
+    testing.expectEqual('font-family: -a;', round('font-family: "-a"'));
+    testing.expectEqual('font-family: a1;', round('font-family: "a1"'));
+    testing.expectEqual('font-family: a_b;', round('font-family: "a_b"'));
+    testing.expectEqual('font-family: MONOSPACE;', round('font-family: "MONOSPACE"'));
+
+    // Not one identifier, or one that would read as something else bare.
+    testing.expectEqual('font-family: "a b";', round('font-family: "a b"'));
+    testing.expectEqual('font-family: "a,b";', round('font-family: "a,b"'));
+    testing.expectEqual('font-family: "1a";', round('font-family: "1a"'));
+    testing.expectEqual('font-family: "--a";', round('font-family: "--a"'));
+    testing.expectEqual('font-family: "";', round('font-family: ""'));
+    testing.expectEqual('font-family: "monospace";', round('font-family: "monospace"'));
+    testing.expectEqual('font-family: "inherit";', round('font-family: "inherit"'));
+
+    // A name that stays quoted is quoted with double quotes, and its escapes
+    // are resolved first -- `\31 a` is the name `1a`, which cannot go bare.
+    testing.expectEqual('font-family: "a b";', round("font-family: 'a b'"));
+    testing.expectEqual('font-family: "1a";', round('font-family: "\\31 a"'));
+
+    // Every name in a list is judged on its own, and the font shorthand
+    // carries a family too.
+    testing.expectEqual(
+        'font-family: MyOwnFont, "Other One", monospace;',
+        round('font-family: "MyOwnFont", "Other One", monospace'));
+    testing.expectEqual('font: 12px MyFont;', round('font: 12px "MyFont"'));
+    testing.expectEqual('font: 12px "My Font";', round('font: 12px "My Font"'));
+
+    // Only a family name: a string anywhere else is content.
+    testing.expectEqual('content: "MiXeD";', round('content: "MiXeD"'));
+    testing.expectEqual('content: "monospace";', round('content: "monospace"'));
+}
+</script>
+
 <script id="a_url_is_always_serialised_quoted">
 {
     const round = (text) => withStyle(text).style.cssText;

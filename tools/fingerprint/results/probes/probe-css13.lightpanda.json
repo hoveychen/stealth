@@ -15,7 +15,7 @@
  "cssWideUnset": "display: unset;",
  "multiKeyword": "overflow: hidden visible;",
  "fontFamilyIdent": "font-family: MyOwnFont;",
- "fontFamilyQuoted": "font-family: \"MyOwnFont\";",
+ "fontFamilyQuoted": "font-family: MyOwnFont;",
  "fontFamilyGeneric": "font-family: sans-serif;",
  "animationName": "animation-name: MyAnim;",
  "gridArea": "grid-area: MyArea;",
