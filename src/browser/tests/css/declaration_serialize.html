@@ -639,6 +639,13 @@ function withStyle(text) {
     testing.expectEqual('top 20px', anchored.style.getPropertyValue('background-position-y'));
     testing.expectEqual('left 10px top 20px', anchored.style.getPropertyValue('background'));
 
+    // A unitless zero in a position or a size is stored `0px`, the same as in
+    // any other length.
+    const zero = withStyle('background: url("a") 0/0');
+    testing.expectEqual('0px', zero.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('0px', zero.style.getPropertyValue('background-size'));
+    testing.expectEqual('url("a") 0px center / 0px', zero.style.getPropertyValue('background'));
+
     // The `/` reaches the size, and the position it needs in front of it comes
     // back written out.
     const sized = withStyle('background: 10px / 20px');

@@ -4980,7 +4980,8 @@ shorthands with a real grammar behind them -- `background`, `font`, `grid`,
 `flex`, `list-style`, `border-radius`, `border-image`, `offset`, `mask` and
 their `-webkit-` spellings -- and for them `style.length` still answers 1 where
 Chrome says 9. That is a visible difference, and a smaller one than nine
-invented values.
+invented values. (`background` is modelled as of the layer work later the same
+day; the section below has it.)
 
 Measured after: the 475-longhand identifier probe is **0 of 449** and the 61
 colour properties crossed with six colour values **0 of 304**, both from the
@@ -4995,6 +4996,103 @@ shorthand work alone. CSS-wide is unchanged at 0 of 39, keyword spelling at 0 of
 maplike iterator identity (`iteratorIsValues`) on the WebXR collections.
 `probe-win30`'s `bipe.frozen` and `probe-win57`'s `MediaMetadataArtworkFrozen`
 are the same shape of miss: an array Chrome freezes and we do not.
+
+## A background is a layer, not a run of components (2026-08-21)
+
+`background` was the most-used of the 36 the shorthand work left `.unmodelled`,
+and the reason the generator gave -- "no single filler explains every row" --
+was true without being the whole story. `background: top` leaves
+background-position-x holding `center`, a value the page never wrote and that no
+filler can be, because it comes out of the position grammar rather than out of
+the shorthand having nothing to say. A layer is not a flat run of components,
+so no flat model could reach it.
+
+Four things measured, over 287 probe values on the same headed Chrome 151:
+
+**A comma is a layer boundary, and the colour is not part of a layer.** Every
+per-layer longhand answers a comma list as long as the value had layers;
+`background-color` answers one colour however many layers there are. So it may
+only be written in the last one: `background: red, blue` does not parse,
+`url(a) blue, url(b)` does not parse, and `url(a), url(b) blue` does. A last
+layer that mentioned nothing else comes back as just the colour --
+`background: url(a), red` reads `url("a"), red`.
+
+**One position fills two longhands, out of one to four components, and their
+order carries meaning.** One component leaves the other axis holding `center`
+(`background: top` is x=center y=top; `10px` is x=10px y=center). Two keywords
+may come in either order -- `top right` and `right top` both land x=right
+y=top -- but once a length is involved the order is fixed, which is why
+`background: 10px left` does not parse at all. Three and four components are two
+`edge [offset]` groups, and an offset may only follow an edge that was measured
+carrying one: `background-position-x` stores `left 10px` and rejects
+`center 10px`, so `center 10px top` does not parse while `center top 10px` does.
+
+**A `/` introduces the size and may only sit straight after the position.**
+`url(a) / 20px`, `no-repeat / 20px`, `10px no-repeat / 20px` and
+`center no-repeat / cover` are all rejected; `10px / 20px` reads back
+`10px center / 20px`, with the position written out.
+
+**One box component fills the origin *and* the clip.** `background: padding-box`
+moves both, and a second component takes the clip over. Which slot a component
+can reach is the acceptance test: `text` is a clip and not an origin, so
+`text border-box` lands origin=border-box clip=text -- the other way round from
+how it was written -- and reads back `border-box text`.
+
+Coming back is per-slot again, and simpler than `border`'s: the only value
+either box slot is dropped at is the literal `initial`, so
+`background: content-box` answers `content-box content-box` rather than
+collapsing to one.
+
+**`mask` and `-webkit-mask` are the same grammar going out and a different rule
+coming back, so they stay whole.** Three readings, same Chrome:
+
+    mask: content-box content-box   ->  "content-box"
+    mask: border-box content-box    ->  "border-box content-box"
+    mask-origin: content-box        ->  "content-box border-box"
+
+with every other longhand at its initial for the third. No pair of per-slot
+dropped-value sets produces all three: the first says one of the two drops
+`content-box`, the second says the clip does not, so it must be the origin, and
+the third writes `content-box` from the origin. mask collapses the pair when the
+two agree, which background does not do and the layer model has no room for.
+There is a second oddity in the same place -- `mask` with a size set and the
+position at its initial answers `" 0% 0% / cover"`, with a leading space where
+the image would have been -- so mask is a plan of its own.
+
+Five values the model declines rather than expands, which the engine keeps whole
+the way it keeps an unmodelled shorthand whole. Four are the two-value repeat
+and size forms (`repeat no-repeat` is stored `repeat-x`, `10px auto` is stored
+`10px`): that is the longhand's own collapse rule, not a distribution, and it
+belongs to the value canonicaliser rather than to this table. The fifth is
+`border-area`, a clip-only keyword that moves the origin to `border-box` where
+`text` -- the same shape of value -- leaves it alone.
+
+Adding a comma to the probe values put the narrower models under a rule they had
+never been asked about, so they are now derived from and checked against the
+rows without a layer boundary and have to *decline* the rest; getting one wrong
+is still a demotion. Two smaller measurements the layer shape needed: a
+function's value class now comes from its name (`background-image` takes
+`linear-gradient()` and not `rgb()`, and one `function` class puts a gradient in
+the colour), and which identifiers a longhand takes is measured per longhand
+rather than read off the keyword table.
+
+Net over the table: unmodelled falls from 36 to 31. `background`,
+`animation-range` and the three `timeline-trigger` ranges are modelled for the
+first time, `background-position` and `mask-position` move from the flat model to
+the layer one, and `position-try` is demoted -- `position-try: top right` parses,
+and the keyword lookup that modelled it cannot express that.
+
+`background: 0` turned up a separate gap: 46 longhands were missing from the
+list of properties where a bare `0` is stored `0px`, background-position-x among
+them. The shorthand probe already measures that per longhand, so all 46 are in
+now.
+
+Measured after, on the layer probe (`probe-css14`, 114 values through both
+engines): 93 match Chrome exactly, 7 are the declines above, and 14 are values
+Chrome rejects outright and this engine keeps whole -- the same thing it does
+with any value a model declines, and not new here. Every earlier probe holds:
+identifiers 0 of 449, colours 0 of 304, CSS-wide 0 of 39, keyword spelling 0 of
+27, `probe-css13` 1 of 42 (the one deliberately unfixed case).
 
 ## The commercial guards, and the regression that came with them (2026-08-20)
 
