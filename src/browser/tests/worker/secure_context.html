@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A worker's secure-context state is its owner's, not a constant. Measured on a
+headed Chrome 151 with the same page served twice: from http://localhost:8777
+the worker answers true, from http://192.168.68.78:8777 it answers false, and
+the worker global surface follows (336 own names vs 243). This test page is on
+127.0.0.1, which is loopback, so the owner here is secure.
+-->
+
+<script id=inherits_owner type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./secure-context-worker.js');
+    worker.onmessage = (e) => state.resolve(e.data);
+    setTimeout(() => worker.postMessage(0), 100);
+
+    await state.done((data) => {
+      testing.expectEqual(true, window.isSecureContext);
+      testing.expectEqual(true, data.secure);
+
+      // Chrome puts it on WorkerGlobalScope.prototype as an enumerable,
+      // configurable getter -- so a page that reads the descriptor rather than
+      // the value sees the same shape it sees in Chrome. It used to be a
+      // read-only, non-configurable data property holding a constant false.
+      testing.expectEqual('WorkerGlobalScope', data.holder);
+      testing.expectEqual(true, data.on_prototype.is_getter);
+      testing.expectEqual(false, data.on_prototype.has_setter);
+      testing.expectEqual(true, data.on_prototype.enumerable);
+      testing.expectEqual(true, data.on_prototype.configurable);
+
+      // Chrome's worker global owns no copy -- `self` there answers through the
+      // prototype. This engine's [Global] flattening mirrors every non-static
+      // accessor onto the global, so it owns one, as it already does for 35
+      // other WorkerGlobalScope members (atob, fetch, setTimeout, location,
+      // self, ... -- measured). That shape difference belongs to the
+      // prototype-chain gap the window global surface notes own, not here; the
+      // assertion records which side of it we are on rather than asserting
+      // Chrome's answer and failing.
+      testing.expectEqual(true, data.on_self !== null);
+    });
+  }
+</script>

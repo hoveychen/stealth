@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+The Secure Contexts determination, measured on a headed Chrome 151 by serving
+one page twice: from http://localhost:8777 (loopback, so potentially
+trustworthy) and from http://192.168.68.78:8777 (not). Each child reported its
+own self.isSecureContext:
+
+  parent                  about:blank  about:srcdoc  sandbox srcdoc  data:
+  http://localhost         true         true          true            false
+  http://192.168.68.78     false        false         false           false
+
+about:blank and about:srcdoc inherit their creator's answer, and a sandbox flag
+does not change that -- a sandboxed srcdoc frame on a secure parent is still a
+secure context there. A data: URL inherits nothing: it is not a potentially
+trustworthy URL, so it answers false under either parent. This test page is
+served from 127.0.0.1, which is loopback, so the creator here is secure.
+-->
+
+<script id=about_urls_inherit_creator type=module>
+{
+  const state = await testing.async();
+
+  const load = (apply) => new Promise((resolve) => {
+    const f = document.createElement('iframe');
+    f.onload = () => resolve(f);
+    apply(f);
+    document.documentElement.appendChild(f);
+  });
+
+  const blank = await load((f) => { f.src = 'about:blank'; });
+  const srcdoc = await load((f) => { f.srcdoc = '<p>hi</p>'; });
+  const empty = await load(() => {});
+  state.resolve();
+
+  await state.done(() => {
+    // The creator, for reference: loopback, hence secure.
+    testing.expectEqual(true, window.isSecureContext);
+
+    testing.expectEqual('about:blank', blank.contentWindow.location.href);
+    testing.expectEqual(true, blank.contentWindow.isSecureContext);
+
+    testing.expectEqual('about:srcdoc', srcdoc.contentWindow.location.href);
+    testing.expectEqual(true, srcdoc.contentWindow.isSecureContext);
+
+    // A src-less iframe is an about:blank document too.
+    testing.expectEqual(true, empty.contentWindow.isSecureContext);
+  });
+}
+</script>
+
+<script id=opaque_children_report_back type=module>
+{
+  // A sandboxed frame and a data: frame are both cross-origin to this page, so
+  // neither contentWindow is readable -- each reports its own answer instead.
+  const state = await testing.async();
+  const seen = {};
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.tag) {
+      seen[e.data.tag] = e.data;
+      if (seen.sandbox && seen.data) state.resolve(seen);
+    }
+  });
+
+  const report = (tag) =>
+    `<script>parent.postMessage({tag:'${tag}',secure:self.isSecureContext},'*')<\/script>`;
+
+  const sandboxed = document.createElement('iframe');
+  sandboxed.setAttribute('sandbox', 'allow-scripts');
+  sandboxed.srcdoc = report('sandbox');
+  document.documentElement.appendChild(sandboxed);
+
+  const data_url = document.createElement('iframe');
+  data_url.src = 'data:text/html,' + report('data');
+  document.documentElement.appendChild(data_url);
+
+  await state.done((got) => {
+    // srcdoc, so it inherits -- the sandbox flag is not part of the answer.
+    testing.expectEqual(true, got.sandbox.secure);
+    // data: is not potentially trustworthy and inherits nothing.
+    testing.expectEqual(false, got.data.secure);
+  });
+}
+</script>
