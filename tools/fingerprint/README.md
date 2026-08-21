@@ -5135,6 +5135,88 @@ declines, and not new here. Every earlier probe holds:
 identifiers 0 of 449, colours 0 of 304, CSS-wide 0 of 39, keyword spelling 0 of
 27, `probe-css13` 1 of 42 (the one deliberately unfixed case).
 
+## The one shorthand with a slash in it (2026-08-21)
+
+The section below closes with `border-radius` as the four-value box family's
+exception — "it keeps all four and its `/` form whole where Chrome elides
+both". That reads like a serialisation bug, one missing elision rule. It was
+not. `probe-css16.js` measured 168 readings across both spellings, all eight
+corner longhands and every shape either parser takes, and the honest
+decomposition of the gap was: 25 readings matched, 46 were values Chrome
+rejects outright and this engine keeps, and **97 were the shorthand not being
+stored at all** — `style.length` answering 1 where Chrome says 4. Of those 97,
+23 already read the right *string*; only the `length` was wrong. So fixing the
+elision alone would have moved the read text on 34 rows and made exactly zero
+readings match end to end. It would have looked fixed.
+
+What the grammar actually is: two box lists split by a `/`, one of horizontal
+radii and one of vertical, each distributed by the ordinary 1/2/3/4-value rule,
+over four corner longhands that each hold a **pair**. `border-radius: 10px 20px
+/ 30px 40px` is four corners holding `10px 30px`, `20px 40px`, `10px 30px`,
+`20px 40px`. Nothing else in the table has that shape, so it is a kind of its
+own — `.corners` — rather than a special case wedged into `.box4`.
+
+Three readings no amount of staring at the grammar gives you:
+
+* **The two lists elide *independently*, and the `/` goes only when they come
+  out identical.** `10px 20px / 10px 20px` reads `10px 20px`; `10px 10px / 20px
+  20px` reads `10px / 20px`; `10px 20px 30px / 40px` keeps both. A single pass
+  over the eight values, or eliding the pair per corner, gets all three wrong.
+* **`-webkit-border-radius` is not the same parser.** With one, three or four
+  components it is `border-radius`. With *exactly* two it is the legacy WebKit
+  horizontal-then-vertical form: `-webkit-border-radius: 10px 20px` is `10px /
+  20px` where `border-radius: 10px 20px` is itself. Reading back and cssText
+  both go through the unprefixed name, so the two differ in expansion only.
+  That is the easiest reading here to miss, because every other value agrees.
+* **A corner longhand is a fold *and* the zero rule at once, in that order.**
+  Neither of the three pair rules from the section below fits: a plain fold
+  leaves `10px 0` alone, a size does the per-token zero but then refuses to
+  fold. A corner does both, and the order shows: `0 0` is `0px`, not `0px 0px`.
+  The four logical spellings needed it most — `isLengthProperty` never listed
+  them, so `border-start-end-radius: 0` was answering `0`.
+
+**Why the generator could not reach this before.** Both spellings were demoted
+for `no single filler explains every row`, which is a filler complaint about a
+shorthand whose fillers are unobservable. `fillers()` asks whether a slot's
+stored value is one of the value's own tokens; a corner holding `1px 3px` is
+not, so two rows disagree and it gives up before any distribution rule gets a
+turn. `.corners` derives its own fillers, honest for the same reason `.layers`
+does: every value Chrome accepts reaches all four corners, so no row leaves one
+holding a filler and there is nothing to measure.
+
+**And the licence that keeps it from rotting.** A corner model may *decline* a
+row Chrome accepted — the licence a layer model already had. Keeping the
+declaration whole is the same answer as not modelling the shorthand; placing a
+value wrongly is worse. Without it the model is all-or-nothing against a probe
+list it does not control: `calc()` is the live example, because Chrome
+evaluates it (`calc(10px + 5px)` reads `calc(15px)`) where this engine keeps a
+substituted value byte for byte, so adding one calc value to `VALUES` would
+have silently demoted both spellings back to `.unmodelled` and thrown this work
+away. Checked rather than assumed — the generator was replayed over the
+measured readings with four real Chrome calc rows spliced in, and `.corners`
+survives, reporting two declines each. The declines print rather than being
+swallowed, the same as a layer's.
+
+Measured after: `probe-css16` goes from 25 of 168 to **116**, and the 52 left
+decompose with nothing unexplained. 46 are values Chrome rejects and this
+engine keeps whole — a negative length, five components, `auto`, `none`, an
+empty side of the `/`, two slashes, and a corner longhand fed a shorthand-shaped
+value. That needs a way to *refuse* a declaration, which this engine does not
+have anywhere; it is a cross-cutting gap rather than a radius one, and 26 of the
+46 are one property (`border-start-start-radius`) being handed values only the
+shorthand takes. The other 6 are calc. The kind column moved on exactly two
+rows, checked by diffing it: `border-radius` and `-webkit-border-radius`,
+`.unmodelled` to `.corners`, and `unmodelled` drops from 30 to 28. Every
+earlier probe holds: the layer probe 197 of 224, `probe-css15` 210 of 235
+whole-object, identifiers 0 of 449, colours 0 of 304, CSS-wide 0 of 39, keyword
+spelling 0 of 27, `probe-css13` 1 of 42, and the suite 1374 of 1374.
+
+One number in the section below needs correcting, because it will mislead the
+next reader comparing against it: `probe-css15`'s "225 of 235" is the score
+comparing the `read` string alone. Comparing the whole reading — `items`,
+`values`, `read`, `cssText`, which is what the other counts here do — it is
+210 of 235, and both numbers are unchanged by this work.
+
 ## A pair is not always a fold (2026-08-21)
 
 The section above left five values declined and blamed the longhand: a
@@ -5204,6 +5286,8 @@ rather than a pair:
   `10px 20px`, `border-width: 1px 1px 1px 1px` is `1px` — because those go out
   through the shorthand table, not through this fold. `border-radius` is the
   exception: it keeps all four and its `/` form whole where Chrome elides both.
+  *(Since fixed — and it was not the serialisation bug this bullet takes it for.
+  See "The one shorthand with a slash in it" above.)*
 * **A shadow list's zeros.** `text-shadow: 0 0 red` is `red 0px 0px` in Chrome
   and `0 0 red` here: two rewrites, a reorder and a per-token unit, neither of
   which is a pair.
