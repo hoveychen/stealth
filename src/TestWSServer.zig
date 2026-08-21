@@ -47,6 +47,10 @@ pub fn stop(self: *TestWSServer) void {
 pub fn run(self: *TestWSServer, wg: *lp.WaitGroup) void {
     self.runImpl(wg) catch |err| {
         std.debug.print("WebSocket echo server error: {}\n", .{err});
+        // runImpl only fails before it finishes the group (past that point the
+        // accept loop swallows everything), so this cannot double-finish — and
+        // without it a bind collision deadlocks beforeAll instead of reporting.
+        wg.finish();
     };
 }
 
