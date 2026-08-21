@@ -666,7 +666,12 @@ function positionSlots(toks, m, accepts) {
         else if (g1.axis === 'y' && g2.axis !== 'y') out = [g2.text, g1.text];
         else if (g1.axis === 'both' && g2.axis === 'y') out = [g1.text, g2.text];
         else if (g1.axis === 'both' && g2.axis === 'x') out = [g2.text, g1.text];
-        if (out && accepts(xi, out[0]) && accepts(yi, out[1])) return out;
+        // A group of one is still a plain token and has to be accepted as one;
+        // a group of two was already checked, by its edge carrying an offset.
+        if (!out) continue;
+        const fits = (slot, group, text) =>
+            group.length === 2 || accepts(slot, text);
+        if (fits(xi, out[0].split(' '), out[0]) && fits(yi, out[1].split(' '), out[1])) return out;
     }
     return null;
 }
@@ -680,17 +685,13 @@ function parseLayer(toks, m, accepts, last) {
         const token = toks[i];
         if (token === '/') {
             if (!afterPosition || m.size === NO_SLOT || slots[m.size] !== null) return null;
-            let took = 0;
-            for (const k of [2, 1]) {
-                const run = toks.slice(i + 1, i + 1 + k);
-                if (run.length !== k || run.includes('/')) continue;
-                if (!accepts(m.size, run.join(' '))) continue;
-                slots[m.size] = run.join(' ');
-                took = k;
-                break;
-            }
-            if (!took) return null;
-            i += 1 + took;
+            // One token. A two-value size is Chrome's own collapse rule on the
+            // size longhand (`10px auto` is stored `10px`) rather than a
+            // distribution, so a value carrying one is declined.
+            const run = toks[i + 1];
+            if (run === undefined || run === '/' || !accepts(m.size, run)) return null;
+            slots[m.size] = run;
+            i += 2;
             afterPosition = false;
             continue;
         }
@@ -810,17 +811,17 @@ function layerCandidate(longhands, plain, canon, classes, keywords) {
     if (width === null || width === 0) return null;
     const total = longhands.length;
     const stored = (i, t) => canon[longhands[i]]?.[t] ?? t;
-    // Acceptance here is the measured kind, not the keyword table's: a token
-    // the longhand was probed with and stored is accepted, an unprobed one
-    // rides on a value class the longhand was measured taking, and nothing
-    // else gets in. That is what keeps `center 10px` out of a position,
-    // `cover cover` out of a size, and `border-area` -- which the keyword
-    // table lists for `background-clip` and Chrome does not store -- out of
-    // the clip.
+    // The same acceptance test the engine will run, token by token: the
+    // keyword table for an identifier, a measured value class otherwise. It has
+    // to be the same test rather than a stricter one, or the model claims rows
+    // the engine would place differently.
     const accepts = (i, token) => {
-        if (canon[longhands[i]]?.[token] !== undefined) return true;
         const cls = classify(token);
-        return cls.length > 0 && cls.some((c) => (classes[longhands[i]] ?? []).includes(c));
+        if (cls.includes('identifier')) {
+            const known = keywords[longhands[i]];
+            if (known && known.includes(token.toLowerCase())) return true;
+        }
+        return cls.some((c) => (classes[longhands[i]] ?? []).includes(c));
     };
     // A position and a size both take a length, so those are the slots worth
     // trying; anything else could not hold `10px`.
@@ -1380,6 +1381,12 @@ async function measure() {
         '    /// does not parse at all.',
         '    axes: [2]u8 = .{ no_slot, no_slot },',
         '    implied: []const u8 = "",',
+        '    /// For `.layers`: the two longhands one box component fills at once.',
+        '    /// `background: padding-box` moves the origin *and* the clip, and a',
+        '    /// second component takes the clip over -- `text` is a clip and not an',
+        '    /// origin, so `text border-box` lands the other way round from how it',
+        '    /// was written.',
+        '    boxes: [2]u8 = .{ no_slot, no_slot },',
         '    /// For `.layers`: the longhand a `/` introduces, which may only sit',
         '    /// straight after the position -- `url(a) / 20px` does not parse.',
         '    size_slot: u8 = no_slot,',
@@ -1421,6 +1428,7 @@ async function measure() {
                 parts.push(`.layer_width = ${s.layer_width}`);
                 if (s.axes) parts.push(`.axes = .{ ${s.axes[0]}, ${s.axes[1]} }`);
                 if (s.implied) parts.push(`.implied = ${zigString(s.implied)}`);
+                if (s.boxes) parts.push(`.boxes = .{ ${s.boxes[0]}, ${s.boxes[1]} }`);
                 if (s.size !== 255) parts.push(`.size_slot = ${s.size}`);
                 if (s.refuse.length) parts.push(`.refuse = ${zigList(s.refuse)}`);
                 parts.push('.offsets = ' + zigSeq(s.offsets.map(zigList)));

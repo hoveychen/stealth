@@ -82,11 +82,9 @@
     testing.expectEqual('red', style.getPropertyValue('color'));
     testing.expectEqual('blue', style.getPropertyValue('background'));
     testing.expectEqual('10px', style.getPropertyValue('margin'));
-    // Three declarations, six entries: `margin` is stored as its four
-    // longhands. Chrome answers 14, because it expands `background` into nine
-    // as well -- that one is `.unmodelled` here, so it stays whole (see
-    // src/browser/webapi/css/chrome_shorthands.zig).
-    testing.expectEqual(6, style.length);
+    // Three declarations, fourteen entries: `margin` is stored as its four
+    // longhands and `background` as its nine.
+    testing.expectEqual(14, style.length);
 }
 </script>
 
@@ -160,7 +158,7 @@
     style.cssText = 'color: red;;; background: blue';
     testing.expectEqual('red', style.getPropertyValue('color'));
     testing.expectEqual('blue', style.getPropertyValue('background'));
-    testing.expectEqual(2, style.length);
+    testing.expectEqual(10, style.length);
 }
 </script>
 
@@ -171,7 +169,7 @@
 
     // Set initial properties
     style.cssText = 'color: red; background: blue';
-    testing.expectEqual(2, style.length);
+    testing.expectEqual(10, style.length);
 
     // Replace with new properties
     style.cssText = 'margin: 10px';
@@ -188,7 +186,7 @@
     const style = div.style;
 
     style.cssText = 'color: red; background: blue';
-    testing.expectEqual(2, style.length);
+    testing.expectEqual(10, style.length);
 
     // Clear all properties
     style.cssText = '';

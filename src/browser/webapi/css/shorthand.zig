@@ -30,7 +30,7 @@ pub const Expansion = struct {
 /// name, or a shorthand the generator left `.unmodelled`.
 pub fn lookup(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
-    if (entry.kind == .unmodelled or entry.kind == .layers) return null;
+    if (entry.kind == .unmodelled) return null;
     return entry;
 }
 
@@ -48,9 +48,12 @@ pub fn expand(arena: Allocator, entry: Shorthand, value: []const u8) !?Expansion
         return .{ .names = names, .values = values };
     }
 
+    if (entry.kind == .layers) return layerExpand(arena, entry, value);
+
     const values = try arena.alloc([]const u8, entry.longhands.len);
     switch (entry.kind) {
-        .unmodelled, .layers => return null,
+        .unmodelled => return null,
+        .layers => unreachable,
         .alias => values[0] = translated(entry, value),
         .presets => {
             const hit = preset(entry, value) orelse return null;
@@ -100,8 +103,11 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
         } else return keyword;
     }
 
+    if (entry.kind == .layers) return layerJoin(arena, entry, values);
+
     switch (entry.kind) {
-        .unmodelled, .layers => return "",
+        .unmodelled => return "",
+        .layers => unreachable,
         .alias => {
             for (entry.reads) |pair| {
                 if (std.ascii.eqlIgnoreCase(pair[0], values[0])) return pair[1];
@@ -153,7 +159,7 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
 pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     var found: usize = 0;
     for (table.shorthands.keys(), table.shorthands.values()) |key, entry| {
-        if (entry.kind == .unmodelled or entry.kind == .layers or key[0] == '-') continue;
+        if (entry.kind == .unmodelled or key[0] == '-') continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;
@@ -173,6 +179,344 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     }.wider);
     return out;
 }
+
+// --- the layer grammar --------------------------------------------------
+
+/// `background` is not a run of components. It is a comma-separated list of
+/// layers, and inside a layer one position fills *two* longhands out of one to
+/// four components, a `/` introduces a size and may only sit straight after
+/// the position, one box component lands on both the origin and the clip, and
+/// the colour belongs to the whole value rather than to a layer -- which is why
+/// `background: red, blue` does not parse and `url(a), red` does. Every part of
+/// that was measured; see chrome_shorthands.zig.
+fn layerExpand(arena: Allocator, entry: Shorthand, value: []const u8) !?Expansion {
+    const total = entry.longhands.len;
+    const width = entry.layer_width;
+
+    var texts: std.ArrayList([]const u8) = .empty;
+    defer texts.deinit(arena);
+    var split = Layers.init(value);
+    while (split.next()) |layer| {
+        if (layer.len == 0) return null;
+        try texts.append(arena, layer);
+    }
+    if (texts.items.len == 0) return null;
+
+    var layers: std.ArrayList([]const ?[]const u8) = .empty;
+    defer layers.deinit(arena);
+    for (texts.items, 0..) |text, n| {
+        const last = n == texts.items.len - 1;
+        const parsed = try parseLayer(arena, entry, text, last) orelse return null;
+        // A shared slot is the whole value's, so only the last layer may reach
+        // one: `url(a) blue, url(b)` does not parse where `url(a), url(b) blue`
+        // does.
+        if (!last) {
+            for (parsed[width..]) |held| {
+                if (held != null) return null;
+            }
+        }
+        try layers.append(arena, parsed);
+    }
+
+    const values = try arena.alloc([]const u8, total);
+    for (values, 0..) |*out, s| {
+        if (s >= width) {
+            out.* = layers.items[layers.items.len - 1][s] orelse entry.fillers[s];
+            continue;
+        }
+        var list: std.ArrayList([]const u8) = .empty;
+        defer list.deinit(arena);
+        for (layers.items) |layer| {
+            try list.append(arena, layer[s] orelse entry.fillers[s]);
+        }
+        out.* = try std.mem.join(arena, ", ", list.items);
+    }
+    return .{ .names = entry.longhands, .values = values };
+}
+
+/// One layer's components distributed over the slots, `null` where the value
+/// never mentioned one, or null for the whole layer when it does not fit -- in
+/// which case the caller keeps the declaration whole.
+fn parseLayer(arena: Allocator, entry: Shorthand, text: []const u8, last: bool) !?[]?[]const u8 {
+    const slots = try arena.alloc(?[]const u8, entry.longhands.len);
+    @memset(slots, null);
+
+    var found: std.ArrayList([]const u8) = .empty;
+    defer found.deinit(arena);
+    var walk = Components{ .text = std.mem.trim(u8, text, &std.ascii.whitespace), .slash = true };
+    while (walk.next()) |component| try found.append(arena, component);
+    if (!walk.exhausted()) return null;
+    const toks = found.items;
+
+    const axes = entry.axes;
+    var i: usize = 0;
+    var after_position = false;
+    var mirrored = false;
+    while (i < toks.len) {
+        const token = toks[i];
+        for (entry.refuse) |bad| {
+            if (std.ascii.eqlIgnoreCase(bad, token)) return null;
+        }
+        if (token.len == 1 and token[0] == '/') {
+            // The size takes one component. A two-value size is the size
+            // longhand's own collapse rule (`10px auto` is stored `10px`)
+            // rather than a distribution, so a value carrying one is declined.
+            if (!after_position or entry.size_slot == table.no_slot) return null;
+            if (slots[entry.size_slot] != null or i + 1 == toks.len) return null;
+            const run = toks[i + 1];
+            if (!accepts(entry.longhands[entry.size_slot], run)) return null;
+            slots[entry.size_slot] = run;
+            i += 2;
+            after_position = false;
+            continue;
+        }
+        // The box pair. One component fills both -- `background: padding-box`
+        // moves the origin *and* the clip -- and a second takes the clip over.
+        // `text` is a clip and not an origin, which is why `text border-box`
+        // lands the other way round from how it was written.
+        if (entry.boxes[0] != table.no_slot and boxToken(entry, token)) {
+            const first = entry.boxes[0];
+            const second = entry.boxes[1];
+            if (slots[first] == null and accepts(entry.longhands[first], token)) {
+                slots[first] = token;
+                if (slots[second] == null) {
+                    slots[second] = token;
+                    mirrored = true;
+                }
+            } else if (accepts(entry.longhands[second], token) and
+                (slots[second] == null or mirrored))
+            {
+                slots[second] = token;
+                mirrored = false;
+            } else return null;
+            after_position = false;
+            i += 1;
+            continue;
+        }
+        if (axes[0] != table.no_slot and slots[axes[0]] == null and slots[axes[1]] == null) {
+            // Up to four components, longest first: `left 10px top 20px` is one
+            // position where `left 10px no-repeat` is a two-component one
+            // followed by a repeat.
+            var room: usize = 0;
+            while (i + room < toks.len and !(toks[i + room].len == 1 and toks[i + room][0] == '/')) {
+                room += 1;
+            }
+            var k = @min(@as(usize, 4), room);
+            const placed = while (k >= 1) : (k -= 1) {
+                var pair: [2][]const u8 = undefined;
+                if (try positionSlots(arena, entry, toks[i .. i + k], &pair)) {
+                    slots[axes[0]] = pair[0];
+                    slots[axes[1]] = pair[1];
+                    break true;
+                }
+            } else false;
+            if (placed) {
+                i += k;
+                after_position = true;
+                continue;
+            }
+        }
+        const order = entry.longhands.len;
+        var slot: usize = 0;
+        const placed = while (slot < order) : (slot += 1) {
+            if (slots[slot] != null) continue;
+            if (slot == axes[0] or slot == axes[1]) continue;
+            if (slot == entry.boxes[0] or slot == entry.boxes[1]) continue;
+            if (slot == entry.size_slot) continue;
+            if (slot >= entry.layer_width and !last) continue;
+            if (!accepts(entry.longhands[slot], token)) continue;
+            slots[slot] = token;
+            break true;
+        } else false;
+        if (!placed) return null;
+        after_position = false;
+        i += 1;
+    }
+    return slots;
+}
+
+/// Whether a component belongs to the box pair at all, which is what keeps a
+/// keyword only the clip takes from being handed to the generic placement.
+fn boxToken(entry: Shorthand, token: []const u8) bool {
+    return accepts(entry.longhands[entry.boxes[0]], token) or
+        accepts(entry.longhands[entry.boxes[1]], token);
+}
+
+/// The two values a position leaves on its axes. One component fills both --
+/// the axis the page did not write is left holding `implied` -- two keywords
+/// may come in either order where a length fixes it, and three or four
+/// components are two `edge [offset]` groups.
+fn positionSlots(
+    arena: Allocator,
+    entry: Shorthand,
+    toks: []const []const u8,
+    out: *[2][]const u8,
+) !bool {
+    const x = entry.longhands[entry.axes[0]];
+    const y = entry.longhands[entry.axes[1]];
+    if (toks.len == 1) {
+        const takes_x = accepts(x, toks[0]);
+        const takes_y = accepts(y, toks[0]);
+        if (!takes_x and !takes_y) return false;
+        out.* = if (!takes_x) .{ entry.implied, toks[0] } else .{ toks[0], entry.implied };
+        return true;
+    }
+    if (toks.len == 2) {
+        const first = toks[0];
+        const second = toks[1];
+        // `top right` is x=right y=top, and `10px left` does not parse: only
+        // two keywords may swap.
+        if (classify(first).identifier and classify(second).identifier) {
+            const swap = (accepts(y, first) and !accepts(x, first)) or
+                (accepts(x, second) and !accepts(y, second));
+            if (swap) {
+                if (!accepts(x, second) or !accepts(y, first)) return false;
+                out.* = .{ second, first };
+                return true;
+            }
+        }
+        if (!accepts(x, first) or !accepts(y, second)) return false;
+        out.* = .{ first, second };
+        return true;
+    }
+    if (toks.len > 4) return false;
+    const splits: [2][2]usize = if (toks.len == 3) .{ .{ 1, 2 }, .{ 2, 1 } } else .{ .{ 2, 2 }, .{ 0, 0 } };
+    for (splits) |split| {
+        if (split[0] + split[1] != toks.len) continue;
+        var group: [2][]const u8 = undefined;
+        var axis: [2]u8 = undefined;
+        var ok = true;
+        for (0..2) |g| {
+            const start = if (g == 0) 0 else split[0];
+            const run = toks[start .. start + split[g]];
+            if (run.len == 1) {
+                group[g] = run[0];
+                const takes_x = accepts(x, run[0]);
+                const takes_y = accepts(y, run[0]);
+                axis[g] = if (takes_x and takes_y) 2 else if (takes_x) 0 else if (takes_y) 1 else 3;
+            } else {
+                // An offset may only follow an edge measured carrying one:
+                // `left 10px` is a position and `center 10px` is not, which is
+                // why `center 10px top` does not parse.
+                const offset = classify(run[1]);
+                if (!offset.length and !offset.percent) {
+                    ok = false;
+                    break;
+                }
+                group[g] = try std.mem.join(arena, " ", run);
+                const takes_x = listed(entry.offsets[0], run[0]);
+                const takes_y = listed(entry.offsets[1], run[0]);
+                axis[g] = if (takes_x and takes_y) 2 else if (takes_x) 0 else if (takes_y) 1 else 3;
+            }
+            if (axis[g] == 3) {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok) continue;
+        if (axis[0] == 0 and axis[1] != 0) {
+            out.* = .{ group[0], group[1] };
+        } else if (axis[0] == 1 and axis[1] != 1) {
+            out.* = .{ group[1], group[0] };
+        } else if (axis[0] == 2 and axis[1] == 1) {
+            out.* = .{ group[0], group[1] };
+        } else if (axis[0] == 2 and axis[1] == 0) {
+            out.* = .{ group[1], group[0] };
+        } else continue;
+        return true;
+    }
+    return false;
+}
+
+fn listed(names: []const []const u8, token: []const u8) bool {
+    for (names) |name| {
+        if (std.ascii.eqlIgnoreCase(name, token)) return true;
+    }
+    return false;
+}
+
+/// Reading a layered shorthand back: every slot that is not at its dropped
+/// value, in the order Chrome writes them, with the size behind a `/` and the
+/// shared slots appended to the last layer.
+fn layerJoin(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]const u8 {
+    const total = entry.longhands.len;
+    const width = entry.layer_width;
+
+    const lists = try arena.alloc([]const []const u8, total);
+    var count: usize = 1;
+    for (lists, values, 0..) |*list, value, s| {
+        if (s >= width) {
+            list.* = &.{value};
+            continue;
+        }
+        var held: std.ArrayList([]const u8) = .empty;
+        defer held.deinit(arena);
+        var split = Layers.init(value);
+        while (split.next()) |layer| try held.append(arena, layer);
+        list.* = try held.toOwnedSlice(arena);
+        count = @max(count, list.*.len);
+    }
+
+    var written: std.ArrayList([]const u8) = .empty;
+    defer written.deinit(arena);
+    for (0..count) |n| {
+        var kept: std.ArrayList([]const u8) = .empty;
+        defer kept.deinit(arena);
+        for (0..total) |i| {
+            const s = if (entry.order.len > 0) entry.order[i] else i;
+            const list = lists[s];
+            if (s >= width and n != count - 1) continue;
+            const held = if (s >= width) list[0] else if (n < list.len) list[n] else continue;
+            if (dropped(entry.omit[s], held)) continue;
+            if (s == entry.size_slot) try kept.append(arena, "/");
+            try kept.append(arena, held);
+        }
+        if (kept.items.len == 0) {
+            try written.append(arena, entry.empty orelse "");
+            continue;
+        }
+        try written.append(arena, try std.mem.join(arena, " ", kept.items));
+    }
+    return std.mem.join(arena, ", ", written.items);
+}
+
+/// A value's layers: top-level commas separate, parentheses and quotes hold.
+pub const Layers = struct {
+    text: []const u8,
+    index: usize = 0,
+
+    pub fn init(text: []const u8) Layers {
+        return .{ .text = std.mem.trim(u8, text, &std.ascii.whitespace) };
+    }
+
+    pub fn next(self: *Layers) ?[]const u8 {
+        if (self.index > self.text.len) return null;
+        const start = self.index;
+        var depth: usize = 0;
+        var quote: ?u8 = null;
+        while (self.index < self.text.len) : (self.index += 1) {
+            const c = self.text[self.index];
+            if (quote) |q| {
+                if (c == q) quote = null;
+                continue;
+            }
+            switch (c) {
+                '"', '\'' => quote = c,
+                '(' => depth += 1,
+                ')' => depth -|= 1,
+                ',' => if (depth == 0) {
+                    const out = self.text[start..self.index];
+                    self.index += 1;
+                    return std.mem.trim(u8, out, &std.ascii.whitespace);
+                },
+                else => {},
+            }
+        }
+        const out = self.text[start..self.index];
+        self.index += 1;
+        return std.mem.trim(u8, out, &std.ascii.whitespace);
+    }
+};
 
 // --- the grammar --------------------------------------------------------
 
@@ -393,6 +737,10 @@ pub const Components = struct {
     text: []const u8,
     index: usize = 0,
     stopped: bool = false,
+    /// Whether a `/` comes back as a component of its own. The flat models have
+    /// no use for one, so they stop there instead and their shorthand keeps the
+    /// value whole.
+    slash: bool = false,
 
     pub fn init(text: []const u8) Components {
         return .{ .text = std.mem.trim(u8, text, &std.ascii.whitespace) };
@@ -405,10 +753,12 @@ pub const Components = struct {
         if (self.index >= self.text.len) return null;
         const start = self.index;
         if (self.text[start] == '/') {
-            // No modelled shorthand takes one, so a value with a `/` in it is
-            // not one this engine expands.
-            self.stopped = true;
-            return null;
+            if (!self.slash) {
+                self.stopped = true;
+                return null;
+            }
+            self.index += 1;
+            return self.text[start..self.index];
         }
         var depth: usize = 0;
         var quote: ?u8 = null;
