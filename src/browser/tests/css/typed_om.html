@@ -1109,6 +1109,44 @@ function attach(el) {
     testing.expectEqual('CSSUnitValue|10px', brand(CSSStyleValue.parse('width', '10px')));
     testing.expectEqual('CSSStyleValue|red', brand(CSSStyleValue.parse('color', 'red')));
 
+    // A keyword's canonical spelling is its lower case one, whatever case it
+    // was written in and however mdn-data spells it in the table's pool.
+    testing.expectEqual('CSSKeywordValue|crispedges',
+        brand(CSSStyleValue.parse('shape-rendering', 'crispEdges')));
+    testing.expectEqual('CSSKeywordValue|crispedges',
+        brand(CSSStyleValue.parse('shape-rendering', 'CRISPEDGES')));
+    testing.expectEqual('CSSKeywordValue|visiblepainted',
+        brand(CSSStyleValue.parse('pointer-events', 'visiblePainted')));
+    testing.expectEqual('CSSKeywordValue|srgb',
+        brand(CSSStyleValue.parse('color-interpolation', 'sRGB')));
+    // ... but a property Blink does not model has no canonical spelling to
+    // answer with: measured, `parse` echoes the text as written, down to the
+    // case. `color` is one of the 154, which is why these keep their capitals.
+    testing.expectEqual('CSSStyleValue|ButtonFace',
+        brand(CSSStyleValue.parse('color', 'ButtonFace')));
+    testing.expectEqual('CSSStyleValue|bUtToNfAcE',
+        brand(CSSStyleValue.parse('color', 'bUtToNfAcE')));
+    testing.expectEqual('CSSStyleValue|SANS-SERIF',
+        brand(CSSStyleValue.parse('font-family', 'SANS-SERIF')));
+    // One measured difference left in `parse`, and it is a subclass rather than
+    // a spelling: `currentcolor` is modelled even on the colour properties
+    // Blink otherwise leaves unmodelled, so Chrome answers
+    // `CSSKeywordValue|currentcolor` for `parse('color', 'currentColor')` where
+    // this engine answers `CSSStyleValue|currentColor`. It is not general to
+    // the keyword either -- on the SVG paint properties Chrome answers
+    // `CSSStyleValue|currentColor` like this engine does:
+    testing.expectEqual('CSSStyleValue|currentColor',
+        brand(CSSStyleValue.parse('fill', 'currentColor')));
+
+    // A style map reads what the declaration stored, so the keyword spelling
+    // there is the declaration's -- lower case even for a property whose values
+    // Blink does not model.
+    const kw = attach(document.createElement('div'));
+    kw.style.setProperty('color', 'ButtonFace');
+    testing.expectEqual('CSSStyleValue|buttonface', brand(kw.attributeStyleMap.get('color')));
+    kw.style.setProperty('shape-rendering', 'crispEdges');
+    testing.expectEqual('CSSKeywordValue|crispedges', brand(kw.attributeStyleMap.get('shape-rendering')));
+
     // The style maps must not gain the check: they read values that are already
     // in the declaration, and a computed keyword this table has never seen would
     // start reading as absent.
