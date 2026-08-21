@@ -4768,14 +4768,42 @@ same 682 properties, zero keywords gained or lost case-insensitively.
 The Typed OM keeps its own answer, measured: a property Blink does not model has
 no canonical spelling to give, so `CSSStyleValue.parse('color', 'bUtToNfAcE')`
 echoes the text as written, where a style map reads the declaration and gets the
-lower case one. One difference is left there, and it is a subclass rather than a
-spelling: `currentcolor` is modelled even on the colour properties Blink
-otherwise leaves unmodelled, so Chrome answers `CSSKeywordValue|currentcolor` to
-`parse('color', 'currentColor')` where this engine answers
-`CSSStyleValue|currentColor`. It is not general to the keyword -- on the SVG
-paint properties Chrome answers `CSSStyleValue|currentColor` too -- so closing it
-needs the per-property measurement the `dispatch` table is built from, not a
-spelling change.
+lower case one.
+
+**Two keyword shapes get through an unmodelled property, and one of them told the
+two Typed OM surfaces apart.** Chasing the last subclass difference the spelling
+work left behind turned up a rule wider than the difference: a CSS-wide keyword
+is answered as a CSSKeywordValue whenever the property is a longhand in Blink's
+property tree, whatever else that property's values do. `parse('color',
+'inherit')` is a CSSKeywordValue where `parse('color', 'red')` is not, and every
+shorthand answers a bare CSSStyleValue even for `inherit`. Chrome's
+computed-style list is nearly that longhand set, and the two places it is not are
+each measured rather than reasoned about: six of the names it enumerates are
+shorthands (`background-position`, `font-variant`, `text-decoration`,
+`mask-position`, `contain-intrinsic-size`, `-webkit-mask-box-image`), and
+thirteen longhands are not enumerated at all (`all`, `size`, `word-wrap`, the
+`background-position-x/y` pair, `grid-column-gap` / `grid-row-gap`, and the
+`page*` family).
+
+`currentcolor` is the other shape, on the fourteen colour properties swept as
+answering a keyword for it -- and not on the logical border colours, `fill`,
+`stroke` or the `-webkit-` ones. It is specific to that one keyword:
+`transparent`, `red` and the system colours answer a bare CSSStyleValue on every
+one of them.
+
+The surfaces disagree on five properties, which is why `dispatch` now takes the
+one that asked: `column-rule-color` and `row-rule-color` answer a keyword for
+`currentcolor` through a style map and a CSSStyleValue through `parse`, and the
+three `page-break-*` aliases are a longhand to `parse` and not to a style map.
+Measured on 39 (surface, property, value) readings against headed Chrome 151,
+this area is now **0 diffs**.
+
+What is left there is a third axis of the same table, recorded in
+`tests/css/typed_om.html`: a property can be modelled for some of its values and
+not for others. `accent-color: auto` is a CSSKeywordValue on both engines, but
+`accent-color: ButtonFace` is a `CSSStyleValue|ButtonFace` in Chrome, because a
+named or system colour parses to a colour rather than to an identifier -- and
+this engine has no notion of which identifiers are colours.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
