@@ -457,7 +457,9 @@ pub fn findProperty(self: *const CSSStyleDeclaration, name: String) ?*Property {
     return null;
 }
 
-fn normalizePropertyName(name: []const u8, buf: []u8) []const u8 {
+/// A property name is matched case-insensitively -- `style.getPropertyValue`
+/// and the Typed OM (see `typed_om.normalizeProperty`) both answer `WIDTH`.
+pub fn normalizePropertyName(name: []const u8, buf: []u8) []const u8 {
     // Custom property names are case-sensitive: Chrome answers `--Case` and
     // `--case` as two different properties.
     if (isCustomProperty(name)) {

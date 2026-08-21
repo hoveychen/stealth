@@ -710,6 +710,88 @@ function attach(el) {
 }
 </script>
 
+<script id="typedom_property_name_case">
+{
+    // Measured (probe-css12.js, local Chrome 151 over http://127.0.0.1): the
+    // Typed OM matches a property name case-insensitively, exactly as the CSSOM
+    // half already does. A custom property name is the exception -- `--Case` and
+    // `--case` are two different properties. The messages keep echoing the name
+    // as passed, so the normalised spelling never reaches one.
+    const fresh = () => {
+        const el = attach(document.createElement('div'));
+        el.setAttribute('style', 'width: 10px; display: block; --Case: 1px');
+        return el;
+    };
+    const map = () => fresh().attributeStyleMap;
+
+    testing.expectEqual('CSSUnitValue|10px', brand(map().get('WIDTH')));
+    testing.expectEqual('CSSUnitValue|10px', brand(map().get('Width')));
+    testing.expectEqual('CSSKeywordValue|block', brand(map().get('Display')));
+    // A known property with nothing declared answers undefined, not a throw.
+    testing.expectEqual('undefined', brand(map().get('-WEBKIT-TRANSFORM')));
+    testing.expectTrue(map().has('WIDTH'));
+    testing.expectFalse(map().has('HEIGHT'));
+    testing.expectEqual('CSSUnitValue|10px', map().getAll('WIDTH').map(brand).join(' ; '));
+
+    // Custom property names stay case-sensitive.
+    testing.expectEqual('CSSUnparsedValue|1px', brand(map().get('--Case')));
+    testing.expectEqual('undefined', brand(map().get('--case')));
+    testing.expectEqual('undefined', brand(map().get('--CASE')));
+
+    const set_el = fresh();
+    set_el.attributeStyleMap.set('HEIGHT', '5px');
+    testing.expectEqual('5px', set_el.style.height);
+    testing.expectEqual('CSSUnitValue|5px', brand(set_el.attributeStyleMap.get('height')));
+
+    const del_el = fresh();
+    del_el.attributeStyleMap.delete('WIDTH');
+    testing.expectEqual('', del_el.style.width);
+    // Deleting the lowercase spelling leaves the capitalised custom property.
+    const del_custom = fresh();
+    del_custom.attributeStyleMap.delete('--case');
+    testing.expectEqual('CSSUnparsedValue|1px', brand(del_custom.attributeStyleMap.get('--Case')));
+
+    // The checks behind set and append read the normalised name too: an angle
+    // for a length property is the type error however the property is spelled,
+    // and append reaches its "no list-valued property" throw rather than
+    // rejecting the name.
+    testing.expectEqual("TypeError: Failed to execute 'set' on 'StylePropertyMap': Invalid type for property",
+        errorText(() => map().set('WIDTH', U(3, 'deg'))));
+    testing.expectEqual("TypeError: Failed to execute 'append' on 'StylePropertyMap': Property does not support multiple values",
+        errorText(() => map().append('WIDTH', U(1, 'px'))));
+    testing.expectEqual("TypeError: Failed to execute 'append' on 'StylePropertyMap': Appending to custom properties is not supported",
+        errorText(() => map().append('--Case', '1px')));
+    // A name no spelling can rescue still throws, echoed as passed.
+    testing.expectEqual("TypeError: Failed to execute 'get' on 'StylePropertyMapReadOnly': Invalid propertyName: BOGUS",
+        errorText(() => map().get('BOGUS')));
+    testing.expectEqual("TypeError: Failed to execute 'delete' on 'StylePropertyMap': Invalid property name: BOGUS",
+        errorText(() => map().delete('BOGUS')));
+
+    // computedStyleMap() reads the same way.
+    const computed = fresh().computedStyleMap();
+    testing.expectEqual('CSSKeywordValue|block', brand(computed.get('DISPLAY')));
+    testing.expectEqual('CSSUnitValue|10px', brand(computed.get('Width')));
+    testing.expectTrue(computed.has('DISPLAY'));
+    testing.expectEqual('CSSKeywordValue|block', computed.getAll('DISPLAY').map(brand).join(' ; '));
+
+    // CSSStyleValue.parse runs its per-property dispatch on the normalised
+    // name, and still answers the keyword's canonical spelling.
+    testing.expectEqual('CSSUnitValue|10px', brand(CSSStyleValue.parse('WIDTH', '10px')));
+    testing.expectEqual('CSSUnitValue|10px', brand(CSSStyleValue.parse('Width', '10px')));
+    testing.expectEqual('CSSKeywordValue|block', brand(CSSStyleValue.parse('DISPLAY', 'BLOCK')));
+    testing.expectEqual('CSSUnparsedValue|1px', brand(CSSStyleValue.parse('--Case', '1px')));
+    testing.expectEqual('CSSUnitValue|10px', CSSStyleValue.parseAll('WIDTH', '10px').map(brand).join(' ; '));
+    // The rejected-value message echoes the property as passed, and parseAll
+    // names itself rather than borrowing parse's wording.
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notalength') could not be parsed as a 'WIDTH'.",
+        errorText(() => CSSStyleValue.parse('WIDTH', 'notalength')));
+    testing.expectEqual("TypeError: Failed to execute 'parseAll' on 'CSSStyleValue': The value provided ('notalength') could not be parsed as a 'WIDTH'.",
+        errorText(() => CSSStyleValue.parseAll('WIDTH', 'notalength')));
+    testing.expectEqual("TypeError: Failed to execute 'parseAll' on 'CSSStyleValue': Invalid property name",
+        errorText(() => CSSStyleValue.parseAll('BOGUS', '1px')));
+}
+</script>
+
 <!--
   Blink's exception wording. Every string below was measured on the local
   Chrome 151 over http://127.0.0.1 (tools/fingerprint/probes/probe-css7.js plus
@@ -1002,14 +1084,10 @@ function attach(el) {
         errorText(() => CSSStyleValue.parse('margin', 'notalength')));
     testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notalength') could not be parsed as a '-webkit-border-radius'.",
         errorText(() => CSSStyleValue.parse('-webkit-border-radius', 'notalength')));
-    // Chrome takes the property name case-insensitively and echoes it back as
-    // passed: `parse('WIDTH', 'notalength')` reports "...as a 'WIDTH'.". This
-    // engine's property lookup is case-sensitive, so it stops one step earlier
-    // with "Invalid property name". That gap predates the keyword table and is
-    // not the Typed OM's -- it is `CSSStyleDeclaration.isKnownPropertyName`,
-    // which every style map member consults too -- so it is recorded here rather
-    // than papered over.
-    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': Invalid property name",
+    // The property name is taken case-insensitively and echoed back as passed,
+    // so the value is judged against `width` while the message names 'WIDTH'.
+    // The rest of that surface is in typedom_property_name_case.
+    testing.expectEqual("TypeError: Failed to execute 'parse' on 'CSSStyleValue': The value provided ('notalength') could not be parsed as a 'WIDTH'.",
         errorText(() => CSSStyleValue.parse('WIDTH', 'notalength')));
 
     // Still accepted, and this is the half that matters: rejecting any of these
