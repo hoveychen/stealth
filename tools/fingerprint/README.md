@@ -4733,14 +4733,49 @@ closing it needs the per-property grammars this engine deliberately does not
 have, since a grammar written one notch too narrow drops declarations Chrome
 renders.
 
-One difference this probe does *not* reach, found by the tests written for the
-fold: `color: currentColor` answers `currentColor` here and `currentcolor` in
-Chrome. `keywordSpelling` takes its spelling from `chrome_keywords.zig`, which
-is generated from mdn-data as an *acceptance* table -- and measuring all 52 of
-that table's capitalised keywords says Chrome answers every one of them in
-lower case (41 system colours, `currentColor`, and nine SVG keywords such as
-`visiblePainted` and `sRGB`). It also runs the wrong way: a page writing
-`pointer-events: visiblepainted` reads back `visiblePainted` here.
+**A keyword's canonical spelling is the one Chrome answers with, and that is
+always the lower case one.** This one no probe here reaches: it was found by the
+tests written for the colour fold, when `color: currentColor` answered
+`currentColor`. `chrome_keywords.zig` is generated from mdn-data as an
+*acceptance* table, and its spelling came from the candidate pool -- which is
+spelled the way the spec spells it. So 59 keywords carried a capital Chrome does
+not use: 41 system colours (`ButtonFace`), `currentColor`, nine SVG keywords
+(`visiblePainted`, `sRGB`, `crispEdges`, `optimizeLegibility`) and the seven page
+sizes (`A4`, `JIS-B4`).
+
+The measurement is the whole table: all 14392 (property, keyword) pairs written
+to a real declaration and read back. 2590 pairs differ, every one of them only
+by case and every one lower; not a single keyword is answered with a capital,
+and no keyword is spelled two ways across the properties that take it. It also
+ran the wrong way, which is what made it more than a fingerprint: a page writing
+`pointer-events: visiblepainted` -- the spelling Chrome itself answers -- read
+back `visiblePainted` here, because the table's spelling was returned for any
+case-insensitive match.
+
+So the generator now reads the spelling off a declaration rather than taking the
+candidate. Two traps in doing that, both worth writing down: a property taking an
+arbitrary `<custom-ident>` echoes every identifier as written *and* is the first
+property to accept most candidates (`animation-name` sorts before
+`color-interpolation`), so learning a spelling there freezes the candidate's own
+capitals -- 21 keywords came back wrong that way before those properties were
+skipped. And a shorthand can answer without the keyword in it at all (`display:
+flow` answers `block`, `border: none` answers nothing), so it cannot say how the
+keyword is spelled; since the spelling belongs to the keyword and not the
+property, those take whatever another property measured, which is what closed
+the last 54 shorthand pairs. Acceptance is unchanged and checked either way: the
+same 682 properties, zero keywords gained or lost case-insensitively.
+
+The Typed OM keeps its own answer, measured: a property Blink does not model has
+no canonical spelling to give, so `CSSStyleValue.parse('color', 'bUtToNfAcE')`
+echoes the text as written, where a style map reads the declaration and gets the
+lower case one. One difference is left there, and it is a subclass rather than a
+spelling: `currentcolor` is modelled even on the colour properties Blink
+otherwise leaves unmodelled, so Chrome answers `CSSKeywordValue|currentcolor` to
+`parse('color', 'currentColor')` where this engine answers
+`CSSStyleValue|currentColor`. It is not general to the keyword -- on the SVG
+paint properties Chrome answers `CSSStyleValue|currentColor` too -- so closing it
+needs the per-property measurement the `dispatch` table is built from, not a
+spelling change.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
