@@ -30,7 +30,7 @@ pub const Expansion = struct {
 /// name, or a shorthand the generator left `.unmodelled`.
 pub fn lookup(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
-    if (entry.kind == .unmodelled) return null;
+    if (entry.kind == .unmodelled or entry.kind == .layers) return null;
     return entry;
 }
 
@@ -50,7 +50,7 @@ pub fn expand(arena: Allocator, entry: Shorthand, value: []const u8) !?Expansion
 
     const values = try arena.alloc([]const u8, entry.longhands.len);
     switch (entry.kind) {
-        .unmodelled => return null,
+        .unmodelled, .layers => return null,
         .alias => values[0] = translated(entry, value),
         .presets => {
             const hit = preset(entry, value) orelse return null;
@@ -101,7 +101,7 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
     }
 
     switch (entry.kind) {
-        .unmodelled => return "",
+        .unmodelled, .layers => return "",
         .alias => {
             for (entry.reads) |pair| {
                 if (std.ascii.eqlIgnoreCase(pair[0], values[0])) return pair[1];
@@ -153,7 +153,7 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
 pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     var found: usize = 0;
     for (table.shorthands.keys(), table.shorthands.values()) |key, entry| {
-        if (entry.kind == .unmodelled or key[0] == '-') continue;
+        if (entry.kind == .unmodelled or entry.kind == .layers or key[0] == '-') continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;
@@ -223,6 +223,8 @@ fn accepts(longhand: []const u8, component: []const u8) bool {
             .identifier => classes.identifier,
             .colour => classes.colour,
             .function => classes.function,
+            .gradient => classes.gradient,
+            .image => classes.image,
         }) return true;
     }
     return false;
@@ -239,6 +241,8 @@ const Classes = packed struct {
     identifier: bool = false,
     colour: bool = false,
     function: bool = false,
+    gradient: bool = false,
+    image: bool = false,
 };
 
 /// A component's value classes, by shape alone -- the same test the generator
@@ -256,8 +260,7 @@ fn classify(component: []const u8) Classes {
     }
     if (component[component.len - 1] == ')') {
         const open = std.mem.indexOfScalar(u8, component, '(') orelse return .{};
-        if (std.ascii.eqlIgnoreCase(component[0..open], "url")) return .{ .url = true };
-        return .{ .function = true };
+        return functionClass(component[0..open]);
     }
     const digits = numberEnd(component);
     if (digits == 0) {
@@ -283,6 +286,29 @@ fn classify(component: []const u8) Classes {
         if (!std.ascii.isAlphabetic(c)) return .{};
     }
     return .{ .length = true };
+}
+
+/// A function's class comes from its name rather than from the fact that it is
+/// a function: `background-image` takes `linear-gradient()` and not `rgb()`, and
+/// `background-color` the other way round, so a single `function` class puts a
+/// gradient in the colour. A name this does not know has no class at all, and a
+/// value carrying one is declined rather than guessed at.
+fn functionClass(name: []const u8) Classes {
+    if (std.ascii.eqlIgnoreCase(name, "url")) return .{ .url = true };
+    if (std.ascii.endsWithIgnoreCase(name, "-gradient")) return .{ .gradient = true };
+    if (std.ascii.eqlIgnoreCase(name, "image-set") or
+        std.ascii.eqlIgnoreCase(name, "-webkit-image-set"))
+    {
+        return .{ .image = true };
+    }
+    for ([_][]const u8{
+        "rgb",       "rgba",       "hsl",   "hsla",  "hwb",
+        "lab",       "lch",        "oklab", "oklch", "color",
+        "color-mix", "light-dark",
+    }) |known| {
+        if (std.ascii.eqlIgnoreCase(name, known)) return .{ .function = true };
+    }
+    return .{};
 }
 
 /// How much of the component is a number, 0 when it does not start with one.
