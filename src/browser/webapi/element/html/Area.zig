@@ -197,6 +197,16 @@ pub fn getRelList(self: *Area, frame: *Frame) !?*DOMTokenList {
     return element.getRelList(frame);
 }
 
+/// `[PutForwards=value]`: the setter assigns to the DOMTokenList's `value`, so
+/// the `rel` content attribute moves and the list object stays the same one.
+/// The point is the descriptor: with a setter it reads as an accessor, which is
+/// what Chrome exposes and what a bot check reads. See
+/// src/browser/tests/descriptor_kind.html.
+pub fn setRelList(self: *Area, value: lp.String, frame: *Frame) !void {
+    const list = (try self.getRelList(frame)) orelse return;
+    try list.setValue(value, frame);
+}
+
 fn getResolvedHref(self: *Area, frame: *Frame) !?[:0]const u8 {
     const href = self.asElement().getAttributeSafe(comptime .wrap("href")) orelse return null;
     if (href.len == 0) {
@@ -244,7 +254,7 @@ pub const JsApi = struct {
     pub const rel = reflect.string("rel");
     pub const referrerPolicy = reflect.referrerPolicy();
     pub const toString = bridge.function(Area.getHref, .{});
-    pub const relList = bridge.accessor(Area.getRelList, null, .{ .null_as_undefined = true });
+    pub const relList = bridge.accessor(Area.getRelList, Area.setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
 };
 
 const testing = @import("../../../../testing.zig");

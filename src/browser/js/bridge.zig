@@ -1583,3 +1583,12 @@ pub fn inheritsOrIs(comptime Child: type, comptime Ancestor: type) bool {
         }
     }
 }
+
+const testing = @import("../../testing.zig");
+// Not "does the property answer the right value" -- every other test does that
+// -- but "is it the right *kind* of property", which is what this file decides
+// and what a bot check reads through
+// `Object.getOwnPropertyDescriptor(P, k).get.call(o)`.
+test "WebApi: descriptor kind" {
+    try testing.htmlRunner("descriptor_kind.html", .{});
+}

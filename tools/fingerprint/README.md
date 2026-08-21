@@ -5346,6 +5346,10 @@ and an accessor in Chrome, because then `desc.get` is undefined.
 
 ### 42 properties are the wrong *kind*, and no value probe could see it
 
+(All 42 are converted now; the table below is the reading that started it, and
+"here" means the engine as it was. What the conversion bought is two sections
+down.)
+
 `probes/probe-descriptor-kind.js` reduces every own property of 130 platform
 prototypes to what kind of property it is -- `get`, `set`, `accessor`, `method`,
 `value` -- and diffs the two engines. A property with the right value and the
@@ -5394,9 +5398,72 @@ getter that no Chrome has.
 
 The readings are `results/probes/probe-descriptor-kind.{chrome,lightpanda}.json`,
 and the oracle for a fix is the probe itself: the wrong-kind list going to zero.
-What that buys is unmeasured until the Cloudflare station is re-run against it,
-which is the next step and the reason the list above is ordered by what a
-challenge reads rather than by interface.
+What that buys is a separate question, and the section below answers it.
+
+### The wrong-kind list is now zero, and Turnstile still fails
+
+All 42 are converted. `probe-descriptor-kind` reports **0 wrong kinds** in both
+directions on the same 130 prototypes, and `src/browser/tests/descriptor_kind.html`
+pins every one of them plus what each new setter does. What Chrome installs is
+not uniform, so the conversions are not either, and the shape came from a second
+probe rather than from a spec reading -- `probes/probe-setter-semantics.js`,
+whose Chrome reading is in `results/probes/probe-setter-semantics.chrome.json`:
+
+| shape | members | what Chrome's setter does |
+|---|---|---|
+| `[LegacyLenientSetter]` | `Document.fullscreen` / `fullscreenEnabled` / `fullscreenElement` | exists, silently drops the assignment |
+| `[PutForwards=value]` | `HTMLIFrameElement.sandbox`, `relList` on `a`/`area`/`link`/SVG `a`, `HTMLOutputElement.htmlFor` | assigns to the token list's `value`; the attribute moves, the object identity does not |
+| genuinely read-write | `HTMLInputElement.files` / `selectionDirection`, `IDBObjectStore.name`, `FontFace`'s eight descriptors, `WebGL*.drawingBufferColorSpace` / `unpackColorSpace` | each with its own failure mode: `files` ignores `null` and a non-file input, `selectionDirection` is InvalidStateError on a type that cannot select and normalises garbage to `"none"`, `IDBObjectStore.name` is InvalidStateError outside a versionchange transaction, `FontFace` parses and throws SyntaxError on an unparsable value, and the two colour spaces *ignore* an out-of-range string rather than throwing the TypeError a WebIDL enum implies |
+| readonly `get` | the remaining 21 | assignment dropped in sloppy mode, `desc.set` undefined |
+
+The Cloudflare station was re-run against it: **no change.** `cf-scrapingcourse`
+still answers 403, still prints
+`TypeError: Cannot read properties of undefined (reading 'call')`, still tears
+the widget down.
+
+**And the debug-info string is not a usable oracle.** It was recorded as one --
+Turnstile prints an opaque pair of base64 blobs with that TypeError, and the
+string held byte-for-byte across runs and across the first eleven conversions,
+which made "the string moved" look like a test for having touched the cause. It
+does not survive a day. After the remaining 31 landed the string was different in
+all four segments, which read as a hit until the control was run: **the previous
+binary, from before any of this, prints the new string too**, out of the same
+`turnstile/v0/b/e694063b5082/api.js` bundle, minutes apart on one address.
+Cloudflare rotated something of their own. Two lessons, both cheap:
+
+* Compare a candidate against a control **run in the same sitting**, never
+  against a value remembered from an earlier one.
+* A remote party's opaque output is only an oracle for as long as they leave it
+  alone, and they do not announce when they stop.
+
+### What is left, and why it is a short list
+
+The two closed classes bound the remaining one tightly. "Cannot read properties
+of undefined (reading 'call')" means something read `X.y` and got undefined, then
+called `.call` on it. So:
+
+* `getOwnPropertyDescriptor(P, k).get.call(o)` against a **wrong kind** -- closed,
+  the list is zero.
+* the same line's `.set.call(o)` against a getter-only property -- closed by the
+  same change.
+* the same line against a **missing** property answers `undefined` from
+  `getOwnPropertyDescriptor` itself, so `.get` throws `reading 'get'`, not
+  `reading 'call'`. That excludes the 97 missing accessors as the cause of *this*
+  message, even though they are still worth having.
+
+What is left is `X.y.call(...)` where **`y` is a missing member** -- most likely a
+method, since that is what gets `.call`ed directly. `probe-descriptor-kind` cannot
+see it: it reduces properties that exist, and a name that is absent has no kind.
+The probe that would is a set difference -- Chrome's
+`Object.getOwnPropertyNames` for each of the 130 prototypes minus ours -- and it
+has not been written yet. That is the next measurement, not another round of
+converting properties.
+
+One caveat on where to look: the TypeError follows the widget document being
+fetched as a `type=Document`, so the failing read may be happening in the
+**iframe's realm** rather than the main one. A cross-origin child realm being
+thinner than the top-level one would not show up in any probe in this directory,
+all of which measure the main realm.
 
 ## The two "wedges" were crashes
 

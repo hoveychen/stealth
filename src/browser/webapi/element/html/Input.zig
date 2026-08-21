@@ -354,17 +354,12 @@ pub fn getFiles(self: *Input, frame: *Frame) !?*FileList {
     return try self.ensureFileList(frame);
 }
 
-/// Replaces the selected file list and fires `input` + `change` events.
-/// Used by CDP `DOM.setFileInputFiles` and any future DataTransfer-style setter.
-///
 /// The FileList holds a reference on each File (whose backing arena is reference
 /// counted via its Blob proto), so we acquire on the incoming files and release
-/// the outgoing ones; the frame releases whatever remains at teardown.
-pub fn setFiles(self: *Input, files: []const *File, frame: *Frame) !void {
-    if (self._input_type != .file) {
-        return error.InvalidStateError;
-    }
-
+/// the outgoing ones; the frame releases whatever remains at teardown. Acquiring
+/// before releasing is what makes `input.files = input.files` a no-op rather than
+/// a double free.
+fn replaceFiles(self: *Input, files: []const *File, frame: *Frame) !void {
     const fl = try self.ensureFileList(frame);
     const dupe = try frame.arena.dupe(*File, files);
 
@@ -377,6 +372,38 @@ pub fn setFiles(self: *Input, files: []const *File, frame: *Frame) !void {
     }
 
     fl._files = dupe;
+}
+
+/// The `files` setter. Read-write is what makes the descriptor an accessor
+/// rather than the getter-only one this engine had, and the kind is what a bot
+/// check reads (see src/browser/tests/descriptor_kind.html).
+///
+/// Measured on headed Chrome 150 (probe-setter-semantics): `null` is ignored, an
+/// input whose type is not `file` ignores the assignment entirely rather than
+/// throwing (the IDL attribute simply does not apply), a value that is not a
+/// FileList is the bridge's TypeError, and the assignment fires **no** events --
+/// `input`/`change` belong to a user selection, not to this.
+///
+/// Chrome adopts the assigned FileList object itself, so `input.files === src`
+/// afterwards; here the files are copied into this input's own list, because a
+/// File's reference is owned by the frame-tracked FileList holding it and two
+/// owners would release it once.
+pub fn setFilesFromList(self: *Input, files: ?*FileList, frame: *Frame) !void {
+    if (self._input_type != .file) {
+        return;
+    }
+    const list = files orelse return;
+    try self.replaceFiles(list._files, frame);
+}
+
+/// Replaces the selected file list and fires `input` + `change` events, the way
+/// a user picking files in the dialog would. Used by CDP `DOM.setFileInputFiles`.
+pub fn setFiles(self: *Input, files: []const *File, frame: *Frame) !void {
+    if (self._input_type != .file) {
+        return error.InvalidStateError;
+    }
+
+    try self.replaceFiles(files, frame);
 
     // A file input fires `input` then `change`, both as plain bubbling Events
     // (not InputEvents — `inputType`/`data` only apply to editable text inputs).
@@ -772,6 +799,24 @@ pub fn innerInsert(self: *Input, str: []const u8, frame: *Frame) !void {
 
 pub fn getSelectionDirection(self: *const Input) []const u8 {
     return @tagName(self._selection_direction);
+}
+
+/// `selectionDirection` is read-write, which is what makes its descriptor an
+/// accessor rather than the getter-only one this engine had -- and the kind is
+/// what a bot check reads (see src/browser/tests/descriptor_kind.html).
+///
+/// Measured on headed Chrome 150 (probe-setter-semantics): an input type that
+/// does not support selection throws InvalidStateError, and anything that is not
+/// one of the three keywords -- including `null` -- normalises to "none" without
+/// throwing, the same rule `setSelectionRange` already applies to its third
+/// argument.
+pub fn setSelectionDirection(self: *Input, value: ?[]const u8, frame: *Frame) !void {
+    if (!self.selectionAvailable()) return error.InvalidStateError;
+    self._selection_direction = if (value) |v|
+        std.meta.stringToEnum(Selection.SelectionDirection, v) orelse .none
+    else
+        .none;
+    try self.dispatchSelectionChangeEvent(frame);
 }
 
 pub fn getSelectionStart(self: *const Input) !?u32 {
@@ -1400,7 +1445,7 @@ pub const JsApi = struct {
     pub const onselectionchange = bridge.accessor(handlerProperty(Input, .onselectionchange).get, handlerProperty(Input, .onselectionchange).set, .{});
     pub const @"type" = bridge.accessor(Input.getType, Input.setType, .{ .ce_reactions = true });
     pub const value = bridge.accessor(Input.getValueForJS, setValueFromJS, .{ .ce_reactions = true });
-    pub const files = bridge.accessor(Input.getFiles, null, .{});
+    pub const files = bridge.accessor(Input.getFiles, Input.setFilesFromList, .{});
     pub const defaultValue = bridge.accessor(Input.getDefaultValue, Input.setDefaultValue, .{ .ce_reactions = true });
     pub const checked = bridge.accessor(Input.getChecked, Input.setChecked, .{});
     pub const defaultChecked = bridge.accessor(Input.getDefaultChecked, Input.setDefaultChecked, .{ .ce_reactions = true });
@@ -1442,7 +1487,7 @@ pub const JsApi = struct {
 
     pub const selectionStart = bridge.accessor(Input.getSelectionStart, Input.setSelectionStart, .{});
     pub const selectionEnd = bridge.accessor(Input.getSelectionEnd, Input.setSelectionEnd, .{});
-    pub const selectionDirection = bridge.accessor(Input.getSelectionDirection, null, .{});
+    pub const selectionDirection = bridge.accessor(Input.getSelectionDirection, Input.setSelectionDirection, .{});
     pub const setSelectionRange = bridge.function(Input.setSelectionRange, .{});
 };
 

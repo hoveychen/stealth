@@ -250,6 +250,10 @@ pub fn abortWith(self: *IDBTransaction, exec: *Execution, reason: ?anyerror) err
             if (store._created) {
                 store._deleted = true;
             }
+            if (store._renamed_from) |original| {
+                store._name = original;
+                store._renamed_from = null;
+            }
             for (store._indexes.items) |idx| {
                 if (idx._created) {
                     idx._deleted = true;

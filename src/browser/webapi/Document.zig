@@ -1358,6 +1358,15 @@ pub fn getFullscreenElement(_: *const Document) ?*Element {
     return null;
 }
 
+/// The setter the three attributes above share. `fullscreenEnabled`,
+/// `fullscreen` and `fullscreenElement` are `[LegacyLenientSetter]` in the
+/// Fullscreen spec: readonly, but with a setter that exists and silently drops
+/// the assignment. So the descriptor is an accessor with both halves, which is
+/// what a bot check reads -- measured on headed Chrome 150, no throw and the
+/// value stays (probe-setter-semantics, and the assertions in
+/// src/browser/tests/descriptor_kind.html).
+pub fn setLeniently(_: *Document, _: js.Value) void {}
+
 pub fn getPictureInPictureEnabled(_: *const Document) bool {
     return true;
 }
@@ -2134,8 +2143,8 @@ pub const JsApi = struct {
     pub const onsearch = bridge.accessor(handlerAccessor(.onsearch).get, handlerAccessor(.onsearch).set, .{});
     pub const onvisibilitychange = bridge.accessor(handlerAccessor(.onvisibilitychange).get, handlerAccessor(.onvisibilitychange).set, .{});
     pub const timeline = bridge.accessor(Document.getTimeline, null, .{});
-    pub const fullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, null, .{});
-    pub const fullscreen = bridge.accessor(Document.getFullscreen, null, .{});
+    pub const fullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, Document.setLeniently, .{});
+    pub const fullscreen = bridge.accessor(Document.getFullscreen, Document.setLeniently, .{});
     pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
     pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
     pub const webkitIsFullScreen = bridge.accessor(Document.getFullscreen, null, .{});
@@ -2252,7 +2261,7 @@ pub const JsApi = struct {
     pub const activeElement = bridge.accessor(Document.getActiveElement, null, .{});
     pub const styleSheets = bridge.accessor(Document.getStyleSheets, null, .{});
     pub const pointerLockElement = bridge.accessor(Document.getFullscreenElement, null, .{});
-    pub const fullscreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const fullscreenElement = bridge.accessor(Document.getFullscreenElement, Document.setLeniently, .{});
     pub const adoptedStyleSheets = bridge.accessor(Document.getAdoptedStyleSheets, Document.setAdoptedStyleSheets, .{});
     pub const pictureInPictureElement = bridge.accessor(Document.getFullscreenElement, null, .{});
     pub const fonts = bridge.accessor(Document.getFonts, null, .{});

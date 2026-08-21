@@ -139,6 +139,16 @@ pub const Orientation = struct {
         return self._proto;
     }
 
+    // The same two values that were here as data properties; only the kind
+    // moves, for the reason in the comment above getAvailHeight.
+    pub fn getAngle(_: *const Orientation) u16 {
+        return 0;
+    }
+
+    pub fn getType(_: *const Orientation) []const u8 {
+        return "landscape-primary";
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(Orientation);
 
@@ -148,7 +158,7 @@ pub const Orientation = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        pub const angle = bridge.property(0, .{ .template = false });
-        pub const @"type" = bridge.property("landscape-primary", .{ .template = false });
+        pub const angle = bridge.accessor(Orientation.getAngle, null, .{});
+        pub const @"type" = bridge.accessor(Orientation.getType, null, .{});
     };
 };

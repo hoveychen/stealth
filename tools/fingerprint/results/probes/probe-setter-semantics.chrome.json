@@ -1,0 +1,176 @@
+{
+ "href": "http://localhost:8777/",
+ "out": {
+  "document.fullscreen = 1": {
+   "ok": true,
+   "after": "boolean false"
+  },
+  "document.fullscreenEnabled = 0": {
+   "ok": true,
+   "after": "boolean true"
+  },
+  "document.fullscreenElement = null": {
+   "ok": true,
+   "after": "null"
+  },
+  "iframe.sandbox = \"allow-scripts\"": {
+   "ok": true,
+   "after": {
+    "kind": "[object DOMTokenList]",
+    "value": "allow-scripts",
+    "attribute": "allow-scripts",
+    "same_object": true
+   }
+  },
+  "a.relList = \"nofollow\"": {
+   "ok": true,
+   "after": {
+    "value": "nofollow",
+    "rel": "nofollow",
+    "attribute": "nofollow"
+   }
+  },
+  "output.htmlFor = \"x y\"": {
+   "ok": true,
+   "after": {
+    "value": "x y",
+    "attribute": "x y"
+   }
+  },
+  "input[file].files = null": {
+   "ok": true,
+   "after": "[object FileList]"
+  },
+  "input[file].files = \"x\"": {
+   "ok": false,
+   "error": "TypeError: Failed to set the 'files' property on 'HTMLInputElement': Failed to convert value to 'FileList'."
+  },
+  "input[file].files = <FileList len 1>": {
+   "ok": true,
+   "after": {
+    "length": 1,
+    "name": "a.txt",
+    "identity": true
+   }
+  },
+  "input[text].files = <FileList>": {
+   "ok": true,
+   "after": "null"
+  },
+  "input[email].selectionDirection read": {
+   "ok": true,
+   "after": "null"
+  },
+  "input[email].selectionDirection = \"forward\"": {
+   "ok": false,
+   "error": "DOMException: Failed to set the 'selectionDirection' property on 'HTMLInputElement': The input element's type ('email') does not support selection."
+  },
+  "input[text].selectionDirection = \"backward\"": {
+   "ok": true,
+   "after": "string \"backward\""
+  },
+  "input[text].selectionDirection = \"garbage\"": {
+   "ok": true,
+   "after": "string \"none\""
+  },
+  "input[text].selectionDirection = null": {
+   "ok": true,
+   "after": "string \"none\""
+  },
+  "gl.drawingBufferColorSpace = \"display-p3\"": {
+   "ok": true,
+   "after": "string \"display-p3\""
+  },
+  "gl.drawingBufferColorSpace = \"garbage\"": {
+   "ok": true,
+   "after": "string \"display-p3\""
+  },
+  "gl.unpackColorSpace = \"display-p3\"": {
+   "ok": true,
+   "after": "string \"display-p3\""
+  },
+  "gl.drawingBufferFormat = 0": {
+   "ok": true,
+   "after": "number 32856"
+  },
+  "fontFace.family = \"Other\"": {
+   "ok": true,
+   "after": "string \"Other\""
+  },
+  "fontFace.style = \"italic\"": {
+   "ok": true,
+   "after": "string \"italic\""
+  },
+  "fontFace.style = \"garbage\"": {
+   "ok": false,
+   "error": "DOMException: Failed to set the 'style' property on 'FontFace': Failed to set 'garbage' as a property value."
+  },
+  "fontFace.weight = \"700\"": {
+   "ok": true,
+   "after": "string \"700\""
+  },
+  "fontFace.unicodeRange = \"U+0-FF\"": {
+   "ok": true,
+   "after": "string \"U+0-FF\""
+  },
+  "fontFace.variant = \"small-caps\"": {
+   "ok": true,
+   "after": "string \"small-caps\""
+  },
+  "fontFace.featureSettings = \"\\\"liga\\\" 0\"": {
+   "ok": true,
+   "after": "string \"\\\"liga\\\" 0\""
+  },
+  "fontFace.display = \"swap\"": {
+   "ok": true,
+   "after": "string \"swap\""
+  },
+  "fontFace.stretch = \"condensed\"": {
+   "ok": true,
+   "after": "string \"condensed\""
+  },
+  "fontFace.status = \"loading\"": {
+   "ok": true,
+   "after": "string \"unloaded\""
+  },
+  "fontFace defaults": {
+   "ok": true,
+   "after": "style=\"normal\" weight=\"normal\" stretch=\"normal\" unicodeRange=\"U+0-10FFFF\" variant=\"normal\" featureSettings=\"normal\" display=\"auto\" status=\"unloaded\""
+  },
+  "fontFaceSet.size = 9": {
+   "ok": true,
+   "after": "number 0"
+  },
+  "fontFaceSet.status = \"loading\"": {
+   "ok": true,
+   "after": "string \"loaded\""
+  },
+  "idb": {
+   "in versionchange: rename": {
+    "ok": true,
+    "after": {
+     "name": "renamed",
+     "storeNames": [
+      "renamed"
+     ]
+    }
+   },
+   "in versionchange: rename to existing": {
+    "ok": false,
+    "error": "DOMException: Failed to set the 'name' property on 'IDBObjectStore': An object store with the specified name already exists."
+   },
+   "in readwrite: rename": {
+    "ok": false,
+    "error": "DOMException: Failed to set the 'name' property on 'IDBObjectStore': The database is not running a version change transaction."
+   },
+   "after commit: rename": {
+    "ok": false,
+    "error": "DOMException: Failed to set the 'name' property on 'IDBObjectStore': The database is not running a version change transaction."
+   }
+  },
+  "readonly (get, no setter)": {
+   "ok": true,
+   "after": "offsetX 0 -> 0, descriptor set=undefined"
+  }
+ }
+}

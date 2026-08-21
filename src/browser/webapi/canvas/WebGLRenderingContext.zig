@@ -44,6 +44,22 @@ const WebGLRenderingContext = @This();
 /// `gl.canvas` and the drawing-buffer size are read by feature-detection code.
 _canvas: Surface,
 
+/// `drawingBufferColorSpace` and `unpackColorSpace` are the only two read-write
+/// attributes on this interface, and nothing downstream reads them -- there is
+/// no rasterizer to hand a colour space to. They are stored so the assignment
+/// sticks, because in Chrome they are accessors and a bot check reads the
+/// descriptor (see src/browser/tests/descriptor_kind.html).
+_drawing_buffer_color_space: ColorSpace = .srgb,
+_unpack_color_space: ColorSpace = .srgb,
+
+/// WebIDL `PredefinedColorSpace`, whose only two members these attributes take.
+/// Chrome *ignores* an out-of-range string rather than throwing the TypeError a
+/// WebIDL enum would normally produce -- measured, probe-setter-semantics.
+pub const ColorSpace = enum {
+    srgb,
+    @"display-p3",
+};
+
 /// Either kind of canvas can own a WebGL context: Chrome hands one back for
 /// `new OffscreenCanvas(256, 256).getContext('webgl')` too (measured, on the
 /// main thread and inside a worker), and `gl.canvas` is then the
@@ -506,6 +522,32 @@ pub fn getDrawingBufferWidth(self: *const WebGLRenderingContext) u32 {
 
 pub fn getDrawingBufferHeight(self: *const WebGLRenderingContext) u32 {
     return self._canvas.height();
+}
+
+// Chrome answers RGBA8 (0x8058) for the default drawing buffer, and answers it
+// from a getter with no setter.
+pub fn getDrawingBufferFormat(_: *const WebGLRenderingContext) u32 {
+    return RGBA8;
+}
+
+pub fn getDrawingBufferColorSpace(self: *const WebGLRenderingContext) []const u8 {
+    return @tagName(self._drawing_buffer_color_space);
+}
+
+pub fn setDrawingBufferColorSpace(self: *WebGLRenderingContext, value: []const u8) void {
+    if (std.meta.stringToEnum(ColorSpace, value)) |cs| {
+        self._drawing_buffer_color_space = cs;
+    }
+}
+
+pub fn getUnpackColorSpace(self: *const WebGLRenderingContext) []const u8 {
+    return @tagName(self._unpack_color_space);
+}
+
+pub fn setUnpackColorSpace(self: *WebGLRenderingContext, value: []const u8) void {
+    if (std.meta.stringToEnum(ColorSpace, value)) |cs| {
+        self._unpack_color_space = cs;
+    }
 }
 
 /// The value `getParameter` answers with. Chrome's return type is a union of
@@ -1058,10 +1100,9 @@ pub const JsApi = struct {
     pub const canvas = bridge.accessor(WebGLRenderingContext.getCanvas, null, .{});
     pub const drawingBufferWidth = bridge.accessor(WebGLRenderingContext.getDrawingBufferWidth, null, .{});
     pub const drawingBufferHeight = bridge.accessor(WebGLRenderingContext.getDrawingBufferHeight, null, .{});
-    pub const drawingBufferColorSpace = bridge.property("srgb", .{ .template = false, .readonly = false });
-    pub const unpackColorSpace = bridge.property("srgb", .{ .template = false, .readonly = false });
-    // Chrome answers RGBA8 (0x8058) for the default drawing buffer.
-    pub const drawingBufferFormat = bridge.property(WebGLRenderingContext.RGBA8, .{ .template = false, .readonly = true });
+    pub const drawingBufferColorSpace = bridge.accessor(WebGLRenderingContext.getDrawingBufferColorSpace, WebGLRenderingContext.setDrawingBufferColorSpace, .{});
+    pub const unpackColorSpace = bridge.accessor(WebGLRenderingContext.getUnpackColorSpace, WebGLRenderingContext.setUnpackColorSpace, .{});
+    pub const drawingBufferFormat = bridge.accessor(WebGLRenderingContext.getDrawingBufferFormat, null, .{});
 
     pub const getParameter = bridge.function(WebGLRenderingContext.getParameter, .{});
     pub const getExtension = bridge.function(WebGLRenderingContext.getExtension, .{});

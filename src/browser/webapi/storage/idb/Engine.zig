@@ -290,6 +290,17 @@ pub fn createObjectStore(
     return (try self.objectStoreId(database_id, name)).?;
 }
 
+/// `store.name = 'x'` inside a versionchange transaction. The unique(database_id,
+/// name) index makes a collision an error.Constraint, which is the caller's
+/// ConstraintError; the surrounding transaction's rollback undoes the rename if
+/// the upgrade aborts.
+pub fn renameObjectStore(self: *Engine, store_id: i64, name: []const u8) !void {
+    try self.conn.exec(
+        "update idb_object_stores set name = ?2 where id = ?1",
+        .{ store_id, name },
+    );
+}
+
 pub fn deleteObjectStore(self: *Engine, database_id: i64, name: []const u8) !void {
     // caller has a transaction open; cascade drops records, indexes and index
     // records.

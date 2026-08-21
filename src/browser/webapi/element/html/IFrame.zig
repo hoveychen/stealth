@@ -96,6 +96,16 @@ pub fn getSandbox(self: *IFrame, frame: *Frame) !?*DOMTokenList {
     return element.getTokenList(.sandbox, frame);
 }
 
+/// `[PutForwards=value]`: `sandbox` is a readonly DOMTokenList whose setter
+/// assigns to the list's `value`, so the content attribute moves and the list
+/// object stays the same one. That makes the descriptor an accessor with both
+/// halves, which is what a bot check reads -- and Chrome behaves exactly this
+/// way (measured, probe-setter-semantics). Same shape as Element.setClassList.
+pub fn setSandbox(self: *IFrame, value: String, frame: *Frame) !void {
+    const list = (try self.getSandbox(frame)) orelse return;
+    try list.setValue(value, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(IFrame);
 
@@ -122,7 +132,7 @@ pub const JsApi = struct {
     pub const name = reflect.string("name");
     pub const contentWindow = bridge.accessor(IFrame.getContentWindow, null, .{});
     pub const contentDocument = bridge.accessor(IFrame.getContentDocument, null, .{});
-    pub const sandbox = bridge.accessor(IFrame.getSandbox, null, .{ .null_as_undefined = true });
+    pub const sandbox = bridge.accessor(IFrame.getSandbox, IFrame.setSandbox, .{ .null_as_undefined = true, .ce_reactions = true });
 };
 
 pub const Build = struct {

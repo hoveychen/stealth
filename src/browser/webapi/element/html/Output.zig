@@ -53,6 +53,16 @@ pub fn getHtmlFor(self: *Output, frame: *Frame) !?*DOMTokenList {
     return element.getTokenList(.@"for", frame);
 }
 
+/// `[PutForwards=value]`: the setter assigns to the DOMTokenList's `value`, so
+/// the `for` content attribute moves and the list object stays the same one.
+/// The point is the descriptor: with a setter it reads as an accessor, which is
+/// what Chrome exposes and what a bot check reads. See
+/// src/browser/tests/descriptor_kind.html.
+pub fn setHtmlFor(self: *Output, value: lp.String, frame: *Frame) !void {
+    const list = (try self.getHtmlFor(frame)) orelse return;
+    try list.setValue(value, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Output);
 
@@ -66,5 +76,5 @@ pub const JsApi = struct {
     pub const name = reflect.string("name");
 
     pub const labels = bridge.accessor(Output.getLabels, null, .{});
-    pub const htmlFor = bridge.accessor(Output.getHtmlFor, null, .{ .null_as_undefined = true });
+    pub const htmlFor = bridge.accessor(Output.getHtmlFor, Output.setHtmlFor, .{ .null_as_undefined = true, .ce_reactions = true });
 };

@@ -388,8 +388,8 @@
     "onsearch": "accessor",
     "onvisibilitychange": "accessor",
     "timeline": "get",
-    "fullscreenEnabled": "get",
-    "fullscreen": "get",
+    "fullscreenEnabled": "accessor",
+    "fullscreen": "accessor",
     "onfullscreenchange": "accessor",
     "onfullscreenerror": "accessor",
     "webkitIsFullScreen": "get",
@@ -506,7 +506,7 @@
     "activeElement": "get",
     "styleSheets": "get",
     "pointerLockElement": "get",
-    "fullscreenElement": "get",
+    "fullscreenElement": "accessor",
     "adoptedStyleSheets": "accessor",
     "pictureInPictureElement": "get",
     "fonts": "get",
@@ -947,7 +947,7 @@
     "name": "accessor",
     "contentWindow": "get",
     "contentDocument": "get",
-    "sandbox": "get"
+    "sandbox": "accessor"
    },
    "HTMLCanvasElement": {
     "width": "accessor",
@@ -980,7 +980,7 @@
     "onselectionchange": "accessor",
     "type": "accessor",
     "value": "accessor",
-    "files": "get",
+    "files": "accessor",
     "defaultValue": "accessor",
     "checked": "accessor",
     "defaultChecked": "accessor",
@@ -1021,7 +1021,7 @@
     "select": "method",
     "selectionStart": "accessor",
     "selectionEnd": "accessor",
-    "selectionDirection": "get",
+    "selectionDirection": "accessor",
     "setSelectionRange": "method"
    },
    "HTMLFormElement": {
@@ -1093,7 +1093,7 @@
     "rel": "accessor",
     "type": "accessor",
     "text": "accessor",
-    "relList": "get",
+    "relList": "accessor",
     "toString": "method"
    },
    "Screen": {
@@ -1221,8 +1221,8 @@
     "clientY": "get",
     "ctrlKey": "get",
     "metaKey": "get",
-    "offsetX": "value",
-    "offsetY": "value",
+    "offsetX": "get",
+    "offsetY": "get",
     "pageX": "get",
     "pageY": "get",
     "relatedTarget": "get",
@@ -1463,9 +1463,9 @@
     "canvas": "get",
     "drawingBufferWidth": "get",
     "drawingBufferHeight": "get",
-    "drawingBufferColorSpace": "value",
-    "unpackColorSpace": "value",
-    "drawingBufferFormat": "value",
+    "drawingBufferColorSpace": "accessor",
+    "unpackColorSpace": "accessor",
+    "drawingBufferFormat": "get",
     "getParameter": "method",
     "getExtension": "method",
     "getSupportedExtensions": "method",
@@ -2254,7 +2254,7 @@
     "onopen": "accessor",
     "onerror": "accessor",
     "onclose": "accessor",
-    "extensions": "value",
+    "extensions": "get",
     "protocol": "get",
     "onmessage": "accessor",
     "binaryType": "accessor",
@@ -2350,17 +2350,17 @@
     "unlock": "method"
    },
    "VisualViewport": {
-    "offsetLeft": "value",
-    "offsetTop": "value",
+    "offsetLeft": "get",
+    "offsetTop": "get",
     "pageLeft": "get",
     "pageTop": "get",
     "width": "get",
     "height": "get",
-    "scale": "value"
+    "scale": "get"
    },
    "ScreenOrientation": {
-    "angle": "value",
-    "type": "value"
+    "angle": "get",
+    "type": "get"
    },
    "Notification": {
     "close": "method",
@@ -2431,7 +2431,7 @@
     "onerror": "accessor"
    },
    "IDBObjectStore": {
-    "name": "get",
+    "name": "accessor",
     "keyPath": "get",
     "autoIncrement": "get",
     "transaction": "get",
@@ -2522,21 +2522,21 @@
     "insertRule": "method"
    },
    "FontFace": {
-    "family": "get",
-    "status": "value",
-    "style": "value",
-    "weight": "value",
-    "stretch": "value",
-    "unicodeRange": "value",
-    "variant": "value",
-    "featureSettings": "value",
-    "display": "value",
+    "family": "accessor",
+    "status": "get",
+    "style": "accessor",
+    "weight": "accessor",
+    "stretch": "accessor",
+    "unicodeRange": "accessor",
+    "variant": "accessor",
+    "featureSettings": "accessor",
+    "display": "accessor",
     "loaded": "get",
     "load": "method"
    },
    "FontFaceSet": {
-    "size": "value",
-    "status": "value",
+    "size": "get",
+    "status": "get",
     "ready": "get",
     "check": "method",
     "load": "method",
@@ -2842,7 +2842,7 @@
    },
    "IdleDeadline": {
     "timeRemaining": "method",
-    "didTimeout": "value"
+    "didTimeout": "get"
    },
    "Scheduler": {
     "postTask": "method",

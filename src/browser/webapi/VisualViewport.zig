@@ -38,6 +38,23 @@ pub fn getPageTop(_: *const VisualViewport, frame: *Frame) u32 {
     return frame.window.getScrollY();
 }
 
+// No pinch-zoom and no mobile viewport, so the visual viewport never moves off
+// the layout viewport and never scales. These three were data properties, which
+// is a difference no value probe can see and one a bot check trips over -- see
+// the note in src/browser/tests/descriptor_kind.html. The values are the ones
+// that were here.
+pub fn getOffsetLeft(_: *const VisualViewport) u32 {
+    return 0;
+}
+
+pub fn getOffsetTop(_: *const VisualViewport) u32 {
+    return 0;
+}
+
+pub fn getScale(_: *const VisualViewport) f64 {
+    return 1.0;
+}
+
 pub fn getWidth(_: *const VisualViewport, frame: *Frame) u32 {
     return frame._page.getViewport().width;
 }
@@ -55,13 +72,11 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    // Static viewport properties for headless browser
-    // No pinch-zoom or mobile viewport, so values are straightforward
-    pub const offsetLeft = bridge.property(0, .{ .template = false });
-    pub const offsetTop = bridge.property(0, .{ .template = false });
+    pub const offsetLeft = bridge.accessor(VisualViewport.getOffsetLeft, null, .{});
+    pub const offsetTop = bridge.accessor(VisualViewport.getOffsetTop, null, .{});
     pub const pageLeft = bridge.accessor(VisualViewport.getPageLeft, null, .{});
     pub const pageTop = bridge.accessor(VisualViewport.getPageTop, null, .{});
     pub const width = bridge.accessor(VisualViewport.getWidth, null, .{});
     pub const height = bridge.accessor(VisualViewport.getHeight, null, .{});
-    pub const scale = bridge.property(1.0, .{ .template = false });
+    pub const scale = bridge.accessor(VisualViewport.getScale, null, .{});
 };
