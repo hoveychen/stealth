@@ -1,0 +1,83 @@
+{
+ "href": "http://localhost:8777/",
+ "isSecureContext": true,
+ "out": {
+  "protoReads": {
+   "ReportBody": {
+    "toJSON": "TypeError: Illegal invocation"
+   },
+   "CSPViolationReportBody": {
+    "documentURL": "TypeError: Illegal invocation",
+    "referrer": "TypeError: Illegal invocation",
+    "blockedURL": "TypeError: Illegal invocation",
+    "effectiveDirective": "TypeError: Illegal invocation",
+    "originalPolicy": "TypeError: Illegal invocation",
+    "sourceFile": "TypeError: Illegal invocation",
+    "sample": "TypeError: Illegal invocation",
+    "disposition": "TypeError: Illegal invocation",
+    "statusCode": "TypeError: Illegal invocation",
+    "lineNumber": "TypeError: Illegal invocation",
+    "columnNumber": "TypeError: Illegal invocation",
+    "toJSON": "TypeError: Illegal invocation"
+   },
+   "IntegrityViolationReportBody": {
+    "documentURL": "TypeError: Illegal invocation",
+    "blockedURL": "TypeError: Illegal invocation",
+    "destination": "TypeError: Illegal invocation",
+    "reportOnly": "TypeError: Illegal invocation",
+    "toJSON": "TypeError: Illegal invocation"
+   },
+   "NotRestoredReasons": {
+    "src": "TypeError: Illegal invocation",
+    "id": "TypeError: Illegal invocation",
+    "name": "TypeError: Illegal invocation",
+    "url": "TypeError: Illegal invocation",
+    "reasons": "TypeError: Illegal invocation",
+    "children": "TypeError: Illegal invocation",
+    "toJSON": "TypeError: Illegal invocation"
+   },
+   "NotRestoredReasonDetails": {
+    "reason": "TypeError: Illegal invocation",
+    "toJSON": "TypeError: Illegal invocation"
+   }
+  },
+  "crashReportDescriptor": {
+   "get": "function",
+   "set": "undefined",
+   "enumerable": true,
+   "configurable": true
+  },
+  "crashReportStableIdentity": true,
+  "crashReportBrand": "[object CrashReportContext]",
+  "crashReportOwnKeys": [],
+  "crashReportJson": "{}",
+  "crashReportPerRealm": "same=false brand=[object CrashReportContext]",
+  "beforeInitialize": {
+   "setNoArgs": "TypeError: Failed to execute 'set' on 'CrashReportContext': 2 arguments required, but only 0 present.",
+   "setOneArg": "TypeError: Failed to execute 'set' on 'CrashReportContext': 2 arguments required, but only 1 present.",
+   "setTwoArgs": "InvalidStateError: Failed to execute 'set' on 'CrashReportContext': CrashReportContext is not initialized. Call initialize() and wait for it to resolve.",
+   "deleteNoArgs": "TypeError: Failed to execute 'delete' on 'CrashReportContext': 1 argument required, but only 0 present.",
+   "deleteKey": "InvalidStateError: Failed to execute 'delete' on 'CrashReportContext': CrashReportContext is not initialized. Call initialize() and wait for it to resolve."
+  },
+  "initializeNoArgs": "rejected:TypeError: Failed to execute 'initialize' on 'CrashReportContext': 1 argument required, but only 0 present.",
+  "initializeObject": "resolved:undefined",
+  "initializeAgain": "rejected:InvalidStateError: Failed to execute 'initialize' on 'CrashReportContext': The initialize() method has already been called.",
+  "initializeAgainNonObject": "rejected:InvalidStateError: Failed to execute 'initialize' on 'CrashReportContext': The initialize() method has already been called.",
+  "freshInitialize": {
+   "number": "resolved:undefined",
+   "string": "resolved:undefined",
+   "null": "resolved:undefined",
+   "undefinedExplicit": "resolved:undefined",
+   "emptyObject": "resolved:undefined",
+   "array": "resolved:undefined"
+  },
+  "afterInitialize": {
+   "setTwoArgs": "NotAllowedError: Failed to execute 'set' on 'CrashReportContext': The crash report data is too large to be stored in the requested buffer.",
+   "setEmptyKey": "NotAllowedError: Failed to execute 'set' on 'CrashReportContext': The crash report data is too large to be stored in the requested buffer.",
+   "setNonString": "NotAllowedError: Failed to execute 'set' on 'CrashReportContext': The crash report data is too large to be stored in the requested buffer.",
+   "deleteKey": "NotAllowedError: Failed to execute 'delete' on 'CrashReportContext': The crash report data is too large to be stored in the requested buffer.",
+   "ownKeys": [],
+   "json": "{}"
+  }
+ }
+}

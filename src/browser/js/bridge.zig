@@ -1330,6 +1330,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/StyleMedia.zig"),
     @import("../webapi/PerformanceObserver.zig"),
     @import("../webapi/ReportingObserver.zig"),
+    @import("../webapi/reporting.zig"),
     @import("../webapi/navigation/Navigation.zig"),
     @import("../webapi/navigation/NavigationHistoryEntry.zig"),
     @import("../webapi/navigation/NavigationActivation.zig"),
@@ -1503,6 +1504,10 @@ const worker_common_apis = [_]type{
     @import("../webapi/Performance.zig"),
     @import("../webapi/PerformanceObserver.zig"),
     @import("../webapi/ReportingObserver.zig"),
+    // The one name of the reporting family a Chrome worker carries (measured,
+    // probe-shapes-worker); the two bodies under it and the bfcache objects are
+    // window-only.
+    @import("../webapi/reporting.zig").ReportBody,
     @import("../webapi/storage/CookieStore.zig"),
     @import("../webapi/storage/idb/idb.zig"),
     @import("../webapi/event/CookieChangeEvent.zig"),

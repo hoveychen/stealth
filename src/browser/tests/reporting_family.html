@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<head>
+  <title>Reporting Family Test</title>
+  <script src="testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<!--
+The reporting family Chrome 151 has on the window that this engine did not:
+ReportBody and its two subclasses, the two bfcache not-restored-reason objects,
+and CrashReportContext with the window.crashReport that answers one.
+
+Five of the six are unreachable -- Illegal constructor, and only the browser's
+own report queue or a bfcache miss makes an instance -- so the interface object
+and the prototype are the whole surface. window.crashReport is the exception: it
+IS a live CrashReportContext, so its three methods are reachable, and they
+answer three different failures depending on whether initialize() has resolved.
+
+Every string below is Chrome's own, from probes/probe-shapes.js and
+probes/probe-s3-reporting.js against a headed Chrome 151 on
+http://localhost:8777 (results/probes/probe-shapes.chrome.json and
+probe-s3-reporting.chrome.json).
+-->
+
+<script id=reporting_family_shapes>
+  {
+    const protoKeys = (ctor) => Object.getOwnPropertyNames(ctor.prototype).join(' ');
+    const rootName = (ctor) => {
+      const parent = Object.getPrototypeOf(ctor.prototype);
+      return parent === Object.prototype ? 'Object' : parent.constructor.name;
+    };
+
+    for (const [name, root, keys] of [
+      ['ReportBody', 'Object', 'toJSON constructor'],
+      ['CSPViolationReportBody', 'ReportBody',
+        'documentURL referrer blockedURL effectiveDirective originalPolicy sourceFile sample ' +
+        'disposition statusCode lineNumber columnNumber toJSON constructor'],
+      ['IntegrityViolationReportBody', 'ReportBody',
+        'documentURL blockedURL destination reportOnly toJSON constructor'],
+      ['NotRestoredReasons', 'Object', 'src id name url reasons children toJSON constructor'],
+      ['NotRestoredReasonDetails', 'Object', 'reason toJSON constructor'],
+      ['CrashReportContext', 'Object', 'delete initialize set constructor'],
+    ]) {
+      const ctor = window[name];
+      testing.expectEqual('function', typeof ctor, { desc: name + ' is on the window' });
+      testing.expectEqual(name, ctor.name, { desc: name + ' name' });
+      testing.expectEqual(0, ctor.length, { desc: name + ' arity' });
+      testing.expectEqual(keys, protoKeys(ctor), { desc: name + ' prototype members' });
+      testing.expectEqual(root, rootName(ctor), { desc: name + ' prototype root' });
+      testing.expectEqual('[object ' + name + ']', Object.prototype.toString.call(ctor.prototype),
+        { desc: name + ' prototype brand' });
+      testing.expectEqual(name, ctor.prototype[Symbol.toStringTag], { desc: name + ' toStringTag' });
+      // None of the six is constructible, and none may be called either.
+      testing.expectError("Failed to construct '" + name + "': Illegal constructor", () => new ctor());
+      testing.expectError('Illegal constructor', () => ctor());
+    }
+
+    // The two subclasses declare their own toJSON rather than inheriting
+    // ReportBody's (measured: it is an own property of each prototype).
+    for (const name of ['CSPViolationReportBody', 'IntegrityViolationReportBody']) {
+      testing.expectTrue(Object.prototype.hasOwnProperty.call(window[name].prototype, 'toJSON'),
+        { desc: name + ' has its own toJSON' });
+      testing.expectFalse(window[name].prototype.toJSON === ReportBody.prototype.toJSON,
+        { desc: name + ' toJSON is not ReportBody\'s' });
+    }
+  }
+</script>
+
+<script id=crash_report_context_shape>
+  {
+    const desc = Object.getOwnPropertyDescriptor(window, 'crashReport');
+    testing.expectEqual('function', typeof desc.get);
+    testing.expectEqual('undefined', typeof desc.set);
+    testing.expectEqual(true, desc.enumerable);
+    testing.expectEqual(true, desc.configurable);
+
+    const c = window.crashReport;
+    testing.expectTrue(window.crashReport === c, { desc: 'one per window' });
+    testing.expectEqual('[object CrashReportContext]', Object.prototype.toString.call(c));
+    testing.expectTrue(c instanceof CrashReportContext);
+    // No data of its own, whatever happens to it.
+    testing.expectEqual('', Object.keys(c).join(' '));
+    testing.expectEqual('{}', JSON.stringify(c));
+    // The three methods, and their arities.
+    testing.expectEqual(1, c.delete.length);
+    testing.expectEqual(1, c.initialize.length);
+    testing.expectEqual(2, c.set.length);
+  }
+</script>
+
+<script id=crash_report_context_before_initialize type=module>
+  {
+    const c = window.crashReport;
+
+    // Too few arguments is a plain TypeError, counted before anything else.
+    testing.expectError(
+      "Failed to execute 'set' on 'CrashReportContext': 2 arguments required, but only 0 present.",
+      () => c.set());
+    testing.expectError(
+      "Failed to execute 'set' on 'CrashReportContext': 2 arguments required, but only 1 present.",
+      () => c.set('a'));
+    testing.expectError(
+      "Failed to execute 'delete' on 'CrashReportContext': 1 argument required, but only 0 present.",
+      () => c.delete());
+
+    // With enough arguments and no initialize() yet: an InvalidStateError.
+    const notInitialized = (method) => "Failed to execute '" + method + "' on 'CrashReportContext': " +
+      'CrashReportContext is not initialized. Call initialize() and wait for it to resolve.';
+    testing.expectError(notInitialized('set'), () => c.set('a', 'b'));
+    testing.expectError(notInitialized('set'), () => c.set(1, 2));
+    testing.expectError(notInitialized('delete'), () => c.delete('a'));
+  }
+</script>
+
+<script id=crash_report_context_initialize type=module>
+  {
+    const state = await testing.async();
+    const c = window.crashReport;
+    const settle = async (fn) => {
+      try { return 'resolved:' + await fn(); } catch (e) { return `rejected:${e.name}: ${e.message}`; }
+    };
+
+    // The gate on initialize() is the argument *count*, not its type: passing
+    // nothing rejects, and passing anything at all -- including an explicit
+    // undefined -- resolves (measured on a fresh context per value).
+    const noArgs = await settle(() => c.initialize());
+    const first = await settle(() => c.initialize({ k: 'v' }));
+    const second = await settle(() => c.initialize({ k: 'v' }));
+    // After a resolved initialize() the refusal changes: this engine has no
+    // crash-report buffer to write into, and neither does a Chrome tab.
+    const tooLarge = (method) => "Failed to execute '" + method + "' on 'CrashReportContext': " +
+      'The crash report data is too large to be stored in the requested buffer.';
+    let setAfter, deleteAfter;
+    try { c.set('a', 'b'); } catch (e) { setAfter = e; }
+    try { c.delete('a'); } catch (e) { deleteAfter = e; }
+
+    state.resolve({ noArgs, first, second, setAfter, deleteAfter });
+
+    await state.done(({ noArgs, first, second, setAfter, deleteAfter }) => {
+      testing.expectEqual(
+        "rejected:TypeError: Failed to execute 'initialize' on 'CrashReportContext': " +
+        '1 argument required, but only 0 present.', noArgs);
+      testing.expectEqual('resolved:undefined', first);
+      testing.expectEqual(
+        "rejected:InvalidStateError: Failed to execute 'initialize' on 'CrashReportContext': " +
+        'The initialize() method has already been called.', second);
+
+      testing.expectEqual('NotAllowedError', setAfter.name);
+      testing.expectEqual(tooLarge('set'), setAfter.message);
+      testing.expectEqual('NotAllowedError', deleteAfter.name);
+      testing.expectEqual(tooLarge('delete'), deleteAfter.message);
+      // Still no data of its own.
+      testing.expectEqual('{}', JSON.stringify(window.crashReport));
+    });
+  }
+</script>
