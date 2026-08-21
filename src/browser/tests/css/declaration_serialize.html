@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  What a `style=` attribute reads back as after the CSSOM has been asked to
+  change it. Every expectation was measured on a headed Chrome 151 over
+  http://127.0.0.1 by tools/fingerprint/probes/probe-css13.js.
+
+  The rule the probe found: the attribute is rewritten only when the
+  declaration block actually changed. A change that changes nothing -- removing
+  a property that was never there, removing a custom property under the wrong
+  case, setting a property to the value it already holds -- leaves the authored
+  text alone, down to the semicolon it was written without. Chrome's own
+  serialisation always ends in `; `, so a resync on a no-op is visible: the
+  attribute grows a semicolon no author typed.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+const authored = 'width: 10px; display: block; --Case: 1px';
+function withStyle(text) {
+    const el = document.createElement('div');
+    el.setAttribute('style', text);
+    (document.body || document.documentElement).appendChild(el);
+    return el;
+}
+</script>
+
+<script id="no_op_mutations_leave_the_attribute_alone">
+{
+    // Reading never rewrites.
+    const read = withStyle(authored);
+    void read.style.width;
+    void read.style.cssText;
+    void read.style.length;
+    void read.attributeStyleMap.get('width');
+    testing.expectEqual(authored, read.getAttribute('style'));
+
+    // Removing a property that is not there.
+    const absent = withStyle(authored);
+    testing.expectEqual('', absent.style.removeProperty('height'));
+    testing.expectEqual(authored, absent.getAttribute('style'));
+
+    // Removing a custom property that is not there, and one that is there
+    // under a different case -- custom property names are case-sensitive.
+    const absent_custom = withStyle(authored);
+    absent_custom.style.removeProperty('--nope');
+    testing.expectEqual(authored, absent_custom.getAttribute('style'));
+    const wrong_case = withStyle(authored);
+    wrong_case.style.removeProperty('--case');
+    testing.expectEqual(authored, wrong_case.getAttribute('style'));
+
+    // Setting a property to the value it already holds.
+    const same = withStyle(authored);
+    same.style.setProperty('width', '10px');
+    testing.expectEqual(authored, same.getAttribute('style'));
+
+    // Setting a property that is not there to the empty string, which is the
+    // spec's spelling of "remove it".
+    const empty = withStyle(authored);
+    empty.style.setProperty('height', '');
+    testing.expectEqual(authored, empty.getAttribute('style'));
+
+    // The Typed OM's delete takes the same path.
+    const map_delete = withStyle(authored);
+    map_delete.attributeStyleMap.delete('height');
+    testing.expectEqual(authored, map_delete.getAttribute('style'));
+}
+</script>
+
+<script id="real_mutations_do_rewrite_the_attribute">
+{
+    // A property that was there comes out, and the rewrite is Chrome's own
+    // serialisation -- every declaration followed by "; ", so the text now
+    // ends in a semicolon the authored text did not have.
+    const removed = withStyle(authored);
+    testing.expectEqual('10px', removed.style.removeProperty('width'));
+    testing.expectEqual('display: block; --Case: 1px;', removed.getAttribute('style'));
+
+    // A new property, and a changed value.
+    const added = withStyle(authored);
+    added.style.setProperty('height', '5px');
+    testing.expectEqual('width: 10px; display: block; --Case: 1px; height: 5px;', added.getAttribute('style'));
+    const changed = withStyle(authored);
+    changed.style.setProperty('width', '20px');
+    testing.expectEqual('width: 20px; display: block; --Case: 1px;', changed.getAttribute('style'));
+
+    // Assigning cssText rewrites even when the text is what it already was.
+    const round = withStyle(authored);
+    round.style.cssText = round.style.cssText;
+    testing.expectEqual('width: 10px; display: block; --Case: 1px;', round.getAttribute('style'));
+}
+</script>
+</body>
+</html>

@@ -302,9 +302,10 @@ pub fn setProperty(self: *CSSStyleDeclaration, property_name: []const u8, value:
         break :blk true;
     } else false;
 
-    try self.setPropertyImpl(property_name, value, important, frame);
-
-    try self.syncStyleAttribute(frame);
+    // Measured: a set that changes nothing does not rewrite the attribute.
+    if (try self.setPropertyImpl(property_name, value, important, frame)) {
+        try self.syncStyleAttribute(frame);
+    }
 }
 
 /// Apply one declaration parsed from a `style=` block. Unlike the imperative
@@ -321,21 +322,25 @@ fn applyParsedDeclaration(self: *CSSStyleDeclaration, declaration: CssParser.Dec
     // declaration; an empty value for a normal property drops it, and so does
     // an explicit `setProperty(name, "")` for either kind.
     if (isCustomProperty(declaration.name) and declaration.value.len == 0) {
-        return self.storeProperty(declaration.name, "", declaration.important, frame);
+        _ = try self.storeProperty(declaration.name, "", declaration.important, frame);
+        return;
     }
-    try self.setPropertyImpl(declaration.name, declaration.value, declaration.important, frame);
+    // The caller syncs once for the whole block, so whether this one declaration
+    // changed anything does not matter here.
+    _ = try self.setPropertyImpl(declaration.name, declaration.value, declaration.important, frame);
 }
 
-fn setPropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !void {
+/// Whether the declaration block came out of this any different. Measured: the
+/// style attribute is rewritten only when it did -- see `syncStyleAttribute`.
+fn setPropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !bool {
     if (value.len == 0) {
-        _ = try self.removePropertyImpl(property_name, frame);
-        return;
+        return (try self.removePropertyImpl(property_name, frame)) != null;
     }
 
     return self.storeProperty(property_name, value, important, frame);
 }
 
-fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !void {
+fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !bool {
     const normalized = normalizePropertyName(property_name, &frame.buf);
 
     // Normalize the value for canonical serialization
@@ -343,9 +348,15 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
 
     // Find existing property
     if (self.findProperty(.wrap(normalized))) |existing| {
+        // Measured: setting a property to the value it already holds does not
+        // touch the attribute -- `setProperty('width', '10px')` over a
+        // `width: 10px` leaves the authored text, semicolon and all.
+        if (existing._important == important and std.mem.eql(u8, existing._value.str(), normalized_value)) {
+            return false;
+        }
         existing._value = try String.init(frame.arena, normalized_value, .{});
         existing._important = important;
-        return;
+        return true;
     }
 
     // Create new property
@@ -356,17 +367,21 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
         ._important = important,
     });
     self._properties.append(&prop._node);
+    return true;
 }
 
 pub fn removeProperty(self: *CSSStyleDeclaration, property_name: []const u8, frame: *Frame) ![]const u8 {
-    const result = try self.removePropertyImpl(property_name, frame);
+    const removed = try self.removePropertyImpl(property_name, frame) orelse return "";
     try self.syncStyleAttribute(frame);
-    return result;
+    return removed;
 }
 
-fn removePropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, frame: *Frame) ![]const u8 {
+/// The value the property held, or null if it was not there at all -- which is
+/// not the same as an empty one, because a custom property may legitimately
+/// hold "" (`--d:;`).
+fn removePropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, frame: *Frame) !?[]const u8 {
     const normalized = normalizePropertyName(property_name, &frame.buf);
-    const prop = self.findProperty(.wrap(normalized)) orelse return "";
+    const prop = self.findProperty(.wrap(normalized)) orelse return null;
 
     // the value might not be on the heap (it could be inlined in the small string
     // optimization), so we need to dupe it.
@@ -416,8 +431,9 @@ pub fn getFloat(self: *const CSSStyleDeclaration, frame: *Frame) []const u8 {
 }
 
 pub fn setFloat(self: *CSSStyleDeclaration, value_: ?[]const u8, frame: *Frame) !void {
-    try self.setPropertyImpl("float", value_ orelse "", false, frame);
-    try self.syncStyleAttribute(frame);
+    if (try self.setPropertyImpl("float", value_ orelse "", false, frame)) {
+        try self.syncStyleAttribute(frame);
+    }
 }
 
 pub fn getCssText(self: *const CSSStyleDeclaration, frame: *Frame) ![]const u8 {
@@ -1482,6 +1498,10 @@ test "normalizePropertyValue: anchor() canonical order" {
 
 test "WebApi: CSSStyleDeclaration surface" {
     try testing.htmlRunner("css/declaration_surface.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration serialize" {
+    try testing.htmlRunner("css/declaration_serialize.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration custom properties" {
