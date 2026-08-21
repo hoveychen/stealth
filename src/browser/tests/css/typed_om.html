@@ -1128,15 +1128,62 @@ function attach(el) {
         brand(CSSStyleValue.parse('color', 'bUtToNfAcE')));
     testing.expectEqual('CSSStyleValue|SANS-SERIF',
         brand(CSSStyleValue.parse('font-family', 'SANS-SERIF')));
-    // One measured difference left in `parse`, and it is a subclass rather than
-    // a spelling: `currentcolor` is modelled even on the colour properties
-    // Blink otherwise leaves unmodelled, so Chrome answers
-    // `CSSKeywordValue|currentcolor` for `parse('color', 'currentColor')` where
-    // this engine answers `CSSStyleValue|currentColor`. It is not general to
-    // the keyword either -- on the SVG paint properties Chrome answers
-    // `CSSStyleValue|currentColor` like this engine does:
+    // A property whose values Blink does not model still answers a keyword for
+    // two things, measured over all 475 longhands: a CSS-wide keyword, and
+    // `currentcolor`. So `parse('color', 'inherit')` is a CSSKeywordValue where
+    // `parse('color', 'red')` is not.
+    testing.expectEqual('CSSKeywordValue|inherit', brand(CSSStyleValue.parse('color', 'inherit')));
+    testing.expectEqual('CSSKeywordValue|inherit', brand(CSSStyleValue.parse('color', 'INHERIT')));
+    testing.expectEqual('CSSKeywordValue|revert-layer',
+        brand(CSSStyleValue.parse('color', 'revert-layer')));
+    testing.expectEqual('CSSKeywordValue|unset', brand(CSSStyleValue.parse('fill', 'unset')));
+    testing.expectEqual('CSSKeywordValue|inherit',
+        brand(CSSStyleValue.parse('font-family', 'inherit')));
+    testing.expectEqual('CSSKeywordValue|unset',
+        brand(CSSStyleValue.parse('border-inline-start-color', 'unset')));
+    // ... except on the six properties measured as answering a bare
+    // CSSStyleValue even for those.
+    testing.expectEqual('CSSStyleValue|inherit',
+        brand(CSSStyleValue.parse('background-position', 'inherit')));
+    testing.expectEqual('CSSStyleValue|inherit',
+        brand(CSSStyleValue.parse('font-variant', 'inherit')));
+    testing.expectEqual('CSSStyleValue|inherit',
+        brand(CSSStyleValue.parse('text-decoration', 'inherit')));
+    testing.expectEqual('CSSStyleValue|unset',
+        brand(CSSStyleValue.parse('contain-intrinsic-size', 'unset')));
+
+    // `currentcolor` keeps the keyword treatment on 14 colour properties, in its
+    // canonical (lower case) spelling whatever case it was written in -- and
+    // does not on the logical border colours, the SVG paint properties or the
+    // -webkit- ones, where the text comes back as written.
+    testing.expectEqual('CSSKeywordValue|currentcolor',
+        brand(CSSStyleValue.parse('color', 'currentColor')));
+    testing.expectEqual('CSSKeywordValue|currentcolor',
+        brand(CSSStyleValue.parse('color', 'CURRENTCOLOR')));
+    testing.expectEqual('CSSKeywordValue|currentcolor',
+        brand(CSSStyleValue.parse('outline-color', 'currentColor')));
+    testing.expectEqual('CSSKeywordValue|currentcolor',
+        brand(CSSStyleValue.parse('text-emphasis-color', 'currentColor')));
+    testing.expectEqual('CSSStyleValue|currentColor',
+        brand(CSSStyleValue.parse('border-inline-start-color', 'currentColor')));
     testing.expectEqual('CSSStyleValue|currentColor',
         brand(CSSStyleValue.parse('fill', 'currentColor')));
+    testing.expectEqual('CSSStyleValue|currentColor',
+        brand(CSSStyleValue.parse('-webkit-text-fill-color', 'currentColor')));
+    // A colour that is not `currentcolor` is not a keyword anywhere.
+    testing.expectEqual('CSSStyleValue|transparent',
+        brand(CSSStyleValue.parse('color', 'transparent')));
+    // The third axis of the same dispatch, measured but not modelled here: a
+    // property can be modelled for some of its values and not for others.
+    // `accent-color: auto` is a CSSKeywordValue in Chrome and here, but
+    // `accent-color: ButtonFace` is a `CSSStyleValue|ButtonFace` there -- a
+    // named or system colour parses to a colour rather than to an identifier,
+    // so it is not a keyword even on a property that is otherwise modelled.
+    // This engine has no notion of which identifiers are colours, so it answers
+    // a keyword (and canonicalises the spelling with it):
+    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('accent-color', 'auto')));
+    testing.expectEqual('CSSKeywordValue|buttonface',
+        brand(CSSStyleValue.parse('accent-color', 'ButtonFace')));
 
     // A style map reads what the declaration stored, so the keyword spelling
     // there is the declaration's -- lower case even for a property whose values
@@ -1146,6 +1193,35 @@ function attach(el) {
     testing.expectEqual('CSSStyleValue|buttonface', brand(kw.attributeStyleMap.get('color')));
     kw.style.setProperty('shape-rendering', 'crispEdges');
     testing.expectEqual('CSSKeywordValue|crispedges', brand(kw.attributeStyleMap.get('shape-rendering')));
+
+    // The two keyword shapes reach the maps too.
+    const mapKw = (property, value) => {
+        const el = attach(document.createElement('div'));
+        el.style.setProperty(property, value);
+        return brand(el.attributeStyleMap.get(property));
+    };
+    testing.expectEqual('CSSKeywordValue|inherit', mapKw('color', 'inherit'));
+    testing.expectEqual('CSSStyleValue|inherit', mapKw('background-position', 'inherit'));
+    testing.expectEqual('CSSKeywordValue|currentcolor', mapKw('color', 'currentColor'));
+    testing.expectEqual('CSSStyleValue|currentcolor', mapKw('fill', 'currentColor'));
+    // Measured, and the reason the two surfaces are told apart: these two
+    // answer a keyword through a map and a bare CSSStyleValue through `parse`.
+    testing.expectEqual('CSSKeywordValue|currentcolor', mapKw('column-rule-color', 'currentColor'));
+    testing.expectEqual('CSSKeywordValue|currentcolor', mapKw('row-rule-color', 'currentColor'));
+    testing.expectEqual('CSSStyleValue|currentColor',
+        brand(CSSStyleValue.parse('column-rule-color', 'currentColor')));
+    // ... where a logical border colour answers a CSSStyleValue on both.
+    testing.expectEqual('CSSStyleValue|currentcolor', mapKw('border-inline-start-color', 'currentColor'));
+    // The other three where the surfaces disagree, in the other direction: a
+    // `page-break-*` alias is a longhand to `parse` and not to a style map.
+    testing.expectEqual('CSSKeywordValue|inherit',
+        brand(CSSStyleValue.parse('page-break-after', 'inherit')));
+    testing.expectEqual('CSSStyleValue|inherit', mapKw('page-break-after', 'inherit'));
+    testing.expectEqual('CSSStyleValue|inherit', mapKw('page-break-inside', 'inherit'));
+    // ... where the other unlisted longhands agree on both.
+    testing.expectEqual('CSSKeywordValue|inherit', mapKw('word-wrap', 'inherit'));
+    testing.expectEqual('CSSKeywordValue|inherit', mapKw('background-position-x', 'inherit'));
+    testing.expectEqual('CSSKeywordValue|inherit', mapKw('all', 'inherit'));
 
     // The style maps must not gain the check: they read values that are already
     // in the declaration, and a computed keyword this table has never seen would
