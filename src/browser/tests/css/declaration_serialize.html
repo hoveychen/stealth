@@ -772,15 +772,50 @@ function withStyle(text) {
             .style.getPropertyValue('background'));
 
     // A value the layer model declines is kept whole rather than expanded
-    // wrongly: a two-value repeat is the repeat longhand's own
-    // canonicalisation (`repeat no-repeat` is `repeat-x`), and `border-area`
-    // moves the origin where no other clip-only keyword does.
-    for (const value of ['repeat no-repeat', 'border-area']) {
+    // wrongly: `border-area` moves the origin where no other clip-only
+    // keyword does.
+    for (const value of ['border-area']) {
         const whole = withStyle('background: ' + value);
         testing.expectEqual(1, whole.style.length);
         testing.expectEqual('background', whole.style.item(0));
         testing.expectEqual(value, whole.style.getPropertyValue('background'));
     }
+
+    // Two of the slots take a pair rather than a single component: the size
+    // after the `/`, and the repeat. The pair reaches its longhand whole and
+    // is shortened there, which is why `repeat no-repeat` comes back as the
+    // axis keyword it spells.
+    const paired = withStyle('background: left top / 10px 20px');
+    testing.expectEqual(9, paired.style.length);
+    testing.expectEqual('left', paired.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('top', paired.style.getPropertyValue('background-position-y'));
+    testing.expectEqual('10px 20px', paired.style.getPropertyValue('background-size'));
+    testing.expectEqual('left top / 10px 20px', paired.style.getPropertyValue('background'));
+
+    const both = withStyle('background: 10px 20px / 30px 40px');
+    testing.expectEqual('10px', both.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('20px', both.style.getPropertyValue('background-position-y'));
+    testing.expectEqual('30px 40px', both.style.getPropertyValue('background-size'));
+    testing.expectEqual('10px 20px / 30px 40px', both.style.getPropertyValue('background'));
+
+    const axis = withStyle('background: repeat no-repeat');
+    testing.expectEqual(9, axis.style.length);
+    testing.expectEqual('repeat-x', axis.style.getPropertyValue('background-repeat'));
+    testing.expectEqual('repeat-x', axis.style.getPropertyValue('background'));
+    testing.expectEqual('repeat-y', withStyle('background: no-repeat repeat')
+        .style.getPropertyValue('background'));
+    // A pair with no keyword of its own stays a pair, in the layer as in the
+    // longhand.
+    testing.expectEqual('space round', withStyle('background: space round')
+        .style.getPropertyValue('background'));
+    testing.expectEqual('repeat-x, space round',
+        withStyle('background: repeat no-repeat, space round')
+            .style.getPropertyValue('background'));
+
+    // The pair does not swallow a component that belongs to another slot.
+    const mixed = withStyle('background: no-repeat fixed');
+    testing.expectEqual('no-repeat', mixed.style.getPropertyValue('background-repeat'));
+    testing.expectEqual('fixed', mixed.style.getPropertyValue('background-attachment'));
 
     // A comma is a layer boundary: every per-layer longhand becomes a comma
     // list as long as the value had layers, and the ones a layer never
@@ -871,6 +906,14 @@ function withStyle(text) {
     testing.expectEqual('url("a"), url("b")', withStyle('mask: url("a"), url("b")')
         .style.getPropertyValue('mask'));
     testing.expectEqual('padding-box, none', withStyle('mask: padding-box, border-box')
+        .style.getPropertyValue('mask'));
+
+    // Mask's size and repeat take a pair the same way background's do.
+    testing.expectEqual('left top / 10px 20px', withStyle('mask: left top / 10px 20px')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('repeat-x', withStyle('mask: repeat no-repeat')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('space round', withStyle('mask: space round')
         .style.getPropertyValue('mask'));
 
     // The -webkit- spelling stores the same nine longhands, and cssText writes

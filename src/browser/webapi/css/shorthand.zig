@@ -258,15 +258,15 @@ fn parseLayer(arena: Allocator, entry: Shorthand, text: []const u8, last: bool) 
             if (std.ascii.eqlIgnoreCase(bad, token)) return null;
         }
         if (token.len == 1 and token[0] == '/') {
-            // The size takes one component. A two-value size is the size
-            // longhand's own collapse rule (`10px auto` is stored `10px`)
-            // rather than a distribution, so a value carrying one is declined.
+            // The size is one of the two slots that take a pair, so
+            // `left top / 10px 20px` is a layer and not a decline. The pair
+            // goes to the longhand whole and is shortened there.
             if (!after_position or entry.size_slot == table.no_slot) return null;
-            if (slots[entry.size_slot] != null or i + 1 == toks.len) return null;
-            const run = toks[i + 1];
-            if (!accepts(entry.longhands[entry.size_slot], run)) return null;
-            slots[entry.size_slot] = run;
-            i += 2;
+            if (slots[entry.size_slot] != null) return null;
+            const run = runLength(entry, toks[i + 1 ..], entry.size_slot);
+            if (run == 0) return null;
+            slots[entry.size_slot] = try runText(arena, toks[i + 1 ..], run);
+            i += 1 + run;
             after_position = false;
             continue;
         }
@@ -324,15 +324,40 @@ fn parseLayer(arena: Allocator, entry: Shorthand, text: []const u8, last: bool) 
             if (slot == entry.boxes[0] or slot == entry.boxes[1]) continue;
             if (slot == entry.size_slot) continue;
             if (slot >= entry.layer_width and !last) continue;
-            if (!accepts(entry.longhands[slot], token)) continue;
-            slots[slot] = token;
-            break true;
-        } else false;
-        if (!placed) return null;
+            // The repeat is the other slot that takes a pair, which is what
+            // makes `repeat no-repeat` one component of the layer rather than
+            // two the model has nowhere to put.
+            const run = runLength(entry, toks[i..], slot);
+            if (run == 0) continue;
+            slots[slot] = try runText(arena, toks[i..], run);
+            break run;
+        } else 0;
+        if (placed == 0) return null;
         after_position = false;
-        i += 1;
+        i += placed;
     }
     return slots;
+}
+
+/// How many of the components at the head of `toks` the slot takes as one
+/// value: two where the table measured the longhand keeping a pair, one
+/// everywhere else, and zero when the slot will not take even the first.
+fn runLength(entry: Shorthand, toks: []const []const u8, slot: usize) usize {
+    if (toks.len == 0 or isSlash(toks[0])) return 0;
+    if (!accepts(entry.longhands[slot], toks[0])) return 0;
+    if (toks.len < 2 or isSlash(toks[1])) return 1;
+    if (std.mem.indexOfScalar(u8, entry.pairs, @intCast(slot)) == null) return 1;
+    if (!accepts(entry.longhands[slot], toks[1])) return 1;
+    return 2;
+}
+
+fn runText(arena: Allocator, toks: []const []const u8, run: usize) ![]const u8 {
+    if (run == 1) return toks[0];
+    return std.mem.join(arena, " ", toks[0..run]);
+}
+
+fn isSlash(token: []const u8) bool {
+    return token.len == 1 and token[0] == '/';
 }
 
 /// Whether a component belongs to the box pair at all, which is what keeps a
