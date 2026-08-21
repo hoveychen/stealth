@@ -504,8 +504,7 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
     if (isCustomProperty(property_name)) {
         return std.mem.trim(u8, raw_value, &std.ascii.whitespace);
     }
-    const cased = try normalizeValueCase(arena, property_name, raw_value);
-    const value = try normalizeLeadingZeros(arena, cased);
+    const value = try canonicaliseValue(arena, property_name, raw_value);
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
     if (std.mem.eql(u8, value, "0") and isLengthProperty(property_name)) {
@@ -547,23 +546,29 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
     return value;
 }
 
-/// Chrome rewrites the case of exactly four things inside a value and leaves
-/// everything else as the author wrote it (measured, probe-css13.js): a keyword
-/// the property takes, a CSS-wide keyword, a dimension's unit and a function
-/// name. Each is rewritten to the spelling Chrome answers with rather than
-/// lowercased -- `TranslateX(1PX)` comes back `translateX(1px)`, so a blanket
-/// `toLowerCase()` would trade one tell for another.
+/// Rewrite a value into the text Chrome answers with. Measured
+/// (probe-css13.js, and the number and colour readings in the plan's C1 notes),
+/// Chrome touches six things and leaves everything else as the author wrote it:
 ///
-/// The tables are the limit of what is rewritten: a keyword the property is not
-/// measured as taking, a unit or a function name no measurement reached, and
-/// anything that is not one of those four shapes at all -- a `<custom-ident>`, a
-/// string, a hex colour, an unquoted url path -- all come through untouched.
-/// Under-normalising leaves a page working; over-normalising invents a spelling
-/// Chrome never uses.
+///   * a keyword the property takes, a CSS-wide keyword, a dimension's unit and
+///     a function name are re-spelled -- to the spelling Chrome answers with
+///     rather than lowercased, so `TranslateX(1PX)` comes back
+///     `translateX(1px)` and a blanket `toLowerCase()` would trade one tell for
+///     another;
+///   * a number is reprinted rather than echoed (`writeCssNumber`);
+///   * a colour is folded to `rgb()`/`rgba()` when Chrome folds it
+///     (`parseHexColour`, `parseColourFunction`).
+///
+/// The tables and shapes are the limit of what is rewritten: a keyword the
+/// property is not measured as taking, a unit or a function name no measurement
+/// reached, a colour space Chrome keeps, and anything that is not one of those
+/// shapes at all -- a `<custom-ident>`, a string, an unquoted url path -- all
+/// come through untouched. Under-normalising leaves a page working;
+/// over-normalising invents a spelling Chrome never uses.
 ///
 /// `property_name` has already been lowercased by `storeProperty`, which is the
 /// spelling both keyword tables are keyed on.
-fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []const u8) ![]const u8 {
+fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const u8) ![]const u8 {
     // Measured: a value whose real content is substituted later is kept byte
     // for byte, and that covers everything around the substitution as well --
     // `width: CALC(1PX + VAR(--a))` reads back exactly as written.
@@ -613,11 +618,40 @@ fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []cons
             continue;
         }
 
+        // A hash is one token: the digits of `#AABBCC` are neither an
+        // identifier to re-case nor a number to reprint, and the whole of it is
+        // what folds to an rgb().
+        if (c == '#') {
+            const end = hashEnd(value, i);
+            const token = value[i..end];
+            if (parseHexColour(token)) |colour| {
+                const before = buf.written().len;
+                try writeColour(&buf.writer, colour);
+                changed = changed or !std.mem.eql(u8, buf.written()[before..], token);
+            } else {
+                try buf.writer.writeAll(token);
+            }
+            i = end;
+            continue;
+        }
+
         if (isIdentStart(value, i)) {
             const end = identEnd(value, i);
             const name = value[i..end];
 
             if (end < value.len and value[end] == '(') {
+                // A colour Chrome folds is answered as an rgb() whatever it was
+                // written as, so the call goes rather than being re-spelled.
+                if (colourFunction(name)) |kind| {
+                    if (parseColourFunction(kind, value, end)) |colour| {
+                        const before = buf.written().len;
+                        try writeColour(&buf.writer, colour.value);
+                        changed = changed or
+                            !std.mem.eql(u8, buf.written()[before..], value[before_i..colour.end]);
+                        i = colour.end;
+                        continue;
+                    }
+                }
                 const spelling = lookupSpelling(chrome_value_case.functions, name) orelse name;
                 try buf.writer.writeAll(spelling);
                 changed = changed or !std.mem.eql(u8, spelling, name);
@@ -633,28 +667,38 @@ fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []cons
                 continue;
             }
 
-            // The hex digits of `#AABBCC` only look like an identifier.
-            const spelling = if (i > 0 and value[i - 1] == '#')
-                name
-            else
-                keywordSpelling(keywords, name, std.mem.eql(u8, trimmed, name));
+            const spelling = keywordSpelling(keywords, name, std.mem.eql(u8, trimmed, name));
             try buf.writer.writeAll(spelling);
             changed = changed or !std.mem.eql(u8, spelling, name);
             i = end;
             continue;
         }
 
-        if (numberEnd(value, i)) |number_end| {
-            try buf.writer.writeAll(value[i..number_end]);
-            i = number_end;
-            if (i < value.len and isIdentStart(value, i)) {
-                const end = identEnd(value, i);
-                const unit = value[i..end];
-                const spelling = lookupSpelling(chrome_value_case.units, unit) orelse unit;
-                try buf.writer.writeAll(spelling);
-                changed = changed or !std.mem.eql(u8, spelling, unit);
-                i = end;
+        // A digit run right after an identifier character belongs to that token
+        // rather than starting a number of its own -- the `+0` of
+        // `unicode-range: U+0-7F` is not a number Chrome would reprint.
+        const number_end = if (i > 0 and isIdentChar(value[i - 1]))
+            null
+        else
+            numberEnd(value, i);
+        if (number_end) |end| {
+            const before = buf.written().len;
+            const dimension = end < value.len and (value[end] == '%' or isIdentStart(value, end));
+            if (!dimension and isIntegerToken(value[i..end]) and
+                (isIntegerProperty(property_name) or takesIntegerFirst(value, i)))
+            {
+                try writeCssInteger(&buf.writer, value[i..end]);
+            } else {
+                try writeCssNumber(&buf.writer, value[i..end]);
             }
+            i = end;
+            if (i < value.len and isIdentStart(value, i)) {
+                const unit_end = identEnd(value, i);
+                const unit = value[i..unit_end];
+                try buf.writer.writeAll(lookupSpelling(chrome_value_case.units, unit) orelse unit);
+                i = unit_end;
+            }
+            changed = changed or !std.mem.eql(u8, buf.written()[before..], value[before_i..i]);
             continue;
         }
 
@@ -938,49 +982,420 @@ fn stringEnd(value: []const u8, start: usize) usize {
     return value.len;
 }
 
-// Insert a leading "0" before any bare ".<digit>". A value might have multiple
-// such bare digits
-fn normalizeLeadingZeros(arena: Allocator, value: []const u8) ![]const u8 {
-    // A bare ".<digit>" needs at least 2 chars, and a trailing "." can never be
-    // followed by a digit. So we only ever scan up to value.len - 1, which lets
-    // us index value[i + 1] without a bounds check.
-    if (value.len < 2) {
-        return value;
+/// A `<number>` or `<length>` is not echoed back: Chrome reprints it, which is
+/// what folds `1E2px` to `100px`, `1.50px` to `1.5px` and `+1px` to `1px`. The
+/// printer is the one Typed OM already uses -- printf `%g`, six significant
+/// digits -- over a value clamped to the float range: measured,
+/// `width: 1e100px` answers `3.40282e+38px` (FLT_MAX), while `width: 1e-40px`
+/// keeps all six digits no float could hold, so the clamp is to the range and
+/// not to float precision.
+fn writeCssNumber(writer: *std.Io.Writer, text: []const u8) !void {
+    const v = std.fmt.parseFloat(f64, text) catch return writer.writeAll(text);
+    const limit: f64 = std.math.floatMax(f32);
+    try typed_om.writeNumber(writer, std.math.clamp(v, -limit, limit));
+}
+
+/// An `<integer>` is printed as an integer rather than through `%g`, so it keeps
+/// its digits past the sixth: measured, `z-index: 1000000` answers `1000000`
+/// where `flex-grow: 1000000` answers `1e+06`. Blink parses one into an int, and
+/// the value clamps there -- `z-index: 3000000000` answers `2147483647`,
+/// measured over ten integer-valued properties and both integer-taking
+/// functions.
+fn writeCssInteger(writer: *std.Io.Writer, text: []const u8) !void {
+    const v = std.fmt.parseFloat(f64, text) catch return writer.writeAll(text);
+    const clamped = std.math.clamp(v, std.math.minInt(i32), std.math.maxInt(i32));
+    try writer.print("{d}", .{@as(i32, @intFromFloat(clamped))});
+}
+
+/// Whether the number is written as a bare integer -- the only shape an
+/// `<integer>` can have, so the only one printed as one.
+fn isIntegerToken(text: []const u8) bool {
+    const digits = if (text.len > 0 and (text[0] == '+' or text[0] == '-')) text[1..] else text;
+    if (digits.len == 0) {
+        return false;
+    }
+    for (digits) |c| {
+        if (!std.ascii.isDigit(c)) return false;
+    }
+    return true;
+}
+
+/// The properties whose bare number is an `<integer>`. Measured by writing
+/// `1000000` to each of the 772 property names Chrome knows and reading it back:
+/// 19 answer `1000000` and 72 answer `1e+06`. The four below that the bare form
+/// cannot reach -- their integer sits after an identifier or a string -- were
+/// measured in that longer form (`counter-increment: c 1000000`,
+/// `font-feature-settings: "liga" 1000000`).
+///
+/// A dimension is never one of these: `columns: 1000000px` answers `1e+06px`
+/// even though `columns: 1000000` answers `1000000`, so only the unitless token
+/// takes this path.
+fn isIntegerProperty(name: []const u8) bool {
+    const integer_properties = std.StaticStringMap(void).initComptime(.{
+        .{ "-webkit-box-ordinal-group", {} },
+        .{ "-webkit-line-clamp", {} },
+        .{ "column-count", {} },
+        .{ "columns", {} },
+        .{ "counter-increment", {} },
+        .{ "counter-reset", {} },
+        .{ "counter-set", {} },
+        .{ "flex-line-count", {} },
+        .{ "font-feature-settings", {} },
+        .{ "grid-area", {} },
+        .{ "grid-column", {} },
+        .{ "grid-column-end", {} },
+        .{ "grid-column-start", {} },
+        .{ "grid-row", {} },
+        .{ "grid-row-end", {} },
+        .{ "grid-row-start", {} },
+        .{ "hyphenate-limit-chars", {} },
+        .{ "math-depth", {} },
+        .{ "order", {} },
+        .{ "orphans", {} },
+        .{ "reading-order", {} },
+        .{ "widows", {} },
+        .{ "z-index", {} },
+    });
+    return integer_properties.has(name);
+}
+
+/// The two functions whose first argument is an `<integer>` whatever property
+/// they sit in: measured, `grid-template-columns: repeat(1000000, 1px)` and
+/// `steps(1000000, jump-start)` both keep their digits where every other
+/// function argument goes through `%g` (`transform: scale(1000000)` answers
+/// `scale(1e+06)`).
+fn takesIntegerFirst(value: []const u8, index: usize) bool {
+    var i = index;
+    while (i > 0 and std.ascii.isWhitespace(value[i - 1])) : (i -= 1) {}
+    if (i == 0 or value[i - 1] != '(') {
+        return false;
+    }
+    const paren = i - 1;
+    var start = paren;
+    while (start > 0 and isIdentChar(value[start - 1])) : (start -= 1) {}
+    const name = value[start..paren];
+    return std.ascii.eqlIgnoreCase(name, "repeat") or std.ascii.eqlIgnoreCase(name, "steps");
+}
+
+/// Where the hash token starting at `index` ends. Its content is only ever hex
+/// digits when it is a colour, but an id in a value (`url(#a)` aside) can hold
+/// any identifier character, and reading the whole token is what keeps the
+/// digits away from the number and identifier paths.
+fn hashEnd(value: []const u8, index: usize) usize {
+    var i = index + 1;
+    while (i < value.len and isIdentChar(value[i])) : (i += 1) {}
+    return i;
+}
+
+/// A colour as Chrome answers it: three bytes and an alpha byte.
+const Colour = struct {
+    rgb: [3]u8,
+    alpha: u8,
+};
+
+/// Measured: `#AABBCC` answers `rgb(170, 187, 204)`, the three and four digit
+/// forms double each nibble, and an alpha of 255 answers `rgb()` rather than
+/// `rgba(..., 1)`. A hash of any other length is not a colour -- Chrome drops
+/// the declaration, this engine keeps the text, which is the difference it keeps
+/// everywhere else too.
+fn parseHexColour(token: []const u8) ?Colour {
+    const digits = token[1..];
+    switch (digits.len) {
+        3, 4, 6, 8 => {},
+        else => return null,
+    }
+    var nibbles: [8]u8 = undefined;
+    for (digits, 0..) |c, i| {
+        nibbles[i] = std.fmt.charToDigit(c, 16) catch return null;
+    }
+    if (digits.len <= 4) {
+        var colour: Colour = .{ .rgb = undefined, .alpha = 255 };
+        for (0..3) |i| colour.rgb[i] = nibbles[i] * 17;
+        if (digits.len == 4) colour.alpha = nibbles[3] * 17;
+        return colour;
+    }
+    var colour: Colour = .{ .rgb = undefined, .alpha = 255 };
+    for (0..3) |i| colour.rgb[i] = nibbles[i * 2] * 16 + nibbles[i * 2 + 1];
+    if (digits.len == 8) colour.alpha = nibbles[6] * 16 + nibbles[7];
+    return colour;
+}
+
+/// The colour functions Chrome answers as an `rgb()`. Measured: `oklch()`,
+/// `lab()`, `lch()`, `oklab()`, `color()`, `color-mix()` and `light-dark()` keep
+/// their own function, so they are not here and their arguments are left as
+/// written.
+const ColourFunction = enum { rgb, hsl, hwb };
+
+fn colourFunction(name: []const u8) ?ColourFunction {
+    if (std.ascii.eqlIgnoreCase(name, "rgb") or std.ascii.eqlIgnoreCase(name, "rgba")) {
+        return .rgb;
+    }
+    if (std.ascii.eqlIgnoreCase(name, "hsl") or std.ascii.eqlIgnoreCase(name, "hsla")) {
+        return .hsl;
+    }
+    if (std.ascii.eqlIgnoreCase(name, "hwb")) {
+        return .hwb;
+    }
+    return null;
+}
+
+/// One channel as it was written. `none` is a channel Chrome reads as zero.
+const Channel = union(enum) {
+    number: f64,
+    percentage: f64,
+    angle: f64,
+    none,
+};
+
+/// What separates an argument from the one before it. Which separators a call
+/// uses is what tells the two argument forms apart, and Chrome accepts each
+/// whole rather than mixed: `rgb(50%, 25, 0%)` and `rgb(1 2 3 4)` are both
+/// dropped, so a call that is neither form is left as written.
+const Separator = enum { first, space, comma, slash };
+
+/// Parse the arguments of a colour function whose `(` is at `open`, answering
+/// null for anything the fold cannot be sure of -- a `calc()` or any other
+/// nested call, a relative colour (`rgb(from red r g b)`), a channel in a unit
+/// the function does not take, an argument count Chrome rejects. Those keep the
+/// text the author wrote, which is the safe direction: Chrome drops what it
+/// rejects, and inventing an `rgb()` for it would be a spelling Chrome never
+/// answers.
+fn parseColourFunction(
+    kind: ColourFunction,
+    value: []const u8,
+    open: usize,
+) ?struct { value: Colour, end: usize } {
+    var channels: [5]Channel = undefined;
+    var separators: [5]Separator = undefined;
+    var count: usize = 0;
+
+    var i = open + 1;
+    var pending: Separator = .first;
+    while (i < value.len and value[i] != ')') {
+        const c = value[i];
+        if (std.ascii.isWhitespace(c)) {
+            if (count > 0 and pending == .first) pending = .space;
+            i += 1;
+            continue;
+        }
+        if (c == ',' or c == '/') {
+            pending = if (c == ',') .comma else .slash;
+            i += 1;
+            continue;
+        }
+        // A nested call is a value this fold cannot compute.
+        if (c == '(') {
+            return null;
+        }
+        const start = i;
+        while (i < value.len and value[i] != ')' and value[i] != ',' and value[i] != '/' and
+            !std.ascii.isWhitespace(value[i])) : (i += 1)
+        {
+            if (value[i] == '(') return null;
+        }
+        if (count == channels.len) {
+            return null;
+        }
+        channels[count] = parseChannel(value[start..i]) orelse return null;
+        separators[count] = pending;
+        count += 1;
+        pending = .first;
+    }
+    if (i == value.len) {
+        // Unclosed: leave it alone rather than guess where it ended.
+        return null;
+    }
+    const end = i + 1;
+
+    // Three components, then an alpha introduced by a comma in the comma form
+    // and by a slash in the space separated one.
+    if (count != 3 and count != 4) {
+        return null;
+    }
+    const comma_form = separators[1] == .comma;
+    for (separators[1..3]) |separator| {
+        if (separator != (if (comma_form) Separator.comma else Separator.space)) return null;
+    }
+    if (count == 4 and separators[3] != (if (comma_form) Separator.comma else Separator.slash)) {
+        return null;
     }
 
-    var inserts: usize = 0;
-    for (value[0 .. value.len - 1], 0..) |c, i| {
-        if (c != '.') {
-            continue;
-        }
-        if (!std.ascii.isDigit(value[i + 1])) {
-            // next value isn't a digit
-            continue;
-        }
-        if (i > 0 and std.ascii.isDigit(value[i - 1])) {
-            // previous value is a digit
-            continue;
-        }
-        inserts += 1;
-    }
-    if (inserts == 0) {
-        return value;
-    }
+    const alpha: u8 = if (count == 4) alphaByte(channels[3]) orelse return null else 255;
+    const components = channels[0..3];
+    const rgb: [3]f64 = switch (kind) {
+        .rgb => blk: {
+            // Measured: every component is a number or every component is a
+            // percentage. `none` counts as either.
+            var percentage: ?bool = null;
+            for (components) |channel| {
+                const is_percentage = switch (channel) {
+                    .number => false,
+                    .percentage => true,
+                    .angle => return null,
+                    .none => continue,
+                };
+                if (percentage) |p| {
+                    if (p != is_percentage) return null;
+                } else {
+                    percentage = is_percentage;
+                }
+            }
+            // Kept on the 0..255 scale a number is already written on: taking
+            // it to 0..1 and back moves the halfway cases a byte.
+            var out: [3]f64 = undefined;
+            for (components, 0..) |channel, at| {
+                out[at] = switch (channel) {
+                    .number => |n| n,
+                    .percentage => |p| p / 100.0 * 255.0,
+                    else => 0,
+                };
+            }
+            break :blk out;
+        },
+        .hsl, .hwb => blk: {
+            const hue = switch (components[0]) {
+                .number => |n| n,
+                .angle => |a| a,
+                .none => 0,
+                .percentage => return null,
+            };
+            // Measured: the other two are percentages. A bare number there is
+            // left to the author -- no measurement says what Chrome answers.
+            var pair: [2]f64 = undefined;
+            for (components[1..3], 0..) |channel, at| {
+                pair[at] = switch (channel) {
+                    .percentage => |p| std.math.clamp(p / 100.0, 0, 1),
+                    .none => 0,
+                    else => return null,
+                };
+            }
+            const unit = if (kind == .hsl)
+                hslToRgb(hue, pair[0], pair[1])
+            else
+                hwbToRgb(hue, pair[0], pair[1]);
+            break :blk .{ unit[0] * 255.0, unit[1] * 255.0, unit[2] * 255.0 };
+        },
+    };
 
-    const buf = try arena.alloc(u8, value.len + inserts);
-    var w: usize = 0;
-    for (value[0 .. value.len - 1], 0..) |c, i| {
-        if (c == '.' and std.ascii.isDigit(value[i + 1]) and (i == 0 or !std.ascii.isDigit(value[i - 1]))) {
-            buf[w] = '0';
-            w += 1;
-        }
-        buf[w] = c;
-        w += 1;
+    var colour: Colour = .{ .rgb = undefined, .alpha = alpha };
+    for (rgb, 0..) |channel, at| {
+        colour.rgb[at] = colourByte(channel);
     }
-    // The last char is copied unconditionally: it can't start a bare ".<digit>".
-    buf[w] = value[value.len - 1];
-    w += 1;
-    return buf[0..w];
+    return .{ .value = colour, .end = end };
+}
+
+fn parseChannel(text: []const u8) ?Channel {
+    if (std.ascii.eqlIgnoreCase(text, "none")) {
+        return .none;
+    }
+    if (std.mem.endsWith(u8, text, "%")) {
+        const n = std.fmt.parseFloat(f64, text[0 .. text.len - 1]) catch return null;
+        return .{ .percentage = n };
+    }
+    // A hue takes any angle unit; the factors are the exact ones, since a
+    // rounded pi would move the answer a byte.
+    const units = [_]struct { []const u8, f64 }{
+        .{ "deg", 1 },
+        .{ "grad", 0.9 },
+        .{ "rad", 180.0 / std.math.pi },
+        .{ "turn", 360 },
+    };
+    for (units) |unit| {
+        if (text.len > unit[0].len and std.ascii.endsWithIgnoreCase(text, unit[0])) {
+            const n = std.fmt.parseFloat(f64, text[0 .. text.len - unit[0].len]) catch return null;
+            return .{ .angle = n * unit[1] };
+        }
+    }
+    const n = std.fmt.parseFloat(f64, text) catch return null;
+    return .{ .number = n };
+}
+
+/// A channel already on the 0..255 scale as the byte Chrome answers: rounded
+/// half away from zero, which is what makes `rgb(2.5)` a 3 and `50%` a 128.
+fn colourByte(channel: f64) u8 {
+    return @intFromFloat(std.math.clamp(@round(channel), 0, 255));
+}
+
+fn alphaByte(channel: Channel) ?u8 {
+    const alpha: f64 = switch (channel) {
+        .number => |n| n,
+        .percentage => |p| p / 100.0,
+        .none => 0,
+        .angle => return null,
+    };
+    return colourByte(std.math.clamp(alpha, 0, 1) * 255.0);
+}
+
+fn hslToRgb(hue: f64, saturation: f64, lightness: f64) [3]f64 {
+    const h = @mod(hue, 360.0);
+    const c = (1 - @abs(2 * lightness - 1)) * saturation;
+    const segment = h / 60.0;
+    const x = c * (1 - @abs(@mod(segment, 2.0) - 1));
+    const m = lightness - c / 2;
+    const triple: [3]f64 = switch (@as(u8, @intFromFloat(@min(5, @floor(segment))))) {
+        0 => .{ c, x, 0 },
+        1 => .{ x, c, 0 },
+        2 => .{ 0, c, x },
+        3 => .{ 0, x, c },
+        4 => .{ x, 0, c },
+        else => .{ c, 0, x },
+    };
+    return .{ triple[0] + m, triple[1] + m, triple[2] + m };
+}
+
+fn hwbToRgb(hue: f64, whiteness: f64, blackness: f64) [3]f64 {
+    // Measured: a whiteness and blackness summing past 100% is the grey
+    // between them -- `hwb(120 50% 60%)` answers `rgb(116, 116, 116)`.
+    if (whiteness + blackness >= 1) {
+        const grey = whiteness / (whiteness + blackness);
+        return .{ grey, grey, grey };
+    }
+    const base = hslToRgb(hue, 1, 0.5);
+    var out: [3]f64 = undefined;
+    for (base, 0..) |channel, at| {
+        out[at] = channel * (1 - whiteness - blackness) + whiteness;
+    }
+    return out;
+}
+
+fn writeColour(writer: *std.Io.Writer, colour: Colour) !void {
+    const rgb = colour.rgb;
+    if (colour.alpha == 255) {
+        return writer.print("rgb({d}, {d}, {d})", .{ rgb[0], rgb[1], rgb[2] });
+    }
+    try writer.print("rgba({d}, {d}, {d}, ", .{ rgb[0], rgb[1], rgb[2] });
+    try writeAlpha(writer, colour.alpha);
+    try writer.writeByte(')');
+}
+
+/// The alpha Chrome answers with is the shortest one, two or three decimal
+/// number that rounds back to the same alpha byte -- measured over fifty
+/// alphas, which is what makes 221/255 `0.867`, 158/255 `0.62`, 128/255 `0.5`
+/// and anything under half a byte a plain `0`. Three decimals always round-trip
+/// (their spacing is finer than a byte), so the loop always answers.
+fn writeAlpha(writer: *std.Io.Writer, alpha: u8) !void {
+    if (alpha == 0) {
+        return writer.writeByte('0');
+    }
+    const exact = @as(f64, @floatFromInt(alpha)) / 255.0;
+    for ([_]f64{ 10, 100, 1000 }, 1..) |scale, places| {
+        const rounded = @round(exact * scale);
+        if (rounded >= scale) {
+            // Would answer `1`, which no alpha under 255 can round back to.
+            continue;
+        }
+        if (colourByte(rounded / scale * 255.0) != alpha) {
+            continue;
+        }
+        const digits: u32 = @intFromFloat(rounded);
+        switch (places) {
+            1 => try writer.print("0.{d}", .{digits}),
+            2 => try writer.print("0.{d:0>2}", .{digits}),
+            else => try writer.print("0.{d:0>3}", .{digits}),
+        }
+        return;
+    }
+    unreachable;
 }
 
 // Canonicalize anchor-size() so that the dashed ident (anchor name) comes before the size keyword.
@@ -1896,20 +2311,88 @@ test "normalizePropertyValue: value case" {
         // (Chrome drops this declaration; this engine keeps invalid values, a
         // separate and already-recorded difference.)
         .{ "display", "Nonsense", "Nonsense" },
-        // Not one of the four shapes. Chrome answers `rgb(170, 187, 204)` to
-        // the first; what matters here is that the hex digits are not read as
-        // an identifier.
-        .{ "color", "#AABBCC", "#AABBCC" },
+        // The hex digits are not read as an identifier: the whole hash is one
+        // token, and it folds to the rgb() Chrome answers.
+        .{ "color", "#AABBCC", "rgb(170, 187, 204)" },
         .{ "content", "\"MiXeD\"", "\"MiXeD\"" },
         .{ "content", "\"1PX\"", "\"1PX\"" },
         .{ "background-image", "URL(Foo/Bar.PNG)", "url(\"Foo/Bar.PNG\")" },
         // An `e` only starts an exponent when digits follow it, or `1em` would
-        // lose its unit. Chrome folds the second to `100px`.
+        // lose its unit.
         .{ "width", "1EM", "1em" },
-        .{ "width", "1E2PX", "1E2px" },
+        .{ "width", "1E2PX", "100px" },
         // A substituted value freezes whole, capitals and all.
         .{ "width", "VAR(--Foo)", "VAR(--Foo)" },
         .{ "width", "CALC(1PX + VAR(--a))", "CALC(1PX + VAR(--a))" },
+    };
+    inline for (cases) |case| {
+        const result = try normalizePropertyValue(testing.arena_allocator, case[0], case[1]);
+        try testing.expectEqual(case[2], result);
+    }
+}
+
+test "normalizePropertyValue: numbers" {
+    const cases = .{
+        // printf %g over a value clamped to the float range.
+        .{ "width", "1E2px", "100px" },
+        .{ "width", "1E-2px", "0.01px" },
+        .{ "width", "1.50px", "1.5px" },
+        .{ "width", "+1px", "1px" },
+        .{ "width", ".5px", "0.5px" },
+        .{ "width", "01.5px", "1.5px" },
+        .{ "width", "3.14159265358979px", "3.14159px" },
+        .{ "width", "999999.9px", "1e+06px" },
+        .{ "width", "1e100px", "3.40282e+38px" },
+        .{ "width", "1e-40px", "1e-40px" },
+        .{ "width", "-0px", "0px" },
+        .{ "margin", "1.500px -2.0px +3px .5px", "1.5px -2px 3px 0.5px" },
+        .{ "transform", "scale(1E1)", "scale(10)" },
+        // An <integer> prints as one, clamped to the 32-bit range.
+        .{ "z-index", "1000000", "1000000" },
+        .{ "z-index", "3000000000", "2147483647" },
+        .{ "z-index", "-3000000000", "-2147483648" },
+        .{ "order", "010", "10" },
+        .{ "counter-increment", "c 1000000", "c 1000000" },
+        .{ "grid-template-columns", "repeat(1000000, 1px)", "repeat(1000000, 1px)" },
+        // Everywhere else the same digits are a <number>.
+        .{ "flex-grow", "1000000", "1e+06" },
+        .{ "width", "1234567px", "1.23457e+06px" },
+        .{ "columns", "1000000px", "1e+06px" },
+        // Not a value: a string, a url() path, a substituted value.
+        .{ "content", "\".5\"", "\".5\"" },
+        .{ "background-image", "url(.5)", "url(\".5\")" },
+        .{ "width", "var(--a, .5px)", "var(--a, .5px)" },
+    };
+    inline for (cases) |case| {
+        const result = try normalizePropertyValue(testing.arena_allocator, case[0], case[1]);
+        try testing.expectEqual(case[2], result);
+    }
+}
+
+test "normalizePropertyValue: colours" {
+    const cases = .{
+        .{ "color", "#AABBCC", "rgb(170, 187, 204)" },
+        .{ "color", "#abc", "rgb(170, 187, 204)" },
+        .{ "color", "#AABBCCFF", "rgb(170, 187, 204)" },
+        .{ "color", "#AABBCCDD", "rgba(170, 187, 204, 0.867)" },
+        .{ "color", "#1234", "rgba(17, 34, 51, 0.267)" },
+        .{ "color", "rgb(1 2 3)", "rgb(1, 2, 3)" },
+        .{ "color", "rgb(1 2 3 / 50%)", "rgba(1, 2, 3, 0.5)" },
+        .{ "color", "rgba(1,2,3,1)", "rgb(1, 2, 3)" },
+        .{ "color", "rgb(300, -5, 2.6)", "rgb(255, 0, 3)" },
+        .{ "color", "rgb(50%, 25%, 0%)", "rgb(128, 64, 0)" },
+        .{ "color", "rgb(none 2 3)", "rgb(0, 2, 3)" },
+        .{ "color", "hsl(120, 50%, 50%)", "rgb(64, 191, 64)" },
+        .{ "color", "hsl(2rad 50% 50%)", "rgb(75, 191, 64)" },
+        .{ "color", "hwb(120 20% 30%)", "rgb(51, 179, 51)" },
+        .{ "color", "hwb(120 50% 60%)", "rgb(116, 116, 116)" },
+        .{ "border", "1px solid #ABC", "1px solid rgb(170, 187, 204)" },
+        // Left alone: a named colour, a space Chrome does not fold, arguments
+        // that are not plain numbers, and a hex of any other length.
+        .{ "color", "rebeccapurple", "rebeccapurple" },
+        .{ "color", "oklch(0.5 0.1 200)", "oklch(0.5 0.1 200)" },
+        .{ "color", "rgb(from red r g b)", "rgb(from red r g b)" },
+        .{ "color", "#12345", "#12345" },
     };
     inline for (cases) |case| {
         const result = try normalizePropertyValue(testing.arena_allocator, case[0], case[1]);

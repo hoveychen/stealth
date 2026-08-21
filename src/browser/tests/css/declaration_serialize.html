@@ -212,6 +212,212 @@ function withStyle(text) {
 }
 </script>
 
+<script id="a_number_is_reprinted_by_chromes_printer">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured: a number in a declaration is reprinted rather than echoed. The
+    // printer is printf `%g` -- six significant digits, trailing zeros dropped,
+    // scientific notation once the exponent leaves [-4, 6) with the exponent
+    // padded to two digits -- over a value clamped to the float range.
+    testing.expectEqual('width: 100px;', round('width: 1E2px'));
+    testing.expectEqual('width: 100px;', round('width: 1e2px'));
+    testing.expectEqual('width: 100px;', round('width: 1E+2px'));
+    testing.expectEqual('width: 0.01px;', round('width: 1E-2px'));
+    testing.expectEqual('width: 1.5px;', round('width: 1.50px'));
+    testing.expectEqual('width: 1px;', round('width: 1.0px'));
+    testing.expectEqual('width: 0.5px;', round('width: 0.50000px'));
+    testing.expectEqual('width: 1.5px;', round('width: 01.5px'));
+    testing.expectEqual('width: 1px;', round('width: +1px'));
+    testing.expectEqual('width: 0.5px;', round('width: .5px'));
+    testing.expectEqual('width: 0px;', round('width: -0px'));
+    testing.expectEqual('width: 0px;', round('width: +0.0px'));
+
+    // Six significant digits, and the exponent thresholds either side.
+    testing.expectEqual('width: 100px;', round('width: 100.000001px'));
+    testing.expectEqual('width: 3.14159px;', round('width: 3.14159265358979px'));
+    testing.expectEqual('width: 33.3333%;', round('width: 33.333333333%'));
+    testing.expectEqual('width: 1e+06px;', round('width: 999999.9px'));
+    testing.expectEqual('width: 1e-06px;', round('width: 0.000001px'));
+    testing.expectEqual('width: 1e-07px;', round('width: 0.0000001px'));
+
+    // The clamp is to the float range, not to float precision: 1e100 comes
+    // back as FLT_MAX, while 1e-40 -- which no float can hold to six digits --
+    // keeps all of them.
+    testing.expectEqual('width: 3.40282e+38px;', round('width: 1e100px'));
+    testing.expectEqual('width: 3.40282e+38px;', round('width: 3.4028236e38px'));
+    testing.expectEqual('width: 1e-40px;', round('width: 1e-40px'));
+    testing.expectEqual('width: 1e-46px;', round('width: 1e-46px'));
+
+    // Every dimension in the value, inside a function or a shorthand alike.
+    testing.expectEqual('margin: 10px 20px;', round('margin: 1E1px 2E1px'));
+    testing.expectEqual('margin: 1.5px -2px 3px 0.5px;', round('margin: 1.500px -2.0px +3px .5px'));
+    testing.expectEqual('transform: scale(10);', round('transform: scale(1E1)'));
+    testing.expectEqual('transform: translateX(1.5px);', round('transform: translateX(1.50px)'));
+    testing.expectEqual('width: calc(100px);', round('width: calc(1E2px)'));
+    testing.expectEqual('grid-template-columns: 10fr;', round('grid-template-columns: 1E1fr'));
+    testing.expectEqual('transition-duration: 1000ms;', round('transition-duration: 1E3ms'));
+    testing.expectEqual('opacity: 0.5;', round('opacity: 0.500'));
+    testing.expectEqual('line-height: 1;', round('line-height: 1.0'));
+
+    // An <integer> is printed as an integer rather than through %g, so it keeps
+    // its digits past the sixth -- and it is clamped to the 32-bit range, which
+    // is what Blink parses it into.
+    testing.expectEqual('z-index: 1000000;', round('z-index: 1000000'));
+    testing.expectEqual('z-index: 2147483647;', round('z-index: 2147483647'));
+    testing.expectEqual('z-index: 2147483647;', round('z-index: 3000000000'));
+    testing.expectEqual('z-index: -2147483648;', round('z-index: -3000000000'));
+    testing.expectEqual('order: 10;', round('order: 010'));
+    testing.expectEqual('order: 1;', round('order: +1'));
+    testing.expectEqual('counter-increment: c 1000000;', round('counter-increment: c 1000000'));
+    testing.expectEqual('font-feature-settings: "liga" 1000000;', round('font-feature-settings: "liga" 1000000'));
+    // ... including the two functions whose first argument is one.
+    testing.expectEqual(
+        'grid-template-columns: repeat(1000000, 1px);',
+        round('grid-template-columns: repeat(1000000, 1px)'));
+    testing.expectEqual(
+        'transition-timing-function: steps(1000000, jump-start);',
+        round('transition-timing-function: steps(1000000, jump-start)'));
+    // Anywhere else the same digits are a <number>, and go through %g.
+    testing.expectEqual('flex-grow: 1e+06;', round('flex-grow: 1000000'));
+    testing.expectEqual('width: 1.23457e+06px;', round('width: 1234567px'));
+    testing.expectEqual('transform: scale(1e+06);', round('transform: scale(1000000)'));
+    // A dimension is a <number> even in a property whose bare value is an
+    // <integer>: only the unitless token is the integer.
+    testing.expectEqual('columns: 1e+06px;', round('columns: 1000000px'));
+
+    // A number that is not a value is left alone: inside a string, inside a
+    // url(), inside a substituted value, and in a custom property.
+    testing.expectEqual('content: ".5";', round('content: ".5"'));
+    testing.expectEqual('content: "1.50px";', round('content: "1.50px"'));
+    testing.expectEqual('background-image: url(".5");', round('background-image: url(.5)'));
+    testing.expectEqual('width: var(--a, .5px);', round('width: var(--a, .5px)'));
+    testing.expectEqual('width: env(safe-area-inset-top, .5px);', round('width: env(safe-area-inset-top, .5px)'));
+    testing.expectEqual('--c: 01.50;', round('--c: 01.50'));
+}
+</script>
+
+<script id="a_colour_folds_to_rgb_or_rgba">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Measured: a hex colour is answered as rgb(), or as rgba() when its alpha
+    // is not opaque. Three and four digit forms double each nibble.
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #AABBCC'));
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #abc'));
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #ABC'));
+    testing.expectEqual('color: rgb(0, 0, 0);', round('color: #000'));
+    testing.expectEqual('color: rgb(255, 255, 255);', round('color: #FFFFFF'));
+    testing.expectEqual('color: rgb(170, 187, 204);', round('color: #AABBCCFF'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0);', round('color: #AABBCC00'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0.867);', round('color: #AABBCCDD'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0.498);', round('color: #AABBCC7F'));
+    testing.expectEqual('color: rgba(170, 187, 204, 0.867);', round('color: #ABCD'));
+    testing.expectEqual('color: rgba(17, 34, 51, 0.267);', round('color: #1234'));
+
+    // The alpha is the shortest one, two or three decimal number that rounds
+    // back to the same 8-bit alpha byte -- which is why 221/255 is `0.867` but
+    // 158/255 is `0.62`, and why an alpha under half a byte is plain `0`.
+    const alpha = (a) => round(`color: rgba(1, 2, 3, ${a})`);
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', alpha('0.5'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.25);', alpha('0.25'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.125);', alpha('0.125'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.063);', alpha('0.0625'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.62);', alpha('0.618'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.12);', alpha('0.1235'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.086);', alpha('0.08666667'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.008);', alpha('0.008666667'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.004);', alpha('0.002'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', alpha('0.001'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', alpha('0.0005'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', alpha('-1'));
+    testing.expectEqual('color: rgb(1, 2, 3);', alpha('0.999'));
+    testing.expectEqual('color: rgb(1, 2, 3);', alpha('1'));
+    testing.expectEqual('color: rgb(1, 2, 3);', alpha('1.5'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', alpha('50%'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.333);', alpha('0.3333333'));
+
+    // rgb() and rgba() are one function: the space separated form becomes the
+    // comma separated one, an alpha of 1 drops back to rgb(), and a component
+    // is rounded to a byte -- from a percentage of 255 when it is written as
+    // one -- and clamped there.
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgb(1 2 3)'));
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgb( 1 , 2 , 3 )'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', round('color: rgb(1 2 3 / 50%)'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0.5);', round('color: rgb(1,2,3,0.5)'));
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgba(1,2,3,1)'));
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: rgb(1 2 3 / 1)'));
+    testing.expectEqual('color: rgb(255, 0, 3);', round('color: rgb(300, -5, 2.6)'));
+    testing.expectEqual('color: rgb(2, 3, 4);', round('color: rgb(2.4, 2.5, 3.5)'));
+    testing.expectEqual('color: rgb(1, 2, 255);', round('color: rgb(0.5 1.5 254.5)'));
+    testing.expectEqual('color: rgb(128, 64, 0);', round('color: rgb(50%, 25%, 0%)'));
+    testing.expectEqual('color: rgb(85, 3, 1);', round('color: rgb(33.333%, 1%, 0.4%)'));
+    testing.expectEqual('color: rgb(2, 255, 255);', round('color: rgb(0.6% 99.9% 100.4%)'));
+    testing.expectEqual('color: rgb(100, 2, 3);', round('color: rgb(1e2 2 3)'));
+    testing.expectEqual('color: rgb(0, 2, 3);', round('color: rgb(none 2 3)'));
+    testing.expectEqual('color: rgba(1, 2, 3, 0);', round('color: rgb(1 2 3 / none)'));
+
+    // hsl() and hwb() are answered as rgb() too, so the conversion is ours to
+    // do. A hue takes any angle unit and wraps; a saturation, lightness,
+    // whiteness or blackness clamps; a whiteness and blackness summing past
+    // 100% is the grey between them.
+    testing.expectEqual('color: rgb(64, 191, 64);', round('color: hsl(120, 50%, 50%)'));
+    testing.expectEqual('color: rgba(64, 191, 64, 0.5);', round('color: hsl(120deg 50% 50% / 0.5)'));
+    testing.expectEqual('color: rgba(64, 191, 64, 0.25);', round('color: hsla(120, 50%, 50%, 0.25)'));
+    testing.expectEqual('color: rgb(64, 191, 191);', round('color: hsl(0.5turn 50% 50%)'));
+    testing.expectEqual('color: rgb(128, 191, 64);', round('color: hsl(100grad 50% 50%)'));
+    testing.expectEqual('color: rgb(75, 191, 64);', round('color: hsl(2rad 50% 50%)'));
+    testing.expectEqual('color: rgb(191, 149, 64);', round('color: hsl(400 50% 50%)'));
+    testing.expectEqual('color: rgb(191, 64, 128);', round('color: hsl(-30 50% 50%)'));
+    testing.expectEqual('color: rgb(191, 64, 64);', round('color: hsl(none 50% 50%)'));
+    testing.expectEqual('color: rgb(128, 128, 128);', round('color: hsl(120 0% 50%)'));
+    testing.expectEqual('color: rgb(128, 128, 128);', round('color: hsl(120 -50% 50%)'));
+    testing.expectEqual('color: rgb(0, 255, 0);', round('color: hsl(120 200% 50%)'));
+    testing.expectEqual('color: rgb(255, 255, 255);', round('color: hsl(120 50% 150%)'));
+    testing.expectEqual('color: rgb(65, 193, 65);', round('color: hsl(120 50.5% 50.5%)'));
+    testing.expectEqual('color: rgb(51, 179, 51);', round('color: hwb(120 20% 30%)'));
+    testing.expectEqual('color: rgb(51, 179, 51);', round('color: hwb(120deg 20% 30%)'));
+    testing.expectEqual('color: rgba(51, 179, 51, 0.5);', round('color: hwb(120 20% 30% / 0.5)'));
+    testing.expectEqual('color: rgb(116, 116, 116);', round('color: hwb(120 50% 60%)'));
+    testing.expectEqual('color: rgb(0, 255, 0);', round('color: hwb(120 0% 0%)'));
+    testing.expectEqual('color: rgb(179, 51, 51);', round('color: hwb(none 20% 30%)'));
+
+    // Wherever the colour sits, and whatever case it was written in.
+    testing.expectEqual('border: 1px solid rgb(170, 187, 204);', round('border: 1px solid #ABC'));
+    testing.expectEqual('background-color: rgb(1, 2, 3);', round('background-color: RGB(1, 2, 3)'));
+    testing.expectEqual(
+        'text-decoration-color: rgba(64, 191, 64, 0.25);',
+        round('text-decoration-color: HSLA(120, 50%, 50%, 0.25)'));
+    testing.expectEqual(
+        'background-image: linear-gradient(rgb(170, 187, 204), rgb(18, 52, 86));',
+        round('background-image: linear-gradient(#AABBCC, #123456)'));
+
+    // What is left alone: a named colour, a colour space Chrome does not fold
+    // to rgb(), and a colour whose arguments are not plain numbers.
+    testing.expectEqual('color: rebeccapurple;', round('color: rebeccapurple'));
+    testing.expectEqual('color: transparent;', round('color: transparent'));
+    // `currentColor` is a keyword rather than a colour to fold, and this engine
+    // answers it with the capital its keyword table carries. Measured: Chrome
+    // answers `currentcolor`, and lowercases all 52 of that table's
+    // capitalised keywords -- a keyword-table difference, recorded rather than
+    // fixed here.
+    testing.expectEqual('color: currentColor;', round('color: currentColor'));
+    testing.expectEqual('color: oklch(0.5 0.1 200);', round('color: oklch(0.5 0.1 200)'));
+    testing.expectEqual('color: color(srgb 1 0 0);', round('color: color(srgb 1 0 0)'));
+    testing.expectEqual('color: color-mix(in srgb, red, blue);', round('color: color-mix(in srgb, red, blue)'));
+    testing.expectEqual('color: light-dark(red, blue);', round('color: light-dark(red, blue)'));
+    testing.expectEqual('color: rgb(from red r g b);', round('color: rgb(from red r g b)'));
+    testing.expectEqual('color: VAR(--a, #AABBCC);', round('color: VAR(--a, #AABBCC)'));
+    testing.expectEqual('--c: #AABBCC;', round('--c: #AABBCC'));
+
+    // A hex of any other length is not a colour at all. Chrome drops the whole
+    // declaration; this engine keeps invalid values, which is the same
+    // already-recorded difference the value-case table has.
+    testing.expectEqual('color: #12345;', round('color: #12345'));
+    testing.expectEqual('color: #AABBCCDDEE;', round('color: #AABBCCDDEE'));
+}
+</script>
+
 <script id="a_url_is_always_serialised_quoted">
 {
     const round = (text) => withStyle(text).style.cssText;
