@@ -231,9 +231,42 @@ fn connect(self: *WebSocket, protocols: [][]const u8) !void {
     try conn.setHeaderCallback(receivedHeaderCallback);
 
     const allocator = arena.allocator();
-    for (http_client.baselineHeaders()) |hdr| {
-        try conn.addHeader(allocator, hdr.name, hdr.value);
-    }
+
+    // A WebSocket upgrade is NOT a page request, and Chrome's handshake is not
+    // the page header set. Measured against a real Chrome 151 (headless, ws://
+    // to a raw TCP recorder that logs the request block verbatim):
+    //
+    //   Host, Connection, Pragma, Cache-Control, User-Agent, Upgrade, Origin,
+    //   Sec-WebSocket-Version, Accept-Encoding, Accept-Language,
+    //   Sec-WebSocket-Key, Sec-WebSocket-Extensions
+    //
+    // No client hints at all, and no Accept. Seeding the page baseline here put
+    // Sec-Ch-Ua, Sec-Ch-Ua-Mobile, Sec-Ch-Ua-Platform and Accept on the
+    // handshake -- four headers no browser sends on an upgrade, which is a
+    // sharper signal than a missing one.
+    //
+    // curl generates Host / Connection / Upgrade / Sec-WebSocket-Key /
+    // Sec-WebSocket-Version itself; the rest is ours.
+    // curl sends `Upgrade: websocket` but no `Connection: Upgrade`; Chrome
+    // sends both, with Connection second, right after Host. The vendored curl
+    // emits a caller-supplied Connection at its own H1_HD_CONNECTION slot,
+    // which this fork already moved to follow Host -- so supplying it here
+    // lands it where Chrome has it.
+    try conn.addHeader(allocator, "Connection", "Upgrade");
+    try conn.addHeader(allocator, "Pragma", "no-cache");
+    try conn.addHeader(allocator, "Cache-Control", "no-cache");
+    try conn.addHeader(allocator, "User-Agent", http_client.getUserAgent());
+    try conn.addHeader(allocator, "Accept-Encoding", http.accept_encoding);
+    try conn.addHeader(allocator, "Accept-Language", http_client.getLanguages());
+    // curl generates `Accept: */*` for any request that does not carry one, and
+    // a browser sends no Accept on an upgrade at all. An empty value suppresses
+    // the generated header rather than sending an empty one.
+    try conn.addRawHeader("Accept:");
+
+    // Not sent: Sec-WebSocket-Extensions: permessage-deflate. Chrome offers it,
+    // but offering it invites the server to compress frames, and this engine's
+    // WebSocket reader has no inflate -- the same rule as Accept-Encoding, only
+    // advertise what we can actually decode.
     if (protocols.len > 0) {
         try conn.addHeader(allocator, "Sec-WebSocket-Protocol", try std.mem.join(allocator, ", ", protocols));
     }
