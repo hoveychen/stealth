@@ -2226,6 +2226,9 @@ probes do. What costs a page is not finishing, which is what the two remaining
 node gaps are.
 
 The readings are in `results/detectors-{chrome,lightpanda}-2026-08-21.json`.
+The commercial guards were re-asked in the same session; that reading is its own
+section below, because "does a detector call us a bot" and "does a guard open the
+door" are still two different questions.
 
 ## G23: amiunique and browserscan, attributed
 
@@ -5193,6 +5196,87 @@ fix it.
   the table above: claude.ai passes at 1066 nodes.)*
 - **indeed, discord and nowsecure are byte-for-byte unchanged**, which is the
   over-permissiveness check.
+
+## The guards again, after the 47-name surface cut (2026-08-21)
+
+Re-asked the only question these stations answer -- does the door open -- on
+main at `dev.726+1556e8bd6`, and paired it with the detector re-measurement in
+the section above. Three of the four layers read the same as the last sweep; the
+fourth finally says something, and what it says is about the address.
+
+| layer | headed Chrome 151 | this engine |
+|---|---|---|
+| CF **passive**, production sites (chatgpt, claude, indeed, nowsecure, discord, pixiv) | 6/6 | **6/6** |
+| unattributed edge (sony, zillow) | 2/2 | **2/2** |
+| CF **managed challenge** (scrapingcourse) | pass, 34n | **stuck, 43n `Just a moment...`** |
+| CF managed challenge (nopecha, zeroclover) | stuck | stuck |
+| DataDome (4 stations) | **0/4** | **0/4** |
+
+The passive layer and the unattributed edge are the controls and both are clean:
+every production site behind Cloudflare serves this engine the real page, and
+pixiv is still node-for-node with Chrome. The managed challenge is the same
+Turnstile-widget hang the section above attributes -- 43 nodes of interstitial,
+reloading every ~20s -- so nothing moved there, in either direction, across the
+47 new globals. Two of the three challenge stations stop headed Chrome too, so
+only scrapingcourse discriminates at all.
+
+### The DataDome column, settled: it was measuring the address
+
+The section above left this open and named the experiment that would close it --
+alternate the engine order across repeated runs. Done, and the answer is that
+neither column is about the client:
+
+| run | order | Chrome | this engine |
+|---|---|---|---|
+| 08-20 re-run | engine first | 0/4 | **2/4** (datadome.co, hermes) |
+| 08-21, non-fresh | engine first | 0/4 | **2/4** (datadome.co, hermes) |
+| 08-21, `--fresh` | engine second | — | **0/4** |
+| 08-21, `--fresh` | Chrome first | 0/4 | 0/4 |
+
+**The two passes did not reproduce twenty minutes later from the same address.**
+Same binary, same stations, same route: datadome.co and hermes served this engine
+2044 and 2042 nodes of their real pages, and then challenged it. So the 10/15
+that reads better than headed Chrome's 9/15 was two rows of IP reputation, not
+two rows of fingerprint, and this engine's DataDome column has never been a
+result. What the address does now is challenge everything: 0/4 for both clients
+in both orders, which is at least a *stable* control -- the previous open item
+was that the control moved between runs. Measuring DataDome as a property of the
+client needs an address these sixty-odd requests have not already spent.
+
+### Two things to fix in the harness before trusting it again
+
+**`--fresh` is not optional and is not the default.** The first two sweeps of the
+day were run without it, which is the mode the section above records manufacturing
+six clean-looking refusals out of one wedged station. Nothing cascaded this time
+(pixiv passed in both columns), but the DataDome re-checks above are the only
+readings of the day taken the way the harness asks.
+
+**`verdict()` scores a denial page as a pass, and a served page as a challenge.**
+Both directions appeared in one day of data:
+
+* headless Chrome at zillow -- `pass`, `doc=403->200`, title **"Access to this
+  page has been denied"**. The rule asks for a final status under 400, a
+  non-empty body and no Cloudflare or DataDome mark; a denial page from an
+  unattributed edge that answers 200 and names no vendor satisfies all three.
+* this engine at leboncoin -- `datadome-challenge`, `doc=200`, **1440 nodes of
+  the real site**. `captcha-delivery.com` appears in the markup of a page that
+  was served, which is the same over-counting the `_cf_chl_opt` rule was fixed
+  for on the Cloudflare side and has not been fixed on this one.
+
+Neither changes a conclusion above -- zillow passes in both engines when headed,
+leboncoin is inside the burned DataDome column -- but a pass count out of this
+sweep is worth exactly as much as the rule behind it, and this rule is wrong in
+both directions.
+
+### And the number nobody had measured: what headlessness alone costs
+
+The Chrome column was run twice, headless and headed, minutes apart on one
+address: **3/15 headless against 9/15 headed.** Six stations that serve a headed
+Chrome refuse the same binary with `--headless=new` -- chatgpt, claude, indeed,
+pixiv, datadome.co, hermes -- and one (sony) answers `403 Access Denied` outright.
+Worth keeping in view whenever a comparison in this file says "Chrome": a headless
+baseline is not a lenient one, it is a *different client*, and one that most of
+these guards already know.
 
 ## The two "wedges" were crashes
 

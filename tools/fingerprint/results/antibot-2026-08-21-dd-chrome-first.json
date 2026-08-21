@@ -1,0 +1,263 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "startedAt": "2026-08-21T18:14:01.029Z",
+  "egress": {
+    "fl": "1231f140",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787336041.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9336/devtools/browser/66d3cb6f-a270-48e4-b051-0f1f7d0cd9b5"
+  },
+  "stations": [
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAFDx-1Ar8qecAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=OWSCinyPxG2TkzhzbAAeNXEQpz3p61vq2wCCUy0G6SaV8QGz~91fE4mxdgjtOzsXrCyr_QRIL0C0mi6BUUDk3rGKvEdGhe9769ONOL8aWCkzr63WdTYBime9oppqk3qY&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=ec06e71a6cf2ac2dbf04aeceddedcb84e79f2713cf9f3bf280ed7145759d6615d216f7c9519937c5858bfd790cdbec08&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "datadome.co",
+      "landedOn": "https://datadome.co/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false
+      },
+      "ms": 30695
+    },
+    {
+      "name": "dd-g2",
+      "vendor": "datadome",
+      "url": "https://www.g2.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.g2.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMABofkk6ZEhhgAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=8moDVWrpU7XYMGJeJYUaDtvOblA5U15TnRF2p5j3JWKBC~wIESzZR8YFjx4OHqr7zdwSqkr49PKCnq87pJjstzC7TgKpuaT6Cb_Se6rbrwg59EKmPg87naeEEwa1xQA9&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=ff62e739c69ff6349bd2565b788e3e825cb121857b837c3b572031145928d75d34618401f00d3ab868fa0c24caebf96c&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "g2.com",
+      "landedOn": "https://www.g2.com/",
+      "nodes": 11,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false
+      },
+      "ms": 28524
+    },
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAihJ0WaiBjSMAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=pbZOSDgnYZMJUFGvoXOndhPdeDUcRc5eWbHT9WZL7tHvbq3Y_Xq2yMrEvBbkuMQRkUlw5wMHJAjk6nZK18CAFD3S6s_shf07wQwOZEq671LrX2HzSE8g2z80Ss3xAuKz&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=b0077b5576a12c9a931766fd88a0c40370a4b073e4c81c7a2eb7489269c1b9b59c06415f1bf402889e74965386407699&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin.fr",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false
+      },
+      "ms": 29106
+    },
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAHwfU-HZfI0kAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=VhSpSabv9XKbdxhAYr~MZNqyefPWq0C2lwaKdxENPx_195AgU2m_HeCT3gqXzZIgTC0Y6QRH5YVYKntgpuaiMVTpon97TCWy_vPSIPnIQljV6UaaK02ZQJVaMCHg5Oot&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=59787da0960c913f0b1a44b099fc8119c1fcff3efdf445da65beca14beb0c9c1ddff7aa6dc355e9f8198bfecbdd7a288&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "hermes.com",
+      "landedOn": "https://www.hermes.com/",
+      "nodes": 10,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false
+      },
+      "ms": 29415
+    }
+  ],
+  "fresh": true,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:9336/devtools/browser/7923170c-bcfa-4306-b2d8-b9de2dd5b73f",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[23937:7044696:0821/111530.165470:ERROR:chrome/browser/ui/views/user_education/impl/browser_user_education_interface_impl.cc:186] Attempting to show IPH IPH_BatterySaverMode before browser initialization complete; IPH will not be shown.",
+    "[23937:7044696:0821/111530.481626:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[23937:7044696:0821/111530.482150:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[23937:7044725:0821/111535.769737:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[23937:7044725:0821/111535.774650:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[23916:7044363:0821/111536.055557:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[23916:7044363:0821/111536.057452:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[23916:7044363:0821/111536.057526:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake) returned 0.",
+    "[23912:7044358:0821/111536.087216:VERBOSE1:chrome/updater/app/app_wakeall.cc:68] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` exited 0",
+    "[23912:7044346:0821/111536.087630:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[23912:7044346:0821/111536.088902:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[23912:7044346:0821/111536.088964:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake-all) returned 0.",
+    "[23937:7044725:0821/111537.161533:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[23918:7044367:0821/111546.063675:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[23918:7044367:0821/111546.063747:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--crash-handler) returned 0.",
+    "[23914:7044350:0821/111546.066212:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[23914:7044350:0821/111546.066279:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--crash-handler) returned 0.",
+    "[24122:7046306:0821/111549.244436:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake-all --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[24122:7046306:0821/111549.245459:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 85689, parent pid: 23937",
+    "[24122:7046306:0821/111549.248817:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 88676364288B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24122:7046306:0821/111549.248844:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 88676364288B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24122:7046306:0821/111549.248974:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[24124:7046310:0821/111549.264327:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[24124:7046310:0821/111549.265205:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 85689, parent pid: 1",
+    "[24124:7046310:0821/111549.268091:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 88676364288B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24124:7046310:0821/111549.268113:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 88676364288B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24124:7046310:0821/111549.268237:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[24122:7046306:0821/111549.268938:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[24122:7046306:0821/111549.270046:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[24122:7046306:0821/111549.270172:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[24122:7046306:0821/111549.270298:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[24122:7046306:0821/111549.270319:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[24122:7046306:0821/111549.270400:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[24122:7046306:0821/111549.270416:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[24122:7046306:0821/111549.270437:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[24122:7046318:0821/111549.270842:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[24122:7046318:0821/111549.270998:VERBOSE1:chrome/updater/app/app_wakeall.cc:64] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` process invalid: Undefined error: 0 (0)",
+    "[24122:7046318:0821/111549.271055:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[24126:7046323:0821/111549.281893:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[24126:7046323:0821/111549.282654:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 85689, parent pid: 24122",
+    "[24126:7046323:0821/111549.285527:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 88676347904B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24126:7046323:0821/111549.285553:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 88676347904B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24126:7046323:0821/111549.285660:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[24128:7046327:0821/111549.297374:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[24128:7046327:0821/111549.298230:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 85689, parent pid: 1",
+    "[24128:7046327:0821/111549.301046:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 88675581952B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24128:7046327:0821/111549.301071:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 88675581952B (82.586GiB) / 994662584320B (926.352GiB)",
+    "[24128:7046327:0821/111549.301187:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[24126:7046323:0821/111549.301900:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[24126:7046323:0821/111549.303129:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[24126:7046323:0821/111549.303303:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[24126:7046323:0821/111549.303461:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[24126:7046323:0821/111549.303505:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[24126:7046323:0821/111549.303600:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[24126:7046323:0821/111549.303617:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[24126:7046323:0821/111549.303641:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[24126:7046323:0821/111549.303896:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run"
+  ],
+  "summary": {
+    "stations": 4,
+    "pass": 0
+  }
+}
