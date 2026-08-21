@@ -45,10 +45,15 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // A secure owner, so nothing is gated away. 230 after EventTarget came
       // off the flattening, 231 since ReportBody went on, 233 with Origin and
       // WebGLObject -- exactly the three names of the 47-name window-surface cut
-      // that a Chrome worker carries too (measured, probe-shapes-worker).
+      // that a Chrome worker carries too (measured, probe-shapes-worker) -- and
+      // back to 230 once the two WebGL extensions and the ReadableStream async
+      // iterator stopped being named, which are the three of that group of five
+      // reachable from a worker (WebGLRenderingContext.zig and ReadableStream.zig
+      // are both in worker_common_apis; the SVG and cross-origin-window ones are
+      // window-only).
       testing.expectEqual(8, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(233, data.count);
+      testing.expectEqual(230, data.count);
     });
   }
 </script>

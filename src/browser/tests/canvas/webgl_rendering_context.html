@@ -77,7 +77,9 @@
   const element = document.createElement("canvas");
   const ctx = element.getContext("webgl");
   const rendererInfo = ctx.getExtension("WEBGL_debug_renderer_info");
-  testing.expectEqual(true, rendererInfo instanceof WEBGL_debug_renderer_info);
+  // An extension has no interface object, so there is no constructor to test
+  // against -- the brand is what identifies it. See to_string_tag.html.
+  testing.expectEqual('[object WebGLDebugRendererInfo]', Object.prototype.toString.call(rendererInfo));
 
   const { UNMASKED_VENDOR_WEBGL, UNMASKED_RENDERER_WEBGL } = rendererInfo;
   testing.expectEqual(UNMASKED_VENDOR_WEBGL, 0x9245);
@@ -103,7 +105,7 @@
   const element = document.createElement("canvas");
   const ctx = element.getContext("webgl");
   const loseContext = ctx.getExtension("WEBGL_lose_context");
-  testing.expectEqual(true, loseContext instanceof WEBGL_lose_context);
+  testing.expectEqual('[object WebGLLoseContext]', Object.prototype.toString.call(loseContext));
 
   loseContext.loseContext();
   loseContext.restoreContext();

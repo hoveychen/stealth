@@ -584,6 +584,15 @@ pub const AsyncIterator = struct {
 
         pub const Meta = struct {
             pub const name = "ReadableStreamAsyncIterator";
+
+            // Web IDL async iterator prototype objects are not interfaces: there
+            // is no globalThis.ReadableStreamAsyncIterator in Chrome, and the
+            // brand it stamps is the interface name and the words "AsyncIterator"
+            // joined by a *space*. Measured on a headed Chrome 150:
+            // '[object ReadableStream AsyncIterator]'.
+            pub const no_interface_object = true;
+            pub const to_string_tag = "ReadableStream AsyncIterator";
+
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };

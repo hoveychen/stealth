@@ -134,8 +134,8 @@
   testing.expectEqual(null, gl.getExtension("ANGLE_instanced_arrays"));
   testing.expectEqual(true, gl.getExtension("EXT_color_buffer_float") !== null);
   testing.expectEqual(
-    true,
-    gl.getExtension("WEBGL_lose_context") instanceof WEBGL_lose_context,
+    '[object WebGLLoseContext]',
+    Object.prototype.toString.call(gl.getExtension("WEBGL_lose_context")),
   );
 }
 </script>

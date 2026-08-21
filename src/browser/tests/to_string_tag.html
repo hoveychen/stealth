@@ -147,3 +147,41 @@
     testing.expectEqual(undefined, globalThis.DeprecatedStorageQuota);
   }
 </script>
+
+<script id=tag_on_internals_chrome_does_not_name>
+  {
+    // Four interface objects this engine used to name on `window` and no Chrome
+    // does. Hiding the global is only half of it: the flag keeps the brand, so
+    // the brand has to be the one Chrome reports rather than the class name we
+    // happened to pick. Measured on a headed Chrome 150, same page and port --
+    // tools/fingerprint/results/probes/probe-internal-globals.chrome.json.
+    const gl = document.createElement('canvas').getContext('webgl');
+    for (const [name, tag] of [['WEBGL_debug_renderer_info', 'WebGLDebugRendererInfo'],
+                               ['WEBGL_lose_context', 'WebGLLoseContext']]) {
+      const ext = gl.getExtension(name);
+      testing.expectEqual('object', typeof ext, { desc: name + ' answers an object' });
+      testing.expectEqual(undefined, globalThis[name], { desc: name + ' is not a global' });
+      testing.expectEqual('[object ' + tag + ']', Object.prototype.toString.call(ext),
+        { desc: name + ' brand' });
+      // No interface object leaves nothing for `constructor` to point at, so the
+      // prototype has none of its own and inherits Object's.
+      const proto = Object.getPrototypeOf(ext);
+      testing.expectEqual(undefined, Object.getOwnPropertyDescriptor(proto, 'constructor'),
+        { desc: name + ' prototype owns no constructor' });
+      testing.expectTrue(proto.constructor === Object);
+    }
+
+    // An unknown SVG tag is an SVGElement in Chrome, brand and constructor both.
+    // The prototype object is still this engine's own -- what is pinned here is
+    // that nothing names it.
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'notarealtag');
+    testing.expectEqual(undefined, globalThis.SVGGenericElement);
+    testing.expectEqual('[object SVGElement]', Object.prototype.toString.call(svg));
+    testing.expectTrue(Object.getPrototypeOf(svg).constructor === SVGElement);
+
+    // Chrome's async iterator brand has a space in the middle of it.
+    const it = new ReadableStream({ start(c) { c.close(); } })[Symbol.asyncIterator]();
+    testing.expectEqual(undefined, globalThis.ReadableStreamAsyncIterator);
+    testing.expectEqual('[object ReadableStream AsyncIterator]', Object.prototype.toString.call(it));
+  }
+</script>

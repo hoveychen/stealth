@@ -1828,6 +1828,14 @@ const CrossOriginWindow = struct {
 
         pub const Meta = struct {
             pub const name = "CrossOriginWindow";
+
+            // The cross-origin window proxy is not an interface of its own: Chrome
+            // names nothing on the global for it and brands it '[object Window]',
+            // exactly as it brands a same-origin window (both measured on a headed
+            // Chrome 150 against an https://example.com/ iframe).
+            pub const no_interface_object = true;
+            pub const to_string_tag = "Window";
+
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };

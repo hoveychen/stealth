@@ -174,6 +174,15 @@ pub const Extension = union(enum) {
                 pub const Meta = struct {
                     pub const name = "WEBGL_debug_renderer_info";
 
+                    // A WebGL extension has no interface object: Chrome answers
+                    // undefined for globalThis.WEBGL_debug_renderer_info and its
+                    // prototype owns no `constructor`. The brand is not the
+                    // extension string either -- measured on a headed Chrome 150,
+                    // Object.prototype.toString.call(gl.getExtension(...)) reads
+                    // '[object WebGLDebugRendererInfo]'.
+                    pub const no_interface_object = true;
+                    pub const to_string_tag = "WebGLDebugRendererInfo";
+
                     pub const prototype_chain = bridge.prototypeChain();
                     pub var class_id: bridge.ClassId = undefined;
                 };
@@ -193,6 +202,12 @@ pub const Extension = union(enum) {
 
                 pub const Meta = struct {
                     pub const name = "WEBGL_lose_context";
+
+                    // Same as WEBGL_debug_renderer_info above: no global name,
+                    // no `constructor`, and a CamelCase brand that is not the
+                    // extension string. '[object WebGLLoseContext]' measured.
+                    pub const no_interface_object = true;
+                    pub const to_string_tag = "WebGLLoseContext";
 
                     pub const prototype_chain = bridge.prototypeChain();
                     pub var class_id: bridge.ClassId = undefined;

@@ -5792,11 +5792,47 @@ window surface while their implementations stayed for internal callers, and
 `Snapshot`'s `[Global]` flattening stopped copying `EventTarget`'s three members
 onto the global. That branch reached the same 13-and-83 split independently from
 its own headed run, which is the reason to trust either reading. The 1167 above
-is the pre-merge count; the surface is **1208** now — 1161 after that merge, plus
+is the pre-merge count; the surface was **1208** at that point — 1161 after that merge, plus
 the 47 names `prd/window-surface-shells` landed — so the own-name excess is 7,
 not 13, and the three counts that moved with it are in the secure-context table
 below. The other direction moved with it: the 83 is **36** now, because those 47
 came out of it.
+
+**The remaining five are gone too** (`prd/window-surface-internals`), which takes
+the own-name excess from 7 to **2** — only the WebMCP pair, kept on purpose. All
+five became `no_interface_object`, and that flag alone would have been half a fix:
+it takes the name off the window and *keeps* the `Symbol.toStringTag`, and every
+one of the five has a different brand in Chrome than the global name we were
+exposing. So each also carries an explicit `to_string_tag`. Measured on a headed
+Chrome 150, same page and port — reading in
+`results/probes/probe-internal-globals.{chrome,lightpanda}.json`:
+
+| our old global | Chrome's global | Chrome's brand |
+|---|---|---|
+| `WEBGL_debug_renderer_info` | undefined | `[object WebGLDebugRendererInfo]` |
+| `WEBGL_lose_context` | undefined | `[object WebGLLoseContext]` |
+| `ReadableStreamAsyncIterator` | undefined | `[object ReadableStream AsyncIterator]` (note the space) |
+| `SVGGenericElement` | undefined | `[object SVGElement]` |
+| `CrossOriginWindow` | undefined | `[object Window]` |
+
+The last two looked like they needed a name a real interface already holds, which
+would have been a registry conflict. They did not: `Meta.to_string_tag` is
+independent of `Meta.name`, so the brand can say `SVGElement` while the class
+stays `SVGGenericElement` internally. Dropping the interface object also drops the
+`constructor` back-reference — which is the other half of the same tell, since
+Chrome's extension prototypes own no `constructor` either, and it is what makes an
+unknown SVG tag's `constructor` resolve up the chain to `SVGElement` the way it
+does there. What is *not* fixed is prototype identity:
+`Object.getPrototypeOf(unknownSvgEl) === SVGElement.prototype` is true in Chrome
+and false here, because the class is still its own. Three of the five are reachable
+from a worker (`WebGLRenderingContext.zig` and `ReadableStream.zig` are both in
+`worker_common_apis`), so the worker realm dropped 3 and the window realm 5.
+
+One finding fell out of the same probe that no globals diff could ever show:
+`gl.getExtension('WEBGL_debug_shaders')` answers an object in Chrome (brand
+`[object WebGLDebugShaders]`, one member `getTranslatedShaderSource`) and
+`undefined` here. Chrome does not name that extension on the window either, so it
+is invisible to a name-set comparison — a missing extension, not a surface excess.
 
 **The other direction is still the larger one: 36 globals headed Chrome has and
 we do not** (`CloseWatcher`, `Temporal`, `Observable`, `PressureObserver`, the
@@ -5819,7 +5855,7 @@ EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours was
 Object.prototype(12)`, and the extra intermediate is where the three duplicated
 `EventTarget` members came from. The duplicates are gone (the flattening skips
 that level now, so the global reads `addEventListener` through the chain, as
-Chrome's does) and the head of the chain is 1208; the extra level itself is
+Chrome's does) and the head of the chain is 1203; the extra level itself is
 still there, so this is still a difference a detector can walk.
 
 ## The 234 globals that were not behind the secure-context gate (2026-08-20)
@@ -5836,25 +5872,29 @@ Not https-vs-http, which also changes the scheme; not a different port or path.
 Same `python3 -m http.server`, same port, same bytes — only the host differs, so
 the only variable is whether that host is loopback:
 
-|                                   | headed Chrome 151 | this engine, before | gate landed | now |
-|-----------------------------------|------:|------:|------:|------:|
-| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 | 1208 |
-| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |  973 |
-| names behind the gate               |  252 |    0 |  234 |  235 |
-| worker realm, secure owner          |  336 |  232 |  233 |  233 |
-| worker realm, insecure owner        |  243 |  232 |  222 |  222 |
+|                                   | headed Chrome 151 | this engine, before | gate landed | shells | now |
+|-----------------------------------|------:|------:|------:|------:|------:|
+| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 | 1208 | 1203 |
+| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |  973 |  968 |
+| names behind the gate               |  252 |    0 |  234 |  235 |  235 |
+| worker realm, secure owner          |  336 |  232 |  233 |  233 |  230 |
+| worker realm, insecure owner        |  243 |  232 |  222 |  222 |  219 |
 
 The "gate landed" column is the gate on its own, measured before
 `prd/window-surface-extras` took six names off the surface (both totals moved by
-those same six, none of which is `[SecureContext]`). The "now" column is after
+those same six, none of which is `[SecureContext]`). The "shells" column is after
 `prd/window-surface-shells` added 47: the secure surface takes all 47 and the
 insecure one 46, because exactly one of them — `ClipboardChangeEvent` — is
 `[SecureContext]` in Chrome, which is why the gated count went 234 → 235. The
-worker realm holds still at the *frame* level because only three of the 47 exist
+worker realm held still at the *frame* level because only three of the 47 exist
 there at all (`ReportBody`, `Origin`, `WebGLObject`), and those moved
-`worker/secure_context.html` from 230 to **233**. The suite pins every one of
-these: `frames/secure_context_gate.html` asserts **1208** secure / **973**
-insecure and **222** for a worker with an insecure owner.
+`worker/secure_context.html` from 230 to 233. The "now" column is
+`prd/window-surface-internals` hiding the last five interface objects Chrome names
+nowhere: −5 on both frame totals (none of the five is `[SecureContext]`, so the
+gated count does not move) and −3 in both worker totals, the three of the five a
+worker can reach. The suite pins every one of these:
+`frames/secure_context_gate.html` asserts **1203** secure / **968** insecure and
+**219** for a worker with an insecure owner.
 
 252 names in Chrome. 235 of them are names this engine has, and before the gate
 it leaked all of them on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
@@ -5870,9 +5910,10 @@ they belong to the 36-missing count above, not here. It was 18 until
 After the gate: **0 of Chrome's 252 still leak, and 0 names are gated that
 Chrome does not gate** (re-measured on all four readings after the 47 landed).
 The residual difference is the same one the section above records, which is the
-cross-check that the secure surface was not disturbed: 7 extra / 36 missing on a
-trustworthy origin, 7 extra / 19 missing on an untrustworthy one (the 17 gated
-names we lack stop counting as missing once Chrome hides them too).
+cross-check that the secure surface was not disturbed: 2 extra / 36 missing on a
+trustworthy origin, 2 extra / 19 missing on an untrustworthy one (the 17 gated
+names we lack stop counting as missing once Chrome hides them too). It was 7 extra
+on both until `prd/window-surface-internals` hid the five.
 
 **Two things the gate turned up that the value of `isSecureContext` had been
 getting wrong.**
@@ -5920,7 +5961,7 @@ The gap: a frame that **never navigates** keeps the full surface, because the
 gate hangs off document commit. In practice that is the bare `about:blank` CDP
 target — no page script observes it, and every document that loads content
 commits. So a reading of this engine taken on `about:blank` still reports the
-full ungated surface (1167 when this was written, 1208 now); pass a url. Gating at frame init instead would strip the surface off a root
+full ungated surface (1167 when this was written, 1203 now); pass a url. Gating at frame init instead would strip the surface off a root
 frame, which is born at `about:blank` and navigates to its real URL inside the
 same context.
 
