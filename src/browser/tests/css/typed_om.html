@@ -1230,6 +1230,108 @@ function attach(el) {
         brand(CSSStyleValue.parse('page-break-after', 'inherit')));
     testing.expectEqual('CSSStyleValue|inherit', mapKw('page-break-after', 'inherit'));
     testing.expectEqual('CSSStyleValue|inherit', mapKw('page-break-inside', 'inherit'));
+    // A property taking an arbitrary identifier answers one of two ways, and
+    // which is measured rather than derived: of the 29 such properties, 11
+    // answer a CSSKeywordValue and 18 a bare CSSStyleValue.
+    testing.expectEqual('CSSKeywordValue|MyAnim', brand(CSSStyleValue.parse('animation-name', 'MyAnim')));
+    testing.expectEqual('CSSKeywordValue|MyLine', brand(CSSStyleValue.parse('grid-row-start', 'MyLine')));
+    testing.expectEqual('CSSKeywordValue|MyPage', brand(CSSStyleValue.parse('page', 'MyPage')));
+    testing.expectEqual('CSSKeywordValue|MyGroup',
+        brand(CSSStyleValue.parse('view-transition-group', 'MyGroup')));
+    testing.expectEqual('CSSStyleValue|MyContainer',
+        brand(CSSStyleValue.parse('container-name', 'MyContainer')));
+    testing.expectEqual('CSSStyleValue|MyCounter',
+        brand(CSSStyleValue.parse('counter-reset', 'MyCounter')));
+    testing.expectEqual('CSSStyleValue|MyThing', brand(CSSStyleValue.parse('will-change', 'MyThing')));
+    testing.expectEqual('CSSStyleValue|MyClass',
+        brand(CSSStyleValue.parse('view-transition-class', 'MyClass')));
+    testing.expectEqual('CSSStyleValue|DARK', brand(CSSStyleValue.parse('color-scheme', 'DARK')));
+    testing.expectEqual('CSSStyleValue|MyType', brand(CSSStyleValue.parse('list-style-type', 'MyType')));
+
+    // ... and the keyword half still canonicalises an identifier it recognises
+    // as a keyword, keeping the case only of a genuine custom ident. Measured
+    // over all 668 keywords the table knows: every one of them folds, and the
+    // folded set is the same on two such properties.
+    testing.expectEqual('CSSKeywordValue|buttonface',
+        brand(CSSStyleValue.parse('animation-name', 'ButtonFace')));
+    testing.expectEqual('CSSKeywordValue|transparent',
+        brand(CSSStyleValue.parse('animation-name', 'TRANSPARENT')));
+    testing.expectEqual('CSSKeywordValue|block', brand(CSSStyleValue.parse('animation-name', 'BLOCK')));
+    testing.expectEqual('CSSKeywordValue|none', brand(CSSStyleValue.parse('animation-name', 'NONE')));
+    testing.expectEqual('CSSKeywordValue|buttonface',
+        brand(CSSStyleValue.parse('grid-row-start', 'ButtonFace')));
+    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('grid-row-start', 'AUTO')));
+    testing.expectEqual('CSSKeywordValue|buttonface', brand(CSSStyleValue.parse('page', 'ButtonFace')));
+    testing.expectEqual('CSSKeywordValue|nearest',
+        brand(CSSStyleValue.parse('view-transition-group', 'NEAREST')));
+    testing.expectEqual('CSSKeywordValue|buttonface',
+        brand(CSSStyleValue.parse('-webkit-animation-name', 'ButtonFace')));
+
+    // `transition-property`'s identifiers are property *names*, and one that
+    // names a property is a property-name value rather than a keyword --
+    // measured: `COLOR` and `ALL` answer a CSSStyleValue holding the text as
+    // written, where `MyProp` and `ButtonFace` answer a keyword.
+    testing.expectEqual('CSSStyleValue|COLOR', brand(CSSStyleValue.parse('transition-property', 'COLOR')));
+    testing.expectEqual('CSSStyleValue|ALL', brand(CSSStyleValue.parse('transition-property', 'ALL')));
+    testing.expectEqual('CSSStyleValue|Transform',
+        brand(CSSStyleValue.parse('transition-property', 'Transform')));
+    testing.expectEqual('CSSStyleValue|COLOR',
+        brand(CSSStyleValue.parse('-webkit-transition-property', 'COLOR')));
+    testing.expectEqual('CSSKeywordValue|MyProp',
+        brand(CSSStyleValue.parse('transition-property', 'MyProp')));
+    testing.expectEqual('CSSKeywordValue|buttonface',
+        brand(CSSStyleValue.parse('transition-property', 'ButtonFace')));
+    testing.expectEqual('CSSKeywordValue|none', brand(CSSStyleValue.parse('transition-property', 'NONE')));
+
+    // The unmodelled set has a per-value half of its own. Measured over all 5335
+    // (unmodelled property, keyword) pairs: 21 answer a keyword, 13 of them the
+    // `currentcolor` above and these 8 the rest. `position-visibility` is the
+    // shape of the whole class -- `always` is a lone identifier where its other
+    // keywords parse as a list, so only `always` is a keyword.
+    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('caret-color', 'auto')));
+    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('offset-rotate', 'auto')));
+    testing.expectEqual('CSSKeywordValue|reverse', brand(CSSStyleValue.parse('offset-rotate', 'reverse')));
+    testing.expectEqual('CSSKeywordValue|always',
+        brand(CSSStyleValue.parse('position-visibility', 'always')));
+    testing.expectEqual('CSSKeywordValue|start', brand(CSSStyleValue.parse('scroll-snap-align', 'start')));
+    testing.expectEqual('CSSKeywordValue|none', brand(CSSStyleValue.parse('scroll-snap-align', 'none')));
+    testing.expectEqual('CSSStyleValue|anchors-visible',
+        brand(CSSStyleValue.parse('position-visibility', 'anchors-visible')));
+    testing.expectEqual('CSSStyleValue|red', brand(CSSStyleValue.parse('caret-color', 'red')));
+
+    // A modelled property has the same split: its lone value is a keyword, and
+    // the values that combine into a list or a pair are style values. Measured
+    // per (property, keyword) over the 14 properties whose keywords do not
+    // answer uniformly.
+    testing.expectEqual('CSSKeywordValue|none',
+        brand(CSSStyleValue.parse('grid-template-columns', 'none')));
+    testing.expectEqual('CSSStyleValue|auto',
+        brand(CSSStyleValue.parse('grid-template-columns', 'auto')));
+    testing.expectEqual('CSSStyleValue|min-content',
+        brand(CSSStyleValue.parse('grid-template-rows', 'min-content')));
+    testing.expectEqual('CSSKeywordValue|normal', brand(CSSStyleValue.parse('paint-order', 'normal')));
+    testing.expectEqual('CSSStyleValue|stroke', brand(CSSStyleValue.parse('paint-order', 'stroke')));
+    testing.expectEqual('CSSKeywordValue|auto',
+        brand(CSSStyleValue.parse('text-underline-position', 'auto')));
+    testing.expectEqual('CSSStyleValue|under',
+        brand(CSSStyleValue.parse('text-underline-position', 'under')));
+    testing.expectEqual('CSSStyleValue|auto', brand(CSSStyleValue.parse('ruby-overhang', 'auto')));
+    testing.expectEqual('CSSStyleValue|border-box',
+        brand(CSSStyleValue.parse('shape-outside', 'border-box')));
+    testing.expectEqual('CSSKeywordValue|none', brand(CSSStyleValue.parse('shape-outside', 'none')));
+
+    // ... and the style-value-answering arbitrary-identifier properties keep a
+    // keyword for their own lone value, which is the same shape again.
+    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('will-change', 'auto')));
+    testing.expectEqual('CSSStyleValue|contents',
+        brand(CSSStyleValue.parse('will-change', 'contents')));
+    testing.expectEqual('CSSKeywordValue|none', brand(CSSStyleValue.parse('counter-reset', 'none')));
+    testing.expectEqual('CSSKeywordValue|none',
+        brand(CSSStyleValue.parse('view-transition-class', 'none')));
+    testing.expectEqual('CSSStyleValue|dark', brand(CSSStyleValue.parse('color-scheme', 'dark')));
+    testing.expectEqual('CSSStyleValue|monospace',
+        brand(CSSStyleValue.parse('font-family', 'monospace')));
+
     // A style map reads the declaration, so a colour there is the canonical
     // text rather than the authored one.
     testing.expectEqual('CSSStyleValue|buttonface', mapKw('accent-color', 'ButtonFace'));

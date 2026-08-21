@@ -254,6 +254,7 @@ try {
             .filter((k) => !CSS_WIDE.includes(k) && !SENTINELS.includes(k))
             .map((k) => spellings[k] ?? k))].sort()]);
     const pairs = perProperty.reduce((n, [, ks]) => n + ks.length, 0);
+    const allKeywords = [...new Set(perProperty.flatMap(([, ks]) => ks))].sort();
     const noKeywords = perProperty.filter(([, ks]) => ks.length === 0).length;
 
     const lines = [
@@ -292,6 +293,17 @@ try {
         'pub const keywords = std.StaticStringMap([]const []const u8).initComptime(.{',
         ...perProperty.map(([p, ks]) =>
             `    .{ ${zigString(p)}, ${zigList(ks)} },`),
+        '});',
+        '',
+        '// Every keyword the table knows, once. Measured: a property taking an',
+        '// arbitrary <custom-ident> still canonicalises an identifier it recognises',
+        "// as a keyword -- parse('animation-name', 'ButtonFace') answers `buttonface`",
+        '// where `MyAnim` keeps its case -- and every one of these folded on both of',
+        "// the two such properties swept, with the same set both times. Blink's own",
+        '// keyword-id set is wider than this pool, so an identifier missing here keeps',
+        '// its case: under-normalising, which is the safe direction.',
+        'pub const all_keywords = std.StaticStringMap(void).initComptime(.{',
+        ...allKeywords.map((k) => `    .{ ${zigString(k)}, {} },`),
         '});',
         '',
         '// Properties whose value may be an arbitrary <custom-ident> (a font family,',
