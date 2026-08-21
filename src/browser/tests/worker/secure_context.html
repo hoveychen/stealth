@@ -43,12 +43,12 @@ the worker global surface follows (336 own names vs 243). This test page is on
       testing.expectEqual(true, data.on_self !== null);
 
       // A secure owner, so nothing is gated away. 230 after EventTarget came
-      // off the flattening, 231 since ReportBody went on -- the one name of the
-      // reporting family a Chrome worker carries too (measured,
-      // probe-shapes-worker).
+      // off the flattening, 231 since ReportBody went on, 233 with Origin and
+      // WebGLObject -- exactly the three names of the 47-name window-surface cut
+      // that a Chrome worker carries too (measured, probe-shapes-worker).
       testing.expectEqual(8, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(231, data.count);
+      testing.expectEqual(233, data.count);
     });
   }
 </script>

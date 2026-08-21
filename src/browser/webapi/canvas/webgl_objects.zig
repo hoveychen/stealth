@@ -19,18 +19,20 @@
 //! fingerprinting script reads, and because a consumer that stores them in a
 //! Map keyed by identity needs each call to produce a fresh object.
 //!
-//! Known deviation from Chrome: there, every one of these except
-//! WebGLUniformLocation inherits from a `WebGLObject` base interface, so
-//! `Object.getPrototypeOf(WebGLBuffer.prototype) === WebGLObject.prototype`.
-//! Ours inherit straight from Object, and no `WebGLObject` global is exposed.
-//! Reproducing the base class would mean a chained-factory allocation per
-//! handle for a prototype link nothing calls, so it is deliberately skipped.
+//! Eleven of them hang off a `WebGLObject` base interface, the way Chrome's do:
+//! `Object.getPrototypeOf(WebGLBuffer.prototype) === WebGLObject.prototype` and
+//! `gl.createBuffer() instanceof WebGLObject`. The three that do not are the
+//! ones that are not GPU objects at all -- a uniform location, an active-info
+//! record and a precision-format record -- and Chrome roots those on Object too
+//! (all measured, probe-s7-misc). The base costs one empty struct per handle in
+//! the chained allocation, which buys the prototype link a detector walks.
 
 const js = @import("../../js/js.zig");
 const Precision = @import("gpu.zig").Precision;
 
 pub fn registerTypes() []const type {
     return &.{
+        WebGLObject,
         WebGLBuffer,
         WebGLFramebuffer,
         WebGLProgram,
@@ -48,9 +50,48 @@ pub fn registerTypes() []const type {
     };
 }
 
-/// Builds one of the member-less handle types. The `_` field is what gives each
-/// instance its own allocation, and therefore its own JS identity.
+/// The prototype root the GPU handles share. Abstract in WebIDL and abstract
+/// here: no members at all, an illegal constructor, and never instantiated on
+/// its own.
+pub const WebGLObject = struct {
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(WebGLObject);
+
+        pub const Meta = struct {
+            pub const name = "WebGLObject";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+            pub const empty_with_no_proto = true;
+        };
+    };
+};
+
+/// Builds one of the GPU handle types: a member-less struct on WebGLObject. The
+/// `_` field is what gives each instance its own allocation, and therefore its
+/// own JS identity.
 fn Handle(comptime js_name: [:0]const u8) type {
+    return struct {
+        const Self = @This();
+
+        pub const Proto = WebGLObject;
+
+        _proto: *WebGLObject,
+        _: u8 = 0,
+
+        pub const JsApi = struct {
+            pub const bridge = js.Bridge(Self);
+
+            pub const Meta = struct {
+                pub const name = js_name;
+                pub const prototype_chain = bridge.prototypeChain();
+                pub var class_id: bridge.ClassId = undefined;
+            };
+        };
+    };
+}
+
+/// The same, for a handle Chrome roots on Object rather than on WebGLObject.
+fn PlainHandle(comptime js_name: [:0]const u8) type {
     return struct {
         const Self = @This();
 
@@ -68,6 +109,12 @@ fn Handle(comptime js_name: [:0]const u8) type {
     };
 }
 
+/// Allocates a handle with its WebGLObject base, since a `create*` call site
+/// cannot use the plain factory once the type has a prototype.
+pub fn handle(comptime T: type, exec: *const js.Execution) !*T {
+    return exec._factory.chained(.{ WebGLObject{}, T{ ._proto = undefined } });
+}
+
 pub const WebGLBuffer = Handle("WebGLBuffer");
 pub const WebGLFramebuffer = Handle("WebGLFramebuffer");
 pub const WebGLProgram = Handle("WebGLProgram");
@@ -79,7 +126,7 @@ pub const WebGLSync = Handle("WebGLSync");
 pub const WebGLTexture = Handle("WebGLTexture");
 pub const WebGLTransformFeedback = Handle("WebGLTransformFeedback");
 pub const WebGLVertexArrayObject = Handle("WebGLVertexArrayObject");
-pub const WebGLUniformLocation = Handle("WebGLUniformLocation");
+pub const WebGLUniformLocation = PlainHandle("WebGLUniformLocation");
 
 /// Describes one active attribute or uniform of a linked program. We never link
 /// anything, so `getActiveAttrib`/`getActiveUniform` answer null and this type

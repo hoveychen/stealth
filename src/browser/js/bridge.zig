@@ -1018,6 +1018,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/EyeDropper.zig"),
     @import("../webapi/IdleDetector.zig"),
     @import("../webapi/EditContext.zig"),
+    @import("../webapi/TextFormat.zig"),
     @import("../webapi/InputDeviceCapabilities.zig"),
     @import("../webapi/Profiler.zig"),
     @import("../webapi/DOMImplementation.zig"),
@@ -1276,6 +1277,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/event/CookieChangeEvent.zig"),
     @import("../webapi/URL.zig"),
     @import("../webapi/URLPattern.zig"),
+    @import("../webapi/Origin.zig"),
     @import("../webapi/Window.zig"),
     @import("../webapi/Performance.zig"),
     @import("../webapi/performance/timing.zig"),
@@ -1309,6 +1311,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/Screen.zig"),
     @import("../webapi/scheduler.zig"),
     @import("../webapi/VisualViewport.zig"),
+    @import("../webapi/Viewport.zig"),
     @import("../webapi/BarProp.zig"),
     @import("../webapi/trusted_types.zig"),
     @import("../webapi/screen_details.zig"),
@@ -1340,6 +1343,7 @@ pub const PageJsApis = flattenTypes(&.{
     @import("../webapi/navigation/NavigationActivation.zig"),
     @import("../webapi/navigation/NavigationDestination.zig"),
     @import("../webapi/navigation/NavigationTransition.zig"),
+    @import("../webapi/navigation/NavigationPrecommitController.zig"),
     @import("../webapi/canvas/CanvasRenderingContext2D.zig"),
     @import("../webapi/canvas/WebGLRenderingContext.zig"),
     @import("../webapi/canvas/WebGL2RenderingContext.zig"),
@@ -1512,6 +1516,10 @@ const worker_common_apis = [_]type{
     // probe-shapes-worker); the two bodies under it and the bfcache objects are
     // window-only.
     @import("../webapi/reporting.zig").ReportBody,
+    // The other two of the 47 surface names a Chrome worker carries: everything
+    // else in that cut is window-only (measured, probe-shapes-worker).
+    @import("../webapi/Origin.zig"),
+    @import("../webapi/canvas/webgl_objects.zig").WebGLObject,
     @import("../webapi/storage/CookieStore.zig"),
     @import("../webapi/storage/idb/idb.zig"),
     @import("../webapi/event/CookieChangeEvent.zig"),

@@ -48,6 +48,7 @@ const js = @import("../../js/js.zig");
 const Event = @import("../Event.zig");
 const Element = @import("../Element.zig");
 const dictionary = @import("../dictionary.zig");
+const TextFormat = @import("../TextFormat.zig");
 const NavigationActivation = @import("../navigation/NavigationActivation.zig");
 
 const String = lp.String;
@@ -418,36 +419,44 @@ pub const TextUpdateEvent = struct {
 // TextFormatUpdateEvent
 
 /// EditContext's `textformatupdate`: the underlines and highlights the IME wants
-/// drawn. The formats are a `sequence<TextFormat>`, and TextFormat is not an
-/// interface this engine has yet -- so the sequence check is observable (a
-/// non-array is refused as one) and every item then fails to convert, which
-/// leaves getTextFormats() answering a fresh empty array, as it does in Chrome
-/// for an event built without the member.
+/// drawn. The formats are a `sequence<TextFormat>`, so the sequence check is
+/// observable (a non-array is refused as one) and every item has to convert --
+/// which it now can, since TextFormat.zig landed. The event keeps the very
+/// objects it was handed.
 pub const TextFormatUpdateEvent = struct {
     pub const Proto = Event;
 
     _proto: *Event,
+    _formats: []const *TextFormat = &.{},
 
     const Reader = Init("TextFormatUpdateEvent", "TextFormatUpdateEventInit");
 
     pub fn constructor(type_: ?js.Value, options_: ?js.Value, exec: *const Execution) !*TextFormatUpdateEvent {
         const init = try Reader.read(options_, exec);
+
+        const arena = try exec.getArena(.tiny, "TextFormatUpdateEvent");
+        errdefer arena.release();
+        const allocator = arena.allocator();
+
+        var formats: []const *TextFormat = &.{};
         if (try init.present("textFormats")) |member| {
             if (member.isArray() == false) {
                 return Reader.notASequence("textFormats", exec);
             }
-            if (member.toArray().len() > 0) {
-                return Reader.convertFailed("textFormats", "TextFormat", exec);
+            const array = member.toArray();
+            const items = try allocator.alloc(*TextFormat, @intCast(array.len()));
+            for (items, 0..) |*item, i| {
+                const entry = try array.get(@intCast(i));
+                item.* = entry.toZig(*TextFormat) catch
+                    return Reader.convertFailed("textFormats", "TextFormat", exec);
             }
+            formats = items;
         }
-
-        const arena = try exec.getArena(.tiny, "TextFormatUpdateEvent");
-        errdefer arena.release();
 
         const event = try exec._factory.event(
             arena,
-            try eventType(type_, arena.allocator()),
-            TextFormatUpdateEvent{ ._proto = undefined },
+            try eventType(type_, allocator),
+            TextFormatUpdateEvent{ ._proto = undefined, ._formats = formats },
         );
         Event.populatePrototypes(event, init.event, false);
         return event;
@@ -459,8 +468,8 @@ pub const TextFormatUpdateEvent = struct {
 
     /// A fresh array every call, like Chrome's (measured: two reads are not the
     /// same object).
-    pub fn getTextFormats(_: *TextFormatUpdateEvent) []const js.Value {
-        return &.{};
+    pub fn getTextFormats(self: *TextFormatUpdateEvent) []const *TextFormat {
+        return self._formats;
     }
 
     pub const JsApi = struct {

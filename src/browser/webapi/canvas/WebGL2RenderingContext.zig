@@ -887,47 +887,47 @@ pub fn getParameter(self: *const WebGL2RenderingContext, pname: u32, exec: *Exec
 // The calls.
 
 pub fn createBuffer(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLBuffer {
-    return exec._factory.create(objects.WebGLBuffer{});
+    return objects.handle(objects.WebGLBuffer, exec);
 }
 
 pub fn createFramebuffer(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLFramebuffer {
-    return exec._factory.create(objects.WebGLFramebuffer{});
+    return objects.handle(objects.WebGLFramebuffer, exec);
 }
 
 pub fn createProgram(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLProgram {
-    return exec._factory.create(objects.WebGLProgram{});
+    return objects.handle(objects.WebGLProgram, exec);
 }
 
 pub fn createRenderbuffer(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLRenderbuffer {
-    return exec._factory.create(objects.WebGLRenderbuffer{});
+    return objects.handle(objects.WebGLRenderbuffer, exec);
 }
 
 pub fn createShader(_: *const WebGL2RenderingContext, _: u32, exec: *Execution) !*objects.WebGLShader {
-    return exec._factory.create(objects.WebGLShader{});
+    return objects.handle(objects.WebGLShader, exec);
 }
 
 pub fn createTexture(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLTexture {
-    return exec._factory.create(objects.WebGLTexture{});
+    return objects.handle(objects.WebGLTexture, exec);
 }
 
 pub fn createQuery(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLQuery {
-    return exec._factory.create(objects.WebGLQuery{});
+    return objects.handle(objects.WebGLQuery, exec);
 }
 
 pub fn createSampler(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLSampler {
-    return exec._factory.create(objects.WebGLSampler{});
+    return objects.handle(objects.WebGLSampler, exec);
 }
 
 pub fn createVertexArray(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLVertexArrayObject {
-    return exec._factory.create(objects.WebGLVertexArrayObject{});
+    return objects.handle(objects.WebGLVertexArrayObject, exec);
 }
 
 pub fn createTransformFeedback(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLTransformFeedback {
-    return exec._factory.create(objects.WebGLTransformFeedback{});
+    return objects.handle(objects.WebGLTransformFeedback, exec);
 }
 
 pub fn fenceSync(_: *const WebGL2RenderingContext, _: u32, _: u32, exec: *Execution) !*objects.WebGLSync {
-    return exec._factory.create(objects.WebGLSync{});
+    return objects.handle(objects.WebGLSync, exec);
 }
 
 pub fn checkFramebufferStatus(_: *const WebGL2RenderingContext, _: u32) u32 {

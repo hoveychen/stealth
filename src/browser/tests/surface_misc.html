@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<head>
+  <title>Surface Misc Test</title>
+  <script src="testing.js"></script>
+  <script src="shape.js"></script>
+</head>
+
+<body>
+</body>
+
+<!--
+The seven leftovers of the window-surface cut: Origin, TextFormat,
+MediaStreamTrackVideoStats, NavigationPrecommitController, Viewport with the
+window.viewport that answers one, and WebGLObject -- which is not just a name but
+the prototype root eleven of the WebGL handles hang off, a deviation
+canvas/webgl_objects.zig used to document as deliberately skipped.
+
+Two of the seven are reachable: Origin and TextFormat are constructible, and
+Origin is the only one of the 47 with real behaviour to reproduce -- its two
+comparisons are same-origin and same-site for real. window.viewport is a live
+singleton. The rest are illegal constructors whose prototype is the whole
+surface, because a video track's stats, a precommit controller and a bare
+Viewport all come from something this engine has no source for.
+
+Every string, default, arity and refusal below is Chrome's own, from
+probes/probe-shapes.js and probes/probe-s7-misc.js against a headed Chrome 151 on
+http://localhost:8777 (results/probes/probe-shapes.chrome.json and
+probe-s7-misc.chrome.json).
+-->
+
+<script id=surface_misc_shapes>
+  {
+    // Chrome's descriptors, verbatim.
+    for (const [name, shape] of [
+      ['Origin', 'get opaque[ec-],isSameOrigin/1[ecw],isSameSite/1[ecw],@@toStringTag=Origin'],
+      ['TextFormat',
+        'get rangeStart[ec-],get rangeEnd[ec-],get underlineStyle[ec-],' +
+        'get underlineThickness[ec-],@@toStringTag=TextFormat'],
+      ['MediaStreamTrackVideoStats',
+        'get deliveredFrames[ec-],get discardedFrames[ec-],get totalFrames[ec-],toJSON/0[ecw],' +
+        '@@toStringTag=MediaStreamTrackVideoStats'],
+      ['NavigationPrecommitController',
+        'redirect/1[ecw],addHandler/1[ecw],@@toStringTag=NavigationPrecommitController'],
+      ['Viewport', 'get segments[ec-],@@toStringTag=Viewport'],
+      ['WebGLObject', '@@toStringTag=WebGLObject'],
+    ]) {
+      testing.expectEqual(shape, shapeOf(window[name].prototype), { desc: name + ' descriptors' });
+      testing.expectEqual('[object ' + name + ']',
+        Object.prototype.toString.call(window[name].prototype));
+    }
+
+    // Four of the six cannot be constructed at all; the two that can only
+    // refuse a call without `new`.
+    expectInterfaceObject('MediaStreamTrackVideoStats');
+    expectInterfaceObject('NavigationPrecommitController');
+    expectInterfaceObject('Viewport');
+    expectInterfaceObject('WebGLObject');
+    expectInterfaceObject('Origin', { illegal: false, statics: ['from'] });
+    expectInterfaceObject('TextFormat', { illegal: false });
+  }
+</script>
+
+<script id=origin_constructor>
+  {
+    // `new Origin(...)` ignores its argument entirely: the result is always an
+    // opaque origin, even when a perfectly good URL is handed in (measured with
+    // location.href, location.origin, a garbage string, a number and null).
+    for (const arg of [undefined, location.href, location.origin, 'nope', 5, null, '']) {
+      const origin = new Origin(arg);
+      testing.expectEqual(true, origin.opaque, { desc: 'new Origin(' + String(arg) + ')' });
+      testing.expectEqual('[object Origin]', Object.prototype.toString.call(origin));
+    }
+    // No own data and no serialiser of its own.
+    testing.expectEqual('{}', JSON.stringify(new Origin()));
+    testing.expectEqual('[object Origin]', String(new Origin()));
+
+    // Origin.from() is where a real origin comes from. One required argument,
+    // and two different refusals: a string that is not a URL is one thing, a
+    // value that is not a string at all is another.
+    testing.expectEqual(1, Origin.from.length);
+    testing.expectError(
+      "Failed to execute 'from' on 'Origin': 1 argument required, but only 0 present.",
+      () => Origin.from());
+    for (const bad of ['nope', '']) {
+      testing.expectError(
+        "Failed to execute 'from' on 'Origin': The string provided cannot be parsed as a " +
+        'serialized URL.',
+        () => Origin.from(bad), { desc: 'from(' + JSON.stringify(bad) + ')' });
+    }
+    for (const bad of [5, null]) {
+      testing.expectError(
+        "Failed to execute 'from' on 'Origin': An origin cannot be extracted from the given " +
+        'parameter.',
+        () => Origin.from(bad), { desc: 'from(' + String(bad) + ')' });
+    }
+
+    const here = Origin.from(location.href);
+    testing.expectEqual(false, here.opaque);
+    testing.expectEqual('[object Origin]', Object.prototype.toString.call(here));
+    testing.expectEqual(false, Origin.from(location.origin).opaque);
+    // An Origin handed back in comes through as itself, so an opaque one stays
+    // opaque.
+    testing.expectEqual(true, Origin.from(new Origin()).opaque);
+  }
+</script>
+
+<script id=origin_comparisons>
+  {
+    const from = (url) => Origin.from(url);
+
+    // Same origin is scheme + host + port; same site drops the port but keeps
+    // the scheme and climbs to the registrable domain.
+    testing.expectEqual(true, from(location.href).isSameOrigin(from(location.href)));
+    testing.expectEqual(false, from(location.href).isSameOrigin(from('https://example.com/')));
+    testing.expectEqual(true, from(location.href).isSameSite(from(location.href)));
+    testing.expectEqual(false, from(location.href).isSameSite(from('https://example.com/')));
+    testing.expectEqual(true, from('https://a.example.com/').isSameSite(from('https://b.example.com/')));
+    testing.expectEqual(false, from('https://a.example.com/').isSameOrigin(from('https://b.example.com/')));
+    testing.expectEqual(false, from('https://example.com/').isSameSite(from('http://example.com/')));
+    testing.expectEqual(false, from('https://example.com:1/').isSameOrigin(from('https://example.com:2/')));
+    testing.expectEqual(true, from('https://example.com:1/').isSameSite(from('https://example.com:2/')));
+
+    // An opaque origin is same-origin with itself and with nothing else, not
+    // even another opaque one.
+    const opaque = new Origin();
+    testing.expectEqual(true, opaque.isSameOrigin(opaque));
+    testing.expectEqual(false, opaque.isSameOrigin(new Origin()));
+    testing.expectEqual(false, opaque.isSameOrigin(from(location.href)));
+
+    // Both comparisons take an Origin and nothing else -- not the string that
+    // Origin.from() would have accepted.
+    for (const method of ['isSameOrigin', 'isSameSite']) {
+      testing.expectError(
+        `Failed to execute '${method}' on 'Origin': 1 argument required, but only 0 present.`,
+        () => from(location.href)[method]());
+      for (const bad of [location.origin, null, 5]) {
+        testing.expectError(
+          `Failed to execute '${method}' on 'Origin': parameter 1 is not of type 'Origin'.`,
+          () => from(location.href)[method](bad), { desc: method + '(' + String(bad) + ')' });
+      }
+    }
+  }
+</script>
+
+<script id=text_format>
+  {
+    // One optional TextFormatInit, so the arity is 0 and a bare one takes every
+    // default: two zero offsets and two 'none' underlines.
+    const bare = new TextFormat();
+    testing.expectEqual(0, bare.rangeStart);
+    testing.expectEqual(0, bare.rangeEnd);
+    testing.expectEqual('none', bare.underlineStyle);
+    testing.expectEqual('none', bare.underlineThickness);
+    testing.expectEqual('[object TextFormat]', Object.prototype.toString.call(bare));
+    testing.expectEqual(0, new TextFormat(null).rangeStart);
+    testing.expectEqual('none', new TextFormat(undefined).underlineStyle);
+    testing.expectError(
+      "Failed to construct 'TextFormat': The provided value is not of type 'TextFormatInit'.",
+      () => new TextFormat(5));
+
+    const filled = new TextFormat({
+      rangeStart: 2, rangeEnd: 5, underlineStyle: 'dotted', underlineThickness: 'thick',
+    });
+    testing.expectEqual(2, filled.rangeStart);
+    testing.expectEqual(5, filled.rangeEnd);
+    testing.expectEqual('dotted', filled.underlineStyle);
+    testing.expectEqual('thick', filled.underlineThickness);
+
+    // The offsets are `unsigned long` with neither [EnforceRange] nor [Clamp],
+    // so nothing is ever an error: -1 wraps, a fraction truncates, and a value
+    // past 32 bits or a NaN reads back 0.
+    testing.expectEqual(4294967295, new TextFormat({ rangeStart: -1 }).rangeStart);
+    testing.expectEqual(2, new TextFormat({ rangeStart: 2.7 }).rangeStart);
+    testing.expectEqual(0, new TextFormat({ rangeStart: 2 ** 33 }).rangeStart);
+    testing.expectEqual(0, new TextFormat({ rangeStart: NaN }).rangeStart);
+    testing.expectEqual(9, new TextFormat({ rangeStart: '9' }).rangeStart);
+
+    // The two enums, and their refusals. An absent member takes the default;
+    // an explicit null is stringified to "null" and refused like any other
+    // unknown name.
+    for (const style of ['none', 'solid', 'dotted', 'dashed', 'wavy']) {
+      testing.expectEqual(style, new TextFormat({ underlineStyle: style }).underlineStyle);
+    }
+    for (const thickness of ['none', 'thin', 'thick']) {
+      testing.expectEqual(thickness,
+        new TextFormat({ underlineThickness: thickness }).underlineThickness);
+    }
+    testing.expectEqual('none', new TextFormat({ underlineStyle: undefined }).underlineStyle);
+    const badEnum = (member, idl, value) =>
+      `Failed to construct 'TextFormat': Failed to read the '${member}' property from ` +
+      `'TextFormatInit': The provided value '${value}' is not a valid enum value of type ${idl}.`;
+    for (const bad of ['squiggle', '', 'nope', null]) {
+      testing.expectError(badEnum('underlineStyle', 'UnderlineStyle', String(bad)),
+        () => new TextFormat({ underlineStyle: bad }), { desc: 'style ' + String(bad) });
+    }
+    for (const bad of ['', 'nope']) {
+      testing.expectError(badEnum('underlineThickness', 'UnderlineThickness', String(bad)),
+        () => new TextFormat({ underlineThickness: bad }), { desc: 'thickness ' + String(bad) });
+    }
+
+    // Now that TextFormat exists, TextFormatUpdateEvent's sequence takes one --
+    // it used to refuse every non-empty array because there was nothing that
+    // could convert.
+    const event = new TextFormatUpdateEvent('textformatupdate', { textFormats: [bare, filled] });
+    testing.expectEqual(2, event.getTextFormats().length);
+    testing.expectTrue(event.getTextFormats()[0] === bare);
+    testing.expectTrue(event.getTextFormats()[1] === filled);
+    // A fresh array every read, as before.
+    testing.expectFalse(event.getTextFormats() === event.getTextFormats());
+    testing.expectError(
+      "Failed to construct 'TextFormatUpdateEvent': Failed to read the 'textFormats' property " +
+      "from 'TextFormatUpdateEventInit': Failed to convert value to 'TextFormat'.",
+      () => new TextFormatUpdateEvent('x', { textFormats: [5] }));
+  }
+</script>
+
+<script id=window_viewport>
+  {
+    const desc = Object.getOwnPropertyDescriptor(window, 'viewport');
+    testing.expectEqual('function', typeof desc.get);
+    // Unlike window.crashReport this one is [Replaceable], so it has a setter.
+    testing.expectEqual('function', typeof desc.set);
+    testing.expectEqual('ec-', windowFlags('viewport'));
+
+    const viewport = window.viewport;
+    testing.expectTrue(window.viewport === viewport, { desc: 'one per window' });
+    testing.expectEqual('[object Viewport]', Object.prototype.toString.call(viewport));
+    testing.expectTrue(viewport instanceof Viewport);
+    testing.expectEqual('', Object.keys(viewport).join(' '));
+    testing.expectEqual('{}', JSON.stringify(viewport));
+
+    // One segment, the whole viewport, as a DOMRect -- and a fresh frozen array
+    // on every read (measured: two reads are not the same array).
+    testing.expectEqual(1, viewport.segments.length);
+    testing.expectFalse(viewport.segments === viewport.segments);
+    // Chrome's array is a FrozenArray and reads back frozen; this engine hands
+    // back an ordinary array, which is the engine-wide FrozenArray gap rather
+    // than anything about Viewport.
+    testing.expectEqual(false, Object.isFrozen(viewport.segments));
+    const segment = viewport.segments[0];
+    testing.expectEqual('[object DOMRect]', Object.prototype.toString.call(segment));
+    testing.expectEqual(0, segment.x);
+    testing.expectEqual(0, segment.y);
+    testing.expectEqual(window.innerWidth, segment.width);
+    testing.expectEqual(window.innerHeight, segment.height);
+    testing.expectEqual(window.innerWidth, segment.right);
+    testing.expectEqual(window.innerHeight, segment.bottom);
+  }
+</script>
+
+<script id=webgl_object_root>
+  {
+    // Eleven of the handles hang off WebGLObject in Chrome. The three that do
+    // not are the ones that are not GPU objects at all: a uniform location, an
+    // active-info record and a precision-format record.
+    for (const name of ['WebGLBuffer', 'WebGLFramebuffer', 'WebGLProgram', 'WebGLQuery',
+      'WebGLRenderbuffer', 'WebGLSampler', 'WebGLShader', 'WebGLSync', 'WebGLTexture',
+      'WebGLTransformFeedback', 'WebGLVertexArrayObject']) {
+      const ctor = window[name];
+      testing.expectTrue(Object.getPrototypeOf(ctor.prototype) === WebGLObject.prototype,
+        { desc: name + ' prototype root' });
+      testing.expectTrue(Object.getPrototypeOf(ctor) === WebGLObject,
+        { desc: name + ' inherits WebGLObject' });
+    }
+    for (const name of ['WebGLUniformLocation', 'WebGLActiveInfo', 'WebGLShaderPrecisionFormat']) {
+      testing.expectTrue(Object.getPrototypeOf(window[name].prototype) === Object.prototype,
+        { desc: name + ' stays on Object' });
+    }
+
+    // And a real handle is an instance of both.
+    const gl = document.createElement('canvas').getContext('webgl');
+    const buffer = gl.createBuffer();
+    testing.expectTrue(buffer instanceof WebGLBuffer);
+    testing.expectTrue(buffer instanceof WebGLObject);
+    testing.expectEqual('[object WebGLBuffer]', Object.prototype.toString.call(buffer));
+    // Still a fresh object per call, which is what a Map keyed by identity needs.
+    testing.expectFalse(gl.createBuffer() === gl.createBuffer());
+    testing.expectTrue(gl.createTexture() instanceof WebGLObject);
+    testing.expectTrue(gl.createProgram() instanceof WebGLObject);
+    testing.expectTrue(gl.createShader(gl.VERTEX_SHADER) instanceof WebGLObject);
+  }
+</script>

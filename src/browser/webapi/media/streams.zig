@@ -64,6 +64,7 @@ pub fn registerTypes() []const type {
         MediaStreamTrack,
         OverconstrainedError,
         MediaStreamTrackAudioStats,
+        MediaStreamTrackVideoStats,
         MediaStreamTrackEvent,
         MediaStreamEvent,
     };
@@ -804,6 +805,45 @@ pub const MediaStreamTrackAudioStats = struct {
         pub const maximumLatency = bridge.accessor(MediaStreamTrackAudioStats.zero, null, .{});
         pub const resetLatency = bridge.function(MediaStreamTrackAudioStats.resetLatency, .{ .arity = 0 });
         pub const toJSON = bridge.function(MediaStreamTrackAudioStats.toJSON, .{ .arity = 0 });
+    };
+};
+
+/// `track.stats` on a *video* track: three frame counters and a toJSON. Same
+/// stance as its audio sibling -- no capture source owns a track here, so
+/// nothing hands one out and every counter is zero. Illegal to construct
+/// (measured), so the prototype is the whole surface a page can read.
+pub const MediaStreamTrackVideoStats = struct {
+    _pad: bool = false,
+
+    fn zeroFrames(_: *const MediaStreamTrackVideoStats) u32 {
+        return 0;
+    }
+
+    pub fn toJSON(_: *const MediaStreamTrackVideoStats) Json {
+        return .{};
+    }
+
+    pub const Json = struct {
+        deliveredFrames: u32 = 0,
+        discardedFrames: u32 = 0,
+        totalFrames: u32 = 0,
+    };
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(MediaStreamTrackVideoStats);
+
+        pub const Meta = struct {
+            pub const name = "MediaStreamTrackVideoStats";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const V = MediaStreamTrackVideoStats;
+
+        pub const deliveredFrames = bridge.accessor(V.zeroFrames, null, .{});
+        pub const discardedFrames = bridge.accessor(V.zeroFrames, null, .{});
+        pub const totalFrames = bridge.accessor(V.zeroFrames, null, .{});
+        pub const toJSON = bridge.function(V.toJSON, .{ .arity = 0 });
     };
 };
 

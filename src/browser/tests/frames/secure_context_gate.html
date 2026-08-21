@@ -49,7 +49,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(true, secure.secure);
       testing.expectEqual(17, secure.gated.length);
       testing.expectEqual(6, secure.ungated.length);
-      testing.expectEqual(1201, secure.count);
+      testing.expectEqual(1208, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
@@ -57,7 +57,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual('', insecure.gated.join(' '));
       testing.expectEqual(6, insecure.ungated.length);
 
-      // The gate now removes 235 names off a surface of 1201. Both totals move
+      // The gate now removes 235 names off a surface of 1208. Both totals move
       // together whenever the surface changes and none of the names involved is
       // [SecureContext] -- 1167 before the three EventTarget methods and Css /
       // setImmediate / clearImmediate came off, 1172 once the eleven unmodelled
@@ -65,11 +65,12 @@ insecure origin this suite can reach without a second listener.
       // subclasses, 1188 with the reporting family, 1192 with the four
       // unreachable PerformanceEntry subclasses, 1198 with the six
       // scroll-driven timeline and trigger interfaces, 1201 with the three
-      // surface HTML elements. The two totals parted
+      // surface HTML elements, 1208 with the seven leftovers -- six interfaces
+      // and the window.viewport accessor. The two totals parted
       // company by one at the Event subclasses: Chrome gates
       // ClipboardChangeEvent and not the other eight (measured, probe-
       // secure-context), so that step added nine names here and eight there.
-      testing.expectEqual(966, insecure.count);
+      testing.expectEqual(973, insecure.count);
     });
   }
 </script>
@@ -100,7 +101,7 @@ insecure origin this suite can reach without a second listener.
       // Trustworthy URL, untrustworthy ancestor.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
-      testing.expectEqual(966, grandchild.count);
+      testing.expectEqual(973, grandchild.count);
     });
   }
 </script>
@@ -129,11 +130,11 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(false, w.secure);
       testing.expectEqual('', w.gated.join(' '));
       testing.expectEqual(6, w.ungated.length);
-      // 231 own names on a secure owner, less the 8 gated ones this engine has
+      // 233 own names on a secure owner, less the 8 gated ones this engine has
       // in the worker realm plus the three it exposes that Chrome's worker does
       // not have at all (CookieStore, CookieChangeEvent, cookieStore) and that
       // are [SecureContext] in the window realm.
-      testing.expectEqual(220, w.count);
+      testing.expectEqual(222, w.count);
     });
   }
 </script>

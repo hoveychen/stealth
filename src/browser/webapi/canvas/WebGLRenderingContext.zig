@@ -704,27 +704,27 @@ pub fn getSupportedExtensions(_: *const WebGLRenderingContext) []const []const u
 // silently does nothing, instead of a TypeError on the first call.
 
 pub fn createBuffer(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLBuffer {
-    return exec._factory.create(objects.WebGLBuffer{});
+    return objects.handle(objects.WebGLBuffer, exec);
 }
 
 pub fn createFramebuffer(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLFramebuffer {
-    return exec._factory.create(objects.WebGLFramebuffer{});
+    return objects.handle(objects.WebGLFramebuffer, exec);
 }
 
 pub fn createProgram(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLProgram {
-    return exec._factory.create(objects.WebGLProgram{});
+    return objects.handle(objects.WebGLProgram, exec);
 }
 
 pub fn createRenderbuffer(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLRenderbuffer {
-    return exec._factory.create(objects.WebGLRenderbuffer{});
+    return objects.handle(objects.WebGLRenderbuffer, exec);
 }
 
 pub fn createShader(_: *const WebGLRenderingContext, _: u32, exec: *Execution) !*objects.WebGLShader {
-    return exec._factory.create(objects.WebGLShader{});
+    return objects.handle(objects.WebGLShader, exec);
 }
 
 pub fn createTexture(_: *const WebGLRenderingContext, exec: *Execution) !*objects.WebGLTexture {
-    return exec._factory.create(objects.WebGLTexture{});
+    return objects.handle(objects.WebGLTexture, exec);
 }
 
 /// We never bind anything, so there is nothing to be incomplete about.
