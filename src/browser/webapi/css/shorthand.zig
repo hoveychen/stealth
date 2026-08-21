@@ -464,9 +464,33 @@ fn layerJoin(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]
         defer kept.deinit(arena);
         for (0..total) |i| {
             const s = if (entry.order.len > 0) entry.order[i] else i;
-            const list = lists[s];
-            if (s >= width and n != count - 1) continue;
-            const held = if (s >= width) list[0] else if (n < list.len) list[n] else continue;
+            // A collapsing box pair is written as a unit, and `mask` is the
+            // reason the flag exists: with the two agreeing it writes one
+            // component where `background` writes both, and with the origin at
+            // its initial it writes it anyway -- unless the clip holds a value
+            // the origin could not take, which is why `mask: border-box
+            // no-clip` answers just `no-clip`.
+            if (entry.box_collapse and s == entry.boxes[1]) continue;
+            if (entry.box_collapse and s == entry.boxes[0]) {
+                const origin = layerAt(lists[entry.boxes[0]], entry, entry.boxes[0], n, count) orelse continue;
+                const clip = layerAt(lists[entry.boxes[1]], entry, entry.boxes[1], n, count) orelse continue;
+                const bare_origin = dropped(entry.omit[entry.boxes[0]], origin);
+                const one = if (bare_origin) entry.fillers[entry.boxes[0]] else origin;
+                const other = if (dropped(entry.omit[entry.boxes[1]], clip))
+                    entry.fillers[entry.boxes[1]]
+                else
+                    clip;
+                if (std.ascii.eqlIgnoreCase(one, other)) {
+                    if (!bare_origin) try kept.append(arena, one);
+                } else if (bare_origin and !accepts(entry.longhands[entry.boxes[0]], other)) {
+                    try kept.append(arena, other);
+                } else {
+                    try kept.append(arena, one);
+                    try kept.append(arena, other);
+                }
+                continue;
+            }
+            const held = layerAt(lists[s], entry, s, n, count) orelse continue;
             if (dropped(entry.omit[s], held)) continue;
             if (s == entry.size_slot) try kept.append(arena, "/");
             try kept.append(arena, held);
@@ -478,6 +502,23 @@ fn layerJoin(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]
         try written.append(arena, try std.mem.join(arena, " ", kept.items));
     }
     return std.mem.join(arena, ", ", written.items);
+}
+
+/// What one slot holds in layer `n`: a shared slot only in the last layer, and
+/// nothing at all where a longhand's list is shorter than the layer count --
+/// measured, a `background-image` with two layers over a one-layer position
+/// leaves the second layer's position unwritten rather than repeating it.
+fn layerAt(
+    list: []const []const u8,
+    entry: Shorthand,
+    slot: usize,
+    n: usize,
+    count: usize,
+) ?[]const u8 {
+    if (slot >= entry.layer_width) {
+        return if (n == count - 1) list[0] else null;
+    }
+    return if (n < list.len) list[n] else null;
 }
 
 /// A value's layers: top-level commas separate, parentheses and quotes hold.

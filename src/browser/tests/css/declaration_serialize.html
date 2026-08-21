@@ -720,14 +720,63 @@ function withStyle(text) {
         withStyle('background: url("a") center / cover, url("b") left top / contain')
             .style.getPropertyValue('background'));
 
-    // `mask` is the same layer grammar and is still kept whole, because its
-    // origin and clip are not two independently dropped slots the way
-    // background's are: `mask: content-box content-box` answers one
-    // `content-box` while `mask: border-box content-box` answers both, and no
-    // per-slot rule does both at once (tools/fingerprint/README.md).
+    // `mask` is the same layer grammar, with one longhand fewer -- there is no
+    // colour, so every slot is per-layer -- and its unmentioned longhands hold
+    // their initial value spelled out where background's hold the literal
+    // `initial`.
     const mask = withStyle('mask: url("a")');
-    testing.expectEqual(1, mask.style.length);
-    testing.expectEqual('mask', mask.style.item(0));
+    testing.expectEqual(9, mask.style.length);
+    testing.expectEqual('mask-image,-webkit-mask-position-x,-webkit-mask-position-y,' +
+        'mask-size,mask-repeat,mask-origin,mask-clip,mask-composite,mask-mode',
+        names(mask).join(','));
+    testing.expectEqual('url("a"),0%,0%,auto,repeat,border-box,border-box,add,match-source',
+        values(mask).join(','));
+    testing.expectEqual('url("a")', mask.style.getPropertyValue('mask'));
+    testing.expectEqual('mask: url("a");', mask.style.cssText);
+
+    // Every slot at its initial answers `none` rather than nothing.
+    testing.expectEqual('none', withStyle('mask: repeat').style.getPropertyValue('mask'));
+    testing.expectEqual('none', withStyle('mask: add').style.getPropertyValue('mask'));
+
+    // The box pair collapses when the two agree, which background's does not:
+    // `background: content-box` answers it twice.
+    testing.expectEqual('content-box', withStyle('mask: content-box')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('content-box', withStyle('mask: content-box content-box')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('padding-box border-box', withStyle('mask: padding-box border-box')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('border-box content-box', withStyle('mask: border-box content-box')
+        .style.getPropertyValue('mask'));
+
+    // ... and an origin sitting at its initial is written anyway, unless the
+    // clip holds something the origin could not: `no-clip` is a clip and not an
+    // origin, so it is written on its own.
+    const noclip = withStyle('mask: border-box no-clip');
+    testing.expectEqual('border-box', noclip.style.getPropertyValue('mask-origin'));
+    testing.expectEqual('no-clip', noclip.style.getPropertyValue('mask-clip'));
+    testing.expectEqual('no-clip', noclip.style.getPropertyValue('mask'));
+    testing.expectEqual('content-box no-clip', withStyle('mask: content-box no-clip')
+        .style.getPropertyValue('mask'));
+
+    // The composite and the mode are slots of their own, the `/` and the
+    // layers work as they do for background, and a layer that drops everything
+    // is where `none` shows up in the middle of a list.
+    testing.expectEqual('subtract', withStyle('mask: subtract').style.getPropertyValue('mask'));
+    testing.expectEqual('alpha', withStyle('mask: alpha').style.getPropertyValue('mask'));
+    testing.expectEqual('10px center / 20px', withStyle('mask: 10px / 20px')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('url("a"), url("b")', withStyle('mask: url("a"), url("b")')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('padding-box, none', withStyle('mask: padding-box, border-box')
+        .style.getPropertyValue('mask'));
+
+    // The -webkit- spelling stores the same nine longhands, and cssText writes
+    // the unprefixed name back.
+    const webkit = withStyle('-webkit-mask: url("a") no-repeat');
+    testing.expectEqual(9, webkit.style.length);
+    testing.expectEqual('url("a") no-repeat', webkit.style.getPropertyValue('-webkit-mask'));
+    testing.expectEqual('mask: url("a") no-repeat;', webkit.style.cssText);
 
     // One longhand on its own is not a background, and cssText says so.
     testing.expectEqual('background-color: red;', withStyle('background-color: red').style.cssText);
