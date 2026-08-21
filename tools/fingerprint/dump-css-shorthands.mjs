@@ -25,9 +25,23 @@
 //      the engine will run is simulated here against every measured row before
 //      a shorthand is called modelled at all.
 //
+// A fourth thing, for `background` and the rest of the layered ones: a comma is
+// a layer boundary, and inside a layer the components are not a flat run. One
+// position fills *two* longhands out of one to four tokens whose order carries
+// meaning (`top right` and `right top` both land x=right y=top, and `10px left`
+// does not parse at all), a `/` introduces a size and may only sit straight
+// after the position, one box token fills the origin *and* the clip, and the
+// colour belongs to the whole value rather than to a layer -- which is why
+// `background: red, blue` does not parse and `url(a), red` does. That shape is
+// `.layers`, and every part of it is derived from the rows below.
+//
 // A shorthand no model reproduces is emitted as `.unmodelled` and the engine
 // keeps it whole, which is the safe direction: a page reading `style.length`
 // sees 1 instead of 9, where a wrong expansion would answer nine wrong values.
+// A model is also allowed to *decline* a single value rather than model it --
+// `background: repeat no-repeat` stores `repeat-x`, which is the repeat
+// longhand's own canonicalisation and not this table's business -- and the
+// declines are printed on every run rather than swallowed.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -63,6 +77,23 @@ const CLASS_TOKENS = {
     identifier: 'MyIdentXyz',
     colour: '#abc',
     function: 'rgb(1, 2, 3)',
+    gradient: 'linear-gradient(red, blue)',
+    image: 'image-set("a" 1x)',
+};
+
+// A function token's class comes from its *name*, not from the fact that it is
+// a function: `background-image` takes `linear-gradient()` and not `rgb()`,
+// `background-color` the other way round, and a value class that cannot tell
+// them apart puts a gradient in the colour. A name this list does not know has
+// no class at all, so a value carrying one is declined rather than guessed at.
+const FUNCTION_CLASS = (name) => {
+    const lower = name.toLowerCase();
+    if (/-gradient$/.test(lower)) return 'gradient';
+    if (lower === 'image-set' || lower === '-webkit-image-set') return 'image';
+    return [
+        'rgb', 'rgba', 'hsl', 'hsla', 'hwb', 'lab', 'lch', 'oklab', 'oklch',
+        'color', 'color-mix', 'light-dark',
+    ].includes(lower) ? 'function' : null;
 };
 
 // Values offered to every shorthand. Only the ones that parse are recorded, so
@@ -95,6 +126,39 @@ const VALUES = [
     'repeat-x', 'no-repeat', 'fixed', 'ease', 'infinite', 'alternate',
     'forwards', 'running', 'wavy', 'underline', 'contain', 'cover',
     'flat', 'preserve-3d', 'add', 'exclude', 'economy', 'nowrap', 'balance',
+    // The layered shorthands. A comma is a layer boundary, a `/` introduces a
+    // size, and a position takes up to four tokens whose order carries meaning
+    // -- so these have to be offered as well, or the layer model is checked
+    // against nothing that exercises it.
+    'url(a) no-repeat', 'no-repeat url(a)', 'red url(a)', 'url(a) red',
+    'red url(a) no-repeat', 'url(a) no-repeat center / cover',
+    'url(a) center / cover no-repeat fixed padding-box border-box red',
+    'linear-gradient(red, blue)', 'linear-gradient(red, blue) no-repeat',
+    'top right', 'right top', 'left top', 'top left', 'center center',
+    'center top', 'top center', '10px center', 'center 10px', '50% 50%',
+    'left 10px', '10px left', 'left center', 'center left',
+    'left 10px top 20px', 'right 10px bottom 20px', 'left top 20px',
+    'left 10px top', 'top 20px left 10px', 'center top 10px', 'top 10px center',
+    'left 10px center', 'center 10px top', 'left center 10px',
+    'center center 10px', 'left 10px right 20px', 'left top 10px 20px',
+    'center / cover', 'center / contain', '/ cover', '2px / auto',
+    'left top / 10px 20px', 'left 10px top 20px / cover', 'center / 10px',
+    'url(a) / 20px', 'no-repeat / 20px', '2px no-repeat / 20px',
+    'center no-repeat / cover', 'url(a) 0/0',
+    'padding-box border-box', 'border-box padding-box', 'content-box content-box',
+    'border-box content-box', 'text border-box', 'padding-box text',
+    'text', 'no-clip', 'border-box no-clip', 'content-box no-clip',
+    'left 10px no-repeat', 'left top no-repeat', 'no-repeat left 10px top 20px',
+    'repeat', 'repeat-y', 'space', 'local', 'alpha', 'luminance',
+    'match-source', 'intersect', 'subtract', 'none red', 'red 2px',
+    'repeat no-repeat', 'no-repeat repeat', 'space round',
+    'red, blue', 'url(a), url(b)', 'url(a), url(b) blue', 'url(a) blue, url(b)',
+    'url(a), red', 'url(a), url(b), url(c)', 'url(a), url(b), url(c) red',
+    'no-repeat, repeat-x', 'none, none', '10px 20px, 30px',
+    'padding-box, border-box', 'padding-box border-box, content-box',
+    'url(a) center / cover, url(b) left top / contain',
+    'url(a) no-repeat, url(b) fixed, url(c) padding-box',
+    'url(a) fixed, url(b) local', 'repeat no-repeat, space round',
 ];
 
 const PAGE = 'data:text/html,<!doctype html><title>shorthands</title><body>';
@@ -109,6 +173,9 @@ const KIND_NOTES = {
         '//                     and `red 1px solid` all land identically, measured.',
     presets: 'a lookup over the whole value space, used where the keyword table says a\n' +
         '//                     single keyword is all a page can write (`white-space`).',
+    layers: 'a comma-separated list of layers, each with a position filling two\n' +
+        '//                     longhands, a size only a `/` introduces, and slots shared by the\n' +
+        '//                     whole value that only the last layer may write (`background`).',
     unmodelled: 'no model reproduced every reading; the engine keeps the shorthand whole.',
 };
 
@@ -188,10 +255,14 @@ const PROBE = (names, values, classTokens, tokens, extra) => `(() => {
   // \`border-color: #abc\` reads back \`rgb(170, 187, 204)\`, so a written token
   // cannot be compared against a stored value without this.
   const longhands = [...new Set(Object.values(expansion).flat())].sort();
+  const own = ${JSON.stringify(extra)};
   const canon = {};
   for (const lh of longhands) {
     const seen = {};
-    for (const token of ${JSON.stringify(tokens)}) {
+    // Its own keyword list on top of the shared battery, so which identifiers
+    // a longhand takes is measured rather than read off the keyword table:
+    // background-clip is listed as taking border-area and does not store it.
+    for (const token of ${JSON.stringify(tokens)}.concat(own[lh] ?? [])) {
       if (set(lh, token)) seen[token] = el.style.getPropertyValue(lh);
     }
     canon[lh] = seen;
@@ -206,13 +277,18 @@ const PROBE = (names, values, classTokens, tokens, extra) => `(() => {
   // A shorthand's own keyword list on top of the shared battery, so a
   // keyword-only shorthand (\`white-space\`) is measured over its whole value
   // space rather than over whichever generic tokens happened to parse.
-  const extra = ${JSON.stringify(extra)};
+  const extra = own;
   const rows = {};
+  // The values that did *not* parse matter as much as the ones that did: a
+  // model that places one is answering longhands for a declaration Chrome threw
+  // away.
+  const rejected = {};
   for (const name of Object.keys(expansion)) {
     const got = {};
+    rejected[name] = [];
     for (const value of ${JSON.stringify(values)}.concat(extra[name] ?? [])) {
       const snapped = set(name, value);
-      if (!snapped) continue;
+      if (!snapped) { rejected[name].push(value); continue; }
       got[value] = {
         items: snapped.items,
         v: snapped.v,
@@ -223,7 +299,7 @@ const PROBE = (names, values, classTokens, tokens, extra) => `(() => {
     rows[name] = got;
   }
 
-  return JSON.stringify({ userAgent: navigator.userAgent, expansion, classes, canon, rows });
+  return JSON.stringify({ userAgent: navigator.userAgent, expansion, classes, canon, rows, rejected });
 })()`;
 
 // --- derivation -----------------------------------------------------------
@@ -262,7 +338,10 @@ function classify(token) {
     if (/^"/.test(token) || /^'/.test(token)) return ['string'];
     if (/^#[0-9a-fA-F]+$/.test(token)) return ['colour'];
     if (/^url\(/i.test(token)) return ['url'];
-    if (/\(.*\)$/.test(token)) return ['function'];
+    if (/\(.*\)$/.test(token)) {
+        const cls = FUNCTION_CLASS(token.slice(0, token.indexOf('(')));
+        return cls ? [cls] : [];
+    }
     if (/^[+-]?(\d+\.?\d*|\.\d+)%$/.test(token)) return ['percent'];
     if (/^[+-]?(\d+\.?\d*|\.\d+)(deg|grad|rad|turn)$/i.test(token)) return ['angle'];
     if (/^[+-]?(\d+\.?\d*|\.\d+)(s|ms)$/i.test(token)) return ['time'];
@@ -487,6 +566,519 @@ function serialisation(name, chosen, longhands, plain) {
     return null;
 }
 
+// --- the layer grammar ----------------------------------------------------
+
+// `background` is not a run of components. It is a comma-separated list of
+// layers, and inside a layer three things happen that no `.components` model
+// can express: a position fills *two* longhands from one to four tokens whose
+// order carries meaning (`top right` and `right top` both land x=right y=top,
+// but `10px left` does not parse at all), a `/` introduces a size and may only
+// sit straight after the position, and the colour belongs to the whole value
+// rather than to a layer -- which is why it may only be written in the last one.
+//
+// Every part of that is read off the measured rows below and then checked
+// against all of them: the width of a layer, which longhands the position
+// fills, which one the slash introduces, what the axis the page did not write
+// is left holding, and which keywords may carry an offset.
+const NO_SLOT = 255;
+
+// Top-level commas separate layers; parentheses and quotes hold.
+function layersOf(value) {
+    const out = [];
+    let depth = 0, quote = null, cur = '';
+    for (const ch of value) {
+        if (quote) {
+            cur += ch;
+            if (ch === quote) quote = null;
+            continue;
+        }
+        if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue; }
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        else if (ch === ',' && depth === 0) { out.push(cur); cur = ''; continue; }
+        cur += ch;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+}
+
+// How many leading longhands are per-layer: the ones answering a comma list as
+// long as the value had layers. The rest are shared by the whole value --
+// `background-color` is one colour however many layers there are -- and a
+// shorthand whose per-layer longhands are not a leading run is not this shape.
+function layerWidth(plain) {
+    let width = null;
+    for (const [value, row] of plain) {
+        const n = layersOf(value).length;
+        if (n < 2) continue;
+        const per = row.v.map((v) => layersOf(v).length === n);
+        let w = 0;
+        while (w < per.length && per[w]) w++;
+        if (per.slice(w).some(Boolean)) return null;
+        if (width === null) width = w;
+        else if (width !== w) return null;
+    }
+    return width;
+}
+
+// Which axis a position token can be: the two axis longhands were measured
+// separately, and `background-position-x` takes `left` where
+// `background-position-y` takes `top`, so the token says where it goes.
+function positionSlots(toks, m, accepts) {
+    const [xi, yi] = m.axes;
+    const axis = (t) => {
+        const x = accepts(xi, t), y = accepts(yi, t);
+        return x && y ? 'both' : x ? 'x' : y ? 'y' : null;
+    };
+    if (toks.length === 1) {
+        const a = axis(toks[0]);
+        if (!a) return null;
+        return a === 'y' ? [m.implied, toks[0]] : [toks[0], m.implied];
+    }
+    if (toks.length === 2) {
+        const [a, b] = toks;
+        // Two keywords may come in either order (`top right` is x=right); once
+        // a length is involved the order is fixed, which is why `10px left`
+        // does not parse.
+        const keyword = (t) => classify(t).includes('identifier');
+        if (keyword(a) && keyword(b)) {
+            const first = axis(a), second = axis(b);
+            if (!first || !second) return null;
+            if (first === 'y' || second === 'x') {
+                return accepts(xi, b) && accepts(yi, a) ? [b, a] : null;
+            }
+        }
+        return accepts(xi, a) && accepts(yi, b) ? [a, b] : null;
+    }
+    // Three or four tokens is two groups, each an edge keyword and maybe an
+    // offset. `center` never carries one -- measured, through the axis
+    // longhand's own acceptance -- so `center 10px top` does not parse.
+    const splits = toks.length === 3 ? [[1, 2], [2, 1]] : toks.length === 4 ? [[2, 2]] : [];
+    for (const [n1, n2] of splits) {
+        if (n1 + n2 !== toks.length) continue;
+        const groups = [toks.slice(0, n1), toks.slice(n1)];
+        const seen = groups.map((g) => {
+            if (g.length === 1) return { text: g[0], axis: axis(g[0]) };
+            if (!classify(g[1]).some((c) => c === 'length' || c === 'percent')) return null;
+            const x = m.offsets[0].includes(g[0].toLowerCase());
+            const y = m.offsets[1].includes(g[0].toLowerCase());
+            return { text: g.join(' '), axis: x && y ? 'both' : x ? 'x' : y ? 'y' : null };
+        });
+        if (seen.some((g) => !g || !g.axis)) continue;
+        const [g1, g2] = seen;
+        let out = null;
+        if (g1.axis === 'x' && g2.axis !== 'x') out = [g1.text, g2.text];
+        else if (g1.axis === 'y' && g2.axis !== 'y') out = [g2.text, g1.text];
+        else if (g1.axis === 'both' && g2.axis === 'y') out = [g1.text, g2.text];
+        else if (g1.axis === 'both' && g2.axis === 'x') out = [g2.text, g1.text];
+        // A group of one is still a plain token and has to be accepted as one;
+        // a group of two was already checked, by its edge carrying an offset.
+        if (!out) continue;
+        const fits = (slot, group, text) =>
+            group.length === 2 || accepts(slot, text);
+        if (fits(xi, out[0].split(' '), out[0]) && fits(yi, out[1].split(' '), out[1])) return out;
+    }
+    return null;
+}
+
+// One layer's tokens distributed over the slots, or null -- which is not a
+// failure but a decline: the engine keeps a declaration it cannot place whole.
+function parseLayer(toks, m, accepts, last, refuse) {
+    if (toks.some((t) => refuse.has(t.toLowerCase()))) return null;
+    const slots = new Array(m.total).fill(null);
+    let i = 0, afterPosition = false, mirrored = false;
+    while (i < toks.length) {
+        const token = toks[i];
+        if (token === '/') {
+            if (!afterPosition || m.size === NO_SLOT || slots[m.size] !== null) return null;
+            // One token. A two-value size is Chrome's own collapse rule on the
+            // size longhand (`10px auto` is stored `10px`) rather than a
+            // distribution, so a value carrying one is declined.
+            const run = toks[i + 1];
+            if (run === undefined || run === '/' || !accepts(m.size, run)) return null;
+            slots[m.size] = run;
+            i += 2;
+            afterPosition = false;
+            continue;
+        }
+        // The box pair. One token fills both -- `background: padding-box` moves
+        // the origin *and* the clip -- and a second one takes the clip over.
+        // Which slot a token can reach is the acceptance test: `text` is a clip
+        // and not an origin, which is why `text border-box` lands the other way
+        // round from how it was written.
+        if (m.boxes && (accepts(m.boxes[0], token) || accepts(m.boxes[1], token))) {
+            const [b1, b2] = m.boxes;
+            if (slots[b1] === null && accepts(b1, token)) {
+                slots[b1] = token;
+                if (slots[b2] === null) {
+                    slots[b2] = token;
+                    mirrored = true;
+                }
+            } else if (accepts(b2, token) && (slots[b2] === null || mirrored)) {
+                slots[b2] = token;
+                mirrored = false;
+            } else return null;
+            afterPosition = false;
+            i += 1;
+            continue;
+        }
+        if (m.axes && slots[m.axes[0]] === null && slots[m.axes[1]] === null) {
+            const room = toks.slice(i).findIndex((t) => t === '/');
+            const limit = Math.min(4, room < 0 ? toks.length - i : room);
+            let placed = false;
+            for (let k = limit; k >= 1; k--) {
+                const got = positionSlots(toks.slice(i, i + k), m, accepts);
+                if (!got) continue;
+                slots[m.axes[0]] = got[0];
+                slots[m.axes[1]] = got[1];
+                i += k;
+                afterPosition = true;
+                placed = true;
+                break;
+            }
+            if (placed) continue;
+        }
+        let placed = false;
+        for (let s = 0; s < m.total; s++) {
+            if (slots[s] !== null) continue;
+            if (m.axes && (s === m.axes[0] || s === m.axes[1])) continue;
+            if (m.boxes && (s === m.boxes[0] || s === m.boxes[1])) continue;
+            if (s === m.size) continue;
+            if (s >= m.width && !last) continue;   // shared, last layer only
+            if (!accepts(s, token)) continue;
+            slots[s] = token;
+            placed = true;
+            break;
+        }
+        if (!placed) return null;
+        afterPosition = false;
+        i += 1;
+    }
+    return slots;
+}
+
+// The whole value: every layer's slots, and the shared ones taken from the
+// last layer. Returns null when any layer declines.
+function parseLayers(value, m, accepts, refuse) {
+    const layers = layersOf(value);
+    if (layers.some((l) => l.length === 0)) return null;
+    const out = [];
+    for (const [n, layer] of layers.entries()) {
+        const got = parseLayer(components(layer), m, accepts, n === layers.length - 1, refuse);
+        if (!got) return null;
+        // Only the last layer may carry a shared slot, and an earlier layer
+        // that reached one is a value Chrome would not have parsed.
+        if (n !== layers.length - 1 && got.slice(m.width).some((v) => v !== null)) return null;
+        out.push(got);
+    }
+    return out;
+}
+
+// What the stored longhand vector looks like: each per-layer longhand a comma
+// list, each shared one a single value.
+function layerVector(parsed, m, fill, stored) {
+    const out = [];
+    for (let s = 0; s < m.total; s++) {
+        if (s >= m.width) {
+            const held = parsed[parsed.length - 1][s];
+            out.push(held === null ? fill[s] : stored(s, held));
+            continue;
+        }
+        out.push(parsed.map((layer) => layer[s] === null ? fill[s] : stored(s, layer[s]))
+            .join(', '));
+    }
+    return out;
+}
+
+// Reading the shorthand back: every slot that is not at its dropped value, in
+// longhand order, with the size behind a `/` and the shared slots appended to
+// the last layer.
+function joinLayers(values, m, omit, empty, order, fill, accepts) {
+    const per = values.map((v, s) => s < m.width ? layersOf(v) : [v]);
+    const count = Math.max(...per.slice(0, m.width).map((l) => l.length));
+    const out = [];
+    for (let n = 0; n < count; n++) {
+        const at = (s) => s < m.width ? per[s][n] : (n === count - 1 ? per[s][0] : undefined);
+        const kept = [];
+        for (const s of order) {
+            // A collapsing box pair is written as a unit, and `mask` is the
+            // reason the flag exists: with the two agreeing it writes one
+            // component where `background` writes both, and with the origin at
+            // its initial it still writes it -- unless the clip holds
+            // something the origin could not.
+            if (m.collapse && s === m.boxes[1]) continue;
+            if (m.collapse && s === m.boxes[0]) {
+                const [oi, ci] = m.boxes;
+                const origin = at(oi), clip = at(ci);
+                if (origin === undefined || clip === undefined) continue;
+                const bare = (slot, held) => omit[slot].includes(held.toLowerCase());
+                const o = bare(oi, origin) ? fill[oi] : origin;
+                const c = bare(ci, clip) ? fill[ci] : clip;
+                if (sameValue(o, c)) {
+                    if (!bare(oi, origin)) kept.push(o);
+                } else if (!accepts(oi, c) && bare(oi, origin)) {
+                    kept.push(c);
+                } else {
+                    kept.push(o, c);
+                }
+                continue;
+            }
+            const held = at(s);
+            if (held === undefined || omit[s].includes(held.toLowerCase())) continue;
+            kept.push(s === m.size ? `/ ${held}` : held);
+        }
+        out.push(kept.length ? kept.join(' ') : empty);
+    }
+    return out.join(', ');
+}
+
+// The whole model, derived and then checked against every measured row. The
+// hypotheses are which pair of longhands the position fills and which one the
+// slash introduces; everything else follows from the rows.
+function layerCandidate(longhands, plain, canon, classes, keywords, rejected) {
+    const width = layerWidth(plain);
+    if (width === null || width === 0) return null;
+    const total = longhands.length;
+    const stored = (i, t) => canon[longhands[i]]?.[t] ?? t;
+    // The same acceptance test the engine will run, token by token: the
+    // keyword table for an identifier, a measured value class otherwise. It has
+    // to be the same test rather than a stricter one, or the model claims rows
+    // the engine would place differently.
+    const accepts = (i, token) => {
+        const cls = classify(token);
+        if (cls.includes('identifier')) {
+            const known = keywords[longhands[i]];
+            if (known && known.includes(token.toLowerCase())) return true;
+        }
+        return cls.some((c) => (classes[longhands[i]] ?? []).includes(c));
+    };
+    // A position and a size both take a length, so those are the slots worth
+    // trying; anything else could not hold `10px`.
+    const lengthy = [];
+    for (let i = 0; i < width; i++) {
+        if (accepts(i, '1px')) lengthy.push(i);
+    }
+    // A keyword may carry an offset where the axis longhand was measured
+    // storing it with one: `background-position-x` keeps `left 10px` and
+    // rejects `center 10px`, which is the whole reason `center 10px top` does
+    // not parse.
+    const offsetsFor = (i) => (keywords[longhands[i]] ?? []).filter((k) =>
+        Object.keys(canon[longhands[i]] ?? {}).some((run) => {
+            const parts = run.split(' ');
+            return parts.length === 2 && parts[0].toLowerCase() === k &&
+                classify(parts[1]).some((c) => c === 'length' || c === 'percent');
+        }));
+
+    const pairs = [null];
+    for (const x of lengthy) {
+        for (const y of lengthy) {
+            if (x !== y) pairs.push([x, y]);
+        }
+    }
+    // A box pair is two slots one token fills at once, found by looking for a
+    // single-token row that moved two of them to the same value.
+    const boxPairs = [null];
+    for (const [value, row] of plain) {
+        if (components(value).length !== 1 || layersOf(value).length !== 1) continue;
+        for (let s1 = 0; s1 < width; s1++) {
+            for (let s2 = s1 + 1; s2 < width; s2++) {
+                if (!sameValue(row.v[s1], row.v[s2])) continue;
+                if (!sameValue(stored(s1, value), row.v[s1])) continue;
+                if (boxPairs.some((p) => p && p[0] === s1 && p[1] === s2)) continue;
+                boxPairs.push([s1, s2]);
+            }
+        }
+    }
+    let best = null;
+    for (const axes of pairs) {
+        for (const boxes of boxPairs) {
+            if (axes && boxes && (boxes.includes(axes[0]) || boxes.includes(axes[1]))) continue;
+        for (const collapse of boxes ? [false, true] : [false]) {
+        for (const size of [NO_SLOT, ...lengthy]) {
+            if (axes && (size === axes[0] || size === axes[1])) continue;
+            if (boxes && boxes.includes(size)) continue;
+            const m = {
+                total, width, axes, boxes, collapse, size, implied: '', offsets: [[], []],
+            };
+            if (axes) {
+                m.offsets = [offsetsFor(axes[0]), offsetsFor(axes[1])];
+                // What the axis the page did not write is left holding, taken
+                // from a row that wrote one token and moved both.
+                for (const [value, row] of plain) {
+                    if (components(value).length !== 1 || layersOf(value).length !== 1) continue;
+                    const x = row.v[axes[0]], y = row.v[axes[1]];
+                    if (sameValue(x, y)) continue;
+                    if (sameValue(stored(axes[0], value), x)) { m.implied = y; break; }
+                    if (sameValue(stored(axes[1], value), y)) { m.implied = x; break; }
+                }
+            }
+            // What a slot the parse left alone holds. Taken by weight rather
+            // than by agreement: `background: border-area` moves the origin to
+            // `border-box` where every other row leaves it `initial`, and one
+            // such row must not be able to claim the filler.
+            const parsed = new Map();
+            const votes = Array.from({ length: total }, () => new Map());
+            const seen = new Set();
+            for (const [value, row] of plain) {
+                const got = parseLayers(value, m, accepts, seen);
+                if (!got) continue;
+                parsed.set(value, got);
+                for (let s = 0; s < total; s++) {
+                    const layers = s < width ? layersOf(row.v[s]) : [row.v[s]];
+                    for (const [n, layer] of got.entries()) {
+                        if (layer[s] !== null || layers[n] === undefined) continue;
+                        if (s >= width && n !== got.length - 1) continue;
+                        const held = layers[n].toLowerCase();
+                        votes[s].set(held, (votes[s].get(held) ?? 0) + 1);
+                    }
+                }
+            }
+            if (!parsed.size) continue;
+            const filler = votes.map((slot) => [...slot.entries()]
+                .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'initial');
+            // A row the model gets *wrong* is not allowed. A keyword-only value
+            // whose row it cannot reproduce is refused instead: the engine
+            // declines a declaration carrying one and keeps it whole, which is
+            // the same answer as not modelling the shorthand at all.
+            const refuse = new Set();
+            const refusable = (value) => {
+                const toks = components(value);
+                if (toks.length !== 1 || layersOf(value).length !== 1) return false;
+                const cls = classify(toks[0]);
+                if (!cls.includes('identifier')) return false;
+                return !longhands.some((lh, i) => i < total &&
+                    (classes[lh] ?? []).includes('identifier'));
+            };
+            let ok = true;
+            for (const [value, got] of [...parsed]) {
+                const row = plain.find(([v]) => v === value)[1];
+                const want = layerVector(got, m, filler, stored);
+                if (want.every((v, i) => sameValue(v, row.v[i]))) continue;
+                if (refusable(value)) {
+                    refuse.add(value.toLowerCase());
+                    parsed.delete(value);
+                    continue;
+                }
+                ok = false;
+                break;
+            }
+            // And a value Chrome threw away has to be declined, not placed:
+            // `-webkit-mask: no-clip` does not parse where `mask: no-clip` does,
+            // and both spellings reach the same clip longhand, so only the
+            // shorthand's own reading says so.
+            for (const value of rejected) {
+                if (!parseLayers(value, m, accepts, refuse)) continue;
+                if (!refusable(value)) {
+                    ok = false;
+                    break;
+                }
+                refuse.add(components(value)[0].toLowerCase());
+            }
+            if (!ok || !parsed.size) continue;
+            for (const value of rejected) {
+                if (parseLayers(value, m, accepts, refuse)) { ok = false; break; }
+            }
+            if (!ok) continue;
+            for (const value of [...parsed.keys()]) {
+                if (!parseLayers(value, m, accepts, refuse)) parsed.delete(value);
+            }
+            if (!parsed.size) continue;
+            // Then the reading back, whose dropped values are forced by the
+            // rows the same way `.components`' are: a slot holding something
+            // the reading does not show was left out.
+            const rows = [...parsed.keys()].map((v) => [v, plain.find(([w]) => w === v)[1]]);
+            const omit = Array.from({ length: total }, () => new Set());
+            for (const [, row] of rows) {
+                const shown = layersOf(row.read).map(components);
+                const lists = row.v.map((v, s) => s < width ? layersOf(v) : [v]);
+                const count = Math.max(...lists.slice(0, width).map((l) => l.length));
+                for (let n = 0; n < count; n++) {
+                    for (let s = 0; s < total; s++) {
+                        const held = s < width ? lists[s][n] : (n === count - 1 ? lists[s][0] : undefined);
+                        if (held === undefined) continue;
+                        const seen = shown[n] ?? [];
+                        if (components(held).every((t) => seen.includes(t))) continue;
+                        omit[s].add(held.toLowerCase());
+                    }
+                }
+            }
+            const flat = omit.map((s) => [...s].sort());
+            // What a layer whose every slot dropped serialises to. `mask`
+            // answers `none` there; for `background` no probe value reaches it,
+            // and "" is what the search settles on when nothing exercises it.
+            // The order the kept components come back in is not always the
+            // order the longhands are stored in: `transition` stores its
+            // property last and writes it first. No one reading shows the whole
+            // order, so the pairs are collected across the rows and sorted.
+            const identity = [...Array(total).keys()];
+            const derived = (() => {
+                const after = Array.from({ length: total }, () => new Set());
+                for (const [, r] of rows) {
+                    const shown = components(layersOf(r.read)[0] ?? '');
+                    const seen = [];
+                    for (const s of identity) {
+                        if (m.collapse && s === m.boxes[1]) continue;
+                        const held = s < width ? layersOf(r.v[s])[0] : r.v[s];
+                        if (held === undefined || flat[s].includes(held.toLowerCase())) continue;
+                        const at = shown.indexOf(components(held)[0]);
+                        if (at >= 0) seen.push([s, at]);
+                    }
+                    seen.sort((a, b) => a[1] - b[1]);
+                    for (let k = 1; k < seen.length; k++) after[seen[k][0]].add(seen[k - 1][0]);
+                }
+                const out = [];
+                while (out.length < total) {
+                    const next = identity.find((s) => !out.includes(s) &&
+                        [...after[s]].every((prior) => out.includes(prior)));
+                    if (next === undefined) return null;
+                    out.push(next);
+                }
+                return out;
+            })();
+            const empties = ['', ...new Set(rows.map(([, r]) => r.read))];
+            let order = null;
+            const empty = empties.find((candidate) => [identity, derived]
+                .filter(Boolean).some((attempt) => {
+                    const fits = rows.every(([, r]) => sameValue(
+                        joinLayers(r.v, m, flat, candidate, attempt, filler, accepts), r.read));
+                    if (fits) order = attempt;
+                    return fits;
+                }));
+            if (empty === undefined) continue;
+            // A slot no accepted row ever reached is not evidence of a slot.
+            const reached = new Set();
+            for (const [, got] of parsed) {
+                for (const layer of got) {
+                    layer.forEach((v, s) => { if (v !== null) reached.add(s); });
+                }
+            }
+            // A per-layer slot no accepted row ever reached is not evidence of
+            // a slot. A shared one may go unreached -- `animation` has three no
+            // probe value touches -- and still be there, since the layer
+            // structure says where the shared ones start.
+            if (![...Array(width).keys()].every((s) => reached.has(s))) continue;
+            // Several shapes can reproduce the rows; the one that reproduces
+            // the most of them is the one kept, and a position beats a box pair
+            // on a tie because it is the narrower claim.
+            const score = [parsed.size, axes ? 1 : 0, boxes ? 0 : 1, collapse ? 0 : 1];
+            if (best && !score.some((v, i) => v > best.score[i] &&
+                score.slice(0, i).every((w, j) => w === best.score[j]))) continue;
+            best = { score, model: {
+                kind: 'layers', group: 0, groups: 0, blocked: false, fill: filler,
+                layer_width: width, axes, size, implied: m.implied,
+                boxes, collapse, offsets: m.offsets, omit: flat, empty,
+                order: order.every((v, i) => v === i) ? [] : order,
+                refuse: [...refuse].sort(),
+                declined: plain.filter(([v]) => !parsed.has(v)).map(([v]) => v),
+                reached: parsed.size,
+            } };
+        }
+        }
+        }
+    }
+    return best?.model ?? null;
+}
+
 // --- run ------------------------------------------------------------------
 
 // Deriving the models from the readings is the fiddly half, and it does not
@@ -520,9 +1112,23 @@ async function measure() {
         process.stderr.write(`candidate property names: ${names.length}\n`);
         // Every component any probe value can decompose into, so the canonical
         // form each longhand stores it as is known before a row is explained.
+        // A slot can hold more than one component -- a position edge with an
+        // offset, a two-value size -- so the canonical form of every adjacent
+        // pair is measured as well. That is also the only test that says
+        // `left 10px` is a position and `center 10px` is not.
+        const runs = VALUES.flatMap((value) => {
+            const toks = components(value);
+            return toks.slice(1).map((t, i) => [toks[i], t]);
+        }).filter(([a, b]) => a !== '/' && b !== '/').map((pair) => pair.join(' '));
         const tokens = [...new Set([
             ...Object.values(CLASS_TOKENS),
             ...VALUES.flatMap(components).filter((t) => t !== '/'),
+            ...runs,
+            // And every probe value whole, so what a longhand stores for it is
+            // measured rather than assumed to be the text as written:
+            // `perspective-origin` keeps `top 20px left 10px` as
+            // `left 10px top 20px`, and without this that reads as a rename.
+            ...VALUES,
         ])].filter((t) => !CSS_WIDE.includes(t.toLowerCase()));
         process.stderr.write(`probe tokens: ${tokens.length}\n`);
 
@@ -551,7 +1157,7 @@ async function measure() {
 
 {
     const measured = await measure();
-    const { userAgent, expansion, classes, canon, rows } = measured;
+    const { userAgent, expansion, classes, canon, rows, rejected } = measured;
 
     const shorthands = {};
     const demoted = [];
@@ -581,7 +1187,13 @@ async function measure() {
         } else if (orders.length > 1) {
             demoted.push([name, `${orders.length} different longhand orders`]);
         } else {
-            const measuredFill = fillers(plain, width, longhands, canon);
+            // A comma is a layer boundary, and the narrower models have no
+            // layers: they are derived from the rows without one and have to
+            // *decline* the rest, which is what the engine does with a value it
+            // cannot place. Getting one wrong is still a demotion.
+            const simple = plain.filter(([v]) => layersOf(v).length === 1);
+            const layered = plain.filter(([v]) => layersOf(v).length > 1);
+            const measuredFill = fillers(simple, width, longhands, canon);
             const fill = measuredFill ?? new Array(width).fill('initial');
             {
                 // A rename can still rewrite the value: `page-break-after:
@@ -590,7 +1202,7 @@ async function measure() {
                 // measured rather than assumed.
                 if (width === 1) {
                     const lh = longhands[0];
-                    const translate = plain
+                    const translate = simple
                         .filter(([v, r]) => !sameValue(r.v[0], canon[lh]?.[v] ?? v))
                         .map(([v, r]) => [v.toLowerCase(), r.v[0]]);
                     if (translate.every(([v]) => classify(v).includes('identifier'))) {
@@ -615,7 +1227,7 @@ async function measure() {
                 // preset gate below still gets its turn.
                 for (const [kind, g, k, blocked] of (chosen || !measuredFill) ? [] : candidates) {
                     const used = new Set();
-                    const ok = plain.every(([value, row]) => {
+                    const ok = simple.every(([value, row]) => {
                         const got = expand(kind, value, longhands, fill, g, k, blocked,
                             classes, keywords, canon, used);
                         return got && got.length === width &&
@@ -638,16 +1250,28 @@ async function measure() {
                 // lists -- so a page cannot write one this table has not seen.
                 if (!chosen) {
                     const own = (keywords[name] ?? []).filter((k) => !CSS_WIDE.includes(k));
-                    const singles = plain.every(([v]) => components(v).length === 1 &&
+                    const listed = simple.filter(([v]) => components(v).length === 1 &&
                         classify(v).includes('identifier') && own.includes(v.toLowerCase()));
-                    const covered = own.every((k) => plain.some(([v]) => sameValue(v, k)));
-                    if (own.length && singles && covered) {
+                    const covered = own.every((k) => simple.some(([v]) => sameValue(v, k)));
+                    // The gate is that a single keyword is *all* a page can
+                    // write here: relax it and the lookup swallows every
+                    // shorthand with a keyword list, declining the values that
+                    // matter.
+                    if (own.length && listed.length === simple.length && covered) {
                         chosen = {
                             kind: 'presets', group: 0, groups: 0, blocked: false,
                             fill: fill,
-                            presets: plain.map(([v, r]) => [v.toLowerCase(), r.v]),
+                            presets: listed.map(([v, r]) => [v.toLowerCase(), r.v]),
                         };
                     }
+                }
+                // Last, the layered shapes. It goes after everything else so a
+                // shorthand already modelled cannot change model: the narrower
+                // one reproduces every row too, and there is nothing to gain
+                // from re-reading `border` as a list of layers.
+                if (!chosen) {
+                    chosen = layerCandidate(longhands, plain, canon, classes, keywords,
+                        rejected?.[name] ?? []);
                 }
                 if (!chosen) {
                     demoted.push([name, measuredFill
@@ -666,8 +1290,21 @@ async function measure() {
         // cannot do that would leave the declaration unreadable -- worse than
         // not expanding at all. So the rule is derived and checked here, and a
         // shorthand it fails on is demoted with the rest.
-        if (chosen && chosen.kind !== 'unmodelled') {
-            const bad = serialisation(name, chosen, longhands, plain);
+        const single = plain.filter(([v]) => layersOf(v).length === 1);
+        // A rename is the exception: it hands the value to its one longhand
+        // whole, so a comma list is that longhand's business and not a layer
+        // boundary it has to decline.
+        if (chosen && chosen.kind !== 'layers' && chosen.kind !== 'alias') {
+            const wrong = plain.filter(([v]) => layersOf(v).length > 1).find(([value]) =>
+                expand(chosen.kind, value, longhands, chosen.fill, chosen.group,
+                    chosen.groups, chosen.blocked, classes, keywords, canon) !== null);
+            if (wrong) {
+                demoted.push([name, `answers ${JSON.stringify(wrong[0])} rather than declining it`]);
+                chosen = null;
+            }
+        }
+        if (chosen && chosen.kind !== 'unmodelled' && chosen.kind !== 'layers') {
+            const bad = serialisation(name, chosen, longhands, single);
             if (bad) {
                 demoted.push([name, bad]);
                 chosen = null;
@@ -685,6 +1322,16 @@ async function measure() {
     process.stderr.write(`shorthands: ${Object.keys(shorthands).length} -- ` +
         Object.entries(kindCount).sort().map(([k, n]) => `${k} ${n}`).join(', ') + '\n');
     for (const [name, reason] of demoted) process.stderr.write(`  unmodelled ${name}: ${reason}\n`);
+    // A layer model is allowed to decline a row -- the engine keeps a value it
+    // cannot place whole, which is the same answer as not modelling the
+    // shorthand at all. It is not allowed to get one wrong, so the declines are
+    // printed rather than swallowed.
+    for (const [name, s] of Object.entries(shorthands)) {
+        if (s.kind !== 'layers' || !s.declined?.length) continue;
+        process.stderr.write(`  ${name} declines ${s.declined.length} of ` +
+            `${s.declined.length + s.reached} probe values: ` +
+            s.declined.map((v) => JSON.stringify(v)).join(', ') + '\n');
+    }
 
     const names_ = Object.keys(shorthands).sort();
     const classNames = Object.keys(CLASS_TOKENS);
@@ -721,7 +1368,11 @@ async function measure() {
         '',
         'const std = @import("std");',
         '',
-        'pub const Kind = enum { alias, box4, box2, components, presets, unmodelled };',
+        'pub const Kind = enum { alias, box4, box2, components, presets, layers, unmodelled };',
+        '',
+        '/// A slot the layer grammar has no longhand for: `.axes` and `.size_slot`',
+        '/// hold it when the shorthand has no position or no `/`.',
+        'pub const no_slot: u8 = 255;',
         '',
         '/// The value classes a longhand accepts, by the shape of the component. The',
         '/// keyword half of the same test lives in chrome_keywords.zig: `solid` and',
@@ -776,6 +1427,45 @@ async function measure() {
         '    /// `white-space: nowrap` is `collapse` and `nowrap`, which is a',
         '    /// lookup, not a rule.',
         '    presets: []const struct { []const u8, []const []const u8, []const u8 } = &.{},',
+        '    /// For `.layers`: how many leading longhands are per-layer. The rest are',
+        '    /// shared by the whole value and only the last layer may write them --',
+        '    /// `background-color` is one colour however many layers there are, which',
+        '    /// is why `background: red, blue` does not parse and `url(a), red` does.',
+        '    layer_width: u8 = 0,',
+        '    /// For `.layers`: the two longhands one position fills, and what the',
+        '    /// axis the page did not write is left holding (`center`). A position',
+        '    /// takes one to four components and their order carries meaning:',
+        '    /// `top right` and `right top` both land x=right y=top, and `10px left`',
+        '    /// does not parse at all.',
+        '    axes: [2]u8 = .{ no_slot, no_slot },',
+        '    implied: []const u8 = "",',
+        '    /// For `.layers`: the two longhands one box component fills at once.',
+        '    /// `background: padding-box` moves the origin *and* the clip, and a',
+        '    /// second component takes the clip over -- `text` is a clip and not an',
+        '    /// origin, so `text border-box` lands the other way round from how it',
+        '    /// was written.',
+        '    boxes: [2]u8 = .{ no_slot, no_slot },',
+        '    /// For `.layers`: whether the box pair is written as one component',
+        '    /// when the two agree. `mask: content-box content-box` answers one',
+        '    /// `content-box` where `background: content-box` answers two, and with',
+        '    /// the origin at its initial the pair still writes it -- unless the clip',
+        '    /// holds a value the origin could not take, which is why',
+        '    /// `mask: border-box no-clip` answers just `no-clip`.',
+        '    box_collapse: bool = false,',
+        '    /// For `.layers`: the longhand a `/` introduces, which may only sit',
+        '    /// straight after the position -- `url(a) / 20px` does not parse.',
+        '    size_slot: u8 = no_slot,',
+        '    /// For `.layers`: values the model cannot express, so the engine',
+        '    /// declines a declaration carrying one and keeps it whole.',
+        '    /// `background: border-area` is the one: it moves the origin to',
+        '    /// `border-box` where `background: text` -- the same shape of value,',
+        '    /// a clip-only keyword -- leaves it alone.',
+        '    refuse: []const []const u8 = &.{},',
+        '    /// For `.layers`: per axis, the keywords that may carry an offset.',
+        '    /// Measured through the axis longhand itself: it stores `left 10px`',
+        '    /// and rejects `center 10px`, which is what makes `center 10px top`',
+        '    /// fail to parse.',
+        '    offsets: []const []const []const u8 = &.{},',
         '    /// For `.alias`: what reading back through the *old* name answers when',
         '    /// it is not simply the stored value. Not the inverse of `translate`:',
         '    /// `page-break-after` answers `always` for a stored `page`, and the',
@@ -798,6 +1488,18 @@ async function measure() {
                 if (s.order?.length) {
                     parts.push('.order = ' + zigSeq(s.order.map(String)));
                 }
+            }
+            if (s.kind === 'layers') {
+                parts.push(`.layer_width = ${s.layer_width}`);
+                if (s.axes) parts.push(`.axes = .{ ${s.axes[0]}, ${s.axes[1]} }`);
+                if (s.implied) parts.push(`.implied = ${zigString(s.implied)}`);
+                if (s.boxes) parts.push(`.boxes = .{ ${s.boxes[0]}, ${s.boxes[1]} }`);
+                if (s.collapse) parts.push('.box_collapse = true');
+                if (s.size !== 255) parts.push(`.size_slot = ${s.size}`);
+                if (s.refuse.length) parts.push(`.refuse = ${zigList(s.refuse)}`);
+                parts.push('.offsets = ' + zigSeq(s.offsets.map(zigList)));
+                parts.push('.omit = ' + zigSeq(s.omit.map(zigList)));
+                if (s.order.length) parts.push('.order = ' + zigSeq(s.order.map(String)));
             }
             if (s.wide.length) parts.push(`.wide_longhands = ${zigList(s.wide)}`);
             if (s.translate?.length) {

@@ -604,6 +604,183 @@ function withStyle(text) {
     testing.expectEqual('normal,1s,ease,0s,MyIdent', values(transition).join(','));
     testing.expectEqual('MyIdent 1s', transition.style.getPropertyValue('transition'));
 
+    // `background` is a layer rather than a run of components: nine longhands,
+    // a position filling two of them, a size only a `/` reaches, and one box
+    // token landing on both the origin and the clip.
+    const bg = withStyle('background: blue');
+    testing.expectEqual(9, bg.style.length);
+    testing.expectEqual('background-image,background-position-x,background-position-y,' +
+        'background-size,background-repeat,background-attachment,background-origin,' +
+        'background-clip,background-color', names(bg).join(','));
+    testing.expectEqual('initial,initial,initial,initial,initial,initial,initial,initial,blue',
+        values(bg).join(','));
+    testing.expectEqual('blue', bg.style.getPropertyValue('background'));
+    testing.expectEqual('background: blue;', bg.style.cssText);
+
+    // One position token fills both axes: the one the page did not write is
+    // left holding `center`, and which axis a token belongs to is what decides
+    // where it goes -- `top` is a y and `10px` is an x.
+    testing.expectEqual('10px center', withStyle('background: 10px')
+        .style.getPropertyValue('background'));
+    testing.expectEqual('center top', withStyle('background: top')
+        .style.getPropertyValue('background'));
+
+    // Two keywords may come in either order; once a length is involved the
+    // order is fixed, which is why `10px left` does not parse.
+    testing.expectEqual('right top', withStyle('background: top right')
+        .style.getPropertyValue('background'));
+    testing.expectEqual('left 10px', withStyle('background: left 10px')
+        .style.getPropertyValue('background'));
+
+    // Three and four tokens are two `edge [offset]` groups, and one axis holds
+    // the whole group.
+    const anchored = withStyle('background: left 10px top 20px');
+    testing.expectEqual('left 10px', anchored.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('top 20px', anchored.style.getPropertyValue('background-position-y'));
+    testing.expectEqual('left 10px top 20px', anchored.style.getPropertyValue('background'));
+
+    // A unitless zero in a position or a size is stored `0px`, the same as in
+    // any other length.
+    const zero = withStyle('background: url("a") 0/0');
+    testing.expectEqual('0px', zero.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('0px', zero.style.getPropertyValue('background-size'));
+    testing.expectEqual('url("a") 0px center / 0px', zero.style.getPropertyValue('background'));
+
+    // The `/` reaches the size, and the position it needs in front of it comes
+    // back written out.
+    const sized = withStyle('background: 10px / 20px');
+    testing.expectEqual('20px', sized.style.getPropertyValue('background-size'));
+    testing.expectEqual('10px center / 20px', sized.style.getPropertyValue('background'));
+
+    // One box token fills the origin and the clip; a second takes the clip
+    // over. `text` is a clip and not an origin, so it lands there whichever
+    // side of the value it was written on.
+    testing.expectEqual('padding-box padding-box', withStyle('background: padding-box')
+        .style.getPropertyValue('background'));
+    const clipped = withStyle('background: text border-box');
+    testing.expectEqual('border-box', clipped.style.getPropertyValue('background-origin'));
+    testing.expectEqual('text', clipped.style.getPropertyValue('background-clip'));
+    testing.expectEqual('border-box text', clipped.style.getPropertyValue('background'));
+
+    // The whole layer, in an order of its own, and the colour last.
+    const layer = withStyle('background: red 10px');
+    testing.expectEqual('10px center red', layer.style.getPropertyValue('background'));
+    testing.expectEqual('url("a") center center / cover no-repeat fixed padding-box border-box red',
+        withStyle('background: url("a") center / cover no-repeat fixed padding-box border-box red')
+            .style.getPropertyValue('background'));
+
+    // A value the layer model declines is kept whole rather than expanded
+    // wrongly: a two-value repeat is the repeat longhand's own
+    // canonicalisation (`repeat no-repeat` is `repeat-x`), and `border-area`
+    // moves the origin where no other clip-only keyword does.
+    for (const value of ['repeat no-repeat', 'border-area']) {
+        const whole = withStyle('background: ' + value);
+        testing.expectEqual(1, whole.style.length);
+        testing.expectEqual('background', whole.style.item(0));
+        testing.expectEqual(value, whole.style.getPropertyValue('background'));
+    }
+
+    // A comma is a layer boundary: every per-layer longhand becomes a comma
+    // list as long as the value had layers, and the ones a layer never
+    // mentioned hold their filler in that layer's place.
+    const two = withStyle('background: url(a), url(b)');
+    testing.expectEqual(9, two.style.length);
+    testing.expectEqual('url("a"), url("b")', two.style.getPropertyValue('background-image'));
+    testing.expectEqual('initial, initial', two.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('url("a"), url("b")', two.style.getPropertyValue('background'));
+    testing.expectEqual('background: url("a"), url("b");', two.style.cssText);
+
+    // The colour belongs to the whole value rather than to a layer, so it is
+    // one value however many layers there are -- and only the last layer may
+    // write it. `url(a) blue, url(b)` does not parse in Chrome at all; this
+    // engine declines it and keeps the declaration whole.
+    const tinted = withStyle('background: url("a"), url("b") blue');
+    testing.expectEqual('blue', tinted.style.getPropertyValue('background-color'));
+    testing.expectEqual('url("a"), url("b") blue', tinted.style.getPropertyValue('background'));
+    const early = withStyle('background: url("a") blue, url("b")');
+    testing.expectEqual(1, early.style.length);
+
+    // A last layer that mentioned nothing but the colour comes back as just
+    // the colour.
+    testing.expectEqual('url("a"), red', withStyle('background: url("a"), red')
+        .style.getPropertyValue('background'));
+
+    // Each layer parses on its own: the second one here writes one position
+    // component and is left holding `center` on the other axis.
+    const positions = withStyle('background: 10px 20px, 30px');
+    testing.expectEqual('10px, 30px', positions.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('20px, center', positions.style.getPropertyValue('background-position-y'));
+    testing.expectEqual('10px 20px, 30px center', positions.style.getPropertyValue('background'));
+
+    // The box pair and the `/` are per-layer too.
+    testing.expectEqual('padding-box border-box, content-box content-box',
+        withStyle('background: padding-box border-box, content-box')
+            .style.getPropertyValue('background'));
+    testing.expectEqual('url("a") center center / cover, url("b") left top / contain',
+        withStyle('background: url("a") center / cover, url("b") left top / contain')
+            .style.getPropertyValue('background'));
+
+    // `mask` is the same layer grammar, with one longhand fewer -- there is no
+    // colour, so every slot is per-layer -- and its unmentioned longhands hold
+    // their initial value spelled out where background's hold the literal
+    // `initial`.
+    const mask = withStyle('mask: url("a")');
+    testing.expectEqual(9, mask.style.length);
+    testing.expectEqual('mask-image,-webkit-mask-position-x,-webkit-mask-position-y,' +
+        'mask-size,mask-repeat,mask-origin,mask-clip,mask-composite,mask-mode',
+        names(mask).join(','));
+    testing.expectEqual('url("a"),0%,0%,auto,repeat,border-box,border-box,add,match-source',
+        values(mask).join(','));
+    testing.expectEqual('url("a")', mask.style.getPropertyValue('mask'));
+    testing.expectEqual('mask: url("a");', mask.style.cssText);
+
+    // Every slot at its initial answers `none` rather than nothing.
+    testing.expectEqual('none', withStyle('mask: repeat').style.getPropertyValue('mask'));
+    testing.expectEqual('none', withStyle('mask: add').style.getPropertyValue('mask'));
+
+    // The box pair collapses when the two agree, which background's does not:
+    // `background: content-box` answers it twice.
+    testing.expectEqual('content-box', withStyle('mask: content-box')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('content-box', withStyle('mask: content-box content-box')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('padding-box border-box', withStyle('mask: padding-box border-box')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('border-box content-box', withStyle('mask: border-box content-box')
+        .style.getPropertyValue('mask'));
+
+    // ... and an origin sitting at its initial is written anyway, unless the
+    // clip holds something the origin could not: `no-clip` is a clip and not an
+    // origin, so it is written on its own.
+    const noclip = withStyle('mask: border-box no-clip');
+    testing.expectEqual('border-box', noclip.style.getPropertyValue('mask-origin'));
+    testing.expectEqual('no-clip', noclip.style.getPropertyValue('mask-clip'));
+    testing.expectEqual('no-clip', noclip.style.getPropertyValue('mask'));
+    testing.expectEqual('content-box no-clip', withStyle('mask: content-box no-clip')
+        .style.getPropertyValue('mask'));
+
+    // The composite and the mode are slots of their own, the `/` and the
+    // layers work as they do for background, and a layer that drops everything
+    // is where `none` shows up in the middle of a list.
+    testing.expectEqual('subtract', withStyle('mask: subtract').style.getPropertyValue('mask'));
+    testing.expectEqual('alpha', withStyle('mask: alpha').style.getPropertyValue('mask'));
+    testing.expectEqual('10px center / 20px', withStyle('mask: 10px / 20px')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('url("a"), url("b")', withStyle('mask: url("a"), url("b")')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('padding-box, none', withStyle('mask: padding-box, border-box')
+        .style.getPropertyValue('mask'));
+
+    // The -webkit- spelling stores the same nine longhands, and cssText writes
+    // the unprefixed name back.
+    const webkit = withStyle('-webkit-mask: url("a") no-repeat');
+    testing.expectEqual(9, webkit.style.length);
+    testing.expectEqual('url("a") no-repeat', webkit.style.getPropertyValue('-webkit-mask'));
+    testing.expectEqual('mask: url("a") no-repeat;', webkit.style.cssText);
+
+    // One longhand on its own is not a background, and cssText says so.
+    testing.expectEqual('background-color: red;', withStyle('background-color: red').style.cssText);
+
     // Removing a shorthand removes every longhand it expanded to.
     const removed = withStyle('border: 1px solid red');
     testing.expectEqual('1px solid red', removed.style.removeProperty('border'));
