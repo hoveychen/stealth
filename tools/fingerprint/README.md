@@ -5311,6 +5311,93 @@ Worth keeping in view whenever a comparison in this file says "Chrome": a headle
 baseline is not a lenient one, it is a *different client*, and one that most of
 these guards already know.
 
+## The Turnstile TypeError, and the descriptor-kind gap behind it (2026-08-21)
+
+The Cloudflare managed challenge is the one door still closed to this engine, and
+the section above stops at a symptom: Turnstile "cannot find widget
+cf-chl-widget-…", its container and iframe never in the document. A `--trace` run
+puts one line in front of that, and it is the cause rather than the effect:
+
+```
+res  200  …/turnstile/f/av0/rch/tx83w/…/new/normal      type=Document   <- the iframe IS created and navigated
+console.error  [Cloudflare Turnstile] Unhandled error:
+               TypeError: Cannot read properties of undefined (reading 'call')
+console.warn   [Cloudflare Turnstile] Cannot find Widget cf-chl-widget-tx83w
+req  GET  /cloudflare-challenge                          403             <- and round again, every ~20s
+```
+
+So the widget iframe is not missing because it was never built -- the wire shows
+its document fetched as a `Document`, which only happens for a frame that exists.
+It is missing because Turnstile threw while setting it up and tore it down. The
+`querySelectorAll('iframe')`-is-empty reading in the section above was taken
+after that teardown.
+
+**"Cannot read properties of undefined (reading 'call')" names its own cause.**
+Something read `X.something` and got undefined, then called `.call` on it. The
+idiom that produces exactly this, and the one every serious bot check uses to
+read a property it will not trust the instance to answer honestly, is
+
+```js
+Object.getOwnPropertyDescriptor(Screen.prototype, 'colorDepth').get.call(screen)
+```
+
+which throws precisely that string when `colorDepth` is a **data property** here
+and an accessor in Chrome, because then `desc.get` is undefined.
+
+### 42 properties are the wrong *kind*, and no value probe could see it
+
+`probes/probe-descriptor-kind.js` reduces every own property of 130 platform
+prototypes to what kind of property it is -- `get`, `set`, `accessor`, `method`,
+`value` -- and diffs the two engines. A property with the right value and the
+wrong kind is invisible to every value-comparing probe in this directory and
+fatal to that one line.
+
+**42 are accessors in Chrome and not accessors here.** The ones a bot check reads:
+
+| interface | properties | Chrome | here |
+|---|---|---|---|
+| `Screen` | `availHeight`, `availLeft`, `availTop`, `colorDepth`, `pixelDepth`, `isExtended` | `get` | **`value`** |
+| `Document` | `hidden`, `visibilityState`, `prerendering`, `webkitHidden`, `webkitVisibilityState` | `get` | **`value`** |
+| `MouseEvent` | `offsetX`, `offsetY` | `get` | **`value`** |
+| `VisualViewport` | `offsetLeft`, `offsetTop`, `scale` | `get` | **`value`** |
+| `ScreenOrientation` | `angle`, `type` | `get` | **`value`** |
+| `WebSocket` | `extensions` | `get` | **`value`** |
+| `IdleDeadline` | `didTimeout` | `get` | **`value`** |
+| `WebGLRenderingContext` | `drawingBufferFormat`, `drawingBufferColorSpace`, `unpackColorSpace` | `get`/`accessor` | **`value`** |
+| `FontFace`, `FontFaceSet` | `status`, `size`, and seven `FontFace` descriptors | `get`/`accessor` | `value`/`get` |
+| `Document` | `fullscreen`, `fullscreenEnabled`, `fullscreenElement` | `accessor` | `get` |
+| `HTMLIFrameElement` | `sandbox` | `accessor` | `get` |
+| `HTMLInputElement` | `files`, `selectionDirection` | `accessor` | `get` |
+| `HTMLAnchorElement` | `relList` | `accessor` | `get` |
+| `IDBObjectStore` | `name` | `accessor` | `get` |
+
+Six of those `Screen` rows and the five `Document` visibility rows are the two
+groups a challenge reads first, and either group is enough to throw the line
+above. A further **97 accessors are missing outright** (`MouseEvent.movementX` /
+`movementY` / `fromElement` / `toElement`, `PointerEvent.persistentDeviceId`,
+`HTMLIFrameElement.allow` / `csp` / `loading` / `credentialless`,
+`HTMLInputElement.valueAsNumber` / `valueAsDate`, ...), which throw the same
+string one step earlier -- `getOwnPropertyDescriptor` itself answers undefined.
+
+**Nothing is an accessor here that is not one in Chrome** -- the diff is zero in
+that direction, so this is a gap and not a divergence.
+
+### And one that is inverted, on the single most-read property in bot detection
+
+`window.chrome` is a **data property** in Chrome and a **getter** here. It is the
+only property in either list that this engine makes an accessor where Chrome does
+not, and it is the one that
+`deviceandbrowserinfo.com/are_you_a_bot` has a named signal for
+(`hasInconsistentChromeObject`, currently false because that check reads the
+object rather than its descriptor). A check that reads the descriptor sees a
+getter that no Chrome has.
+
+The readings are `results/probes/probe-descriptor-kind.{chrome,lightpanda}.json`,
+and the oracle for a fix is the probe itself: the wrong-kind list going to zero.
+What that buys is unmeasured until the Cloudflare station is re-run against it,
+which is the next step and the reason the list above is ordered by what a
+challenge reads rather than by interface.
+
 ## The two "wedges" were crashes
 
 pixiv and claude.ai were recorded above as stations that wedge the engine —
