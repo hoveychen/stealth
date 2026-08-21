@@ -29,15 +29,17 @@
 //                                              336 secure     243 insecure
 //
 // 252 names in the window realm. This engine answered 1167 either way -- it
-// gated nothing -- and 234 of Chrome's 252 are names it has, which is this
-// list. The other 18 it does not implement at all; those belong to the separate
-// what-are-we-missing count, not here.
+// gated nothing -- and 234 of Chrome's 252 were names it had, which was this
+// list; ClipboardChangeEvent has since been added to the surface and it is one
+// of Chrome's gated names too, so the list is 235 and the not-implemented
+// remainder 17. That remainder belongs to the separate what-are-we-missing
+// count, not here.
 //
 // One list covers both realms. [SecureContext] is an attribute of the
 // interface, not of the realm, so a name gated in a window is gated in a worker
 // too -- Chrome's worker gated set is smaller (93) only because a worker
 // exposes fewer interfaces to begin with, and the 8 of them this engine leaked
-// are a subset of the 234 below (measured).
+// are a subset of the list below (measured).
 //
 // Kept as names rather than as a flag on each interface's Meta because the
 // ground truth is one Chrome reading of the whole surface, so a list diffs
@@ -50,62 +52,62 @@ const std = @import("std");
 // Interface objects and WebIDL namespaces: own properties of the global, and of
 // nothing else, so the gate deletes them from there.
 pub const gated_interfaces = [_][:0]const u8{
-    "AbsoluteOrientationSensor",        "Accelerometer",                     "AudioDecoder",                     "AudioEncoder",
-    "AudioPlaybackStats",               "AudioWorklet",                      "AuthenticatorAssertionResponse",   "AuthenticatorAttestationResponse",
-    "AuthenticatorResponse",            "BatteryManager",                    "Bluetooth",                        "BluetoothCharacteristicProperties",
-    "BluetoothDevice",                  "BluetoothRemoteGATTCharacteristic", "BluetoothRemoteGATTDescriptor",    "BluetoothRemoteGATTServer",
-    "BluetoothRemoteGATTService",       "Cache",                             "CacheStorage",                     "CaptureController",
-    "Clipboard",                        "ClipboardItem",                     "CookieChangeEvent",                "CookieStore",
-    "CookieStoreManager",               "Credential",                        "CredentialsContainer",             "CryptoKey",
-    "DeviceMotionEvent",                "DeviceMotionEventAcceleration",     "DeviceMotionEventRotationRate",    "DeviceOrientationEvent",
-    "DevicePosture",                    "EyeDropper",                        "FederatedCredential",              "FileSystemDirectoryHandle",
-    "FileSystemFileHandle",             "FileSystemHandle",                  "FileSystemWritableFileStream",     "FontData",
-    "GPU",                              "GPUAdapter",                        "GPUAdapterInfo",                   "GPUBindGroup",
-    "GPUBindGroupLayout",               "GPUBuffer",                         "GPUBufferUsage",                   "GPUCanvasContext",
-    "GPUColorWrite",                    "GPUCommandBuffer",                  "GPUCommandEncoder",                "GPUCompilationInfo",
-    "GPUCompilationMessage",            "GPUComputePassEncoder",             "GPUComputePipeline",               "GPUDevice",
-    "GPUDeviceLostInfo",                "GPUError",                          "GPUExternalTexture",               "GPUInternalError",
-    "GPUMapMode",                       "GPUOutOfMemoryError",               "GPUPipelineError",                 "GPUPipelineLayout",
-    "GPUQuerySet",                      "GPUQueue",                          "GPURenderBundle",                  "GPURenderBundleEncoder",
-    "GPURenderPassEncoder",             "GPURenderPipeline",                 "GPUSampler",                       "GPUShaderModule",
-    "GPUShaderStage",                   "GPUSupportedFeatures",              "GPUSupportedLimits",               "GPUTexture",
-    "GPUTextureUsage",                  "GPUTextureView",                    "GPUUncapturedErrorEvent",          "GPUValidationError",
-    "GravitySensor",                    "Gyroscope",                         "HID",                              "HIDConnectionEvent",
-    "HIDDevice",                        "HIDInputReportEvent",               "IdentityCredential",               "IdleDetector",
-    "ImageCapture",                     "ImageDecoder",                      "ImageTrack",                       "ImageTrackList",
-    "Keyboard",                         "KeyboardLayoutMap",                 "LinearAccelerationSensor",         "Lock",
-    "LockManager",                      "MIDIAccess",                        "MIDIConnectionEvent",              "MIDIInput",
-    "MIDIInputMap",                     "MIDIMessageEvent",                  "MIDIOutput",                       "MIDIOutputMap",
-    "MIDIPort",                         "MediaDeviceInfo",                   "MediaDevices",                     "MediaKeyMessageEvent",
-    "MediaKeySession",                  "MediaKeyStatusMap",                 "MediaKeySystemAccess",             "MediaKeys",
-    "NavigationPreloadManager",         "NavigatorLogin",                    "NavigatorManagedData",             "OTPCredential",
-    "OrientationSensor",                "PasswordCredential",                "PaymentAddress",                   "PaymentManager",
-    "PaymentMethodChangeEvent",         "PaymentRequest",                    "PaymentRequestUpdateEvent",        "PaymentResponse",
-    "Presentation",                     "PresentationAvailability",          "PresentationConnection",           "PresentationConnectionAvailableEvent",
-    "PresentationConnectionCloseEvent", "PresentationConnectionList",        "PresentationReceiver",             "PresentationRequest",
-    "ProtectedAudience",                "PublicKeyCredential",               "RelativeOrientationSensor",        "ScreenDetailed",
-    "ScreenDetails",                    "Sensor",                            "SensorErrorEvent",                 "Serial",
-    "SerialPort",                       "ServiceWorker",                     "ServiceWorkerContainer",           "ServiceWorkerRegistration",
-    "SpeechRecognitionPhrase",          "StorageBucket",                     "StorageBucketManager",             "StorageManager",
-    "SubtleCrypto",                     "USB",                               "USBAlternateInterface",            "USBConfiguration",
-    "USBConnectionEvent",               "USBDevice",                         "USBEndpoint",                      "USBInTransferResult",
-    "USBInterface",                     "USBIsochronousInTransferPacket",    "USBIsochronousInTransferResult",   "USBIsochronousOutTransferPacket",
-    "USBIsochronousOutTransferResult",  "USBOutTransferResult",              "VideoDecoder",                     "VideoEncoder",
-    "VirtualKeyboard",                  "WGSLLanguageFeatures",              "WakeLock",                         "WakeLockSentinel",
-    "WebTransport",                     "WebTransportBidirectionalStream",   "WebTransportDatagramDuplexStream", "WebTransportError",
-    "Worklet",                          "XRAnchor",                          "XRAnchorSet",                      "XRBoundedReferenceSpace",
-    "XRCPUDepthInformation",            "XRCamera",                          "XRCompositionLayer",               "XRCubeLayer",
-    "XRCylinderLayer",                  "XRDOMOverlayState",                 "XRDepthInformation",               "XREquirectLayer",
-    "XRFrame",                          "XRHand",                            "XRHitTestResult",                  "XRHitTestSource",
-    "XRInputSource",                    "XRInputSourceArray",                "XRInputSourceEvent",               "XRInputSourcesChangeEvent",
-    "XRJointPose",                      "XRJointSpace",                      "XRLayer",                          "XRLayerEvent",
-    "XRLightEstimate",                  "XRLightProbe",                      "XRPlane",                          "XRPlaneSet",
-    "XRPose",                           "XRProjectionLayer",                 "XRQuadLayer",                      "XRRay",
-    "XRReferenceSpace",                 "XRReferenceSpaceEvent",             "XRRenderState",                    "XRRigidTransform",
-    "XRSession",                        "XRSessionEvent",                    "XRSpace",                          "XRSubImage",
-    "XRSystem",                         "XRTransientInputHitTestResult",     "XRTransientInputHitTestSource",    "XRView",
-    "XRViewerPose",                     "XRViewport",                        "XRVisibilityMaskChangeEvent",      "XRWebGLBinding",
-    "XRWebGLDepthInformation",          "XRWebGLLayer",                      "XRWebGLSubImage",
+    "AbsoluteOrientationSensor",            "Accelerometer",                     "AudioDecoder",                    "AudioEncoder",
+    "AudioPlaybackStats",                   "AudioWorklet",                      "AuthenticatorAssertionResponse",  "AuthenticatorAttestationResponse",
+    "AuthenticatorResponse",                "BatteryManager",                    "Bluetooth",                       "BluetoothCharacteristicProperties",
+    "BluetoothDevice",                      "BluetoothRemoteGATTCharacteristic", "BluetoothRemoteGATTDescriptor",   "BluetoothRemoteGATTServer",
+    "BluetoothRemoteGATTService",           "Cache",                             "CacheStorage",                    "CaptureController",
+    "Clipboard",                            "ClipboardChangeEvent",              "ClipboardItem",                   "CookieChangeEvent",
+    "CookieStore",                          "CookieStoreManager",                "Credential",                      "CredentialsContainer",
+    "CryptoKey",                            "DeviceMotionEvent",                 "DeviceMotionEventAcceleration",   "DeviceMotionEventRotationRate",
+    "DeviceOrientationEvent",               "DevicePosture",                     "EyeDropper",                      "FederatedCredential",
+    "FileSystemDirectoryHandle",            "FileSystemFileHandle",              "FileSystemHandle",                "FileSystemWritableFileStream",
+    "FontData",                             "GPU",                               "GPUAdapter",                      "GPUAdapterInfo",
+    "GPUBindGroup",                         "GPUBindGroupLayout",                "GPUBuffer",                       "GPUBufferUsage",
+    "GPUCanvasContext",                     "GPUColorWrite",                     "GPUCommandBuffer",                "GPUCommandEncoder",
+    "GPUCompilationInfo",                   "GPUCompilationMessage",             "GPUComputePassEncoder",           "GPUComputePipeline",
+    "GPUDevice",                            "GPUDeviceLostInfo",                 "GPUError",                        "GPUExternalTexture",
+    "GPUInternalError",                     "GPUMapMode",                        "GPUOutOfMemoryError",             "GPUPipelineError",
+    "GPUPipelineLayout",                    "GPUQuerySet",                       "GPUQueue",                        "GPURenderBundle",
+    "GPURenderBundleEncoder",               "GPURenderPassEncoder",              "GPURenderPipeline",               "GPUSampler",
+    "GPUShaderModule",                      "GPUShaderStage",                    "GPUSupportedFeatures",            "GPUSupportedLimits",
+    "GPUTexture",                           "GPUTextureUsage",                   "GPUTextureView",                  "GPUUncapturedErrorEvent",
+    "GPUValidationError",                   "GravitySensor",                     "Gyroscope",                       "HID",
+    "HIDConnectionEvent",                   "HIDDevice",                         "HIDInputReportEvent",             "IdentityCredential",
+    "IdleDetector",                         "ImageCapture",                      "ImageDecoder",                    "ImageTrack",
+    "ImageTrackList",                       "Keyboard",                          "KeyboardLayoutMap",               "LinearAccelerationSensor",
+    "Lock",                                 "LockManager",                       "MIDIAccess",                      "MIDIConnectionEvent",
+    "MIDIInput",                            "MIDIInputMap",                      "MIDIMessageEvent",                "MIDIOutput",
+    "MIDIOutputMap",                        "MIDIPort",                          "MediaDeviceInfo",                 "MediaDevices",
+    "MediaKeyMessageEvent",                 "MediaKeySession",                   "MediaKeyStatusMap",               "MediaKeySystemAccess",
+    "MediaKeys",                            "NavigationPreloadManager",          "NavigatorLogin",                  "NavigatorManagedData",
+    "OTPCredential",                        "OrientationSensor",                 "PasswordCredential",              "PaymentAddress",
+    "PaymentManager",                       "PaymentMethodChangeEvent",          "PaymentRequest",                  "PaymentRequestUpdateEvent",
+    "PaymentResponse",                      "Presentation",                      "PresentationAvailability",        "PresentationConnection",
+    "PresentationConnectionAvailableEvent", "PresentationConnectionCloseEvent",  "PresentationConnectionList",      "PresentationReceiver",
+    "PresentationRequest",                  "ProtectedAudience",                 "PublicKeyCredential",             "RelativeOrientationSensor",
+    "ScreenDetailed",                       "ScreenDetails",                     "Sensor",                          "SensorErrorEvent",
+    "Serial",                               "SerialPort",                        "ServiceWorker",                   "ServiceWorkerContainer",
+    "ServiceWorkerRegistration",            "SpeechRecognitionPhrase",           "StorageBucket",                   "StorageBucketManager",
+    "StorageManager",                       "SubtleCrypto",                      "USB",                             "USBAlternateInterface",
+    "USBConfiguration",                     "USBConnectionEvent",                "USBDevice",                       "USBEndpoint",
+    "USBInTransferResult",                  "USBInterface",                      "USBIsochronousInTransferPacket",  "USBIsochronousInTransferResult",
+    "USBIsochronousOutTransferPacket",      "USBIsochronousOutTransferResult",   "USBOutTransferResult",            "VideoDecoder",
+    "VideoEncoder",                         "VirtualKeyboard",                   "WGSLLanguageFeatures",            "WakeLock",
+    "WakeLockSentinel",                     "WebTransport",                      "WebTransportBidirectionalStream", "WebTransportDatagramDuplexStream",
+    "WebTransportError",                    "Worklet",                           "XRAnchor",                        "XRAnchorSet",
+    "XRBoundedReferenceSpace",              "XRCPUDepthInformation",             "XRCamera",                        "XRCompositionLayer",
+    "XRCubeLayer",                          "XRCylinderLayer",                   "XRDOMOverlayState",               "XRDepthInformation",
+    "XREquirectLayer",                      "XRFrame",                           "XRHand",                          "XRHitTestResult",
+    "XRHitTestSource",                      "XRInputSource",                     "XRInputSourceArray",              "XRInputSourceEvent",
+    "XRInputSourcesChangeEvent",            "XRJointPose",                       "XRJointSpace",                    "XRLayer",
+    "XRLayerEvent",                         "XRLightEstimate",                   "XRLightProbe",                    "XRPlane",
+    "XRPlaneSet",                           "XRPose",                            "XRProjectionLayer",               "XRQuadLayer",
+    "XRRay",                                "XRReferenceSpace",                  "XRReferenceSpaceEvent",           "XRRenderState",
+    "XRRigidTransform",                     "XRSession",                         "XRSessionEvent",                  "XRSpace",
+    "XRSubImage",                           "XRSystem",                          "XRTransientInputHitTestResult",   "XRTransientInputHitTestSource",
+    "XRView",                               "XRViewerPose",                      "XRViewport",                      "XRVisibilityMaskChangeEvent",
+    "XRWebGLBinding",                       "XRWebGLDepthInformation",           "XRWebGLLayer",                    "XRWebGLSubImage",
 };
 
 // Window members. In this engine these are own properties of the global *and*
@@ -132,5 +134,5 @@ test "secure_context: lists are sorted and disjoint" {
             try testing.expect(std.mem.eql(u8, m, i) == false);
         }
     }
-    try testing.expectEqual(234, gated_interfaces.len + gated_members.len);
+    try testing.expectEqual(235, gated_interfaces.len + gated_members.len);
 }

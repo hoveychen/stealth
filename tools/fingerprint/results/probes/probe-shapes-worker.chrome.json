@@ -1,0 +1,91 @@
+{
+ "href": "http://localhost:8777/",
+ "isSecureContext": true,
+ "have": [
+  "Origin",
+  "ReportBody",
+  "WebGLObject"
+ ],
+ "miss": [
+  "AnimationTrigger",
+  "CSPViolationReportBody",
+  "CSSFontFeatureValuesRule",
+  "CSSFunctionDeclarations",
+  "CSSFunctionDescriptors",
+  "CSSFunctionRule",
+  "CSSMarginRule",
+  "CSSNestedDeclarations",
+  "CSSPositionTryDescriptors",
+  "CSSPositionTryRule",
+  "CSSScopeRule",
+  "CSSStartingStyleRule",
+  "CSSViewTransitionRule",
+  "CharacterBoundsUpdateEvent",
+  "ClipboardChangeEvent",
+  "CommandEvent",
+  "CrashReportContext",
+  "HTMLGeolocationElement",
+  "HTMLSelectedContentElement",
+  "HTMLUserMediaElement",
+  "IntegrityViolationReportBody",
+  "InteractionContentfulPaint",
+  "InterestEvent",
+  "MediaStreamTrackVideoStats",
+  "NavigationPrecommitController",
+  "NotRestoredReasonDetails",
+  "NotRestoredReasons",
+  "PageRevealEvent",
+  "PageSwapEvent",
+  "PerformanceLongAnimationFrameTiming",
+  "PerformanceScriptTiming",
+  "PerformanceSoftNavigation",
+  "ScrollTimeline",
+  "SnapEvent",
+  "TextFormat",
+  "TextFormatUpdateEvent",
+  "TextUpdateEvent",
+  "TimelineTrigger",
+  "TimelineTriggerRange",
+  "TimelineTriggerRangeList",
+  "ViewTimeline",
+  "Viewport",
+  "crashReport",
+  "viewport"
+ ],
+ "shapes": {
+  "Origin": {
+   "typeof": "function",
+   "length": 0,
+   "protoChain": [
+    "Origin"
+   ],
+   "protoMembers": [
+    "opaque:get",
+    "isSameOrigin:method(1)",
+    "isSameSite:method(1)",
+    "constructor:method(0)"
+   ]
+  },
+  "ReportBody": {
+   "typeof": "function",
+   "length": 0,
+   "protoChain": [
+    "ReportBody"
+   ],
+   "protoMembers": [
+    "toJSON:method(0)",
+    "constructor:method(0)"
+   ]
+  },
+  "WebGLObject": {
+   "typeof": "function",
+   "length": 0,
+   "protoChain": [
+    "WebGLObject"
+   ],
+   "protoMembers": [
+    "constructor:method(0)"
+   ]
+  }
+ }
+}

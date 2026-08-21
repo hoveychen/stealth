@@ -10,8 +10,9 @@ difference is whether the host is loopback:
 
   Object.getOwnPropertyNames(window).length   1237 secure   985 insecure
 
-252 names, and this engine used to expose 234 of them either way (the other 18
-it does not have at all). The insecure origin used here is 0.0.0.0: connecting
+252 names, and this engine used to expose 234 of them either way -- 235 since
+ClipboardChangeEvent joined the surface, leaving 17 of Chrome's 252 that this
+engine does not have at all. The insecure origin used here is 0.0.0.0: connecting
 to it lands on the loopback listener, so it reaches the test server, but it is
 not a loopback *host*, so it is not potentially trustworthy -- Chrome answers
 isSecureContext false there and hands out the 985-name surface. It is the only
@@ -46,9 +47,9 @@ insecure origin this suite can reach without a second listener.
     await state.done(({ insecure, secure }) => {
       // The control: 127.0.0.1 is loopback, so nothing is gated away.
       testing.expectEqual(true, secure.secure);
-      testing.expectEqual(16, secure.gated.length);
+      testing.expectEqual(17, secure.gated.length);
       testing.expectEqual(6, secure.ungated.length);
-      testing.expectEqual(1172, secure.count);
+      testing.expectEqual(1181, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
@@ -56,12 +57,16 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual('', insecure.gated.join(' '));
       testing.expectEqual(6, insecure.ungated.length);
 
-      // The gate only removes: 234 names off a surface of 1172. Both totals
-      // move together whenever the surface changes and the names involved are
-      // not [SecureContext] -- 1167 before the three EventTarget methods and
-      // Css / setImmediate / clearImmediate came off, 1172 since the eleven
-      // unmodelled CSSOM interfaces went on, and Chrome gates none of those.
-      testing.expectEqual(938, insecure.count);
+      // The gate now removes 235 names off a surface of 1181. Both totals move
+      // together whenever the surface changes and none of the names involved is
+      // [SecureContext] -- 1167 before the three EventTarget methods and Css /
+      // setImmediate / clearImmediate came off, 1172 once the eleven unmodelled
+      // CSSOM interfaces went on, 1181 with the nine window-surface Event
+      // subclasses. The two totals part company by one there: Chrome gates
+      // ClipboardChangeEvent and not the other eight (measured, probe-
+      // secure-context), so the secure surface gained nine and the insecure one
+      // eight.
+      testing.expectEqual(946, insecure.count);
     });
   }
 </script>
@@ -92,7 +97,7 @@ insecure origin this suite can reach without a second listener.
       // Trustworthy URL, untrustworthy ancestor.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
-      testing.expectEqual(938, grandchild.count);
+      testing.expectEqual(946, grandchild.count);
     });
   }
 </script>
