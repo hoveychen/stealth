@@ -4895,3 +4895,68 @@ three station runs a column: `9d117e371` `SIGABRT` 3/3 → same commit plus that
 one loop change, pass 3/3 → `main` pass 4/4.
 `performance_observer/register_during_delivery.html` pins it — against the
 snapshot loop it aborts the test binary with the production crash verbatim.
+
+## The window global surface, against a headed baseline (2026-08-20)
+
+A headless reading had put this engine 247 globals *ahead* of Chrome, which
+would be the worst kind of miss -- a name no browser has is a positive signal,
+where a missing name is only an absence. The number came with a caveat
+attached: the baseline was headless, and this file already records five probes
+where a headless Chrome 151 does not reproduce the headed one. So it was
+re-measured against both.
+
+`probe-globals.js` dumps `Object.getOwnPropertyNames(window)` and nothing else
+-- values, descriptors and prototype shapes are what the `probe-win*` batches
+are for; this one only answers which globals exist. Same probe, same host
+(`http://127.0.0.1`), three runs: this engine, Chrome 151 headless, Chrome 151
+headed.
+
+**The headless baseline was not the problem.** Headless and headed Chrome
+answer the *same 1237 names, byte for byte* -- 0 headless-only, 0 headed-only.
+Whatever produced 247 was not counting this. Every way of counting a "global"
+that both engines can answer puts it in single or low double digits: window own
+names 13, `for...in` 3, the union along the whole prototype chain 10. The
+engine has 1167 own names to Chrome's 1237.
+
+**What we have that headed Chrome does not, all 13, each confirmed by a
+`typeof` on both engines:**
+
+* `setImmediate` / `clearImmediate` -- no browser has these. A page reading
+  `typeof setImmediate` gets `"function"` here and `"undefined"` in Chrome,
+  which is the Node-shaped tell this whole exercise exists to remove.
+* `addEventListener` / `removeEventListener` / `dispatchEvent` as window **own**
+  properties. Chrome has them once, on `EventTarget.prototype`; we have them in
+  both places (`hasOwnProperty(window, 'addEventListener')` is true here, false
+  in Chrome). Same root as the prototype-chain shape below.
+* `Css` -- an interface object beside the real `CSS` namespace, which Chrome has
+  as an object with no `Css` anywhere. Exposing an interface Chrome lacks is why
+  `CSSStyleProperties` was deleted in G16.
+* `SVGGenericElement` -- this engine's catch-all for unrecognised SVG tags,
+  named as a global.
+* `CrossOriginWindow`, `ReadableStreamAsyncIterator`,
+  `WEBGL_debug_renderer_info`, `WEBGL_lose_context` -- internals and WebGL
+  extension objects Chrome keeps unnamed.
+* `ModelContext` / `ModelContextClient` -- this fork's WebMCP surface, kept
+  deliberately (G14 records the same call for `navigator.modelContext`).
+
+Five of those thirteen are already being removed on `prd/window-surface-extras`
+(`8a7202dbe`): `Css` becomes `[LegacyNoInterfaceObject]`, `setImmediate` /
+`clearImmediate` come off the window surface while their implementations stay
+for internal callers, and `Snapshot`'s `[Global]` flattening stops copying
+`EventTarget`'s three members onto the global. That branch reached the same
+13-and-83 split independently from its own headed run, which is the reason to
+trust either reading. The counts above are as of `bbf32fc9d`, before it lands.
+
+**The other direction is the larger one: 83 globals headed Chrome has and we do
+not** (`CSSFunctionRule`, `CloseWatcher`, `Temporal`, `Observable`,
+`PressureObserver`, the SharedStorage family, `LanguageModel` / `Summarizer` /
+`Translator`, the fenced-frame family, ...). The full lists are in
+`results/probes/probe-globals.{chrome,chrome-headless,lightpanda}.json`.
+
+**And the prototype chain still differs**, which G19 measured and G17 owns:
+`Object.getPrototypeOf(window) === Window.prototype` is `true` in Chrome and
+`false` here. Chrome's chain is `Window(1237 own) <- Window.prototype(3) <-
+EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours is
+`Window(1167) <- Window(1) <- Window(239) <- EventTarget(4) <-
+Object.prototype(12)`. That extra intermediate is where the three duplicated
+`EventTarget` members come from.
