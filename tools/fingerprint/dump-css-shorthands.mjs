@@ -279,11 +279,16 @@ const PROBE = (names, values, classTokens, tokens, extra) => `(() => {
   // space rather than over whichever generic tokens happened to parse.
   const extra = own;
   const rows = {};
+  // The values that did *not* parse matter as much as the ones that did: a
+  // model that places one is answering longhands for a declaration Chrome threw
+  // away.
+  const rejected = {};
   for (const name of Object.keys(expansion)) {
     const got = {};
+    rejected[name] = [];
     for (const value of ${JSON.stringify(values)}.concat(extra[name] ?? [])) {
       const snapped = set(name, value);
-      if (!snapped) continue;
+      if (!snapped) { rejected[name].push(value); continue; }
       got[value] = {
         items: snapped.items,
         v: snapped.v,
@@ -294,7 +299,7 @@ const PROBE = (names, values, classTokens, tokens, extra) => `(() => {
     rows[name] = got;
   }
 
-  return JSON.stringify({ userAgent: navigator.userAgent, expansion, classes, canon, rows });
+  return JSON.stringify({ userAgent: navigator.userAgent, expansion, classes, canon, rows, rejected });
 })()`;
 
 // --- derivation -----------------------------------------------------------
@@ -678,7 +683,8 @@ function positionSlots(toks, m, accepts) {
 
 // One layer's tokens distributed over the slots, or null -- which is not a
 // failure but a decline: the engine keeps a declaration it cannot place whole.
-function parseLayer(toks, m, accepts, last) {
+function parseLayer(toks, m, accepts, last, refuse) {
+    if (toks.some((t) => refuse.has(t.toLowerCase()))) return null;
     const slots = new Array(m.total).fill(null);
     let i = 0, afterPosition = false, mirrored = false;
     while (i < toks.length) {
@@ -753,12 +759,12 @@ function parseLayer(toks, m, accepts, last) {
 
 // The whole value: every layer's slots, and the shared ones taken from the
 // last layer. Returns null when any layer declines.
-function parseLayers(value, m, accepts) {
+function parseLayers(value, m, accepts, refuse) {
     const layers = layersOf(value);
     if (layers.some((l) => l.length === 0)) return null;
     const out = [];
     for (const [n, layer] of layers.entries()) {
-        const got = parseLayer(components(layer), m, accepts, n === layers.length - 1);
+        const got = parseLayer(components(layer), m, accepts, n === layers.length - 1, refuse);
         if (!got) return null;
         // Only the last layer may carry a shared slot, and an earlier layer
         // that reached one is a value Chrome would not have parsed.
@@ -829,7 +835,7 @@ function joinLayers(values, m, omit, empty, order, fill, accepts) {
 // The whole model, derived and then checked against every measured row. The
 // hypotheses are which pair of longhands the position fills and which one the
 // slash introduces; everything else follows from the rows.
-function layerCandidate(longhands, plain, canon, classes, keywords) {
+function layerCandidate(longhands, plain, canon, classes, keywords, rejected) {
     const width = layerWidth(plain);
     if (width === null || width === 0) return null;
     const total = longhands.length;
@@ -912,8 +918,9 @@ function layerCandidate(longhands, plain, canon, classes, keywords) {
             // such row must not be able to claim the filler.
             const parsed = new Map();
             const votes = Array.from({ length: total }, () => new Map());
+            const seen = new Set();
             for (const [value, row] of plain) {
-                const got = parseLayers(value, m, accepts);
+                const got = parseLayers(value, m, accepts, seen);
                 if (!got) continue;
                 parsed.set(value, got);
                 for (let s = 0; s < total; s++) {
@@ -955,7 +962,27 @@ function layerCandidate(longhands, plain, canon, classes, keywords) {
                 ok = false;
                 break;
             }
+            // And a value Chrome threw away has to be declined, not placed:
+            // `-webkit-mask: no-clip` does not parse where `mask: no-clip` does,
+            // and both spellings reach the same clip longhand, so only the
+            // shorthand's own reading says so.
+            for (const value of rejected) {
+                if (!parseLayers(value, m, accepts, refuse)) continue;
+                if (!refusable(value)) {
+                    ok = false;
+                    break;
+                }
+                refuse.add(components(value)[0].toLowerCase());
+            }
             if (!ok || !parsed.size) continue;
+            for (const value of rejected) {
+                if (parseLayers(value, m, accepts, refuse)) { ok = false; break; }
+            }
+            if (!ok) continue;
+            for (const value of [...parsed.keys()]) {
+                if (!parseLayers(value, m, accepts, refuse)) parsed.delete(value);
+            }
+            if (!parsed.size) continue;
             // Then the reading back, whose dropped values are forced by the
             // rows the same way `.components`' are: a slot holding something
             // the reading does not show was left out.
@@ -1130,7 +1157,7 @@ async function measure() {
 
 {
     const measured = await measure();
-    const { userAgent, expansion, classes, canon, rows } = measured;
+    const { userAgent, expansion, classes, canon, rows, rejected } = measured;
 
     const shorthands = {};
     const demoted = [];
@@ -1242,7 +1269,10 @@ async function measure() {
                 // shorthand already modelled cannot change model: the narrower
                 // one reproduces every row too, and there is nothing to gain
                 // from re-reading `border` as a list of layers.
-                if (!chosen) chosen = layerCandidate(longhands, plain, canon, classes, keywords);
+                if (!chosen) {
+                    chosen = layerCandidate(longhands, plain, canon, classes, keywords,
+                        rejected?.[name] ?? []);
+                }
                 if (!chosen) {
                     demoted.push([name, measuredFill
                         ? 'no model reproduces every row'

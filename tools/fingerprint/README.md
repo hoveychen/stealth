@@ -4999,6 +4999,7 @@ are the same shape of miss: an array Chrome freezes and we do not.
 
 ## A background is a layer, not a run of components (2026-08-21)
 
+
 `background` was the most-used of the 36 the shorthand work left `.unmodelled`,
 and the reason the generator gave -- "no single filler explains every row" --
 was true without being the whole story. `background: top` leaves
@@ -5044,20 +5045,55 @@ either box slot is dropped at is the literal `initial`, so
 collapsing to one.
 
 **`mask` and `-webkit-mask` are the same grammar going out and a different rule
-coming back, so they stay whole.** Three readings, same Chrome:
+coming back.** Ten readings pin it down:
 
-    mask: content-box content-box   ->  "content-box"
-    mask: border-box content-box    ->  "border-box content-box"
-    mask-origin: content-box        ->  "content-box border-box"
+    (border-box, border-box)     ->  ""
+    (content-box, content-box)   ->  "content-box"
+    (padding-box, padding-box)   ->  "padding-box"
+    (padding-box, border-box)    ->  "padding-box border-box"
+    (border-box, padding-box)    ->  "border-box padding-box"
+    (border-box, content-box)    ->  "border-box content-box"
+    (content-box, border-box)    ->  "content-box border-box"
+    (border-box, no-clip)        ->  "no-clip"
+    (content-box, no-clip)       ->  "content-box no-clip"
+    (initial, border-box)        ->  ""
 
-with every other longhand at its initial for the third. No pair of per-slot
-dropped-value sets produces all three: the first says one of the two drops
-`content-box`, the second says the clip does not, so it must be the origin, and
-the third writes `content-box` from the origin. mask collapses the pair when the
-two agree, which background does not do and the layer model has no room for.
-There is a second oddity in the same place -- `mask` with a size set and the
-position at its initial answers `" 0% 0% / cover"`, with a leading space where
-the image would have been -- so mask is a plan of its own.
+The pair is written as a unit rather than as two independently dropped slots:
+collapse it to one component when the two agree, drop it when that one is the
+initial, and write both when they differ -- including an origin sitting at its
+initial, which background drops -- except that the origin is left out when the
+clip holds a value the origin could not take. `no-clip` is a clip and not an
+origin, so `mask: border-box no-clip` answers just `no-clip`; `content-box` is
+both, so `mask: border-box content-box` answers both. No pair of per-slot
+dropped-value sets produces those ten: the second says one of the two drops
+`content-box`, the sixth says the clip does not, so it must be the origin, and
+the seventh writes `content-box` from the origin.
+
+That is one measured boolean, tried both ways per shorthand and kept whichever
+reproduces the rows -- false for background, true for mask -- so both are
+modelled now.
+
+Two things fell out of measuring mask. Its unmentioned longhands hold their
+initial value *spelled out* (`0%`, `auto`, `repeat`, `border-box`, `add`,
+`match-source`) where background's hold the literal `initial`, and it has no
+shared slot at all: there is no colour, so all nine longhands are per-layer,
+and a layer with all nine at their initial answers `none` -- which is where the
+`none` in `mask: padding-box, border-box` -> `padding-box, none` comes from.
+
+And `-webkit-mask` is not the same parser as `mask`, even though both expand to
+the same nine longhands. `mask: no-clip` parses; `-webkit-mask: no-clip` does
+not, nor do `fill-box`, `stroke-box` or `view-box`, all four of which
+`mask-clip` takes on its own. Only the shorthand's own reading says so, so the
+probe now records which values *failed* to parse as well: a model that places
+one is answering nine longhands for a declaration Chrome threw away, which is
+worse than keeping it whole. Those four are refused for `-webkit-mask` and taken
+for `mask`.
+
+One state is not modelled: `mask` with a size set and the position at its
+initial answers `" 0% 0% / cover"`, with a leading space where the image would
+have been. Like background printing a resolved `0% 0%` in the same state, it is
+only reachable by setting the longhands one at a time -- a `/` needs a position
+in front of it, so no shorthand value gets there.
 
 Five values the model declines rather than expands, which the engine keeps whole
 the way it keeps an unmodelled shorthand whole. Four are the two-value repeat
@@ -5076,21 +5112,23 @@ function's value class now comes from its name (`background-image` takes
 the colour), and which identifiers a longhand takes is measured per longhand
 rather than read off the keyword table.
 
-Net over the table: unmodelled falls from 36 to 31. `background`,
-`animation-range` and the three `timeline-trigger` ranges are modelled for the
-first time, `background-position` and `mask-position` move from the flat model to
-the layer one, and `position-try` is demoted -- `position-try: top right` parses,
-and the keyword lookup that modelled it cannot express that.
+Net over the table: unmodelled falls from 36 to 30. `background`, `mask`,
+`-webkit-mask`, `animation-range` and two of the `timeline-trigger` ranges are
+modelled for the first time, `background-position` and `mask-position` move from
+the flat model to the layer one, and `position-try` is demoted --
+`position-try: top right` parses, and the keyword lookup that modelled it cannot
+express that.
 
 `background: 0` turned up a separate gap: 46 longhands were missing from the
 list of properties where a bare `0` is stored `0px`, background-position-x among
 them. The shorthand probe already measures that per longhand, so all 46 are in
 now.
 
-Measured after, on the layer probe (`probe-css14`, 114 values through both
-engines): 93 match Chrome exactly, 7 are the declines above, and 14 are values
-Chrome rejects outright and this engine keeps whole -- the same thing it does
-with any value a model declines, and not new here. Every earlier probe holds:
+Measured after, on the layer probe (`probe-css14`, 224 readings across
+`background`, `mask` and `-webkit-mask` through both engines): 185 match Chrome
+exactly, 15 are the declines above, and 24 are values Chrome rejects outright and
+this engine keeps whole -- the same thing it does with any value a model
+declines, and not new here. Every earlier probe holds:
 identifiers 0 of 449, colours 0 of 304, CSS-wide 0 of 39, keyword spelling 0 of
 27, `probe-css13` 1 of 42 (the one deliberately unfixed case).
 

@@ -24,18 +24,18 @@
 //                     and the group repeats -- which is how `border` reaches all four
 //                     sides. Order does not matter: `1px solid red`, `solid red 1px`
 //                     and `red 1px solid` all land identically, measured.
-//   layers       10  a comma-separated list of layers, each with a position filling two
+//   layers        9  a comma-separated list of layers, each with a position filling two
 //                     longhands, a size only a `/` introduces, and slots shared by the
 //                     whole value that only the last layer may write (`background`).
 //   presets       1  a lookup over the whole value space, used where the keyword table says a
 //                     single keyword is all a page can write (`white-space`).
-//   unmodelled   29  no model reproduced every reading; the engine keeps the shorthand whole.
+//   unmodelled   30  no model reproduced every reading; the engine keeps the shorthand whole.
 //
 // The unmodelled ones are the shorthands with a real grammar behind them,
 // border-image, border-radius, column-rule-inset, columns, container, flex,
 // font, font-synthesis, font-variant, grid, grid-area, grid-column,
 // grid-row, grid-template, list-style, offset, place-content, position-try,
-// row-rule-inset, rule-inset, text-box, text-emphasis,
+// row-rule-inset, rule-inset, text-box, text-emphasis, timeline-trigger,
 // plus their -webkit- spellings. The engine keeps those whole, so
 // `style.length` answers 1 where Chrome says 9: a visible difference, but a
 // smaller one than nine invented values.
@@ -219,7 +219,7 @@ pub const shorthands = std.StaticStringMap(Shorthand).initComptime(.{
     .{ "-webkit-margin-before", Shorthand{ .kind = .alias, .longhands = &.{"margin-block-start"}, .fillers = &.{"initial"} } },
     .{ "-webkit-margin-end", Shorthand{ .kind = .alias, .longhands = &.{"margin-inline-end"}, .fillers = &.{"initial"} } },
     .{ "-webkit-margin-start", Shorthand{ .kind = .alias, .longhands = &.{"margin-inline-start"}, .fillers = &.{"initial"} } },
-    .{ "-webkit-mask", Shorthand{ .kind = .layers, .longhands = &.{ "mask-image", "-webkit-mask-position-x", "-webkit-mask-position-y", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite", "mask-mode" }, .fillers = &.{ "initial", "0%", "0%", "auto", "repeat", "border-box", "border-box", "add", "match-source" }, .layer_width = 9, .axes = .{ 1, 2 }, .implied = "center", .boxes = .{ 5, 6 }, .box_collapse = true, .size_slot = 3, .offsets = &.{ &.{ "left", "right" }, &.{ "bottom", "top" } }, .omit = &.{ &.{"initial"}, &.{"0%"}, &.{"0%"}, &.{"auto"}, &.{"repeat"}, &.{"border-box"}, &.{"border-box"}, &.{"add"}, &.{"match-source"} }, .empty = "none" } },
+    .{ "-webkit-mask", Shorthand{ .kind = .layers, .longhands = &.{ "mask-image", "-webkit-mask-position-x", "-webkit-mask-position-y", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite", "mask-mode" }, .fillers = &.{ "initial", "0%", "0%", "auto", "repeat", "border-box", "border-box", "add", "match-source" }, .layer_width = 9, .axes = .{ 1, 2 }, .implied = "center", .boxes = .{ 5, 6 }, .box_collapse = true, .size_slot = 3, .refuse = &.{ "fill-box", "no-clip", "stroke-box", "view-box" }, .offsets = &.{ &.{ "left", "right" }, &.{ "bottom", "top" } }, .omit = &.{ &.{"initial"}, &.{"0%"}, &.{"0%"}, &.{"auto"}, &.{"repeat"}, &.{"border-box"}, &.{"border-box"}, &.{"add"}, &.{"match-source"} }, .empty = "none" } },
     .{ "-webkit-mask-box-image", Shorthand{ .kind = .unmodelled, .longhands = &.{ "-webkit-mask-box-image-source", "-webkit-mask-box-image-slice", "-webkit-mask-box-image-width", "-webkit-mask-box-image-outset", "-webkit-mask-box-image-repeat" }, .fillers = &.{} } },
     .{ "-webkit-mask-clip", Shorthand{ .kind = .alias, .longhands = &.{"mask-clip"}, .fillers = &.{"initial"} } },
     .{ "-webkit-mask-composite", Shorthand{ .kind = .alias, .longhands = &.{"mask-composite"}, .fillers = &.{"initial"} } },
@@ -328,7 +328,7 @@ pub const shorthands = std.StaticStringMap(Shorthand).initComptime(.{
     .{ "margin-inline", Shorthand{ .kind = .box2, .longhands = &.{ "margin-inline-start", "margin-inline-end" }, .fillers = &.{ "initial", "initial" } } },
     .{ "marker", Shorthand{ .kind = .components, .longhands = &.{ "marker-start", "marker-mid", "marker-end" }, .fillers = &.{ "initial", "initial", "initial" }, .group = 1, .groups = 3, .omit = &.{&.{}} } },
     .{ "mask", Shorthand{ .kind = .layers, .longhands = &.{ "mask-image", "-webkit-mask-position-x", "-webkit-mask-position-y", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite", "mask-mode" }, .fillers = &.{ "initial", "0%", "0%", "auto", "repeat", "border-box", "border-box", "add", "match-source" }, .layer_width = 9, .axes = .{ 1, 2 }, .implied = "center", .boxes = .{ 5, 6 }, .box_collapse = true, .size_slot = 3, .offsets = &.{ &.{ "left", "right" }, &.{ "bottom", "top" } }, .omit = &.{ &.{"initial"}, &.{"0%"}, &.{"0%"}, &.{"auto"}, &.{"repeat"}, &.{"border-box"}, &.{"border-box"}, &.{"add"}, &.{"match-source"} }, .empty = "none" } },
-    .{ "mask-position", Shorthand{ .kind = .layers, .longhands = &.{ "-webkit-mask-position-x", "-webkit-mask-position-y" }, .fillers = &.{ "initial", "initial" }, .layer_width = 2, .axes = .{ 0, 1 }, .implied = "center", .offsets = &.{ &.{ "left", "right" }, &.{ "bottom", "top" } }, .omit = &.{ &.{}, &.{} }, .empty = "" } },
+    .{ "mask-position", Shorthand{ .kind = .layers, .longhands = &.{ "-webkit-mask-position-x", "-webkit-mask-position-y" }, .fillers = &.{ "center", "center" }, .layer_width = 2, .offsets = &.{ &.{}, &.{} }, .omit = &.{ &.{}, &.{} }, .empty = "" } },
     .{ "offset", Shorthand{ .kind = .unmodelled, .longhands = &.{ "offset-position", "offset-path", "offset-distance", "offset-rotate", "offset-anchor" }, .fillers = &.{} } },
     .{ "outline", Shorthand{ .kind = .components, .longhands = &.{ "outline-color", "outline-style", "outline-width" }, .fillers = &.{ "initial", "initial", "initial" }, .group = 3, .groups = 1, .omit = &.{ &.{"initial"}, &.{"initial"}, &.{"initial"} } } },
     .{ "overflow", Shorthand{ .kind = .box2, .longhands = &.{ "overflow-x", "overflow-y" }, .fillers = &.{ "initial", "initial" } } },
@@ -371,7 +371,7 @@ pub const shorthands = std.StaticStringMap(Shorthand).initComptime(.{
     .{ "text-decoration", Shorthand{ .kind = .components, .longhands = &.{ "text-decoration-line", "text-decoration-thickness", "text-decoration-style", "text-decoration-color" }, .fillers = &.{ "initial", "initial", "initial", "initial" }, .group = 4, .groups = 1, .omit = &.{ &.{ "initial", "none" }, &.{ "auto", "initial" }, &.{ "initial", "solid" }, &.{ "currentcolor", "initial" } }, .empty = "none" } },
     .{ "text-emphasis", Shorthand{ .kind = .unmodelled, .longhands = &.{ "text-emphasis-style", "text-emphasis-color" }, .fillers = &.{} } },
     .{ "text-wrap", Shorthand{ .kind = .components, .longhands = &.{ "text-wrap-mode", "text-wrap-style" }, .fillers = &.{ "initial", "initial" }, .group = 2, .groups = 1, .omit = &.{ &.{"initial"}, &.{ "auto", "initial" } }, .empty = "wrap" } },
-    .{ "timeline-trigger", Shorthand{ .kind = .layers, .longhands = &.{ "timeline-trigger-name", "timeline-trigger-source", "timeline-trigger-activation-range-start", "timeline-trigger-activation-range-end", "timeline-trigger-active-range-start", "timeline-trigger-active-range-end" }, .fillers = &.{ "none", "auto", "normal", "normal", "auto", "auto" }, .layer_width = 6, .axes = .{ 2, 3 }, .implied = "normal", .size_slot = 4, .refuse = &.{ "contain", "cover", "entry", "entry-crossing", "exit", "exit-crossing", "scroll" }, .offsets = &.{ &.{}, &.{} }, .omit = &.{ &.{"none"}, &.{"auto"}, &.{"normal"}, &.{"normal"}, &.{"auto"}, &.{"auto"} }, .empty = "none" } },
+    .{ "timeline-trigger", Shorthand{ .kind = .unmodelled, .longhands = &.{ "timeline-trigger-name", "timeline-trigger-source", "timeline-trigger-activation-range-start", "timeline-trigger-activation-range-end", "timeline-trigger-active-range-start", "timeline-trigger-active-range-end" }, .fillers = &.{} } },
     .{ "timeline-trigger-activation-range", Shorthand{ .kind = .layers, .longhands = &.{ "timeline-trigger-activation-range-start", "timeline-trigger-activation-range-end" }, .fillers = &.{ "initial", "initial" }, .layer_width = 2, .axes = .{ 0, 1 }, .implied = "normal", .refuse = &.{ "contain", "cover", "entry", "entry-crossing", "exit", "exit-crossing", "scroll" }, .offsets = &.{ &.{}, &.{} }, .omit = &.{ &.{}, &.{"normal"} }, .empty = "" } },
     .{ "timeline-trigger-active-range", Shorthand{ .kind = .layers, .longhands = &.{ "timeline-trigger-active-range-start", "timeline-trigger-active-range-end" }, .fillers = &.{ "initial", "initial" }, .layer_width = 2, .axes = .{ 0, 1 }, .implied = "auto", .refuse = &.{ "contain", "cover", "entry", "entry-crossing", "exit", "exit-crossing", "scroll" }, .offsets = &.{ &.{}, &.{} }, .omit = &.{ &.{}, &.{"auto"} }, .empty = "" } },
     .{ "transition", Shorthand{ .kind = .components, .longhands = &.{ "transition-behavior", "transition-duration", "transition-timing-function", "transition-delay", "transition-property" }, .fillers = &.{ "normal", "0s", "ease", "0s", "all" }, .group = 5, .groups = 1, .omit = &.{ &.{"normal"}, &.{"0s"}, &.{"ease"}, &.{"0s"}, &.{"all"} }, .order = &.{ 0, 4, 1, 2, 3 }, .wide_longhands = &.{ "transition-property", "transition-duration", "transition-timing-function", "transition-delay", "transition-behavior" }, .empty = "all" } },

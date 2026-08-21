@@ -57,18 +57,45 @@
         'inherit', 'initial', 'unset', 'revert', 'revert-layer',
     ];
 
+    // `mask` is the same grammar with no colour and a box pair that collapses,
+    // so it gets its own list: the composite and the mode, `no-clip`, and the
+    // readings that say the pair is written as a unit.
+    const maskValues = [
+        'url("a")', 'none', 'no-repeat', 'repeat', 'repeat-x', 'space', 'round',
+        'alpha', 'luminance', 'match-source', 'add', 'subtract', 'intersect',
+        'exclude', 'alpha add', 'add alpha', 'subtract luminance',
+        'center', 'top', 'left', '10px', 'top right', '10px 20px',
+        'left 10px top 20px', 'top 20px left 10px', '10px / 20px',
+        'center / cover', 'left top / 10px 20px',
+        'border-box', 'padding-box', 'content-box', 'no-clip',
+        'content-box content-box', 'padding-box border-box',
+        'border-box content-box', 'content-box border-box',
+        'border-box no-clip', 'content-box no-clip', 'no-clip content-box',
+        'text', 'text border-box', 'red', 'url("a") red',
+        'url("a") no-repeat', 'url("a") center / cover no-repeat content-box',
+        'url("a"), url("b")', 'padding-box, border-box', 'none, none',
+        'url("a") no-repeat, url("b") subtract', '10px 20px, 30px',
+        'repeat no-repeat', 'space round',
+        'inherit', 'initial', 'unset',
+    ];
+
     const out = {};
-    for (const value of values) {
+    const read = (property, value) => {
         const el = document.createElement('div');
-        el.style.setProperty('background', value);
+        el.style.setProperty(property, value);
         const names = [];
         for (let i = 0; i < el.style.length; i++) names.push(el.style.item(i));
-        out[value] = {
+        out[`${property}: ${value}`] = {
             items: names,
             values: names.map((n) => el.style.getPropertyValue(n)),
-            read: el.style.getPropertyValue('background'),
+            read: el.style.getPropertyValue(property),
             cssText: el.style.cssText,
         };
+    };
+    for (const value of values) read('background', value);
+    for (const value of maskValues) {
+        read('mask', value);
+        read('-webkit-mask', value);
     }
     return out;
 })()
