@@ -4615,10 +4615,10 @@ property that is not there reserialised the style attribute here (`--Case:
 1px;`, trailing semicolon) where Chrome leaves the authored text alone. That is
 closed too, below, and `probe-css12` is now **0 of 39**.
 
-**The declaration side is closed to the four re-casing rules** (`probe-css13`,
-42 readings, headed Chrome 151 against this engine on the same host).
-It started at 27 of 42 and is now **3**, every one of them a shape deliberately
-left out of scope. Four separate findings, none guessable:
+**The declaration side is closed** (`probe-css13`, 42 readings, headed Chrome 151
+against this engine on the same host). It started at 27 of 42 and is now **1**,
+and that one is a shape deliberately left out of scope. Six separate findings,
+none guessable:
 
 *What rewrites the attribute text.* The style attribute is rewritten only when
 the declaration block actually changed. Removing a property that was never
@@ -4672,11 +4672,75 @@ Chrome does not fold case. A name that keeps its quotes gets double ones
 (`'a b'` -> `"a b"`), escapes resolved first (`"\31 a"` -> `"1a"`). The `font`
 shorthand carries a family too, and is treated the same.
 
-The three readings that still differ are the cases where Chrome rewrites the
-value past a case change, which needs a colour parser and a number normaliser
-this engine does not have: `#AABBCC` -> `rgb(170, 187, 204)` and `1E2px` ->
-`100px` -- plus `setProperty('height', 'notalength')` sticking here, which is
-the invalid-inline-value difference recorded above.
+*How a number is printed.* A number in a declaration is not echoed back:
+Chrome reprints it through printf `%g` -- six significant digits, trailing zeros
+dropped, scientific notation once the exponent leaves [-4, 6) -- over a value
+clamped to the float range. That one rule covers a pile of separate-looking
+readings: `1E2px` -> `100px`, `1.50px` -> `1.5px`, `+1px` -> `1px`,
+`3.14159265358979px` -> `3.14159px`, `999999.9px` -> `1e+06px`, `1e100px` ->
+`3.40282e+38px` (FLT_MAX). The clamp is to the *range* and not to float
+precision, which took a denormal to establish: `1e-40px` keeps all six digits
+no float can hold (a real f32 round-trip would answer `9.99995e-41`), and
+`1e-46px` is not flushed to zero either. So the value is a double that the
+parser clamps, not a float that the parser stores.
+
+An `<integer>` is printed as an integer instead, and that distinction is
+per-property rather than per-value: `z-index: 1000000` answers `1000000` where
+`flex-grow: 1000000` answers `1e+06`, and `width: 1234567px` answers
+`1.23457e+06px`. Which properties those are is not derivable, so it was
+measured -- `1000000` written to each of the 772 property names Chrome knows,
+19 answering an integer and 72 answering `1e+06` -- plus the four whose integer
+sits after an identifier or a string (`counter-increment: c 1000000`,
+`font-feature-settings: "liga" 1000000`) and the two functions whose first
+argument is one wherever they appear (`repeat()`, `steps()`). A dimension is
+never one: `columns: 1000000` answers `1000000`, `columns: 1000000px` answers
+`1e+06px`. Integers clamp to the 32-bit range Blink parses them into
+(`z-index: 3000000000` -> `2147483647`, measured over ten integer positions).
+
+*How a colour is folded.* A 3/4/6/8 digit hash answers an `rgb()` -- or an
+`rgba()` when its alpha is not opaque, the short forms doubling each nibble --
+and `rgb()` / `rgba()` / `hsl()` / `hsla()` / `hwb()` all answer the legacy
+comma form, so hsl and hwb are converted here rather than passed through. Each
+channel is rounded to a byte (half away from zero, from a percentage of 255 when
+written as one) and clamped there.
+
+The alpha text was the part worth measuring: it is not "three decimals rounded"
+but **the shortest one, two or three decimal number that rounds back to the same
+alpha byte**. That is why 221/255 is `0.867`, 158/255 is `0.62`, 128/255 is
+plain `0.5`, and 22/255 is `0.086` where rounding the fraction would have said
+`0.087`. The model was checked against fifty measured alphas and reproduces
+every one.
+
+What is left as written is measured too: a named colour, `oklch()`, `lab()`,
+`lch()`, `oklab()`, `color()`, `color-mix()`, `light-dark()`, a relative colour
+(`rgb(from red r g b)`), any call with a nested function in it (Chrome
+*computes* `rgb(calc(1 + 1) 2 3)`; this engine has no calc evaluator), a channel
+count or separator mix Chrome rejects (`rgb(50%, 25, 0%)`), and a hash of any
+other length. So no Lab or OKLab colour-space maths is needed at all.
+
+Two smaller things came out of the same pass. The percentage inside the colour
+spaces Chrome keeps is still folded by it -- `lab(50% 40 59.5)` -> `lab(50 40
+59.5)`, `oklch(50% 0.1 200)` -> `oklch(0.5 0.1 200)`, `oklch(0.5 25% 200)` ->
+`oklch(0.5 0.1 200)` (chroma's full scale is 0.4) -- which is a per-channel
+conversion rather than a `%` strip, and is not done here. And the number pass
+replaced a leading-zero inserter that had been reaching into places a value
+never goes: `content: ".5"` answered `"0.5"` and `var(--a, .5px)` answered
+`var(--a, 0.5px)`, where Chrome leaves both alone.
+
+The one reading that still differs is `setProperty('height', 'notalength')`
+sticking here, which is the invalid-inline-value difference recorded above --
+closing it needs the per-property grammars this engine deliberately does not
+have, since a grammar written one notch too narrow drops declarations Chrome
+renders.
+
+One difference this probe does *not* reach, found by the tests written for the
+fold: `color: currentColor` answers `currentColor` here and `currentcolor` in
+Chrome. `keywordSpelling` takes its spelling from `chrome_keywords.zig`, which
+is generated from mdn-data as an *acceptance* table -- and measuring all 52 of
+that table's capitalised keywords says Chrome answers every one of them in
+lower case (41 system colours, `currentColor`, and nine SVG keywords such as
+`visiblePainted` and `sRGB`). It also runs the wrong way: a page writing
+`pointer-events: visiblepainted` reads back `visiblePainted` here.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
