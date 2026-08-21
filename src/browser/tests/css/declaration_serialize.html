@@ -673,6 +673,55 @@ function withStyle(text) {
         testing.expectEqual(value, whole.style.getPropertyValue('background'));
     }
 
+    // A comma is a layer boundary: every per-layer longhand becomes a comma
+    // list as long as the value had layers, and the ones a layer never
+    // mentioned hold their filler in that layer's place.
+    const two = withStyle('background: url(a), url(b)');
+    testing.expectEqual(9, two.style.length);
+    testing.expectEqual('url("a"), url("b")', two.style.getPropertyValue('background-image'));
+    testing.expectEqual('initial, initial', two.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('url("a"), url("b")', two.style.getPropertyValue('background'));
+    testing.expectEqual('background: url("a"), url("b");', two.style.cssText);
+
+    // The colour belongs to the whole value rather than to a layer, so it is
+    // one value however many layers there are -- and only the last layer may
+    // write it. `url(a) blue, url(b)` does not parse in Chrome at all; this
+    // engine declines it and keeps the declaration whole.
+    const tinted = withStyle('background: url("a"), url("b") blue');
+    testing.expectEqual('blue', tinted.style.getPropertyValue('background-color'));
+    testing.expectEqual('url("a"), url("b") blue', tinted.style.getPropertyValue('background'));
+    const early = withStyle('background: url("a") blue, url("b")');
+    testing.expectEqual(1, early.style.length);
+
+    // A last layer that mentioned nothing but the colour comes back as just
+    // the colour.
+    testing.expectEqual('url("a"), red', withStyle('background: url("a"), red')
+        .style.getPropertyValue('background'));
+
+    // Each layer parses on its own: the second one here writes one position
+    // component and is left holding `center` on the other axis.
+    const positions = withStyle('background: 10px 20px, 30px');
+    testing.expectEqual('10px, 30px', positions.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('20px, center', positions.style.getPropertyValue('background-position-y'));
+    testing.expectEqual('10px 20px, 30px center', positions.style.getPropertyValue('background'));
+
+    // The box pair and the `/` are per-layer too.
+    testing.expectEqual('padding-box border-box, content-box content-box',
+        withStyle('background: padding-box border-box, content-box')
+            .style.getPropertyValue('background'));
+    testing.expectEqual('url("a") center center / cover, url("b") left top / contain',
+        withStyle('background: url("a") center / cover, url("b") left top / contain')
+            .style.getPropertyValue('background'));
+
+    // `mask` is the same layer grammar and is still kept whole, because its
+    // origin and clip are not two independently dropped slots the way
+    // background's are: `mask: content-box content-box` answers one
+    // `content-box` while `mask: border-box content-box` answers both, and no
+    // per-slot rule does both at once (tools/fingerprint/README.md).
+    const mask = withStyle('mask: url("a")');
+    testing.expectEqual(1, mask.style.length);
+    testing.expectEqual('mask', mask.style.item(0));
+
     // One longhand on its own is not a background, and cssText says so.
     testing.expectEqual('background-color: red;', withStyle('background-color: red').style.cssText);
 
