@@ -49,7 +49,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(true, secure.secure);
       testing.expectEqual(17, secure.gated.length);
       testing.expectEqual(6, secure.ungated.length);
-      testing.expectEqual(1188, secure.count);
+      testing.expectEqual(1192, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
@@ -57,16 +57,17 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual('', insecure.gated.join(' '));
       testing.expectEqual(6, insecure.ungated.length);
 
-      // The gate now removes 235 names off a surface of 1188. Both totals move
+      // The gate now removes 235 names off a surface of 1192. Both totals move
       // together whenever the surface changes and none of the names involved is
       // [SecureContext] -- 1167 before the three EventTarget methods and Css /
       // setImmediate / clearImmediate came off, 1172 once the eleven unmodelled
       // CSSOM interfaces went on, 1181 with the nine window-surface Event
-      // subclasses, 1188 with the reporting family. The two totals parted
+      // subclasses, 1188 with the reporting family, 1192 with the four
+      // unreachable PerformanceEntry subclasses. The two totals parted
       // company by one at the Event subclasses: Chrome gates
       // ClipboardChangeEvent and not the other eight (measured, probe-
       // secure-context), so that step added nine names here and eight there.
-      testing.expectEqual(953, insecure.count);
+      testing.expectEqual(957, insecure.count);
     });
   }
 </script>
@@ -97,7 +98,7 @@ insecure origin this suite can reach without a second listener.
       // Trustworthy URL, untrustworthy ancestor.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
-      testing.expectEqual(953, grandchild.count);
+      testing.expectEqual(957, grandchild.count);
     });
   }
 </script>
