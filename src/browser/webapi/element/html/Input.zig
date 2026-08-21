@@ -89,6 +89,22 @@ pub const Type = enum {
     pub fn toString(self: Type) []const u8 {
         return @tagName(self);
     }
+
+    // How the `value` IDL attribute relates to the `value` content attribute.
+    // Only `.value` keeps its own state: in the other two the attribute *is*
+    // the value, so assigning to .value writes the attribute and removing the
+    // attribute drops the value. `.default_on` differs from `.default` only in
+    // reading "on" instead of "" when the attribute is absent.
+    pub const ValueMode = enum { value, default, default_on, filename };
+
+    pub fn valueMode(self: Type) ValueMode {
+        return switch (self) {
+            .hidden, .submit, .reset, .button, .image => .default,
+            .checkbox, .radio => .default_on,
+            .file => .filename,
+            else => .value,
+        };
+    }
 };
 
 _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
@@ -142,10 +158,12 @@ pub fn setType(self: *Input, typ: []const u8, frame: *Frame) !void {
 }
 
 pub fn getValue(self: *const Input) []const u8 {
-    if (self._input_type == .file) return "";
-    return self._value orelse self._default_value orelse switch (self._input_type) {
-        .checkbox, .radio => "on",
-        else => "",
+    return switch (self._input_type.valueMode()) {
+        .filename => "",
+        // The attribute is the value here, so a dirty _value cannot outlive it.
+        .default => self._default_value orelse "",
+        .default_on => self._default_value orelse "on",
+        .value => self._value orelse self._default_value orelse "",
     };
 }
 
@@ -158,13 +176,20 @@ pub fn getRedactedValue(self: *const Input) []const u8 {
 }
 
 pub fn setValue(self: *Input, value: []const u8, frame: *Frame) !void {
-    // File inputs: setting to empty string is a no-op, anything else throws
-    if (self._input_type == .file) {
-        if (value.len == 0) return;
-        return error.InvalidStateError;
+    switch (self._input_type.valueMode()) {
+        // File inputs: setting to empty string is a no-op, anything else throws
+        .filename => {
+            if (value.len == 0) return;
+            return error.InvalidStateError;
+        },
+        // The attribute is the value, so write it there and keep no dirty copy.
+        .default, .default_on => {
+            try self.asElement().setAttributeSafe(comptime .wrap("value"), .wrap(value), frame);
+            self._value = null;
+        },
+        // This should _not_ call setAttribute. It updates the current state only
+        .value => self._value = try self.sanitizeValue(true, value, frame),
     }
-    // This should _not_ call setAttribute. It updates the current state only
-    self._value = try self.sanitizeValue(true, value, frame);
 }
 
 pub fn getDefaultValue(self: *const Input) []const u8 {
@@ -1347,14 +1372,25 @@ pub const Build = struct {
         const self = element.as(Input);
         switch (attribute) {
             .type => {
+                const was = self._input_type.valueMode();
                 self._input_type = Type.fromString(value.str());
+                const now = self._input_type.valueMode();
+
+                // Changing the mode moves the value across the boundary: on the
+                // way out of `.value` a dirty value is banked into the
+                // attribute, and on the way in the attribute is read back out.
+                if (was == .value and now != .value) {
+                    if (self._value) |dirty| {
+                        try self.asElement().setAttributeSafe(comptime .wrap("value"), .wrap(dirty), frame);
+                        self._value = null;
+                    }
+                } else if (was != .value and now == .value) {
+                    self._value = null;
+                }
+
                 // Sanitize the current value according to the new type
                 if (self._value) |current_value| {
                     self._value = try self.sanitizeValue(false, current_value, frame);
-                    // Apply default value for checkbox/radio if value is now empty
-                    if (self._value.?.len == 0 and (self._input_type == .checkbox or self._input_type == .radio)) {
-                        self._value = "on";
-                    }
                 }
             },
             .value => self._default_value = try frame.arena.dupe(u8, value.str()),
@@ -1414,6 +1450,7 @@ test "WebApi: HTML.Input" {
     try testing.htmlRunner("element/html/input-attrs.html", .{});
     try testing.htmlRunner("element/html/input-validity.html", .{});
     try testing.htmlRunner("element/html/input_file.html", .{});
+    try testing.htmlRunner("element/html/input_value_mode.html", .{});
 }
 
 test "isValidFloatingPoint" {

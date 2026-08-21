@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<script id="value_mode_reflects">
+  // The `value` IDL attribute has a mode that depends on the input's type. In
+  // "default" (hidden, submit, reset, button, image) and "default/on"
+  // (checkbox, radio) the content attribute *is* the value, so assigning .value
+  // writes it; in "value" mode (text and friends) the attribute is left alone.
+  // Every expectation here was read off headed Chrome 151 —
+  // tools/fingerprint/probes/probe-input-value.js.
+  {
+    const mk = (type) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', type);
+      return i;
+    };
+
+    for (const type of ['hidden', 'submit', 'reset', 'button', 'image', 'checkbox', 'radio']) {
+      const i = mk(type);
+      i.value = 'TOK';
+      testing.expectEqual('TOK', i.getAttribute('value'));
+      testing.expectEqual('TOK', i.value);
+    }
+
+    for (const type of ['text', 'search', 'tel', 'url', 'email', 'password']) {
+      const i = mk(type);
+      i.value = 'TOK';
+      testing.expectEqual(null, i.getAttribute('value'));
+      testing.expectEqual('TOK', i.value);
+    }
+  }
+</script>
+
+<script id="value_mode_serializes">
+  {
+    const mk = (type) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', type);
+      i.value = 'TOK';
+      return i.outerHTML;
+    };
+    testing.expectEqual('<input type="hidden" value="TOK">', mk('hidden'));
+    testing.expectEqual('<input type="submit" value="TOK">', mk('submit'));
+    testing.expectEqual('<input type="checkbox" value="TOK">', mk('checkbox'));
+    testing.expectEqual('<input type="text">', mk('text'));
+  }
+</script>
+
+<script id="value_mode_attribute_wins">
+  // In default mode there is no dirty value to diverge from the attribute, so
+  // the attribute keeps driving the property in both directions.
+  {
+    const mk = (type) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', type);
+      return i;
+    };
+
+    for (const type of ['hidden', 'submit', 'checkbox']) {
+      const a = mk(type);
+      a.value = 'FIRST';
+      a.setAttribute('value', 'SECOND');
+      testing.expectEqual('SECOND', a.value);
+
+      const b = mk(type);
+      b.setAttribute('value', 'FIRST');
+      b.value = 'SECOND';
+      testing.expectEqual('SECOND', b.getAttribute('value'));
+    }
+
+    // In value mode the dirty flag detaches the property from the attribute.
+    const t = mk('text');
+    t.value = 'FIRST';
+    t.setAttribute('value', 'SECOND');
+    testing.expectEqual('FIRST', t.value);
+  }
+</script>
+
+<script id="value_mode_attribute_removed">
+  // Removing the attribute in default mode drops the value with it; checkbox
+  // and radio fall back to "on" rather than the empty string, which is the
+  // "/on" half of "default/on".
+  {
+    const mk = (type) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', type);
+      i.value = 'TOK';
+      i.removeAttribute('value');
+      return i.value;
+    };
+    testing.expectEqual('', mk('hidden'));
+    testing.expectEqual('', mk('submit'));
+    testing.expectEqual('on', mk('checkbox'));
+    testing.expectEqual('on', mk('radio'));
+  }
+</script>
+
+<script id="value_mode_type_switch">
+  // Changing the type changes the mode, and the spec moves the value across the
+  // boundary: leaving "value" mode with a dirty value writes it to the
+  // attribute; entering "value" mode reads the attribute back out.
+  {
+    const a = document.createElement('input');
+    a.setAttribute('type', 'text');
+    a.value = 'TOK';
+    testing.expectEqual(null, a.getAttribute('value'));
+    a.setAttribute('type', 'hidden');
+    testing.expectEqual('TOK', a.getAttribute('value'));
+    testing.expectEqual('TOK', a.value);
+
+    const b = document.createElement('input');
+    b.setAttribute('type', 'hidden');
+    b.value = 'TOK';
+    testing.expectEqual('TOK', b.getAttribute('value'));
+    b.setAttribute('type', 'text');
+    testing.expectEqual('TOK', b.getAttribute('value'));
+    testing.expectEqual('TOK', b.value);
+  }
+</script>
+
+<!--
+  Form reset is the other half of this, and it is not testable here yet:
+  HTMLFormElement.reset() does not exist in this engine ("form.reset is not a
+  function"), which is its own gap rather than this one. Chrome's answer, for
+  whoever implements it — with `value="DEF"` on each control and `.value` then
+  assigned "TOK", reset leaves:
+
+      hidden   attr=TOK prop=TOK      submit   attr=TOK prop=TOK
+      text     attr=DEF prop=DEF      checkbox attr=TOK prop=TOK
+
+  i.e. reset clears the dirty value, which only value-mode controls have, so
+  only the text input goes back to its attribute.
+-->
+
+<script id="value_mode_turnstile_shape">
+  // The shape that started this: a hidden input a script drops a token into,
+  // and the serialized markup a challenge reads back.
+  {
+    const host = document.createElement('div');
+    const i = document.createElement('input');
+    i.type = 'hidden';
+    i.name = 'cf-turnstile-response';
+    i.id = 'cf-chl-widget-xxxxx_response';
+    host.appendChild(i);
+    i.value = 'XXXX.DUMMY.TOKEN.XXXX';
+    testing.expectEqual(
+      '<input type="hidden" name="cf-turnstile-response" id="cf-chl-widget-xxxxx_response" value="XXXX.DUMMY.TOKEN.XXXX">',
+      host.innerHTML,
+    );
+  }
+</script>
