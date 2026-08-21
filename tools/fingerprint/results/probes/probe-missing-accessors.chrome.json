@@ -1,0 +1,608 @@
+{
+ "href": "http://localhost:8777/",
+ "out": {
+  "Element": {
+   "ariaActionsElements": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "HTMLIFrameElement": {
+   "csp": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "csp=\"probe-value\""
+   },
+   "allow": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "allow=\"probe-value\""
+   },
+   "featurePolicy": {
+    "kind": "get",
+    "value": "FeaturePolicy",
+    "type": "object",
+    "interface": "FeaturePolicy"
+   },
+   "loading": {
+    "kind": "accessor",
+    "value": "\"auto\"",
+    "type": "string",
+    "after_read": "\"auto\"",
+    "reflects": "loading=\"probe-value\""
+   },
+   "credentialless": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "credentialless=\"\""
+   },
+   "allowPaymentRequest": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "allowpaymentrequest=\"\""
+   },
+   "privateToken": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "privatetoken=\"probe-value\""
+   },
+   "browsingTopics": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "browsingtopics=\"\""
+   },
+   "adAuctionHeaders": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "adauctionheaders=\"\""
+   },
+   "sharedStorageWritable": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "sharedstoragewritable=\"\""
+   }
+  },
+  "HTMLScriptElement": {
+   "referrerPolicy": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"\"",
+    "reflects": "referrerpolicy=\"probe-value\""
+   },
+   "fetchPriority": {
+    "kind": "accessor",
+    "value": "\"auto\"",
+    "type": "string",
+    "after_read": "\"auto\"",
+    "reflects": "fetchpriority=\"probe-value\""
+   },
+   "blocking": {
+    "kind": "accessor",
+    "value": "DOMTokenList len=0",
+    "type": "object",
+    "interface": "DOMTokenList",
+    "after_read": "DOMTokenList len=1",
+    "reflects": "blocking=\"probe-value\""
+   },
+   "textContent": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\""
+   },
+   "attributionSrc": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "attributionsrc=\"probe-value\""
+   }
+  },
+  "HTMLInputElement": {
+   "height": {
+    "kind": "accessor",
+    "value": "0",
+    "type": "number",
+    "after_read": "0",
+    "reflects": "height=\"0\""
+   },
+   "valueAsDate": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null",
+    "after_read": "null",
+    "threw": "TypeError: Failed to set the 'valueAsDate' property on 'HTMLInputElement': Failed to convert value to 'object'."
+   },
+   "valueAsNumber": {
+    "kind": "accessor",
+    "value": "NaN",
+    "type": "number",
+    "after_read": "NaN",
+    "threw": "DOMException: Failed to set the 'valueAsNumber' property on 'HTMLInputElement': This input element does not support Number values."
+   },
+   "width": {
+    "kind": "accessor",
+    "value": "0",
+    "type": "number",
+    "after_read": "0",
+    "reflects": "width=\"0\""
+   },
+   "webkitdirectory": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "webkitdirectory=\"\""
+   },
+   "incremental": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "incremental=\"\""
+   },
+   "webkitEntries": {
+    "kind": "get",
+    "value": "Array len=0",
+    "type": "object",
+    "interface": "Array"
+   }
+  },
+  "HTMLFormElement": {
+   "relList": {
+    "kind": "accessor",
+    "value": "DOMTokenList len=0",
+    "type": "object",
+    "interface": "DOMTokenList",
+    "after_read": "DOMTokenList len=1",
+    "reflects": "rel=\"probe-value\""
+   },
+   "rel": {
+    "kind": "accessor",
+    "value": "\"probe-value\"",
+    "type": "string",
+    "after_read": "\"probe-value\""
+   }
+  },
+  "HTMLImageElement": {
+   "sizes": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "sizes=\"probe-value\""
+   },
+   "fetchPriority": {
+    "kind": "accessor",
+    "value": "\"auto\"",
+    "type": "string",
+    "after_read": "\"auto\"",
+    "reflects": "fetchpriority=\"probe-value\""
+   },
+   "x": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   },
+   "y": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   },
+   "browsingTopics": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "browsingtopics=\"\""
+   },
+   "attributionSrc": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "attributionsrc=\"probe-value\""
+   },
+   "sharedStorageWritable": {
+    "kind": "accessor",
+    "value": "false",
+    "type": "boolean",
+    "after_read": "true",
+    "reflects": "sharedstoragewritable=\"\""
+   }
+  },
+  "HTMLAnchorElement": {
+   "interestForElement": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null",
+    "after_read": "null",
+    "threw": "TypeError: Failed to set the 'interestForElement' property on 'HTMLAnchorElement': Failed to convert value to 'Element'."
+   },
+   "hrefTranslate": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "hreftranslate=\"probe-value\""
+   },
+   "attributionSrc": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string",
+    "after_read": "\"probe-value\"",
+    "reflects": "attributionsrc=\"probe-value\""
+   }
+  },
+  "MouseEvent": {
+   "movementX": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   },
+   "movementY": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   },
+   "fromElement": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "toElement": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "PointerEvent": {
+   "persistentDeviceId": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   }
+  },
+  "UIEvent": {
+   "pseudoTarget": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "MessageEvent": {
+   "userActivation": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "IntersectionObserver": {
+   "root": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "rootMargin": {
+    "kind": "get",
+    "value": "\"10px 20px 10px 20px\"",
+    "type": "string"
+   },
+   "scrollMargin": {
+    "kind": "get",
+    "value": "\"0px 0px 0px 0px\"",
+    "type": "string"
+   },
+   "thresholds": {
+    "kind": "get",
+    "value": "Array len=3",
+    "type": "object",
+    "interface": "Array"
+   },
+   "delay": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   },
+   "trackVisibility": {
+    "kind": "get",
+    "value": "false",
+    "type": "boolean"
+   }
+  },
+  "PerformanceEntry": {
+   "navigationId": {
+    "kind": "get",
+    "value": "8472",
+    "type": "number"
+   }
+  },
+  "ShadowRoot": {
+   "innerHTML": {
+    "kind": "accessor",
+    "value": "\"\"",
+    "type": "string"
+   },
+   "styleSheets": {
+    "kind": "get",
+    "value": "StyleSheetList len=0",
+    "type": "object",
+    "interface": "StyleSheetList"
+   },
+   "pointerLockElement": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "fullscreenElement": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "pictureInPictureElement": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "customElementRegistry": {
+    "kind": "get",
+    "value": "CustomElementRegistry",
+    "type": "object",
+    "interface": "CustomElementRegistry"
+   }
+  },
+  "Selection": {
+   "baseNode": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "baseOffset": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   },
+   "extentNode": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "extentOffset": {
+    "kind": "get",
+    "value": "0",
+    "type": "number"
+   }
+  },
+  "Attr": {
+   "prefix": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "specified": {
+    "kind": "get",
+    "value": "true",
+    "type": "boolean"
+   }
+  },
+  "Request": {
+   "destination": {
+    "kind": "get",
+    "value": "\"\"",
+    "type": "string"
+   },
+   "referrer": {
+    "kind": "get",
+    "value": "\"about:client\"",
+    "type": "string"
+   },
+   "referrerPolicy": {
+    "kind": "get",
+    "value": "\"\"",
+    "type": "string"
+   },
+   "mode": {
+    "kind": "get",
+    "value": "\"cors\"",
+    "type": "string"
+   },
+   "integrity": {
+    "kind": "get",
+    "value": "\"\"",
+    "type": "string"
+   },
+   "keepalive": {
+    "kind": "get",
+    "value": "false",
+    "type": "boolean"
+   },
+   "duplex": {
+    "kind": "get",
+    "value": "\"half\"",
+    "type": "string"
+   },
+   "isHistoryNavigation": {
+    "kind": "get",
+    "value": "false",
+    "type": "boolean"
+   },
+   "targetAddressSpace": {
+    "kind": "get",
+    "value": "\"unknown\"",
+    "type": "string"
+   },
+   "isReloadNavigation": {
+    "kind": "get",
+    "value": "false",
+    "type": "boolean"
+   }
+  },
+  "File": {
+   "lastModifiedDate": {
+    "kind": "get",
+    "value": "Date 2026-08-21T19:25:41.152Z",
+    "type": "object",
+    "interface": "Date"
+   },
+   "webkitRelativePath": {
+    "kind": "get",
+    "value": "\"\"",
+    "type": "string"
+   }
+  },
+  "VisualViewport": {
+   "onresize": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onscroll": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onscrollend": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "ScreenOrientation": {
+   "onchange": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "Notification": {
+   "onclick": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onshow": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onerror": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onclose": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "vibrate": {
+    "kind": "get",
+    "value": "Array len=0",
+    "type": "object",
+    "interface": "Array"
+   },
+   "timestamp": {
+    "kind": "get",
+    "value": "1787340341154",
+    "type": "number"
+   },
+   "data": {
+    "kind": "get",
+    "value": "null",
+    "type": "null"
+   },
+   "actions": {
+    "kind": "get",
+    "value": "Array len=0",
+    "type": "object",
+    "interface": "Array"
+   }
+  },
+  "FontFace": {
+   "ascentOverride": {
+    "kind": "accessor",
+    "value": "\"normal\"",
+    "type": "string"
+   },
+   "descentOverride": {
+    "kind": "accessor",
+    "value": "\"normal\"",
+    "type": "string"
+   },
+   "lineGapOverride": {
+    "kind": "accessor",
+    "value": "\"normal\"",
+    "type": "string"
+   },
+   "sizeAdjust": {
+    "kind": "accessor",
+    "value": "\"100%\"",
+    "type": "string"
+   },
+   "variationSettings": {
+    "kind": "accessor",
+    "value": "\"normal\"",
+    "type": "string"
+   }
+  },
+  "FontFaceSet": {
+   "onloading": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onloadingdone": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onloadingerror": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "ElementInternals": {
+   "ariaActionsElements": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   }
+  },
+  "IDBDatabase": {
+   "onabort": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onclose": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   },
+   "onversionchange": {
+    "kind": "accessor",
+    "value": "null",
+    "type": "null"
+   }
+  }
+ }
+}

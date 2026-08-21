@@ -5465,6 +5465,74 @@ fetched as a `type=Document`, so the failing read may be happening in the
 thinner than the top-level one would not show up in any probe in this directory,
 all of which measure the main realm.
 
+### The 97 missing accessors, sorted by what it would take to add each
+
+The 42 wrong kinds were a repair. The 97 accessors Chrome's prototypes carry and
+this engine's do not are a different question, because a missing name is not just
+the wrong kind -- `'credentialless' in HTMLIFrameElement.prototype` is one
+expression, and the answer is a Chrome version. So the interesting question is
+not whether absence is measurable (it is, every time) but what adding each one
+costs and whether the addition claims a capability the engine cannot back.
+
+`probes/probe-missing-accessors.js` reads all 97 off a headed Chrome 150 --
+value, type, and for the settable ones which content attribute the assignment
+moved. Reading in `results/probes/probe-missing-accessors.chrome.json`. The
+answer the measurement gives is lopsided, and that is the finding: **96 of the 97
+are cheap, and exactly one is not.**
+
+| # | class | what it takes | members |
+|---|---|---|---|
+| 14 | **event-handler slots** | one `handler_property.accessors` line each | `VisualViewport.on{resize,scroll,scrollend}`, `ScreenOrientation.onchange`, `Notification.on{click,show,error,close}`, `IDBDatabase.on{abort,close,versionchange}`, `FontFaceSet.on{loading,loadingdone,loadingerror}` |
+| 26 | **reflected content attributes** | one `Element.Reflect` line each | iframe `csp` `allow` `privateToken` `loading` `credentialless` `allowPaymentRequest` `browsingTopics` `adAuctionHeaders` `sharedStorageWritable`; script `referrerPolicy` `fetchPriority` `blocking` `attributionSrc`; input `height` `width` `webkitdirectory` `incremental`; form `rel` `relList`; img `sizes` `fetchPriority` `browsingTopics` `attributionSrc` `sharedStorageWritable`; a `hrefTranslate` `attributionSrc` |
+| 40 | **constant or always-empty** | a getter returning the value a headless engine honestly has | `MouseEvent.movement{X,Y}`=0 / `fromElement`/`toElement`=null, `PointerEvent.persistentDeviceId`=0, `UIEvent.pseudoTarget`=null, `MessageEvent.userActivation`=null, img `x`/`y`=0, `input.webkitEntries`=`[]`, `Selection.base{Node,Offset}`/`extent{Node,Offset}`, `Attr.prefix`=null/`specified`=true, `Request`'s ten, `File.lastModifiedDate`/`webkitRelativePath`, `ShadowRoot`'s six, `Element`/`ElementInternals.ariaActionsElements`=null, `Notification.vibrate`=`[]`/`data`=null/`actions`=`[]`, `HTMLScriptElement.textContent` |
+| 16 | **needs real state, small** | a field and a conversion | `FontFace`'s five remaining descriptors (`ascentOverride`/`descentOverride`/`lineGapOverride`=`"normal"`, `sizeAdjust`=`"100%"`, `variationSettings`=`"normal"`); `IntersectionObserver`'s six init options read back; `input.valueAsNumber`/`valueAsDate`; `Notification.timestamp`; `a.interestForElement`; `PerformanceEntry.navigationId` |
+| **1** | **skip** | a whole interface | `HTMLIFrameElement.featurePolicy` |
+
+**Why the "capability" worry mostly evaporates, and the measurement is what
+settles it.** The fear going in was that adding `iframe.credentialless` or
+`img.sharedStorageWritable` advertises a Privacy Sandbox feature this engine does
+not implement, and that a detector could catch the claim. It cannot: in Chrome
+these are *pure reflections*. The getter reads the content attribute and nothing
+else -- measured, `iframe.credentialless = true` moves `credentialless=""` and the
+getter reads it back, and no property anywhere reports whether the resulting load
+was actually credentialless. Reflecting the attribute claims nothing. The same
+holds for all 26 in that row.
+
+**The one genuine skip.** `HTMLIFrameElement.featurePolicy` answers a
+`FeaturePolicy` object, the only value in the 97 whose type is an interface this
+engine does not have. Adding the property means adding the interface, and a stub
+whose `allowsFeature()` answers wrongly is a larger surface than the absent name
+-- absence costs one `in` check, a lying `allowsFeature` costs every call. Nothing
+in the detector code read for this file reads it.
+
+**Two that need a decision before they are written, not just a line:**
+
+* `PerformanceEntry.navigationId` measured **2208** -- a live per-navigation
+  counter in the browser process, not a constant. Hardcoding 2208 would trade a
+  missing property for a *new* constant fingerprint, and a shared one across every
+  page this engine loads. It wants a real counter, and the counter wants a
+  starting value that is not 1.
+* `input.valueAsNumber` is **NaN** on a type that has no numeric value and
+  `valueAsDate` is **null** on one that has no date, and the setter throws
+  `DOMException`, "This input element does not support Number values." on the
+  wrong type. That is a conversion against the input's type, the only real
+  implementation work in the list.
+
+(A note on reading the archived JSON: `JSON.stringify(NaN)` is the string
+`"null"`, so the probe writes non-finite numbers with `String()` instead. The
+first run of it recorded `valueAsNumber` as a null, which would have sent the
+next reader to implement the wrong value.)
+
+**Still not classified here: `window.chrome`.** It is the one property this engine
+makes an accessor where Chrome has a data property -- the opposite direction from
+everything above, and the one
+`deviceandbrowserinfo.com/are_you_a_bot` has a named signal for
+(`hasInconsistentChromeObject`). It is not in the 97 and it was not in the 42; it
+is its own change, because fixing it means defining a real own data property on
+the global (`Window.zig`'s `defineOwnProperty`, the path `replaceGlobalProperty`
+uses) rather than swapping a bridge call, and doing that without breaking the
+cached object's identity or the secure-context name count.
+
 ## The two "wedges" were crashes
 
 pixiv and claude.ai were recorded above as stations that wedge the engine —
