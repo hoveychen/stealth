@@ -61,6 +61,18 @@ pub fn asEventTarget(self: *FontFaceSet) *EventTarget {
     return self._proto;
 }
 
+// Both readonly, and both the values that were already here as data properties:
+// nothing is tracked, so the set is empty and never loading. Chrome answers them
+// from getters, and the kind is what a bot check reads (see
+// src/browser/tests/descriptor_kind.html).
+pub fn getSize(_: *const FontFaceSet) u32 {
+    return 0;
+}
+
+pub fn getStatus(_: *const FontFaceSet) []const u8 {
+    return "loaded";
+}
+
 // FontFaceSet.ready - returns an already-resolved Promise.
 // In a headless browser there is no font loading, so fonts are always ready.
 pub fn getReady(_: *FontFaceSet, frame: *Frame) !js.Promise {
@@ -109,8 +121,8 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const size = bridge.property(0, .{ .template = false, .readonly = true });
-    pub const status = bridge.property("loaded", .{ .template = false, .readonly = true });
+    pub const size = bridge.accessor(FontFaceSet.getSize, null, .{});
+    pub const status = bridge.accessor(FontFaceSet.getStatus, null, .{});
     pub const ready = bridge.accessor(FontFaceSet.getReady, null, .{});
     pub const check = bridge.function(FontFaceSet.check, .{});
     pub const load = bridge.function(FontFaceSet.load, .{});

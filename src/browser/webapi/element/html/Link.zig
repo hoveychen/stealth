@@ -100,6 +100,16 @@ pub fn getRelList(self: *Link, frame: *Frame) !?*DOMTokenList {
     return element.getRelList(frame);
 }
 
+/// `[PutForwards=value]`: the setter assigns to the DOMTokenList's `value`, so
+/// the `rel` content attribute moves and the list object stays the same one.
+/// The point is the descriptor: with a setter it reads as an accessor, which is
+/// what Chrome exposes and what a bot check reads. See
+/// src/browser/tests/descriptor_kind.html.
+pub fn setRelList(self: *Link, value: lp.String, frame: *Frame) !void {
+    const list = (try self.getRelList(frame)) orelse return;
+    try list.setValue(value, frame);
+}
+
 pub fn linkAddedCallback(self: *Link, frame: *Frame) !void {
     // if we're planning on navigating to another frame, don't trigger load event.
     if (frame.isGoingAway()) {
@@ -171,7 +181,7 @@ pub const JsApi = struct {
     pub const @"type" = reflect.string("type");
     pub const rev = reflect.string("rev");
     pub const target = reflect.string("target");
-    pub const relList = bridge.accessor(Link.getRelList, null, .{ .null_as_undefined = true });
+    pub const relList = bridge.accessor(Link.getRelList, Link.setRelList, .{ .null_as_undefined = true, .ce_reactions = true });
     pub const sizes = bridge.accessor(Link.getSizes, null, .{ .null_as_undefined = true });
 };
 

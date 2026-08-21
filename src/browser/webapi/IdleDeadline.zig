@@ -25,6 +25,14 @@ pub fn init() IdleDeadline {
     return .{};
 }
 
+// The callback always runs because the engine went idle, never because the
+// timeout expired -- the value that was already here. Chrome exposes it as a
+// getter, and the kind is what a bot check reads (see
+// src/browser/tests/descriptor_kind.html).
+pub fn getDidTimeout(_: *const IdleDeadline) bool {
+    return false;
+}
+
 pub fn timeRemaining(_: *const IdleDeadline) f64 {
     // Return a fixed 50ms.
     // This allows idle callbacks to perform work without complex
@@ -44,5 +52,5 @@ pub const JsApi = struct {
     };
 
     pub const timeRemaining = bridge.function(IdleDeadline.timeRemaining, .{});
-    pub const didTimeout = bridge.property(false, .{ .template = false });
+    pub const didTimeout = bridge.accessor(IdleDeadline.getDidTimeout, null, .{});
 };

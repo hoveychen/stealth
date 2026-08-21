@@ -687,6 +687,13 @@ pub fn getProtocol(self: *const WebSocket) []const u8 {
     return self._protocol;
 }
 
+// This client negotiates no extensions, so the empty string it already answered
+// as a data property is right. Chrome answers it from a getter, and the kind is
+// what a bot check reads (see src/browser/tests/descriptor_kind.html).
+pub fn getExtensions(_: *const WebSocket) []const u8 {
+    return "";
+}
+
 pub fn setBinaryType(self: *WebSocket, value: []const u8) void {
     if (std.meta.stringToEnum(BinaryType, value)) |bt| {
         self._binary_type = bt;
@@ -1000,7 +1007,7 @@ pub const JsApi = struct {
     pub const onopen = bridge.accessor(handler(.onopen).get, handler(.onopen).set, .{});
     pub const onerror = bridge.accessor(handler(.onerror).get, handler(.onerror).set, .{});
     pub const onclose = bridge.accessor(handler(.onclose).get, handler(.onclose).set, .{});
-    pub const extensions = bridge.property("", .{ .template = false });
+    pub const extensions = bridge.accessor(WebSocket.getExtensions, null, .{});
     pub const protocol = bridge.accessor(WebSocket.getProtocol, null, .{});
     pub const onmessage = bridge.accessor(handler(.onmessage).get, handler(.onmessage).set, .{});
     pub const binaryType = bridge.accessor(WebSocket.getBinaryType, WebSocket.setBinaryType, .{});

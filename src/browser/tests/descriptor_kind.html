@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<script src="testing.js"></script>
+
+<script id=descriptor_kind>
+  // *What kind* of property each of these is, which is a thing no
+  // value-comparing test in this directory can see and a thing a bot check
+  // reads directly. The idiom is
+  //
+  //     Object.getOwnPropertyDescriptor(Screen.prototype, 'colorDepth').get.call(screen)
+  //
+  // -- how a detector reads a value it will not trust the instance to answer
+  // honestly -- and against a *data* property `desc.get` is undefined, so the
+  // call throws "Cannot read properties of undefined (reading 'call')".
+  // Cloudflare's Turnstile dies on exactly that string on this engine.
+  //
+  // Every row below is a reading off a headed Chrome 150, taken by
+  // tools/fingerprint/probes/probe-descriptor-kind.js (which kind) and
+  // probe-setter-semantics.js (what the setter does). `get` means a getter and
+  // no setter; `accessor` means both.
+  const KINDS = {
+    Screen: {
+      availWidth: 'get', availHeight: 'get', width: 'get', height: 'get',
+      colorDepth: 'get', pixelDepth: 'get', availLeft: 'get', availTop: 'get',
+      orientation: 'get', isExtended: 'get', onchange: 'accessor',
+    },
+    Document: {
+      hidden: 'get', visibilityState: 'get', prerendering: 'get',
+      webkitHidden: 'get', webkitVisibilityState: 'get',
+      // [LegacyLenientSetter] in the Fullscreen spec: a setter that exists and
+      // silently drops the assignment.
+      fullscreen: 'accessor', fullscreenEnabled: 'accessor',
+      fullscreenElement: 'accessor',
+    },
+    MouseEvent: { offsetX: 'get', offsetY: 'get' },
+    VisualViewport: { offsetLeft: 'get', offsetTop: 'get', scale: 'get' },
+    ScreenOrientation: { angle: 'get', type: 'get' },
+    WebSocket: { extensions: 'get' },
+    IdleDeadline: { didTimeout: 'get' },
+    WebGLRenderingContext: {
+      drawingBufferFormat: 'get',
+      drawingBufferColorSpace: 'accessor', unpackColorSpace: 'accessor',
+    },
+    WebGL2RenderingContext: {
+      drawingBufferFormat: 'get',
+      drawingBufferColorSpace: 'accessor', unpackColorSpace: 'accessor',
+    },
+    FontFace: {
+      family: 'accessor', style: 'accessor', weight: 'accessor',
+      stretch: 'accessor', unicodeRange: 'accessor', variant: 'accessor',
+      featureSettings: 'accessor', display: 'accessor', status: 'get',
+    },
+    FontFaceSet: { status: 'get', size: 'get' },
+    // [PutForwards=value]: assigning a string lands on the DOMTokenList's
+    // `.value`, so the content attribute moves and the object identity does not.
+    HTMLIFrameElement: { sandbox: 'accessor' },
+    HTMLAnchorElement: { relList: 'accessor' },
+    HTMLAreaElement: { relList: 'accessor' },
+    HTMLLinkElement: { relList: 'accessor' },
+    SVGAElement: { relList: 'accessor' },
+    HTMLOutputElement: { htmlFor: 'accessor' },
+    HTMLInputElement: { files: 'accessor', selectionDirection: 'accessor' },
+    IDBObjectStore: { name: 'accessor' },
+  };
+
+  for (const [iface, props] of Object.entries(KINDS)) {
+    const proto = window[iface].prototype;
+    for (const [key, want] of Object.entries(props)) {
+      const d = Object.getOwnPropertyDescriptor(proto, key);
+      const label = iface + '.' + key;
+      testing.expectEqual('object', typeof d, { desc: label + ' has a descriptor' });
+      testing.expectEqual('function', typeof d.get, { desc: label + ' is a getter' });
+      testing.expectEqual(
+        want === 'accessor' ? 'function' : 'undefined',
+        typeof d.set,
+        { desc: label + ' setter is ' + (want === 'accessor' ? 'present' : 'absent') },
+      );
+      testing.expectEqual(false, 'value' in d, { desc: label + ' is not a data property' });
+      testing.expectEqual(true, d.enumerable, { desc: label + ' enumerable' });
+      testing.expectEqual(true, d.configurable, { desc: label + ' configurable' });
+    }
+  }
+
+  // And reading through the descriptor answers what reading off the instance
+  // answers, for every one of them we can cheaply build an instance of. That is
+  // the whole point of the exercise: the descriptor path is the one a detector
+  // takes, so it is the one that has to work.
+  const canvas = document.createElement('canvas');
+  const INSTANCES = {
+    Screen: screen,
+    Document: document,
+    MouseEvent: new MouseEvent('click'),
+    VisualViewport: window.visualViewport,
+    ScreenOrientation: screen.orientation,
+    WebGLRenderingContext: canvas.getContext('webgl'),
+    WebGL2RenderingContext: document.createElement('canvas').getContext('webgl2'),
+    FontFace: new FontFace('Test', 'local(Arial)'),
+    FontFaceSet: document.fonts,
+    HTMLIFrameElement: document.createElement('iframe'),
+    HTMLAnchorElement: document.createElement('a'),
+    HTMLAreaElement: document.createElement('area'),
+    HTMLLinkElement: document.createElement('link'),
+    HTMLOutputElement: document.createElement('output'),
+    HTMLInputElement: document.createElement('input'),
+  };
+  for (const [iface, instance] of Object.entries(INSTANCES)) {
+    for (const key of Object.keys(KINDS[iface])) {
+      if (key === 'onchange') continue; // a handler slot, not a value
+      const d = Object.getOwnPropertyDescriptor(window[iface].prototype, key);
+      testing.expectEqual(instance[key], d.get.call(instance), {
+        desc: iface + '.' + key + ' via descriptor',
+      });
+    }
+  }
+</script>
+
+<script id=lenient_setters>
+  // Chrome's three fullscreen members carry [LegacyLenientSetter]: the setter
+  // exists, so the descriptor reads as an accessor, and it does nothing.
+  // Measured on headed Chrome 150 (probe-setter-semantics): no throw, and the
+  // value that comes back is the one that was there.
+  document.fullscreen = 1;
+  testing.expectEqual(false, document.fullscreen);
+  document.fullscreenEnabled = 0;
+  testing.expectEqual(true, document.fullscreenEnabled);
+  document.fullscreenElement = document.body;
+  testing.expectEqual(null, document.fullscreenElement);
+</script>
+
+<script id=put_forwards>
+  // [PutForwards=value]: the assignment goes to the DOMTokenList's `value`, so
+  // the content attribute moves, the token list object stays the same one, and
+  // nothing throws.
+  const iframe = document.createElement('iframe');
+  const sandbox = iframe.sandbox;
+  iframe.sandbox = 'allow-scripts allow-forms';
+  testing.expectEqual('allow-scripts allow-forms', iframe.sandbox.value);
+  testing.expectEqual('allow-scripts allow-forms', iframe.getAttribute('sandbox'));
+  testing.expectEqual(sandbox, iframe.sandbox);
+  testing.expectEqual(2, iframe.sandbox.length);
+
+  for (const [tag, attribute] of [['a', 'rel'], ['area', 'rel'], ['link', 'rel']]) {
+    const el = document.createElement(tag);
+    el.relList = 'nofollow noopener';
+    testing.expectEqual('nofollow noopener', el.relList.value, { desc: tag + '.relList value' });
+    testing.expectEqual('nofollow noopener', el.getAttribute(attribute), { desc: tag + ' attribute' });
+    testing.expectEqual('nofollow noopener', el.rel, { desc: tag + '.rel' });
+  }
+
+  const svg_a = document.createElementNS('http://www.w3.org/2000/svg', 'a');
+  svg_a.relList = 'noreferrer';
+  testing.expectEqual('noreferrer', svg_a.relList.value);
+  testing.expectEqual('noreferrer', svg_a.getAttribute('rel'));
+
+  const output = document.createElement('output');
+  output.htmlFor = 'one two';
+  testing.expectEqual('one two', output.htmlFor.value);
+  testing.expectEqual('one two', output.getAttribute('for'));
+</script>
+
+<script id=readonly_accessors>
+  // A getter with no setter drops the assignment in sloppy mode rather than
+  // throwing, and the value stays. Measured the same way.
+  const ev = new MouseEvent('click');
+  ev.offsetX = 99;
+  testing.expectEqual(0, ev.offsetX);
+  window.visualViewport.scale = 3;
+  testing.expectEqual(1, window.visualViewport.scale);
+  screen.orientation.angle = 90;
+  testing.expectEqual(0, screen.orientation.angle);
+  document.fonts.size = 9;
+  testing.expectEqual(0, document.fonts.size);
+  document.fonts.status = 'loading';
+  testing.expectEqual('loaded', document.fonts.status);
+  const gl = document.createElement('canvas').getContext('webgl');
+  gl.drawingBufferFormat = 0;
+  testing.expectEqual(0x8058, gl.drawingBufferFormat);
+</script>
+
+<script id=color_space_setters>
+  // `drawingBufferColorSpace` and `unpackColorSpace` are read-write. Chrome
+  // takes 'srgb' and 'display-p3' and *ignores* anything else without throwing
+  // (measured -- a WebIDL enum would normally be a TypeError, and this one is
+  // not).
+  for (const gl of [
+    document.createElement('canvas').getContext('webgl'),
+    document.createElement('canvas').getContext('webgl2'),
+  ]) {
+    testing.expectEqual('srgb', gl.drawingBufferColorSpace);
+    gl.drawingBufferColorSpace = 'display-p3';
+    testing.expectEqual('display-p3', gl.drawingBufferColorSpace);
+    gl.drawingBufferColorSpace = 'garbage';
+    testing.expectEqual('display-p3', gl.drawingBufferColorSpace);
+    gl.drawingBufferColorSpace = 'srgb';
+    testing.expectEqual('srgb', gl.drawingBufferColorSpace);
+
+    testing.expectEqual('srgb', gl.unpackColorSpace);
+    gl.unpackColorSpace = 'display-p3';
+    testing.expectEqual('display-p3', gl.unpackColorSpace);
+    gl.unpackColorSpace = 'nope';
+    testing.expectEqual('display-p3', gl.unpackColorSpace);
+  }
+</script>
+
+<script id=font_face_setters>
+  // FontFace's descriptors are read-write, and each instance carries its own.
+  const ff = new FontFace('Test', 'local(Arial)');
+  testing.expectEqual('Test', ff.family);
+  ff.family = 'Other';
+  testing.expectEqual('Other', ff.family);
+
+  const defaults = {
+    style: 'normal', weight: 'normal', stretch: 'normal',
+    unicodeRange: 'U+0-10FFFF', variant: 'normal', featureSettings: 'normal',
+    display: 'auto',
+  };
+  const assigned = {
+    style: 'italic', weight: '700', stretch: 'condensed',
+    unicodeRange: 'U+0-FF', variant: 'small-caps', featureSettings: '"liga" 0',
+    display: 'swap',
+  };
+  for (const [key, want] of Object.entries(defaults)) {
+    testing.expectEqual(want, ff[key], { desc: 'FontFace.' + key + ' default' });
+    ff[key] = assigned[key];
+    testing.expectEqual(assigned[key], ff[key], { desc: 'FontFace.' + key + ' assigned' });
+  }
+  // A second FontFace is unaffected by the first one's assignments.
+  const other = new FontFace('Second', 'local(Arial)');
+  for (const [key, want] of Object.entries(defaults)) {
+    testing.expectEqual(want, other[key], { desc: 'FontFace.' + key + ' is per-instance' });
+  }
+
+  // status is readonly.
+  ff.status = 'loading';
+  testing.expectEqual('loaded', ff.status);
+</script>
+
+<script id=input_setters>
+  // selectionDirection is read-write on the input types that support selection,
+  // an InvalidStateError on the ones that do not, and normalises anything that
+  // is not one of the three keywords to 'none'.
+  const text = document.createElement('input');
+  testing.expectEqual('none', text.selectionDirection);
+  text.selectionDirection = 'backward';
+  testing.expectEqual('backward', text.selectionDirection);
+  text.selectionDirection = 'forward';
+  testing.expectEqual('forward', text.selectionDirection);
+  text.selectionDirection = 'garbage';
+  testing.expectEqual('none', text.selectionDirection);
+
+  const email = document.createElement('input');
+  email.type = 'email';
+  testing.expectError('InvalidStateError', () => { email.selectionDirection = 'forward'; });
+
+  // `files` takes a FileList. null is ignored, a non-file input ignores the
+  // assignment entirely, and the files land on a file input.
+  const file = document.createElement('input');
+  file.type = 'file';
+  testing.expectEqual(0, file.files.length);
+  file.files = null;
+  testing.expectEqual(0, file.files.length);
+
+  const dt = new DataTransfer();
+  dt.items.add(new File(['hi'], 'a.txt'));
+  testing.expectEqual(1, dt.files.length);
+  file.files = dt.files;
+  testing.expectEqual(1, file.files.length);
+  testing.expectEqual('a.txt', file.files[0].name);
+
+  const not_a_file_input = document.createElement('input');
+  not_a_file_input.files = dt.files;
+  testing.expectEqual(null, not_a_file_input.files);
+</script>
+
+<script id=idb_object_store_name type=module>
+  // IDBObjectStore.name is settable, but only inside the versionchange
+  // transaction that can record the rename. Everywhere else Chrome answers
+  // InvalidStateError, "The database is not running a version change
+  // transaction." (measured).
+{
+  const state = await testing.async();
+  const request = indexedDB.open('store-rename-db', 1);
+  request.onupgradeneeded = (e) => {
+    const db = e.target.result;
+    const store = db.createObjectStore('original');
+    store.name = 'renamed';
+    state.resolve({
+      renamed: store.name,
+      names: Array.from(db.objectStoreNames),
+      // The versionchange transaction's cache is keyed on the name, so the
+      // renamed store has to be reachable under the new one -- and be the same
+      // object.
+      by_new_name: e.target.transaction.objectStore('renamed') === store,
+    });
+  };
+  await state.done((got) => {
+    testing.expectEqual('renamed', got.renamed);
+    testing.expectEqual(['renamed'], got.names);
+    testing.expectEqual(true, got.by_new_name);
+  });
+}
+</script>
+
+<script id=idb_object_store_name_outside_upgrade type=module>
+{
+  const state = await testing.async();
+  const request = indexedDB.open('store-rename-guard-db', 1);
+  request.onupgradeneeded = (e) => {
+    e.target.result.createObjectStore('kept');
+  };
+  request.onsuccess = (e) => {
+    const db = e.target.result;
+    const store = db.transaction('kept', 'readwrite').objectStore('kept');
+    state.resolve(store);
+  };
+  await state.done((store) => {
+    testing.expectError('InvalidStateError', () => { store.name = 'nope'; });
+    testing.expectEqual('kept', store.name);
+  });
+}
+</script>

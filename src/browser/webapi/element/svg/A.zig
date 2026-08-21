@@ -45,6 +45,16 @@ pub fn getRelList(self: *A, frame: *Frame) !*DOMTokenList {
     return self.asElement().getRelList(frame);
 }
 
+/// `[PutForwards=value]`: the setter assigns to the DOMTokenList's `value`, so
+/// the `rel` content attribute moves and the list object stays the same one.
+/// The point is the descriptor: with a setter it reads as an accessor, which is
+/// what Chrome exposes and what a bot check reads. See
+/// src/browser/tests/descriptor_kind.html.
+pub fn setRelList(self: *A, value: lp.String, frame: *Frame) !void {
+    const list = try self.getRelList(frame);
+    try list.setValue(value, frame);
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(A);
 
@@ -59,5 +69,5 @@ pub const JsApi = struct {
         return AnimatedString.getOrCreate(self.asElement(), .href, frame);
     }
 
-    pub const relList = bridge.accessor(A.getRelList, null, .{});
+    pub const relList = bridge.accessor(A.getRelList, A.setRelList, .{ .ce_reactions = true });
 };

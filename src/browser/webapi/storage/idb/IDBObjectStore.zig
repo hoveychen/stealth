@@ -48,6 +48,10 @@ _txn: *IDBTransaction,
 _deleted: bool = false,
 // Created by this (versionchange) transaction — so an abort must delete it.
 _created: bool = false,
+// Renamed by this (versionchange) transaction — so an abort must put the old
+// name back on the handle the caller still holds. The engine rollback takes
+// care of the row.
+_renamed_from: ?[]const u8 = null,
 // identity map, store.indexes('a') === store.index('a')
 _indexes: std.ArrayList(*IDBIndex) = .empty,
 // not just for efficiency, we must return the same v8::Array every time the
@@ -271,6 +275,45 @@ pub fn openKeyCursor(self: *IDBObjectStore, query: ?js.Value, direction: ?IDBCur
 
 pub fn getName(self: *const IDBObjectStore) []const u8 {
     return self._name;
+}
+
+/// `name` is read-write, which is what makes its descriptor an accessor rather
+/// than the getter-only one this engine had -- and the kind is what a bot check
+/// reads (see src/browser/tests/descriptor_kind.html).
+///
+/// A rename is a schema change, so it is only legal inside the versionchange
+/// transaction that can record one. Measured on headed Chrome 150
+/// (probe-setter-semantics): inside `upgradeneeded` the rename takes and
+/// `db.objectStoreNames` reports the new name; in a readwrite transaction and
+/// after the upgrade has committed it is InvalidStateError, "The database is not
+/// running a version change transaction."; renaming onto a name that already
+/// exists is a ConstraintError.
+///
+/// `objectStoreNames` reads the names back out of the engine and the
+/// transaction's store cache is keyed on `_name`, so updating both is the whole
+/// rename. `_renamed_from` is for the abort path: the engine rollback undoes the
+/// row, and this undoes the handle the caller is still holding.
+pub fn setName(self: *IDBObjectStore, name: []const u8) !void {
+    try self.assertLive();
+    const txn = self._txn;
+    if (txn._mode != .versionchange) {
+        return error.InvalidStateError;
+    }
+    try txn.assertActive();
+
+    if (std.mem.eql(u8, self._name, name)) {
+        return;
+    }
+
+    const owned = try txn.dupe(name);
+    self._engine.renameObjectStore(self._store_id, owned) catch |err| switch (err) {
+        error.Constraint => return error.ConstraintError,
+        else => return err,
+    };
+    if (self._renamed_from == null) {
+        self._renamed_from = self._name;
+    }
+    self._name = owned;
 }
 
 pub fn getKeyPath(self: *IDBObjectStore, exec: *Execution) !js.Value {
@@ -601,7 +644,7 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const name = bridge.accessor(IDBObjectStore.getName, null, .{});
+    pub const name = bridge.accessor(IDBObjectStore.getName, IDBObjectStore.setName, .{});
     pub const keyPath = bridge.accessor(IDBObjectStore.getKeyPath, null, .{});
     pub const autoIncrement = bridge.accessor(IDBObjectStore.getAutoIncrement, null, .{});
     pub const transaction = bridge.accessor(IDBObjectStore.getTransaction, null, .{ .null_as_undefined = true });

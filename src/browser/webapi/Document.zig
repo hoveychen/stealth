@@ -1184,6 +1184,25 @@ pub fn setDesignMode(self: *Document, value: []const u8) void {
     self._design_mode = std.ascii.eqlIgnoreCase(value, "on");
 }
 
+// The five below were data properties. Chrome has every one of them as a
+// getter, and the difference is not cosmetic: a bot check reads a value it will
+// not trust the instance to answer honestly as
+// `Object.getOwnPropertyDescriptor(Document.prototype, k).get.call(document)`,
+// which throws "Cannot read properties of undefined (reading 'call')" against a
+// data property. Values are the ones that were there: this engine's document is
+// always visible, and never prerendering.
+pub fn getHidden(_: *const Document) bool {
+    return false;
+}
+
+pub fn getVisibilityState(_: *const Document) []const u8 {
+    return "visible";
+}
+
+pub fn getPrerendering(_: *const Document) bool {
+    return false;
+}
+
 pub fn getWasDiscarded(_: *const Document) bool {
     return false;
 }
@@ -1338,6 +1357,15 @@ pub fn getFullscreen(_: *const Document) bool {
 pub fn getFullscreenElement(_: *const Document) ?*Element {
     return null;
 }
+
+/// The setter the three attributes above share. `fullscreenEnabled`,
+/// `fullscreen` and `fullscreenElement` are `[LegacyLenientSetter]` in the
+/// Fullscreen spec: readonly, but with a setter that exists and silently drops
+/// the assignment. So the descriptor is an accessor with both halves, which is
+/// what a bot check reads -- measured on headed Chrome 150, no throw and the
+/// value stays (probe-setter-semantics, and the assertions in
+/// src/browser/tests/descriptor_kind.html).
+pub fn setLeniently(_: *Document, _: js.Value) void {}
 
 pub fn getPictureInPictureEnabled(_: *const Document) bool {
     return true;
@@ -2098,13 +2126,14 @@ pub const JsApi = struct {
     pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
     pub const onpointerlockchange = bridge.accessor(handlerAccessor(.onpointerlockchange).get, handlerAccessor(.onpointerlockchange).set, .{});
     pub const onpointerlockerror = bridge.accessor(handlerAccessor(.onpointerlockerror).get, handlerAccessor(.onpointerlockerror).set, .{});
-    pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
-    pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
+    pub const hidden = bridge.accessor(Document.getHidden, null, .{});
+    pub const visibilityState = bridge.accessor(Document.getVisibilityState, null, .{});
     pub const wasDiscarded = bridge.accessor(Document.getWasDiscarded, null, .{});
-    pub const prerendering = bridge.property(false, .{ .template = false });
+    pub const prerendering = bridge.accessor(Document.getPrerendering, null, .{});
     pub const featurePolicy = bridge.accessor(Document.getFeaturePolicy, null, .{});
-    pub const webkitVisibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
-    pub const webkitHidden = bridge.property(false, .{ .template = false, .readonly = true });
+    // The two -webkit- aliases are the same getters under their old names.
+    pub const webkitVisibilityState = bridge.accessor(Document.getVisibilityState, null, .{});
+    pub const webkitHidden = bridge.accessor(Document.getHidden, null, .{});
     pub const onbeforecopy = bridge.accessor(handlerAccessor(.onbeforecopy).get, handlerAccessor(.onbeforecopy).set, .{});
     pub const onbeforecut = bridge.accessor(handlerAccessor(.onbeforecut).get, handlerAccessor(.onbeforecut).set, .{});
     pub const onbeforepaste = bridge.accessor(handlerAccessor(.onbeforepaste).get, handlerAccessor(.onbeforepaste).set, .{});
@@ -2114,8 +2143,8 @@ pub const JsApi = struct {
     pub const onsearch = bridge.accessor(handlerAccessor(.onsearch).get, handlerAccessor(.onsearch).set, .{});
     pub const onvisibilitychange = bridge.accessor(handlerAccessor(.onvisibilitychange).get, handlerAccessor(.onvisibilitychange).set, .{});
     pub const timeline = bridge.accessor(Document.getTimeline, null, .{});
-    pub const fullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, null, .{});
-    pub const fullscreen = bridge.accessor(Document.getFullscreen, null, .{});
+    pub const fullscreenEnabled = bridge.accessor(Document.getFullscreenEnabled, Document.setLeniently, .{});
+    pub const fullscreen = bridge.accessor(Document.getFullscreen, Document.setLeniently, .{});
     pub const onfullscreenchange = bridge.accessor(handlerAccessor(.onfullscreenchange).get, handlerAccessor(.onfullscreenchange).set, .{});
     pub const onfullscreenerror = bridge.accessor(handlerAccessor(.onfullscreenerror).get, handlerAccessor(.onfullscreenerror).set, .{});
     pub const webkitIsFullScreen = bridge.accessor(Document.getFullscreen, null, .{});
@@ -2232,7 +2261,7 @@ pub const JsApi = struct {
     pub const activeElement = bridge.accessor(Document.getActiveElement, null, .{});
     pub const styleSheets = bridge.accessor(Document.getStyleSheets, null, .{});
     pub const pointerLockElement = bridge.accessor(Document.getFullscreenElement, null, .{});
-    pub const fullscreenElement = bridge.accessor(Document.getFullscreenElement, null, .{});
+    pub const fullscreenElement = bridge.accessor(Document.getFullscreenElement, Document.setLeniently, .{});
     pub const adoptedStyleSheets = bridge.accessor(Document.getAdoptedStyleSheets, Document.setAdoptedStyleSheets, .{});
     pub const pictureInPictureElement = bridge.accessor(Document.getFullscreenElement, null, .{});
     pub const fonts = bridge.accessor(Document.getFonts, null, .{});

@@ -198,6 +198,17 @@ pub fn getShiftKey(self: *const MouseEvent) bool {
     return self._shift_key;
 }
 
+// Zero without layout, which is the value that was already here as a data
+// property. Chrome exposes it as a getter with no setter, and the kind is what
+// a bot check reads -- see the note in src/browser/tests/descriptor_kind.html.
+pub fn getOffsetX(_: *const MouseEvent) f64 {
+    return 0.0;
+}
+
+pub fn getOffsetY(_: *const MouseEvent) f64 {
+    return 0.0;
+}
+
 // Deprecated: tracks the same value as offsetX/clientX in the absence of layout.
 pub fn getLayerX(self: *const MouseEvent) f64 {
     return self._client_x;
@@ -275,8 +286,8 @@ pub const JsApi = struct {
     pub const clientY = bridge.accessor(getClientY, null, .{});
     pub const ctrlKey = bridge.accessor(getCtrlKey, null, .{});
     pub const metaKey = bridge.accessor(getMetaKey, null, .{});
-    pub const offsetX = bridge.property(0.0, .{ .template = false });
-    pub const offsetY = bridge.property(0.0, .{ .template = false });
+    pub const offsetX = bridge.accessor(getOffsetX, null, .{});
+    pub const offsetY = bridge.accessor(getOffsetY, null, .{});
     pub const pageX = bridge.accessor(getPageX, null, .{});
     pub const pageY = bridge.accessor(getPageY, null, .{});
     pub const relatedTarget = bridge.accessor(getRelatedTarget, null, .{});

@@ -45,8 +45,13 @@ const WebGL2RenderingContext = @This();
 
 _canvas: Surface,
 
-/// Shared with WebGL 1: see WebGLRenderingContext.Surface.
+/// Shared with WebGL 1, along with the two colour-space attributes below: see
+/// WebGLRenderingContext.
+_drawing_buffer_color_space: ColorSpace = .srgb,
+_unpack_color_space: ColorSpace = .srgb,
+
 pub const Surface = WebGL1.Surface;
+pub const ColorSpace = WebGL1.ColorSpace;
 
 // The GLenum constants, measured from Chrome.
 pub const DEPTH_BUFFER_BIT: u32 = 0x0100;
@@ -703,6 +708,30 @@ pub fn getDrawingBufferWidth(self: *const WebGL2RenderingContext) u32 {
 
 pub fn getDrawingBufferHeight(self: *const WebGL2RenderingContext) u32 {
     return self._canvas.height();
+}
+
+pub fn getDrawingBufferFormat(_: *const WebGL2RenderingContext) u32 {
+    return RGBA8;
+}
+
+pub fn getDrawingBufferColorSpace(self: *const WebGL2RenderingContext) []const u8 {
+    return @tagName(self._drawing_buffer_color_space);
+}
+
+pub fn setDrawingBufferColorSpace(self: *WebGL2RenderingContext, value: []const u8) void {
+    if (std.meta.stringToEnum(ColorSpace, value)) |cs| {
+        self._drawing_buffer_color_space = cs;
+    }
+}
+
+pub fn getUnpackColorSpace(self: *const WebGL2RenderingContext) []const u8 {
+    return @tagName(self._unpack_color_space);
+}
+
+pub fn setUnpackColorSpace(self: *WebGL2RenderingContext, value: []const u8) void {
+    if (std.meta.stringToEnum(ColorSpace, value)) |cs| {
+        self._unpack_color_space = cs;
+    }
 }
 
 const Parameter = union(enum) {
@@ -1409,9 +1438,9 @@ pub const JsApi = struct {
     pub const canvas = bridge.accessor(WebGL2RenderingContext.getCanvas, null, .{});
     pub const drawingBufferWidth = bridge.accessor(WebGL2RenderingContext.getDrawingBufferWidth, null, .{});
     pub const drawingBufferHeight = bridge.accessor(WebGL2RenderingContext.getDrawingBufferHeight, null, .{});
-    pub const drawingBufferColorSpace = bridge.property("srgb", .{ .template = false, .readonly = false });
-    pub const unpackColorSpace = bridge.property("srgb", .{ .template = false, .readonly = false });
-    pub const drawingBufferFormat = bridge.property(WebGL2RenderingContext.RGBA8, .{ .template = false, .readonly = true });
+    pub const drawingBufferColorSpace = bridge.accessor(WebGL2RenderingContext.getDrawingBufferColorSpace, WebGL2RenderingContext.setDrawingBufferColorSpace, .{});
+    pub const unpackColorSpace = bridge.accessor(WebGL2RenderingContext.getUnpackColorSpace, WebGL2RenderingContext.setUnpackColorSpace, .{});
+    pub const drawingBufferFormat = bridge.accessor(WebGL2RenderingContext.getDrawingBufferFormat, null, .{});
 
     pub const checkFramebufferStatus = bridge.function(WebGL2RenderingContext.checkFramebufferStatus, .{});
     pub const clientWaitSync = bridge.function(WebGL2RenderingContext.clientWaitSync, .{});
