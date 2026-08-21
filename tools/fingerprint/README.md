@@ -4920,18 +4920,73 @@ outright though it takes any other identifier -- the only such pair in the
 tables, and the safe direction of the rejection rule this engine otherwise
 holds, since Chrome drops it too. The identifier probe is **2 of 449**.
 
-**Those last 2 -- and the 13 the colour-property probe still has -- are all one
-thing, and it is not this dispatch.** Chrome *expands a shorthand into its
+**Those last 2 -- and the 13 the colour-property probe still had -- were all one
+thing, and it was not this dispatch.** Chrome *expands a shorthand into its
 longhands* in the declaration: `border: currentColor` becomes 17 longhands and
 `cssText` re-serialises them back (`border-width: medium; border-style: none;
 border-color: currentcolor; border-image: none`), `column-rule: currentColor`
 becomes 3, `background: red` becomes 9. A style map then reads a shorthand by
 reconstructing it from those longhands, which is why `get('column-rule')` answers
-`medium` and `get('border')` answers `undefined` where this engine echoes what
-was declared. It is the same gap already recorded against `margin: 1cm`
-(`style.length` is 4 in Chrome and 1 here), and closing it needs a grammar per
-shorthand -- both to expand and to re-serialise -- rather than anything in the
-identifier dispatch.
+`medium` and `get('border')` answers `undefined` where this engine used to echo
+what was declared -- the same gap already recorded against `margin: 1cm`
+(`style.length` is 4 in Chrome and was 1 here). That is the next section.
+
+## Chrome does not store a shorthand (2026-08-21)
+
+Closing it needed the grammar of each shorthand in both directions, and none of
+it can be read out of a spec, so `dump-css-shorthands.mjs` measures all of it:
+230 shorthands over 115 probe values, against headed Chrome 151. Three things
+came off the browser, and each turned out to be less uniform than it sounds.
+
+**The longhand list is not one list.** It is what `item(i)` answers, so the
+order is the fingerprint -- and nine shorthands enumerate one order for a
+CSS-wide keyword and another for a real value. `border: inherit` is colour,
+style, width, per side; `border: 1px` is four widths, then four styles, then
+four colours. `transition`, `font`, `grid` and `rule-break` do the same, so both
+orders are kept.
+
+**What a longhand the value never mentioned holds is measured per shorthand,
+because Blink is not consistent about it.** `text-decoration: red` leaves the
+other three reading the literal `initial`; `border-top: red` leaves `medium` and
+`none`, the initial values spelled out. Same shape of shorthand, different
+answer, and no rule connects them.
+
+**Distribution is by acceptance, not by position.** `1px solid red`, `solid red
+1px` and `red 1px solid` all land identically, so each component goes to the
+first longhand of the group that accepts it -- which means the value classes
+each longhand takes (`length`, `colour`, `identifier`, ...) had to be measured
+too, and the keyword table already answers the half a value class cannot:
+`solid` and `red` are both identifiers, and only the keyword list says one
+belongs to a style and the other to a colour. The group then repeats, blocked or
+in place, which is how `border` reaches all four sides from three components.
+
+Coming back is not the mirror image of going out, and three separate readings
+say so. A component holding its initial value is **dropped**, so
+`text-decoration: 1px solid red` answers `1px red` -- `solid` is
+text-decoration-style's initial. A slot can be dropped at more than one value:
+text-decoration's colour goes for the literal `initial` *and* for
+`currentcolor`, which is why `text-decoration: currentColor` stores a colour and
+still answers `none`. And when every component drops, the answer is per
+shorthand: `column-rule` answers its width (`medium`), `text-decoration` its
+line (`none`), and `border` answers nothing at all -- cssText then writes the
+four sub-shorthands instead. `transition` writes its components in an order its
+longhands are not stored in, and `page-break-after` reads back `always` for a
+stored `break-after: page`.
+
+Every model was checked against every probe value that parsed, expansion and
+re-serialisation both, before it was written down; 36 of the 230 survive nothing
+and are marked `.unmodelled`, so the engine keeps them whole. Those are the
+shorthands with a real grammar behind them -- `background`, `font`, `grid`,
+`flex`, `list-style`, `border-radius`, `border-image`, `offset`, `mask` and
+their `-webkit-` spellings -- and for them `style.length` still answers 1 where
+Chrome says 9. That is a visible difference, and a smaller one than nine
+invented values.
+
+Measured after: the 475-longhand identifier probe is **0 of 449** and the 61
+colour properties crossed with six colour values **0 of 304**, both from the
+shorthand work alone. CSS-wide is unchanged at 0 of 39, keyword spelling at 0 of
+27, and `probe-css13` at 1 of 42 -- still the one `setProperty('height',
+'notalength')` case that is deliberately not fixed.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
