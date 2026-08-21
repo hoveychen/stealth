@@ -165,5 +165,46 @@ function withStyle(text) {
     testing.expectEqual('width: CALC(1PX + VAR(--a));', round('width: CALC(1PX + VAR(--a))'));
 }
 </script>
+
+<script id="a_url_is_always_serialised_quoted">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // Chrome answers a url() with the path in double quotes however it was
+    // written, and the quoting is the only thing it adds: the path keeps its
+    // case, its query string and its fragment.
+    testing.expectEqual('background-image: url("Foo/Bar.PNG");', round('background-image: URL(Foo/Bar.PNG)'));
+    testing.expectEqual('background-image: url("a");', round('background-image: url(a)'));
+    testing.expectEqual('background-image: url("a");', round('background-image: url("a")'));
+    testing.expectEqual('background-image: url("a");', round("background-image: url('a')"));
+    testing.expectEqual('background-image: url("a");', round('background-image: url(  a  )'));
+    testing.expectEqual('background-image: url("");', round('background-image: url()'));
+    testing.expectEqual('background-image: url("#frag");', round('background-image: url(#frag)'));
+    testing.expectEqual(
+        'background-image: url("A.PNG?X=Y&Z=1PX");',
+        round('background-image: URL(A.PNG?X=Y&Z=1PX)'));
+
+    // One per url(), wherever they sit.
+    testing.expectEqual(
+        'background-image: url("A.PNG"), url("B.PNG");',
+        round('background-image: url(A.PNG), url(B.PNG)'));
+    testing.expectEqual(
+        'background-image: image-set(url("A.PNG") 1x);',
+        round('background-image: image-set(URL(A.PNG) 1x)'));
+    testing.expectEqual('cursor: url("A.PNG"), auto;', round('cursor: URL(A.PNG), auto'));
+
+    // The escapes an unquoted path needs are resolved, and the two characters
+    // a quoted one cannot hold bare are escaped back.
+    testing.expectEqual('background-image: url("a b");', round('background-image: url(a\\ b)'));
+    testing.expectEqual('background-image: url("a(b");', round('background-image: url(a\\28 b)'));
+    testing.expectEqual('background-image: url("a\\"b");', round("background-image: url('a\"b')"));
+    testing.expectEqual('background-image: url("a\\\\b");', round('background-image: url(a\\\\b)'));
+
+    // A url() inside a substituted value is frozen with the rest of it.
+    testing.expectEqual(
+        'background-image: VAR(--a, URL(A.PNG));',
+        round('background-image: VAR(--a, URL(A.PNG))'));
+}
+</script>
 </body>
 </html>

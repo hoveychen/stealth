@@ -609,12 +609,13 @@ fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []cons
                 try buf.writer.writeAll(spelling);
                 changed = changed or !std.mem.eql(u8, spelling, name);
                 i = end;
-                // A url()'s content is a single opaque token, not a value:
-                // `URL(Foo/Bar.PNG)` re-cases the name and nothing else.
+                // A url()'s content is one token rather than a value, and it
+                // gets its own serialisation: measured, Chrome answers a path
+                // in double quotes however it was written.
                 if (std.ascii.eqlIgnoreCase(name, "url")) {
-                    const close = std.mem.indexOfScalarPos(u8, value, i, ')') orelse value.len - 1;
-                    try buf.writer.writeAll(value[i .. close + 1]);
-                    i = close + 1;
+                    const before = buf.written().len;
+                    i = try writeUrl(&buf.writer, value, i);
+                    changed = changed or !std.mem.eql(u8, buf.written()[before..], value[end..i]);
                 }
                 continue;
             }
@@ -655,6 +656,86 @@ fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []cons
         return value;
     }
     return buf.written();
+}
+
+/// Serialise the `url(...)` whose opening paren is at `open`, and answer the
+/// index just past its closing one. Measured: Chrome always answers
+/// `url("<path>")` -- an unquoted path gains quotes, a single-quoted one is
+/// requoted, the whitespace around it goes, the escapes an unquoted path needs
+/// are resolved (`url(a\ b)` is `url("a b")`, `url(a\28 b)` is `url("a(b")`),
+/// and the two characters a quoted path cannot hold bare are escaped back.
+fn writeUrl(writer: *std.Io.Writer, value: []const u8, open: usize) !usize {
+    var i = open + 1;
+    while (i < value.len and std.ascii.isWhitespace(value[i])) : (i += 1) {}
+
+    var content: []const u8 = "";
+    if (i < value.len and (value[i] == '"' or value[i] == '\'')) {
+        const end = stringEnd(value, i);
+        const terminated = end > i + 1 and value[end - 1] == value[i];
+        content = value[i + 1 .. if (terminated) end - 1 else end];
+        i = end;
+    } else {
+        const start = i;
+        while (i < value.len and value[i] != ')') : (i += 1) {
+            if (value[i] == '\\' and i + 1 < value.len) i += 1;
+        }
+        content = std.mem.trimEnd(u8, value[start..i], &std.ascii.whitespace);
+    }
+    while (i < value.len and value[i] != ')') : (i += 1) {}
+
+    try writer.writeAll("(\"");
+    try writeUrlContent(writer, content);
+    try writer.writeAll("\")");
+    return if (i < value.len) i + 1 else i;
+}
+
+fn writeUrlContent(writer: *std.Io.Writer, content: []const u8) !void {
+    var i: usize = 0;
+    while (i < content.len) {
+        if (content[i] != '\\') {
+            try writeUrlCodepoint(writer, content[i]);
+            i += 1;
+            continue;
+        }
+        i += 1;
+        if (i == content.len) {
+            // A trailing backslash escapes nothing.
+            break;
+        }
+        if (std.fmt.charToDigit(content[i], 16) catch null == null) {
+            // `\x` is whatever x is, escape or no escape.
+            try writeUrlCodepoint(writer, content[i]);
+            i += 1;
+            continue;
+        }
+        var code: u32 = 0;
+        var digits: usize = 0;
+        while (i < content.len and digits < 6) : (digits += 1) {
+            const digit = std.fmt.charToDigit(content[i], 16) catch break;
+            code = code * 16 + digit;
+            i += 1;
+        }
+        // A single whitespace may follow, to say where the escape stops.
+        if (i < content.len and std.ascii.isWhitespace(content[i])) {
+            i += 1;
+        }
+        try writeUrlCodepoint(writer, code);
+    }
+}
+
+fn writeUrlCodepoint(writer: *std.Io.Writer, code: u32) !void {
+    if (code == '"' or code == '\\') {
+        try writer.writeByte('\\');
+    }
+    if (code < 0x80) {
+        return writer.writeByte(@intCast(code));
+    }
+    var utf8: [4]u8 = undefined;
+    // A zero, a surrogate half or anything past the last code point is the
+    // replacement character, which is what the tokeniser is specified to do.
+    const len = std.unicode.utf8Encode(std.math.cast(u21, code) orelse 0xFFFD, &utf8) catch
+        std.unicode.utf8Encode(0xFFFD, &utf8) catch unreachable;
+    try writer.writeAll(utf8[0..len]);
 }
 
 /// The canonical spelling of a bare identifier, or the one it was written with
@@ -1736,9 +1817,7 @@ test "normalizePropertyValue: value case" {
         .{ "color", "#AABBCC", "#AABBCC" },
         .{ "content", "\"MiXeD\"", "\"MiXeD\"" },
         .{ "content", "\"1PX\"", "\"1PX\"" },
-        // Chrome also quotes the path (`url("Foo/Bar.PNG")`); the case of the
-        // path itself survives either way.
-        .{ "background-image", "URL(Foo/Bar.PNG)", "url(Foo/Bar.PNG)" },
+        .{ "background-image", "URL(Foo/Bar.PNG)", "url(\"Foo/Bar.PNG\")" },
         // An `e` only starts an exponent when digits follow it, or `1em` would
         // lose its unit. Chrome folds the second to `100px`.
         .{ "width", "1EM", "1em" },

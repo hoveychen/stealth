@@ -4617,8 +4617,8 @@ closed too, below, and `probe-css12` is now **0 of 39**.
 
 **The declaration side is closed to the four re-casing rules** (`probe-css13`,
 42 readings, headed Chrome 151 against this engine on the same host).
-It started at 27 of 42 and is now **5**, every one of them a shape deliberately
-left out of scope. Two separate findings, neither guessable:
+It started at 27 of 42 and is now **4**, every one of them a shape deliberately
+left out of scope. Three separate findings, none guessable:
 
 *What rewrites the attribute text.* The style attribute is rewritten only when
 the declaration block actually changed. Removing a property that was never
@@ -4649,11 +4649,22 @@ arbitrary identifier still *has* keywords, and since Chrome accepts both
 `MyOwnFont` and `sans-serif` for `font-family`, acceptance is no signal there --
 re-casing is. 218 such keywords over 29 properties.
 
-The five readings that still differ are all cases where Chrome rewrites the
+*How a url() is serialised.* Chrome answers a `url()` with its path in double
+quotes however it was written, and the quoting is the only thing it adds: an
+unquoted path gains quotes, a single-quoted one is requoted, the whitespace
+around it goes, the escapes an unquoted path needs are resolved (`url(a\ b)` is
+`url("a b")`, `url(a\28 b)` is `url("a(b")`) and the two characters a quoted
+path cannot hold bare are escaped back. The path itself is untouched -- case,
+query string and fragment all survive, and it is not resolved against the
+document base. This one reaches past the inline style: `@font-face { src:
+url(foo.woff2) }` reads back quoted too, which is why
+`tests/css/rule_hierarchy.html` and `tests/css/stylesheet.html` each had a
+recorded "Chrome answers X, we answer Y" caveat that is now just X.
+
+The four readings that still differ are all cases where Chrome rewrites the
 value past a case change, which needs a colour parser and a number normaliser
 this engine does not have: `#AABBCC` -> `rgb(170, 187, 204)`, `1E2px` ->
-`100px`, `url(Foo/Bar.PNG)` -> `url("Foo/Bar.PNG")` (the name is re-cased, the
-quoting is not added), a quoted font family losing its quotes -- plus
+`100px`, a quoted font family losing its quotes -- plus
 `setProperty('height', 'notalength')` sticking here, which is the
 invalid-inline-value difference recorded above.
 

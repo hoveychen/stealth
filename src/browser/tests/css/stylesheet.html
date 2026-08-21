@@ -198,9 +198,10 @@
     const div = document.createElement('div');
     const style = div.style;
 
-    // URL value with colon
+    // URL value with colon. The quotes are Chrome's: an unquoted url() token
+    // gains them on the way out (tests/css/declaration_serialize.html).
     style.cssText = 'background: url(http://example.com/image.png)';
-    testing.expectEqual('url(http://example.com/image.png)', style.getPropertyValue('background'));
+    testing.expectEqual('url("http://example.com/image.png")', style.getPropertyValue('background'));
 }
 </script>
 

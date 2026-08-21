@@ -21,7 +21,7 @@
  "gridArea": "grid-area: MyArea;",
  "counterReset": "counter-reset: MyCounter 3;",
  "contentString": "content: \"MiXeD\";",
- "urlValue": "background-image: url(Foo/Bar.PNG);",
+ "urlValue": "background-image: url(\"Foo/Bar.PNG\");",
  "attrValue": "content: ATTR(Data-X);",
  "varRef": "width: VAR(--Foo);",
  "customPropValue": "--Case: MiXeD Value;",
