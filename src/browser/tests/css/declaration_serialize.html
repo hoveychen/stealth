@@ -585,6 +585,32 @@ function withStyle(text) {
         testing.expectEqual('repeat-x', read('repeat-x'));
     }
 
+    // A corner radius is a fold *and* the zero rule: the pair is two lengths,
+    // so a bare `0` takes its unit in either half, which is what separates
+    // this from the plain fold. Measured by probe-css16.js on
+    // border-top-left-radius, border-bottom-right-radius and
+    // border-start-end-radius; the other five spellings are the same longhand
+    // and are covered here because the rule is keyed on all eight.
+    for (const property of [
+        'border-top-left-radius', 'border-top-right-radius',
+        'border-bottom-right-radius', 'border-bottom-left-radius',
+        'border-start-start-radius', 'border-start-end-radius',
+        'border-end-start-radius', 'border-end-end-radius',
+    ]) {
+        const read = (value) =>
+            withStyle(property + ': ' + value).style.getPropertyValue(property);
+        testing.expectEqual('10px', read('10px'));
+        testing.expectEqual('10px', read('10px 10px'));
+        testing.expectEqual('10px 20px', read('10px 20px'));
+        testing.expectEqual('50%', read('50%'));
+        testing.expectEqual('50%', read('50% 50%'));
+        testing.expectEqual('50% 25%', read('50% 25%'));
+        testing.expectEqual('0px', read('0'));
+        testing.expectEqual('0px', read('0 0'));
+        testing.expectEqual('0px 10px', read('0 10px'));
+        testing.expectEqual('10px 0px', read('10px 0'));
+    }
+
     // Both rules run per layer, because a comma list of them is what the
     // background and mask shorthands store.
     testing.expectEqual('10px, 20px',
