@@ -504,6 +504,108 @@ function withStyle(text) {
 </script>
 
 <!--
+  A property that takes a pair. Measured by tools/fingerprint/probes/
+  probe-css15.js on headed Chrome 151: three rules, not one. Most such
+  properties fold `X X` back to `X`; a size drops a trailing `auto` and keeps
+  an equal pair; a repeat does both a fold and a rename, because the pair
+  `repeat no-repeat` has a keyword of its own.
+-->
+<script id="a_two_value_property_folds_the_way_chrome_folds_it">
+{
+    // The plain fold, one property from each family that takes it.
+    const folds = {
+        'place-content': 'center center',
+        'place-items': 'start start',
+        'place-self': 'auto auto',
+        'margin-block': '10px 10px',
+        'padding-inline': '10px 10px',
+        'inset-block': 'auto auto',
+        'border-block-style': 'solid solid',
+        'border-inline-width': 'thin thin',
+        'border-block-color': 'red red',
+        'overflow': 'hidden hidden',
+        'overscroll-behavior': 'contain contain',
+        'gap': '10px 10px',
+        'scroll-padding-block': '10px 10px',
+        'scroll-snap-align': 'start start',
+        'border-image-repeat': 'stretch stretch',
+        '-webkit-mask-box-image-repeat': 'stretch stretch',
+    };
+    for (const [property, pair] of Object.entries(folds)) {
+        const half = pair.slice(0, pair.indexOf(' '));
+        testing.expectEqual(half,
+            withStyle(property + ': ' + pair).style.getPropertyValue(property));
+    }
+
+    // An unequal pair stays a pair, whichever way round it was written.
+    testing.expectEqual('stretch repeat',
+        withStyle('border-image-repeat: stretch repeat').style.getPropertyValue('border-image-repeat'));
+    testing.expectEqual('10px auto',
+        withStyle('inset-block: 10px auto').style.getPropertyValue('inset-block'));
+
+    // A size does not fold: `10px 10px` is two values in Chrome. What it does
+    // instead is drop a trailing `auto`, which is the half a one-value size
+    // would have implied anyway. `-webkit-mask-size` is the same longhand
+    // under another name.
+    for (const property of ['background-size', 'mask-size', '-webkit-mask-size']) {
+        const read = (value) =>
+            withStyle(property + ': ' + value).style.getPropertyValue(property);
+        testing.expectEqual('10px', read('10px auto'));
+        testing.expectEqual('auto', read('auto auto'));
+        testing.expectEqual('50%', read('50% auto'));
+        testing.expectEqual('auto 10px', read('auto 10px'));
+        testing.expectEqual('10px 10px', read('10px 10px'));
+        testing.expectEqual('10px 20px', read('10px 20px'));
+        testing.expectEqual('cover', read('cover'));
+        // A bare zero takes its unit in either half, which the whole-value
+        // rule alone does not reach.
+        testing.expectEqual('0px', read('0'));
+        testing.expectEqual('0px 0px', read('0 0'));
+        testing.expectEqual('0px 10px', read('0 10px'));
+        testing.expectEqual('10px 0px', read('10px 0'));
+        testing.expectEqual('0px', read('0 auto'));
+        testing.expectEqual('auto 0px', read('auto 0'));
+    }
+
+    // A repeat pair folds when the halves agree and is renamed when they are
+    // the two halves of an axis keyword.
+    for (const property of ['background-repeat', 'mask-repeat', '-webkit-mask-repeat']) {
+        const read = (value) =>
+            withStyle(property + ': ' + value).style.getPropertyValue(property);
+        testing.expectEqual('repeat-x', read('repeat no-repeat'));
+        testing.expectEqual('repeat-y', read('no-repeat repeat'));
+        testing.expectEqual('repeat', read('repeat repeat'));
+        testing.expectEqual('no-repeat', read('no-repeat no-repeat'));
+        testing.expectEqual('space', read('space space'));
+        testing.expectEqual('round', read('round round'));
+        testing.expectEqual('space round', read('space round'));
+        testing.expectEqual('round space', read('round space'));
+        testing.expectEqual('repeat space', read('repeat space'));
+        testing.expectEqual('no-repeat space', read('no-repeat space'));
+        testing.expectEqual('repeat-x', read('repeat-x'));
+    }
+
+    // Both rules run per layer, because a comma list of them is what the
+    // background and mask shorthands store.
+    testing.expectEqual('10px, 20px',
+        withStyle('background-size: 10px auto, 20px').style.getPropertyValue('background-size'));
+    testing.expectEqual('10px 10px, auto',
+        withStyle('background-size: 10px 10px, auto auto').style.getPropertyValue('background-size'));
+    testing.expectEqual('0px 0px, 10px',
+        withStyle('background-size: 0 0, 10px').style.getPropertyValue('background-size'));
+    testing.expectEqual('repeat-x, space round',
+        withStyle('background-repeat: repeat no-repeat, space round')
+            .style.getPropertyValue('background-repeat'));
+    testing.expectEqual('repeat, repeat-y',
+        withStyle('background-repeat: repeat repeat, no-repeat repeat')
+            .style.getPropertyValue('background-repeat'));
+    testing.expectEqual('repeat-x, space round',
+        withStyle('mask-repeat: repeat no-repeat, space round')
+            .style.getPropertyValue('mask-repeat'));
+}
+</script>
+
+<!--
   A shorthand is not stored. Chrome expands it into its longhands and keeps
   those, so the declaration's length, its indexed names and the value it
   answers for the shorthand are all rebuilt rather than echoed. Measured on
@@ -670,15 +772,50 @@ function withStyle(text) {
             .style.getPropertyValue('background'));
 
     // A value the layer model declines is kept whole rather than expanded
-    // wrongly: a two-value repeat is the repeat longhand's own
-    // canonicalisation (`repeat no-repeat` is `repeat-x`), and `border-area`
-    // moves the origin where no other clip-only keyword does.
-    for (const value of ['repeat no-repeat', 'border-area']) {
+    // wrongly: `border-area` moves the origin where no other clip-only
+    // keyword does.
+    for (const value of ['border-area']) {
         const whole = withStyle('background: ' + value);
         testing.expectEqual(1, whole.style.length);
         testing.expectEqual('background', whole.style.item(0));
         testing.expectEqual(value, whole.style.getPropertyValue('background'));
     }
+
+    // Two of the slots take a pair rather than a single component: the size
+    // after the `/`, and the repeat. The pair reaches its longhand whole and
+    // is shortened there, which is why `repeat no-repeat` comes back as the
+    // axis keyword it spells.
+    const paired = withStyle('background: left top / 10px 20px');
+    testing.expectEqual(9, paired.style.length);
+    testing.expectEqual('left', paired.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('top', paired.style.getPropertyValue('background-position-y'));
+    testing.expectEqual('10px 20px', paired.style.getPropertyValue('background-size'));
+    testing.expectEqual('left top / 10px 20px', paired.style.getPropertyValue('background'));
+
+    const both = withStyle('background: 10px 20px / 30px 40px');
+    testing.expectEqual('10px', both.style.getPropertyValue('background-position-x'));
+    testing.expectEqual('20px', both.style.getPropertyValue('background-position-y'));
+    testing.expectEqual('30px 40px', both.style.getPropertyValue('background-size'));
+    testing.expectEqual('10px 20px / 30px 40px', both.style.getPropertyValue('background'));
+
+    const axis = withStyle('background: repeat no-repeat');
+    testing.expectEqual(9, axis.style.length);
+    testing.expectEqual('repeat-x', axis.style.getPropertyValue('background-repeat'));
+    testing.expectEqual('repeat-x', axis.style.getPropertyValue('background'));
+    testing.expectEqual('repeat-y', withStyle('background: no-repeat repeat')
+        .style.getPropertyValue('background'));
+    // A pair with no keyword of its own stays a pair, in the layer as in the
+    // longhand.
+    testing.expectEqual('space round', withStyle('background: space round')
+        .style.getPropertyValue('background'));
+    testing.expectEqual('repeat-x, space round',
+        withStyle('background: repeat no-repeat, space round')
+            .style.getPropertyValue('background'));
+
+    // The pair does not swallow a component that belongs to another slot.
+    const mixed = withStyle('background: no-repeat fixed');
+    testing.expectEqual('no-repeat', mixed.style.getPropertyValue('background-repeat'));
+    testing.expectEqual('fixed', mixed.style.getPropertyValue('background-attachment'));
 
     // A comma is a layer boundary: every per-layer longhand becomes a comma
     // list as long as the value had layers, and the ones a layer never
@@ -769,6 +906,14 @@ function withStyle(text) {
     testing.expectEqual('url("a"), url("b")', withStyle('mask: url("a"), url("b")')
         .style.getPropertyValue('mask'));
     testing.expectEqual('padding-box, none', withStyle('mask: padding-box, border-box')
+        .style.getPropertyValue('mask'));
+
+    // Mask's size and repeat take a pair the same way background's do.
+    testing.expectEqual('left top / 10px 20px', withStyle('mask: left top / 10px 20px')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('repeat-x', withStyle('mask: repeat no-repeat')
+        .style.getPropertyValue('mask'));
+    testing.expectEqual('space round', withStyle('mask: space round')
         .style.getPropertyValue('mask'));
 
     // The -webkit- spelling stores the same nine longhands, and cssText writes

@@ -649,10 +649,11 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
         return writeCounters(arena, value, default);
     }
 
-    // For 2-value shorthand properties, collapse "X X" to "X"
-    if (isTwoValueShorthand(property_name)) {
-        if (collapseDuplicateValue(value)) |single| {
-            return single;
+    // A property written as a pair comes back shorter, by whichever of the
+    // three measured rules it takes.
+    if (twoValueRule(property_name)) |rule| {
+        if (try shortenPairs(arena, rule, value)) |shortened| {
+            return shortened;
         }
     }
 
@@ -1747,21 +1748,80 @@ fn canonicalizeAnchor(arena: Allocator, value: []const u8, start_index: usize) !
     return buf.written();
 }
 
-// Check if a value is "X X" (duplicate) and return just "X"
-fn collapseDuplicateValue(value: []const u8) ?[]const u8 {
-    const space_idx = std.mem.indexOfScalar(u8, value, ' ') orelse return null;
-    if (space_idx == 0 or space_idx >= value.len - 1) return null;
+/// Shorten every comma-separated layer of a value by `rule`, or null when no
+/// layer had anything to shorten -- Chrome runs these per layer, so
+/// `background-repeat: repeat, repeat no-repeat` answers `repeat, repeat-x`.
+fn shortenPairs(arena: Allocator, rule: TwoValueRule, value: []const u8) !?[]const u8 {
+    var written: std.ArrayList([]const u8) = .empty;
+    defer written.deinit(arena);
 
-    const first = value[0..space_idx];
-    const rest = std.mem.trimStart(u8, value[space_idx + 1 ..], " ");
-
-    // Check if there's only one more value (no additional spaces)
-    if (std.mem.indexOfScalar(u8, rest, ' ') != null) return null;
-
-    if (std.mem.eql(u8, first, rest)) {
-        return first;
+    var changed = false;
+    var layers = shorthand.Layers.init(value);
+    while (layers.next()) |layer| {
+        const trimmed = std.mem.trim(u8, layer, &std.ascii.whitespace);
+        if (try shortenPair(arena, rule, trimmed)) |shorter| {
+            changed = true;
+            try written.append(arena, shorter);
+        } else {
+            try written.append(arena, trimmed);
+        }
     }
-    return null;
+    if (!changed) return null;
+    return try std.mem.join(arena, ", ", written.items);
+}
+
+/// One layer under one rule, or null when the layer is already as short as
+/// Chrome writes it. A layer of more components than the rule knows about is
+/// left alone rather than guessed at.
+fn shortenPair(arena: Allocator, rule: TwoValueRule, layer: []const u8) !?[]const u8 {
+    var parts: [2][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = shorthand.Components.init(layer);
+    while (walk.next()) |component| {
+        if (count == parts.len) return null;
+        parts[count] = component;
+        count += 1;
+    }
+    if (count == 0 or !walk.exhausted()) return null;
+
+    switch (rule) {
+        .fold => {
+            if (count != 2 or !std.mem.eql(u8, parts[0], parts[1])) return null;
+            return parts[0];
+        },
+        .repeat => {
+            if (count != 2) return null;
+            // The two pairs that name an axis have a keyword of their own.
+            if (std.mem.eql(u8, parts[0], "repeat") and std.mem.eql(u8, parts[1], "no-repeat")) {
+                return "repeat-x";
+            }
+            if (std.mem.eql(u8, parts[0], "no-repeat") and std.mem.eql(u8, parts[1], "repeat")) {
+                return "repeat-y";
+            }
+            if (!std.mem.eql(u8, parts[0], parts[1])) return null;
+            return parts[0];
+        },
+        .size => {
+            var shortened = false;
+            // Both halves are lengths, and a bare `0` takes its unit in
+            // either -- the whole-value rule above only reaches a lone one.
+            for (parts[0..count]) |*part| {
+                if (!std.mem.eql(u8, part.*, "0")) continue;
+                part.* = "0px";
+                shortened = true;
+            }
+            // A trailing `auto` is the half a one-value size would have
+            // implied, so Chrome drops it. An equal pair is not a fold here:
+            // `10px 10px` stays two values.
+            var kept = count;
+            if (count == 2 and std.mem.eql(u8, parts[1], "auto")) {
+                kept = 1;
+                shortened = true;
+            }
+            if (!shortened) return null;
+            return try std.mem.join(arena, " ", parts[0..kept]);
+        },
+    }
 }
 
 /// The count a counter property gives a name written without one. Measured:
@@ -1822,38 +1882,71 @@ fn writeCounters(arena: Allocator, value: []const u8, default: []const u8) ![]co
     return buf.written();
 }
 
-fn isTwoValueShorthand(name: []const u8) bool {
-    const shorthands = std.StaticStringMap(void).initComptime(.{
-        .{ "place-content", {} },
-        .{ "place-items", {} },
-        .{ "place-self", {} },
-        .{ "margin-block", {} },
-        .{ "margin-inline", {} },
-        .{ "padding-block", {} },
-        .{ "padding-inline", {} },
-        .{ "inset-block", {} },
-        .{ "inset-inline", {} },
-        .{ "border-block-style", {} },
-        .{ "border-inline-style", {} },
-        .{ "border-block-width", {} },
-        .{ "border-inline-width", {} },
-        .{ "border-block-color", {} },
-        .{ "border-inline-color", {} },
-        .{ "overflow", {} },
-        .{ "overscroll-behavior", {} },
-        .{ "gap", {} },
-        .{ "grid-gap", {} },
+/// How Chrome shortens a property written as a pair. Measured by
+/// tools/fingerprint/probes/probe-css15.js -- three rules, not one, and the
+/// difference between them is only visible on the values where they disagree.
+const TwoValueRule = enum {
+    /// An equal pair becomes one value and an unequal pair stays two:
+    /// `gap: 10px 10px` is `10px`, `gap: 10px 20px` is itself. What every
+    /// two-value property but a size and a repeat does.
+    fold,
+    /// A trailing `auto` goes -- `10px auto` is `10px`, `auto auto` is `auto`
+    /// -- and an equal pair does *not* fold: `background-size: 10px 10px`
+    /// stays two values, which is where a plain fold gets it wrong.
+    size,
+    /// A fold, plus the rename an axis keyword gives the two pairs that spell
+    /// it: `repeat no-repeat` is `repeat-x` and `no-repeat repeat` is
+    /// `repeat-y`. Every other mixed pair (`space round`, `repeat space`)
+    /// stays a pair.
+    repeat,
+};
+
+/// The rule a property takes, or null for one Chrome leaves as written.
+///
+/// Most of the `.fold` names are shorthands, which reach this only when the
+/// shorthand table declines their value -- `storeProperty` expands the ones it
+/// models and canonicalises the longhands instead. They are listed anyway,
+/// because the fallback path should not answer differently from the modelled
+/// one.
+///
+/// The `-webkit-` spellings of mask are not here: `-webkit-mask-size` and
+/// `-webkit-mask-repeat` are stored under the unprefixed name, so they arrive
+/// already renamed. `-webkit-mask-box-image-repeat` keeps its own name and so
+/// needs its own entry.
+fn twoValueRule(name: []const u8) ?TwoValueRule {
+    const rules = std.StaticStringMap(TwoValueRule).initComptime(.{
+        .{ "place-content", .fold },
+        .{ "place-items", .fold },
+        .{ "place-self", .fold },
+        .{ "margin-block", .fold },
+        .{ "margin-inline", .fold },
+        .{ "padding-block", .fold },
+        .{ "padding-inline", .fold },
+        .{ "inset-block", .fold },
+        .{ "inset-inline", .fold },
+        .{ "border-block-style", .fold },
+        .{ "border-inline-style", .fold },
+        .{ "border-block-width", .fold },
+        .{ "border-inline-width", .fold },
+        .{ "border-block-color", .fold },
+        .{ "border-inline-color", .fold },
+        .{ "overflow", .fold },
+        .{ "overscroll-behavior", .fold },
+        .{ "gap", .fold },
+        .{ "grid-gap", .fold },
         // Scroll
-        .{ "scroll-padding-block", {} },
-        .{ "scroll-padding-inline", {} },
-        .{ "scroll-snap-align", {} },
+        .{ "scroll-padding-block", .fold },
+        .{ "scroll-padding-inline", .fold },
+        .{ "scroll-snap-align", .fold },
         // Background/Mask
-        .{ "background-size", {} },
-        .{ "border-image-repeat", {} },
-        .{ "mask-repeat", {} },
-        .{ "mask-size", {} },
+        .{ "background-size", .size },
+        .{ "mask-size", .size },
+        .{ "background-repeat", .repeat },
+        .{ "mask-repeat", .repeat },
+        .{ "border-image-repeat", .fold },
+        .{ "-webkit-mask-box-image-repeat", .fold },
     });
-    return shorthands.has(name);
+    return rules.get(name);
 }
 
 fn isLengthProperty(name: []const u8) bool {
@@ -2507,20 +2600,44 @@ test "normalizePropertyValue: first baseline to baseline" {
     try testing.expectEqual("last baseline", result2);
 }
 
-test "normalizePropertyValue: collapse duplicate two-value shorthands" {
+// The three rules of `twoValueRule`, and the rows where they disagree: a fold
+// keeps nothing of an equal pair, a size keeps both halves but drops a trailing
+// `auto`, a repeat renames the two pairs that spell an axis. The fixture in
+// tests/css/declaration_serialize.html carries the same readings through the
+// CSSOM; these are the ones taken straight off the canonicaliser.
+test "normalizePropertyValue: shorten a two-value property" {
     const cases = .{
+        // .fold
         .{ "overflow", "hidden hidden", "hidden" },
         .{ "gap", "10px 10px", "10px" },
         .{ "scroll-snap-align", "start start", "start" },
         .{ "scroll-padding-block", "5px 5px", "5px" },
-        .{ "background-size", "auto auto", "auto" },
         .{ "overscroll-behavior", "auto auto", "auto" },
-        // Different values should NOT collapse
+        .{ "border-image-repeat", "stretch stretch", "stretch" },
+        .{ "-webkit-mask-box-image-repeat", "stretch stretch", "stretch" },
         .{ "overflow", "hidden scroll", "hidden scroll" },
         .{ "gap", "10px 20px", "10px 20px" },
+        // .size -- an equal pair is two values, and only a trailing `auto` goes
+        .{ "background-size", "auto auto", "auto" },
+        .{ "background-size", "10px auto", "10px" },
+        .{ "background-size", "auto 10px", "auto 10px" },
+        .{ "background-size", "10px 10px", "10px 10px" },
+        .{ "mask-size", "10px 10px", "10px 10px" },
+        .{ "background-size", "0 0", "0px 0px" },
+        .{ "background-size", "0 auto", "0px" },
+        .{ "background-size", "cover", "cover" },
+        // .repeat
+        .{ "background-repeat", "repeat no-repeat", "repeat-x" },
+        .{ "background-repeat", "no-repeat repeat", "repeat-y" },
+        .{ "background-repeat", "round round", "round" },
+        .{ "background-repeat", "space round", "space round" },
+        .{ "mask-repeat", "repeat no-repeat", "repeat-x" },
+        // Per layer, both rules
+        .{ "background-size", "10px auto, 20px", "10px, 20px" },
+        .{ "background-repeat", "repeat repeat, no-repeat repeat", "repeat, repeat-y" },
     };
     inline for (cases) |case| {
-        const result = try normalizePropertyValue(testing.allocator, case[0], case[1]);
+        const result = try normalizePropertyValue(testing.arena_allocator, case[0], case[1]);
         try testing.expectEqual(case[2], result);
     }
 }

@@ -681,6 +681,16 @@ function positionSlots(toks, m, accepts) {
     return null;
 }
 
+// How many components a slot takes as one value. Two of them take a pair --
+// the size after the `/` and the repeat -- and every other slot stops at one.
+// 0 means the slot cannot take even the first component.
+function runLength(toks, m, accepts, slot) {
+    if (!toks.length || toks[0] === '/' || !accepts(slot, toks[0])) return 0;
+    if (!m.pairs.includes(slot) || toks.length < 2) return 1;
+    if (toks[1] === '/' || !accepts(slot, toks[1])) return 1;
+    return 2;
+}
+
 // One layer's tokens distributed over the slots, or null -- which is not a
 // failure but a decline: the engine keeps a declaration it cannot place whole.
 function parseLayer(toks, m, accepts, last, refuse) {
@@ -691,13 +701,10 @@ function parseLayer(toks, m, accepts, last, refuse) {
         const token = toks[i];
         if (token === '/') {
             if (!afterPosition || m.size === NO_SLOT || slots[m.size] !== null) return null;
-            // One token. A two-value size is Chrome's own collapse rule on the
-            // size longhand (`10px auto` is stored `10px`) rather than a
-            // distribution, so a value carrying one is declined.
-            const run = toks[i + 1];
-            if (run === undefined || run === '/' || !accepts(m.size, run)) return null;
-            slots[m.size] = run;
-            i += 2;
+            const n = runLength(toks.slice(i + 1), m, accepts, m.size);
+            if (n === 0) return null;
+            slots[m.size] = toks.slice(i + 1, i + 1 + n).join(' ');
+            i += 1 + n;
             afterPosition = false;
             continue;
         }
@@ -738,21 +745,22 @@ function parseLayer(toks, m, accepts, last, refuse) {
             }
             if (placed) continue;
         }
-        let placed = false;
+        let placed = 0;
         for (let s = 0; s < m.total; s++) {
             if (slots[s] !== null) continue;
             if (m.axes && (s === m.axes[0] || s === m.axes[1])) continue;
             if (m.boxes && (s === m.boxes[0] || s === m.boxes[1])) continue;
             if (s === m.size) continue;
             if (s >= m.width && !last) continue;   // shared, last layer only
-            if (!accepts(s, token)) continue;
-            slots[s] = token;
-            placed = true;
+            const n = runLength(toks.slice(i), m, accepts, s);
+            if (n === 0) continue;
+            slots[s] = toks.slice(i, i + n).join(' ');
+            placed = n;
             break;
         }
-        if (!placed) return null;
+        if (placed === 0) return null;
         afterPosition = false;
-        i += 1;
+        i += placed;
     }
     return slots;
 }
@@ -868,6 +876,25 @@ function layerCandidate(longhands, plain, canon, classes, keywords, rejected) {
             return parts.length === 2 && parts[0].toLowerCase() === k &&
                 classify(parts[1]).some((c) => c === 'length' || c === 'percent');
         }));
+    // A slot whose value may be a *pair* of components rather than one, read
+    // off the longhand itself: its canon carries a two-component run Chrome
+    // kept, which no slot that takes only one does. `background-size` keeps
+    // `1px 2px` and `background-repeat` answers `repeat no-repeat` with
+    // `repeat-x`, where `background-attachment` throws `scroll fixed` away.
+    // An axis's `left 10px` is not one of these -- that is an edge and its
+    // offset, which `offsets` above already carries and the position
+    // placement reads. Counting it would let a bare `mask-position` place
+    // `left top` on one axis and lose the other.
+    const pairSlots = [];
+    for (let i = 0; i < width; i++) {
+        const offsets = offsetsFor(i);
+        const takesPair = Object.entries(canon[longhands[i]] ?? {}).some(([run, held]) => {
+            if (held === '' || layersOf(run).length !== 1) return false;
+            const parts = components(run);
+            return parts.length === 2 && !offsets.includes(parts[0].toLowerCase());
+        });
+        if (takesPair) pairSlots.push(i);
+    }
 
     const pairs = [null];
     for (const x of lengthy) {
@@ -899,6 +926,7 @@ function layerCandidate(longhands, plain, canon, classes, keywords, rejected) {
             if (boxes && boxes.includes(size)) continue;
             const m = {
                 total, width, axes, boxes, collapse, size, implied: '', offsets: [[], []],
+                pairs: pairSlots,
             };
             if (axes) {
                 m.offsets = [offsetsFor(axes[0]), offsetsFor(axes[1])];
@@ -1066,7 +1094,7 @@ function layerCandidate(longhands, plain, canon, classes, keywords, rejected) {
             best = { score, model: {
                 kind: 'layers', group: 0, groups: 0, blocked: false, fill: filler,
                 layer_width: width, axes, size, implied: m.implied,
-                boxes, collapse, offsets: m.offsets, omit: flat, empty,
+                boxes, collapse, pairs: pairSlots, offsets: m.offsets, omit: flat, empty,
                 order: order.every((v, i) => v === i) ? [] : order,
                 refuse: [...refuse].sort(),
                 declined: plain.filter(([v]) => !parsed.has(v)).map(([v]) => v),
@@ -1455,6 +1483,16 @@ async function measure() {
         '    /// For `.layers`: the longhand a `/` introduces, which may only sit',
         '    /// straight after the position -- `url(a) / 20px` does not parse.',
         '    size_slot: u8 = no_slot,',
+        '    /// For `.layers`: the slots whose value may be a pair of',
+        '    /// components rather than one. Read off the longhand: its canon',
+        '    /// carries a two-component run Chrome kept, which no slot taking',
+        '    /// a single component does. The size and the repeat are the two,',
+        '    /// so `left top / 10px 20px` and `repeat no-repeat` are layers',
+        '    /// rather than declines -- the pair reaches the longhand whole',
+        '    /// and is shortened there (`repeat no-repeat` is `repeat-x`).',
+        '    /// An axis is not one of these: its `left 10px` is an edge and',
+        '    /// its offset, which `offsets` carries and `positionSlots` reads.',
+        '    pairs: []const u8 = &.{},',
         '    /// For `.layers`: values the model cannot express, so the engine',
         '    /// declines a declaration carrying one and keeps it whole.',
         '    /// `background: border-area` is the one: it moves the origin to',
@@ -1496,6 +1534,7 @@ async function measure() {
                 if (s.boxes) parts.push(`.boxes = .{ ${s.boxes[0]}, ${s.boxes[1]} }`);
                 if (s.collapse) parts.push('.box_collapse = true');
                 if (s.size !== 255) parts.push(`.size_slot = ${s.size}`);
+                if (s.pairs.length) parts.push('.pairs = ' + zigSeq(s.pairs.map(String)));
                 if (s.refuse.length) parts.push(`.refuse = ${zigList(s.refuse)}`);
                 parts.push('.offsets = ' + zigSeq(s.offsets.map(zigList)));
                 parts.push('.omit = ' + zigSeq(s.omit.map(zigList)));
