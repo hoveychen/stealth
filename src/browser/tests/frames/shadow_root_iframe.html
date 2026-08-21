@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<script id="shadow_root_iframe" type=module>
+  // Turnstile's shape: the iframe goes into a detached shadow root and the host
+  // is connected afterwards, so the walk that starts loads has to descend into
+  // shadow trees, not just the host's own children.
+  {
+    const state = await testing.async();
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'open' });
+
+    const f = document.createElement('iframe');
+    f.onload = () => state.resolve();
+    f.src = 'support/sub2.html';
+    shadow.appendChild(f);
+    document.documentElement.appendChild(host);
+
+    testing.expectTrue(f.isConnected);
+
+    await state.done(() => {
+      testing.expectEqual('sub2 div1', f.contentDocument.getElementById('div-1').textContent);
+    });
+  }
+</script>
+
+<script id="shadow_root_iframe_src_attribute" type=module>
+  // The same shape the widget actually uses: src on the attribute, set while
+  // the iframe is still detached.
+  {
+    const state = await testing.async();
+    const host = document.createElement('div');
+    const shadow = host.attachShadow({ mode: 'closed' });
+
+    const f = document.createElement('iframe');
+    f.onload = () => state.resolve();
+    f.setAttribute('src', 'support/sub2.html');
+    shadow.appendChild(f);
+    document.documentElement.appendChild(host);
+
+    await state.done(() => {
+      testing.expectEqual('sub2 div1', f.contentDocument.getElementById('div-1').textContent);
+    });
+  }
+</script>

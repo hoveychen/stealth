@@ -69,15 +69,10 @@ pub fn getSrc(self: *IFrame, frame: *Frame) ![]const u8 {
 }
 
 pub fn setSrc(self: *IFrame, src: []const u8, frame: *Frame) !void {
-    const element = self.asElement();
-    try element.setAttributeSafe(comptime .wrap("src"), .wrap(src), frame);
-    self._src = element.getAttributeSafe(comptime .wrap("src")) orelse unreachable;
-    if (element.asNode().isConnected()) {
-        // unlike script, an iframe is reloaded every time the src is set
-        // even if it's set to the same URL.
-        self._executed = false;
-        try frame.iframeAddedCallback(self);
-    }
+    // Build.attributeChange resyncs _src and triggers the (re)navigation, so
+    // that setAttribute('src', …) — which is how Turnstile points its widget
+    // frame — behaves exactly like assigning .src.
+    try self.asElement().setAttributeSafe(comptime .wrap("src"), .wrap(src), frame);
 }
 
 pub fn hasSrcdoc(self: *IFrame) bool {
@@ -138,24 +133,33 @@ pub const Build = struct {
     }
 
     pub fn attributeChange(element: *Element, name: String, _: String, frame: *Frame) !void {
-        if (!name.eql(comptime .wrap("srcdoc"))) {
+        const is_src = name.eql(comptime .wrap("src"));
+        if (!is_src and !name.eql(comptime .wrap("srcdoc"))) {
             return;
         }
+        const self = element.as(IFrame);
+        if (is_src) {
+            self._src = element.getAttributeSafe(comptime .wrap("src")) orelse "";
+        }
         if (element.asNode().isConnected()) {
-            // like src, setting srcdoc reloads the frame even if the value didn't change
-            const self = element.as(IFrame);
+            // unlike script, an iframe is reloaded every time src or srcdoc is
+            // set, even if the value didn't change.
             self._executed = false;
             try frame.iframeAddedCallback(self);
         }
     }
 
     pub fn attributeRemove(element: *Element, name: String, frame: *Frame) !void {
-        if (!name.eql(comptime .wrap("srcdoc"))) {
+        const is_src = name.eql(comptime .wrap("src"));
+        if (!is_src and !name.eql(comptime .wrap("srcdoc"))) {
             return;
         }
+        const self = element.as(IFrame);
+        if (is_src) {
+            self._src = "";
+        }
         if (element.asNode().isConnected()) {
-            const self = element.as(IFrame);
-            // removing srcdoc falls back to src (or about:blank)
+            // removing srcdoc falls back to src, removing src to about:blank
             self._executed = false;
             try frame.iframeAddedCallback(self);
         }

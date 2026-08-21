@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<script id="src_attribute" type=module>
+  // setAttribute('src') is the same navigation trigger as the .src setter, and
+  // reflects into .src straight away. Turnstile builds its widget iframe that
+  // way, so a src that only lands on the attribute leaves the frame blank.
+  {
+    const state = await testing.async();
+    const f = document.createElement('iframe');
+    document.documentElement.appendChild(f);
+    f.onload = () => state.resolve();
+    f.setAttribute('src', 'support/sub2.html');
+
+    testing.expectEqual(testing.BASE_URL + 'frames/support/sub2.html', f.src);
+
+    await state.done(() => {
+      testing.expectEqual('sub2 div1', f.contentDocument.getElementById('div-1').textContent);
+    });
+  }
+</script>
+
+<script id="src_attribute_removed" type=module>
+  // Removing the attribute falls back to about:blank, like assigning "" does.
+  {
+    const state = await testing.async();
+    const f = document.createElement('iframe');
+    f.setAttribute('src', 'support/sub2.html');
+    document.documentElement.appendChild(f);
+    f.onload = () => state.resolve();
+
+    await state.done(() => {
+      f.removeAttribute('src');
+      testing.expectEqual('', f.src);
+    });
+  }
+</script>
