@@ -1821,6 +1821,24 @@ fn shortenPair(arena: Allocator, rule: TwoValueRule, layer: []const u8) !?[]cons
             if (!shortened) return null;
             return try std.mem.join(arena, " ", parts[0..kept]);
         },
+        .radius => {
+            var shortened = false;
+            // Both halves are a length or a percentage, so a bare `0` takes
+            // its unit in either -- the whole-value rule above only reaches a
+            // lone one, and only for the spellings isLengthProperty lists.
+            for (parts[0..count]) |*part| {
+                if (!std.mem.eql(u8, part.*, "0")) continue;
+                part.* = "0px";
+                shortened = true;
+            }
+            // And then it folds, on the units the zero rule just filled in:
+            // `0 0` is `0px`, not `0px 0px`.
+            if (count == 2 and std.mem.eql(u8, parts[0], parts[1])) {
+                return parts[0];
+            }
+            if (!shortened) return null;
+            return try std.mem.join(arena, " ", parts[0..count]);
+        },
     }
 }
 
@@ -1883,8 +1901,9 @@ fn writeCounters(arena: Allocator, value: []const u8, default: []const u8) ![]co
 }
 
 /// How Chrome shortens a property written as a pair. Measured by
-/// tools/fingerprint/probes/probe-css15.js -- three rules, not one, and the
-/// difference between them is only visible on the values where they disagree.
+/// tools/fingerprint/probes/probe-css15.js and probe-css16.js -- four rules,
+/// not one, and the difference between them is only visible on the values
+/// where they disagree.
 const TwoValueRule = enum {
     /// An equal pair becomes one value and an unequal pair stays two:
     /// `gap: 10px 10px` is `10px`, `gap: 10px 20px` is itself. What every
@@ -1899,6 +1918,11 @@ const TwoValueRule = enum {
     /// `repeat-y`. Every other mixed pair (`space round`, `repeat space`)
     /// stays a pair.
     repeat,
+    /// A fold, plus the zero rule a size takes: both halves are a length or a
+    /// percentage, so `10px 0` is `10px 0px` and `0 0` is `0px` -- a fold on
+    /// the unit the zero rule just filled in, which neither a plain fold nor a
+    /// size reaches. What the eight corner radius longhands do.
+    radius,
 };
 
 /// The rule a property takes, or null for one Chrome leaves as written.
@@ -1945,6 +1969,17 @@ fn twoValueRule(name: []const u8) ?TwoValueRule {
         .{ "mask-repeat", .repeat },
         .{ "border-image-repeat", .fold },
         .{ "-webkit-mask-box-image-repeat", .fold },
+        // A corner radius, in both spellings of every corner. These are
+        // longhands rather than shorthands: the `/` belongs to `border-radius`
+        // and a corner rejects one.
+        .{ "border-top-left-radius", .radius },
+        .{ "border-top-right-radius", .radius },
+        .{ "border-bottom-right-radius", .radius },
+        .{ "border-bottom-left-radius", .radius },
+        .{ "border-start-start-radius", .radius },
+        .{ "border-start-end-radius", .radius },
+        .{ "border-end-start-radius", .radius },
+        .{ "border-end-end-radius", .radius },
     });
     return rules.get(name);
 }

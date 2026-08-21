@@ -173,6 +173,9 @@ const KIND_NOTES = {
         '//                     and `red 1px solid` all land identically, measured.',
     presets: 'a lookup over the whole value space, used where the keyword table says a\n' +
         '//                     single keyword is all a page can write (`white-space`).',
+    corners: 'two box lists split by a `/`, one of horizontal radii and one of\n' +
+        '//                     vertical, over four corner longhands that each hold a *pair*\n' +
+        '//                     (`border-radius`).',
     layers: 'a comma-separated list of layers, each with a position filling two\n' +
         '//                     longhands, a size only a `/` introduces, and slots shared by the\n' +
         '//                     whole value that only the last layer may write (`background`).',
@@ -564,6 +567,125 @@ function serialisation(name, chosen, longhands, plain) {
     record();
     chosen.order = derived;
     return null;
+}
+
+// --- the corner grammar ---------------------------------------------------
+
+// `border-radius` is the one four-value box shorthand carrying a `/`, and the
+// `/` is what makes it its own kind: two box lists, one of horizontal radii and
+// one of vertical, over four corner longhands that each hold a *pair*.
+//
+// That pair is also why `fillers` cannot see this shape at all. It asks whether
+// a slot's stored value is one of the value's own tokens, and a corner holding
+// `1px 3px` is not -- so a shorthand this shape is demoted for "no single
+// filler explains every row" before any distribution rule gets its turn. The
+// fillers here are derived rather than measured, which is honest for the same
+// reason `.layers` derives its own: every value Chrome accepts reaches all four
+// corners, so no row leaves one holding a filler and there is nothing to
+// measure.
+
+// What Chrome stores for `name: value`, or null when the value does not fit.
+function cornersExpand(value, longhands, canon, legacy, takes) {
+    const sides = [[], []];
+    let half = 0;
+    for (const token of components(value)) {
+        if (token === '/') {
+            // A second `/`, and one with nothing before it, are both declines.
+            if (half === 1 || sides[0].length === 0) return null;
+            half = 1;
+            continue;
+        }
+        // A radius is a length or a percentage and nothing else, so `auto`,
+        // `none` and a bare number are declines rather than four invented
+        // corners. All four longhands take the same classes, measured, which is
+        // why the first stands for the lot.
+        if (!takes(longhands[0], token)) return null;
+        if (sides[half].length === 4) return null;
+        sides[half].push(token);
+    }
+    // A `/` with nothing after it is a decline too.
+    if (!sides[0].length || (half === 1 && !sides[1].length)) return null;
+    // The legacy WebKit spelling reads *exactly* two components as
+    // horizontal-then-vertical rather than top-left-then-top-right.
+    if (half === 0 && legacy && sides[0].length === 2) {
+        sides[1] = [sides[0][1]];
+        sides[0] = [sides[0][0]];
+        half = 1;
+    }
+    const across = BOX.box4(sides[0]);
+    const down = half === 0 ? across : BOX.box4(sides[1]);
+    if (!across || !down) return null;
+    return longhands.map((lh, i) => {
+        const stored = (t) => canon[lh]?.[t] ?? t;
+        const h = stored(across[i]);
+        const v = stored(down[i]);
+        // A corner holds the pair, folded to one when the two agree -- which is
+        // why a value with no `/` leaves every corner holding one component.
+        return sameValue(h, v) ? h : `${h} ${v}`;
+    });
+}
+
+// And what reading it back answers: each list is elided by the box rule
+// *independently*, and the `/` goes only when the two come out identical.
+function cornersJoin(values) {
+    if (values.length !== 4) return null;
+    const across = [];
+    const down = [];
+    for (const held of values) {
+        const toks = components(held);
+        if (!toks.length || toks.length > 2 || toks.includes('/')) return null;
+        across.push(toks[0]);
+        down.push(toks.length === 2 ? toks[1] : toks[0]);
+    }
+    const h = boxForm(across).join(' ');
+    const v = boxForm(down).join(' ');
+    return sameValue(h, v) ? h : `${h} / ${v}`;
+}
+
+// The model, if it gets no row *wrong* -- both directions, because one that
+// expands right and serialises wrong leaves the declaration unreadable -- and
+// declines every value Chrome threw away.
+//
+// Like a layer model, this one is allowed to *decline* a row Chrome accepted:
+// keeping the declaration whole is the same answer as not modelling the
+// shorthand at all, where placing a value wrongly is worse. The declines are
+// counted and printed rather than swallowed. Without that licence the model
+// would be all-or-nothing against a probe list it does not control -- adding a
+// `calc()` value, which Chrome evaluates and this engine keeps byte for byte,
+// would silently demote the shorthand back to `.unmodelled`.
+//
+// `legacy` is derived rather than assumed: the two-component reading is tried
+// both ways round, and the one that has to decline least is recorded.
+function cornersCandidate(longhands, plain, canon, classes, keywords, rejected) {
+    if (longhands.length !== 4) return null;
+    const takes = (lh, token) => {
+        const cls = classify(token);
+        if (cls.includes('identifier')) {
+            const known = keywords[lh];
+            if (known && known.includes(token.toLowerCase())) return true;
+        }
+        return cls.some((c) => (classes[lh] ?? []).includes(c));
+    };
+    let best = null;
+    for (const legacy of [false, true]) {
+        const declined = [];
+        const ok = plain.every(([value, row]) => {
+            const got = cornersExpand(value, longhands, canon, legacy, takes);
+            if (!got) { declined.push(value); return true; }
+            if (!got.every((x, i) => sameValue(x, row.v[i]))) return false;
+            return sameValue(cornersJoin(row.v) ?? '', row.read);
+        }) && rejected.every((value) =>
+            cornersExpand(value, longhands, canon, legacy, takes) === null);
+        // A model that placed nothing has not been tested by anything.
+        const reached = plain.length - declined.length;
+        if (!ok || reached === 0) continue;
+        if (best && best.reached >= reached) continue;
+        best = {
+            kind: 'corners', group: 0, groups: 0, blocked: false,
+            fill: new Array(4).fill('initial'), legacy, declined, reached,
+        };
+    }
+    return best;
 }
 
 // --- the layer grammar ----------------------------------------------------
@@ -1293,6 +1415,14 @@ async function measure() {
                         };
                     }
                 }
+                // Then the corner shape, which -- like the layered one below --
+                // has to run even when no single filler explained a row: a
+                // corner holds a *pair*, and `fillers` compares a slot against
+                // the value's own tokens, so it cannot see one.
+                if (!chosen) {
+                    chosen = cornersCandidate(longhands, plain, canon, classes, keywords,
+                        rejected?.[name] ?? []);
+                }
                 // Last, the layered shapes. It goes after everything else so a
                 // shorthand already modelled cannot change model: the narrower
                 // one reproduces every row too, and there is nothing to gain
@@ -1321,8 +1451,12 @@ async function measure() {
         const single = plain.filter(([v]) => layersOf(v).length === 1);
         // A rename is the exception: it hands the value to its one longhand
         // whole, so a comma list is that longhand's business and not a layer
-        // boundary it has to decline.
-        if (chosen && chosen.kind !== 'layers' && chosen.kind !== 'alias') {
+        // boundary it has to decline. So is a corner model, which was already
+        // checked against every row -- comma-carrying ones included -- and
+        // against everything Chrome rejected, by `cornersCandidate`.
+        if (chosen && chosen.kind !== 'layers' && chosen.kind !== 'alias' &&
+            chosen.kind !== 'corners')
+        {
             const wrong = plain.filter(([v]) => layersOf(v).length > 1).find(([value]) =>
                 expand(chosen.kind, value, longhands, chosen.fill, chosen.group,
                     chosen.groups, chosen.blocked, classes, keywords, canon) !== null);
@@ -1331,7 +1465,11 @@ async function measure() {
                 chosen = null;
             }
         }
-        if (chosen && chosen.kind !== 'unmodelled' && chosen.kind !== 'layers') {
+        // `.layers` and `.corners` derive and check their own reconstruction, so
+        // they are past this gate rather than exempt from one.
+        if (chosen && chosen.kind !== 'unmodelled' && chosen.kind !== 'layers' &&
+            chosen.kind !== 'corners')
+        {
             const bad = serialisation(name, chosen, longhands, single);
             if (bad) {
                 demoted.push([name, bad]);
@@ -1350,12 +1488,12 @@ async function measure() {
     process.stderr.write(`shorthands: ${Object.keys(shorthands).length} -- ` +
         Object.entries(kindCount).sort().map(([k, n]) => `${k} ${n}`).join(', ') + '\n');
     for (const [name, reason] of demoted) process.stderr.write(`  unmodelled ${name}: ${reason}\n`);
-    // A layer model is allowed to decline a row -- the engine keeps a value it
-    // cannot place whole, which is the same answer as not modelling the
+    // A layer or corner model is allowed to decline a row -- the engine keeps a
+    // value it cannot place whole, which is the same answer as not modelling the
     // shorthand at all. It is not allowed to get one wrong, so the declines are
     // printed rather than swallowed.
     for (const [name, s] of Object.entries(shorthands)) {
-        if (s.kind !== 'layers' || !s.declined?.length) continue;
+        if ((s.kind !== 'layers' && s.kind !== 'corners') || !s.declined?.length) continue;
         process.stderr.write(`  ${name} declines ${s.declined.length} of ` +
             `${s.declined.length + s.reached} probe values: ` +
             s.declined.map((v) => JSON.stringify(v)).join(', ') + '\n');
@@ -1396,7 +1534,7 @@ async function measure() {
         '',
         'const std = @import("std");',
         '',
-        'pub const Kind = enum { alias, box4, box2, components, presets, layers, unmodelled };',
+        'pub const Kind = enum { alias, box4, box2, components, presets, corners, layers, unmodelled };',
         '',
         '/// A slot the layer grammar has no longhand for: `.axes` and `.size_slot`',
         '/// hold it when the shorthand has no position or no `/`.',
@@ -1504,6 +1642,13 @@ async function measure() {
         '    /// and rejects `center 10px`, which is what makes `center 10px top`',
         '    /// fail to parse.',
         '    offsets: []const []const []const u8 = &.{},',
+        '    /// For `.corners`: whether *exactly* two components are read as the',
+        '    /// legacy WebKit horizontal-then-vertical form rather than by the box',
+        '    /// rule. The one place the two parsers disagree, measured:',
+        '    /// `-webkit-border-radius: 10px 20px` is `10px / 20px` where',
+        '    /// `border-radius: 10px 20px` is itself. One and three and four',
+        '    /// components land the same way under both spellings.',
+        '    legacy_pair: bool = false,',
         '    /// For `.alias`: what reading back through the *old* name answers when',
         '    /// it is not simply the stored value. Not the inverse of `translate`:',
         '    /// `page-break-after` answers `always` for a stored `page`, and the',
@@ -1527,6 +1672,7 @@ async function measure() {
                     parts.push('.order = ' + zigSeq(s.order.map(String)));
                 }
             }
+            if (s.kind === 'corners' && s.legacy) parts.push('.legacy_pair = true');
             if (s.kind === 'layers') {
                 parts.push(`.layer_width = ${s.layer_width}`);
                 if (s.axes) parts.push(`.axes = .{ ${s.axes[0]}, ${s.axes[1]} }`);

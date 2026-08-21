@@ -49,11 +49,12 @@ pub fn expand(arena: Allocator, entry: Shorthand, value: []const u8) !?Expansion
     }
 
     if (entry.kind == .layers) return layerExpand(arena, entry, value);
+    if (entry.kind == .corners) return cornersExpand(arena, entry, value);
 
     const values = try arena.alloc([]const u8, entry.longhands.len);
     switch (entry.kind) {
         .unmodelled => return null,
-        .layers => unreachable,
+        .layers, .corners => unreachable,
         .alias => values[0] = translated(entry, value),
         .presets => {
             const hit = preset(entry, value) orelse return null;
@@ -104,10 +105,11 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
     }
 
     if (entry.kind == .layers) return layerJoin(arena, entry, values);
+    if (entry.kind == .corners) return cornersJoin(arena, values);
 
     switch (entry.kind) {
         .unmodelled => return "",
-        .layers => unreachable,
+        .layers, .corners => unreachable,
         .alias => {
             for (entry.reads) |pair| {
                 if (std.ascii.eqlIgnoreCase(pair[0], values[0])) return pair[1];
@@ -178,6 +180,91 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
         }
     }.wider);
     return out;
+}
+
+// --- the corner grammar -------------------------------------------------
+
+/// `border-radius` is the one four-value box shorthand carrying a `/`, and the
+/// `/` is what makes it its own kind: it is two box lists, one of horizontal
+/// radii and one of vertical, distributed over four corner longhands that each
+/// hold a *pair*. Measured by tools/fingerprint/probes/probe-css16.js.
+fn cornersExpand(arena: Allocator, entry: Shorthand, value: []const u8) !?Expansion {
+    var sides: [2][4][]const u8 = undefined;
+    var written: [2]usize = .{ 0, 0 };
+    var half: usize = 0;
+    var walk = Components{ .text = std.mem.trim(u8, value, &std.ascii.whitespace), .slash = true };
+    while (walk.next()) |component| {
+        if (component.len == 1 and component[0] == '/') {
+            // A second `/`, and one with nothing before it, are both declines.
+            if (half == 1 or written[0] == 0) return null;
+            half = 1;
+            continue;
+        }
+        // A radius is a length or a percentage and nothing else, so `auto`,
+        // `none` and a bare number are declines rather than four invented
+        // corners. All four longhands take the same classes, measured, which is
+        // why the first stands for the lot.
+        if (!accepts(entry.longhands[0], component)) return null;
+        if (written[half] == sides[half].len) return null;
+        sides[half][written[half]] = component;
+        written[half] += 1;
+    }
+    if (!walk.exhausted()) return null;
+    // A `/` with nothing after it is a decline too.
+    if (written[0] == 0 or (half == 1 and written[1] == 0)) return null;
+
+    // The legacy WebKit spelling reads *exactly* two components as
+    // horizontal-then-vertical rather than top-left-then-top-right, which is
+    // the one place the two parsers disagree: `-webkit-border-radius: 10px
+    // 20px` is `10px / 20px` where `border-radius: 10px 20px` is itself.
+    if (half == 0 and entry.legacy_pair and written[0] == 2) {
+        sides[1][0] = sides[0][1];
+        written = .{ 1, 1 };
+        half = 1;
+    }
+
+    const horizontal = boxRule(sides[0][0..written[0]], 4) orelse return null;
+    const vertical = if (half == 0)
+        horizontal
+    else
+        boxRule(sides[1][0..written[1]], 4) orelse return null;
+
+    const values = try arena.alloc([]const u8, entry.longhands.len);
+    if (values.len != horizontal.len) return null;
+    for (values, 0..) |*out, i| {
+        // A corner holds the pair, folded to one when the two agree -- which is
+        // why a value with no `/` leaves every corner holding one component.
+        out.* = if (std.ascii.eqlIgnoreCase(horizontal[i], vertical[i]))
+            horizontal[i]
+        else
+            try std.mem.join(arena, " ", &.{ horizontal[i], vertical[i] });
+    }
+    return .{ .names = entry.longhands, .values = values };
+}
+
+/// What reading a corner shorthand back answers. Each list is elided by the box
+/// rule *independently*, and the `/` goes only when the two come out identical:
+/// `10px 20px / 10px 20px` reads `10px 20px` where `10px 10px / 20px 20px`
+/// reads `10px / 20px`.
+fn cornersJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    var horizontal: [4][]const u8 = undefined;
+    var vertical: [4][]const u8 = undefined;
+    if (values.len != horizontal.len) return "";
+    for (values, 0..) |held, i| {
+        var walk = Components.init(held);
+        const first = walk.next() orelse return "";
+        const second = walk.next() orelse first;
+        // A corner holding anything but one component or two cannot have come
+        // from this shorthand, so it cannot be written as one either.
+        if (walk.next() != null or !walk.exhausted()) return "";
+        horizontal[i] = first;
+        vertical[i] = second;
+    }
+
+    const across = try std.mem.join(arena, " ", boxForm(&horizontal));
+    const down = try std.mem.join(arena, " ", boxForm(&vertical));
+    if (std.ascii.eqlIgnoreCase(across, down)) return across;
+    return std.mem.concat(arena, u8, &.{ across, " / ", down });
 }
 
 // --- the layer grammar --------------------------------------------------

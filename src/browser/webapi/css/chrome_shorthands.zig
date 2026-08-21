@@ -24,17 +24,20 @@
 //                     and the group repeats -- which is how `border` reaches all four
 //                     sides. Order does not matter: `1px solid red`, `solid red 1px`
 //                     and `red 1px solid` all land identically, measured.
+//   corners       2  two box lists split by a `/`, one of horizontal radii and one of
+//                     vertical, over four corner longhands that each hold a *pair*
+//                     (`border-radius`).
 //   layers        9  a comma-separated list of layers, each with a position filling two
 //                     longhands, a size only a `/` introduces, and slots shared by the
 //                     whole value that only the last layer may write (`background`).
 //   presets       1  a lookup over the whole value space, used where the keyword table says a
 //                     single keyword is all a page can write (`white-space`).
-//   unmodelled   30  no model reproduced every reading; the engine keeps the shorthand whole.
+//   unmodelled   28  no model reproduced every reading; the engine keeps the shorthand whole.
 //
 // The unmodelled ones are the shorthands with a real grammar behind them,
-// border-image, border-radius, column-rule-inset, columns, container, flex,
-// font, font-synthesis, font-variant, grid, grid-area, grid-column,
-// grid-row, grid-template, list-style, offset, place-content, position-try,
+// border-image, column-rule-inset, columns, container, flex, font,
+// font-synthesis, font-variant, grid, grid-area, grid-column, grid-row,
+// grid-template, list-style, offset, place-content, position-try,
 // row-rule-inset, rule-inset, text-box, text-emphasis, timeline-trigger,
 // plus their -webkit- spellings. The engine keeps those whole, so
 // `style.length` answers 1 where Chrome says 9: a visible difference, but a
@@ -42,7 +45,7 @@
 
 const std = @import("std");
 
-pub const Kind = enum { alias, box4, box2, components, presets, layers, unmodelled };
+pub const Kind = enum { alias, box4, box2, components, presets, corners, layers, unmodelled };
 
 /// A slot the layer grammar has no longhand for: `.axes` and `.size_slot`
 /// hold it when the shorthand has no position or no `/`.
@@ -150,6 +153,13 @@ pub const Shorthand = struct {
     /// and rejects `center 10px`, which is what makes `center 10px top`
     /// fail to parse.
     offsets: []const []const []const u8 = &.{},
+    /// For `.corners`: whether *exactly* two components are read as the
+    /// legacy WebKit horizontal-then-vertical form rather than by the box
+    /// rule. The one place the two parsers disagree, measured:
+    /// `-webkit-border-radius: 10px 20px` is `10px / 20px` where
+    /// `border-radius: 10px 20px` is itself. One and three and four
+    /// components land the same way under both spellings.
+    legacy_pair: bool = false,
     /// For `.alias`: what reading back through the *old* name answers when
     /// it is not simply the stored value. Not the inverse of `translate`:
     /// `page-break-after` answers `always` for a stored `page`, and the
@@ -190,7 +200,7 @@ pub const shorthands = std.StaticStringMap(Shorthand).initComptime(.{
     .{ "-webkit-border-end-color", Shorthand{ .kind = .alias, .longhands = &.{"border-inline-end-color"}, .fillers = &.{"initial"} } },
     .{ "-webkit-border-end-style", Shorthand{ .kind = .alias, .longhands = &.{"border-inline-end-style"}, .fillers = &.{"initial"} } },
     .{ "-webkit-border-end-width", Shorthand{ .kind = .alias, .longhands = &.{"border-inline-end-width"}, .fillers = &.{"initial"} } },
-    .{ "-webkit-border-radius", Shorthand{ .kind = .unmodelled, .longhands = &.{ "border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius" }, .fillers = &.{} } },
+    .{ "-webkit-border-radius", Shorthand{ .kind = .corners, .longhands = &.{ "border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius" }, .fillers = &.{ "initial", "initial", "initial", "initial" }, .legacy_pair = true } },
     .{ "-webkit-border-start", Shorthand{ .kind = .components, .longhands = &.{ "border-inline-start-width", "border-inline-start-style", "border-inline-start-color" }, .fillers = &.{ "initial", "initial", "initial" }, .group = 3, .groups = 1, .omit = &.{ &.{"initial"}, &.{"initial"}, &.{"initial"} } } },
     .{ "-webkit-border-start-color", Shorthand{ .kind = .alias, .longhands = &.{"border-inline-start-color"}, .fillers = &.{"initial"} } },
     .{ "-webkit-border-start-style", Shorthand{ .kind = .alias, .longhands = &.{"border-inline-start-style"}, .fillers = &.{"initial"} } },
@@ -290,7 +300,7 @@ pub const shorthands = std.StaticStringMap(Shorthand).initComptime(.{
     .{ "border-inline-style", Shorthand{ .kind = .box2, .longhands = &.{ "border-inline-start-style", "border-inline-end-style" }, .fillers = &.{ "initial", "initial" } } },
     .{ "border-inline-width", Shorthand{ .kind = .box2, .longhands = &.{ "border-inline-start-width", "border-inline-end-width" }, .fillers = &.{ "initial", "initial" } } },
     .{ "border-left", Shorthand{ .kind = .components, .longhands = &.{ "border-left-width", "border-left-style", "border-left-color" }, .fillers = &.{ "medium", "none", "currentcolor" }, .group = 3, .groups = 1, .omit = &.{ &.{"medium"}, &.{"none"}, &.{"currentcolor"} }, .empty = "", .fallback = &.{ "border-left-width", "border-left-style", "border-left-color" } } },
-    .{ "border-radius", Shorthand{ .kind = .unmodelled, .longhands = &.{ "border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius" }, .fillers = &.{} } },
+    .{ "border-radius", Shorthand{ .kind = .corners, .longhands = &.{ "border-top-left-radius", "border-top-right-radius", "border-bottom-right-radius", "border-bottom-left-radius" }, .fillers = &.{ "initial", "initial", "initial", "initial" } } },
     .{ "border-right", Shorthand{ .kind = .components, .longhands = &.{ "border-right-width", "border-right-style", "border-right-color" }, .fillers = &.{ "medium", "none", "currentcolor" }, .group = 3, .groups = 1, .omit = &.{ &.{"medium"}, &.{"none"}, &.{"currentcolor"} }, .empty = "", .fallback = &.{ "border-right-width", "border-right-style", "border-right-color" } } },
     .{ "border-spacing", Shorthand{ .kind = .box2, .longhands = &.{ "-webkit-border-horizontal-spacing", "-webkit-border-vertical-spacing" }, .fillers = &.{ "initial", "initial" } } },
     .{ "border-style", Shorthand{ .kind = .box4, .longhands = &.{ "border-top-style", "border-right-style", "border-bottom-style", "border-left-style" }, .fillers = &.{ "initial", "initial", "initial", "initial" } } },
