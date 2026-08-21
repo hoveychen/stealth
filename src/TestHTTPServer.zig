@@ -56,7 +56,15 @@ pub fn stop(self: *TestHTTPServer) void {
 pub fn run(self: *TestHTTPServer, wg: *lp.WaitGroup) !void {
     const address = try std.Io.net.IpAddress.parse("127.0.0.1", 9582);
 
-    self.listener = try address.listen(lp.io, .{ .reuse_address = true });
+    // No `reuse_address`: it sets SO_REUSEPORT too, which let a second test
+    // binary bind this live port and take a share of the connections, serving
+    // fixtures out of its own checkout (see the lock in testing.zig). Binding
+    // exclusively turns that into an error here instead.
+    self.listener = address.listen(lp.io, .{}) catch |err| {
+        std.debug.print("test HTTP server cannot bind 127.0.0.1:9582: {}\n", .{err});
+        wg.finish();
+        return err;
+    };
     var listener = &self.listener.?;
     self.shutdown.store(false, .release);
 
