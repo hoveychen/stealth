@@ -32,18 +32,21 @@ the worker global surface follows (336 own names vs 243). This test page is on
 
       // Chrome's worker global owns no copy -- `self` there answers through the
       // prototype. This engine's [Global] flattening mirrors every non-static
-      // accessor onto the global, so it owns one, as it already does for 35
-      // other WorkerGlobalScope members (atob, fetch, setTimeout, location,
-      // self, ... -- measured). That shape difference belongs to the
-      // prototype-chain gap the window global surface notes own, not here; the
-      // assertion records which side of it we are on rather than asserting
-      // Chrome's answer and failing.
+      // WorkerGlobalScope accessor onto the global, so it owns one, as it does
+      // for 35 other members (atob, fetch, setTimeout, location, self, ... --
+      // measured). EventTarget's three methods are the exception: the
+      // flattening skips that level in both realms now, so the worker global no
+      // longer owns addEventListener / removeEventListener / dispatchEvent
+      // either, which is Chrome's shape. That leaves this one shape difference,
+      // and the assertion records which side of it we are on rather than
+      // asserting Chrome's answer and failing.
       testing.expectEqual(true, data.on_self !== null);
 
-      // A secure owner, so nothing is gated away.
+      // A secure owner, so nothing is gated away. 230, not the 233 this test
+      // pinned before EventTarget came off the flattening.
       testing.expectEqual(8, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(233, data.count);
+      testing.expectEqual(230, data.count);
     });
   }
 </script>

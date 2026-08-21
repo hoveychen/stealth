@@ -5145,8 +5145,9 @@ that both engines can answer puts it in single or low double digits: window own
 names 13, `for...in` 3, the union along the whole prototype chain 10. The
 engine has 1167 own names to Chrome's 1237.
 
-**What we have that headed Chrome does not, all 13, each confirmed by a
-`typeof` on both engines:**
+**What we had that headed Chrome does not, all 13, each confirmed by a
+`typeof` on both engines** (the first three bullets — six names — are gone as of
+the `prd/window-surface-extras` merge; see the note after the list):
 
 * `setImmediate` / `clearImmediate` -- no browser has these. A page reading
   `typeof setImmediate` gets `"function"` here and `"undefined"` in Chrome,
@@ -5166,13 +5167,15 @@ engine has 1167 own names to Chrome's 1237.
 * `ModelContext` / `ModelContextClient` -- this fork's WebMCP surface, kept
   deliberately (G14 records the same call for `navigator.modelContext`).
 
-Five of those thirteen are already being removed on `prd/window-surface-extras`
-(`8a7202dbe`): `Css` becomes `[LegacyNoInterfaceObject]`, `setImmediate` /
-`clearImmediate` come off the window surface while their implementations stay
-for internal callers, and `Snapshot`'s `[Global]` flattening stops copying
-`EventTarget`'s three members onto the global. That branch reached the same
-13-and-83 split independently from its own headed run, which is the reason to
-trust either reading. The counts above are as of `bbf32fc9d`, before it lands.
+**Six of those thirteen names are gone** (`prd/window-surface-extras`): `Css`
+became `no_interface_object`, `setImmediate` / `clearImmediate` came off the
+window surface while their implementations stayed for internal callers, and
+`Snapshot`'s `[Global]` flattening stopped copying `EventTarget`'s three members
+onto the global. That branch reached the same 13-and-83 split independently from
+its own headed run, which is the reason to trust either reading. The 1167 above
+is the pre-merge count; the surface is **1161** now, so the own-name excess is
+7, not 13, and the three counts that moved with it are in the secure-context
+table below. The 83 in the other direction did not move — nothing was added.
 
 **The other direction is the larger one: 83 globals headed Chrome has and we do
 not** (`CSSFunctionRule`, `CloseWatcher`, `Temporal`, `Observable`,
@@ -5183,10 +5186,13 @@ not** (`CSSFunctionRule`, `CloseWatcher`, `Temporal`, `Observable`,
 **And the prototype chain still differs**, which G19 measured and G17 owns:
 `Object.getPrototypeOf(window) === Window.prototype` is `true` in Chrome and
 `false` here. Chrome's chain is `Window(1237 own) <- Window.prototype(3) <-
-EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours is
+EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours was
 `Window(1167) <- Window(1) <- Window(239) <- EventTarget(4) <-
-Object.prototype(12)`. That extra intermediate is where the three duplicated
-`EventTarget` members come from.
+Object.prototype(12)`, and the extra intermediate is where the three duplicated
+`EventTarget` members came from. The duplicates are gone (the flattening skips
+that level now, so the global reads `addEventListener` through the chain, as
+Chrome's does) and the head of the chain is 1161; the extra level itself is
+still there, so this is still a difference a detector can walk.
 
 ## The 234 globals that were not behind the secure-context gate (2026-08-20)
 
@@ -5209,6 +5215,14 @@ the only variable is whether that host is loopback:
 | names behind the gate               |  252 |    0 |  234 |
 | worker realm, secure owner          |  336 |  232 |  233 |
 | worker realm, insecure owner        |  243 |  232 |  222 |
+
+The "after" column is the gate on its own, measured before
+`prd/window-surface-extras` took six names off the surface. Both totals moved by
+those same six — none of the six is `[SecureContext]`, so the gated count is
+unchanged — and the suite now pins the current numbers instead:
+`frames/secure_context_gate.html` asserts **1161** secure / **927** insecure and
+**219** for a worker with an insecure owner, `worker/secure_context.html` asserts
+**230** for one with a secure owner.
 
 252 names in Chrome. 234 of them are names this engine has, and it leaked all
 234 on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
@@ -5270,8 +5284,8 @@ as of the global, so those walk the chain — deleting only the global's copy le
 The gap: a frame that **never navigates** keeps the full surface, because the
 gate hangs off document commit. In practice that is the bare `about:blank` CDP
 target — no page script observes it, and every document that loads content
-commits. So a reading of this engine taken on `about:blank` still reports 1167;
-pass a url. Gating at frame init instead would strip the surface off a root
+commits. So a reading of this engine taken on `about:blank` still reports the
+full ungated surface (1167 when this was written, 1161 now); pass a url. Gating at frame init instead would strip the surface off a root
 frame, which is born at `about:blank` and navigates to its real URL inside the
 same context.
 

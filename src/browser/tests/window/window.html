@@ -433,16 +433,28 @@
 </script>
 
 <script id=global_flattening_own_props>
-  // WebIDL [Global] flattening: members of the Window interface (and the
-  // interfaces it inherits, e.g. EventTarget) must be OWN properties of the
-  // global object, not merely inherited via the prototype chain. Otherwise a
-  // top-level `var navigator = ...` shadows the inherited accessor with an own
-  // `undefined` (CreateGlobalVarBinding only skips when the name is already own).
+  // WebIDL [Global] flattening: members of the Window interface must be OWN
+  // properties of the global object, not merely inherited via the prototype
+  // chain. Otherwise a top-level `var navigator = ...` shadows the inherited
+  // accessor with an own `undefined` (CreateGlobalVarBinding only skips when
+  // the name is already own) -- that is the espn.com breakage the next block
+  // reproduces.
+  //
+  // EventTarget's methods are the exception, and it is measured rather than
+  // reasoned: on Chrome 151 `Object.getOwnPropertyNames(window)` carries
+  // document / location / navigator and every other Window member, and does
+  // NOT carry addEventListener, removeEventListener or dispatchEvent. Those
+  // stay on EventTarget.prototype, which the global inherits through
+  // Window.prototype -- so calling them on the global still works, and a
+  // detector reading the global's own properties sees what Chrome shows.
   const hop = Object.prototype.hasOwnProperty;
   testing.expectEqual(true, hop.call(globalThis, 'navigator'));   // Window attribute
   testing.expectEqual(true, hop.call(globalThis, 'document'));    // Window attribute
   testing.expectEqual(true, hop.call(globalThis, 'location'));    // Window attribute
-  testing.expectEqual(true, hop.call(globalThis, 'addEventListener')); // inherited EventTarget method
+  for (const inherited of ['addEventListener', 'removeEventListener', 'dispatchEvent']) {
+    testing.expectEqual(false, hop.call(globalThis, inherited), { desc: inherited + ' is not own' });
+    testing.expectEqual('function', typeof globalThis[inherited], { desc: inherited + ' still callable' });
+  }
 
   // They still work when invoked on the global.
   testing.expectEqual(document, globalThis.document);
