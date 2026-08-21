@@ -4821,28 +4821,55 @@ CSSKeywordValue for *any* colour name, where its own sibling
 
 The colour axis is closed: the 61 colour-accepting properties crossed with six
 colour values went from 24 diffs to 14, and every one of the 10 that closed was
-a colour reading. What the remaining 14 are -- and the 79 left in the wider
-475-longhand version of the same probe -- is three other axes, recorded here so
-the next pass does not have to re-measure them:
+a colour reading.
 
-- **Which any-identifier properties are modelled at all.** `container-name`,
-  `counter-increment` / `-reset` / `-set`, `view-transition-class` and
-  `will-change` answer a bare CSSStyleValue for *every* identifier, where
-  `animation-name`, `transition-property`, the `grid-*-start` / `-end` four and
-  `view-transition-group` / `-name` answer a CSSKeywordValue. This engine answers
-  a keyword for all of them.
-- **An any-identifier property still canonicalises a keyword it recognises.**
+**The three axes after it are closed too, and none of them was one flag.** The
+475-longhand identifier probe went 79 diffs -> 27, all 52 of those in these
+three:
+
+- **Which arbitrary-identifier properties answer a keyword at all.** Of the 29,
+  11 answer a CSSKeywordValue for a custom ident (`animation-name`,
+  `transition-property`, the four `grid-*-start` / `-end`,
+  `view-transition-group` / `-name`, `page`, two `-webkit-` aliases) and 18
+  answer a bare CSSStyleValue (`container-name`, `counter-*`, `color-scheme`,
+  `font-family`, `list-style-type`, `view-transition-class`, `will-change` and
+  the shorthands). `page` is in the first group *and* is not a computed longhand,
+  which is why the branch has to sit above the unmodelled set rather than below
+  it.
+- **A keyword-answering property still canonicalises what it recognises.**
   `parse('animation-name', 'ButtonFace')` answers `buttonface` where
   `parse('animation-name', 'MyAnim')` answers `MyAnim`: Blink turns an identifier
-  that is a known keyword id anywhere into a CSSIdentifierValue, and only a
-  genuine custom ident keeps its case.
-- **The per-value half of the unmodelled set.** `caret-color: auto` is a
-  CSSKeywordValue in Chrome (a CSSStyleValue here) even though every colour on
-  that property is a CSSStyleValue, and `grid-template-columns: auto`,
-  `offset-rotate: auto`, `ruby-overhang: auto` and `text-decoration` go the same
-  way. A style map also reads a *shorthand* by reconstructing it from longhands
-  (`border: currentColor` reads back `undefined`, `column-rule: currentColor`
-  reads back `medium`) rather than by echoing what was declared.
+  that is a known keyword id into a CSSIdentifierValue and only a genuine custom
+  ident keeps its case. All 668 keywords the table knows fold, on both properties
+  swept, with the same set both times -- so the generator now emits that union as
+  `all_keywords`. Blink's own id set is wider, so an identifier outside the pool
+  keeps its case: under-normalising, the safe direction.
+
+  `transition-property` is the exception, and it is not about case: its
+  identifiers are property *names*, so one that names a property is a
+  property-name value (`COLOR`, `ALL`, `Transform` all answer a CSSStyleValue
+  holding the text as written) where `MyProp` and `ButtonFace` answer a keyword.
+  `isKnownPropertyName` is that test exactly, and reproduces all 28 of its
+  measured style-value keywords.
+- **The per-value half of the unmodelled set, and its mirror.** Over all 5335
+  (unmodelled property, keyword) pairs, 21 answer a keyword -- 13 the
+  `currentcolor` above and 8 the rest (`caret-color: auto`, `offset-rotate: auto`
+  / `reverse`, `position-visibility: always`, `scroll-snap-align`'s four). The
+  same split runs the other way on 14 *modelled* properties: the keyword that
+  stays one is the property's lone value (`none`, `auto`, `normal`, `always`) and
+  the values that combine into a list or a pair are style values
+  (`grid-template-columns: auto`, `paint-order: stroke`,
+  `text-underline-position: under`). Blink's rule is whether the parsed CSSValue
+  is an identifier, which needs its grammars, so those pairs are listed. Three
+  style-value properties keep a keyword for their own lone value too
+  (`will-change: auto`, `counter-*: none`, `view-transition-class: none`).
+
+What the 27 left are, none of them this dispatch: **24** are the declaration
+adding `counter-increment`'s implicit `1` (Chrome stores `red 1` where this
+engine stores `red`), **2** are a style map reading a *shorthand* by rebuilding
+it from longhands rather than echoing what was declared (`border: currentColor`
+reads back `undefined`, `column-rule: currentColor` reads back `medium`), and
+**1** is `view-transition-name: auto`, which Chrome rejects outright.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
