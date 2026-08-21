@@ -2180,6 +2180,53 @@ render their shell and stop short. Both are attributed and amiunique is closed
 in the G23 section below; browserscan's remainder is −178 and is waiting on RSA
 in SubtleCrypto.
 
+### Re-measured same-day, after the 47-name surface cut (2026-08-21)
+
+The table above is a *snapshot*, and two of its rows had gone stale in the
+direction that manufactures a finding: read against it, this engine looked 45
+nodes short at pixelscan (recorded "exact") and 7 nodes over at rebrowser. Both
+sites had simply changed their own markup. So both columns were taken again in
+the same hour, from the same address, with `detector-sweep.mjs` at a matched
+1920 — which is the only way either number means anything:
+
+| site | Chrome, 08-14 | Chrome, 08-21 | lightpanda, 08-21 | delta |
+|---|---:|---:|---:|---:|
+| pixelscan | 1828 | 1783 | **1783** | 0 |
+| iphey | 487 | 487 | **487** | 0 |
+| deviceinfo | 263 | 264 | **264** | 0 |
+| rebrowser | 91 | 98 | **98** | 0 |
+| areyouheadless / fpscanner | 8 | 8 | **8** | 0 (host still 502) |
+| sannysoft | 290 | 290 | 291 | +1 |
+| browserleaks-js | 1180 | 1180 | 1183 | +3 |
+| browserleaks-tls | 7 | 7 | 5 | −2 |
+| amiunique | 1551 | 1551 | 1571 | +20 |
+| creepjs | 3758 | 3794 | 3683 | −111 |
+| browserscan | 2063 | 2016 | 1871 | −145 |
+
+**pixelscan was never a regression** and rebrowser was never a gap: Chrome moved
+with us on both. Five sites are node-for-node exact, and the two the section
+above left open are down from −980 and −687 to **+20** and **−145**. What is left
+is browserscan (−145, still the RSA thread) and creepjs (−111).
+
+**And the verdicts, which are the reading that actually decides anything.** Three
+of the twelve state a machine-readable answer, and all three pass:
+
+* `deviceandbrowserinfo.com/are_you_a_bot` — `isBot: false` with **all 22
+  signals false**, five times out of five on a fresh process each time. Worth
+  recording that the same page inside the twelve-site sweep produced "You are a
+  bot!" once and could not be made to do it again in isolation; a verdict read
+  off one pass of a sequential sweep is not a verdict.
+* `bot.sannysoft.com` — **zero failed rows** (8 result-passed, 22 passed).
+* `iphey.com` — "Your Digital Identity Looks Trustworthy".
+
+Which is also the answer to what the 43 remaining window-name differences cost:
+**nothing that any of these sites reads.** None of them diffs
+`Object.getOwnPropertyNames(window)` against Chrome — that is what our own
+probes do. What costs a page is not finishing, which is what the two remaining
+node gaps are.
+
+The readings are in `results/detectors-{chrome,lightpanda}-2026-08-21.json`.
+
 ## G23: amiunique and browserscan, attributed
 
 Both sites rendered their shell and stopped short. They turned out to share a
