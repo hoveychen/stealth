@@ -4931,6 +4931,14 @@ engine has 1167 own names to Chrome's 1237.
 * `ModelContext` / `ModelContextClient` -- this fork's WebMCP surface, kept
   deliberately (G14 records the same call for `navigator.modelContext`).
 
+Five of those thirteen are already being removed on `prd/window-surface-extras`
+(`8a7202dbe`): `Css` becomes `[LegacyNoInterfaceObject]`, `setImmediate` /
+`clearImmediate` come off the window surface while their implementations stay
+for internal callers, and `Snapshot`'s `[Global]` flattening stops copying
+`EventTarget`'s three members onto the global. That branch reached the same
+13-and-83 split independently from its own headed run, which is the reason to
+trust either reading. The counts above are as of `bbf32fc9d`, before it lands.
+
 **The other direction is the larger one: 83 globals headed Chrome has and we do
 not** (`CSSFunctionRule`, `CloseWatcher`, `Temporal`, `Observable`,
 `PressureObserver`, the SharedStorage family, `LanguageModel` / `Summarizer` /
