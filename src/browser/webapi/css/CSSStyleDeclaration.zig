@@ -33,6 +33,7 @@ const Allocator = std.mem.Allocator;
 const chrome_keywords = @import("chrome_keywords.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
+const shorthand = @import("shorthand.zig");
 const typed_om = @import("typed_om.zig");
 
 const CSSStyleDeclaration = @This();
@@ -229,6 +230,13 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
     }
 
     const prop = self.findProperty(wrapped) orelse {
+        // A shorthand is never stored, so it is answered by putting its
+        // longhands back together -- and "" is one of the answers, since a
+        // `border` whose components all hold their initial value cannot be
+        // written as a shorthand at all.
+        if (!self._is_computed) {
+            if (self.shorthandValue(normalized, frame)) |value| return value;
+        }
         // Only return default values for computed styles
         if (self._is_computed) {
             if (self._element) |element| {
@@ -261,6 +269,18 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
     return prop._value.str();
 }
 
+/// The shorthand `name` reads back as, or null when it is not a shorthand this
+/// engine expands or not every longhand it covers is in the declaration.
+fn shorthandValue(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame) ?[]const u8 {
+    const entry = shorthand.lookup(name) orelse return null;
+    const held = frame.local_arena.alloc([]const u8, entry.longhands.len) catch return null;
+    for (entry.longhands, held) |longhand, *value| {
+        const prop = self.findProperty(.wrap(longhand)) orelse return null;
+        value.* = prop._value.str();
+    }
+    return shorthand.join(frame.local_arena, entry, held) catch null;
+}
+
 /// The `display` a computed view reports: the cascade first (a stylesheet rule
 /// sets display as often as an inline declaration does, and the generic inline
 /// path cannot let a sheet's `!important` outrank one), the per-tag UA default
@@ -290,8 +310,17 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
 
 pub fn getPropertyPriority(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame) []const u8 {
     const normalized = normalizePropertyName(property_name, &frame.buf);
-    const prop = self.findProperty(.wrap(normalized)) orelse return "";
-    return if (prop._important) "important" else "";
+    if (self.findProperty(.wrap(normalized))) |prop| {
+        return if (prop._important) "important" else "";
+    }
+    // A shorthand is not stored, so its priority is its longhands': important
+    // only when every one of them is.
+    const entry = shorthand.lookup(normalized) orelse return "";
+    for (entry.longhands) |longhand| {
+        const prop = self.findProperty(.wrap(longhand)) orelse return "";
+        if (!prop._important) return "";
+    }
+    return "important";
 }
 
 pub fn setProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, priority_: ?[]const u8, frame: *Frame) !void {
@@ -345,8 +374,27 @@ fn setPropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, value:
 fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: []const u8, important: bool, frame: *Frame) !bool {
     const normalized = normalizePropertyName(property_name, &frame.buf);
 
+    // Chrome does not keep a shorthand: it stores the longhands and rebuilds
+    // every read of the shorthand from them. A shorthand whose value does not
+    // fit its grammar -- and one the tables do not model -- falls through and
+    // is kept whole.
+    if (shorthand.lookup(normalized)) |entry| {
+        if (try shorthand.expand(frame.local_arena, entry, value)) |expansion| {
+            var changed = false;
+            for (expansion.names, expansion.values) |name, longhand| {
+                const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
+                changed = try self.storeLonghand(name, canonical, important, frame) or changed;
+            }
+            return changed;
+        }
+    }
+
     // Normalize the value for canonical serialization
     const normalized_value = try normalizePropertyValue(frame.local_arena, normalized, value);
+    return self.storeLonghand(normalized, normalized_value, important, frame);
+}
+
+fn storeLonghand(self: *CSSStyleDeclaration, normalized: []const u8, normalized_value: []const u8, important: bool, frame: *Frame) !bool {
 
     // Find existing property
     if (self.findProperty(.wrap(normalized))) |existing| {
@@ -383,6 +431,20 @@ pub fn removeProperty(self: *CSSStyleDeclaration, property_name: []const u8, fra
 /// hold "" (`--d:;`).
 fn removePropertyImpl(self: *CSSStyleDeclaration, property_name: []const u8, frame: *Frame) !?[]const u8 {
     const normalized = normalizePropertyName(property_name, &frame.buf);
+
+    // Removing a shorthand removes every longhand it expanded to, and answers
+    // what it read as on the way out.
+    if (shorthand.lookup(normalized)) |entry| {
+        const was = self.shorthandValue(normalized, frame) orelse return null;
+        const old_value = try frame.call_arena.dupe(u8, was);
+        for (entry.longhands) |longhand| {
+            const prop = self.findProperty(.wrap(longhand)) orelse continue;
+            self._properties.remove(&prop._node);
+            frame._factory.destroy(prop);
+        }
+        return old_value;
+    }
+
     const prop = self.findProperty(.wrap(normalized)) orelse return null;
 
     // the value might not be on the heap (it could be inlined in the small string
@@ -444,6 +506,48 @@ pub fn getCssText(self: *const CSSStyleDeclaration, frame: *Frame) ![]const u8 {
     return buf.written();
 }
 
+/// Writes `name` as one shorthand if every longhand it covers is in the
+/// declaration and unwritten, and if it can be written as one at all. A
+/// shorthand that cannot -- `border` with every component at its initial value
+/// -- writes the sub-shorthands Chrome was measured writing instead.
+fn writeShorthand(
+    self: *const CSSStyleDeclaration,
+    writer: *std.Io.Writer,
+    name: []const u8,
+    emitted: *std.StringHashMapUnmanaged(void),
+    first: *bool,
+    frame: *Frame,
+) !bool {
+    const entry = shorthand.lookup(name) orelse return false;
+    const held = try frame.local_arena.alloc([]const u8, entry.longhands.len);
+    var important = false;
+    for (entry.longhands, held, 0..) |longhand, *value, i| {
+        if (emitted.contains(longhand)) return false;
+        const prop = self.findProperty(.wrap(longhand)) orelse return false;
+        if (i == 0) important = prop._important else if (prop._important != important) return false;
+        value.* = prop._value.str();
+    }
+
+    const text = try shorthand.join(frame.local_arena, entry, held);
+    if (text.len == 0) {
+        if (entry.fallback.len == 0) return false;
+        for (entry.fallback) |sub| {
+            if (!try self.writeShorthand(writer, sub, emitted, first, frame)) return false;
+        }
+        return true;
+    }
+
+    if (!first.*) try writer.writeByte(' ');
+    first.* = false;
+    try writer.writeAll(name);
+    try writer.writeAll(": ");
+    try writer.writeAll(text);
+    if (important) try writer.writeAll(" !important");
+    try writer.writeByte(';');
+    for (entry.longhands) |longhand| try emitted.put(frame.local_arena, longhand, {});
+    return true;
+}
+
 pub fn setCssText(self: *CSSStyleDeclaration, text: []const u8, frame: *Frame) !void {
     self.clearProperties(frame);
 
@@ -451,15 +555,31 @@ pub fn setCssText(self: *CSSStyleDeclaration, text: []const u8, frame: *Frame) !
     try self.syncStyleAttribute(frame);
 }
 
+/// The declaration as CSS text, with the longhands a shorthand expanded to
+/// written back as that shorthand. Chrome rebuilds this the same way -- it has
+/// no record of what was authored -- so `border: 1px solid red` comes back
+/// whole, while a `border` whose components all hold their initial value comes
+/// back as the four sub-shorthands it was measured writing
+/// (`border-width: medium; border-style: none; ...`).
 pub fn format(self: *const CSSStyleDeclaration, writer: *std.Io.Writer) !void {
-    const node = self._properties.first orelse return;
-    try Property.fromNodeLink(node).format(writer);
+    const frame = self._frame;
+    var emitted: std.StringHashMapUnmanaged(void) = .empty;
+    defer emitted.deinit(frame.local_arena);
 
-    var next = node.next;
-    while (next) |n| {
-        try writer.writeByte(' ');
-        try Property.fromNodeLink(n).format(writer);
-        next = n.next;
+    var first = true;
+    var node = self._properties.first;
+    while (node) |n| : (node = n.next) {
+        const prop = Property.fromNodeLink(n);
+        if (emitted.contains(prop._name.str())) continue;
+
+        var candidates: [8][]const u8 = undefined;
+        for (shorthand.covering(prop._name.str(), &candidates)) |name| {
+            if (try self.writeShorthand(writer, name, &emitted, &first, frame)) break;
+        } else {
+            if (!first) try writer.writeByte(' ');
+            first = false;
+            try prop.format(writer);
+        }
     }
 }
 

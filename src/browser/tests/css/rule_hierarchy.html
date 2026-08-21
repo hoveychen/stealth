@@ -415,11 +415,9 @@ function chainOf(ctor) {
     testing.expectEqual('@font-face { font-family: Foo; src: url("foo.woff2"); }', face.cssText);
 
     testing.expectEqual(':first', page.selectorText);
-    // Chrome answers 4 here: it expands `margin` into its four longhands on
-    // the way into any declaration block. We store shorthands verbatim
-    // everywhere (see the inline-style cases in stylesheet.html), so this is
-    // an engine-wide CSSStyleDeclaration gap rather than a @page one.
-    testing.expectEqual(1, page.style.length);
+    // Four: `margin` is expanded into its longhands on the way into any
+    // declaration block, a @page one included.
+    testing.expectEqual(4, page.style.length);
     testing.expectEqual(0, page.cssRules.length);
     testing.expectEqual('@page :first { margin: 1cm; }', page.cssText);
 }
