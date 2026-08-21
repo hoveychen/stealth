@@ -200,6 +200,14 @@ pub fn init(
     // features like BroadcastChannel can reach across the page/worker boundary.
     try self.js.setOrigin(self.origin);
 
+    // Same for the [SecureContext] gate, and once is enough: a worker realm has
+    // no navigation, so its answer cannot change after this. Measured on a
+    // headed Chrome 151, a worker owned by an insecure page sees 243 globals
+    // against 336 for one owned by a trustworthy origin.
+    if (frame.secure_context == false) {
+        self.js.hideSecureContextGlobals();
+    }
+
     return leaf;
 }
 
@@ -342,6 +350,12 @@ pub fn performance(self: *WorkerGlobalScope) *Performance {
 
 pub fn getLocation(self: *WorkerGlobalScope) *WorkerLocation {
     return &self._location;
+}
+
+// The owner's answer -- a worker script has to be same-origin with the document
+// that spawned it, so there is nothing of its own to judge.
+pub fn getIsSecureContext(self: *const WorkerGlobalScope) bool {
+    return self._frame.secure_context;
 }
 
 pub fn getCookieStore(self: *WorkerGlobalScope) !*CookieStore {
@@ -652,6 +666,11 @@ pub const JsApi = struct {
     pub const setInterval = bridge.function(WorkerGlobalScope.setInterval, .{});
     pub const clearInterval = bridge.function(WorkerGlobalScope.clearInterval, .{});
 
-    // Return false since workers don't have secure-context-only APIs
-    pub const isSecureContext = bridge.property(false, .{ .template = false });
+    // A worker's secure-context state is its owner's, not a constant: measured
+    // on a headed Chrome 151, a worker on http://localhost:8777 answers true
+    // and one on http://192.168.68.78:8777 answers false, and its global
+    // surface follows (336 own names vs 243). Chrome holds it as an
+    // enumerable, configurable getter on WorkerGlobalScope.prototype, which is
+    // an accessor here rather than the read-only data property it used to be.
+    pub const isSecureContext = bridge.accessor(WorkerGlobalScope.getIsSecureContext, null, .{});
 };

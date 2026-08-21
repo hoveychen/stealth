@@ -5148,3 +5148,99 @@ EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours is
 `Window(1167) <- Window(1) <- Window(239) <- EventTarget(4) <-
 Object.prototype(12)`. That extra intermediate is where the three duplicated
 `EventTarget` members come from.
+
+## The 234 globals that were not behind the secure-context gate (2026-08-20)
+
+The section above counts the window surface against one origin. It is not one
+surface. WebIDL marks a large slice of the platform `[SecureContext]`, and a
+browser only puts those names on the global when the document's origin is
+potentially trustworthy — which the previous count could not see, because
+`http://127.0.0.1` is loopback and therefore trustworthy. This engine had no
+gate at all: it handed out the same 1167 names to every origin.
+
+**Measured by serving one page from two origins that differ in nothing else.**
+Not https-vs-http, which also changes the scheme; not a different port or path.
+Same `python3 -m http.server`, same port, same bytes — only the host differs, so
+the only variable is whether that host is loopback:
+
+|                                   | headed Chrome 151 | this engine, before | after |
+|-----------------------------------|------:|------:|------:|
+| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 |
+| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |
+| names behind the gate               |  252 |    0 |  234 |
+| worker realm, secure owner          |  336 |  232 |  233 |
+| worker realm, insecure owner        |  243 |  232 |  222 |
+
+252 names in Chrome. 234 of them are names this engine has, and it leaked all
+234 on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
+HID / Serial / Bluetooth / MIDI, credentials, payments, presentation, the
+file-system-access handles, `ServiceWorker`, `WebTransport`, `caches`,
+`cookieStore`, `showOpenFilePicker`, `queryLocalFonts`, `ondevicemotion`,
+`onpointerrawupdate`. The other 18 of Chrome's 252 it does not implement at all,
+so they belong to the 83-missing count above, not here.
+
+After the gate: **0 of Chrome's 252 still leak, and 0 names are gated that
+Chrome does not gate.** The residual difference is the same one the section
+above records, which is the cross-check that the secure surface was not
+disturbed: 13 extra / 83 missing on a trustworthy origin, 13 extra / 65 missing
+on an untrustworthy one (the 18 gated names we lack stop counting as missing
+once Chrome hides them too).
+
+**Two things the gate turned up that the value of `isSecureContext` had been
+getting wrong.**
+
+*An about: child inherits.* `isSecureContext` was derived from the document's
+own URL, so every `about:blank` and `about:srcdoc` child answered false —
+including inside an https page, where Chrome answers true. Each child reported
+for itself, both parents measured:
+
+| parent | `about:blank` | `about:srcdoc` | `sandbox="allow-scripts"` srcdoc | `data:` |
+|---|---|---|---|---|
+| `http://localhost:8777`     | true  | true  | true  | false |
+| `http://192.168.68.78:8777` | false | false | false | false |
+
+The about: URLs inherit their creator's answer and a sandbox flag is not part of
+it; a `data:` URL inherits nothing, because it is simply not a potentially
+trustworthy URL. Worth pinning: reading that as "an opaque origin inherits"
+gets `data:` wrong in the direction that hands a page 252 extra names.
+
+*Every ancestor has to be secure.* An `http://localhost:8777` iframe — loopback,
+trustworthy entirely on its own — inside an `http://192.168.68.78:8777` page
+answers **false** in Chrome and gets the 985-name surface. This engine answered
+true. So the determination is `own URL is trustworthy AND every ancestor is a
+secure context`, and only a *parent* counts: an opener is not an ancestor, so it
+is consulted for `about:blank` inheritance and never as a gate on a popup that
+navigates somewhere trustworthy.
+
+*And a worker takes its owner's answer*, where this engine returned a hardcoded
+false with a comment claiming workers have no secure-context-only APIs. They do:
+Chrome's worker realm gates 93 names. Chrome holds the property as an
+enumerable, configurable getter on `WorkerGlobalScope.prototype`; here it was a
+read-only, non-configurable data property.
+
+**Mechanics, and the one gap.** The gate deletes from the global once per
+committed document and never puts anything back — each committed document gets
+its surface restored from the V8 snapshot, verified directly by deleting
+`window.GPU` alongside a marker property, navigating, and finding GPU back with
+the marker gone. Restoring would also append the 234 names to the end of
+`getOwnPropertyNames`, which is its own tell. The eleven Window members among
+the 234 are own properties of the Window interface prototype object here as well
+as of the global, so those walk the chain — deleting only the global's copy left
+`'caches' in window` true.
+
+The gap: a frame that **never navigates** keeps the full surface, because the
+gate hangs off document commit. In practice that is the bare `about:blank` CDP
+target — no page script observes it, and every document that loads content
+commits. So a reading of this engine taken on `about:blank` still reports 1167;
+pass a url. Gating at frame init instead would strip the surface off a root
+frame, which is born at `about:blank` and navigates to its real URL inside the
+same context.
+
+The probe is `probes/probe-secure-context.js`, with the two-origin recipe in its
+header; the four readings are in
+`results/probes/probe-secure-context.{chrome,lightpanda}-{secure,insecure}.json`.
+The Zig suite reaches an untrustworthy origin through `0.0.0.0`: connecting to
+it lands on the loopback listener, so it reaches the test server on 9582, but it
+is not a loopback *host* — Chrome answers false there and hands out the same 985
+names as the LAN address (measured). It is the only insecure origin the suite
+can reach without binding a second interface.

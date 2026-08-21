@@ -431,19 +431,11 @@ pub fn setOrigin(self: *Window, value: js.Value) void {
 // A potentially-trustworthy origin: https/wss, file, or a loopback host. On a
 // headed Chrome 150 over http://localhost this answers true, which is what
 // unlocks the secure-context-only APIs the rest of the surface advertises.
+// The determination lives on the frame because an about:blank child inherits
+// its creator's answer rather than deriving one from its own URL, and because
+// the [SecureContext] global gate reads the same bit.
 pub fn getIsSecureContext(self: *const Window) bool {
-    const protocol = self._location._url.getProtocol();
-    if (std.mem.eql(u8, protocol, "https:")) return true;
-    if (std.mem.eql(u8, protocol, "wss:")) return true;
-    if (std.mem.eql(u8, protocol, "file:")) return true;
-
-    const hostname = self._location._url.getHostname();
-    if (std.mem.eql(u8, hostname, "localhost")) return true;
-    if (std.mem.eql(u8, hostname, "[::1]")) return true;
-    if (std.mem.endsWith(u8, hostname, ".localhost")) return true;
-    // Blink treats the whole 127.0.0.0/8 block as loopback, not just 127.0.0.1.
-    if (std.mem.startsWith(u8, hostname, "127.")) return true;
-    return false;
+    return self._frame.secure_context;
 }
 
 // COOP+COEP cross-origin isolation, which nothing here negotiates, so the

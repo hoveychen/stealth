@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<script>
+  // Spawns a worker and relays what it reports up to this frame's parent. The
+  // point is the frame's *origin*: a worker's secure-context state is its
+  // owner's, so loading this page from an untrustworthy origin is how a test on
+  // 127.0.0.1 gets to see an insecure worker realm.
+  const w = new Worker('../../worker/secure-context-worker.js');
+  w.onmessage = (e) => {
+    parent.postMessage({ href: location.href, worker_report: e.data }, '*');
+  };
+  w.onerror = (e) => {
+    parent.postMessage({ href: location.href, worker_error: e.message ?? 'error' }, '*');
+  };
+  setTimeout(() => w.postMessage(0), 50);
+</script>

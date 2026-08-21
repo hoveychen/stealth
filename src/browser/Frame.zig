@@ -288,6 +288,23 @@ url: [:0]const u8 = "about:blank",
 
 origin: ?[]const u8 = null,
 
+// Whether this document's environment is a secure context. Stored rather than
+// derived on demand because the [SecureContext] global gate reads it once per
+// document commit, and because the answer is not a property of `url` alone --
+// the about: URLs inherit it from their creator.
+//
+// Measured on a headed Chrome 151 by serving one page twice, from
+// http://localhost:8777 (loopback, so potentially trustworthy) and from
+// http://192.168.68.78:8777, and having each child report its own answer:
+//
+//   parent               about:blank  about:srcdoc  sandbox srcdoc  data:
+//   http://localhost      true         true          true            false
+//   http://192.168.68.78  false        false         false           false
+//
+// So the about: URLs inherit, a sandbox flag is not part of the answer, and a
+// data: URL inherits nothing -- it is simply not potentially trustworthy.
+secure_context: bool = false,
+
 // The base url specifies the base URL used to resolve the relative urls.
 // It is set by a <base> tag.
 // If null the url must be used.
@@ -476,6 +493,11 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
     // We're holding a reference in Zig-side.
     location.acquireRef();
     self.window._location = location;
+
+    // A frame starts life as an about:blank document, so it already has a
+    // secure-context answer for an about:blank child to inherit before
+    // anything navigates it. No gate here -- see commitSecureContext.
+    self.secure_context = self.computeSecureContext();
 
     document._frame = self;
 
@@ -726,6 +748,87 @@ pub fn isSameOrigin(self: *const Frame, url: [:0]const u8) bool {
     return URL.isSameOrigin(url, current_origin);
 }
 
+// Recomputes `secure_context` for the document this frame has just committed,
+// and takes the [SecureContext] globals off the context when the answer is no.
+// Called from the two points that settle `url` for a *committed* document: the
+// synthetic (about:/blob:) navigation branch, and the HTTP response-header
+// commit, which is where a redirect's final scheme lands.
+//
+// Not from frame init. A frame starts at about:blank with no creator, so the
+// provisional answer there is false, and gating on it would strip the surface
+// off every https page -- a root frame is born at about:blank and navigates to
+// its real URL inside the same context. Init only settles the value, so an
+// about:blank child has something to inherit.
+pub fn commitSecureContext(self: *Frame) void {
+    self.secure_context = self.computeSecureContext();
+    if (self.secure_context == false) {
+        self.js.hideSecureContextGlobals();
+    }
+}
+
+fn computeSecureContext(self: *const Frame) bool {
+    // An embedded document is only a secure context if every ancestor is one
+    // too, whatever its own URL says. Measured on a headed Chrome 151: an
+    // http://localhost:8777 iframe -- loopback, so trustworthy on its own --
+    // inside an http://192.168.68.78:8777 page answers false and gets the
+    // 985-name surface. Recursion is not needed: the parent's own answer
+    // already folded its ancestors in.
+    if (self.parent) |parent| {
+        if (parent.secure_context == false) {
+            return false;
+        }
+    }
+
+    // about:blank and about:srcdoc have no URL to judge, so they take their
+    // creator's answer. An opener is not an ancestor -- a popup is not a child
+    // browsing context, so it is only consulted for this inheritance, never as
+    // a gate on a popup that navigates somewhere trustworthy.
+    if (std.mem.eql(u8, self.url, "about:blank") or std.mem.eql(u8, self.url, "about:srcdoc")) {
+        if (self.parent) |parent| {
+            return parent.secure_context;
+        }
+        if (self.window._opener) |opener| {
+            return opener._frame.secure_context;
+        }
+        // A top-level about:blank has an opaque origin and no creator to
+        // inherit from. Chrome answers false there (measured: 985 globals on
+        // the CDP about:blank target).
+        return false;
+    }
+    return isPotentiallyTrustworthy(self.url);
+}
+
+// "Is url potentially trustworthy" from the Secure Contexts spec, as Blink
+// implements it: the https/wss/file schemes, plus the loopback hosts -- which
+// for Blink is the whole 127.0.0.0/8 block, [::1], "localhost" and the
+// .localhost tree, not just 127.0.0.1. A blob: URL is as trustworthy as the
+// origin it was minted from. Everything else is not: data:, and http on any
+// non-loopback host (measured on Chrome 151: http://0.0.0.0 and
+// http://192.168.68.78 both answer false, http://localhost answers true).
+fn isPotentiallyTrustworthy(url: []const u8) bool {
+    if (std.mem.startsWith(u8, url, "blob:")) {
+        return isPotentiallyTrustworthy(url["blob:".len..]);
+    }
+
+    const protocol = URL.getProtocol(url);
+    if (std.mem.eql(u8, protocol, "https:")) return true;
+    if (std.mem.eql(u8, protocol, "wss:")) return true;
+    if (std.mem.eql(u8, protocol, "file:")) return true;
+
+    // Only a scheme followed by an authority has a host worth judging.
+    // URL.getHostname keys off the first "://" anywhere in the string, so
+    // without this guard `data:text/html,<a href="http://127.0.0.1/">` reads
+    // as loopback.
+    if (!std.mem.startsWith(u8, url[protocol.len..], "//")) return false;
+
+    const hostname = URL.getHostname(url);
+    if (std.mem.eql(u8, hostname, "localhost")) return true;
+    if (std.mem.eql(u8, hostname, "[::1]")) return true;
+    if (std.mem.endsWith(u8, hostname, ".localhost")) return true;
+    if (std.mem.startsWith(u8, hostname, "127.")) return true;
+    return false;
+}
+
 pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !void {
     lp.assert(self._load_state == .waiting, "frame.renavigate", .{});
     const session = self._session;
@@ -799,6 +902,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         } else {
             self.origin = null;
         }
+        self.commitSecureContext();
         try self.js.setOrigin(self.origin);
 
         // Assume we parsed the document.
@@ -1421,6 +1525,9 @@ fn frameHeaderDoneCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.
         self.url = try self.arena.dupeZ(u8, response_url);
         self.origin = try URL.getOrigin(self.arena, self.url);
     }
+    // After the redirect chain, so a http -> https hop lands on the final
+    // scheme rather than the one the navigation started with.
+    self.commitSecureContext();
     try self.js.setOrigin(self.origin);
 
     // After any redirect, drop the original method/body/header so a later
@@ -4094,6 +4201,42 @@ test "WebApi: inject_script" {
     try testing.htmlRunner("inject_script.html", .{
         .inject_script = "window.__injected = true; window.__injectValue = 42;",
     });
+}
+
+test "Frame: isPotentiallyTrustworthy" {
+    // Each of these was read off a headed Chrome 151 as window.isSecureContext
+    // on a page served from that origin, except the ones marked otherwise.
+    for ([_][]const u8{
+        "https://example.com/",
+        "wss://example.com/socket",
+        "file:///tmp/a.html",
+        "http://localhost:8777/",
+        "http://127.0.0.1:9582/x",
+        // Blink's loopback set is the whole 127.0.0.0/8 block.
+        "http://127.5.5.5/",
+        "http://[::1]:8777/",
+        "http://app.localhost/",
+        // As trustworthy as the origin the blob was minted from.
+        "blob:https://example.com/9b2b1f1e",
+    }) |url| {
+        try testing.expectEqual(true, isPotentiallyTrustworthy(url));
+    }
+
+    for ([_][]const u8{
+        "http://example.com/",
+        "http://192.168.68.78:8777/",
+        // Reaches a loopback-bound listener, but is not a loopback host.
+        "http://0.0.0.0:9582/",
+        "data:text/html,<p>hi",
+        // URL.getHostname keys off the first "://" anywhere in the string, so a
+        // data: payload that mentions one must not read as loopback.
+        "data:text/html,<a href=\"http://127.0.0.1/\">x</a>",
+        "about:blank",
+        "about:srcdoc",
+        "blob:http://example.com/9b2b1f1e",
+    }) |url| {
+        try testing.expectEqual(false, isPotentiallyTrustworthy(url));
+    }
 }
 
 test "Page: isSameOrigin" {
