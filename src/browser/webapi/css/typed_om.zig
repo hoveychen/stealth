@@ -3028,6 +3028,140 @@ const currentcolor_keyword_style_map_only = [_][]const u8{
     "-webkit-column-rule-color",
 };
 
+/// The properties taking an arbitrary identifier that answer a bare
+/// CSSStyleValue for every one of them. Measured by handing each of the 29 such
+/// properties a custom ident: 11 answer a CSSKeywordValue and these 18 do not.
+const any_identifier_style_value = [_][]const u8{
+    "color-scheme",
+    "container-name",
+    "counter-increment",
+    "counter-reset",
+    "counter-set",
+    "font-family",
+    "list-style-type",
+    "view-transition-class",
+    "will-change",
+    // The shorthands among them, which answer a CSSStyleValue anyway.
+    "animation",
+    "container",
+    "grid-area",
+    "grid-column",
+    "grid-row",
+    "list-style",
+    "transition",
+    "-webkit-animation",
+    "-webkit-transition",
+};
+
+/// The keywords a style-value-answering property answers as keywords anyway,
+/// measured over those properties' own keyword lists: it is the property's lone
+/// value each time, and every other keyword they take stays a CSSStyleValue
+/// (`color-scheme: dark`, `font-family: monospace`, `list-style-type: circle`).
+const any_identifier_keyword_exceptions = [_]struct { []const u8, []const u8 }{
+    .{ "container-name", "none" },
+    .{ "counter-increment", "none" },
+    .{ "counter-reset", "none" },
+    .{ "counter-set", "none" },
+    .{ "view-transition-class", "none" },
+    .{ "will-change", "auto" },
+};
+
+/// What a property taking an arbitrary identifier answers. Measured, and none of
+/// it derivable: the property decides whether an identifier is a keyword at all,
+/// and a keyword-answering property still folds an identifier it recognises to
+/// its canonical spelling -- `parse('animation-name', 'ButtonFace')` answers
+/// `buttonface` where `parse('animation-name', 'MyAnim')` answers `MyAnim`.
+fn anyIdentifierValue(property: []const u8, value: []const u8, frame: *Frame) !*CSSStyleValue {
+    for (any_identifier_style_value) |name| {
+        if (!std.mem.eql(u8, name, property)) continue;
+        for (any_identifier_keyword_exceptions) |pair| {
+            if (std.mem.eql(u8, pair[0], property) and std.ascii.eqlIgnoreCase(pair[1], value)) {
+                return (try CSSKeywordValue.create(pair[1], frame))._proto;
+            }
+        }
+        return CSSStyleValue.init(value, frame);
+    }
+    // Both questions below are asked of the lower case spelling: a property name
+    // and a keyword are matched case-insensitively, and the lower case one is
+    // also the answer when a keyword matches.
+    var buf: [128]u8 = undefined;
+    if (value.len > buf.len) {
+        return (try CSSKeywordValue.create(value, frame))._proto;
+    }
+    const lowered = std.ascii.lowerString(buf[0..value.len], value);
+    // `transition-property`'s identifiers are property *names*, and one that
+    // names a property is a property-name value rather than a keyword: measured,
+    // `COLOR` and `ALL` answer a CSSStyleValue holding the text as written where
+    // `MyProp` and `ButtonFace` answer a keyword.
+    if (std.mem.eql(u8, property, "transition-property") or
+        std.mem.eql(u8, property, "-webkit-transition-property"))
+    {
+        if (CSSStyleDeclaration.isKnownPropertyName(lowered)) {
+            return CSSStyleValue.init(value, frame);
+        }
+    }
+    if (chrome_keywords.all_keywords.has(lowered)) {
+        return (try CSSKeywordValue.create(lowered, frame))._proto;
+    }
+    return (try CSSKeywordValue.create(value, frame))._proto;
+}
+
+/// The keywords an unmodelled property still answers as keywords, beyond the
+/// `currentcolor` above. Measured over all 5335 (unmodelled property, keyword)
+/// pairs the table carries: 21 answer a keyword, 13 of them `currentcolor` and
+/// these 8 the rest. `position-visibility` is the shape of the class -- `always`
+/// is a lone identifier where its other keywords parse as a list, so only
+/// `always` is one.
+fn unmodelledKeyword(property: []const u8, value: []const u8) ?[]const u8 {
+    const pairs = [_]struct { []const u8, []const u8 }{
+        .{ "caret-color", "auto" },
+        .{ "offset-rotate", "auto" },
+        .{ "offset-rotate", "reverse" },
+        .{ "position-visibility", "always" },
+        .{ "scroll-snap-align", "center" },
+        .{ "scroll-snap-align", "end" },
+        .{ "scroll-snap-align", "none" },
+        .{ "scroll-snap-align", "start" },
+    };
+    for (pairs) |pair| {
+        if (std.mem.eql(u8, pair[0], property) and std.ascii.eqlIgnoreCase(pair[1], value)) {
+            return pair[1];
+        }
+    }
+    return null;
+}
+
+/// The keywords a *modelled* property answers as a bare CSSStyleValue rather
+/// than as a keyword. Measured per (property, keyword) over the 14 properties
+/// whose keywords do not answer uniformly: the one that stays a keyword is the
+/// property's lone value (`none`, `auto`, `normal`, `always`) and everything else
+/// -- the values that combine into a list or a pair -- is a style value. Blink's
+/// own rule is whether the parsed CSSValue is an identifier, which cannot be
+/// derived without its grammars, so the pairs are listed.
+const style_value_keywords = std.StaticStringMap([]const []const u8).initComptime(.{
+    .{ "font-variant-alternates", &.{"historical-forms"} },
+    .{ "grid-template-columns", &.{ "auto", "max-content", "min-content", "subgrid" } },
+    .{ "grid-template-rows", &.{ "auto", "max-content", "min-content", "subgrid" } },
+    .{ "offset-anchor", &.{ "bottom", "center", "left", "right", "top" } },
+    .{ "offset-path", &.{ "border-box", "content-box", "fill-box", "padding-box", "stroke-box", "view-box" } },
+    .{ "offset-position", &.{ "bottom", "center", "left", "right", "top" } },
+    .{ "paint-order", &.{ "fill", "markers", "stroke" } },
+    .{ "position-try-fallbacks", &.{ "block-end", "block-start", "bottom", "center", "end", "flip-block", "flip-inline", "flip-start", "inline-end", "inline-start", "left", "right", "self-block-end", "self-block-start", "self-end", "self-inline-end", "self-inline-start", "self-start", "span-all", "span-block-end", "span-block-start", "span-bottom", "span-end", "span-inline-end", "span-inline-start", "span-left", "span-right", "span-self-block-end", "span-self-block-start", "span-self-end", "span-self-inline-end", "span-self-inline-start", "span-self-start", "span-start", "span-top", "span-x-end", "span-x-start", "span-y-end", "span-y-start", "start", "top", "x-end", "x-start", "y-end", "y-start" } },
+    .{ "position-visibility", &.{ "anchors-visible", "no-overflow" } },
+    .{ "ruby-overhang", &.{ "auto", "none", "spaces" } },
+    .{ "shape-outside", &.{ "border-box", "content-box", "margin-box", "padding-box" } },
+    .{ "text-underline-position", &.{ "from-font", "left", "right", "under" } },
+    .{ "-webkit-shape-outside", &.{ "border-box", "content-box", "margin-box", "padding-box" } },
+});
+
+fn isStyleValueKeyword(property: []const u8, keyword: []const u8) bool {
+    const keywords = style_value_keywords.get(property) orelse return false;
+    for (keywords) |name| {
+        if (std.mem.eql(u8, name, keyword)) return true;
+    }
+    return false;
+}
+
 /// Whether the identifier is one Blink parses as a colour. Measured: this is a
 /// property of the identifier rather than of the property it sits in -- over all
 /// 14264 (property, keyword) pairs the tables carry, every colour-named keyword
@@ -3197,14 +3331,25 @@ pub fn dispatch(
             else => {},
         }
     }
+    // A property taking an arbitrary identifier answers on its own terms, above
+    // the unmodelled set: `page` is one of them and is not even a computed
+    // longhand, so leaving it to the branch below would answer a CSSStyleValue
+    // where Chrome answers a keyword.
+    if (isIdentifier(value) and lookupIdentifier(property, value) == .any) {
+        return anyIdentifierValue(property, value, frame);
+    }
     // A shorthand (and anything that is not a computed longhand) is not
-    // modelled, exactly as Blink leaves it -- except that `currentcolor` keeps
-    // the keyword treatment on the colour properties measured below.
+    // modelled, exactly as Blink leaves it -- except for the keywords measured
+    // as getting through anyway.
     if (!isComputedLonghand(property) or isUnsupported(property)) {
+        const trimmed = std.mem.trim(u8, value, " \t\r\n");
         if (isCurrentcolorKeyword(property, surface) and
-            std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, " \t\r\n"), "currentcolor"))
+            std.ascii.eqlIgnoreCase(trimmed, "currentcolor"))
         {
             return (try CSSKeywordValue.create("currentcolor", frame))._proto;
+        }
+        if (unmodelledKeyword(property, trimmed)) |keyword| {
+            return (try CSSKeywordValue.create(keyword, frame))._proto;
         }
         return CSSStyleValue.init(value, frame);
     }
@@ -3238,6 +3383,11 @@ pub fn dispatch(
                     if (!currentcolor or !isCurrentcolorKeyword(property, surface)) {
                         return CSSStyleValue.init(value, frame);
                     }
+                }
+                // A keyword that is one of the property's list or pair values
+                // rather than its lone one is a style value too.
+                if (isStyleValueKeyword(property, keyword)) {
+                    return CSSStyleValue.init(value, frame);
                 }
                 break :blk keyword;
             },
@@ -3294,7 +3444,18 @@ fn lookupIdentifier(property: []const u8, value: []const u8) Identifier {
     if (property.len > buf.len) return .unknown;
     const name = std.ascii.lowerString(buf[0..property.len], property);
 
-    if (chrome_keywords.any_identifier.has(name)) return .any;
+    if (chrome_keywords.any_identifier.has(name)) {
+        // Measured: `view-transition-name` takes an arbitrary identifier but
+        // rejects `auto` outright. It is the only such pair, and rejecting it is
+        // safe in the direction that matters -- Chrome drops it too, so no page
+        // that renders there depends on it being kept.
+        if (std.mem.eql(u8, name, "view-transition-name") and
+            std.ascii.eqlIgnoreCase(trimmed, "auto"))
+        {
+            return .rejected;
+        }
+        return .any;
+    }
     const accepted = chrome_keywords.keywords.get(name) orelse return .unknown;
     for (accepted) |keyword| {
         if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return .{ .canonical = keyword };

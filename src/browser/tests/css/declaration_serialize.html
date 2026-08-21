@@ -147,6 +147,20 @@ function withStyle(text) {
     testing.expectEqual('animation-name: MyAnim;', round('animation-name: MyAnim'));
     testing.expectEqual('grid-area: MyArea;', round('grid-area: MyArea'));
     testing.expectEqual('counter-reset: MyCounter 3;', round('counter-reset: MyCounter 3'));
+    // A counter name carries a count, and the one it is written without is
+    // filled in: measured, `counter-increment` defaults to 1 and
+    // `counter-reset` / `counter-set` to 0, per name and not per declaration.
+    testing.expectEqual('counter-increment: MyCounter 1;', round('counter-increment: MyCounter'));
+    testing.expectEqual('counter-increment: c 5;', round('counter-increment: c 5'));
+    testing.expectEqual('counter-increment: a 1 b 1;', round('counter-increment: a b'));
+    testing.expectEqual('counter-increment: a 2 b 1;', round('counter-increment: a 2 b'));
+    testing.expectEqual('counter-reset: c 0;', round('counter-reset: c'));
+    testing.expectEqual('counter-reset: a 0 b 0 c 0;', round('counter-reset: a b c'));
+    testing.expectEqual('counter-set: c 0;', round('counter-set: c'));
+    // ... except that `none` is the whole value rather than a counter name.
+    testing.expectEqual('counter-increment: none;', round('counter-increment: none'));
+    testing.expectEqual('counter-reset: none;', round('counter-reset: none'));
+    testing.expectEqual('counter-set: none;', round('counter-set: none'));
     const family = withStyle('');
     family.style.setProperty('font-family', 'MyOwnFont');
     testing.expectEqual('MyOwnFont', family.style.fontFamily);
