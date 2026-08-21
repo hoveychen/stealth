@@ -523,6 +523,12 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
         }
     }
 
+    // A counter name carries a count, and Chrome fills in the one it was
+    // written without.
+    if (counterDefault(property_name)) |default| {
+        return writeCounters(arena, value, default);
+    }
+
     // For 2-value shorthand properties, collapse "X X" to "X"
     if (isTwoValueShorthand(property_name)) {
         if (collapseDuplicateValue(value)) |single| {
@@ -1636,6 +1642,64 @@ fn collapseDuplicateValue(value: []const u8) ?[]const u8 {
         return first;
     }
     return null;
+}
+
+/// The count a counter property gives a name written without one. Measured:
+/// `counter-increment: c` answers `c 1` and `counter-reset: c` / `counter-set: c`
+/// answer `c 0`, per name rather than per declaration (`counter-reset: a b c`
+/// answers `a 0 b 0 c 0`).
+fn counterDefault(property_name: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, property_name, "counter-increment")) return "1";
+    if (std.mem.eql(u8, property_name, "counter-reset")) return "0";
+    if (std.mem.eql(u8, property_name, "counter-set")) return "0";
+    return null;
+}
+
+/// Rewrite a counter list with every name's count filled in. `none` is the whole
+/// value rather than a counter name, so it comes through untouched.
+fn writeCounters(arena: Allocator, value: []const u8, default: []const u8) ![]const u8 {
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+    var changed = false;
+    var tokens = std.mem.tokenizeAny(u8, value, &std.ascii.whitespace);
+    var pending: ?[]const u8 = null;
+    while (tokens.next()) |token| {
+        const is_number = numberEnd(token, 0) == token.len;
+        if (pending) |name| {
+            if (buf.written().len != 0) try buf.writer.writeByte(' ');
+            try buf.writer.print("{s} ", .{name});
+            if (is_number) {
+                try buf.writer.writeAll(token);
+                pending = null;
+                continue;
+            }
+            try buf.writer.writeAll(default);
+            changed = true;
+            pending = token;
+            continue;
+        }
+        if (is_number) {
+            // A count with no name before it is not a shape Chrome accepts; keep
+            // the value as written rather than invent a name for it.
+            buf.deinit();
+            return value;
+        }
+        pending = token;
+    }
+    if (pending) |name| {
+        if (std.ascii.eqlIgnoreCase(name, "none") and buf.written().len == 0) {
+            buf.deinit();
+            return value;
+        }
+        if (buf.written().len != 0) try buf.writer.writeByte(' ');
+        try buf.writer.print("{s} {s}", .{ name, default });
+        changed = true;
+    }
+    if (!changed) {
+        buf.deinit();
+        return value;
+    }
+    return buf.written();
 }
 
 fn isTwoValueShorthand(name: []const u8) bool {

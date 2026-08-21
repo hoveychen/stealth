@@ -3441,7 +3441,18 @@ fn lookupIdentifier(property: []const u8, value: []const u8) Identifier {
     if (property.len > buf.len) return .unknown;
     const name = std.ascii.lowerString(buf[0..property.len], property);
 
-    if (chrome_keywords.any_identifier.has(name)) return .any;
+    if (chrome_keywords.any_identifier.has(name)) {
+        // Measured: `view-transition-name` takes an arbitrary identifier but
+        // rejects `auto` outright. It is the only such pair, and rejecting it is
+        // safe in the direction that matters -- Chrome drops it too, so no page
+        // that renders there depends on it being kept.
+        if (std.mem.eql(u8, name, "view-transition-name") and
+            std.ascii.eqlIgnoreCase(trimmed, "auto"))
+        {
+            return .rejected;
+        }
+        return .any;
+    }
     const accepted = chrome_keywords.keywords.get(name) orelse return .unknown;
     for (accepted) |keyword| {
         if (std.ascii.eqlIgnoreCase(keyword, trimmed)) return .{ .canonical = keyword };

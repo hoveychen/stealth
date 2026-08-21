@@ -1332,6 +1332,23 @@ function attach(el) {
     testing.expectEqual('CSSStyleValue|monospace',
         brand(CSSStyleValue.parse('font-family', 'monospace')));
 
+    // Measured: `view-transition-name` takes an arbitrary identifier but rejects
+    // `auto` outright, whatever case it is written in. It is the one identifier
+    // this engine rejects for a property that otherwise takes any of them, and
+    // rejecting it is safe in the direction that matters: Chrome drops it too, so
+    // no page that renders there depends on it being kept.
+    testing.expectEqual('TypeError',
+        errorText(() => CSSStyleValue.parse('view-transition-name', 'auto')).split(':')[0]);
+    testing.expectEqual('TypeError',
+        errorText(() => CSSStyleValue.parse('view-transition-name', 'AUTO')).split(':')[0]);
+    testing.expectEqual('CSSKeywordValue|none',
+        brand(CSSStyleValue.parse('view-transition-name', 'none')));
+    testing.expectEqual('CSSKeywordValue|MyName',
+        brand(CSSStyleValue.parse('view-transition-name', 'MyName')));
+    // ... and it is specific to that property: `view-transition-group` takes it.
+    testing.expectEqual('CSSKeywordValue|auto',
+        brand(CSSStyleValue.parse('view-transition-group', 'auto')));
+
     // A style map reads the declaration, so a colour there is the canonical
     // text rather than the authored one.
     testing.expectEqual('CSSStyleValue|buttonface', mapKw('accent-color', 'ButtonFace'));
