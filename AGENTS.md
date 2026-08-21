@@ -17,6 +17,12 @@ METRICS=true make test                          # Capture allocation/duration me
 
 The custom test runner (`src/test_runner.zig`) detects memory leaks in debug builds. **A test that allocates without freeing fails** — not just lints.
 
+The test servers bind fixed ports (9582 HTTP, 9583 CDP, 9584 WS), so a run takes
+an advisory lock on `/tmp/lightpanda-test-servers.lock` first. A second run on
+the same machine — another worktree, another agent — prints
+`another test run holds …` and waits its turn rather than interleaving with the
+first. Expect roughly `n × 35s` for `n` concurrent runs.
+
 ## Formatting
 
 ```bash
