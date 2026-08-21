@@ -471,3 +471,82 @@ function chainOf(ctor) {
         ctors('@layer w { p{color:red} }\n@import url(a.css);\n.x{color:red}'));
 }
 </script>
+
+<script id="unmodelled_at_rule_interfaces">
+{
+    // Eleven CSSOM interfaces Chrome 151 puts on the window that we did not
+    // have. We never hand out an instance -- nothing parses @scope, @function,
+    // @position-try, @starting-style, @margin, @font-feature-values or a nested
+    // declaration block yet -- but a detector reads the global's own property
+    // names before it reads a stylesheet, so the interface objects and their
+    // prototype chains are the part that has to exist. Every string below is
+    // Chrome's own, from probes/probe-shapes.js against a headed Chrome 151 on
+    // http://localhost (results/probes/probe-shapes.chrome.json).
+    testing.expectEqual('fontFamily annotation ornaments stylistic swash characterVariant styleset constructor',
+        protoKeys(CSSFontFeatureValuesRule));
+    testing.expectEqual('CSSRule', chainOf(CSSFontFeatureValuesRule));
+
+    testing.expectEqual('style constructor', protoKeys(CSSFunctionDeclarations));
+    testing.expectEqual('CSSRule', chainOf(CSSFunctionDeclarations));
+
+    testing.expectEqual('name returnType getParameters constructor', protoKeys(CSSFunctionRule));
+    testing.expectEqual('CSSGroupingRule CSSRule', chainOf(CSSFunctionRule));
+
+    testing.expectEqual('name style constructor', protoKeys(CSSMarginRule));
+    testing.expectEqual('CSSRule', chainOf(CSSMarginRule));
+
+    testing.expectEqual('style constructor', protoKeys(CSSNestedDeclarations));
+    testing.expectEqual('CSSRule', chainOf(CSSNestedDeclarations));
+
+    testing.expectEqual('name style constructor', protoKeys(CSSPositionTryRule));
+    testing.expectEqual('CSSRule', chainOf(CSSPositionTryRule));
+
+    testing.expectEqual('start end constructor', protoKeys(CSSScopeRule));
+    testing.expectEqual('CSSGroupingRule CSSRule', chainOf(CSSScopeRule));
+
+    // @starting-style adds nothing of its own, like @supports.
+    testing.expectEqual('constructor', protoKeys(CSSStartingStyleRule));
+    testing.expectEqual('CSSGroupingRule CSSRule', chainOf(CSSStartingStyleRule));
+
+    testing.expectEqual('navigation types constructor', protoKeys(CSSViewTransitionRule));
+    testing.expectEqual('CSSRule', chainOf(CSSViewTransitionRule));
+
+    // The two descriptor blocks are CSSStyleDeclaration subclasses, not rules.
+    testing.expectEqual('result constructor', protoKeys(CSSFunctionDescriptors));
+    testing.expectEqual('CSSStyleDeclaration', chainOf(CSSFunctionDescriptors));
+
+    testing.expectEqual(
+        'margin marginTop marginRight marginBottom marginLeft marginBlock marginBlockStart ' +
+        'marginBlockEnd marginInline marginInlineStart marginInlineEnd margin-top margin-right ' +
+        'margin-bottom margin-left margin-block margin-block-start margin-block-end margin-inline ' +
+        'margin-inline-start margin-inline-end inset insetBlock insetBlockStart insetBlockEnd ' +
+        'insetInline insetInlineStart insetInlineEnd top left right bottom inset-block ' +
+        'inset-block-start inset-block-end inset-inline inset-inline-start inset-inline-end ' +
+        'width minWidth maxWidth height minHeight maxHeight blockSize minBlockSize maxBlockSize ' +
+        'inlineSize minInlineSize maxInlineSize min-width max-width min-height max-height ' +
+        'block-size min-block-size max-block-size inline-size min-inline-size max-inline-size ' +
+        'placeSelf alignSelf justifySelf place-self align-self justify-self positionAnchor ' +
+        'position-anchor positionArea position-area constructor',
+        protoKeys(CSSPositionTryDescriptors));
+    testing.expectEqual('CSSStyleDeclaration', chainOf(CSSPositionTryDescriptors));
+
+    // None of the eleven is constructible, and the refusal is Chrome's wording.
+    for (const name of ['CSSFontFeatureValuesRule', 'CSSFunctionDeclarations', 'CSSFunctionDescriptors',
+                        'CSSFunctionRule', 'CSSMarginRule', 'CSSNestedDeclarations',
+                        'CSSPositionTryDescriptors', 'CSSPositionTryRule', 'CSSScopeRule',
+                        'CSSStartingStyleRule', 'CSSViewTransitionRule']) {
+        const ctor = window[name];
+        testing.expectEqual('function', typeof ctor, { desc: name + ' is on the window' });
+        testing.expectEqual(0, ctor.length, { desc: name + ' arity' });
+        testing.expectEqual(name, ctor.name, { desc: name + ' name' });
+        let message = null;
+        try {
+            new ctor();
+        } catch (e) {
+            message = e.message;
+        }
+        testing.expectEqual("Failed to construct '" + name + "': Illegal constructor", message,
+            { desc: name + ' refuses construction' });
+    }
+}
+</script>

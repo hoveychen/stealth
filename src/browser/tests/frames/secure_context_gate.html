@@ -48,7 +48,7 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(true, secure.secure);
       testing.expectEqual(16, secure.gated.length);
       testing.expectEqual(6, secure.ungated.length);
-      testing.expectEqual(1161, secure.count);
+      testing.expectEqual(1172, secure.count);
 
       // 0.0.0.0 is not, so every [SecureContext] name is gone -- and the ones
       // that are not gated stay.
@@ -56,11 +56,12 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual('', insecure.gated.join(' '));
       testing.expectEqual(6, insecure.ungated.length);
 
-      // The gate only removes: 234 names off a surface of 1161. (The surface
-      // was 1167 until the three EventTarget methods and Css / setImmediate /
-      // clearImmediate came off it -- none of those is [SecureContext], so the
-      // gated count is untouched and both totals moved by the same six.)
-      testing.expectEqual(927, insecure.count);
+      // The gate only removes: 234 names off a surface of 1172. Both totals
+      // move together whenever the surface changes and the names involved are
+      // not [SecureContext] -- 1167 before the three EventTarget methods and
+      // Css / setImmediate / clearImmediate came off, 1172 since the eleven
+      // unmodelled CSSOM interfaces went on, and Chrome gates none of those.
+      testing.expectEqual(938, insecure.count);
     });
   }
 </script>
@@ -91,7 +92,7 @@ insecure origin this suite can reach without a second listener.
       // Trustworthy URL, untrustworthy ancestor.
       testing.expectEqual(false, grandchild.secure);
       testing.expectEqual('', grandchild.gated.join(' '));
-      testing.expectEqual(927, grandchild.count);
+      testing.expectEqual(938, grandchild.count);
     });
   }
 </script>
