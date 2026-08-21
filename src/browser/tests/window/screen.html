@@ -45,6 +45,24 @@
       'availLeft', 'availTop', 'orientation', 'onchange', 'isExtended'],
     Object.getOwnPropertyNames(Screen.prototype).filter((n) => n !== 'constructor'),
   );
+
+  // Every one of them is an accessor on the prototype, not a data property, and
+  // that is not cosmetic: a bot check reads a value it will not trust the
+  // instance to answer honestly as
+  // `Object.getOwnPropertyDescriptor(Screen.prototype, k).get.call(screen)`,
+  // which throws "Cannot read properties of undefined (reading 'call')" against
+  // a data property. Cloudflare's Turnstile fails on exactly that line
+  // (measured, probe-descriptor-kind + the cf-scrapingcourse trace).
+  for (const key of ['availWidth', 'availHeight', 'width', 'height', 'colorDepth',
+    'pixelDepth', 'availLeft', 'availTop', 'orientation', 'isExtended']) {
+    const d = Object.getOwnPropertyDescriptor(Screen.prototype, key);
+    testing.expectEqual('function', typeof d.get, { desc: key + ' is a getter' });
+    testing.expectEqual('undefined', typeof d.set, { desc: key + ' has no setter' });
+    testing.expectEqual(true, d.enumerable, { desc: key + ' enumerable' });
+    testing.expectEqual(true, d.configurable, { desc: key + ' configurable' });
+    // And it answers the same value read that way as read off the instance.
+    testing.expectEqual(screen[key], d.get.call(screen), { desc: key + ' via descriptor' });
+  }
 </script>
 
 <script id=orientation>

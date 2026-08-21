@@ -64,6 +64,40 @@ pub fn getHeight(_: *const Screen, frame: *Frame) u32 {
     return frame._page.getViewport().height;
 }
 
+// The six below were data properties, which is a difference no value probe can
+// see and one a bot check trips over: it reads a value it will not trust the
+// instance to answer honestly as
+// `Object.getOwnPropertyDescriptor(Screen.prototype, k).get.call(screen)`, and
+// against a data property `desc.get` is undefined, so the call throws "Cannot
+// read properties of undefined (reading 'call')". Cloudflare's Turnstile dies on
+// exactly that line here (measured -- see the trace in tools/fingerprint's
+// Turnstile section). Every value below is the one that was there.
+
+// The usable height is the viewport less the menu bar, the 40px availTop
+// reports. Kept a constant because that is what it was; only the kind changes.
+pub fn getAvailHeight(_: *const Screen) u32 {
+    return 1040;
+}
+
+// 24-bit colour, which is what every desktop Chrome reports.
+pub fn getColorDepth(_: *const Screen) u32 {
+    return 24;
+}
+
+pub fn getAvailLeft(_: *const Screen) u32 {
+    return 0;
+}
+
+// The usable area starts below the menu bar.
+pub fn getAvailTop(_: *const Screen) u32 {
+    return 40;
+}
+
+// One display. A second one would be extra entropy, not less.
+pub fn getIsExtended(_: *const Screen) bool {
+    return false;
+}
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(Screen);
 
@@ -76,19 +110,18 @@ pub const JsApi = struct {
     // Declaration order is Object.getOwnPropertyNames(Screen.prototype) order,
     // and that list is itself fingerprinted — this is Chrome 150's own order.
     pub const availWidth = bridge.accessor(Screen.getWidth, null, .{});
-    pub const availHeight = bridge.property(1040, .{ .template = false });
+    pub const availHeight = bridge.accessor(Screen.getAvailHeight, null, .{});
     pub const width = bridge.accessor(Screen.getWidth, null, .{});
     pub const height = bridge.accessor(Screen.getHeight, null, .{});
-    pub const colorDepth = bridge.property(24, .{ .template = false });
-    pub const pixelDepth = bridge.property(24, .{ .template = false });
-    // The usable area starts at the left edge and below the menu bar, which is
-    // the 40px that separates height from availHeight.
-    pub const availLeft = bridge.property(0, .{ .template = false });
-    pub const availTop = bridge.property(40, .{ .template = false });
+    // colorDepth and pixelDepth are the same 24 in Chrome and answer through
+    // separate getters only because the two names are separate accessors there.
+    pub const colorDepth = bridge.accessor(Screen.getColorDepth, null, .{});
+    pub const pixelDepth = bridge.accessor(Screen.getColorDepth, null, .{});
+    pub const availLeft = bridge.accessor(Screen.getAvailLeft, null, .{});
+    pub const availTop = bridge.accessor(Screen.getAvailTop, null, .{});
     pub const orientation = bridge.accessor(Screen.getOrientation, null, .{});
     pub const onchange = bridge.accessor(handlerProperty(Screen, .onchange).get, handlerProperty(Screen, .onchange).set, .{});
-    // One display. A second one would be extra entropy, not less.
-    pub const isExtended = bridge.property(false, .{ .template = false });
+    pub const isExtended = bridge.accessor(Screen.getIsExtended, null, .{});
 };
 
 pub const Orientation = struct {

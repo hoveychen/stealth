@@ -1184,6 +1184,25 @@ pub fn setDesignMode(self: *Document, value: []const u8) void {
     self._design_mode = std.ascii.eqlIgnoreCase(value, "on");
 }
 
+// The five below were data properties. Chrome has every one of them as a
+// getter, and the difference is not cosmetic: a bot check reads a value it will
+// not trust the instance to answer honestly as
+// `Object.getOwnPropertyDescriptor(Document.prototype, k).get.call(document)`,
+// which throws "Cannot read properties of undefined (reading 'call')" against a
+// data property. Values are the ones that were there: this engine's document is
+// always visible, and never prerendering.
+pub fn getHidden(_: *const Document) bool {
+    return false;
+}
+
+pub fn getVisibilityState(_: *const Document) []const u8 {
+    return "visible";
+}
+
+pub fn getPrerendering(_: *const Document) bool {
+    return false;
+}
+
 pub fn getWasDiscarded(_: *const Document) bool {
     return false;
 }
@@ -2098,13 +2117,14 @@ pub const JsApi = struct {
     pub const scrollingElement = bridge.accessor(Document.getDocumentElement, null, .{});
     pub const onpointerlockchange = bridge.accessor(handlerAccessor(.onpointerlockchange).get, handlerAccessor(.onpointerlockchange).set, .{});
     pub const onpointerlockerror = bridge.accessor(handlerAccessor(.onpointerlockerror).get, handlerAccessor(.onpointerlockerror).set, .{});
-    pub const hidden = bridge.property(false, .{ .template = false, .readonly = true });
-    pub const visibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
+    pub const hidden = bridge.accessor(Document.getHidden, null, .{});
+    pub const visibilityState = bridge.accessor(Document.getVisibilityState, null, .{});
     pub const wasDiscarded = bridge.accessor(Document.getWasDiscarded, null, .{});
-    pub const prerendering = bridge.property(false, .{ .template = false });
+    pub const prerendering = bridge.accessor(Document.getPrerendering, null, .{});
     pub const featurePolicy = bridge.accessor(Document.getFeaturePolicy, null, .{});
-    pub const webkitVisibilityState = bridge.property("visible", .{ .template = false, .readonly = true });
-    pub const webkitHidden = bridge.property(false, .{ .template = false, .readonly = true });
+    // The two -webkit- aliases are the same getters under their old names.
+    pub const webkitVisibilityState = bridge.accessor(Document.getVisibilityState, null, .{});
+    pub const webkitHidden = bridge.accessor(Document.getHidden, null, .{});
     pub const onbeforecopy = bridge.accessor(handlerAccessor(.onbeforecopy).get, handlerAccessor(.onbeforecopy).set, .{});
     pub const onbeforecut = bridge.accessor(handlerAccessor(.onbeforecut).get, handlerAccessor(.onbeforecut).set, .{});
     pub const onbeforepaste = bridge.accessor(handlerAccessor(.onbeforepaste).get, handlerAccessor(.onbeforepaste).set, .{});
