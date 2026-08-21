@@ -5572,7 +5572,13 @@ Cloudflare rotated something of their own. Two lessons, both cheap:
 * A remote party's opaque output is only an oracle for as long as they leave it
   alone, and they do not announce when they stop.
 
-### Found it: the cross-origin proxy answers undefined where Chrome throws
+### The cross-origin proxy answered undefined where Chrome throws — fixed, and it was not Turnstile's line
+
+**Read the last subsection before using this as the root cause.** The mechanism
+below reproduces Turnstile's exact message byte for byte and has been fixed, which
+is a real repair to a realm nothing here had measured. It is *not* what breaks
+Turnstile: with the fix in, the widget still prints the same TypeError.
+
 
 `reading 'call'` is reproduced, exactly, off a local page — and the mechanism is
 not a missing member on any prototype in the main realm. It is the **cross-origin
@@ -5607,13 +5613,39 @@ expect and handle — and an *unhandled* `TypeError` here. Which is also why the
 message names `'call'` rather than the property: the denial happened one level up,
 silently.
 
-**What this does and does not establish.** It establishes that this engine
-produces that exact message, from that exact realm, through a mechanism whose
-timing matches the wire log. It does not prove Turnstile's failing line is one of
-these five; the widget's payload is obfuscated and `api.js` itself contains only
-`toString.call` and `valueOf.call` literally, the rest being 13 bare `X.call(` on
-minified locals. What makes this the leading candidate rather than one of many is
-that nothing else found so far reproduces the string at all.
+**And then the fix refuted it.** `CrossOriginWindow` now carries a
+`[[NonMasking]]` named-property interceptor that returns `error.SecurityError` for
+every name off the safelist, so the reproduction above is gone -- the five
+expressions raise `SecurityError` here now, in both directions (a page reading a
+cross-origin child and a child reading its cross-origin parent; Chrome throws on
+both, measured). `frames/cross_origin_deny.html` pins it.
+
+With that in, **Turnstile prints the identical TypeError**. Four alternating
+`--only cf-scrapingcourse` runs, patched against `main`, same sitting: all four
+`cf-challenge`, and the traced console line is unchanged down to the debug-info
+blob. So the mechanism is real, was worth fixing, and **is not the failing line**.
+The lesson is the narrow one: reproducing a remote party's exact error string from
+a plausible mechanism is not evidence that it is *their* mechanism. Only removing
+it and watching the string survive settles that, and it took one run to find out.
+
+Two exemptions in the interceptor, both because Chrome does not deny these:
+`then` (an own property whose value is undefined, so `await w` does not throw) and
+`location` (a real CrossOriginLocation there). This engine has no such Location
+object, so `location` keeps answering `undefined` -- wrong in the direction it was
+already wrong in, rather than newly throwing on a name a browser lets through.
+The message text still differs too: `SecurityError: The operation is insecure`
+here against Chrome's `Failed to read a named property 'document' from 'Window':
+Blocked a frame with origin … from accessing a cross-origin frame.`
+
+**Where that leaves the hunt.** `api.js` contains no literal `.<name>.call(` for
+any of the 138 missing members; it has `toString.call`, `valueOf.call` and 13 bare
+`X.call(` on minified locals, so the read is off a local whose provenance needs
+the obfuscated payload traced. The widget's own document is fetched (`Document`
+200) and nothing is ever requested *from* it, which says its scripts may not run
+here at all -- if so the failing read is in `api.js` in the parent realm, and the
+next measurement is which of those 13 locals is undefined at that point. A CDP
+`Debugger.scriptParsed` + `getScriptSource` capture with a `pause on caught
+exception` would name the frame outright; no tool in this directory does that yet.
 
 **The proxy differs in more than that.** Same probe, same sitting:
 

@@ -1823,6 +1823,42 @@ const CrossOriginWindow = struct {
         self.window.blur();
     }
 
+    // Every name off the WebIDL cross-origin safelist has to *throw* on read.
+    // Answering undefined instead is what breaks Cloudflare's Turnstile on this
+    // engine: the widget reads a denied property and calls a method on the
+    // result, which is a SecurityError it is written to catch in a browser and
+    // was an unhandled `TypeError: Cannot read properties of undefined (reading
+    // 'call')` here -- the message naming 'call' rather than the property is the
+    // giveaway that the denial one level up went silent. Measured on a headed
+    // Chrome 150 (probe-cross-origin-surface): all 24 names tested throw there.
+    //
+    // The interceptor is [[NonMasking]], so it only runs for names the normal
+    // lookup did not find -- the safelisted members live on the prototype and
+    // resolve before this is reached -- and only for strings, which leaves
+    // Symbol.toStringTag alone.
+    fn getDenied(_: *const CrossOriginWindow, name: []const u8) !?[]const u8 {
+        // Two names Chrome does *not* deny, so neither may start throwing here.
+        //
+        // `then` is an own property on Chrome's proxy whose value is undefined,
+        // rather than a denial: awaiting a cross-origin window has to answer
+        // "not a thenable" instead of throwing, or `await w` raises where a
+        // browser resolves. Measured -- `then` is in the proxy's own-name list
+        // and `typeof w.then` is 'undefined'.
+        //
+        // `location` is on the safelist and answers a CrossOriginLocation object
+        // in Chrome (own names `href replace then`, with `href` throwing on read
+        // and `replace` callable). This engine has no such object, so the read
+        // stays the `undefined` it has always been: wrong, but wrong in the
+        // direction it was already wrong in. Throwing here would be a *new*
+        // divergence on a name a browser lets through, which is worse than the
+        // standing one. The real fix is the object -- see the cross-origin
+        // section in tools/fingerprint/README.md.
+        if (std.mem.eql(u8, name, "then") or std.mem.eql(u8, name, "location")) {
+            return null;
+        }
+        return error.SecurityError;
+    }
+
     pub const JsApi = struct {
         pub const bridge = js.Bridge(CrossOriginWindow);
 
@@ -1855,6 +1891,8 @@ const CrossOriginWindow = struct {
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
+
+        pub const @"[str]" = bridge.namedIndexed(CrossOriginWindow.getDenied, null, null, null, null, .{ .null_as_undefined = true });
 
         pub const postMessage = bridge.function(CrossOriginWindow.postMessage, .{});
         pub const close = bridge.function(CrossOriginWindow.close, .{});

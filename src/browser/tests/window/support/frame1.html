@@ -1,7 +1,20 @@
 <!DOCTYPE html>
 <script>
+  // Reading a denied property off a cross-origin parent throws; it does not
+  // answer undefined. Measured on a headed Chrome 150 from a localhost child of
+  // a 127.0.0.1 page: `window.parent.document` raises
+  //   SecurityError: Failed to read a named property 'document' from 'Window':
+  //   Blocked a frame with origin "http://localhost:8777" from accessing a
+  //   cross-origin frame.
+  // so `window.parent.document === undefined` never evaluates at all. This used
+  // to record `document_is_undefined: true`, which was this engine's answer
+  // rather than a browser's.
+  function probe(fn) {
+    try { return { value: String(fn()) }; } catch (e) { return { threw: e.name }; }
+  }
   window.parent.postMessage({
     url: location.toString(),
-    document_is_undefined: window.parent.document === undefined,
+    document: probe(() => typeof window.parent.document),
+    postMessage: probe(() => typeof window.parent.postMessage),
   }, '*')
 </script>

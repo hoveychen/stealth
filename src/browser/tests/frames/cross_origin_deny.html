@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+Reading a property off a cross-origin window has to *throw*, not answer
+undefined. Measured on a headed Chrome 150 against an https://example.com/ iframe
+(tools/fingerprint/probes/probe-cross-origin-surface.js, readings in
+results/probes/probe-cross-origin-surface.{chrome,lightpanda}.json): every name
+off the WebIDL safelist raises a SecurityError, and `in` raises one too.
+
+This is not a spec nicety. Turnstile dies on the Cloudflare interstitial with
+
+  TypeError: Cannot read properties of undefined (reading 'call')
+
+which is what `w.<denied>.call(...)` produces when `w.<denied>` answers undefined
+instead of throwing: a browser raises a SecurityError the widget is written to
+catch, and this engine used to raise an unhandled TypeError one level down, which
+is why the message names 'call' rather than the property. The probe reproduces
+both sides byte for byte.
+
+localhost is cross-origin to the 127.0.0.1 test page, so the child below is a
+real cross-origin frame without needing the network.
+-->
+
+<script id=denied_reads_throw_security_error type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const iframe = document.createElement('iframe');
+  iframe.src = ALT_BASE + 'frames/support/post_to_parent.html';
+  await new Promise((resolve) => {
+    iframe.addEventListener('load', resolve);
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    const w = iframe.contentWindow;
+
+    // The safelist still answers.
+    testing.expectEqual('function', typeof w.postMessage);
+    testing.expectEqual('function', typeof w.close);
+    testing.expectEqual('function', typeof w.focus);
+    testing.expectEqual('function', typeof w.blur);
+    testing.expectEqual('object', typeof w.top);
+    testing.expectEqual('object', typeof w.parent);
+    testing.expectEqual('boolean', typeof w.closed);
+    testing.expectEqual('number', typeof w.length);
+
+    // Everything else throws. These are the names probe-cross-origin-surface
+    // measured Chrome throwing on.
+    const denied = ['document', 'navigator', 'localStorage', 'sessionStorage',
+                    'name', 'origin', 'history', 'screen', 'performance',
+                    'innerWidth', 'innerHeight', 'devicePixelRatio', 'alert',
+                    'fetch', 'addEventListener', 'getComputedStyle',
+                    'isSecureContext', 'crypto', 'indexedDB', 'caches',
+                    'onload', 'onerror', 'eval', 'Function'];
+    for (const key of denied) {
+      testing.expectError('SecurityError', () => w[key]);
+    }
+
+    // And the shape that made this worth fixing: the failing read is one level
+    // up, so a browser never gets as far as reading 'call' off undefined.
+    testing.expectError('SecurityError', () => w.document.call);
+    testing.expectError('SecurityError', () => w.eval.call);
+  });
+}
+</script>

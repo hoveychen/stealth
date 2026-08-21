@@ -1,5 +1,5 @@
 {
- "href": "http://127.0.0.1:53935/",
+ "href": "http://127.0.0.1:62290/",
  "out": {
   "committedBy": "load",
   "sameOrigin": {
@@ -30,9 +30,9 @@
     "desc": "absent"
    },
    "location": {
-    "in": false,
+    "in": true,
     "type": "undefined",
-    "desc": "absent"
+    "desc": "value"
    },
    "close": {
     "in": true,
@@ -87,124 +87,124 @@
   },
   "mustDeny": {
    "document": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "navigator": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "localStorage": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "sessionStorage": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "name": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "origin": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "history": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "screen": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "performance": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "innerWidth": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "innerHeight": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "devicePixelRatio": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "alert": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "fetch": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "addEventListener": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "getComputedStyle": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "isSecureContext": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "crypto": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "indexedDB": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "caches": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "onload": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "onerror": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "eval": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    },
    "Function": {
-    "in": false,
-    "type": "undefined",
-    "desc": "absent"
+    "in": "THREW SecurityError",
+    "type": "THREW SecurityError",
+    "desc": "THREW SecurityError"
    }
   },
   "location": {
@@ -221,11 +221,11 @@
    "w.blur.call": "function"
   },
   "deniedThenCall": {
-   "w.document.call": "TypeError: Cannot read properties of undefined (reading 'call')",
-   "w.eval.call": "TypeError: Cannot read properties of undefined (reading 'call')",
-   "w.addEventListener.call": "TypeError: Cannot read properties of undefined (reading 'call')",
-   "w.getComputedStyle.call": "TypeError: Cannot read properties of undefined (reading 'call')",
-   "w.navigator.call": "TypeError: Cannot read properties of undefined (reading 'call')"
+   "w.document.call": "SecurityError: The operation is insecure",
+   "w.eval.call": "SecurityError: The operation is insecure",
+   "w.addEventListener.call": "SecurityError: The operation is insecure",
+   "w.getComputedStyle.call": "SecurityError: The operation is insecure",
+   "w.navigator.call": "SecurityError: The operation is insecure"
   }
  }
 }
