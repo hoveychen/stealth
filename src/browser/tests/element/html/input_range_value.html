@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<script id="range_default_value">
+  // type=range always has a value: an invalid or absent one becomes the default,
+  // which is the midpoint of the range. Every expectation was read off headless
+  // Chrome 151 (tools/fingerprint/probes/probe-input-range.js).
+  {
+    const R = (attrs, assign) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'range');
+      for (const [k, v] of Object.entries(attrs)) i.setAttribute(k, v);
+      if (assign !== undefined) i.value = assign;
+      return i.value;
+    };
+
+    testing.expectEqual('50', R({}));
+    testing.expectEqual('50', R({}, 'TOK'));
+    testing.expectEqual('50', R({}, ''));
+    // Not valid floating-point numbers per the HTML grammar, so also the default.
+    testing.expectEqual('50', R({}, '5.'));
+    testing.expectEqual('50', R({}, '+50'));
+
+    // A non-numeric min or max is ignored, leaving the 0..100 default range.
+    testing.expectEqual('50', R({ min: 'TOK' }));
+    testing.expectEqual('50', R({ max: 'TOK' }));
+  }
+</script>
+
+<script id="range_serializes_the_number">
+  // Unlike type=number, which keeps whatever literal it was handed, range
+  // re-serializes the parsed number.
+  {
+    const R = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'range');
+      i.value = v;
+      return i.value;
+    };
+
+    testing.expectEqual('10', R('1e1'));
+    testing.expectEqual('10', R('10.0'));
+    testing.expectEqual('10', R('010'));
+    testing.expectEqual('50', R('50.0'));
+    testing.expectEqual('100', R('1e2'));
+    testing.expectEqual('20', R('2e1'));
+
+    // The number input next to it keeps the literal, which is the contrast.
+    const n = document.createElement('input');
+    n.setAttribute('type', 'number');
+    n.value = '1e1';
+    testing.expectEqual('1e1', n.value);
+  }
+</script>
+
+<script id="range_clamps_on_attribute_change">
+  // The clamp re-runs whenever min/max/step change, so the answer depends on the
+  // order the attributes arrive in: setting type first materializes the value at
+  // 50, and a later max pulls it down rather than the range being re-centred.
+  {
+    const ordered = (pairs) => {
+      const i = document.createElement('input');
+      for (const [k, v] of pairs) i.setAttribute(k, v);
+      return i.value;
+    };
+
+    // type first: 50, then clamped down to max.
+    testing.expectEqual('20', ordered([['type', 'range'], ['min', '10'], ['max', '20']]));
+    testing.expectEqual('20', ordered([['type', 'range'], ['max', '20'], ['min', '10']]));
+    testing.expectEqual('50', ordered([['type', 'range'], ['min', '10']]));
+    testing.expectEqual('20', ordered([['type', 'range'], ['max', '20']]));
+    testing.expectEqual('50', ordered([['type', 'range'], ['min', '10'], ['max', '200']]));
+    // min/max first: becoming a range centres on the range that already exists.
+    testing.expectEqual('15', ordered([['min', '10'], ['max', '20'], ['type', 'range']]));
+
+    // A value attribute is clamped by a min that arrives after it.
+    testing.expectEqual('10', ordered([['type', 'range'], ['value', '5'], ['min', '10']]));
+    testing.expectEqual('10', ordered([['type', 'range'], ['min', '10'], ['value', '5']]));
+
+    // The clamp is not gated on the dirty flag: an assigned value is re-clamped
+    // by a later max just the same.
+    const dirty = document.createElement('input');
+    dirty.setAttribute('type', 'range');
+    dirty.value = '90';
+    testing.expectEqual('90', dirty.value);
+    dirty.setAttribute('max', '20');
+    testing.expectEqual('20', dirty.value);
+
+    // Removing a bound widens the range again but does not move the value.
+    const moving = document.createElement('input');
+    moving.setAttribute('type', 'range');
+    testing.expectEqual('50', moving.value);
+    moving.setAttribute('max', '20');
+    testing.expectEqual('20', moving.value);
+    moving.setAttribute('min', '30');
+    testing.expectEqual('30', moving.value);
+    moving.removeAttribute('max');
+    testing.expectEqual('30', moving.value);
+  }
+</script>
+
+<script id="range_max_below_min">
+  // When max is below min, max becomes min -- so the range collapses to a single
+  // value rather than the clamp reading the bounds backwards.
+  {
+    const R = (attrs, assign) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'range');
+      for (const [k, v] of Object.entries(attrs)) i.setAttribute(k, v);
+      if (assign !== undefined) i.value = assign;
+      return i.value;
+    };
+
+    testing.expectEqual('20', R({ min: '20', max: '10' }));
+    testing.expectEqual('20', R({ min: '20', max: '10' }, '15'));
+    testing.expectEqual('20', R({ min: '20', max: '10' }, '5'));
+    testing.expectEqual('20', R({ min: '20', max: '10' }, '99'));
+  }
+</script>
+
+<script id="range_step_snapping">
+  // Snapping happens after the clamp, on the ladder anchored at min.
+  {
+    const R = (attrs, assign) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'range');
+      for (const [k, v] of Object.entries(attrs)) i.setAttribute(k, v);
+      if (assign !== undefined) i.value = assign;
+      return i.value;
+    };
+
+    testing.expectEqual('5', R({ min: '0', max: '20', step: '5' }, '7'));
+    testing.expectEqual('10', R({ min: '0', max: '20', step: '5' }, '7.5'));
+    testing.expectEqual('20', R({ min: '0', max: '20', step: '5' }));
+    testing.expectEqual('20', R({ min: '0', max: '21', step: '5' }));
+    testing.expectEqual('1', R({}, '.5'));
+
+    // step=any disables snapping; a zero or negative step falls back to no
+    // effective ladder.
+    testing.expectEqual('7.3', R({ min: '0', max: '20', step: 'any' }, '7.3'));
+    testing.expectEqual('7', R({ min: '0', max: '20', step: '0' }, '7'));
+    testing.expectEqual('7', R({ min: '0', max: '20', step: '-5' }, '7'));
+
+    // Negative and fractional ranges.
+    testing.expectEqual('-50', R({ min: '-100', max: '-50' }));
+    testing.expectEqual('-50', R({ min: '-100', max: '-50' }, '0'));
+    testing.expectEqual('1', R({ min: '0', max: '1' }));
+
+    // A fractional ladder must not leak binary floating point into the string:
+    // 0 + 3 * 0.1 is 0.30000000000000004 as a double, and Chrome reads "0.3".
+    testing.expectEqual('0.3', R({ min: '0', max: '1', step: '0.1' }, '0.25'));
+  }
+</script>
+
+<script id="range_via_attribute">
+  // The attribute path, where defaultValue keeps the raw text.
+  {
+    const read = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'range');
+      i.setAttribute('value', v);
+      return `${i.value} ${i.defaultValue}`;
+    };
+
+    testing.expectEqual('50 TOK', read('TOK'));
+    testing.expectEqual('12 12', read('12'));
+    testing.expectEqual('50 2026-08-20', read('2026-08-20'));
+    testing.expectEqual('50 #aabbcc', read('#aabbcc'));
+  }
+</script>
+
+<!--
+  One family of range cells on the *attribute* path is knowingly not matched:
+  Chrome keeps the value in a decimal type whose source form survives, so an
+  exponential spelling is normalized but not expanded. Chrome 151 reads, for
+  `<input type=range value="X">`:
+
+      X="1e1"  -> "1e+1"      X="1E1" -> "1e+1"      X="1e+1" -> "1e+1"
+      X="2e1"  -> "2e+1"      X="1e2" -> "1e+2"
+
+  We read those as "10" / "20" / "100" -- the same number, spelled canonically.
+  Everything else on that path does agree, including the normalizations
+  (X="10.0" and X="010" both read "10", X="0.30" reads "0.3", X="-0" reads "0")
+  and the fact that the attribute is not step-snapped where an assignment is
+  (X="0.5" reads "0.5", while `el.value = '0.5'` reads "1", in both engines).
+  Matching the exponential spelling needs the source literal carried alongside
+  the value rather than a plain f64.
+-->
+

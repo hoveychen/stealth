@@ -257,6 +257,186 @@ pub const RGBA = packed struct(u32) {
         }
     }
 
+    /// Parses a CSS color *function*: `rgb()`, `rgba()`, `hsl()` and `hsla()`,
+    /// in both the legacy comma syntax and the modern space-separated one.
+    /// Returns null for anything else — notably the color-space functions
+    /// (`lab()`, `oklch()`, `hwb()`, `color()`), which need a conversion matrix,
+    /// and `calc()` channels, which need an expression evaluator.
+    ///
+    /// Out-of-range channels clamp rather than reject, and halves round away
+    /// from zero, both of which match what Chrome reads back.
+    pub fn parseFunction(input: []const u8) ?RGBA {
+        const open = std.mem.indexOfScalar(u8, input, '(') orelse return null;
+        if (input.len == 0 or input[input.len - 1] != ')') return null;
+
+        var name_buf: [8]u8 = undefined;
+        const raw_name = input[0..open];
+        if (raw_name.len > name_buf.len) return null;
+        const name = std.ascii.lowerString(name_buf[0..raw_name.len], raw_name);
+        const kind: enum { rgb, hsl } = if (std.mem.eql(u8, name, "rgb") or std.mem.eql(u8, name, "rgba"))
+            .rgb
+        else if (std.mem.eql(u8, name, "hsl") or std.mem.eql(u8, name, "hsla"))
+            .hsl
+        else
+            return null;
+
+        const args = input[open + 1 .. input.len - 1];
+        // A nested function would need its own parser, and none of the ones we
+        // accept take one.
+        if (std.mem.indexOfScalar(u8, args, '(') != null) return null;
+
+        // Legacy and modern syntax cannot be mixed, so the presence of a comma
+        // picks the separator outright.
+        var parts: [4][]const u8 = undefined;
+        var count: usize = 0;
+        if (std.mem.indexOfScalar(u8, args, ',') != null) {
+            if (std.mem.indexOfScalar(u8, args, '/') != null) return null;
+            var it = std.mem.splitScalar(u8, args, ',');
+            while (it.next()) |part| {
+                if (count == parts.len) return null;
+                parts[count] = std.mem.trim(u8, part, &std.ascii.whitespace);
+                count += 1;
+            }
+        } else {
+            // The modern syntax separates the alpha with a slash, which may or
+            // may not have whitespace around it.
+            var it = std.mem.tokenizeAny(u8, args, " \t\r\n/");
+            const slash = std.mem.indexOfScalar(u8, args, '/');
+            while (it.next()) |part| {
+                if (count == parts.len) return null;
+                parts[count] = part;
+                count += 1;
+            }
+            // A slash is only ever the 3-then-1 separator.
+            if (slash != null and count != 4) return null;
+            if (slash == null and count == 4) return null;
+        }
+        if (count != 3 and count != 4) return null;
+
+        // The alpha is parsed for validity and then dropped: the callers that
+        // want a hex string cannot express it anyway.
+        if (count == 4) _ = parseAlpha(parts[3]) orelse return null;
+
+        return switch (kind) {
+            .rgb => parseRgbChannels(parts[0..3]),
+            .hsl => parseHslChannels(parts[0..3]),
+        };
+    }
+
+    fn parseRgbChannels(parts: []const []const u8) ?RGBA {
+        // Percentages are all-or-nothing across the three channels, though
+        // `none` sits outside that rule.
+        var percents: usize = 0;
+        var numbers: usize = 0;
+        var channels: [3]u8 = undefined;
+        for (parts, 0..) |part, i| {
+            if (std.ascii.eqlIgnoreCase(part, "none")) {
+                channels[i] = 0;
+                continue;
+            }
+            if (std.mem.endsWith(u8, part, "%")) {
+                percents += 1;
+                const pct = parseNumber(part[0 .. part.len - 1]) orelse return null;
+                channels[i] = round255(pct / 100 * 255);
+            } else {
+                numbers += 1;
+                const n = parseNumber(part) orelse return null;
+                channels[i] = round255(n);
+            }
+        }
+        if (percents != 0 and numbers != 0) return null;
+        return .{ .r = channels[0], .g = channels[1], .b = channels[2], .a = 255 };
+    }
+
+    fn parseHslChannels(parts: []const []const u8) ?RGBA {
+        const hue = parseHue(parts[0]) orelse return null;
+        const s = parsePercent(parts[1]) orelse return null;
+        const l = parsePercent(parts[2]) orelse return null;
+
+        // HSL -> RGB, with the hue wrapped into [0, 360) first.
+        const h = @mod(hue, 360);
+        const c = (1 - @abs(2 * l - 1)) * s;
+        const h6 = h / 60;
+        const x = c * (1 - @abs(@mod(h6, 2) - 1));
+        const m = l - c / 2;
+        const rgb: [3]f64 = switch (@as(u8, @intFromFloat(@floor(h6)))) {
+            0 => .{ c, x, 0 },
+            1 => .{ x, c, 0 },
+            2 => .{ 0, c, x },
+            3 => .{ 0, x, c },
+            4 => .{ x, 0, c },
+            else => .{ c, 0, x },
+        };
+        return .{
+            .r = round255((rgb[0] + m) * 255),
+            .g = round255((rgb[1] + m) * 255),
+            .b = round255((rgb[2] + m) * 255),
+            .a = 255,
+        };
+    }
+
+    /// A hue is a bare number or an angle, and it is not clamped — it wraps.
+    fn parseHue(part: []const u8) ?f64 {
+        const units = [_]struct { []const u8, f64 }{
+            .{ "deg", 1 },
+            .{ "grad", 0.9 },
+            .{ "rad", 180.0 / std.math.pi },
+            .{ "turn", 360 },
+        };
+        for (units) |unit| {
+            const suffix, const scale = unit;
+            if (part.len > suffix.len and std.ascii.endsWithIgnoreCase(part, suffix)) {
+                const n = parseNumber(part[0 .. part.len - suffix.len]) orelse return null;
+                return n * scale;
+            }
+        }
+        return parseNumber(part);
+    }
+
+    /// Saturation and lightness are percentages, clamped to [0, 1].
+    fn parsePercent(part: []const u8) ?f64 {
+        if (!std.mem.endsWith(u8, part, "%")) return null;
+        const n = parseNumber(part[0 .. part.len - 1]) orelse return null;
+        return std.math.clamp(n / 100, 0, 1);
+    }
+
+    fn parseAlpha(part: []const u8) ?f64 {
+        if (std.ascii.eqlIgnoreCase(part, "none")) return 0;
+        if (std.mem.endsWith(u8, part, "%")) {
+            const n = parseNumber(part[0 .. part.len - 1]) orelse return null;
+            return std.math.clamp(n / 100, 0, 1);
+        }
+        const n = parseNumber(part) orelse return null;
+        return std.math.clamp(n, 0, 1);
+    }
+
+    fn parseNumber(part: []const u8) ?f64 {
+        if (part.len == 0) return null;
+        const n = std.fmt.parseFloat(f64, part) catch return null;
+        if (std.math.isNan(n) or std.math.isInf(n)) return null;
+        return n;
+    }
+
+    fn round255(value: f64) u8 {
+        return @intFromFloat(std.math.clamp(@round(value), 0, 255));
+    }
+
+    /// The 7-character lowercase hex form, alpha discarded. This is what
+    /// `<input type=color>` reads back, and it is not `format`'s job: that one
+    /// switches to `rgba()` when the color is translucent.
+    pub fn toHex(self: RGBA) [7]u8 {
+        const digits = "0123456789abcdef";
+        return .{
+            '#',
+            digits[self.r >> 4],
+            digits[self.r & 15],
+            digits[self.g >> 4],
+            digits[self.g & 15],
+            digits[self.b >> 4],
+            digits[self.b & 15],
+        };
+    }
+
     /// By default, browsers prefer lowercase formatting.
     const format_upper = false;
 

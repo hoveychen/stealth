@@ -20,6 +20,7 @@ const std = @import("std");
 const lp = @import("lightpanda");
 
 const js = @import("../../../js/js.zig");
+const color = @import("../../../color.zig");
 const Factory = @import("../../../Factory.zig");
 const Frame = @import("../../../Frame.zig");
 
@@ -184,7 +185,20 @@ pub fn getValue(self: *const Input) []const u8 {
 fn seedValue(self: *Input, frame: *Frame) !void {
     if (self._value_dirty) return;
     if (self._input_type.valueMode() != .value) return;
-    self._value = if (self._default_value) |dv| try self.sanitizeValue(false, dv, frame) else null;
+    // Sanitizing the empty string rather than short-circuiting on it is what
+    // gives `type=color` its "#000000" and `type=range` its midpoint without an
+    // attribute to seed from.
+    self._value = try self.sanitizeValue(false, self._default_value orelse "", frame);
+}
+
+/// Re-run the sanitizer after a bound moved. Only `range` cares: it is the one
+/// type whose sanitizer reads min/max/step, and it clamps rather than rejects,
+/// so `<input type=range>` materializing at 50 and then meeting `max=20` reads
+/// 20 — not the 15 the midpoint of 10..20 would give. The dirty flag does not
+/// gate this: an assigned 90 is pulled down by a later max just the same.
+fn reclamp(self: *Input, frame: *Frame) !void {
+    if (self._input_type != .range) return;
+    self._value = try self.sanitizeValue(false, self._value orelse "", frame);
 }
 
 /// Adopt a new input type, moving the value across the value-mode boundary the
@@ -891,6 +905,33 @@ pub fn setFormNoValidate(self: *Input, value: bool, frame: *Frame) !void {
     }
 }
 
+/// What `type=color` accepts. The spec's sanitizer only takes the 7-character
+/// lowercase hex "simple color", but Chrome runs the CSS color parser and
+/// serializes back to that form, so the short and alpha hex forms, the named
+/// colors and `rgb()`/`hsl()` all come through.
+///
+/// Surrounding whitespace is tolerated around the hex and function forms but
+/// *not* around a bare name — `"#aabbcc "` reads `#aabbcc` while `"red "` reads
+/// `#000000`. That asymmetry is measured, not derived
+/// (tools/fingerprint/probes/probe-input-color.js, the `padding` group).
+fn parseColorValue(value: []const u8) ?color.RGBA {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return null;
+
+    if (trimmed[0] == '#') {
+        return color.RGBA.parse(trimmed) catch null;
+    }
+    if (std.mem.indexOfScalar(u8, trimmed, '(') != null) {
+        return color.RGBA.parseFunction(trimmed);
+    }
+
+    // A name, which the trim must not have changed.
+    if (trimmed.len != value.len) return null;
+    var buf: [32]u8 = undefined;
+    if (trimmed.len > buf.len) return null;
+    return color.RGBA.find(std.ascii.lowerString(buf[0..trimmed.len], trimmed));
+}
+
 /// Sanitize the value according to the current input type
 fn sanitizeValue(self: *Input, comptime dupe: bool, value: []const u8, frame: *Frame) ![]const u8 {
     switch (self._input_type) {
@@ -929,29 +970,13 @@ fn sanitizeValue(self: *Input, comptime dupe: bool, value: []const u8, frame: *F
             return try sanitizeRange(dupe, value, self.getMin(), self.getMax(), self.getStep(), value_attr, frame);
         },
         .color => {
-            if (value.len == 7 and value[0] == '#') {
-                var needs_lower = false;
-                for (value[1..]) |c| {
-                    if (!std.ascii.isHex(c)) {
-                        return "#000000";
-                    }
-                    if (c >= 'A' and c <= 'F') {
-                        needs_lower = true;
-                    }
-                }
-                if (!needs_lower) {
-                    return if (comptime dupe) try frame.dupeString(value) else value;
-                }
-
-                // Normalize to lowercase per spec
-                const result = try frame.arena.alloc(u8, 7);
-                result[0] = '#';
-                for (value[1..], 1..) |c, j| {
-                    result[j] = std.ascii.toLower(c);
-                }
-                return result;
+            const rgba = parseColorValue(value) orelse return "#000000";
+            const hex = rgba.toHex();
+            // Already in the canonical form, so keep the caller's slice.
+            if (std.mem.eql(u8, value, &hex)) {
+                return if (comptime dupe) try frame.dupeString(value) else value;
             }
-            return "#000000";
+            return try frame.arena.dupe(u8, &hex);
         },
         .file => return "", // File: always empty
         .checkbox, .radio, .submit, .image, .reset, .button, .hidden => return if (comptime dupe) try frame.dupeString(value) else value, // no sanitization
@@ -1173,14 +1198,17 @@ fn sanitizeRange(
     value_attr: []const u8,
     frame: *Frame,
 ) ![]const u8 {
+    _ = dupe; // range always re-serializes the number, so nothing is kept
     const min: f64 = if (isValidFloatingPoint(min_attr))
         std.fmt.parseFloat(f64, min_attr) catch 0
     else
         0;
-    const max: f64 = if (isValidFloatingPoint(max_attr))
+    // A max below the min collapses the range onto the min rather than letting
+    // the clamp read its bounds backwards.
+    const max: f64 = @max(min, if (isValidFloatingPoint(max_attr))
         std.fmt.parseFloat(f64, max_attr) catch 100
     else
-        100;
+        100);
     const step_base: f64 = if (isValidFloatingPoint(min_attr))
         std.fmt.parseFloat(f64, min_attr) catch 0
     else if (isValidFloatingPoint(value_attr))
@@ -1188,21 +1216,43 @@ fn sanitizeRange(
     else
         0;
 
-    if (!isValidFloatingPoint(value)) {
-        return try formatFloat(frame.arena, snapToStep(min + (max - min) / 2, min, max, step_base, step_attr));
-    }
+    // Unlike every other numeric type, range has no empty state: an
+    // unrepresentable value becomes the midpoint of the range.
+    const v0 = if (isValidFloatingPoint(value))
+        std.fmt.parseFloat(f64, value) catch unreachable // grammar already validated
+    else
+        min + (max - min) / 2;
 
-    const v0 = std.fmt.parseFloat(f64, value) catch unreachable; // grammar already validated
-    var v = v0;
-    if (v < min) v = min;
-    if (v > max) v = max;
-    const snapped = snapToStep(v, min, max, step_base, step_attr);
-    if (v == v0 and snapped == v) {
-        // Already valid and on the ladder — preserve the original string so
-        // assignments like `el.value = "1.0"` round-trip without canonicalizing.
-        return if (comptime dupe) try frame.dupeString(value) else value;
-    }
-    return try formatFloat(frame.arena, snapped);
+    const clamped = std.math.clamp(v0, min, max);
+    const snapped = snapToStep(clamped, min, max, step_base, step_attr);
+    return try formatFloat(frame.arena, roundToLadderPrecision(snapped, step_base, step_attr));
+}
+
+/// Blink holds the range value in a decimal type, so a ladder of `0 + n * 0.1`
+/// serializes as "0.3" where the same arithmetic in binary floating point gives
+/// 0.30000000000000004. Rounding to the decimal places the ladder's own inputs
+/// carry reproduces that without a decimal type, since a rung can never need
+/// more places than its base and step do.
+fn roundToLadderPrecision(value: f64, step_base: f64, step_attr: []const u8) f64 {
+    if (std.ascii.eqlIgnoreCase(step_attr, "any")) return value;
+    const places = @max(decimalPlaces(step_attr), decimalPlaces(formatFloatBuf(step_base)));
+    if (places == 0) return value;
+    const scale = std.math.pow(f64, 10, @floatFromInt(places));
+    return @round(value * scale) / scale;
+}
+
+/// Digits after the decimal point, or 0 for a spelling this cannot answer for
+/// (exponential notation, or no fraction at all).
+fn decimalPlaces(text: []const u8) usize {
+    if (std.mem.indexOfAny(u8, text, "eE") != null) return 0;
+    const dot = std.mem.indexOfScalar(u8, text, '.') orelse return 0;
+    return text.len - dot - 1;
+}
+
+/// `decimalPlaces` needs the step base as text, and the base came from an f64.
+threadlocal var float_buf: [32]u8 = undefined;
+fn formatFloatBuf(value: f64) []const u8 {
+    return std.fmt.bufPrint(&float_buf, "{d}", .{value}) catch "0";
 }
 
 /// Snap `value` (already clamped to `[min, max]`) to the nearest value on the
@@ -1422,7 +1472,7 @@ pub const Build = struct {
     }
 
     pub fn attributeChange(element: *Element, name: String, value: String, frame: *Frame) !void {
-        const attribute = std.meta.stringToEnum(enum { type, value, checked }, name.str()) orelse return;
+        const attribute = std.meta.stringToEnum(enum { type, value, checked, min, max, step }, name.str()) orelse return;
         const self = element.as(Input);
         switch (attribute) {
             .type => try self.retype(Type.fromString(value.str()), frame),
@@ -1430,6 +1480,7 @@ pub const Build = struct {
                 self._default_value = try frame.arena.dupe(u8, value.str());
                 try self.seedValue(frame);
             },
+            .min, .max, .step => try self.reclamp(frame),
             .checked => {
                 self._default_checked = true;
                 // Only update checked state if it hasn't been manually modified
@@ -1445,7 +1496,7 @@ pub const Build = struct {
     }
 
     pub fn attributeRemove(element: *Element, name: String, frame: *Frame) !void {
-        const attribute = std.meta.stringToEnum(enum { type, value, checked }, name.str()) orelse return;
+        const attribute = std.meta.stringToEnum(enum { type, value, checked, min, max, step }, name.str()) orelse return;
         const self = element.as(Input);
         switch (attribute) {
             .type => try self.retype(.text, frame),
@@ -1453,6 +1504,7 @@ pub const Build = struct {
                 self._default_value = null;
                 try self.seedValue(frame);
             },
+            .min, .max, .step => try self.reclamp(frame),
             .checked => {
                 self._default_checked = false;
                 // Only update checked state if it hasn't been manually modified
@@ -1492,6 +1544,8 @@ test "WebApi: HTML.Input" {
     try testing.htmlRunner("element/html/input_file.html", .{});
     try testing.htmlRunner("element/html/input_value_mode.html", .{});
     try testing.htmlRunner("element/html/input_value_sanitize.html", .{});
+    try testing.htmlRunner("element/html/input_color_value.html", .{});
+    try testing.htmlRunner("element/html/input_range_value.html", .{});
 }
 
 test "isValidFloatingPoint" {
