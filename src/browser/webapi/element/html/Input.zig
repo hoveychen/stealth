@@ -111,6 +111,12 @@ _proto_canary: if (lp.IS_DEBUG) *HtmlElement else void = undefined,
 _default_value: ?[]const u8 = null,
 _default_checked: bool = false,
 _value: ?[]const u8 = null,
+// The spec's dirty value flag. Only an assignment raises it; while it is down
+// the `value` content attribute keeps seeding `_value` through the sanitizer.
+// It is not "`_value` is non-null": a rejected assignment leaves `_value` empty
+// and still dirty, which is what detaches `type=number` from a later
+// `setAttribute("value", "12")`.
+_value_dirty: bool = false,
 _checked: bool = false,
 _checked_dirty: bool = false,
 _input_type: Type = .text,
@@ -163,8 +169,53 @@ pub fn getValue(self: *const Input) []const u8 {
         // The attribute is the value here, so a dirty _value cannot outlive it.
         .default => self._default_value orelse "",
         .default_on => self._default_value orelse "on",
-        .value => self._value orelse self._default_value orelse "",
+        // `_value` is kept seeded from the attribute by `seedValue`, so there is
+        // no falling back to `_default_value` here: that fallback would hand
+        // back the raw attribute and skip the sanitizer.
+        .value => self._value orelse "",
     };
+}
+
+/// Re-run the value sanitization algorithm over the `value` content attribute
+/// and adopt the result, per the spec's "value sanitization algorithm ... when
+/// the value content attribute is added, changed, or removed". A dirty value
+/// outranks the attribute, and the other value modes read the attribute
+/// directly, so both are left alone.
+fn seedValue(self: *Input, frame: *Frame) !void {
+    if (self._value_dirty) return;
+    if (self._input_type.valueMode() != .value) return;
+    self._value = if (self._default_value) |dv| try self.sanitizeValue(false, dv, frame) else null;
+}
+
+/// Adopt a new input type, moving the value across the value-mode boundary the
+/// way the spec's "type attribute has changed" steps do. The sanitizer then
+/// runs over whatever the value now *is*, rather than re-reading the attribute:
+/// `type=number value=TOK` has already dropped the "TOK", so switching on to
+/// `text` reads "" and not "TOK" back out of the attribute.
+fn retype(self: *Input, new_type: Type, frame: *Frame) !void {
+    const was = self._input_type.valueMode();
+    self._input_type = new_type;
+    const now = self._input_type.valueMode();
+
+    if (was == .value and now != .value) {
+        // Only a dirty value is banked into the attribute. A pristine one came
+        // out of the attribute to begin with, so writing it back would clobber
+        // the raw attribute with its sanitized form.
+        if (self._value_dirty) {
+            if (self._value) |dirty| {
+                try self.asElement().setAttributeSafe(comptime .wrap("value"), .wrap(dirty), frame);
+            }
+        }
+        self._value = null;
+        self._value_dirty = false;
+    } else if (was != .value and now == .value) {
+        self._value = self._default_value;
+        self._value_dirty = false;
+    }
+
+    if (self._value) |current| {
+        self._value = try self.sanitizeValue(false, current, frame);
+    }
 }
 
 // Spec-compliant `getValue` exposes the raw password to JS, FormData, CSS
@@ -188,7 +239,10 @@ pub fn setValue(self: *Input, value: []const u8, frame: *Frame) !void {
             self._value = null;
         },
         // This should _not_ call setAttribute. It updates the current state only
-        .value => self._value = try self.sanitizeValue(true, value, frame),
+        .value => {
+            self._value = try self.sanitizeValue(true, value, frame);
+            self._value_dirty = true;
+        },
     }
 }
 
@@ -383,8 +437,10 @@ pub fn suffersValueMissing(self: *Input, frame: *Frame) bool {
         .checkbox => !self._checked,
         .radio => !self.radioGroupHasChecked(frame),
         .file => if (self._files) |fl| fl._files.len == 0 else true,
+        // All value-mode types, so `_value` is already seeded from the
+        // attribute — no falling back to the raw `_default_value`.
         .text, .password, .email, .url, .tel, .search, .number, .date, .time, .@"datetime-local", .month, .week, .color => blk: {
-            const v = self._value orelse self._default_value orelse "";
+            const v: []const u8 = self._value orelse "";
             break :blk v.len == 0;
         },
         // submit/reset/button/hidden/image/range never participate in valueMissing.
@@ -434,9 +490,10 @@ pub fn suffersPatternMismatch(self: *const Input, frame: *Frame) bool {
 }
 
 pub fn suffersTooLong(self: *const Input) bool {
-    // Per spec, only the dirty value flag triggers tooLong / tooShort. We treat
-    // the presence of an explicit _value (vs. attribute-derived _default_value)
-    // as an approximation of dirty.
+    // Per spec only a dirty value triggers tooLong / tooShort, so a value the
+    // `value` content attribute seeded never does — `_value` is non-null for
+    // those too, which is why this reads the flag and not the value.
+    if (!self._value_dirty) return false;
     const value = self._value orelse return false;
     const max = self.getMaxLength();
     if (max < 0) return false;
@@ -444,6 +501,7 @@ pub fn suffersTooLong(self: *const Input) bool {
 }
 
 pub fn suffersTooShort(self: *const Input) bool {
+    if (!self._value_dirty) return false;
     const value = self._value orelse return false;
     if (value.len == 0) return false;
     const min = self.getMinLength();
@@ -1355,11 +1413,7 @@ pub const Build = struct {
             .text;
 
         // Sanitize initial value per input type (e.g. date rejects "invalid-date").
-        if (self._default_value) |dv| {
-            self._value = try self.sanitizeValue(false, dv, frame);
-        } else {
-            self._value = null;
-        }
+        try self.seedValue(frame);
 
         // If this is a checked radio button, uncheck others in its group
         if (self._checked and self._input_type == .radio) {
@@ -1371,29 +1425,11 @@ pub const Build = struct {
         const attribute = std.meta.stringToEnum(enum { type, value, checked }, name.str()) orelse return;
         const self = element.as(Input);
         switch (attribute) {
-            .type => {
-                const was = self._input_type.valueMode();
-                self._input_type = Type.fromString(value.str());
-                const now = self._input_type.valueMode();
-
-                // Changing the mode moves the value across the boundary: on the
-                // way out of `.value` a dirty value is banked into the
-                // attribute, and on the way in the attribute is read back out.
-                if (was == .value and now != .value) {
-                    if (self._value) |dirty| {
-                        try self.asElement().setAttributeSafe(comptime .wrap("value"), .wrap(dirty), frame);
-                        self._value = null;
-                    }
-                } else if (was != .value and now == .value) {
-                    self._value = null;
-                }
-
-                // Sanitize the current value according to the new type
-                if (self._value) |current_value| {
-                    self._value = try self.sanitizeValue(false, current_value, frame);
-                }
+            .type => try self.retype(Type.fromString(value.str()), frame),
+            .value => {
+                self._default_value = try frame.arena.dupe(u8, value.str());
+                try self.seedValue(frame);
             },
-            .value => self._default_value = try frame.arena.dupe(u8, value.str()),
             .checked => {
                 self._default_checked = true;
                 // Only update checked state if it hasn't been manually modified
@@ -1408,12 +1444,15 @@ pub const Build = struct {
         }
     }
 
-    pub fn attributeRemove(element: *Element, name: String, _: *Frame) !void {
+    pub fn attributeRemove(element: *Element, name: String, frame: *Frame) !void {
         const attribute = std.meta.stringToEnum(enum { type, value, checked }, name.str()) orelse return;
         const self = element.as(Input);
         switch (attribute) {
-            .type => self._input_type = .text,
-            .value => self._default_value = null,
+            .type => try self.retype(.text, frame),
+            .value => {
+                self._default_value = null;
+                try self.seedValue(frame);
+            },
             .checked => {
                 self._default_checked = false;
                 // Only update checked state if it hasn't been manually modified
@@ -1431,6 +1470,7 @@ pub const Build = struct {
 
         // Copy runtime state from source to clone
         clone._value = source._value;
+        clone._value_dirty = source._value_dirty;
         clone._checked = source._checked;
         clone._checked_dirty = source._checked_dirty;
         clone._selection_direction = source._selection_direction;
@@ -1451,6 +1491,7 @@ test "WebApi: HTML.Input" {
     try testing.htmlRunner("element/html/input-validity.html", .{});
     try testing.htmlRunner("element/html/input_file.html", .{});
     try testing.htmlRunner("element/html/input_value_mode.html", .{});
+    try testing.htmlRunner("element/html/input_value_sanitize.html", .{});
 }
 
 test "isValidFloatingPoint" {

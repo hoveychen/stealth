@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<script id="sanitize_via_attribute">
+  // The value sanitization algorithm is not only for assignments to .value: in
+  // value mode the content attribute seeds the value, and it goes through the
+  // same sanitizer on the way. So `type=number value=TOK` reads "" while
+  // defaultValue keeps the raw "TOK" -- the attribute itself is never rewritten.
+  // Every expectation was read off headless Chrome 151 --
+  // tools/fingerprint/probes/probe-input-sanitize.js.
+  {
+    const CASES = [
+      ['number', 'TOK', ''],
+      ['number', '12', '12'],
+      ['number', '2026-08-20', ''],
+      ['number', '#aabbcc', ''],
+      ['color', 'TOK', '#000000'],
+      ['color', '12', '#000000'],
+      ['color', '2026-08-20', '#000000'],
+      ['color', '#aabbcc', '#aabbcc'],
+      ['range', 'TOK', '50'],
+      ['range', '12', '12'],
+      ['range', '2026-08-20', '50'],
+      ['range', '#aabbcc', '50'],
+      ['date', 'TOK', ''],
+      ['date', '12', ''],
+      ['date', '2026-08-20', '2026-08-20'],
+      ['date', '#aabbcc', ''],
+      ['time', 'TOK', ''],
+      ['time', '12', ''],
+      ['time', '2026-08-20', ''],
+      ['time', '#aabbcc', ''],
+      ['month', 'TOK', ''],
+      ['month', '12', ''],
+      ['month', '2026-08-20', ''],
+      ['month', '#aabbcc', ''],
+      ['week', 'TOK', ''],
+      ['week', '12', ''],
+      ['week', '2026-08-20', ''],
+      ['week', '#aabbcc', ''],
+      ['datetime-local', 'TOK', ''],
+      ['datetime-local', '12', ''],
+      ['datetime-local', '2026-08-20', ''],
+      ['datetime-local', '#aabbcc', ''],
+    ];
+
+    for (const [type, attr, expected] of CASES) {
+      const i = document.createElement('input');
+      i.setAttribute('type', type);
+      i.setAttribute('value', attr);
+      testing.expectEqual(expected, i.value);
+      testing.expectEqual(attr, i.defaultValue);
+      testing.expectEqual(attr, i.getAttribute('value'));
+    }
+  }
+</script>
+
+<script id="sanitize_dirty_flag_wins">
+  // The dirty value flag, not the emptiness of the value, decides whether a
+  // later attribute write reaches the property. A value the sanitizer rejected
+  // is still dirty: it reads "" and keeps reading "" after the attribute is set
+  // to something the sanitizer would have accepted.
+  {
+    const mk = () => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'number');
+      return i;
+    };
+
+    const accepted = mk();
+    accepted.value = '12';
+    accepted.setAttribute('value', 'TOK');
+    testing.expectEqual('12', accepted.value);
+    testing.expectEqual('TOK', accepted.defaultValue);
+
+    const rejected = mk();
+    rejected.value = 'TOK';
+    rejected.setAttribute('value', '12');
+    testing.expectEqual('', rejected.value);
+    testing.expectEqual('12', rejected.defaultValue);
+
+    // Never dirty, so the second attribute write does reach the property.
+    const pristine = mk();
+    pristine.setAttribute('value', 'TOK');
+    pristine.setAttribute('value', '12');
+    testing.expectEqual('12', pristine.value);
+    testing.expectEqual('12', pristine.defaultValue);
+  }
+</script>
+
+<script id="sanitize_attribute_removed">
+  // Removing the attribute drops the seeded value, unless a dirty value has
+  // already detached the property from it.
+  {
+    const mk = () => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'number');
+      i.setAttribute('value', '12');
+      return i;
+    };
+
+    const pristine = mk();
+    pristine.removeAttribute('value');
+    testing.expectEqual('', pristine.value);
+    testing.expectEqual('', pristine.defaultValue);
+
+    const dirty = mk();
+    dirty.value = '7';
+    dirty.removeAttribute('value');
+    testing.expectEqual('7', dirty.value);
+    testing.expectEqual('', dirty.defaultValue);
+  }
+</script>
+
+<script id="sanitize_on_type_switch">
+  // Switching to a stricter type re-runs the sanitizer over the attribute, both
+  // from another value-mode type and from default mode.
+  {
+    const fromText = document.createElement('input');
+    fromText.setAttribute('type', 'text');
+    fromText.setAttribute('value', 'TOK');
+    testing.expectEqual('TOK', fromText.value);
+    fromText.setAttribute('type', 'number');
+    testing.expectEqual('', fromText.value);
+    testing.expectEqual('TOK', fromText.defaultValue);
+
+    const fromHidden = document.createElement('input');
+    fromHidden.setAttribute('type', 'hidden');
+    fromHidden.setAttribute('value', 'TOK');
+    testing.expectEqual('TOK', fromHidden.value);
+    fromHidden.setAttribute('type', 'number');
+    testing.expectEqual('', fromHidden.value);
+    testing.expectEqual('TOK', fromHidden.defaultValue);
+  }
+</script>
+
+<script id="sanitize_type_switch_is_in_place">
+  // The sanitizer runs over the value the element currently *has*, not over the
+  // attribute re-read: `type=number value=TOK` has already dropped the "TOK",
+  // so relaxing the type to text reads "" rather than recovering it. Only
+  // arriving from a non-value mode re-reads the attribute.
+  {
+    const strictThenLax = document.createElement('input');
+    strictThenLax.setAttribute('type', 'number');
+    strictThenLax.setAttribute('value', 'TOK');
+    strictThenLax.removeAttribute('type');
+    testing.expectEqual('', strictThenLax.value);
+    testing.expectEqual('TOK', strictThenLax.defaultValue);
+
+    const fromDefaultMode = document.createElement('input');
+    fromDefaultMode.setAttribute('type', 'hidden');
+    fromDefaultMode.setAttribute('value', 'TOK');
+    fromDefaultMode.removeAttribute('type');
+    testing.expectEqual('TOK', fromDefaultMode.value);
+
+    // A pristine value must not be banked into the attribute on the way out of
+    // value mode -- that would replace the raw "TOK" with its sanitized "".
+    const pristineOut = document.createElement('input');
+    pristineOut.setAttribute('type', 'number');
+    pristineOut.setAttribute('value', 'TOK');
+    pristineOut.setAttribute('type', 'hidden');
+    testing.expectEqual('TOK', pristineOut.getAttribute('value'));
+    testing.expectEqual('TOK', pristineOut.value);
+
+    // A dirty one is, and it survives the round trip back into value mode.
+    const dirtyOut = document.createElement('input');
+    dirtyOut.setAttribute('type', 'text');
+    dirtyOut.value = '12';
+    dirtyOut.setAttribute('type', 'hidden');
+    testing.expectEqual('12', dirtyOut.getAttribute('value'));
+    dirtyOut.setAttribute('type', 'number');
+    testing.expectEqual('12', dirtyOut.value);
+
+    // A dirty value outlives the type attribute going away entirely.
+    const dirtyRemove = document.createElement('input');
+    dirtyRemove.setAttribute('type', 'number');
+    dirtyRemove.value = '12';
+    dirtyRemove.removeAttribute('type');
+    testing.expectEqual('12', dirtyRemove.value);
+    testing.expectEqual('', dirtyRemove.defaultValue);
+    testing.expectEqual(null, dirtyRemove.getAttribute('value'));
+  }
+</script>
+
+<script id="sanitize_clone_keeps_dirty">
+  // cloneNode copies the value and the dirty flag with it, so the clone of a
+  // dirty input keeps the assigned value rather than re-seeding from the
+  // attribute it carries.
+  {
+    const mk = () => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'number');
+      i.setAttribute('value', 'TOK');
+      return i;
+    };
+
+    const dirty = mk();
+    dirty.value = '12';
+    const dirtyClone = dirty.cloneNode(false);
+    testing.expectEqual('12', dirtyClone.value);
+    testing.expectEqual('TOK', dirtyClone.defaultValue);
+
+    const pristineClone = mk().cloneNode(false);
+    testing.expectEqual('', pristineClone.value);
+    testing.expectEqual('TOK', pristineClone.defaultValue);
+  }
+</script>
+
+<script id="sanitize_seeded_value_is_not_dirty">
+  // Seeding the value from the attribute must not look like an edit: tooLong
+  // and tooShort key off the dirty flag, and Chrome reads false for a value
+  // that only ever came out of the attribute.
+  {
+    const short = document.createElement('input');
+    short.setAttribute('type', 'text');
+    short.setAttribute('minlength', '3');
+    short.setAttribute('value', 'ab');
+    testing.expectEqual('ab', short.value);
+    testing.expectEqual(false, short.validity.tooShort);
+
+    const long = document.createElement('input');
+    long.setAttribute('type', 'text');
+    long.setAttribute('maxlength', '2');
+    long.setAttribute('value', 'abcdef');
+    testing.expectEqual('abcdef', long.value);
+    testing.expectEqual(false, long.validity.tooLong);
+
+    // typeMismatch and patternMismatch are not dirty-gated, so they do read the
+    // seeded value -- and Chrome agrees.
+    const email = document.createElement('input');
+    email.setAttribute('type', 'email');
+    email.setAttribute('value', 'bad');
+    testing.expectEqual(true, email.validity.typeMismatch);
+
+    const pattern = document.createElement('input');
+    pattern.setAttribute('type', 'text');
+    pattern.setAttribute('pattern', '\\d+');
+    pattern.setAttribute('value', 'abc');
+    testing.expectEqual(true, pattern.validity.patternMismatch);
+  }
+</script>
+
+<script id="sanitize_default_value_setter">
+  // defaultValue writes the content attribute, so it seeds the value through
+  // the sanitizer and reads back unsanitized itself.
+  {
+    const i = document.createElement('input');
+    i.setAttribute('type', 'number');
+    i.defaultValue = 'TOK';
+    testing.expectEqual('', i.value);
+    testing.expectEqual('TOK', i.defaultValue);
+    testing.expectEqual('TOK', i.getAttribute('value'));
+  }
+</script>
+
+<script id="sanitize_parsed_markup">
+  // The parser is the other entry point into the same seeding, and it already
+  // sanitized -- pinned here so the attribute path cannot regress it.
+  {
+    const d = document.createElement('div');
+    d.innerHTML = '<input type="number" value="TOK"><input type="date" value="2026-13-01">';
+    testing.expectEqual('', d.children[0].value);
+    testing.expectEqual('TOK', d.children[0].defaultValue);
+    testing.expectEqual('', d.children[1].value);
+    testing.expectEqual('2026-13-01', d.children[1].defaultValue);
+  }
+</script>
