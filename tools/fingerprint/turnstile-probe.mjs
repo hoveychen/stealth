@@ -14,6 +14,7 @@
 // usage: node tools/fingerprint/turnstile-probe.mjs <lightpanda|chrome> [--settle 20000]
 //                                                   [--sitekey KEY] [--render explicit]
 //                                                   [--out results/x.json] [--headed]
+//                                                   [--log-level debug] [--open-shadow]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -62,8 +63,21 @@ const widget = RENDER === 'explicit'
     : `<div class="cf-turnstile" data-sitekey="${SITEKEY}"></div>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>`;
 
+// The widget puts its iframe in a `closed` shadow root, so nothing outside can
+// read it — in either engine. Forcing every root open costs the widget nothing
+// (it keeps its own handle) and is the only way to ask both engines the same
+// question about the iframe they built.
+const openShadow = `<script>
+  (function () {
+    const real = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function (init) {
+      return real.call(this, Object.assign({}, init, { mode: 'open' }));
+    };
+  })();
+</script>`;
+
 const html = `<!DOCTYPE html>
-<html><head><title>turnstile probe</title></head>
+<html><head><title>turnstile probe</title>${has('--open-shadow') ? openShadow : ''}</head>
 <body>
 ${widget}
 </body></html>`;
@@ -90,7 +104,10 @@ const proc = engine === 'chrome'
         '--window-size=1920,1080',
         ...(has('--headed') ? [] : ['--headless=new']),
     ], { stdio: ['ignore', 'pipe', 'pipe'] })
-    : spawn(LIGHTPANDA, ['serve', '--host', '127.0.0.1', '--port', String(PORT)], {
+    : spawn(LIGHTPANDA, [
+        'serve', '--host', '127.0.0.1', '--port', String(PORT),
+        '--log_level', arg('--log-level', 'info'),
+    ], {
         stdio: ['ignore', 'pipe', 'pipe'],
     });
 proc.stdout.on('data', (d) => engineLog.push(String(d)));
@@ -111,10 +128,25 @@ const READ = `(() => {
     renderReturned: window.__renderReturned ?? null,
     apiScripts: q('script[src*="challenges.cloudflare.com"]').length,
     container: container
-      ? { childElementCount: container.childElementCount, innerHTMLLength: container.innerHTML.length, id: container.id || null }
+      ? { childElementCount: container.childElementCount, innerHTMLLength: container.innerHTML.length, id: container.id || null, innerHTML: container.innerHTML }
       : null,
     widgetIds: idsLike('cf-chl-widget'),
     iframes: q('iframe').map((f) => ({ src: f.src || null, id: f.id || null, parentId: f.parentElement?.id || null })),
+    // With --open-shadow, whatever the widget hid from us.
+    shadowIframes: q('*').flatMap((e) => e.shadowRoot
+      ? Array.from(e.shadowRoot.querySelectorAll('iframe')).map((f) => ({
+          hostTag: e.tagName.toLowerCase(),
+          hostConnected: e.isConnected,
+          id: f.id || null,
+          srcAttr: f.getAttribute('src'),
+          srcProp: f.src || null,
+          sandbox: f.getAttribute('sandbox'),
+          isConnected: f.isConnected,
+          contentWindow: !!f.contentWindow,
+          contentDocumentUrl: (() => { try { return f.contentDocument?.URL ?? null; } catch { return 'cross-origin'; } })(),
+        }))
+      : []),
+    shadowHTMLLength: q('*').filter((e) => e.shadowRoot).map((e) => e.shadowRoot.innerHTML.length),
     inputs: q('input').map((i) => ({ name: i.name || null, type: i.type, valueLength: (i.value || '').length })),
     shadowRoots: q('*').filter((e) => e.shadowRoot).map((e) => e.tagName.toLowerCase()),
     bodyChildTags: Array.from(document.body.children).map((e) => e.tagName.toLowerCase()),
@@ -148,6 +180,11 @@ try {
             consoleLines.push(`${msg.params.type}: ${msg.params.args.map((a) => a.value ?? a.description ?? a.type).join(' ')}`);
         } else if (msg.method === 'Log.entryAdded') {
             consoleLines.push(`log.${msg.params.entry.level}: ${msg.params.entry.text}`);
+        } else if (msg.method === 'Runtime.exceptionThrown') {
+            // The widget's own failure path throws rather than logs, and an
+            // uncaught throw shows up here and nowhere else.
+            const d = msg.params.exceptionDetails ?? {};
+            consoleLines.push(`exception: ${(d.exception?.description ?? d.text ?? '').slice(0, 400)}`);
         } else if (msg.method === 'Network.requestWillBeSent') {
             requests.push(`> ${msg.params.request.url.slice(0, 140)}`);
         } else if (msg.method === 'Network.loadingFailed') {

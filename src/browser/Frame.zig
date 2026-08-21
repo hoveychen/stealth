@@ -3455,19 +3455,35 @@ pub fn updateRangesForNodeRemoval(self: *Frame, parent: *Node, child: *Node, chi
 // children, for its descendants in tree order: appending a subtree
 // containing scripts must execute them all, after the whole insertion.
 fn nodeIsReadySubtree(self: *Frame, node: *Node) !void {
-    if (node._type != .element or node.firstChild() == null) {
+    if (node._type != .element) {
+        return self.nodeIsReady(false, node);
+    }
+    const element = node.is(Element) orelse return self.nodeIsReady(false, node);
+    if (node.firstChild() == null and element.hostedShadowRoot(self) == null) {
         return self.nodeIsReady(false, node);
     }
 
     // Scripts can mutate the tree. Safe to do this since nodeIsReady re-checks
     // connectivity.
     var elements: std.ArrayList(*Node) = .empty;
-    var tw = TreeWalker.Full.Elements.init(node, .{});
-    while (tw.next()) |el| {
-        try elements.append(self.call_arena, el.asNode());
-    }
+    try self.collectReadySubtree(&elements, node);
     for (elements.items) |el| {
         try self.nodeIsReady(false, el);
+    }
+}
+
+// A shadow root's contents become connected along with their host, so they
+// need the same walk — a shadow tree is not reachable through firstChild.
+// Turnstile builds its widget iframe inside a detached shadow root and attaches
+// the host afterwards, so skipping shadow trees here means that frame never
+// loads.
+fn collectReadySubtree(self: *Frame, elements: *std.ArrayList(*Node), root: *Node) !void {
+    var tw = TreeWalker.Full.Elements.init(root, .{});
+    while (tw.next()) |el| {
+        try elements.append(self.call_arena, el.asNode());
+        if (el.hostedShadowRoot(self)) |shadow| {
+            try self.collectReadySubtree(elements, shadow.asNode());
+        }
     }
 }
 

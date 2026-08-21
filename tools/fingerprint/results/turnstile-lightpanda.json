@@ -1,6 +1,6 @@
 {
   "engine": "lightpanda",
-  "pageUrl": "http://127.0.0.1:62479/",
+  "pageUrl": "http://127.0.0.1:53427/",
   "sitekey": "1x00000000000000000000AA",
   "render": "implicit",
   "settleMs": 12000,
@@ -8,7 +8,7 @@
     "Browser": "Lightpanda/1.0",
     "Protocol-Version": "1.3",
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
-    "Lightpanda-Version": "1.0.0-dev.669+bbf32fc9d",
+    "Lightpanda-Version": "1.0.0-dev.674+dbce66dc9",
     "webSocketDebuggerUrl": "ws://127.0.0.1:9227/"
   },
   "samples": [
@@ -31,12 +31,15 @@
       "container": {
         "childElementCount": 1,
         "innerHTMLLength": 95,
-        "id": null
+        "id": null,
+        "innerHTML": "<div><input type=\"hidden\" name=\"cf-turnstile-response\" id=\"cf-chl-widget-e8kde_response\"></div>"
       },
       "widgetIds": [
-        "cf-chl-widget-ddzoq_response"
+        "cf-chl-widget-e8kde_response"
       ],
       "iframes": [],
+      "shadowIframes": [],
+      "shadowHTMLLength": [],
       "inputs": [
         {
           "name": "cf-turnstile-response",
@@ -70,17 +73,20 @@
       "container": {
         "childElementCount": 1,
         "innerHTMLLength": 95,
-        "id": null
+        "id": null,
+        "innerHTML": "<div><input type=\"hidden\" name=\"cf-turnstile-response\" id=\"cf-chl-widget-e8kde_response\"></div>"
       },
       "widgetIds": [
-        "cf-chl-widget-ddzoq_response"
+        "cf-chl-widget-e8kde_response"
       ],
       "iframes": [],
+      "shadowIframes": [],
+      "shadowHTMLLength": [],
       "inputs": [
         {
           "name": "cf-turnstile-response",
           "type": "hidden",
-          "valueLength": 0
+          "valueLength": 21
         }
       ],
       "shadowRoots": [],
@@ -109,17 +115,20 @@
       "container": {
         "childElementCount": 1,
         "innerHTMLLength": 95,
-        "id": null
+        "id": null,
+        "innerHTML": "<div><input type=\"hidden\" name=\"cf-turnstile-response\" id=\"cf-chl-widget-e8kde_response\"></div>"
       },
       "widgetIds": [
-        "cf-chl-widget-ddzoq_response"
+        "cf-chl-widget-e8kde_response"
       ],
       "iframes": [],
+      "shadowIframes": [],
+      "shadowHTMLLength": [],
       "inputs": [
         {
           "name": "cf-turnstile-response",
           "type": "hidden",
-          "valueLength": 0
+          "valueLength": 21
         }
       ],
       "shadowRoots": [],
@@ -148,17 +157,20 @@
       "container": {
         "childElementCount": 1,
         "innerHTMLLength": 95,
-        "id": null
+        "id": null,
+        "innerHTML": "<div><input type=\"hidden\" name=\"cf-turnstile-response\" id=\"cf-chl-widget-e8kde_response\"></div>"
       },
       "widgetIds": [
-        "cf-chl-widget-ddzoq_response"
+        "cf-chl-widget-e8kde_response"
       ],
       "iframes": [],
+      "shadowIframes": [],
+      "shadowHTMLLength": [],
       "inputs": [
         {
           "name": "cf-turnstile-response",
           "type": "hidden",
-          "valueLength": 0
+          "valueLength": 21
         }
       ],
       "shadowRoots": [],
@@ -171,28 +183,41 @@
   ],
   "console": [],
   "requests": [
-    "> http://127.0.0.1:62479/",
+    "> http://127.0.0.1:53427/",
     "> https://challenges.cloudflare.com/turnstile/v0/api.js",
     "> https://challenges.cloudflare.com/turnstile/v0/g/aae2b9a1c261/api.js",
-    "> http://127.0.0.1:62479/favicon.ico"
+    "> https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/av0/rch/e8kde/1x00000000000000000000AA/auto/fbE/new/normal?lang",
+    "> http://127.0.0.1:53427/favicon.ico"
   ],
   "engineLog": [
     "\u001b[0;32mNOTE\u001b[0m  app : server running . . . . . . . . . . . . . . . . . . \u001b[0m[+0ms]",
     "      address = 127.0.0.1:9227",
-    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+243ms]",
-    "      ip = 127.0.0.1:62482",
-    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+258ms]",
-    "      ip = 127.0.0.1:62483",
-    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+262ms]",
-    "      ip = 127.0.0.1:62484",
-    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+269ms]",
-    "      url = http://127.0.0.1:62479/",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+118ms]",
+    "      ip = 127.0.0.1:53432",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+126ms]",
+    "      ip = 127.0.0.1:53433",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+129ms]",
+    "      ip = 127.0.0.1:53434",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+137ms]",
+    "      url = http://127.0.0.1:53427/",
     "      method = GET",
     "      reason = address_bar",
     "      body = false",
     "      type = root",
-    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+377ms]",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+274ms]",
     "      src = https://challenges.cloudflare.com/turnstile/v0/api.js",
-    "      kind = javascript"
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+283ms]",
+    "      url = https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/av0/rch/e8kde/1x00000000000000000000AA/auto/fbE/new/normal?lang=auto",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+343ms]",
+    "      src = https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/av0/rch/e8kde/1x00000000000000000000AA/auto/fbE/new/normal?lang=auto",
+    "      kind = javascript",
+    "\u001b[0;31mERROR browser : worker fetch error . . . . . . . . . . . . . . \u001b[0m[+377ms]",
+    "      url = blob:https://challenges.cloudflare.com/bc51a0b9-e533-400a-99dc-8aad63d02eb6",
+    "      err = Abort"
   ]
 }
