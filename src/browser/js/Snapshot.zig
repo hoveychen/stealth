@@ -319,10 +319,20 @@ fn createSnapshotContext(
                 @compileError("[Global] scope interface " ++ @typeName(ScopeApi) ++ " has [Exposed]-gated members. This is not supported");
             }
         }
-        const scope_index = comptime bridge.JsApiLookup.getId(ScopeApi);
-        // So we're attaching the Window/EventTarget members (which were already attached
-        // to it's prototype), directly on the global_template.
-        attachClass(ScopeApi, true, isolate, templates[scope_index], global_template);
+        // ...but not EventTarget's. Measured on Chrome 151:
+        // Object.getOwnPropertyNames(window) carries document / location /
+        // alert and every other Window member, and does NOT carry
+        // addEventListener, removeEventListener or dispatchEvent -- those stay
+        // on EventTarget.prototype, which the global still inherits through
+        // Window.prototype. Three own properties a real window does not have
+        // is three properties a detector can read for free.
+        if (comptime std.mem.eql(u8, ScopeApi.Meta.name, "EventTarget") == false) {
+            const scope_index = comptime bridge.JsApiLookup.getId(ScopeApi);
+            // So we're attaching the Window/WorkerGlobalScope members (which
+            // were already attached to its prototype), directly on the
+            // global_template.
+            attachClass(ScopeApi, true, isolate, templates[scope_index], global_template);
+        }
     }
 
     const context = v8.v8__Context__New(isolate, global_template, null);

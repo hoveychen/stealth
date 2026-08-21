@@ -175,6 +175,12 @@ pub const JsApi = struct {
     pub const Meta = struct {
         pub const name = "Css";
 
+        // ...and that name never reaches the global. Chrome's `CSS` is the
+        // namespace object the Window accessor hands out; there is no `Css`
+        // constructor beside it. Measured against a real Chrome 151:
+        // Object.getOwnPropertyNames(window) has "CSS" and no "Css".
+        pub const no_interface_object = true;
+
         // The namespace's identifier is all upper case. Measured on Chrome 150:
         //   Object.prototype.toString.call(CSS) -> '[object CSS]'
         pub const to_string_tag = "CSS";
