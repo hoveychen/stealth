@@ -1,0 +1,216 @@
+{
+ "href": "http://localhost:8777/",
+ "isSecureContext": true,
+ "out": {
+  "tags": {
+   "selectedcontent": {
+    "created": "HTMLSelectedContentElement",
+    "brand": "[object HTMLSelectedContentElement]",
+    "localName": "selectedcontent",
+    "tagName": "SELECTEDCONTENT",
+    "parsed": "HTMLSelectedContentElement",
+    "nested": "2:1",
+    "upper": "HTMLSelectedContentElement",
+    "svg": "SVGElement"
+   },
+   "selected-content": {
+    "created": "HTMLElement",
+    "brand": "[object HTMLElement]",
+    "localName": "selected-content",
+    "tagName": "SELECTED-CONTENT",
+    "parsed": "HTMLElement",
+    "nested": "2:1",
+    "upper": "HTMLElement",
+    "svg": "SVGElement"
+   },
+   "geolocation": {
+    "created": "HTMLGeolocationElement",
+    "brand": "[object HTMLGeolocationElement]",
+    "localName": "geolocation",
+    "tagName": "GEOLOCATION",
+    "parsed": "HTMLGeolocationElement",
+    "nested": "2:1",
+    "upper": "HTMLGeolocationElement",
+    "svg": "SVGElement"
+   },
+   "usermedia": {
+    "created": "HTMLUserMediaElement",
+    "brand": "[object HTMLUserMediaElement]",
+    "localName": "usermedia",
+    "tagName": "USERMEDIA",
+    "parsed": "HTMLUserMediaElement",
+    "nested": "2:1",
+    "upper": "HTMLUserMediaElement",
+    "svg": "SVGElement"
+   },
+   "user-media": {
+    "created": "HTMLElement",
+    "brand": "[object HTMLElement]",
+    "localName": "user-media",
+    "tagName": "USER-MEDIA",
+    "parsed": "HTMLElement",
+    "nested": "2:1",
+    "upper": "HTMLElement",
+    "svg": "SVGElement"
+   },
+   "userMedia": {
+    "created": "HTMLUserMediaElement",
+    "brand": "[object HTMLUserMediaElement]",
+    "localName": "usermedia",
+    "tagName": "USERMEDIA",
+    "parsed": "HTMLUserMediaElement",
+    "nested": "2:1",
+    "upper": "HTMLUserMediaElement",
+    "svg": "SVGElement"
+   },
+   "permission": {
+    "created": "HTMLUnknownElement",
+    "brand": "[object HTMLUnknownElement]",
+    "localName": "permission",
+    "tagName": "PERMISSION",
+    "parsed": "HTMLUnknownElement",
+    "nested": "2:1",
+    "upper": "HTMLUnknownElement",
+    "svg": "SVGElement"
+   },
+   "location": {
+    "created": "HTMLUnknownElement",
+    "brand": "[object HTMLUnknownElement]",
+    "localName": "location",
+    "tagName": "LOCATION",
+    "parsed": "HTMLUnknownElement",
+    "nested": "2:1",
+    "upper": "HTMLUnknownElement",
+    "svg": "SVGElement"
+   },
+   "media": {
+    "created": "HTMLUnknownElement",
+    "brand": "[object HTMLUnknownElement]",
+    "localName": "media",
+    "tagName": "MEDIA",
+    "parsed": "HTMLUnknownElement",
+    "nested": "2:1",
+    "upper": "HTMLUnknownElement",
+    "svg": "SVGElement"
+   }
+  },
+  "geolocation": {
+   "defaults": {
+    "onlocation": "null",
+    "position": "null",
+    "error": "null",
+    "accuracymode": "",
+    "autolocate": false,
+    "watch": false,
+    "isValid": false,
+    "invalidReason": "",
+    "initialPermissionStatus": "prompt",
+    "permissionStatus": "prompt",
+    "onpromptaction": "null",
+    "onpromptdismiss": "null",
+    "onvalidationstatuschange": "null"
+   },
+   "accuracymode": "attr=high|prop=high",
+   "accuracymodeBad": "attr=nope|prop=nope",
+   "accuracymodeAttr": "high",
+   "autolocate": "attr=|prop=true",
+   "autolocateAttr": true,
+   "watch": "attr=|prop=true",
+   "watchAttr": true,
+   "isValidAfterAttrs": "false|",
+   "inDocument": "false||prompt|prompt",
+   "handlerSetter": "function|attr=null",
+   "handlerFromAttr": "function",
+   "handlerNonFunction": "null"
+  },
+  "userMedia": {
+   "defaults": {
+    "error": "null",
+    "onstream": "null",
+    "oncancel": "null",
+    "onerror": "null",
+    "stream": "null"
+   },
+   "setConstraintsArity": 0,
+   "setConstraintsBare": "undefined",
+   "setConstraintsEmpty": "undefined",
+   "setConstraintsBad": "TypeError: Failed to execute 'setConstraints' on 'HTMLUserMediaElement': The provided value is not of type 'HTMLMediaStreamConstraints'.",
+   "setConstraintsThenStream": "TypeError: Failed to execute 'setConstraints' on 'HTMLUserMediaElement': Failed to read the 'video' property from 'HTMLMediaStreamConstraints': The provided value is not of type 'MediaTrackConstraintSet'.",
+   "handlerSetter": "function"
+  },
+  "selectedContent": {
+   "defaults": {},
+   "inSelect": "HTMLSelectedContentElement|"
+  },
+  "constraints": {
+   "members": [
+    "audio",
+    "video"
+   ],
+   "outcome": "undefined",
+   "nestedMembers": [
+    "aspectRatio",
+    "autoGainControl",
+    "brightness",
+    "channelCount",
+    "colorTemperature",
+    "contrast",
+    "deviceId",
+    "displaySurface",
+    "echoCancellation",
+    "exposureCompensation",
+    "exposureMode",
+    "exposureTime",
+    "facingMode",
+    "focusDistance",
+    "focusMode",
+    "frameRate",
+    "groupId",
+    "height",
+    "iso",
+    "latency",
+    "mandatory",
+    "noiseSuppression",
+    "optional",
+    "pan",
+    "pointsOfInterest",
+    "resizeMode",
+    "restrictOwnAudio",
+    "sampleRate",
+    "sampleSize",
+    "saturation",
+    "sharpness",
+    "suppressLocalAudioPlayback",
+    "tilt",
+    "torch",
+    "voiceIsolation",
+    "whiteBalanceMode",
+    "width",
+    "zoom"
+   ],
+   "nested": "undefined",
+   "emptyVideo": "undefined",
+   "emptyAudio": "undefined",
+   "audioTrue": "TypeError: Failed to execute 'setConstraints' on 'HTMLUserMediaElement': Failed to read the 'audio' property from 'HTMLMediaStreamConstraints': The provided value is not of type 'MediaTrackConstraintSet'.",
+   "videoNull": "undefined",
+   "nullDict": "undefined",
+   "undefinedDict": "undefined",
+   "stringDict": "TypeError: Failed to execute 'setConstraints' on 'HTMLUserMediaElement': The provided value is not of type 'HTMLMediaStreamConstraints'.",
+   "afterOk": "null|null"
+  },
+  "shapes": {
+   "HTMLSelectedContentElement": "@@toStringTag=HTMLSelectedContentElement",
+   "HTMLGeolocationElement": "accessor onlocation[ec-],get position[ec-],get error[ec-],accessor accuracymode[ec-],accessor autolocate[ec-],accessor watch[ec-],get isValid[ec-],get invalidReason[ec-],get initialPermissionStatus[ec-],get permissionStatus[ec-],accessor onpromptaction[ec-],accessor onpromptdismiss[ec-],accessor onvalidationstatuschange[ec-],@@toStringTag=HTMLGeolocationElement",
+   "HTMLUserMediaElement": "get error[ec-],accessor onstream[ec-],accessor oncancel[ec-],accessor onerror[ec-],get stream[ec-],setConstraints/0[ecw],@@toStringTag=HTMLUserMediaElement"
+  },
+  "selectedContentPlacement": {
+   "inDiv": "<button><selectedcontent></selectedcontent></button>",
+   "inSelectHtml": "<button><selectedcontent></selectedcontent></button><option>a</option>",
+   "appended": "<selectedcontent></selectedcontent>"
+  },
+  "unknownControl": {
+   "definitelyUnknown": "HTMLUnknownElement",
+   "hyphenated": "HTMLElement"
+  }
+ }
+}

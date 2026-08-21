@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<head>
+  <title>Surface HTML Element Test</title>
+  <script src="../../testing.js"></script>
+  <script src="../../shape.js"></script>
+</head>
+
+<body>
+</body>
+
+<!--
+The three HTMLElement subclasses Chrome 151 has on the window that this engine
+did not: HTMLSelectedContentElement, HTMLGeolocationElement and
+HTMLUserMediaElement. Unlike the rest of this cut they are element interfaces, so
+the surface is not just a prototype -- a tag name maps to each one and both
+createElement() and the parser have to answer it, where this engine used to
+answer HTMLUnknownElement.
+
+The tag names are measured, not guessed: `selectedcontent`, `geolocation` and
+`usermedia`, with no hyphen in any of them (a hyphenated spelling is a custom
+element and answers HTMLElement instead).
+
+Nothing here does anything. There is no geolocation prompt to answer, no camera
+to open and no <select> button to project a selection into, so every getter
+answers its measured default and setConstraints() only ever validates. The
+members that reflect a content attribute do reflect it, because that half is
+plain DOM.
+
+Every string, default, arity and refusal below is Chrome's own, from
+probes/probe-shapes.js and probes/probe-s6-elements.js against a headed Chrome
+151 on http://localhost:8777 (results/probes/probe-shapes.chrome.json and
+probe-s6-elements.chrome.json).
+-->
+
+<script id=surface_element_shapes>
+  {
+    // All three are HTMLElement subclasses. The pieces asserted by hand rather
+    // than through expectInterfaceObject are the constructor refusals: in
+    // Chrome `new X()` is "Failed to construct 'X': Illegal constructor" and a
+    // bare call names the subclass, while this engine answers a bare TypeError
+    // and names HTMLElement. That difference is engine-wide for *every* HTML
+    // element interface -- HTMLPictureElement answers exactly the same
+    // (measured) -- so it is not these three interfaces' to fix and not pinned
+    // here.
+    for (const name of ['HTMLSelectedContentElement', 'HTMLGeolocationElement',
+      'HTMLUserMediaElement']) {
+      const ctor = window[name];
+      testing.expectEqual('function', typeof ctor, { desc: name + ' is on the window' });
+      testing.expectEqual(name, ctor.name);
+      testing.expectEqual(0, ctor.length);
+      testing.expectEqual('-cw', windowFlags(name), { desc: name + ' window flags' });
+      testing.expectTrue(Object.getPrototypeOf(ctor) === HTMLElement);
+      testing.expectTrue(Object.getPrototypeOf(ctor.prototype) === HTMLElement.prototype);
+      testing.expectEqual([], Object.getOwnPropertyNames(ctor)
+        .filter((k) => !['length', 'name', 'prototype'].includes(k)));
+      const pd = Object.getOwnPropertyDescriptor(ctor, 'prototype');
+      testing.expectFalse(pd.enumerable);
+      testing.expectFalse(pd.configurable);
+      testing.expectFalse(pd.writable);
+      testing.expectEqual(name, ctor.prototype[Symbol.toStringTag]);
+      testing.expectEqual('[object ' + name + ']',
+        Object.prototype.toString.call(ctor.prototype));
+    }
+
+    // Chrome's descriptors, verbatim. HTMLUserMediaElement re-declares oncancel
+    // and onerror even though HTMLElement already carries both, so they are own
+    // properties of this prototype too.
+    testing.expectEqual('@@toStringTag=HTMLSelectedContentElement',
+      shapeOf(HTMLSelectedContentElement.prototype));
+    testing.expectEqual(
+      'accessor onlocation[ec-],get position[ec-],get error[ec-],accessor accuracymode[ec-],' +
+      'accessor autolocate[ec-],accessor watch[ec-],get isValid[ec-],get invalidReason[ec-],' +
+      'get initialPermissionStatus[ec-],get permissionStatus[ec-],accessor onpromptaction[ec-],' +
+      'accessor onpromptdismiss[ec-],accessor onvalidationstatuschange[ec-],' +
+      '@@toStringTag=HTMLGeolocationElement',
+      shapeOf(HTMLGeolocationElement.prototype));
+    testing.expectEqual(
+      'get error[ec-],accessor onstream[ec-],accessor oncancel[ec-],accessor onerror[ec-],' +
+      'get stream[ec-],setConstraints/0[ecw],@@toStringTag=HTMLUserMediaElement',
+      shapeOf(HTMLUserMediaElement.prototype));
+  }
+</script>
+
+<script id=surface_element_tags>
+  {
+    // The mapping, both ways in: createElement() and the parser.
+    for (const [tag, name] of [
+      ['selectedcontent', 'HTMLSelectedContentElement'],
+      ['geolocation', 'HTMLGeolocationElement'],
+      ['usermedia', 'HTMLUserMediaElement'],
+    ]) {
+      const el = document.createElement(tag);
+      testing.expectEqual(name, el.constructor.name, { desc: tag + ' createElement' });
+      testing.expectEqual('[object ' + name + ']', Object.prototype.toString.call(el));
+      testing.expectEqual(tag, el.localName);
+      testing.expectEqual(tag.toUpperCase(), el.tagName);
+      testing.expectTrue(el instanceof HTMLElement);
+      testing.expectTrue(el instanceof Element);
+      // createElement lowercases in an HTML document, so the spelling handed in
+      // does not matter.
+      testing.expectEqual(name, document.createElement(tag.toUpperCase()).constructor.name);
+
+      const host = document.createElement('div');
+      host.innerHTML = `<${tag}></${tag}>`;
+      testing.expectEqual(name, host.firstElementChild.constructor.name,
+        { desc: tag + ' parsed' });
+      // Neither the parser nor a selector needs the tag in the fast-path enum:
+      // matching falls back to the tag name, as it does for MathML.
+      testing.expectTrue(host.querySelector(tag) === host.firstElementChild);
+      testing.expectEqual(1, host.getElementsByTagName(tag).length);
+
+      // createElementNS into another namespace gets no HTML mapping. Which SVG
+      // interface an unknown SVG tag lands on differs between the engines
+      // already (SVGElement in Chrome, SVGGenericElement here), so what is
+      // pinned is only that the HTML mapping did not leak into it.
+      const foreign = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      testing.expectFalse(foreign instanceof HTMLElement);
+      testing.expectFalse(foreign instanceof window[name]);
+    }
+
+    // The default display each one lays out with, measured on a headed
+    // Chrome 151: the two declarative request elements are inline-block and
+    // <selectedcontent> is plain inline.
+    for (const [tag, display] of [
+      ['selectedcontent', 'inline'],
+      ['geolocation', 'inline-block'],
+      ['usermedia', 'inline-block'],
+    ]) {
+      const el = document.createElement(tag);
+      document.body.appendChild(el);
+      testing.expectEqual(display, getComputedStyle(el).display, { desc: tag + ' display' });
+      el.remove();
+    }
+
+    // A hyphen makes it a custom element rather than one of these. What an
+    // *undefined* custom element's constructor reports differs between the
+    // engines already -- HTMLElement in Chrome, an internal name here, the same
+    // for any hyphenated tag (measured with `a-b`) -- so what is pinned is only
+    // that the three mappings do not answer a hyphenated spelling.
+    for (const tag of ['selected-content', 'user-media', 'geo-location']) {
+      const el = document.createElement(tag);
+      testing.expectEqual('[object HTMLElement]', Object.prototype.toString.call(el),
+        { desc: tag + ' is not one of the three' });
+    }
+    // And the near misses stay unknown.
+    for (const tag of ['permission', 'location', 'media', 'nosuchtag']) {
+      testing.expectEqual('HTMLUnknownElement', document.createElement(tag).constructor.name,
+        { desc: tag + ' stays unknown' });
+    }
+  }
+</script>
+
+<script id=geolocation_element>
+  {
+    const el = document.createElement('geolocation');
+
+    // The measured defaults on a fresh element.
+    testing.expectEqual(null, el.position);
+    testing.expectEqual(null, el.error);
+    testing.expectEqual('', el.accuracymode);
+    testing.expectEqual(false, el.autolocate);
+    testing.expectEqual(false, el.watch);
+    testing.expectEqual(false, el.isValid);
+    testing.expectEqual('', el.invalidReason);
+    testing.expectEqual('prompt', el.initialPermissionStatus);
+    testing.expectEqual('prompt', el.permissionStatus);
+    for (const handler of ['onlocation', 'onpromptaction', 'onpromptdismiss',
+      'onvalidationstatuschange']) {
+      testing.expectEqual(null, el[handler], { desc: handler + ' default' });
+    }
+
+    // Three members reflect a content attribute. `accuracymode` is a plain
+    // string with no keyword validation -- an unknown value reads straight back
+    // (measured) -- and the two booleans are presence flags.
+    el.accuracymode = 'high';
+    testing.expectEqual('high', el.getAttribute('accuracymode'));
+    testing.expectEqual('high', el.accuracymode);
+    el.accuracymode = 'nope';
+    testing.expectEqual('nope', el.accuracymode);
+    el.autolocate = true;
+    testing.expectEqual('', el.getAttribute('autolocate'));
+    testing.expectEqual(true, el.autolocate);
+    el.watch = true;
+    testing.expectEqual('', el.getAttribute('watch'));
+    testing.expectEqual(true, el.watch);
+
+    const fromAttr = document.createElement('geolocation');
+    fromAttr.setAttribute('accuracymode', 'high');
+    fromAttr.setAttribute('autolocate', '');
+    fromAttr.setAttribute('watch', '');
+    testing.expectEqual('high', fromAttr.accuracymode);
+    testing.expectEqual(true, fromAttr.autolocate);
+    testing.expectEqual(true, fromAttr.watch);
+    // Setting the attributes does not make it valid: there is nothing to
+    // validate against without a permission decision.
+    testing.expectEqual(false, fromAttr.isValid);
+    testing.expectEqual('', fromAttr.invalidReason);
+
+    // The handlers are ordinary event-handler IDL attributes: a function
+    // assigned stays a function and sets no content attribute, a non-function
+    // reads back null, and a content attribute compiles into one.
+    const handlers = document.createElement('geolocation');
+    handlers.onlocation = () => {};
+    testing.expectEqual('function', typeof handlers.onlocation);
+    testing.expectEqual(null, handlers.getAttribute('onlocation'));
+    handlers.onlocation = 5;
+    testing.expectEqual(null, handlers.onlocation);
+    handlers.setAttribute('onpromptaction', 'return 1');
+    testing.expectEqual('function', typeof handlers.onpromptaction);
+
+    // In the document it still answers the same thing: nothing here grants or
+    // denies geolocation.
+    document.body.appendChild(el);
+    testing.expectEqual(false, el.isValid);
+    testing.expectEqual('prompt', el.permissionStatus);
+    testing.expectEqual('prompt', el.initialPermissionStatus);
+    el.remove();
+  }
+</script>
+
+<script id=user_media_element>
+  {
+    const el = document.createElement('usermedia');
+    testing.expectEqual(null, el.error);
+    testing.expectEqual(null, el.stream);
+    for (const handler of ['onstream', 'oncancel', 'onerror']) {
+      testing.expectEqual(null, el[handler], { desc: handler + ' default' });
+    }
+    el.onstream = () => {};
+    testing.expectEqual('function', typeof el.onstream);
+
+    // setConstraints declares one optional dictionary, so its arity is 0, and
+    // it never produces a stream -- there is no camera to open.
+    testing.expectEqual(0, HTMLUserMediaElement.prototype.setConstraints.length);
+    testing.expectEqual(undefined, el.setConstraints());
+    testing.expectEqual(undefined, el.setConstraints(undefined));
+    testing.expectEqual(undefined, el.setConstraints(null));
+    testing.expectEqual(undefined, el.setConstraints({}));
+    testing.expectEqual(undefined, el.setConstraints({ video: {} }));
+    testing.expectEqual(undefined, el.setConstraints({ audio: {}, video: {} }));
+    // A null member is fine where a non-object is not.
+    testing.expectEqual(undefined, el.setConstraints({ video: null }));
+    testing.expectEqual(null, el.stream);
+    testing.expectEqual(null, el.error);
+
+    testing.expectError(
+      "Failed to execute 'setConstraints' on 'HTMLUserMediaElement': The provided value is not " +
+      "of type 'HTMLMediaStreamConstraints'.",
+      () => el.setConstraints('x'));
+    testing.expectError(
+      "Failed to execute 'setConstraints' on 'HTMLUserMediaElement': The provided value is not " +
+      "of type 'HTMLMediaStreamConstraints'.",
+      () => el.setConstraints(5));
+    // Each member is a MediaTrackConstraintSet, so `true` -- the spelling every
+    // getUserMedia() example uses -- is refused here.
+    for (const member of ['audio', 'video']) {
+      testing.expectError(
+        "Failed to execute 'setConstraints' on 'HTMLUserMediaElement': Failed to read the '" +
+        member + "' property from 'HTMLMediaStreamConstraints': The provided value is not of " +
+        "type 'MediaTrackConstraintSet'.",
+        () => el.setConstraints({ [member]: true }), { desc: member + ' true' });
+    }
+  }
+</script>
+
+<script id=selected_content_element>
+  {
+    const el = document.createElement('selectedcontent');
+    // The prototype carries nothing but constructor, so the element's whole
+    // surface is HTMLElement's.
+    testing.expectEqual('', Object.keys(el).join(' '));
+    testing.expectEqual('@@toStringTag=HTMLSelectedContentElement',
+      shapeOf(Object.getPrototypeOf(el)));
+
+    // It is meant to live in a <select>'s button and project the selection.
+    // Nothing projects anything here, but the parser keeps it where it is put.
+    const select = document.createElement('select');
+    select.innerHTML = '<button><selectedcontent></selectedcontent></button><option>a</option>';
+    const sc = select.querySelector('selectedcontent');
+    testing.expectEqual('HTMLSelectedContentElement', sc.constructor.name);
+    testing.expectEqual('', sc.innerHTML);
+  }
+</script>

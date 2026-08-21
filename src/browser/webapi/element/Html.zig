@@ -87,7 +87,10 @@ pub const Progress = @import("html/Progress.zig");
 pub const Quote = @import("html/Quote.zig");
 pub const Script = @import("html/Script.zig");
 pub const Select = @import("html/Select.zig");
+pub const SelectedContent = @import("html/SelectedContent.zig");
 pub const Slot = @import("html/Slot.zig");
+pub const Geolocation = @import("html/Geolocation.zig");
+pub const UserMedia = @import("html/UserMedia.zig");
 pub const Source = @import("html/Source.zig");
 pub const Span = @import("html/Span.zig");
 pub const Style = @import("html/Style.zig");
@@ -200,7 +203,10 @@ pub const Type = enum(u8) {
     quote,
     script,
     select,
+    selected_content,
     slot,
+    geolocation,
+    user_media,
     source,
     span,
     style,
@@ -274,7 +280,10 @@ pub fn Subtype(comptime tag: Type) type {
         .quote => Quote,
         .script => Script,
         .select => Select,
+        .selected_content => SelectedContent,
         .slot => Slot,
+        .geolocation => Geolocation,
+        .user_media => UserMedia,
         .source => Source,
         .span => Span,
         .style => Style,
