@@ -40,6 +40,7 @@ const Node = @import("../Node.zig");
 const Element = @import("../Element.zig");
 const DOMRect = @import("../DOMRect.zig");
 const DOMException = @import("../DOMException.zig");
+const typed_om = @import("../css/typed_om.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -59,22 +60,54 @@ pub fn registerTypes() []const type {
 }
 
 // The base of the animation-timeline hierarchy. It is never instantiated
-// directly — the only timeline a document hands out is a DocumentTimeline — but
-// Chrome exposes the global and puts currentTime and duration here rather than
-// on the subclass, so a detector walking the chain sees two levels.
+// directly — a document hands out a DocumentTimeline, and a page builds the two
+// scroll-driven ones itself — but Chrome exposes the global and puts currentTime
+// and duration here rather than on the subclasses, so a detector walking the
+// chain sees two levels.
+//
+// Both of those getters are polymorphic, which is why this struct carries a
+// field at all: a document timeline reports a millisecond number and a null
+// duration, while a scroll-driven one reports a CSSUnitValue duration of 100%
+// and a progress percentage (measured, probe-s5-timelines). Since the flag is
+// read through a base pointer, the type cannot be `empty_with_no_proto` —
+// TaggedOpaque.fromJS hands an empty struct back for those.
 pub const AnimationTimeline = struct {
-    _pad: bool = false,
+    _kind: Kind = .document,
 
-    // Time since the document's time origin, in milliseconds, which is exactly
-    // what performance.now() measures.
-    pub fn getCurrentTime(_: *const AnimationTimeline, frame: *Frame) f64 {
-        return frame.window.getPerformance().now();
+    pub const Kind = enum {
+        /// document.timeline: a millisecond clock with no intrinsic duration.
+        document,
+        /// A scroll-driven timeline whose source cannot scroll, which is every
+        /// source this engine has. Chrome reports a null currentTime for those
+        /// too, so this arm agrees with it rather than approximating it.
+        scroll,
+        /// A ViewTimeline with a subject, which Chrome reports progress through
+        /// whatever the source does. The number is layout and this engine has
+        /// none, so it is 0% — but the *type* is the CSSUnitValue Chrome gives.
+        view,
+    };
+
+    // Three different types out of one getter, which is why this answers a
+    // js.Value: milliseconds for a document timeline, null for a scroll-driven
+    // one and a percentage for a view timeline (all measured).
+    pub fn getCurrentTime(self: *const AnimationTimeline, frame: *Frame) !js.Value {
+        const local = frame.js.local.?;
+        return switch (self._kind) {
+            .document => local.zigValueToJs(frame.window.getPerformance().now(), .{}),
+            .scroll => local.zigValueToJs(@as(?f64, null), .{}),
+            .view => local.zigValueToJs(try typed_om.CSSUnitValue.create(0, .percent, frame), .{}),
+        };
     }
 
-    // Chrome reports null: a document timeline is unbounded, so it has no
-    // intrinsic duration.
-    pub fn getDuration(_: *const AnimationTimeline) ?f64 {
-        return null;
+    // Null for a document timeline: it is unbounded, so it has no intrinsic
+    // duration. A scroll-driven one is always the whole of its scroll range,
+    // reported as a fresh CSSUnitValue of 100% on every read (measured: two
+    // reads are not the same object).
+    pub fn getDuration(self: *const AnimationTimeline, frame: *Frame) !?*typed_om.CSSUnitValue {
+        return switch (self._kind) {
+            .document => null,
+            .scroll, .view => try typed_om.CSSUnitValue.create(100, .percent, frame),
+        };
     }
 
     pub const JsApi = struct {
@@ -84,7 +117,6 @@ pub const AnimationTimeline = struct {
             pub const name = "AnimationTimeline";
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
-            pub const empty_with_no_proto = true;
         };
 
         pub const currentTime = bridge.accessor(AnimationTimeline.getCurrentTime, null, .{});

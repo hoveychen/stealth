@@ -44,6 +44,7 @@ const MAX_CONTEXTS = if (lp.build_config.wpt_extensions) 8192 else 128;
 const GC_HINT_FLOOR = 1 * 1024 * 1024;
 
 fn initClassIds() void {
+    @setEvalBranchQuota(JsApis.len * 8);
     inline for (JsApis, 0..) |JsApi, i| {
         JsApi.Meta.class_id = i;
     }
@@ -173,6 +174,7 @@ pub fn init(app: *App, opts: InitOpts) !Env {
         temp_scope.init(isolate);
         defer temp_scope.deinit();
 
+        @setEvalBranchQuota(JsApis.len * 8);
         inline for (JsApis, 0..) |_, i| {
             const data = v8.v8__Isolate__GetDataFromSnapshotOnce(isolate_handle, snapshot.data_start + i);
             const function_handle: *const v8.FunctionTemplate = @ptrCast(data);

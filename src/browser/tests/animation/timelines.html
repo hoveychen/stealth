@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<head>
+  <title>Scroll-driven Timeline Test</title>
+  <script src="../testing.js"></script>
+  <script src="../shape.js"></script>
+</head>
+
+<body>
+  <div id=subject></div>
+</body>
+
+<!--
+The scroll-driven-animation family Chrome 151 has on the window that this engine
+did not: AnimationTrigger as a prototype root with TimelineTrigger under it, the
+TimelineTriggerRange a trigger hands out and the list it hands it out in, and
+ScrollTimeline / ViewTimeline on the AnimationTimeline chain.
+
+Three of the six have Illegal constructors, which is not the same as being
+unreachable. `new TimelineTrigger([5])` is refused as "not of type
+'TimelineTriggerOptions'" while `([null])` and `([document.timeline])` both
+succeed, so that argument is a sequence of *dictionaries*: a page builds a
+TimelineTriggerRange by passing one and reads it back off `ranges`. Only
+TimelineTriggerRangeList is never built from script.
+
+Every string, default, arity and refusal below is Chrome's own, from
+probes/probe-shapes.js and probes/probe-s5-timelines.js against a headed Chrome
+151 on http://localhost:8777 (results/probes/probe-shapes.chrome.json and
+probe-s5-timelines.chrome.json).
+
+Two readings this engine cannot reproduce, both layout:
+
+  * `currentTime` is a percentage once the timeline's source can really scroll.
+    Nothing scrolls here, and Chrome answers null for a source that does not
+    scroll either -- so a ScrollTimeline agrees with Chrome for the same reason,
+    while a ViewTimeline with a subject reads 0% where Chrome reads its progress.
+  * `startOffset` / `endOffset` are the scroll offsets the subject enters and
+    leaves the view at (-818px / 100px for a 100px box in an 818px viewport,
+    measured). With no boxes to measure they are 0px, the same zero this engine
+    reports for offsetTop and clientHeight.
+-->
+
+<script id=timeline_family_shapes>
+  {
+    const protoKeys = (ctor) => Object.getOwnPropertyNames(ctor.prototype).join(' ');
+
+    // Chrome's own Object.getOwnPropertyNames order on each prototype, which is
+    // neither declaration nor alphabetical order and is itself fingerprinted.
+    for (const [name, keys] of [
+      ['AnimationTrigger', 'addAnimation getAnimations removeAnimation constructor'],
+      ['TimelineTrigger', 'ranges constructor'],
+      ['TimelineTriggerRange',
+        'timeline activationRangeStart activationRangeEnd activeRangeStart activeRangeEnd constructor'],
+      ['TimelineTriggerRangeList', 'entries keys values forEach length item constructor'],
+      ['ScrollTimeline', 'source axis constructor'],
+      ['ViewTimeline', 'subject startOffset endOffset constructor'],
+    ]) {
+      const ctor = window[name];
+      testing.expectEqual(keys, protoKeys(ctor), { desc: name + ' prototype members' });
+      testing.expectEqual('[object ' + name + ']', Object.prototype.toString.call(ctor.prototype),
+        { desc: name + ' prototype brand' });
+      testing.expectEqual(name, ctor.prototype[Symbol.toStringTag], { desc: name + ' toStringTag' });
+    }
+
+    // The three roots and the three that inherit. Every one of the six reports
+    // length 0: the constructible ones take a single optional argument.
+    expectInterfaceObject('AnimationTrigger');
+    expectInterfaceObject('TimelineTriggerRange');
+    expectInterfaceObject('TimelineTriggerRangeList');
+    expectInterfaceObject('TimelineTrigger',
+      { illegal: false, inherits: AnimationTrigger, protoOf: AnimationTrigger.prototype });
+    expectInterfaceObject('ScrollTimeline',
+      { illegal: false, inherits: AnimationTimeline, protoOf: AnimationTimeline.prototype });
+    expectInterfaceObject('ViewTimeline',
+      { illegal: false, inherits: ScrollTimeline, protoOf: ScrollTimeline.prototype });
+
+    // Chrome's descriptors, verbatim. AnimationTimeline is in the list because
+    // its two getters had to become polymorphic for the scroll-driven pair, and
+    // that must not have moved anything.
+    for (const [name, shape] of [
+      ['AnimationTrigger',
+        'addAnimation/2[ecw],getAnimations/0[ecw],removeAnimation/1[ecw],@@toStringTag=AnimationTrigger'],
+      ['TimelineTrigger', 'get ranges[ec-],@@toStringTag=TimelineTrigger'],
+      ['TimelineTriggerRange',
+        'get timeline[ec-],get activationRangeStart[ec-],get activationRangeEnd[ec-],' +
+        'get activeRangeStart[ec-],get activeRangeEnd[ec-],@@toStringTag=TimelineTriggerRange'],
+      ['TimelineTriggerRangeList',
+        'entries/0[ecw],keys/0[ecw],values/0[ecw],forEach/1[ecw],get length[ec-],item/1[ecw],' +
+        '@@toStringTag=TimelineTriggerRangeList,@@iterator=fn:values'],
+      ['ScrollTimeline', 'get source[ec-],get axis[ec-],@@toStringTag=ScrollTimeline'],
+      ['ViewTimeline',
+        'get subject[ec-],get startOffset[ec-],get endOffset[ec-],@@toStringTag=ViewTimeline'],
+      ['AnimationTimeline', 'get currentTime[ec-],get duration[ec-],@@toStringTag=AnimationTimeline'],
+    ]) {
+      testing.expectEqual(shape, shapeOf(window[name].prototype), { desc: name + ' descriptors' });
+    }
+  }
+</script>
+
+<script id=scroll_timeline>
+  {
+    // `duration` and `currentTime` live on AnimationTimeline.prototype in
+    // Chrome, not on the subclass, and both are polymorphic: a DocumentTimeline
+    // reports a number and null, a scroll-driven one the other way around.
+    testing.expectEqual('number', typeof document.timeline.currentTime);
+    testing.expectEqual(null, document.timeline.duration);
+
+    const bare = new ScrollTimeline();
+    testing.expectEqual('[object ScrollTimeline]', Object.prototype.toString.call(bare));
+    testing.expectTrue(bare instanceof AnimationTimeline);
+    // The default source is the document element, and the default axis 'block'.
+    testing.expectTrue(bare.source === document.documentElement);
+    testing.expectEqual('block', bare.axis);
+    testing.expectEqual(null, bare.currentTime);
+    testing.expectEqual('CSSUnitValue', bare.duration.constructor.name);
+    testing.expectEqual(100, bare.duration.value);
+    testing.expectEqual('percent', bare.duration.unit);
+    // A fresh CSSUnitValue every read (measured: not the same object).
+    testing.expectFalse(bare.duration === bare.duration);
+
+    // An omitted, undefined or null dictionary all take the defaults, and an
+    // explicit `source: null` is a null source -- unlike `new ScrollTimeline(null)`.
+    testing.expectTrue(new ScrollTimeline(undefined).source === document.documentElement);
+    testing.expectTrue(new ScrollTimeline(null).source === document.documentElement);
+    testing.expectEqual(null, new ScrollTimeline({ source: null }).source);
+    // The element handed in is the element handed back.
+    testing.expectTrue(new ScrollTimeline({ source: document.body }).source === document.body);
+
+    // ScrollAxis: four names, nothing else, and undefined falls to the default.
+    for (const axis of ['block', 'inline', 'x', 'y']) {
+      testing.expectEqual(axis, new ScrollTimeline({ axis }).axis);
+    }
+    testing.expectEqual('block', new ScrollTimeline({ axis: undefined }).axis);
+    const badAxis = (value) => "Failed to construct 'ScrollTimeline': Failed to read the 'axis' " +
+      "property from 'ScrollTimelineOptions': The provided value '" + value +
+      "' is not a valid enum value of type ScrollAxis.";
+    testing.expectError(badAxis('nope'), () => new ScrollTimeline({ axis: 'nope' }));
+    testing.expectError(badAxis(''), () => new ScrollTimeline({ axis: '' }));
+    testing.expectError(badAxis('horizontal'), () => new ScrollTimeline({ axis: 'horizontal' }));
+    // A null or a number is stringified before it is matched.
+    testing.expectError(badAxis('null'), () => new ScrollTimeline({ axis: null }));
+    testing.expectError(badAxis('5'), () => new ScrollTimeline({ axis: 5 }));
+
+    testing.expectError(
+      "Failed to construct 'ScrollTimeline': The provided value is not of type 'ScrollTimelineOptions'.",
+      () => new ScrollTimeline(5));
+    testing.expectError(
+      "Failed to construct 'ScrollTimeline': Failed to read the 'source' property from " +
+      "'ScrollTimelineOptions': Failed to convert value to 'Element'.",
+      () => new ScrollTimeline({ source: 5 }));
+  }
+</script>
+
+<script id=view_timeline>
+  {
+    const subject = document.getElementById('subject');
+
+    const bare = new ViewTimeline();
+    testing.expectEqual('[object ViewTimeline]', Object.prototype.toString.call(bare));
+    testing.expectTrue(bare instanceof ScrollTimeline);
+    testing.expectTrue(bare instanceof AnimationTimeline);
+    // Without a subject there is nothing to derive a source or a range from,
+    // and every one of the four is null -- but the duration is still 100%.
+    testing.expectEqual(null, bare.subject);
+    testing.expectEqual(null, bare.source);
+    testing.expectEqual(null, bare.startOffset);
+    testing.expectEqual(null, bare.endOffset);
+    testing.expectEqual(null, bare.currentTime);
+    testing.expectEqual('block', bare.axis);
+    testing.expectEqual(100, bare.duration.value);
+    testing.expectEqual('percent', bare.duration.unit);
+    testing.expectTrue(new ViewTimeline(null).subject === null);
+
+    // With a subject the source is derived: it is the scroll container, which
+    // here is always the document element. ViewTimelineOptions has no `source`
+    // member at all, so one passed in is ignored (measured with a Proxy: Chrome
+    // reads axis, inset and subject and nothing else).
+    const view = new ViewTimeline({ subject, axis: 'x' });
+    testing.expectTrue(view.subject === subject);
+    testing.expectTrue(view.source === document.documentElement);
+    testing.expectEqual('x', view.axis);
+    testing.expectTrue(new ViewTimeline({ subject, source: document.body }).source === document.documentElement);
+
+    // The offsets are CSSUnitValues in px once there is a subject. Chrome's
+    // numbers come from layout; this engine has none, so they are 0.
+    testing.expectEqual('CSSUnitValue', view.startOffset.constructor.name);
+    testing.expectEqual('px', view.startOffset.unit);
+    testing.expectEqual('px', view.endOffset.unit);
+    testing.expectEqual('percent', view.currentTime.unit);
+
+    // `subject` is not nullable where ScrollTimeline's `source` is: an explicit
+    // null is a failed conversion rather than a null subject.
+    const badSubject = "Failed to construct 'ViewTimeline': Failed to read the 'subject' property " +
+      "from 'ViewTimelineOptions': Failed to convert value to 'Element'.";
+    testing.expectError(badSubject, () => new ViewTimeline({ subject: null }));
+    testing.expectError(badSubject, () => new ViewTimeline({ subject: 5 }));
+    testing.expectError(
+      "Failed to construct 'ViewTimeline': The provided value is not of type 'ViewTimelineOptions'.",
+      () => new ViewTimeline(5));
+    testing.expectError(
+      "Failed to construct 'ViewTimeline': Failed to read the 'axis' property from " +
+      "'ViewTimelineOptions': The provided value 'nope' is not a valid enum value of type ScrollAxis.",
+      () => new ViewTimeline({ axis: 'nope' }));
+  }
+</script>
+
+<script id=view_timeline_inset>
+  {
+    const subject = document.getElementById('subject');
+    // `inset` is the one member with a refusal of its own, and the only one in
+    // the family whose message carries no dictionary prefix.
+    const invalid = "Failed to construct 'ViewTimeline': Invalid inset";
+    const notNumeric = "Failed to construct 'ViewTimeline': inset must be CSSNumericValue or auto";
+
+    // The string branch: one or two components, each `auto` or a
+    // <length-percentage>. It is read even with no subject to apply it to.
+    for (const inset of ['auto', '0px', '10px', '10px 20px', '10%', 'auto auto', '10px auto']) {
+      testing.expectEqual('object', typeof new ViewTimeline({ subject, inset }),
+        { desc: 'inset ' + inset });
+    }
+    for (const inset of ['nope', '', 'inherit', '10px 20px 30px', 5, null]) {
+      testing.expectError(invalid, () => new ViewTimeline({ subject, inset }),
+        { desc: 'inset ' + inset });
+    }
+    testing.expectError(invalid, () => new ViewTimeline({ inset: 'nope' }));
+
+    // The sequence branch, which `inset: []` proves exists: CSSNumericValues or
+    // the string 'auto', one or two of them.
+    testing.expectEqual('px', new ViewTimeline({ subject, inset: [] }).startOffset.unit);
+    testing.expectEqual('px', new ViewTimeline({ subject, inset: [new CSSUnitValue(10, 'px')] }).startOffset.unit);
+    testing.expectEqual('px',
+      new ViewTimeline({ subject, inset: [new CSSUnitValue(10, 'px'), new CSSUnitValue(20, 'percent')] }).startOffset.unit);
+    testing.expectEqual('px', new ViewTimeline({ subject, inset: ['auto'] }).startOffset.unit);
+    testing.expectEqual('px',
+      new ViewTimeline({ subject, inset: [new CSSUnitValue(10, 'px'), 'auto'] }).startOffset.unit);
+    testing.expectError(invalid,
+      () => new ViewTimeline({ subject, inset: [new CSSUnitValue(1, 'px'), new CSSUnitValue(2, 'px'), new CSSUnitValue(3, 'px')] }));
+    testing.expectError(notNumeric, () => new ViewTimeline({ subject, inset: [5] }));
+    testing.expectError(notNumeric, () => new ViewTimeline({ subject, inset: ['10px'] }));
+  }
+</script>
+
+<script id=timeline_trigger_sequence>
+  {
+    const bare = new TimelineTrigger();
+    testing.expectEqual('[object TimelineTrigger]', Object.prototype.toString.call(bare));
+    testing.expectTrue(bare instanceof AnimationTrigger);
+    // The same list object on every read, empty when nothing was passed.
+    testing.expectEqual('[object TimelineTriggerRangeList]', Object.prototype.toString.call(bare.ranges));
+    testing.expectTrue(bare.ranges === bare.ranges);
+    testing.expectEqual(0, bare.ranges.length);
+    testing.expectEqual(0, [...bare.ranges].length);
+    testing.expectEqual(null, bare.ranges.item(0));
+    testing.expectEqual(undefined, bare.ranges[0]);
+
+    // An omitted, undefined or empty-sequence argument are the same thing.
+    testing.expectEqual(0, new TimelineTrigger(undefined).ranges.length);
+    testing.expectEqual(0, new TimelineTrigger([]).ranges.length);
+    testing.expectEqual(0, new TimelineTrigger(new Set()).ranges.length);
+    testing.expectEqual(0, new TimelineTrigger({ [Symbol.iterator]: function* () {} }).ranges.length);
+
+    // Two refusals, and which one a value gets turns on whether it is an object
+    // at all: a primitive cannot be a sequence, an object without @@iterator is
+    // told what it is missing. A string is a primitive, so it takes the first
+    // even though strings are iterable in JS.
+    const notASequence = "Failed to construct 'TimelineTrigger': The provided value cannot be " +
+      'converted to a sequence.';
+    const noIterator = "Failed to construct 'TimelineTrigger': The object must have a callable " +
+      '@@iterator property.';
+    testing.expectError(notASequence, () => new TimelineTrigger('x'));
+    testing.expectError(notASequence, () => new TimelineTrigger(5));
+    testing.expectError(notASequence, () => new TimelineTrigger(null));
+    testing.expectError(noIterator, () => new TimelineTrigger({}));
+    testing.expectError(noIterator, () => new TimelineTrigger({ length: 0 }));
+
+    // The items are dictionaries, so a non-object item is refused as one, while
+    // null and any object at all get through.
+    testing.expectError(
+      "Failed to construct 'TimelineTrigger': The provided value is not of type 'TimelineTriggerOptions'.",
+      () => new TimelineTrigger([5]));
+    testing.expectEqual(1, new TimelineTrigger([null]).ranges.length);
+    testing.expectEqual(1, new TimelineTrigger([document.timeline]).ranges.length);
+    // Item conversion runs before the one-timeline check, so two bad items
+    // still answer the dictionary refusal.
+    testing.expectError(
+      "Failed to construct 'TimelineTrigger': The provided value is not of type 'TimelineTriggerOptions'.",
+      () => new TimelineTrigger([5, 5]));
+    testing.expectError(
+      "Failed to construct 'TimelineTrigger': Configuring multiple timelines is not supported.",
+      () => new TimelineTrigger([{}, {}]));
+  }
+</script>
+
+<script id=timeline_trigger_range>
+  {
+    const list = new TimelineTrigger([{}]).ranges;
+    const range = list.item(0);
+    testing.expectEqual(1, list.length);
+    testing.expectEqual('[object TimelineTriggerRange]', Object.prototype.toString.call(range));
+    // The same range object every read, reachable by index as well as by item().
+    testing.expectTrue(list.item(0) === range);
+    testing.expectTrue(list[0] === range);
+    testing.expectEqual(null, list.item(1));
+    testing.expectEqual(null, list.item(-1));
+    testing.expectEqual(undefined, list[1]);
+    testing.expectError(
+      "Failed to execute 'item' on 'TimelineTriggerRangeList': 1 argument required, but only 0 present.",
+      () => list.item());
+
+    // The list's iteration protocol, on a list with something in it.
+    testing.expectEqual(1, [...list].length);
+    testing.expectTrue([...list][0] === range);
+    testing.expectEqual(1, [...list.keys()].length);
+    testing.expectEqual(0, [...list.keys()][0]);
+    testing.expectTrue([...list.values()][0] === range);
+    testing.expectEqual(0, [...list.entries()][0][0]);
+    testing.expectTrue([...list.entries()][0][1] === range);
+    let shape = '';
+    list.forEach((v, i, l) => shape = `${Object.prototype.toString.call(v)}|${i}|${l === list}`);
+    testing.expectEqual('[object TimelineTriggerRange]|0|true', shape);
+
+    // The defaults: the document's own timeline, and the two pairs differ --
+    // activation defaults to 'normal', active to 'auto'.
+    testing.expectTrue(range.timeline === document.timeline);
+    testing.expectEqual('normal', range.activationRangeStart);
+    testing.expectEqual('normal', range.activationRangeEnd);
+    testing.expectEqual('auto', range.activeRangeStart);
+    testing.expectEqual('auto', range.activeRangeEnd);
+    // An explicit null timeline is the default too, and a given one is kept.
+    testing.expectTrue(new TimelineTrigger([{ timeline: null }]).ranges.item(0).timeline === document.timeline);
+    const scroll = new ScrollTimeline();
+    testing.expectTrue(new TimelineTrigger([{ timeline: scroll }]).ranges.item(0).timeline === scroll);
+    testing.expectError(
+      "Failed to construct 'TimelineTrigger': Failed to read the 'timeline' property from " +
+      "'TimelineTriggerOptions': Failed to convert value to 'AnimationTimeline'.",
+      () => new TimelineTrigger([{ timeline: 5 }]));
+  }
+</script>
+
+<script id=timeline_trigger_range_grammar>
+  {
+    const at = (name, value) => new TimelineTrigger([{ [name]: value }]).ranges.item(0)[name];
+    const invalid = "Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name " +
+      '<length-percent> pair';
+
+    // A name, a <length-percentage>, or a name followed by one. The value is
+    // echoed back exactly as it came in -- case and inner spacing and all --
+    // so nothing here is normalised.
+    for (const value of ['cover', 'contain', 'entry', 'exit', 'entry-crossing', 'exit-crossing',
+      'COVER', '50%', '10px', '-10px', '10em', 'calc(10px + 5%)',
+      'cover 100%', 'cover 10px', 'cover -5%', 'Cover 50%', 'cover  50%']) {
+      testing.expectEqual(value, at('activationRangeStart', value), { desc: 'range ' + value });
+      testing.expectEqual(value, at('activeRangeEnd', value), { desc: 'range ' + value });
+    }
+    for (const value of ['nope', '', 'none', 'initial', 'var(--x)', 'cover cover', '0% cover',
+      'cover 50', 'cover 0%extra', ' cover 50% ', 'normal 0%', 'auto 0%', 5]) {
+      testing.expectError(invalid, () => at('activationRangeStart', value), { desc: 'range ' + value });
+    }
+
+    // 'normal' is a value for either pair; 'auto' only for the active one.
+    testing.expectEqual('normal', at('activationRangeStart', 'normal'));
+    testing.expectEqual('normal', at('activeRangeStart', 'normal'));
+    testing.expectEqual('auto', at('activeRangeStart', 'auto'));
+    testing.expectError(invalid, () => at('activationRangeStart', 'auto'));
+
+    // The two halves of a pair stay independent.
+    const pair = new TimelineTrigger([{ activationRangeStart: 'cover', activationRangeEnd: 'contain' }])
+      .ranges.item(0);
+    testing.expectEqual('cover', pair.activationRangeStart);
+    testing.expectEqual('contain', pair.activationRangeEnd);
+
+    // The member is a union, not a DOMString: an object is read as a
+    // TimelineRangeOffset dictionary and echoed back as one, carrying only the
+    // members it was given (Chrome reads `offset` then `rangeName`).
+    testing.expectEqual('object', typeof at('activationRangeStart', {}));
+    testing.expectEqual('{}', JSON.stringify(at('activationRangeStart', {})));
+    testing.expectEqual('{}', JSON.stringify(at('activationRangeStart', null)));
+    testing.expectEqual('{}', JSON.stringify(at('activationRangeStart', [])));
+    testing.expectEqual('{"rangeName":"cover"}',
+      JSON.stringify(at('activationRangeStart', { rangeName: 'cover' })));
+    testing.expectEqual('string', typeof at('activationRangeStart', 'cover'));
+  }
+</script>
+
+<script id=animation_trigger_animations>
+  {
+    const subject = document.getElementById('subject');
+    const trigger = new TimelineTrigger();
+
+    // The argument count is checked before anything about the arguments, and
+    // both messages name AnimationTrigger rather than the subclass.
+    const prefix = "Failed to execute 'addAnimation' on 'AnimationTrigger': ";
+    testing.expectError(prefix + '2 arguments required, but only 0 present.',
+      () => trigger.addAnimation());
+    testing.expectError(prefix + '2 arguments required, but only 1 present.',
+      () => trigger.addAnimation(subject.animate([], 1)));
+    testing.expectError(
+      "Failed to execute 'removeAnimation' on 'AnimationTrigger': 1 argument required, but only 0 present.",
+      () => trigger.removeAnimation());
+
+    // Then the first argument's type, then the second's enum.
+    testing.expectError(prefix + "parameter 1 is not of type 'Animation'.",
+      () => trigger.addAnimation(5, 'play'));
+    testing.expectError(
+      "Failed to execute 'removeAnimation' on 'AnimationTrigger': parameter 1 is not of type 'Animation'.",
+      () => trigger.removeAnimation(5));
+    const badBehaviour = (value) => prefix + "The provided value '" + value +
+      "' is not a valid enum value of type AnimationTriggerBehavior.";
+    // AnimationTriggerBehavior is play / pause / none -- not the once / repeat
+    // / alternate / state a reader of the spec drafts would guess.
+    for (const behaviour of ['once', 'repeat', 'alternate', 'state']) {
+      testing.expectError(badBehaviour(behaviour),
+        () => trigger.addAnimation(subject.animate([], 1), behaviour));
+    }
+    testing.expectError(badBehaviour('undefined'),
+      () => trigger.addAnimation(subject.animate([], 1), undefined));
+    testing.expectError(badBehaviour('null'), () => trigger.addAnimation(subject.animate([], 1), null));
+    testing.expectError(badBehaviour('5'), () => trigger.addAnimation(subject.animate([], 1), 5));
+
+    // A fresh array every read, and empty until something is added.
+    testing.expectEqual(0, trigger.getAnimations().length);
+    testing.expectFalse(trigger.getAnimations() === trigger.getAnimations());
+
+    const first = subject.animate([], 1);
+    testing.expectEqual(undefined, trigger.addAnimation(first, 'play'));
+    testing.expectEqual(1, trigger.getAnimations().length);
+    testing.expectTrue(trigger.getAnimations()[0] === first);
+    // The same animation twice is still one entry.
+    trigger.addAnimation(first, 'pause');
+    testing.expectEqual(1, trigger.getAnimations().length);
+    const second = subject.animate([], 1);
+    trigger.addAnimation(second, 'none');
+    testing.expectEqual(2, trigger.getAnimations().length);
+
+    // Removing one that was never added is a silent no-op.
+    testing.expectEqual(undefined, trigger.removeAnimation(subject.animate([], 1)));
+    testing.expectEqual(2, trigger.getAnimations().length);
+    trigger.removeAnimation(first);
+    testing.expectEqual(1, trigger.getAnimations().length);
+    testing.expectTrue(trigger.getAnimations()[0] === second);
+    trigger.removeAnimation(second);
+    testing.expectEqual(0, trigger.getAnimations().length);
+  }
+</script>
