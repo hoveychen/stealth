@@ -5834,6 +5834,23 @@ One finding fell out of the same probe that no globals diff could ever show:
 `undefined` here. Chrome does not name that extension on the window either, so it
 is invisible to a name-set comparison — a missing extension, not a surface excess.
 
+**The commercial guards did not notice.** `antibot-sweep.mjs --fresh` was run
+twice back to back on one address, the patched binary against the pre-change one
+from `main` — the same-sitting control the section above insists on. First pass
+read 11/15 for the patch and 10/15 for the control, the single difference being
+`dd-hermes`. Six alternating re-runs of that one station (`--only dd-hermes`) then
+answered `datadome-challenge` on **both** binaries every time: the flip was
+DataDome noise, not the fix. `cf-chatgpt` differed too and was also noise — the
+control's `Application Error!` at 200 nodes=39 is OpenAI's own error page, and
+four alternating re-runs put the real page on both sides. So the honest reading is
+**10/15 either way, the same five stations failing**: `cf-scrapingcourse`,
+`cf-nopecha`, `cf-zeroclover`, `dd-g2`, `dd-hermes`. Removing five global-name
+tells is measurable on the surface (7 excess names → 2) and worth nothing at the
+door, which is consistent with where the Cloudflare failure actually lives: the
+`reading 'call'` TypeError is a *missing member* being read off some prototype,
+not a name Chrome lacks. Raw readings in
+`results/antibot-lp-{new,control}.json`.
+
 **The other direction is still the larger one: 36 globals headed Chrome has and
 we do not** (`CloseWatcher`, `Temporal`, `Observable`, `PressureObserver`, the
 SharedStorage family, `LanguageModel` / `Summarizer` / `Translator`, the
