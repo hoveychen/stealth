@@ -1,0 +1,99 @@
+{
+ "href": "http://localhost:8777/",
+ "isSecureContext": true,
+ "out": {
+  "protoSymbols": {
+   "AnimationTrigger": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "TimelineTrigger": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "TimelineTriggerRange": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "TimelineTriggerRangeList": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "ScrollTimeline": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "ViewTimeline": [
+    "Symbol(Symbol.toStringTag)"
+   ]
+  },
+  "timelineTrigger": {
+   "bare": "{\"ranges\":\"[object TimelineTriggerRangeList]\",\"addAnimation\":\"TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': 2 arguments required, but only 0 present.\",\"getAnimations\":\"[object Array]\",\"removeAnimation\":\"TypeError: Failed to execute 'removeAnimation' on 'AnimationTrigger': 1 argument required, but only 0 present.\"}",
+   "rangesBrand": "[object TimelineTriggerRangeList]",
+   "rangesLength": 0,
+   "rangesIdentity": true,
+   "rangesIterable": 0,
+   "rangesItem": "null",
+   "rangesItemNoArg": "TypeError: Failed to execute 'item' on 'TimelineTriggerRangeList': 1 argument required, but only 0 present.",
+   "rangesIndex": "undefined",
+   "emptyArray": 0,
+   "nonSequence": "TypeError: Failed to construct 'TimelineTrigger': The provided value cannot be converted to a sequence.",
+   "numberArg": "TypeError: Failed to construct 'TimelineTrigger': The provided value cannot be converted to a sequence.",
+   "nullArg": "TypeError: Failed to construct 'TimelineTrigger': The provided value cannot be converted to a sequence.",
+   "undefinedArg": 0,
+   "badItem": "TypeError: Failed to construct 'TimelineTrigger': The provided value is not of type 'TimelineTriggerOptions'.",
+   "getAnimations": "[]",
+   "addAnimationNoArgs": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': 2 arguments required, but only 0 present.",
+   "addAnimationOne": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': 2 arguments required, but only 1 present.",
+   "removeAnimationNoArgs": "TypeError: Failed to execute 'removeAnimation' on 'AnimationTrigger': 1 argument required, but only 0 present.",
+   "removeAnimationOne": "undefined"
+  },
+  "ScrollTimeline": {
+   "bare": "{\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "filled": "{\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"x\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "sourceIdentity": true,
+   "nonDict": "TypeError: Failed to construct 'ScrollTimeline': The provided value is not of type 'ScrollTimelineOptions'.",
+   "nullDict": "{\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "badAxis": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'axis' property from 'ScrollTimelineOptions': The provided value 'nope' is not a valid enum value of type ScrollAxis.",
+   "badSource": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'source' property from 'ScrollTimelineOptions': Failed to convert value to 'Element'.",
+   "nullSource": "null",
+   "currentTime": "null",
+   "duration": "[object CSSUnitValue]"
+  },
+  "ViewTimeline": {
+   "bare": "{\"subject\":\"null\",\"startOffset\":\"null\",\"endOffset\":\"null\",\"source\":\"null\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "filled": "{\"subject\":\"[object HTMLBodyElement]\",\"startOffset\":\"[object CSSUnitValue]\",\"endOffset\":\"[object CSSUnitValue]\",\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"x\",\"currentTime\":\"[object CSSUnitValue]\",\"duration\":\"[object CSSUnitValue]\"}",
+   "sourceIdentity": true,
+   "nonDict": "TypeError: Failed to construct 'ViewTimeline': The provided value is not of type 'ViewTimelineOptions'.",
+   "nullDict": "{\"subject\":\"null\",\"startOffset\":\"null\",\"endOffset\":\"null\",\"source\":\"null\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "badAxis": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'axis' property from 'ViewTimelineOptions': The provided value 'nope' is not a valid enum value of type ScrollAxis.",
+   "badSource": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+   "nullSource": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+   "currentTime": "null",
+   "duration": "[object CSSUnitValue]"
+  },
+  "viewTimelineInset": {
+   "bad": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+   "two": "null",
+   "auto": "null"
+  },
+  "unreachable": {
+   "AnimationTrigger": {
+    "addAnimation": "TypeError: Illegal invocation",
+    "getAnimations": "TypeError: Illegal invocation",
+    "removeAnimation": "TypeError: Illegal invocation"
+   },
+   "TimelineTriggerRange": {
+    "timeline": "TypeError: Illegal invocation",
+    "activationRangeStart": "TypeError: Illegal invocation",
+    "activationRangeEnd": "TypeError: Illegal invocation",
+    "activeRangeStart": "TypeError: Illegal invocation",
+    "activeRangeEnd": "TypeError: Illegal invocation"
+   },
+   "TimelineTriggerRangeList": {
+    "entries": "[object Array Iterator]",
+    "keys": "[object Array Iterator]",
+    "values": "[object Array Iterator]",
+    "forEach": "TypeError: Illegal invocation",
+    "length": "TypeError: Illegal invocation",
+    "item": "TypeError: Illegal invocation"
+   }
+  }
+ }
+}
