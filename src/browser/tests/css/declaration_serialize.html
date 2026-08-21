@@ -952,6 +952,75 @@ function withStyle(text) {
     // One longhand on its own is not a background, and cssText says so.
     testing.expectEqual('background-color: red;', withStyle('background-color: red').style.cssText);
 
+    // A corner radius is two box lists over four corners, which is the one
+    // four-value shorthand carrying a `/`. Each corner holds the pair `h v`,
+    // folded to `h` when the two agree, so a value with no `/` leaves every
+    // corner holding one component. Measured by probe-css16.js.
+    const radius = withStyle('border-radius: 10px 20px / 30px 40px');
+    testing.expectEqual(4, radius.style.length);
+    testing.expectEqual(
+        'border-top-left-radius,border-top-right-radius,' +
+        'border-bottom-right-radius,border-bottom-left-radius',
+        names(radius).join(','));
+    testing.expectEqual('10px 30px,20px 40px,10px 30px,20px 40px',
+        values(radius).join(','));
+    testing.expectEqual('10px 20px / 30px 40px',
+        radius.style.getPropertyValue('border-radius'));
+    testing.expectEqual('20px 40px',
+        radius.style.getPropertyValue('border-top-right-radius'));
+    testing.expectEqual('border-radius: 10px 20px / 30px 40px;', radius.style.cssText);
+
+    // Coming back, the two lists are elided by the box rule *independently*,
+    // and the `/` goes only when the two come out identical.
+    const radii = (value) =>
+        withStyle('border-radius: ' + value).style.getPropertyValue('border-radius');
+    testing.expectEqual('10px 20px', radii('10px 20px / 10px 20px'));
+    testing.expectEqual('10px / 20px', radii('10px 10px / 20px 20px'));
+    testing.expectEqual('10px', radii('10px / 10px'));
+    testing.expectEqual('10px', radii('10px 10px 10px 10px'));
+    testing.expectEqual('10px 20px 30px', radii('10px 20px 30px 20px'));
+    testing.expectEqual('10px 20px 10px 30px', radii('10px 20px 10px 30px'));
+    testing.expectEqual('10px 20px 30px / 40px', radii('10px 20px 30px / 40px'));
+    testing.expectEqual('10px / 20px 30px', radii('10px / 20px 30px'));
+    testing.expectEqual('50% / 25%', radii('50% / 25%'));
+    // The zero rule rides along, because a corner holds it.
+    testing.expectEqual('0px', radii('0'));
+    testing.expectEqual('0px', radii('0 0'));
+    testing.expectEqual('0px 10px', radii('0 10px'));
+
+    // `-webkit-border-radius` is a different parser: with exactly two
+    // components it is the legacy WebKit horizontal-then-vertical form rather
+    // than top-left-then-top-right. One, three and four are `border-radius`,
+    // and reading back -- and cssText -- go through the unprefixed name.
+    const legacyRadii = (value) => {
+        const el = withStyle('-webkit-border-radius: ' + value);
+        return el.style.getPropertyValue('-webkit-border-radius');
+    };
+    testing.expectEqual('10px / 20px', legacyRadii('10px 20px'));
+    testing.expectEqual('0px / 10px', legacyRadii('0 10px'));
+    testing.expectEqual('50% / 25%', legacyRadii('50% 25%'));
+    testing.expectEqual('10px', legacyRadii('10px'));
+    testing.expectEqual('10px', legacyRadii('10px 10px'));
+    testing.expectEqual('10px 20px 30px', legacyRadii('10px 20px 30px'));
+    testing.expectEqual('10px 20px 30px 40px', legacyRadii('10px 20px 30px 40px'));
+    testing.expectEqual('10px 20px', legacyRadii('10px 20px 10px 20px'));
+    const legacyRadius = withStyle('-webkit-border-radius: 10px 20px');
+    testing.expectEqual(4, legacyRadius.style.length);
+    testing.expectEqual('10px 20px,10px 20px,10px 20px,10px 20px',
+        values(legacyRadius).join(','));
+    testing.expectEqual('10px / 20px',
+        legacyRadius.style.getPropertyValue('border-radius'));
+    testing.expectEqual('border-radius: 10px / 20px;', legacyRadius.style.cssText);
+
+    // A CSS-wide keyword reaches all four corners, under either spelling.
+    for (const property of ['border-radius', '-webkit-border-radius']) {
+        const inherited = withStyle(property + ': inherit');
+        testing.expectEqual(4, inherited.style.length);
+        testing.expectEqual('inherit,inherit,inherit,inherit', values(inherited).join(','));
+        testing.expectEqual('inherit', inherited.style.getPropertyValue(property));
+        testing.expectEqual('border-radius: inherit;', inherited.style.cssText);
+    }
+
     // Removing a shorthand removes every longhand it expanded to.
     const removed = withStyle('border: 1px solid red');
     testing.expectEqual('1px solid red', removed.style.removeProperty('border'));
