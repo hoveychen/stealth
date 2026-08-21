@@ -364,7 +364,10 @@ pub fn getTagNameLower(self: *const Element) []const u8 {
                     .quote => he.subtype(Html.Quote)._tag_name.str(),
                     .script => "script",
                     .select => "select",
+                    .selected_content => "selectedcontent",
                     .slot => "slot",
+                    .geolocation => "geolocation",
+                    .user_media => "usermedia",
                     .source => "source",
                     .span => "span",
                     .style => "style",
@@ -513,7 +516,10 @@ fn tagNameFolded(self: *const Element, buf: []u8) []const u8 {
                 .quote => upperTagName(&he.subtype(Html.Quote)._tag_name, buf),
                 .script => "SCRIPT",
                 .select => "SELECT",
+                .selected_content => "SELECTEDCONTENT",
                 .slot => "SLOT",
+                .geolocation => "GEOLOCATION",
+                .user_media => "USERMEDIA",
                 .source => "SOURCE",
                 .span => "SPAN",
                 .style => "STYLE",
@@ -2520,6 +2526,10 @@ pub fn getTag(self: *const Element) Tag {
                 .script => .script,
                 .select => .select,
                 .slot => .slot,
+                // No Element.Tag entry for the three surface elements, the
+                // way no MathML tag has one: tag-name matching falls back to
+                // the tagName string, which is all a selector needs.
+                .selected_content, .geolocation, .user_media => .unknown,
                 .source => .source,
                 .span => .span,
                 .option => .option,

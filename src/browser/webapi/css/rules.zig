@@ -41,6 +41,20 @@ pub fn registerTypes() []const type {
         CSSPropertyRule,
         CSSKeyframesRule,
         CSSKeyframeRule,
+
+        // Prototype surface only -- nothing hands out an instance yet. See the
+        // section at the bottom of this file.
+        CSSFontFeatureValuesRule,
+        CSSFunctionDeclarations,
+        CSSFunctionDescriptors,
+        CSSFunctionRule,
+        CSSMarginRule,
+        CSSNestedDeclarations,
+        CSSPositionTryDescriptors,
+        CSSPositionTryRule,
+        CSSScopeRule,
+        CSSStartingStyleRule,
+        CSSViewTransitionRule,
     };
 }
 
@@ -1263,5 +1277,366 @@ pub const CSSKeyframeRule = struct {
 
         pub const keyText = bridge.accessor(CSSKeyframeRule.getKeyText, CSSKeyframeRule.setKeyText, .{});
         pub const style = bridge.accessor(CSSKeyframeRule.getStyle, CSSKeyframeRule.setStyle, .{});
+    };
+};
+
+// ---------------------------------------------------------------------------
+// Prototype surface only: at-rules nothing here parses yet
+// ---------------------------------------------------------------------------
+//
+// Chrome 151 puts eleven more CSSOM interfaces on the window than we model, and
+// a detector reads `Object.getOwnPropertyNames(window)` long before it reads a
+// stylesheet -- so the interface objects and their prototype chains are the part
+// that has to exist. The parser hands out none of these: `@scope`,
+// `@starting-style`, `@position-try`, `@function`, `@margin`,
+// `@font-feature-values` and a nested declaration block all still come back as
+// the `.unknown` placeholder, which round-trips its source text.
+//
+// Every member list, argument count and prototype root below is Chrome's own,
+// measured with probes/probe-shapes.js on http://localhost (the readings are in
+// results/probes/probe-shapes.chrome.json). Omitting `constructor` is what makes
+// `new CSSScopeRule()` answer "Illegal constructor", which is what Chrome does.
+
+/// `@font-feature-values`. The six maps Chrome answers here are
+/// CSSFontFeatureValuesMap objects, an interface it does *not* put on the
+/// window, so there is nothing for these getters to answer but null.
+pub const CSSFontFeatureValuesRule = struct {
+    pub const Proto = CSSRule;
+
+    _proto: *CSSRule,
+
+    pub fn getFontFamily(_: *const CSSFontFeatureValuesRule) []const u8 {
+        return "";
+    }
+
+    pub fn setFontFamily(_: *CSSFontFeatureValuesRule, _: []const u8) void {}
+
+    /// Chrome answers a CSSFontFeatureValuesMap, an interface it does not put on
+    /// the window, so there is no type here to answer with.
+    pub fn getMap(_: *const CSSFontFeatureValuesRule) ?js.Value {
+        return null;
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(CSSFontFeatureValuesRule);
+
+        pub const Meta = struct {
+            pub const name = "CSSFontFeatureValuesRule";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const R = CSSFontFeatureValuesRule;
+
+        pub const fontFamily = bridge.accessor(R.getFontFamily, R.setFontFamily, .{});
+        pub const annotation = bridge.accessor(R.getMap, null, .{});
+        pub const ornaments = bridge.accessor(R.getMap, null, .{});
+        pub const stylistic = bridge.accessor(R.getMap, null, .{});
+        pub const swash = bridge.accessor(R.getMap, null, .{});
+        pub const characterVariant = bridge.accessor(R.getMap, null, .{});
+        pub const styleset = bridge.accessor(R.getMap, null, .{});
+    };
+};
+
+/// The declaration block inside a `@function` body, and the nested declarations
+/// a nested style rule collects: same shape, one `style` each.
+fn StyleOnlyRule(comptime js_name: []const u8) type {
+    return struct {
+        const Self = @This();
+
+        pub const Proto = CSSRule;
+
+        _proto: *CSSRule,
+
+        pub fn getStyle(_: *const Self) ?*CSSStyleDeclaration {
+            return null;
+        }
+
+        /// `[PutForwards=cssText]`, so the setter takes the declaration text --
+        /// and with no declaration behind it there is nowhere to put it.
+        pub fn setStyle(_: *Self, _: []const u8) void {}
+
+        pub const JsApi = struct {
+            pub const bridge = js.Bridge(Self);
+
+            pub const Meta = struct {
+                pub const name = js_name;
+                pub const prototype_chain = bridge.prototypeChain();
+                pub var class_id: bridge.ClassId = undefined;
+            };
+
+            pub const style = bridge.accessor(Self.getStyle, Self.setStyle, .{});
+        };
+    };
+}
+
+pub const CSSFunctionDeclarations = StyleOnlyRule("CSSFunctionDeclarations");
+pub const CSSNestedDeclarations = StyleOnlyRule("CSSNestedDeclarations");
+
+/// `@function --foo(--arg) { result: ... }`. A grouping rule: the body holds
+/// CSSFunctionDeclarations children.
+pub const CSSFunctionRule = struct {
+    pub const Proto = CSSGroupingRule;
+
+    _proto: *CSSGroupingRule,
+
+    pub fn getName(_: *const CSSFunctionRule) []const u8 {
+        return "";
+    }
+
+    pub fn getReturnType(_: *const CSSFunctionRule) []const u8 {
+        return "";
+    }
+
+    pub fn getParameters(_: *const CSSFunctionRule) []const js.Value {
+        return &.{};
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(CSSFunctionRule);
+
+        pub const Meta = struct {
+            pub const name = "CSSFunctionRule";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const name = bridge.accessor(CSSFunctionRule.getName, null, .{});
+        pub const returnType = bridge.accessor(CSSFunctionRule.getReturnType, null, .{});
+        pub const getParameters = bridge.function(CSSFunctionRule.getParameters, .{});
+    };
+};
+
+/// A page-margin box (`@top-center` inside `@page`), and `@position-try`: both
+/// are a name plus a declaration block, both hang straight off CSSRule.
+fn NamedStyleRule(comptime js_name: []const u8) type {
+    return struct {
+        const Self = @This();
+
+        pub const Proto = CSSRule;
+
+        _proto: *CSSRule,
+
+        pub fn getName(_: *const Self) []const u8 {
+            return "";
+        }
+
+        pub fn getStyle(_: *const Self) ?*CSSStyleDeclaration {
+            return null;
+        }
+
+        pub fn setStyle(_: *Self, _: []const u8) void {}
+
+        pub const JsApi = struct {
+            pub const bridge = js.Bridge(Self);
+
+            pub const Meta = struct {
+                pub const name = js_name;
+                pub const prototype_chain = bridge.prototypeChain();
+                pub var class_id: bridge.ClassId = undefined;
+            };
+
+            pub const name = bridge.accessor(Self.getName, null, .{});
+            pub const style = bridge.accessor(Self.getStyle, Self.setStyle, .{});
+        };
+    };
+}
+
+pub const CSSMarginRule = NamedStyleRule("CSSMarginRule");
+pub const CSSPositionTryRule = NamedStyleRule("CSSPositionTryRule");
+
+/// `@scope (start) to (end)`. Both bounds are nullable selector text.
+pub const CSSScopeRule = struct {
+    pub const Proto = CSSGroupingRule;
+
+    _proto: *CSSGroupingRule,
+
+    pub fn getBound(_: *const CSSScopeRule) ?[]const u8 {
+        return null;
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(CSSScopeRule);
+
+        pub const Meta = struct {
+            pub const name = "CSSScopeRule";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const start = bridge.accessor(CSSScopeRule.getBound, null, .{});
+        pub const end = bridge.accessor(CSSScopeRule.getBound, null, .{});
+    };
+};
+
+/// `@starting-style`. Adds nothing of its own, like `@supports`.
+pub const CSSStartingStyleRule = struct {
+    pub const Proto = CSSGroupingRule;
+
+    _proto: *CSSGroupingRule,
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(CSSStartingStyleRule);
+
+        pub const Meta = struct {
+            pub const name = "CSSStartingStyleRule";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+    };
+};
+
+/// `@view-transition`. `navigation` is a keyword, `types` a frozen list.
+pub const CSSViewTransitionRule = struct {
+    pub const Proto = CSSRule;
+
+    _proto: *CSSRule,
+
+    pub fn getNavigation(_: *const CSSViewTransitionRule) []const u8 {
+        return "none";
+    }
+
+    pub fn getTypes(_: *const CSSViewTransitionRule) []const []const u8 {
+        return &.{};
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(CSSViewTransitionRule);
+
+        pub const Meta = struct {
+            pub const name = "CSSViewTransitionRule";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const navigation = bridge.accessor(CSSViewTransitionRule.getNavigation, null, .{});
+        pub const types = bridge.accessor(CSSViewTransitionRule.getTypes, null, .{});
+    };
+};
+
+/// The two CSSStyleDeclaration subclasses that come with the rules above. They
+/// are declaration blocks with a restricted property set, and Chrome declares
+/// that set on the prototype -- one accessor pair per descriptor, in both the
+/// camelCase and the dashed spelling.
+pub const CSSFunctionDescriptors = struct {
+    pub const Proto = CSSStyleDeclaration;
+
+    _proto: *CSSStyleDeclaration,
+
+    pub fn get(_: *const CSSFunctionDescriptors) []const u8 {
+        return "";
+    }
+
+    pub fn set(_: *CSSFunctionDescriptors, _: []const u8) void {}
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(CSSFunctionDescriptors);
+
+        pub const Meta = struct {
+            pub const name = "CSSFunctionDescriptors";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        pub const result = bridge.accessor(CSSFunctionDescriptors.get, CSSFunctionDescriptors.set, .{});
+    };
+};
+
+/// `@position-try`'s declaration block. Chrome declares its 70 descriptors on
+/// the prototype, in both spellings, in this order -- the camelCase runs first
+/// and the dashed aliases follow the group they belong to, which is Blink's
+/// order and not the property list's.
+pub const CSSPositionTryDescriptors = struct {
+    pub const Proto = CSSStyleDeclaration;
+
+    _proto: *CSSStyleDeclaration,
+
+    pub fn get(_: *const CSSPositionTryDescriptors) []const u8 {
+        return "";
+    }
+
+    pub fn set(_: *CSSPositionTryDescriptors, _: []const u8) void {}
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(CSSPositionTryDescriptors);
+
+        pub const Meta = struct {
+            pub const name = "CSSPositionTryDescriptors";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const D = CSSPositionTryDescriptors;
+
+        pub const margin = bridge.accessor(D.get, D.set, .{});
+        pub const marginTop = bridge.accessor(D.get, D.set, .{});
+        pub const marginRight = bridge.accessor(D.get, D.set, .{});
+        pub const marginBottom = bridge.accessor(D.get, D.set, .{});
+        pub const marginLeft = bridge.accessor(D.get, D.set, .{});
+        pub const marginBlock = bridge.accessor(D.get, D.set, .{});
+        pub const marginBlockStart = bridge.accessor(D.get, D.set, .{});
+        pub const marginBlockEnd = bridge.accessor(D.get, D.set, .{});
+        pub const marginInline = bridge.accessor(D.get, D.set, .{});
+        pub const marginInlineStart = bridge.accessor(D.get, D.set, .{});
+        pub const marginInlineEnd = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-top" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-right" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-bottom" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-left" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-block" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-block-start" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-block-end" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-inline" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-inline-start" = bridge.accessor(D.get, D.set, .{});
+        pub const @"margin-inline-end" = bridge.accessor(D.get, D.set, .{});
+        pub const inset = bridge.accessor(D.get, D.set, .{});
+        pub const insetBlock = bridge.accessor(D.get, D.set, .{});
+        pub const insetBlockStart = bridge.accessor(D.get, D.set, .{});
+        pub const insetBlockEnd = bridge.accessor(D.get, D.set, .{});
+        pub const insetInline = bridge.accessor(D.get, D.set, .{});
+        pub const insetInlineStart = bridge.accessor(D.get, D.set, .{});
+        pub const insetInlineEnd = bridge.accessor(D.get, D.set, .{});
+        pub const top = bridge.accessor(D.get, D.set, .{});
+        pub const left = bridge.accessor(D.get, D.set, .{});
+        pub const right = bridge.accessor(D.get, D.set, .{});
+        pub const bottom = bridge.accessor(D.get, D.set, .{});
+        pub const @"inset-block" = bridge.accessor(D.get, D.set, .{});
+        pub const @"inset-block-start" = bridge.accessor(D.get, D.set, .{});
+        pub const @"inset-block-end" = bridge.accessor(D.get, D.set, .{});
+        pub const @"inset-inline" = bridge.accessor(D.get, D.set, .{});
+        pub const @"inset-inline-start" = bridge.accessor(D.get, D.set, .{});
+        pub const @"inset-inline-end" = bridge.accessor(D.get, D.set, .{});
+        pub const width = bridge.accessor(D.get, D.set, .{});
+        pub const minWidth = bridge.accessor(D.get, D.set, .{});
+        pub const maxWidth = bridge.accessor(D.get, D.set, .{});
+        pub const height = bridge.accessor(D.get, D.set, .{});
+        pub const minHeight = bridge.accessor(D.get, D.set, .{});
+        pub const maxHeight = bridge.accessor(D.get, D.set, .{});
+        pub const blockSize = bridge.accessor(D.get, D.set, .{});
+        pub const minBlockSize = bridge.accessor(D.get, D.set, .{});
+        pub const maxBlockSize = bridge.accessor(D.get, D.set, .{});
+        pub const inlineSize = bridge.accessor(D.get, D.set, .{});
+        pub const minInlineSize = bridge.accessor(D.get, D.set, .{});
+        pub const maxInlineSize = bridge.accessor(D.get, D.set, .{});
+        pub const @"min-width" = bridge.accessor(D.get, D.set, .{});
+        pub const @"max-width" = bridge.accessor(D.get, D.set, .{});
+        pub const @"min-height" = bridge.accessor(D.get, D.set, .{});
+        pub const @"max-height" = bridge.accessor(D.get, D.set, .{});
+        pub const @"block-size" = bridge.accessor(D.get, D.set, .{});
+        pub const @"min-block-size" = bridge.accessor(D.get, D.set, .{});
+        pub const @"max-block-size" = bridge.accessor(D.get, D.set, .{});
+        pub const @"inline-size" = bridge.accessor(D.get, D.set, .{});
+        pub const @"min-inline-size" = bridge.accessor(D.get, D.set, .{});
+        pub const @"max-inline-size" = bridge.accessor(D.get, D.set, .{});
+        pub const placeSelf = bridge.accessor(D.get, D.set, .{});
+        pub const alignSelf = bridge.accessor(D.get, D.set, .{});
+        pub const justifySelf = bridge.accessor(D.get, D.set, .{});
+        pub const @"place-self" = bridge.accessor(D.get, D.set, .{});
+        pub const @"align-self" = bridge.accessor(D.get, D.set, .{});
+        pub const @"justify-self" = bridge.accessor(D.get, D.set, .{});
+        pub const positionAnchor = bridge.accessor(D.get, D.set, .{});
+        pub const @"position-anchor" = bridge.accessor(D.get, D.set, .{});
+        pub const positionArea = bridge.accessor(D.get, D.set, .{});
+        pub const @"position-area" = bridge.accessor(D.get, D.set, .{});
     };
 };

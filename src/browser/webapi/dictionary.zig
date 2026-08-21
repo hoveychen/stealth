@@ -412,6 +412,95 @@ fn DictionaryWithPrefix(comptime prefix: []const u8, comptime dict: []const u8, 
             return member.toI32() catch 0;
         }
 
+        /// WebIDL `unsigned long` with neither [EnforceRange] nor [Clamp], so
+        /// the conversion is a plain ToUint32 and nothing is ever an error --
+        /// ToInt32 over the same bits. Measured with TextUpdateEventInit
+        /// (probe-s2-events): -1 reads back 4294967295, 2.7 reads back 2, 2**33
+        /// and NaN read back 0, and '9' reads back 9.
+        pub fn unsignedLong(self: Self, comptime name: []const u8, default: u32) !u32 {
+            const member = (try self.present(name)) orelse return default;
+            return @bitCast(member.toI32() catch 0);
+        }
+
+        /// WebIDL `bigint`, whose conversion is ToBigInt and therefore none of
+        /// the integer coercions above: a Number is refused *whatever* its
+        /// value, a boolean goes through as 0 or 1, and everything else is
+        /// stringified and then parsed as a BigInt literal. The two refusals
+        /// differ in kind -- Chrome prefixes V8's own message, and V8 raises a
+        /// TypeError for a value that cannot be converted at all and a
+        /// SyntaxError for a string that is not a literal. Measured with
+        /// ClipboardChangeEventInit (probe-s2-events):
+        ///
+        ///   {changeId: 3}      -> TypeError: ... Cannot convert 3 to a BigInt
+        ///   {changeId: null}   -> TypeError: ... Cannot convert null to a BigInt
+        ///   {changeId: 'nope'} -> SyntaxError: ... Cannot convert nope to a BigInt
+        ///   {changeId: '0x10'} -> 16n        {changeId: '  12  '} -> 12n
+        ///   {changeId: ''}     -> 0n         {changeId: []}       -> 0n
+        ///
+        /// Answers an i64, so a literal past 64 bits truncates where Chrome
+        /// keeps it (`2n ** 64n` reads back 0 here and 18446744073709551616 in
+        /// Chrome). Nothing in this engine ever produces a real one and no
+        /// dictionary member that takes one is reachable from a site, so the
+        /// gap is the same order as the FrozenArray gaps elsewhere.
+        pub fn bigintMember(self: Self, comptime name: []const u8, default: i64, exec: *const Execution) !i64 {
+            const member = (try self.present(name)) orelse return default;
+            if (member.isBigInt()) {
+                return member.toBigInt().getInt64();
+            }
+            if (member.isBoolean()) {
+                return if (member.toBool()) 1 else 0;
+            }
+            if (member.isNumber() or member.isNull()) {
+                const text = if (member.isNull()) "null" else try member.toStringSlice();
+                return throwTypeError(try cannotConvert(name, text, exec), exec);
+            }
+            // A string, or an object taken through ToPrimitive first: parsed as
+            // a BigInt literal, sign and radix prefix and all.
+            const text = std.mem.trim(u8, try member.toStringSlice(), &std.ascii.whitespace);
+            if (text.len == 0) {
+                return 0;
+            }
+            return std.fmt.parseInt(i64, text, 0) catch {
+                const isolate = exec.js.isolate;
+                _ = isolate.throwException(isolate.createSyntaxError(try cannotConvert(name, text, exec)));
+                return error.JsException;
+            };
+        }
+
+        fn cannotConvert(comptime name: []const u8, text: []const u8, exec: *const Execution) ![]const u8 {
+            return std.fmt.allocPrint(
+                exec.call_arena,
+                CTOR ++ "Failed to read the '" ++ name ++ "' property from '" ++ dict ++
+                    "': Cannot convert {s} to a BigInt",
+                .{text},
+            );
+        }
+
+        /// `sequence<DOMString>`: an array, whose items are each stringified.
+        /// Anything that is not an array -- including a string, which is
+        /// iterable in JS and still refused here -- gets the sequence message
+        /// (measured with ClipboardChangeEventInit's `types`: 'ab', 5 and null
+        /// all answer "The provided value cannot be converted to a sequence.",
+        /// while `[1, null, 'x']` reads back ["1", "null", "x"]).
+        pub fn stringSequence(
+            self: Self,
+            comptime name: []const u8,
+            allocator: std.mem.Allocator,
+            exec: *const Execution,
+        ) ![]const []const u8 {
+            const member = (try self.present(name)) orelse return &.{};
+            if (member.isArray() == false) {
+                return notASequence(name, exec);
+            }
+            const array = member.toArray();
+            const items = try allocator.alloc([]const u8, @intCast(array.len()));
+            for (items, 0..) |*item, i| {
+                const entry = try array.get(@intCast(i));
+                item.* = try entry.toStringSliceWithAlloc(allocator);
+            }
+            return items;
+        }
+
         pub fn string(
             self: Self,
             comptime name: []const u8,

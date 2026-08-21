@@ -815,6 +815,16 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                     ),
                     else => {},
                 },
+                9 => switch (@as(u72, @bitCast(name[0..9].*))) {
+                    asUint("usermedia") => return createHtmlElementT(
+                        frame,
+                        Element.Html.UserMedia,
+                        namespace,
+                        attribute_iterator,
+                        .{},
+                    ),
+                    else => {},
+                },
                 10 => switch (@as(u80, @bitCast(name[0..10].*))) {
                     asUint("blockquote") => return createHtmlElementT(
                         frame,
@@ -822,6 +832,26 @@ pub fn createElementNS(frame: *Frame, namespace: Element.Namespace, name: []cons
                         namespace,
                         attribute_iterator,
                         .{ ._tag_name = comptime .wrap("blockquote"), ._tag = .blockquote },
+                    ),
+                    else => {},
+                },
+                11 => switch (@as(u88, @bitCast(name[0..11].*))) {
+                    asUint("geolocation") => return createHtmlElementT(
+                        frame,
+                        Element.Html.Geolocation,
+                        namespace,
+                        attribute_iterator,
+                        .{},
+                    ),
+                    else => {},
+                },
+                15 => switch (@as(u120, @bitCast(name[0..15].*))) {
+                    asUint("selectedcontent") => return createHtmlElementT(
+                        frame,
+                        Element.Html.SelectedContent,
+                        namespace,
+                        attribute_iterator,
+                        .{},
                     ),
                     else => {},
                 },

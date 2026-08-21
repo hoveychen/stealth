@@ -35,11 +35,13 @@ const BarProp = @import("BarProp.zig");
 const External = @import("External.zig");
 const StyleMedia = @import("StyleMedia.zig");
 const trusted_types = @import("trusted_types.zig");
+const reporting = @import("reporting.zig");
 const DOMException = @import("DOMException.zig");
 const launch_queue = @import("launch_queue.zig");
 const ImageBitmap = @import("canvas/ImageBitmap.zig");
 const cache_storage = @import("storage/cache_storage.zig");
 const VisualViewport = @import("VisualViewport.zig");
+const Viewport = @import("Viewport.zig");
 const NetworkInformation = @import("NetworkInformation.zig");
 const MediaDevices = @import("media/MediaDevices.zig");
 const BatteryManager = @import("BatteryManager.zig");
@@ -103,6 +105,12 @@ _trusted_types: trusted_types.TrustedTypePolicyFactory = .init,
 _launch_queue: launch_queue.LaunchQueue = .init,
 _caches: cache_storage.CacheStorage = .init,
 _style_media: StyleMedia = .init,
+// window.crashReport. One per window, and the same object on every read
+// (measured) -- the enumerable getter-only accessor Chrome has.
+_crash_report: reporting.CrashReportContext = .init,
+// window.viewport. One per window like crashReport, but [Replaceable] where
+// that one is not (measured) -- so the accessor has a setter.
+_viewport: Viewport = .init,
 // window.status. Blink kept the accessor after dropping the status bar it used
 // to write to, so it is a plain string cell that remembers whatever is
 // assigned. Owned by the frame arena once written.
@@ -502,6 +510,20 @@ pub fn setScheduler(self: *Window, value: js.Value) void {
 
 pub fn getStyleMedia(self: *Window) *StyleMedia {
     return &self._style_media;
+}
+
+pub fn getCrashReport(self: *Window) *reporting.CrashReportContext {
+    return &self._crash_report;
+}
+
+pub fn getViewport(self: *Window) *Viewport {
+    return &self._viewport;
+}
+
+// [Replaceable]: assigning shadows the accessor with a data property on the
+// global rather than throwing or being ignored.
+pub fn setViewport(self: *Window, value: js.Value) void {
+    self.replaceGlobalProperty(value, "viewport");
 }
 
 pub fn getStatus(self: *const Window) []const u8 {
@@ -1630,6 +1652,9 @@ pub const JsApi = struct {
     // Getter-only, and the one window attribute Blink marks non-enumerable.
     pub const styleMedia = bridge.accessor(Window.getStyleMedia, null, .{});
     pub const trustedTypes = bridge.accessor(Window.getTrustedTypes, null, .{});
+    // Enumerable, getter-only, and never replaceable: Chrome has no setter here.
+    pub const crashReport = bridge.accessor(Window.getCrashReport, null, .{});
+    pub const viewport = bridge.accessor(Window.getViewport, Window.setViewport, .{});
     pub const offscreenBuffering = bridge.accessor(Window.getOffscreenBuffering, Window.setOffscreenBuffering, .{ .enumerable = false });
     // navigator's other name, and the same object.
     pub const clientInformation = bridge.accessor(Window.getNavigator, Window.setClientInformation, .{});

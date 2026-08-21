@@ -1,0 +1,396 @@
+{
+ "href": "http://localhost:8777/",
+ "isSecureContext": true,
+ "out": {
+  "protoSymbols": {
+   "AnimationTrigger": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "TimelineTrigger": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "TimelineTriggerRange": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "TimelineTriggerRangeList": [
+    "Symbol(Symbol.toStringTag)",
+    "Symbol(Symbol.iterator)"
+   ],
+   "ScrollTimeline": [
+    "Symbol(Symbol.toStringTag)"
+   ],
+   "ViewTimeline": [
+    "Symbol(Symbol.toStringTag)"
+   ]
+  },
+  "timelineTrigger": {
+   "bare": "{\"ranges\":\"[object TimelineTriggerRangeList]\",\"addAnimation\":\"TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': 2 arguments required, but only 0 present.\",\"getAnimations\":\"[object Array]\",\"removeAnimation\":\"TypeError: Failed to execute 'removeAnimation' on 'AnimationTrigger': 1 argument required, but only 0 present.\"}",
+   "rangesBrand": "[object TimelineTriggerRangeList]",
+   "rangesLength": 0,
+   "rangesIdentity": true,
+   "rangesIterable": 0,
+   "rangesItem": "null",
+   "rangesItemNoArg": "TypeError: Failed to execute 'item' on 'TimelineTriggerRangeList': 1 argument required, but only 0 present.",
+   "rangesIndex": "undefined",
+   "emptyArray": 0,
+   "nonSequence": "TypeError: Failed to construct 'TimelineTrigger': The provided value cannot be converted to a sequence.",
+   "numberArg": "TypeError: Failed to construct 'TimelineTrigger': The provided value cannot be converted to a sequence.",
+   "nullArg": "TypeError: Failed to construct 'TimelineTrigger': The provided value cannot be converted to a sequence.",
+   "undefinedArg": 0,
+   "badItem": "TypeError: Failed to construct 'TimelineTrigger': The provided value is not of type 'TimelineTriggerOptions'.",
+   "getAnimations": "[]",
+   "addAnimationNoArgs": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': 2 arguments required, but only 0 present.",
+   "addAnimationOne": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': 2 arguments required, but only 1 present.",
+   "removeAnimationNoArgs": "TypeError: Failed to execute 'removeAnimation' on 'AnimationTrigger': 1 argument required, but only 0 present.",
+   "removeAnimationOne": "undefined"
+  },
+  "ScrollTimeline": {
+   "bare": "{\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "filled": "{\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"x\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "sourceIdentity": true,
+   "nonDict": "TypeError: Failed to construct 'ScrollTimeline': The provided value is not of type 'ScrollTimelineOptions'.",
+   "nullDict": "{\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "badAxis": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'axis' property from 'ScrollTimelineOptions': The provided value 'nope' is not a valid enum value of type ScrollAxis.",
+   "badSource": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'source' property from 'ScrollTimelineOptions': Failed to convert value to 'Element'.",
+   "nullSource": "null",
+   "currentTime": "null",
+   "duration": "[object CSSUnitValue]"
+  },
+  "ViewTimeline": {
+   "bare": "{\"subject\":\"null\",\"startOffset\":\"null\",\"endOffset\":\"null\",\"source\":\"null\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "filled": "{\"subject\":\"[object HTMLBodyElement]\",\"startOffset\":\"[object CSSUnitValue]\",\"endOffset\":\"[object CSSUnitValue]\",\"source\":\"[object HTMLHtmlElement]\",\"axis\":\"x\",\"currentTime\":\"[object CSSUnitValue]\",\"duration\":\"[object CSSUnitValue]\"}",
+   "sourceIdentity": true,
+   "nonDict": "TypeError: Failed to construct 'ViewTimeline': The provided value is not of type 'ViewTimelineOptions'.",
+   "nullDict": "{\"subject\":\"null\",\"startOffset\":\"null\",\"endOffset\":\"null\",\"source\":\"null\",\"axis\":\"block\",\"currentTime\":\"null\",\"duration\":\"[object CSSUnitValue]\"}",
+   "badAxis": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'axis' property from 'ViewTimelineOptions': The provided value 'nope' is not a valid enum value of type ScrollAxis.",
+   "badSource": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+   "nullSource": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+   "currentTime": "null",
+   "duration": "[object CSSUnitValue]"
+  },
+  "viewTimelineInset": {
+   "bad": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+   "two": "null",
+   "auto": "null"
+  },
+  "numbers": {
+   "bare": {
+    "scrollDuration": "100percent",
+    "scrollCurrentTime": "null",
+    "viewDuration": "100percent",
+    "viewCurrentTime": "null",
+    "subjectDuration": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+    "subjectCurrentTime": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+    "subjectStartOffset": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+    "subjectEndOffset": "TypeError: Failed to construct 'ViewTimeline': Failed to read the 'subject' property from 'ViewTimelineOptions': Failed to convert value to 'Element'.",
+    "documentDuration": "null",
+    "documentCurrentTimeType": "number",
+    "durationIdentity": false,
+    "scrollY": 0,
+    "label": "bare"
+   },
+   "tall": {
+    "scrollDuration": "100percent",
+    "scrollCurrentTime": "0percent",
+    "viewDuration": "100percent",
+    "viewCurrentTime": "null",
+    "subjectDuration": "100percent",
+    "subjectCurrentTime": "89.10675381263616percent",
+    "subjectStartOffset": "-818px",
+    "subjectEndOffset": "100px",
+    "documentDuration": "null",
+    "documentCurrentTimeType": "number",
+    "durationIdentity": false,
+    "scrollY": 0,
+    "label": "tall"
+   },
+   "scrolled": {
+    "scrollDuration": "100percent",
+    "scrollCurrentTime": "23.353573096683792percent",
+    "viewDuration": "100percent",
+    "viewCurrentTime": "null",
+    "subjectDuration": "100percent",
+    "subjectCurrentTime": "198.0392156862745percent",
+    "subjectStartOffset": "-818px",
+    "subjectEndOffset": "100px",
+    "documentDuration": "null",
+    "documentCurrentTimeType": "number",
+    "durationIdentity": false,
+    "scrollY": 1000,
+    "label": "scrolled"
+   }
+  },
+  "edges": {
+   "plainObject": "TypeError: Failed to construct 'TimelineTrigger': The object must have a callable @@iterator property.",
+   "emptySet": 0,
+   "customIterable": 0,
+   "arrayLike": "TypeError: Failed to construct 'TimelineTrigger': The object must have a callable @@iterator property.",
+   "wrongItem": "[object TimelineTrigger]",
+   "nullItem": "[object TimelineTrigger]",
+   "twoBadItems": "TypeError: Failed to construct 'TimelineTrigger': The provided value is not of type 'TimelineTriggerOptions'.",
+   "axes": {
+    "block": "block",
+    "inline": "inline",
+    "x": "x",
+    "y": "y",
+    "horizontal": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'axis' property from 'ScrollTimelineOptions': The provided value 'horizontal' is not a valid enum value of type ScrollAxis.",
+    "(empty)": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'axis' property from 'ScrollTimelineOptions': The provided value '' is not a valid enum value of type ScrollAxis."
+   },
+   "axisUndefined": "block",
+   "axisNull": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'axis' property from 'ScrollTimelineOptions': The provided value 'null' is not a valid enum value of type ScrollAxis.",
+   "axisNumber": "TypeError: Failed to construct 'ScrollTimeline': Failed to read the 'axis' property from 'ScrollTimelineOptions': The provided value '5' is not a valid enum value of type ScrollAxis.",
+   "insets": {
+    "auto": "[object CSSUnitValue]",
+    "0px": "[object CSSUnitValue]",
+    "10px": "[object CSSUnitValue]",
+    "10px 20px": "[object CSSUnitValue]",
+    "10px 20px 30px": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+    "10%": "[object CSSUnitValue]",
+    "auto auto": "[object CSSUnitValue]",
+    "10px auto": "[object CSSUnitValue]",
+    "nope": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+    "(empty)": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+    "inherit": "TypeError: Failed to construct 'ViewTimeline': Invalid inset"
+   },
+   "insetNumber": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+   "insetNull": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+   "insetArray": "[object ViewTimeline]",
+   "insetOnly": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+   "viewSourceIgnored": "[object HTMLHtmlElement]",
+   "addTwo": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value '[object Object]' is not a valid enum value of type AnimationTriggerBehavior.",
+   "addTwoNull": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value 'null' is not a valid enum value of type AnimationTriggerBehavior.",
+   "addTwoNumber": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value '5' is not a valid enum value of type AnimationTriggerBehavior.",
+   "addBadFirst": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': parameter 1 is not of type 'Animation'.",
+   "addThenGet": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value '[object Object]' is not a valid enum value of type AnimationTriggerBehavior.",
+   "removeUnknown": "undefined",
+   "removeBad": "TypeError: Failed to execute 'removeAnimation' on 'AnimationTrigger': parameter 1 is not of type 'Animation'.",
+   "getAnimationsIdentity": false,
+   "animateWithScrollTimeline": "[object ScrollTimeline]"
+  },
+  "dictMembers": {
+   "TimelineTriggerOptions": {
+    "members": [
+     "activationRangeEnd",
+     "activationRangeStart",
+     "activeRangeEnd",
+     "activeRangeStart",
+     "timeline"
+    ],
+    "outcome": "[object TimelineTrigger]"
+   },
+   "ScrollTimelineOptions": {
+    "members": [
+     "axis",
+     "source"
+    ],
+    "outcome": "[object ScrollTimeline]"
+   },
+   "ViewTimelineOptions": {
+    "members": [
+     "axis",
+     "inset",
+     "subject"
+    ],
+    "outcome": "[object ViewTimeline]"
+   }
+  },
+  "ranges": {
+   "lengthNull": 1,
+   "lengthTwo": "TypeError: Failed to construct 'TimelineTrigger': Configuring multiple timelines is not supported.",
+   "itemBrand": "[object TimelineTriggerRange]",
+   "itemIdentity": true,
+   "spread": "TypeError: Failed to construct 'TimelineTrigger': Configuring multiple timelines is not supported.",
+   "indexAfterFill": "[object TimelineTriggerRange]",
+   "itemPastEnd": "null",
+   "itemNegative": "null",
+   "bare": "{\"timeline\":\"[object DocumentTimeline]\",\"activationRangeStart\":\"normal\",\"activationRangeEnd\":\"normal\",\"activeRangeStart\":\"auto\",\"activeRangeEnd\":\"auto\"}",
+   "empty": "{\"timeline\":\"[object DocumentTimeline]\",\"activationRangeStart\":\"normal\",\"activationRangeEnd\":\"normal\",\"activeRangeStart\":\"auto\",\"activeRangeEnd\":\"auto\"}",
+   "withTimeline": "{\"timeline\":\"[object DocumentTimeline]\",\"activationRangeStart\":\"normal\",\"activationRangeEnd\":\"normal\",\"activeRangeStart\":\"auto\",\"activeRangeEnd\":\"auto\"}",
+   "withScrollTimeline": "{\"timeline\":\"[object ScrollTimeline]\",\"activationRangeStart\":\"normal\",\"activationRangeEnd\":\"normal\",\"activeRangeStart\":\"auto\",\"activeRangeEnd\":\"auto\"}",
+   "withNullTimeline": "{\"timeline\":\"[object DocumentTimeline]\",\"activationRangeStart\":\"normal\",\"activationRangeEnd\":\"normal\",\"activeRangeStart\":\"auto\",\"activeRangeEnd\":\"auto\"}",
+   "withNumberTimeline": "TypeError: Failed to construct 'TimelineTrigger': Failed to read the 'timeline' property from 'TimelineTriggerOptions': Failed to convert value to 'AnimationTimeline'.",
+   "forEachCount": "TypeError: Failed to construct 'TimelineTrigger': Configuring multiple timelines is not supported.",
+   "forEachArgs": "[object TimelineTriggerRange]|0|[object TimelineTriggerRangeList]",
+   "entriesFirst": "[[0,\"[object TimelineTriggerRange]\"]]",
+   "keys": "TypeError: Failed to construct 'TimelineTrigger': Configuring multiple timelines is not supported."
+  },
+  "behaviours": {
+   "once": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value 'once' is not a valid enum value of type AnimationTriggerBehavior.",
+   "repeat": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value 'repeat' is not a valid enum value of type AnimationTriggerBehavior.",
+   "alternate": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value 'alternate' is not a valid enum value of type AnimationTriggerBehavior.",
+   "state": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value 'state' is not a valid enum value of type AnimationTriggerBehavior.",
+   "play": "undefined",
+   "pause": "undefined",
+   "none": "undefined"
+  },
+  "behaviourEffect": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value 'once' is not a valid enum value of type AnimationTriggerBehavior.",
+  "insetSequence": {
+   "empty": "[object CSSUnitValue]",
+   "oneUnit": "[object CSSUnitValue]",
+   "twoUnits": "[object CSSUnitValue]",
+   "threeUnits": "TypeError: Failed to construct 'ViewTimeline': Invalid inset",
+   "numbers": "TypeError: Failed to construct 'ViewTimeline': inset must be CSSNumericValue or auto",
+   "strings": "TypeError: Failed to construct 'ViewTimeline': inset must be CSSNumericValue or auto",
+   "percent": "[object CSSUnitValue]"
+  },
+  "rangeMembers": {
+   "activationRangeStart": {
+    "normal": "normal",
+    "auto": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "cover": "cover",
+    "contain": "contain",
+    "entry": "entry",
+    "exit": "exit",
+    "cover 0%": "cover 0%",
+    "entry 50%": "entry 50%",
+    "cover 0% cover 100%": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "0px": "0px",
+    "nope": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "(empty)": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair"
+   },
+   "activeRangeStart": {
+    "normal": "normal",
+    "auto": "auto",
+    "cover": "cover",
+    "contain": "contain",
+    "entry": "entry",
+    "exit": "exit",
+    "cover 0%": "cover 0%",
+    "entry 50%": "entry 50%",
+    "cover 0% cover 100%": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "0px": "0px",
+    "nope": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "(empty)": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair"
+   },
+   "coercions": {
+    "number": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "null": "[object Object]",
+    "object": "[object Object]",
+    "array": "[object Object]"
+   },
+   "pair": "cover|contain",
+   "timelineIdentity": true,
+   "defaultTimelineIdentity": true
+  },
+  "addAnimation": {
+   "playThenGet": 1,
+   "twiceSame": 1,
+   "twoAnimations": 2,
+   "addThenRemove": 0,
+   "entryBrand": "[object Animation]",
+   "animationIdentity": true,
+   "behaviourMissing": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': 2 arguments required, but only 1 present.",
+   "behaviourUndefined": "TypeError: Failed to execute 'addAnimation' on 'AnimationTrigger': The provided value 'undefined' is not a valid enum value of type AnimationTriggerBehavior."
+  },
+  "insetNumbers": {
+   "none": "-818px|100px",
+   "auto": "-818px|100px",
+   "tenPx": "-808px|90px",
+   "twoLengths": "-798px|90px",
+   "percent": "-736.203125px|18.203125px",
+   "autoString": "[object CSSUnitValue]",
+   "unitAndAuto": "[object CSSUnitValue]",
+   "twoAutos": "[object CSSUnitValue]",
+   "emptySequence": "-818px|100px",
+   "unitSequence": "-808px|90px"
+  },
+  "rangeOffset": {
+   "fromNull": "{}",
+   "fromEmpty": "{}",
+   "fromArray": "{}",
+   "fromNamed": "{\"rangeName\":\"cover\"}",
+   "keys": "[]",
+   "members": {
+    "members": [
+     "offset",
+     "rangeName"
+    ],
+    "outcome": "[object TimelineTrigger]"
+   },
+   "stringStaysString": "string"
+  },
+  "grammar": {
+   "activation": {
+    "entry-crossing": "entry-crossing",
+    "exit-crossing": "exit-crossing",
+    "cover 100%": "cover 100%",
+    "50%": "50%",
+    "10px": "10px",
+    "-10px": "-10px",
+    "10em": "10em",
+    "cover 10px": "cover 10px",
+    "cover -5%": "cover -5%",
+    "cover cover": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "normal 0%": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "auto 0%": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "0% cover": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "COVER": "COVER",
+    "Cover 50%": "Cover 50%",
+    "cover  50%": "cover  50%",
+    " cover 50% ": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "cover 50": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "cover 0%extra": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "calc(10px + 5%)": "calc(10px + 5%)",
+    "var(--x)": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "none": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "initial": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair"
+   },
+   "active": {
+    "entry-crossing": "entry-crossing",
+    "exit-crossing": "exit-crossing",
+    "cover 100%": "cover 100%",
+    "50%": "50%",
+    "10px": "10px",
+    "-10px": "-10px",
+    "10em": "10em",
+    "cover 10px": "cover 10px",
+    "cover -5%": "cover -5%",
+    "cover cover": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "normal 0%": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "auto 0%": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "0% cover": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "COVER": "COVER",
+    "Cover 50%": "Cover 50%",
+    "cover  50%": "cover  50%",
+    " cover 50% ": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "cover 50": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "cover 0%extra": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "calc(10px + 5%)": "calc(10px + 5%)",
+    "var(--x)": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "none": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair",
+    "initial": "TypeError: Failed to construct 'TimelineTrigger': TimelineTrigger range must be a name <length-percent> pair"
+   }
+  },
+  "shapes": {
+   "AnimationTrigger": "addAnimation/2[ecw],getAnimations/0[ecw],removeAnimation/1[ecw],@@toStringTag=AnimationTrigger",
+   "TimelineTrigger": "get ranges[ec-],@@toStringTag=TimelineTrigger",
+   "TimelineTriggerRange": "get timeline[ec-],get activationRangeStart[ec-],get activationRangeEnd[ec-],get activeRangeStart[ec-],get activeRangeEnd[ec-],@@toStringTag=TimelineTriggerRange",
+   "TimelineTriggerRangeList": "entries/0[ecw],keys/0[ecw],values/0[ecw],forEach/1[ecw],get length[ec-],item/1[ecw],@@toStringTag=TimelineTriggerRangeList,@@iterator=fn:values",
+   "ScrollTimeline": "get source[ec-],get axis[ec-],@@toStringTag=ScrollTimeline",
+   "ViewTimeline": "get subject[ec-],get startOffset[ec-],get endOffset[ec-],@@toStringTag=ViewTimeline",
+   "AnimationTimeline": "get currentTime[ec-],get duration[ec-],@@toStringTag=AnimationTimeline"
+  },
+  "unreachable": {
+   "AnimationTrigger": {
+    "addAnimation": "TypeError: Illegal invocation",
+    "getAnimations": "TypeError: Illegal invocation",
+    "removeAnimation": "TypeError: Illegal invocation"
+   },
+   "TimelineTriggerRange": {
+    "timeline": "TypeError: Illegal invocation",
+    "activationRangeStart": "TypeError: Illegal invocation",
+    "activationRangeEnd": "TypeError: Illegal invocation",
+    "activeRangeStart": "TypeError: Illegal invocation",
+    "activeRangeEnd": "TypeError: Illegal invocation"
+   },
+   "TimelineTriggerRangeList": {
+    "entries": "[object Array Iterator]",
+    "keys": "[object Array Iterator]",
+    "values": "[object Array Iterator]",
+    "forEach": "TypeError: Illegal invocation",
+    "length": "TypeError: Illegal invocation",
+    "item": "TypeError: Illegal invocation"
+   }
+  }
+ }
+}

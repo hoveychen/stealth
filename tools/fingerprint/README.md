@@ -5173,14 +5173,23 @@ window surface while their implementations stayed for internal callers, and
 `Snapshot`'s `[Global]` flattening stopped copying `EventTarget`'s three members
 onto the global. That branch reached the same 13-and-83 split independently from
 its own headed run, which is the reason to trust either reading. The 1167 above
-is the pre-merge count; the surface is **1161** now, so the own-name excess is
-7, not 13, and the three counts that moved with it are in the secure-context
-table below. The 83 in the other direction did not move — nothing was added.
+is the pre-merge count; the surface is **1208** now — 1161 after that merge, plus
+the 47 names `prd/window-surface-shells` landed — so the own-name excess is 7,
+not 13, and the three counts that moved with it are in the secure-context table
+below. The other direction moved with it: the 83 is **36** now, because those 47
+came out of it.
 
-**The other direction is the larger one: 83 globals headed Chrome has and we do
-not** (`CSSFunctionRule`, `CloseWatcher`, `Temporal`, `Observable`,
-`PressureObserver`, the SharedStorage family, `LanguageModel` / `Summarizer` /
-`Translator`, the fenced-frame family, ...). The full lists are in
+**The other direction is still the larger one: 36 globals headed Chrome has and
+we do not** (`CloseWatcher`, `Temporal`, `Observable`, `PressureObserver`, the
+SharedStorage family, `LanguageModel` / `Summarizer` / `Translator`, the
+fenced-frame family, ...). It was 83 until `prd/window-surface-shells` took the
+47 pure-surface names out of it — every one whose whole observable behaviour is
+an interface object, a prototype and a set of defaults, which is the half of the
+gap that costs nothing but the writing. What is left is the capability half:
+names a page can *use*, where exposing the interface without the behaviour behind
+it is a louder tell than not having it (`CloseWatcher` needs close requests,
+`PressureObserver` needs a sensor, the on-device-AI family needs a model). The
+full lists are in
 `results/probes/probe-globals.{chrome,chrome-headless,lightpanda}.json`.
 
 **And the prototype chain still differs**, which G19 measured and G17 owns:
@@ -5191,7 +5200,7 @@ EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours was
 Object.prototype(12)`, and the extra intermediate is where the three duplicated
 `EventTarget` members came from. The duplicates are gone (the flattening skips
 that level now, so the global reads `addEventListener` through the chain, as
-Chrome's does) and the head of the chain is 1161; the extra level itself is
+Chrome's does) and the head of the chain is 1208; the extra level itself is
 still there, so this is still a difference a detector can walk.
 
 ## The 234 globals that were not behind the secure-context gate (2026-08-20)
@@ -5208,36 +5217,43 @@ Not https-vs-http, which also changes the scheme; not a different port or path.
 Same `python3 -m http.server`, same port, same bytes — only the host differs, so
 the only variable is whether that host is loopback:
 
-|                                   | headed Chrome 151 | this engine, before | after |
-|-----------------------------------|------:|------:|------:|
-| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 |
-| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |
-| names behind the gate               |  252 |    0 |  234 |
-| worker realm, secure owner          |  336 |  232 |  233 |
-| worker realm, insecure owner        |  243 |  232 |  222 |
+|                                   | headed Chrome 151 | this engine, before | gate landed | now |
+|-----------------------------------|------:|------:|------:|------:|
+| `http://localhost:8777`, own names  | 1237 | 1167 | 1167 | 1208 |
+| `http://192.168.68.78:8777`         |  985 | 1167 |  933 |  973 |
+| names behind the gate               |  252 |    0 |  234 |  235 |
+| worker realm, secure owner          |  336 |  232 |  233 |  233 |
+| worker realm, insecure owner        |  243 |  232 |  222 |  222 |
 
-The "after" column is the gate on its own, measured before
-`prd/window-surface-extras` took six names off the surface. Both totals moved by
-those same six — none of the six is `[SecureContext]`, so the gated count is
-unchanged — and the suite now pins the current numbers instead:
-`frames/secure_context_gate.html` asserts **1161** secure / **927** insecure and
-**219** for a worker with an insecure owner, `worker/secure_context.html` asserts
-**230** for one with a secure owner.
+The "gate landed" column is the gate on its own, measured before
+`prd/window-surface-extras` took six names off the surface (both totals moved by
+those same six, none of which is `[SecureContext]`). The "now" column is after
+`prd/window-surface-shells` added 47: the secure surface takes all 47 and the
+insecure one 46, because exactly one of them — `ClipboardChangeEvent` — is
+`[SecureContext]` in Chrome, which is why the gated count went 234 → 235. The
+worker realm holds still at the *frame* level because only three of the 47 exist
+there at all (`ReportBody`, `Origin`, `WebGLObject`), and those moved
+`worker/secure_context.html` from 230 to **233**. The suite pins every one of
+these: `frames/secure_context_gate.html` asserts **1208** secure / **973**
+insecure and **222** for a worker with an insecure owner.
 
-252 names in Chrome. 234 of them are names this engine has, and it leaked all
-234 on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
+252 names in Chrome. 235 of them are names this engine has, and before the gate
+it leaked all of them on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
 HID / Serial / Bluetooth / MIDI, credentials, payments, presentation, the
 file-system-access handles, `ServiceWorker`, `WebTransport`, `caches`,
 `cookieStore`, `showOpenFilePicker`, `queryLocalFonts`, `ondevicemotion`,
-`onpointerrawupdate`. The other 18 of Chrome's 252 it does not implement at all,
-so they belong to the 83-missing count above, not here.
+`onpointerrawupdate`. The other 17 of Chrome's 252 it does not implement at all
+(`BarcodeDetector`, `DocumentPictureInPicture`, `FileSystemObserver`,
+`PressureObserver`, the on-device-AI family, `sharedStorage`, ... — measured), so
+they belong to the 36-missing count above, not here. It was 18 until
+`ClipboardChangeEvent` landed with the 47.
 
 After the gate: **0 of Chrome's 252 still leak, and 0 names are gated that
-Chrome does not gate.** The residual difference is the same one the section
-above records, which is the cross-check that the secure surface was not
-disturbed: 13 extra / 83 missing on a trustworthy origin, 13 extra / 65 missing
-on an untrustworthy one (the 18 gated names we lack stop counting as missing
-once Chrome hides them too).
+Chrome does not gate** (re-measured on all four readings after the 47 landed).
+The residual difference is the same one the section above records, which is the
+cross-check that the secure surface was not disturbed: 7 extra / 36 missing on a
+trustworthy origin, 7 extra / 19 missing on an untrustworthy one (the 17 gated
+names we lack stop counting as missing once Chrome hides them too).
 
 **Two things the gate turned up that the value of `isSecureContext` had been
 getting wrong.**
@@ -5285,7 +5301,7 @@ The gap: a frame that **never navigates** keeps the full surface, because the
 gate hangs off document commit. In practice that is the bare `about:blank` CDP
 target — no page script observes it, and every document that loads content
 commits. So a reading of this engine taken on `about:blank` still reports the
-full ungated surface (1167 when this was written, 1161 now); pass a url. Gating at frame init instead would strip the surface off a root
+full ungated surface (1167 when this was written, 1208 now); pass a url. Gating at frame init instead would strip the surface off a root
 frame, which is born at `about:blank` and navigates to its real URL inside the
 same context.
 
@@ -5297,3 +5313,100 @@ it lands on the loopback listener, so it reaches the test server on 9582, but it
 is not a loopback *host* — Chrome answers false there and hands out the same 985
 names as the LAN address (measured). It is the only insecure origin the suite
 can reach without binding a second interface.
+
+## The 47 pure-surface globals (2026-08-21)
+
+The section above left 83 globals headed Chrome has and this engine does not.
+`probes/probe-shapes.js` read all 83 the way a detector would — the interface
+object's `typeof` / `name` / `length` / descriptor, the prototype chain, every
+prototype member with its kind and arity, `@@toStringTag`, the brand, the static
+members, and what `new X()` and `X()` each refuse — and split them in two:
+
+* **47 pure surface.** Everything a page can observe is the interface object, the
+  prototype and a set of defaults. Nothing behind them has to work, because in
+  Chrome nothing is behind them either on a page like ours: no report is queued,
+  no view transition runs, no scroll container scrolls, no camera opens.
+* **36 capability.** Names a page can *use*, where exposing the interface without
+  the behaviour is a louder tell than not having it — `CloseWatcher` needs close
+  requests, `PressureObserver` a sensor, `LanguageModel` / `Summarizer` /
+  `Translator` an on-device model, the SharedStorage and fenced-frame families a
+  whole storage and framing model.
+
+`prd/window-surface-shells` landed the 47 (own names 1161 → **1208**, missing 83
+→ **36**, and 44 of the 47 now match Chrome's `probe-shapes` reading field for
+field). Seven probes carry the measurements: `probe-shapes.js` for the shapes,
+`probe-shapes-worker.js` for which of them a worker realm carries, and
+`probe-s2-events.js` / `probe-s3-reporting.js` / `probe-s5-timelines.js` /
+`probe-s6-elements.js` / `probe-s7-misc.js` for the behaviour of each family.
+
+**"Illegal constructor" does not mean unreachable, and that cost four probe
+rounds.** `new TimelineTrigger([5])` is refused as "not of type
+'TimelineTriggerOptions'" while `([null])` and `([document.timeline])` both
+*succeed* — so the argument is a sequence of **dictionaries**, not of ranges, and
+a page builds a `TimelineTriggerRange` by handing one over and reads it back off
+`ranges`. Five of that family's six have live instances; only the list itself is
+never constructed. Reading the spec drafts instead would have produced an
+unreachable stub with no behaviour and no defaults to check.
+
+**A Proxy is the cheapest way to read a dictionary's WebIDL declaration.** Chrome's
+bindings touch exactly the declared members, in their own order, so a
+`new Proxy({}, {get(_, k) { seen.push(k) }})` handed to a constructor logs the
+declaration: `TimelineTriggerOptions` is `{activationRangeEnd,
+activationRangeStart, activeRangeEnd, activeRangeStart, timeline}`,
+`HTMLMediaStreamConstraints` is `{audio, video}`, `TextFormatInit` is `{rangeEnd,
+rangeStart, underlineStyle, underlineThickness}`. Every one of those was measured
+that way rather than taken from a draft — and two of them contradict what a draft
+would suggest: `AnimationTriggerBehavior` is `play` / `pause` / `none`, not the
+`once` / `repeat` / `alternate` / `state` the spec text implies, and
+`HTMLMediaStreamConstraints`' members are each a `MediaTrackConstraintSet`, so
+`{video: true}` — the spelling every `getUserMedia()` example uses — is *refused*.
+
+**Two constructors ignore their argument, in opposite directions.**
+`new Origin(anythingAtAll)` always answers an **opaque** origin: a valid URL, a
+garbage string, a number and null all read back `opaque === true`, and a real
+origin only comes from the static `Origin.from()`. `new ClipboardChangeEvent('x')`
+has no type argument at all, so the string is read as the init dictionary and
+refused as one.
+
+**Three of the 47 are element interfaces**, so the surface is not just a
+prototype: `selectedcontent`, `geolocation` and `usermedia` map to
+`HTMLSelectedContentElement` / `HTMLGeolocationElement` / `HTMLUserMediaElement`
+through both `createElement()` and the parser, where this engine answered
+`HTMLUnknownElement`. The tag names were measured by feeding candidates through
+both routes rather than guessed, and so were the default `display` values
+(`inline` for the first, `inline-block` for the other two).
+
+**`WebGLObject` was a documented deviation and is not one now.** Eleven of the
+WebGL handles hang off it in Chrome; `canvas/webgl_objects.zig` used to record
+that as deliberately skipped, on the grounds that the prototype link cost a
+chained allocation and nothing called it. A detector walking
+`Object.getPrototypeOf(WebGLBuffer.prototype)` calls it. The three Chrome roots
+on `Object` — a uniform location, an active-info record, a precision-format
+record — stay there (measured).
+
+**Three engine-wide differences turned up next door and are deliberately not
+fixed here**, because each is one shape shared by hundreds of interfaces rather
+than anything about these 47:
+
+* Reading a getter off a *prototype* throws `TypeError: Illegal invocation` in
+  Chrome for every interface (seen in `probe-shapes`, `probe-s3-reporting`,
+  `probe-s5-timelines`, `probe-s7-misc`). This engine answers the getter.
+* `new HTMLPictureElement()` gives a bare `TypeError` here against Chrome's
+  "Failed to construct 'HTMLPictureElement': Illegal constructor", and a bare
+  call names `HTMLElement` rather than the subclass. Every HTML element interface
+  is the same, which is why the three new ones are the only remaining
+  `probe-shapes` field mismatches of the 47.
+* An **undefined custom element's `constructor.name` leaks an internal type
+  name** — `document.createElement('a-b').constructor.name` is
+  `browser.webapi.element.html.Custom.JsApi` here and `HTMLElement` in Chrome.
+  That one is a Zig symbol in a page-readable string, so it is the loudest of the
+  three and wants its own plan.
+
+**What is deliberately not reproduced.** Two readings in the scroll-driven family
+are layout: a `ViewTimeline` with a subject reports its progress and its two
+scroll offsets from box geometry (`-818px` / `100px` for a 100px box in an 818px
+viewport, measured), and this engine has no boxes, so those read `0%` and `0px`.
+A `ScrollTimeline`'s null `currentTime` is *not* a gap — Chrome answers null
+whenever the source cannot scroll, which is every source here. `FrozenArray`
+members hand back ordinary arrays, which is the engine-wide gap `window.viewport`'s
+`segments` inherits.

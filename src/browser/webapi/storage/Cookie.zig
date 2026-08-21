@@ -653,7 +653,9 @@ fn areSameSite(origin_url_: ?[:0]const u8, target_host: []const u8) !bool {
     return std.mem.eql(u8, findSecondLevelDomain(target_host), findSecondLevelDomain(origin_host));
 }
 
-fn findSecondLevelDomain(host: []const u8) []const u8 {
+/// The registrable domain (eTLD+1) of a host. Public because Origin's
+/// isSameSite needs exactly this walk (see webapi/Origin.zig).
+pub fn findSecondLevelDomain(host: []const u8) []const u8 {
     var i = std.mem.lastIndexOfScalar(u8, host, '.') orelse return host;
     while (true) {
         i = std.mem.lastIndexOfScalar(u8, host[0..i], '.') orelse return host;

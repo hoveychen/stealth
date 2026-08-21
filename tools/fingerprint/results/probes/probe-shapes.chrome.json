@@ -1,0 +1,1492 @@
+{
+  "href": "http://localhost:8777/",
+  "isSecureContext": true,
+  "shapes": {
+    "AnimationTrigger": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "AnimationTrigger",
+      "fnSource": "function AnimationTrigger() { [native code] }",
+      "protoChain": [
+        "AnimationTrigger",
+        "Object"
+      ],
+      "protoMembers": [
+        "addAnimation:method(2)",
+        "getAnimations:method(0)",
+        "removeAnimation:method(1)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "AnimationTrigger",
+      "protoBrand": "[object AnimationTrigger]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'AnimationTrigger': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'AnimationTrigger': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSPViolationReportBody": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSPViolationReportBody",
+      "fnSource": "function CSPViolationReportBody() { [native code] }",
+      "protoChain": [
+        "CSPViolationReportBody",
+        "ReportBody",
+        "Object"
+      ],
+      "protoMembers": [
+        "documentURL:get",
+        "referrer:get",
+        "blockedURL:get",
+        "effectiveDirective:get",
+        "originalPolicy:get",
+        "sourceFile:get",
+        "sample:get",
+        "disposition:get",
+        "statusCode:get",
+        "lineNumber:get",
+        "columnNumber:get",
+        "toJSON:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSPViolationReportBody",
+      "protoBrand": "[object CSPViolationReportBody]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSPViolationReportBody': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSPViolationReportBody': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSFontFeatureValuesRule": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSFontFeatureValuesRule",
+      "fnSource": "function CSSFontFeatureValuesRule() { [native code] }",
+      "protoChain": [
+        "CSSFontFeatureValuesRule",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "fontFamily:get/set",
+        "annotation:get",
+        "ornaments:get",
+        "stylistic:get",
+        "swash:get",
+        "characterVariant:get",
+        "styleset:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSFontFeatureValuesRule",
+      "protoBrand": "[object CSSFontFeatureValuesRule]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSFontFeatureValuesRule': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSFontFeatureValuesRule': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSFunctionDeclarations": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSFunctionDeclarations",
+      "fnSource": "function CSSFunctionDeclarations() { [native code] }",
+      "protoChain": [
+        "CSSFunctionDeclarations",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "style:get/set",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSFunctionDeclarations",
+      "protoBrand": "[object CSSFunctionDeclarations]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSFunctionDeclarations': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSFunctionDeclarations': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSFunctionDescriptors": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSFunctionDescriptors",
+      "fnSource": "function CSSFunctionDescriptors() { [native code] }",
+      "protoChain": [
+        "CSSFunctionDescriptors",
+        "CSSStyleDeclaration",
+        "Object"
+      ],
+      "protoMembers": [
+        "result:get/set",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSFunctionDescriptors",
+      "protoBrand": "[object CSSFunctionDescriptors]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSFunctionDescriptors': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSFunctionDescriptors': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSFunctionRule": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSFunctionRule",
+      "fnSource": "function CSSFunctionRule() { [native code] }",
+      "protoChain": [
+        "CSSFunctionRule",
+        "CSSGroupingRule",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "name:get",
+        "returnType:get",
+        "getParameters:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSFunctionRule",
+      "protoBrand": "[object CSSFunctionRule]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSFunctionRule': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSFunctionRule': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSMarginRule": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSMarginRule",
+      "fnSource": "function CSSMarginRule() { [native code] }",
+      "protoChain": [
+        "CSSMarginRule",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "name:get",
+        "style:get/set",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSMarginRule",
+      "protoBrand": "[object CSSMarginRule]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSMarginRule': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSMarginRule': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSNestedDeclarations": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSNestedDeclarations",
+      "fnSource": "function CSSNestedDeclarations() { [native code] }",
+      "protoChain": [
+        "CSSNestedDeclarations",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "style:get/set",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSNestedDeclarations",
+      "protoBrand": "[object CSSNestedDeclarations]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSNestedDeclarations': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSNestedDeclarations': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSPositionTryDescriptors": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSPositionTryDescriptors",
+      "fnSource": "function CSSPositionTryDescriptors() { [native code] }",
+      "protoChain": [
+        "CSSPositionTryDescriptors",
+        "CSSStyleDeclaration",
+        "Object"
+      ],
+      "protoMembers": [
+        "margin:get/set",
+        "marginTop:get/set",
+        "marginRight:get/set",
+        "marginBottom:get/set",
+        "marginLeft:get/set",
+        "marginBlock:get/set",
+        "marginBlockStart:get/set",
+        "marginBlockEnd:get/set",
+        "marginInline:get/set",
+        "marginInlineStart:get/set",
+        "marginInlineEnd:get/set",
+        "margin-top:get/set",
+        "margin-right:get/set",
+        "margin-bottom:get/set",
+        "margin-left:get/set",
+        "margin-block:get/set",
+        "margin-block-start:get/set",
+        "margin-block-end:get/set",
+        "margin-inline:get/set",
+        "margin-inline-start:get/set",
+        "margin-inline-end:get/set",
+        "inset:get/set",
+        "insetBlock:get/set",
+        "insetBlockStart:get/set",
+        "insetBlockEnd:get/set",
+        "insetInline:get/set",
+        "insetInlineStart:get/set",
+        "insetInlineEnd:get/set",
+        "top:get/set",
+        "left:get/set",
+        "right:get/set",
+        "bottom:get/set",
+        "inset-block:get/set",
+        "inset-block-start:get/set",
+        "inset-block-end:get/set",
+        "inset-inline:get/set",
+        "inset-inline-start:get/set",
+        "inset-inline-end:get/set",
+        "width:get/set",
+        "minWidth:get/set",
+        "maxWidth:get/set",
+        "height:get/set",
+        "minHeight:get/set",
+        "maxHeight:get/set",
+        "blockSize:get/set",
+        "minBlockSize:get/set",
+        "maxBlockSize:get/set",
+        "inlineSize:get/set",
+        "minInlineSize:get/set",
+        "maxInlineSize:get/set",
+        "min-width:get/set",
+        "max-width:get/set",
+        "min-height:get/set",
+        "max-height:get/set",
+        "block-size:get/set",
+        "min-block-size:get/set",
+        "max-block-size:get/set",
+        "inline-size:get/set",
+        "min-inline-size:get/set",
+        "max-inline-size:get/set",
+        "placeSelf:get/set",
+        "alignSelf:get/set",
+        "justifySelf:get/set",
+        "place-self:get/set",
+        "align-self:get/set",
+        "justify-self:get/set",
+        "positionAnchor:get/set",
+        "position-anchor:get/set",
+        "positionArea:get/set",
+        "position-area:get/set",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSPositionTryDescriptors",
+      "protoBrand": "[object CSSPositionTryDescriptors]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSPositionTryDescriptors': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSPositionTryDescriptors': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSPositionTryRule": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSPositionTryRule",
+      "fnSource": "function CSSPositionTryRule() { [native code] }",
+      "protoChain": [
+        "CSSPositionTryRule",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "name:get",
+        "style:get/set",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSPositionTryRule",
+      "protoBrand": "[object CSSPositionTryRule]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSPositionTryRule': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSPositionTryRule': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSScopeRule": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSScopeRule",
+      "fnSource": "function CSSScopeRule() { [native code] }",
+      "protoChain": [
+        "CSSScopeRule",
+        "CSSGroupingRule",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "start:get",
+        "end:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSScopeRule",
+      "protoBrand": "[object CSSScopeRule]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSScopeRule': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSScopeRule': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSStartingStyleRule": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSStartingStyleRule",
+      "fnSource": "function CSSStartingStyleRule() { [native code] }",
+      "protoChain": [
+        "CSSStartingStyleRule",
+        "CSSGroupingRule",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSStartingStyleRule",
+      "protoBrand": "[object CSSStartingStyleRule]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSStartingStyleRule': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSStartingStyleRule': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CSSViewTransitionRule": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CSSViewTransitionRule",
+      "fnSource": "function CSSViewTransitionRule() { [native code] }",
+      "protoChain": [
+        "CSSViewTransitionRule",
+        "CSSRule",
+        "Object"
+      ],
+      "protoMembers": [
+        "navigation:get",
+        "types:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CSSViewTransitionRule",
+      "protoBrand": "[object CSSViewTransitionRule]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CSSViewTransitionRule': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CSSViewTransitionRule': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "CharacterBoundsUpdateEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 1,
+      "fnName": "CharacterBoundsUpdateEvent",
+      "fnSource": "function CharacterBoundsUpdateEvent() { [native code] }",
+      "protoChain": [
+        "CharacterBoundsUpdateEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "rangeStart:get",
+        "rangeEnd:get",
+        "constructor:method(1)"
+      ],
+      "toStringTag": "CharacterBoundsUpdateEvent",
+      "protoBrand": "[object CharacterBoundsUpdateEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CharacterBoundsUpdateEvent': 1 argument required, but only 0 present.",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'CharacterBoundsUpdateEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "ClipboardChangeEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "ClipboardChangeEvent",
+      "fnSource": "function ClipboardChangeEvent() { [native code] }",
+      "protoChain": [
+        "ClipboardChangeEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "types:get",
+        "changeId:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "ClipboardChangeEvent",
+      "protoBrand": "[object ClipboardChangeEvent]",
+      "staticMembers": [],
+      "newBare": "constructed",
+      "newOneArg": "TypeError: Failed to construct 'ClipboardChangeEvent': The provided value is not of type 'ClipboardChangeEventInit'.",
+      "callBare": "TypeError: Failed to construct 'ClipboardChangeEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "CommandEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 1,
+      "fnName": "CommandEvent",
+      "fnSource": "function CommandEvent() { [native code] }",
+      "protoChain": [
+        "CommandEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "source:get",
+        "command:get",
+        "constructor:method(1)"
+      ],
+      "toStringTag": "CommandEvent",
+      "protoBrand": "[object CommandEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CommandEvent': 1 argument required, but only 0 present.",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'CommandEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "CrashReportContext": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "CrashReportContext",
+      "fnSource": "function CrashReportContext() { [native code] }",
+      "protoChain": [
+        "CrashReportContext",
+        "Object"
+      ],
+      "protoMembers": [
+        "delete:method(1)",
+        "initialize:method(1)",
+        "set:method(2)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "CrashReportContext",
+      "protoBrand": "[object CrashReportContext]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'CrashReportContext': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'CrashReportContext': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "HTMLGeolocationElement": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "HTMLGeolocationElement",
+      "fnSource": "function HTMLGeolocationElement() { [native code] }",
+      "protoChain": [
+        "HTMLGeolocationElement",
+        "HTMLElement",
+        "Element",
+        "Node",
+        "EventTarget",
+        "Object"
+      ],
+      "protoMembers": [
+        "onlocation:get/set",
+        "position:get",
+        "error:get",
+        "accuracymode:get/set",
+        "autolocate:get/set",
+        "watch:get/set",
+        "isValid:get",
+        "invalidReason:get",
+        "initialPermissionStatus:get",
+        "permissionStatus:get",
+        "onpromptaction:get/set",
+        "onpromptdismiss:get/set",
+        "onvalidationstatuschange:get/set",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "HTMLGeolocationElement",
+      "protoBrand": "[object HTMLGeolocationElement]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'HTMLGeolocationElement': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'HTMLGeolocationElement': Illegal constructor",
+      "callBare": "TypeError: Failed to construct 'HTMLGeolocationElement': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "HTMLSelectedContentElement": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "HTMLSelectedContentElement",
+      "fnSource": "function HTMLSelectedContentElement() { [native code] }",
+      "protoChain": [
+        "HTMLSelectedContentElement",
+        "HTMLElement",
+        "Element",
+        "Node",
+        "EventTarget",
+        "Object"
+      ],
+      "protoMembers": [
+        "constructor:method(0)"
+      ],
+      "toStringTag": "HTMLSelectedContentElement",
+      "protoBrand": "[object HTMLSelectedContentElement]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'HTMLSelectedContentElement': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'HTMLSelectedContentElement': Illegal constructor",
+      "callBare": "TypeError: Failed to construct 'HTMLSelectedContentElement': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "HTMLUserMediaElement": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "HTMLUserMediaElement",
+      "fnSource": "function HTMLUserMediaElement() { [native code] }",
+      "protoChain": [
+        "HTMLUserMediaElement",
+        "HTMLElement",
+        "Element",
+        "Node",
+        "EventTarget",
+        "Object"
+      ],
+      "protoMembers": [
+        "error:get",
+        "onstream:get/set",
+        "oncancel:get/set",
+        "onerror:get/set",
+        "stream:get",
+        "setConstraints:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "HTMLUserMediaElement",
+      "protoBrand": "[object HTMLUserMediaElement]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'HTMLUserMediaElement': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'HTMLUserMediaElement': Illegal constructor",
+      "callBare": "TypeError: Failed to construct 'HTMLUserMediaElement': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "IntegrityViolationReportBody": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "IntegrityViolationReportBody",
+      "fnSource": "function IntegrityViolationReportBody() { [native code] }",
+      "protoChain": [
+        "IntegrityViolationReportBody",
+        "ReportBody",
+        "Object"
+      ],
+      "protoMembers": [
+        "documentURL:get",
+        "blockedURL:get",
+        "destination:get",
+        "reportOnly:get",
+        "toJSON:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "IntegrityViolationReportBody",
+      "protoBrand": "[object IntegrityViolationReportBody]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'IntegrityViolationReportBody': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'IntegrityViolationReportBody': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "InteractionContentfulPaint": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "InteractionContentfulPaint",
+      "fnSource": "function InteractionContentfulPaint() { [native code] }",
+      "protoChain": [
+        "InteractionContentfulPaint",
+        "PerformanceEntry",
+        "Object"
+      ],
+      "protoMembers": [
+        "largestContentfulPaint:get",
+        "interactionId:get",
+        "toJSON:method(0)",
+        "paintTime:get",
+        "presentationTime:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "InteractionContentfulPaint",
+      "protoBrand": "[object InteractionContentfulPaint]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'InteractionContentfulPaint': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'InteractionContentfulPaint': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "InterestEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 1,
+      "fnName": "InterestEvent",
+      "fnSource": "function InterestEvent() { [native code] }",
+      "protoChain": [
+        "InterestEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "source:get",
+        "constructor:method(1)"
+      ],
+      "toStringTag": "InterestEvent",
+      "protoBrand": "[object InterestEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'InterestEvent': 1 argument required, but only 0 present.",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'InterestEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "MediaStreamTrackVideoStats": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "MediaStreamTrackVideoStats",
+      "fnSource": "function MediaStreamTrackVideoStats() { [native code] }",
+      "protoChain": [
+        "MediaStreamTrackVideoStats",
+        "Object"
+      ],
+      "protoMembers": [
+        "deliveredFrames:get",
+        "discardedFrames:get",
+        "totalFrames:get",
+        "toJSON:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "MediaStreamTrackVideoStats",
+      "protoBrand": "[object MediaStreamTrackVideoStats]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'MediaStreamTrackVideoStats': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'MediaStreamTrackVideoStats': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "NavigationPrecommitController": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "NavigationPrecommitController",
+      "fnSource": "function NavigationPrecommitController() { [native code] }",
+      "protoChain": [
+        "NavigationPrecommitController",
+        "Object"
+      ],
+      "protoMembers": [
+        "redirect:method(1)",
+        "addHandler:method(1)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "NavigationPrecommitController",
+      "protoBrand": "[object NavigationPrecommitController]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'NavigationPrecommitController': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'NavigationPrecommitController': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "NotRestoredReasonDetails": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "NotRestoredReasonDetails",
+      "fnSource": "function NotRestoredReasonDetails() { [native code] }",
+      "protoChain": [
+        "NotRestoredReasonDetails",
+        "Object"
+      ],
+      "protoMembers": [
+        "reason:get",
+        "toJSON:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "NotRestoredReasonDetails",
+      "protoBrand": "[object NotRestoredReasonDetails]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'NotRestoredReasonDetails': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'NotRestoredReasonDetails': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "NotRestoredReasons": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "NotRestoredReasons",
+      "fnSource": "function NotRestoredReasons() { [native code] }",
+      "protoChain": [
+        "NotRestoredReasons",
+        "Object"
+      ],
+      "protoMembers": [
+        "src:get",
+        "id:get",
+        "name:get",
+        "url:get",
+        "reasons:get",
+        "children:get",
+        "toJSON:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "NotRestoredReasons",
+      "protoBrand": "[object NotRestoredReasons]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'NotRestoredReasons': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'NotRestoredReasons': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "Origin": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "Origin",
+      "fnSource": "function Origin() { [native code] }",
+      "protoChain": [
+        "Origin",
+        "Object"
+      ],
+      "protoMembers": [
+        "opaque:get",
+        "isSameOrigin:method(1)",
+        "isSameSite:method(1)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "Origin",
+      "protoBrand": "[object Origin]",
+      "staticMembers": [
+        "from"
+      ],
+      "newBare": "constructed",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'Origin': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "PageRevealEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 1,
+      "fnName": "PageRevealEvent",
+      "fnSource": "function PageRevealEvent() { [native code] }",
+      "protoChain": [
+        "PageRevealEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "viewTransition:get",
+        "constructor:method(1)"
+      ],
+      "toStringTag": "PageRevealEvent",
+      "protoBrand": "[object PageRevealEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'PageRevealEvent': 1 argument required, but only 0 present.",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'PageRevealEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "PageSwapEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 1,
+      "fnName": "PageSwapEvent",
+      "fnSource": "function PageSwapEvent() { [native code] }",
+      "protoChain": [
+        "PageSwapEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "viewTransition:get",
+        "activation:get",
+        "constructor:method(1)"
+      ],
+      "toStringTag": "PageSwapEvent",
+      "protoBrand": "[object PageSwapEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'PageSwapEvent': 1 argument required, but only 0 present.",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'PageSwapEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "PerformanceLongAnimationFrameTiming": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "PerformanceLongAnimationFrameTiming",
+      "fnSource": "function PerformanceLongAnimationFrameTiming() { [native code] }",
+      "protoChain": [
+        "PerformanceLongAnimationFrameTiming",
+        "PerformanceEntry",
+        "Object"
+      ],
+      "protoMembers": [
+        "renderStart:get",
+        "styleAndLayoutStart:get",
+        "firstUIEventTimestamp:get",
+        "blockingDuration:get",
+        "scripts:get",
+        "toJSON:method(0)",
+        "paintTime:get",
+        "presentationTime:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "PerformanceLongAnimationFrameTiming",
+      "protoBrand": "[object PerformanceLongAnimationFrameTiming]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'PerformanceLongAnimationFrameTiming': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'PerformanceLongAnimationFrameTiming': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "PerformanceScriptTiming": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "PerformanceScriptTiming",
+      "fnSource": "function PerformanceScriptTiming() { [native code] }",
+      "protoChain": [
+        "PerformanceScriptTiming",
+        "PerformanceEntry",
+        "Object"
+      ],
+      "protoMembers": [
+        "invokerType:get",
+        "invoker:get",
+        "windowAttribution:get",
+        "executionStart:get",
+        "forcedStyleAndLayoutDuration:get",
+        "pauseDuration:get",
+        "window:get",
+        "sourceURL:get",
+        "sourceFunctionName:get",
+        "sourceCharPosition:get",
+        "toJSON:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "PerformanceScriptTiming",
+      "protoBrand": "[object PerformanceScriptTiming]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'PerformanceScriptTiming': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'PerformanceScriptTiming': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "PerformanceSoftNavigation": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "PerformanceSoftNavigation",
+      "fnSource": "function PerformanceSoftNavigation() { [native code] }",
+      "protoChain": [
+        "PerformanceSoftNavigation",
+        "PerformanceEntry",
+        "Object"
+      ],
+      "protoMembers": [
+        "navigationType:get",
+        "interactionId:get",
+        "getLargestInteractionContentfulPaint:method(0)",
+        "paintTime:get",
+        "presentationTime:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "PerformanceSoftNavigation",
+      "protoBrand": "[object PerformanceSoftNavigation]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'PerformanceSoftNavigation': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'PerformanceSoftNavigation': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "ReportBody": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "ReportBody",
+      "fnSource": "function ReportBody() { [native code] }",
+      "protoChain": [
+        "ReportBody",
+        "Object"
+      ],
+      "protoMembers": [
+        "toJSON:method(0)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "ReportBody",
+      "protoBrand": "[object ReportBody]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'ReportBody': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'ReportBody': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "ScrollTimeline": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "ScrollTimeline",
+      "fnSource": "function ScrollTimeline() { [native code] }",
+      "protoChain": [
+        "ScrollTimeline",
+        "AnimationTimeline",
+        "Object"
+      ],
+      "protoMembers": [
+        "source:get",
+        "axis:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "ScrollTimeline",
+      "protoBrand": "[object ScrollTimeline]",
+      "staticMembers": [],
+      "newBare": "constructed",
+      "newOneArg": "TypeError: Failed to construct 'ScrollTimeline': The provided value is not of type 'ScrollTimelineOptions'.",
+      "callBare": "TypeError: Failed to construct 'ScrollTimeline': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "SnapEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "SnapEvent",
+      "fnSource": "function SnapEvent() { [native code] }",
+      "protoChain": [
+        "SnapEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "snapTargetBlock:get",
+        "snapTargetInline:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "SnapEvent",
+      "protoBrand": "[object SnapEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'SnapEvent': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'SnapEvent': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "TextFormat": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "TextFormat",
+      "fnSource": "function TextFormat() { [native code] }",
+      "protoChain": [
+        "TextFormat",
+        "Object"
+      ],
+      "protoMembers": [
+        "rangeStart:get",
+        "rangeEnd:get",
+        "underlineStyle:get",
+        "underlineThickness:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "TextFormat",
+      "protoBrand": "[object TextFormat]",
+      "staticMembers": [],
+      "newBare": "constructed",
+      "newOneArg": "TypeError: Failed to construct 'TextFormat': The provided value is not of type 'TextFormatInit'.",
+      "callBare": "TypeError: Failed to construct 'TextFormat': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "TextFormatUpdateEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 1,
+      "fnName": "TextFormatUpdateEvent",
+      "fnSource": "function TextFormatUpdateEvent() { [native code] }",
+      "protoChain": [
+        "TextFormatUpdateEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "getTextFormats:method(0)",
+        "constructor:method(1)"
+      ],
+      "toStringTag": "TextFormatUpdateEvent",
+      "protoBrand": "[object TextFormatUpdateEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'TextFormatUpdateEvent': 1 argument required, but only 0 present.",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'TextFormatUpdateEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "TextUpdateEvent": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 1,
+      "fnName": "TextUpdateEvent",
+      "fnSource": "function TextUpdateEvent() { [native code] }",
+      "protoChain": [
+        "TextUpdateEvent",
+        "Event",
+        "Object"
+      ],
+      "protoMembers": [
+        "updateRangeStart:get",
+        "updateRangeEnd:get",
+        "text:get",
+        "selectionStart:get",
+        "selectionEnd:get",
+        "constructor:method(1)"
+      ],
+      "toStringTag": "TextUpdateEvent",
+      "protoBrand": "[object TextUpdateEvent]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'TextUpdateEvent': 1 argument required, but only 0 present.",
+      "newOneArg": "constructed",
+      "callBare": "TypeError: Failed to construct 'TextUpdateEvent': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "TimelineTrigger": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "TimelineTrigger",
+      "fnSource": "function TimelineTrigger() { [native code] }",
+      "protoChain": [
+        "TimelineTrigger",
+        "AnimationTrigger",
+        "Object"
+      ],
+      "protoMembers": [
+        "ranges:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "TimelineTrigger",
+      "protoBrand": "[object TimelineTrigger]",
+      "staticMembers": [],
+      "newBare": "constructed",
+      "newOneArg": "TypeError: Failed to construct 'TimelineTrigger': The provided value cannot be converted to a sequence.",
+      "callBare": "TypeError: Failed to construct 'TimelineTrigger': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "TimelineTriggerRange": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "TimelineTriggerRange",
+      "fnSource": "function TimelineTriggerRange() { [native code] }",
+      "protoChain": [
+        "TimelineTriggerRange",
+        "Object"
+      ],
+      "protoMembers": [
+        "timeline:get",
+        "activationRangeStart:get",
+        "activationRangeEnd:get",
+        "activeRangeStart:get",
+        "activeRangeEnd:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "TimelineTriggerRange",
+      "protoBrand": "[object TimelineTriggerRange]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'TimelineTriggerRange': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'TimelineTriggerRange': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "TimelineTriggerRangeList": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "TimelineTriggerRangeList",
+      "fnSource": "function TimelineTriggerRangeList() { [native code] }",
+      "protoChain": [
+        "TimelineTriggerRangeList",
+        "Object"
+      ],
+      "protoMembers": [
+        "entries:method(0)",
+        "keys:method(0)",
+        "values:method(0)",
+        "forEach:method(1)",
+        "length:get",
+        "item:method(1)",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "TimelineTriggerRangeList",
+      "protoBrand": "[object TimelineTriggerRangeList]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'TimelineTriggerRangeList': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'TimelineTriggerRangeList': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "ViewTimeline": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "ViewTimeline",
+      "fnSource": "function ViewTimeline() { [native code] }",
+      "protoChain": [
+        "ViewTimeline",
+        "ScrollTimeline",
+        "AnimationTimeline",
+        "Object"
+      ],
+      "protoMembers": [
+        "subject:get",
+        "startOffset:get",
+        "endOffset:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "ViewTimeline",
+      "protoBrand": "[object ViewTimeline]",
+      "staticMembers": [],
+      "newBare": "constructed",
+      "newOneArg": "TypeError: Failed to construct 'ViewTimeline': The provided value is not of type 'ViewTimelineOptions'.",
+      "callBare": "TypeError: Failed to construct 'ViewTimeline': Please use the 'new' operator, this DOM object constructor cannot be called as a function."
+    },
+    "Viewport": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "Viewport",
+      "fnSource": "function Viewport() { [native code] }",
+      "protoChain": [
+        "Viewport",
+        "Object"
+      ],
+      "protoMembers": [
+        "segments:get",
+        "constructor:method(0)"
+      ],
+      "toStringTag": "Viewport",
+      "protoBrand": "[object Viewport]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'Viewport': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'Viewport': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "WebGLObject": {
+      "present": true,
+      "descriptor": {
+        "writable": true,
+        "enumerable": false,
+        "configurable": true,
+        "accessor": false
+      },
+      "typeof": "function",
+      "length": 0,
+      "fnName": "WebGLObject",
+      "fnSource": "function WebGLObject() { [native code] }",
+      "protoChain": [
+        "WebGLObject",
+        "Object"
+      ],
+      "protoMembers": [
+        "constructor:method(0)"
+      ],
+      "toStringTag": "WebGLObject",
+      "protoBrand": "[object WebGLObject]",
+      "staticMembers": [],
+      "newBare": "TypeError: Failed to construct 'WebGLObject': Illegal constructor",
+      "newOneArg": "TypeError: Failed to construct 'WebGLObject': Illegal constructor",
+      "callBare": "TypeError: Illegal constructor"
+    },
+    "crashReport": {
+      "present": true,
+      "descriptor": {
+        "enumerable": true,
+        "configurable": true,
+        "accessor": true
+      },
+      "typeof": "object",
+      "brand": "[object CrashReportContext]",
+      "ownProps": [],
+      "instanceProtoChain": [
+        "CrashReportContext",
+        "Object"
+      ],
+      "instanceProtoMembers": [
+        "delete",
+        "initialize",
+        "set",
+        "constructor"
+      ],
+      "memberValues": {
+        "delete": "function",
+        "initialize": "function",
+        "set": "function"
+      }
+    },
+    "viewport": {
+      "present": true,
+      "descriptor": {
+        "enumerable": true,
+        "configurable": true,
+        "accessor": true
+      },
+      "typeof": "object",
+      "brand": "[object Viewport]",
+      "ownProps": [],
+      "instanceProtoChain": [
+        "Viewport",
+        "Object"
+      ],
+      "instanceProtoMembers": [
+        "segments",
+        "constructor"
+      ],
+      "memberValues": {
+        "segments": "[object Array]"
+      }
+    }
+  }
+}

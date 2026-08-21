@@ -1,0 +1,378 @@
+{
+ "href": "http://localhost:8777/",
+ "isSecureContext": true,
+ "out": {
+  "CommandEvent": {
+   "bare": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "source": "null",
+    "command": ""
+   },
+   "filled": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "source": "[object HTMLBodyElement]",
+    "command": "show-modal"
+   },
+   "nonDict": "TypeError: Failed to construct 'CommandEvent': The provided value is not of type 'CommandEventInit'.",
+   "nullDict": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "source": "null",
+    "command": ""
+   },
+   "eventInit": {
+    "type": "t",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "source": "null",
+    "command": ""
+   },
+   "numericType": "7",
+   "undefinedType": "undefined"
+  },
+  "InterestEvent": {
+   "bare": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "source": "null"
+   },
+   "filled": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "source": "[object HTMLBodyElement]"
+   },
+   "nonDict": "TypeError: Failed to construct 'InterestEvent': The provided value is not of type 'InterestEventInit'.",
+   "nullDict": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "source": "null"
+   },
+   "eventInit": {
+    "type": "t",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "source": "null"
+   },
+   "numericType": "7",
+   "undefinedType": "undefined"
+  },
+  "PageRevealEvent": {
+   "bare": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "viewTransition": "null"
+   },
+   "filled": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "viewTransition": "null"
+   },
+   "nonDict": "TypeError: Failed to construct 'PageRevealEvent': The provided value is not of type 'PageRevealEventInit'.",
+   "nullDict": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "viewTransition": "null"
+   },
+   "eventInit": {
+    "type": "t",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "viewTransition": "null"
+   },
+   "numericType": "7",
+   "undefinedType": "undefined"
+  },
+  "PageSwapEvent": {
+   "bare": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "viewTransition": "null",
+    "activation": "null"
+   },
+   "filled": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "viewTransition": "null",
+    "activation": "null"
+   },
+   "nonDict": "TypeError: Failed to construct 'PageSwapEvent': The provided value is not of type 'PageSwapEventInit'.",
+   "nullDict": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "viewTransition": "null",
+    "activation": "null"
+   },
+   "eventInit": {
+    "type": "t",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "viewTransition": "null",
+    "activation": "null"
+   },
+   "numericType": "7",
+   "undefinedType": "undefined"
+  },
+  "TextUpdateEvent": {
+   "bare": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "updateRangeStart": 0,
+    "updateRangeEnd": 0,
+    "text": "",
+    "selectionStart": 0,
+    "selectionEnd": 0
+   },
+   "filled": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "updateRangeStart": 1,
+    "updateRangeEnd": 2,
+    "text": "hi",
+    "selectionStart": 3,
+    "selectionEnd": 4
+   },
+   "nonDict": "TypeError: Failed to construct 'TextUpdateEvent': The provided value is not of type 'TextUpdateEventInit'.",
+   "nullDict": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "updateRangeStart": 0,
+    "updateRangeEnd": 0,
+    "text": "",
+    "selectionStart": 0,
+    "selectionEnd": 0
+   },
+   "eventInit": {
+    "type": "t",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "updateRangeStart": 0,
+    "updateRangeEnd": 0,
+    "text": "",
+    "selectionStart": 0,
+    "selectionEnd": 0
+   },
+   "numericType": "7",
+   "undefinedType": "undefined"
+  },
+  "TextFormatUpdateEvent": {
+   "bare": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "getTextFormats": "[object Array]"
+   },
+   "filled": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "getTextFormats": "[object Array]"
+   },
+   "nonDict": "TypeError: Failed to construct 'TextFormatUpdateEvent': The provided value is not of type 'TextFormatUpdateEventInit'.",
+   "nullDict": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "getTextFormats": "[object Array]"
+   },
+   "eventInit": {
+    "type": "t",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "getTextFormats": "[object Array]"
+   },
+   "numericType": "7",
+   "undefinedType": "undefined"
+  },
+  "CharacterBoundsUpdateEvent": {
+   "bare": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "rangeStart": 0,
+    "rangeEnd": 0
+   },
+   "filled": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "rangeStart": 5,
+    "rangeEnd": 6
+   },
+   "nonDict": "TypeError: Failed to construct 'CharacterBoundsUpdateEvent': The provided value is not of type 'CharacterBoundsUpdateEventInit'.",
+   "nullDict": {
+    "type": "t",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "rangeStart": 0,
+    "rangeEnd": 0
+   },
+   "eventInit": {
+    "type": "t",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "rangeStart": 0,
+    "rangeEnd": 0
+   },
+   "numericType": "7",
+   "undefinedType": "undefined"
+  },
+  "ClipboardChangeEvent": {
+   "bare": {
+    "type": "clipboardchange",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "types": "[object Array]",
+    "changeId": "bigint:0"
+   },
+   "filled": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert 3 to a BigInt",
+   "stringArg": "TypeError: Failed to construct 'ClipboardChangeEvent': The provided value is not of type 'ClipboardChangeEventInit'.",
+   "nullArg": {
+    "type": "clipboardchange",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "types": "[object Array]",
+    "changeId": "bigint:0"
+   },
+   "undefinedArg": {
+    "type": "clipboardchange",
+    "bubbles": false,
+    "cancelable": false,
+    "composed": false,
+    "types": "[object Array]",
+    "changeId": "bigint:0"
+   },
+   "numberArg": "TypeError: Failed to construct 'ClipboardChangeEvent': The provided value is not of type 'ClipboardChangeEventInit'.",
+   "eventInit": {
+    "type": "clipboardchange",
+    "bubbles": true,
+    "cancelable": true,
+    "composed": true,
+    "types": "[object Array]",
+    "changeId": "bigint:0"
+   },
+   "typesIdentity": {
+    "same": false,
+    "json": "[\"text/plain\"]",
+    "frozen": true
+   },
+   "changeIdCoercion": "bigint:7",
+   "changeIdFractional": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert 7.9 to a BigInt",
+   "changeIdNegative": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert -1 to a BigInt",
+   "changeIdBig": "bigint:18446744073709551616"
+  },
+  "changeIdConversion": {
+   "bigint": "bigint:9",
+   "zero": "bigint:0",
+   "string7": "bigint:7",
+   "stringEmpty": "bigint:0",
+   "stringSpace": "bigint:12",
+   "stringHex": "bigint:16",
+   "stringBad": "SyntaxError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert nope to a BigInt",
+   "stringNeg": "bigint:-3",
+   "stringFloat": "SyntaxError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert 1.5 to a BigInt",
+   "number": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert 3 to a BigInt",
+   "numberZero": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert 0 to a BigInt",
+   "float": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert 1.5 to a BigInt",
+   "neg": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert -1 to a BigInt",
+   "nul": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert null to a BigInt",
+   "undef": "bigint:0",
+   "tru": "bigint:1",
+   "fals": "bigint:0",
+   "obj": "SyntaxError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert [object Object] to a BigInt",
+   "arr": "bigint:0",
+   "sym": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property from 'ClipboardChangeEventInit': Cannot convert Symbol(s) to a BigInt",
+   "valueOf": "bigint:5",
+   "toStringy": "bigint:11"
+  },
+  "memberConversion": {
+   "typesString": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'types' property from 'ClipboardChangeEventInit': The provided value cannot be converted to a sequence.",
+   "typesNumber": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'types' property from 'ClipboardChangeEventInit': The provided value cannot be converted to a sequence.",
+   "typesNull": "TypeError: Failed to construct 'ClipboardChangeEvent': Failed to read the 'types' property from 'ClipboardChangeEventInit': The provided value cannot be converted to a sequence.",
+   "typesMixed": "[\"1\",\"null\",\"x\"]",
+   "commandSourceNonElement": "TypeError: Failed to construct 'CommandEvent': Failed to read the 'source' property from 'CommandEventInit': Failed to convert value to 'Element'.",
+   "commandSourceWindow": "TypeError: Failed to construct 'CommandEvent': Failed to read the 'source' property from 'CommandEventInit': Failed to convert value to 'Element'.",
+   "commandSourceTextNode": "TypeError: Failed to construct 'CommandEvent': Failed to read the 'source' property from 'CommandEventInit': Failed to convert value to 'Element'.",
+   "interestSourceNonElement": "TypeError: Failed to construct 'InterestEvent': Failed to read the 'source' property from 'InterestEventInit': Failed to convert value to 'Element'.",
+   "commandCommandNumber": "5",
+   "pageRevealViewTransition": "TypeError: Failed to construct 'PageRevealEvent': Failed to read the 'viewTransition' property from 'PageRevealEventInit': Failed to convert value to 'ViewTransition'.",
+   "pageSwapViewTransition": "TypeError: Failed to construct 'PageSwapEvent': Failed to read the 'viewTransition' property from 'PageSwapEventInit': Failed to convert value to 'ViewTransition'.",
+   "pageSwapActivation": "TypeError: Failed to construct 'PageSwapEvent': Failed to read the 'activation' property from 'PageSwapEventInit': Failed to convert value to 'NavigationActivation'.",
+   "textFormatsFresh": false,
+   "textFormatsNonSequence": "TypeError: Failed to construct 'TextFormatUpdateEvent': Failed to read the 'textFormats' property from 'TextFormatUpdateEventInit': The provided value cannot be converted to a sequence.",
+   "textFormatsBadItem": "TypeError: Failed to construct 'TextFormatUpdateEvent': Failed to read the 'textFormats' property from 'TextFormatUpdateEventInit': Failed to convert value to 'TextFormat'.",
+   "textFormatsReal": 1
+  },
+  "unsignedLongConversion": {
+   "negative": 4294967295,
+   "fractional": 2,
+   "past32Bits": 0,
+   "nan": 0,
+   "numericString": 9,
+   "textNumber": "5",
+   "textNull": "null",
+   "boundsNegative": 4294967295,
+   "boundsFractional": 2
+  },
+  "SnapEvent": {
+   "newBare": "TypeError: Failed to construct 'SnapEvent': Illegal constructor",
+   "protoGetter": "TypeError: Illegal invocation",
+   "protoGetterInline": "TypeError: Illegal invocation"
+  },
+  "protoGetterOffInterface": {
+   "CommandEvent": "TypeError: Illegal invocation",
+   "InterestEvent": "TypeError: Illegal invocation",
+   "PageRevealEvent": "TypeError: Illegal invocation",
+   "PageSwapEvent": "TypeError: Illegal invocation",
+   "TextUpdateEvent": "TypeError: Illegal invocation",
+   "CharacterBoundsUpdateEvent": "TypeError: Illegal invocation",
+   "ClipboardChangeEvent": "TypeError: Illegal invocation"
+  }
+ }
+}

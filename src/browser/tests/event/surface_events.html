@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<head>
+  <title>Window-surface Event Subclasses Test</title>
+  <script src="../testing.js"></script>
+</head>
+
+<body>
+</body>
+
+<!--
+The nine Event subclasses Chrome 151 puts on the window that this engine did
+not have. Nothing here ever fires one -- there is no invoker command, no
+interest target, no view transition, no IME composition and no scroll snap --
+but eight of the nine are constructible from script, so their dictionaries, the
+conversion refusals those produce and the defaults every getter answers are all
+part of the surface a detector can read.
+
+Every string and number below is Chrome's own, from
+probes/probe-shapes.js and probes/probe-s2-events.js against a headed Chrome 151
+on http://localhost:8777 (results/probes/probe-shapes.chrome.json and
+results/probes/probe-s2-events.chrome.json).
+-->
+
+<script id=surface_event_shapes>
+  {
+    // The prototype's own members, in the order the interface declares them.
+    const protoKeys = (ctor) => Object.getOwnPropertyNames(ctor.prototype).join(' ');
+    const rootOf = (ctor) => Object.getPrototypeOf(ctor.prototype) === Event.prototype;
+
+    for (const [name, arity, keys] of [
+      ['CommandEvent', 1, 'source command constructor'],
+      ['InterestEvent', 1, 'source constructor'],
+      ['PageRevealEvent', 1, 'viewTransition constructor'],
+      ['PageSwapEvent', 1, 'viewTransition activation constructor'],
+      ['TextUpdateEvent', 1, 'updateRangeStart updateRangeEnd text selectionStart selectionEnd constructor'],
+      ['TextFormatUpdateEvent', 1, 'getTextFormats constructor'],
+      ['CharacterBoundsUpdateEvent', 1, 'rangeStart rangeEnd constructor'],
+      ['ClipboardChangeEvent', 0, 'types changeId constructor'],
+      ['SnapEvent', 0, 'snapTargetBlock snapTargetInline constructor'],
+    ]) {
+      const ctor = window[name];
+      testing.expectEqual('function', typeof ctor, { desc: name + ' is on the window' });
+      testing.expectEqual(name, ctor.name, { desc: name + ' name' });
+      testing.expectEqual(arity, ctor.length, { desc: name + ' arity' });
+      testing.expectEqual(keys, protoKeys(ctor), { desc: name + ' prototype members' });
+      testing.expectTrue(rootOf(ctor), { desc: name + ' inherits Event' });
+      testing.expectEqual('[object ' + name + ']', Object.prototype.toString.call(ctor.prototype),
+        { desc: name + ' prototype brand' });
+      testing.expectEqual(name, ctor.prototype[Symbol.toStringTag], { desc: name + ' toStringTag' });
+      // Every interface object refuses a plain call, but not with the same
+      // words: the constructible ones point at `new`, and the one that has no
+      // constructor at all says the same thing it says to `new` (measured --
+      // probe-shapes' callBare).
+      testing.expectError(
+        name === 'SnapEvent'
+          ? 'Illegal constructor'
+          : 'Please use the \'new\' operator, this DOM object constructor cannot be called as a function.',
+        () => ctor());
+    }
+  }
+</script>
+
+<script id=command_event>
+  {
+    const bare = new CommandEvent('command');
+    testing.expectEqual('command', bare.type);
+    testing.expectEqual(null, bare.source);
+    testing.expectEqual('', bare.command);
+    testing.expectEqual(false, bare.bubbles);
+    testing.expectEqual('[object CommandEvent]', Object.prototype.toString.call(bare));
+
+    // `source` is an Element and keeps the very object it was handed.
+    const el = document.createElement('button');
+    const filled = new CommandEvent('command', { source: el, command: 'show-modal' });
+    testing.expectTrue(filled.source === el);
+    testing.expectEqual('show-modal', filled.command);
+
+    // `command` is a plain DOMString, so it takes whatever it is given.
+    testing.expectEqual('5', new CommandEvent('t', { command: 5 }).command);
+    testing.expectEqual(null, new CommandEvent('t', { source: null }).source);
+
+    // EventInit gets through, and the type argument is stringified.
+    const flagged = new CommandEvent('t', { bubbles: true, cancelable: true, composed: true });
+    testing.expectEqual(true, flagged.bubbles);
+    testing.expectEqual(true, flagged.cancelable);
+    testing.expectEqual(true, flagged.composed);
+    testing.expectEqual('7', new CommandEvent(7).type);
+    testing.expectEqual('undefined', new CommandEvent(undefined).type);
+
+    testing.expectError("Failed to construct 'CommandEvent': 1 argument required, but only 0 present.",
+      () => new CommandEvent());
+    testing.expectError("Failed to construct 'CommandEvent': The provided value is not of type 'CommandEventInit'.",
+      () => new CommandEvent('t', 5));
+    // Not an Element: a Window and a Text node fail the same way a number does.
+    for (const bad of [5, window, document.createTextNode('x')]) {
+      testing.expectError(
+        "Failed to construct 'CommandEvent': Failed to read the 'source' property from 'CommandEventInit': Failed to convert value to 'Element'.",
+        () => new CommandEvent('t', { source: bad }));
+    }
+  }
+</script>
+
+<script id=interest_event>
+  {
+    const bare = new InterestEvent('interest');
+    testing.expectEqual('interest', bare.type);
+    testing.expectEqual(null, bare.source);
+
+    const el = document.createElement('a');
+    testing.expectTrue(new InterestEvent('t', { source: el }).source === el);
+    testing.expectEqual(true, new InterestEvent('t', { bubbles: true }).bubbles);
+
+    testing.expectError("Failed to construct 'InterestEvent': 1 argument required, but only 0 present.",
+      () => new InterestEvent());
+    testing.expectError("Failed to construct 'InterestEvent': The provided value is not of type 'InterestEventInit'.",
+      () => new InterestEvent('t', 5));
+    testing.expectError(
+      "Failed to construct 'InterestEvent': Failed to read the 'source' property from 'InterestEventInit': Failed to convert value to 'Element'.",
+      () => new InterestEvent('t', { source: 5 }));
+  }
+</script>
+
+<script id=page_reveal_and_swap_events>
+  {
+    // ViewTransition is an interface neither engine puts on the window here, so
+    // `viewTransition` can only ever be null -- and any value that is not null
+    // is a conversion failure, which is the only observable half.
+    const reveal = new PageRevealEvent('pagereveal');
+    testing.expectEqual('pagereveal', reveal.type);
+    testing.expectEqual(null, reveal.viewTransition);
+    testing.expectEqual(null, new PageRevealEvent('t', { viewTransition: null }).viewTransition);
+
+    const swap = new PageSwapEvent('pageswap');
+    testing.expectEqual(null, swap.viewTransition);
+    testing.expectEqual(null, swap.activation);
+    testing.expectEqual(true, new PageSwapEvent('t', { composed: true }).composed);
+
+    testing.expectError("Failed to construct 'PageRevealEvent': 1 argument required, but only 0 present.",
+      () => new PageRevealEvent());
+    testing.expectError("Failed to construct 'PageSwapEvent': 1 argument required, but only 0 present.",
+      () => new PageSwapEvent());
+    testing.expectError("Failed to construct 'PageRevealEvent': The provided value is not of type 'PageRevealEventInit'.",
+      () => new PageRevealEvent('t', 5));
+    testing.expectError(
+      "Failed to construct 'PageRevealEvent': Failed to read the 'viewTransition' property from 'PageRevealEventInit': Failed to convert value to 'ViewTransition'.",
+      () => new PageRevealEvent('t', { viewTransition: 5 }));
+    testing.expectError(
+      "Failed to construct 'PageSwapEvent': Failed to read the 'viewTransition' property from 'PageSwapEventInit': Failed to convert value to 'ViewTransition'.",
+      () => new PageSwapEvent('t', { viewTransition: 5 }));
+    testing.expectError(
+      "Failed to construct 'PageSwapEvent': Failed to read the 'activation' property from 'PageSwapEventInit': Failed to convert value to 'NavigationActivation'.",
+      () => new PageSwapEvent('t', { activation: 5 }));
+  }
+</script>
+
+<script id=text_update_event>
+  {
+    const bare = new TextUpdateEvent('textupdate');
+    testing.expectEqual(0, bare.updateRangeStart);
+    testing.expectEqual(0, bare.updateRangeEnd);
+    testing.expectEqual('', bare.text);
+    testing.expectEqual(0, bare.selectionStart);
+    testing.expectEqual(0, bare.selectionEnd);
+
+    const filled = new TextUpdateEvent('t', {
+      updateRangeStart: 1, updateRangeEnd: 2, text: 'hi', selectionStart: 3, selectionEnd: 4,
+    });
+    testing.expectEqual(1, filled.updateRangeStart);
+    testing.expectEqual(2, filled.updateRangeEnd);
+    testing.expectEqual('hi', filled.text);
+    testing.expectEqual(3, filled.selectionStart);
+    testing.expectEqual(4, filled.selectionEnd);
+
+    // The four offsets are `unsigned long` with neither [EnforceRange] nor
+    // [Clamp], so the conversion is a plain ToUint32: -1 wraps, a fraction
+    // truncates, anything past 32 bits and NaN land on 0, and a numeric string
+    // parses.
+    testing.expectEqual(4294967295, new TextUpdateEvent('t', { updateRangeStart: -1 }).updateRangeStart);
+    testing.expectEqual(2, new TextUpdateEvent('t', { updateRangeStart: 2.7 }).updateRangeStart);
+    testing.expectEqual(0, new TextUpdateEvent('t', { updateRangeStart: 2 ** 33 }).updateRangeStart);
+    testing.expectEqual(0, new TextUpdateEvent('t', { updateRangeStart: NaN }).updateRangeStart);
+    testing.expectEqual(9, new TextUpdateEvent('t', { updateRangeStart: '9' }).updateRangeStart);
+    testing.expectEqual('5', new TextUpdateEvent('t', { text: 5 }).text);
+    testing.expectEqual('null', new TextUpdateEvent('t', { text: null }).text);
+
+    testing.expectError("Failed to construct 'TextUpdateEvent': 1 argument required, but only 0 present.",
+      () => new TextUpdateEvent());
+    testing.expectError("Failed to construct 'TextUpdateEvent': The provided value is not of type 'TextUpdateEventInit'.",
+      () => new TextUpdateEvent('t', 5));
+  }
+</script>
+
+<script id=text_format_update_event>
+  {
+    const bare = new TextFormatUpdateEvent('textformatupdate');
+    testing.expectEqual('textformatupdate', bare.type);
+    // getTextFormats() answers a fresh array every call, empty because
+    // TextFormat is an interface this engine does not have yet.
+    testing.expectEqual(0, bare.getTextFormats().length);
+    testing.expectFalse(bare.getTextFormats() === bare.getTextFormats());
+    testing.expectEqual(0, new TextFormatUpdateEvent('t', { textFormats: [] }).getTextFormats().length);
+
+    testing.expectError("Failed to construct 'TextFormatUpdateEvent': 1 argument required, but only 0 present.",
+      () => new TextFormatUpdateEvent());
+    testing.expectError(
+      "Failed to construct 'TextFormatUpdateEvent': The provided value is not of type 'TextFormatUpdateEventInit'.",
+      () => new TextFormatUpdateEvent('t', 5));
+    // A non-array is refused as a sequence; an array whose items are not
+    // TextFormats is refused per item.
+    testing.expectError(
+      "Failed to construct 'TextFormatUpdateEvent': Failed to read the 'textFormats' property from 'TextFormatUpdateEventInit': The provided value cannot be converted to a sequence.",
+      () => new TextFormatUpdateEvent('t', { textFormats: 5 }));
+    testing.expectError(
+      "Failed to construct 'TextFormatUpdateEvent': Failed to read the 'textFormats' property from 'TextFormatUpdateEventInit': Failed to convert value to 'TextFormat'.",
+      () => new TextFormatUpdateEvent('t', { textFormats: [5] }));
+  }
+</script>
+
+<script id=character_bounds_update_event>
+  {
+    const bare = new CharacterBoundsUpdateEvent('characterboundsupdate');
+    testing.expectEqual(0, bare.rangeStart);
+    testing.expectEqual(0, bare.rangeEnd);
+
+    const filled = new CharacterBoundsUpdateEvent('t', { rangeStart: 5, rangeEnd: 6 });
+    testing.expectEqual(5, filled.rangeStart);
+    testing.expectEqual(6, filled.rangeEnd);
+    testing.expectEqual(4294967295, new CharacterBoundsUpdateEvent('t', { rangeStart: -1 }).rangeStart);
+    testing.expectEqual(2, new CharacterBoundsUpdateEvent('t', { rangeEnd: 2.7 }).rangeEnd);
+
+    testing.expectError("Failed to construct 'CharacterBoundsUpdateEvent': 1 argument required, but only 0 present.",
+      () => new CharacterBoundsUpdateEvent());
+    testing.expectError(
+      "Failed to construct 'CharacterBoundsUpdateEvent': The provided value is not of type 'CharacterBoundsUpdateEventInit'.",
+      () => new CharacterBoundsUpdateEvent('t', 5));
+  }
+</script>
+
+<script id=clipboard_change_event>
+  {
+    // The odd one out: arity 0 and no type argument at all -- the first argument
+    // IS the dictionary, and the type is always 'clipboardchange'.
+    const bare = new ClipboardChangeEvent();
+    testing.expectEqual('clipboardchange', bare.type);
+    testing.expectEqual(0, bare.types.length);
+    testing.expectEqual('bigint', typeof bare.changeId);
+    // As a string: the runner's failure reporter goes through JSON.stringify,
+    // which throws on a BigInt.
+    testing.expectEqual('0', String(bare.changeId));
+    testing.expectEqual('[object ClipboardChangeEvent]', Object.prototype.toString.call(bare));
+    testing.expectEqual('clipboardchange', new ClipboardChangeEvent(null).type);
+    testing.expectEqual('clipboardchange', new ClipboardChangeEvent(undefined).type);
+
+    const filled = new ClipboardChangeEvent({ types: ['text/plain', 'text/html'] });
+    testing.expectEqual('text/plain,text/html', filled.types.join(','));
+    // A fresh array every read, and every item stringified.
+    testing.expectFalse(filled.types === filled.types);
+    testing.expectEqual('1,null,x', new ClipboardChangeEvent({ types: [1, null, 'x'] }).types.join(','));
+
+    const flagged = new ClipboardChangeEvent({ bubbles: true, cancelable: true, composed: true });
+    testing.expectEqual(true, flagged.bubbles);
+    testing.expectEqual(true, flagged.cancelable);
+    testing.expectEqual(true, flagged.composed);
+
+    // A string or a number where the dictionary belongs.
+    for (const bad of ['x', 5]) {
+      testing.expectError(
+        "Failed to construct 'ClipboardChangeEvent': The provided value is not of type 'ClipboardChangeEventInit'.",
+        () => new ClipboardChangeEvent(bad));
+    }
+    for (const bad of ['ab', 5, null]) {
+      testing.expectError(
+        "Failed to construct 'ClipboardChangeEvent': Failed to read the 'types' property from 'ClipboardChangeEventInit': The provided value cannot be converted to a sequence.",
+        () => new ClipboardChangeEvent({ types: bad }));
+    }
+  }
+</script>
+
+<script id=clipboard_change_event_change_id>
+  {
+    // changeId is a WebIDL `bigint`, so it is ToBigInt rather than any integer
+    // coercion: a BigInt and a boolean go straight through, a string is parsed
+    // (with sign, radix prefix and surrounding space), an object is stringified
+    // first -- and a Number is refused outright, which is the surprising half.
+    // Compared as strings: the runner's failure reporter goes through
+    // JSON.stringify, which throws on a BigInt.
+    const changeId = (v) => String(new ClipboardChangeEvent({ changeId: v }).changeId);
+    testing.expectEqual('9', changeId(9n));
+    testing.expectEqual('0', changeId(0n));
+    testing.expectEqual('0', changeId(undefined));
+    testing.expectEqual('1', changeId(true));
+    testing.expectEqual('0', changeId(false));
+    testing.expectEqual('7', changeId('7'));
+    testing.expectEqual('0', changeId(''));
+    testing.expectEqual('12', changeId('  12  '));
+    testing.expectEqual('16', changeId('0x10'));
+    testing.expectEqual('-3', changeId('-3'));
+    // An object is ToPrimitive'd and then parsed, so an empty array is 0.
+    testing.expectEqual('0', changeId([]));
+    testing.expectEqual('5', changeId({ valueOf: () => 5n }));
+    testing.expectEqual('11', changeId({ toString: () => '11' }));
+    // The one measured gap: this engine keeps changeId in an i64, so a literal
+    // past 64 bits truncates where Chrome answers 18446744073709551616. Nothing
+    // reachable from a site produces one -- see dictionary.bigintMember.
+    testing.expectEqual('0', changeId(2n ** 64n));
+
+    // A Number -- any Number, including 0 -- is a TypeError.
+    const prefix = "Failed to construct 'ClipboardChangeEvent': Failed to read the 'changeId' property " +
+      "from 'ClipboardChangeEventInit': Cannot convert ";
+    for (const [bad, text] of [[3, '3'], [0, '0'], [1.5, '1.5'], [-1, '-1'], [null, 'null']]) {
+      testing.withError((err) => {
+        testing.expectEqual('TypeError', err.name);
+        testing.expectEqual(prefix + text + ' to a BigInt', err.message);
+      }, () => new ClipboardChangeEvent({ changeId: bad }));
+    }
+
+    // A string that is not a BigInt literal is a *SyntaxError*, not a TypeError.
+    for (const [bad, text] of [['nope', 'nope'], ['1.5', '1.5'], [{}, '[object Object]']]) {
+      testing.withError((err) => {
+        testing.expectEqual('SyntaxError', err.name);
+        testing.expectEqual(prefix + text + ' to a BigInt', err.message);
+      }, () => new ClipboardChangeEvent({ changeId: bad }));
+    }
+  }
+</script>
+
+<script id=snap_event>
+  {
+    // The one of the nine that is not constructible: only a scroll container
+    // Chrome snaps ever produces one, so a page can reach the interface object
+    // and the prototype and nothing else.
+    testing.expectError("Failed to construct 'SnapEvent': Illegal constructor", () => new SnapEvent());
+    testing.expectError("Failed to construct 'SnapEvent': Illegal constructor", () => new SnapEvent('t'));
+  }
+</script>

@@ -983,3 +983,52 @@
     testing.expectEqual(true, smallest > 0.05);
   }
 </script>
+
+<script id=unreachable_performance_entry_subclasses>
+  {
+    // Four more PerformanceEntry subclasses Chrome 151 puts on the window.
+    // Nothing here queues one -- there is no frame-timing pass, no script
+    // attribution, no soft-navigation heuristic and no interaction paint -- and
+    // Chrome does not let a page build one either, so the interface object and
+    // the prototype are the whole surface. Every member list below is Chrome's
+    // own, from probes/probe-shapes.js against a headed Chrome 151
+    // (results/probes/probe-shapes.chrome.json).
+    const protoKeys = (ctor) => Object.getOwnPropertyNames(ctor.prototype).join(' ');
+
+    for (const [name, keys] of [
+      // paintTime and presentationTime come last on the three that have them,
+      // after toJSON -- they are own properties of each prototype, not
+      // inherited, same as LargestContentfulPaint's.
+      ['PerformanceLongAnimationFrameTiming',
+        'renderStart styleAndLayoutStart firstUIEventTimestamp blockingDuration scripts ' +
+        'toJSON paintTime presentationTime constructor'],
+      ['PerformanceScriptTiming',
+        'invokerType invoker windowAttribution executionStart forcedStyleAndLayoutDuration ' +
+        'pauseDuration window sourceURL sourceFunctionName sourceCharPosition toJSON constructor'],
+      ['PerformanceSoftNavigation',
+        'navigationType interactionId getLargestInteractionContentfulPaint paintTime ' +
+        'presentationTime constructor'],
+      ['InteractionContentfulPaint',
+        'largestContentfulPaint interactionId toJSON paintTime presentationTime constructor'],
+    ]) {
+      const ctor = window[name];
+      testing.expectEqual('function', typeof ctor, { desc: name + ' is on the window' });
+      testing.expectEqual(name, ctor.name, { desc: name + ' name' });
+      testing.expectEqual(0, ctor.length, { desc: name + ' arity' });
+      testing.expectEqual(keys, protoKeys(ctor), { desc: name + ' prototype members' });
+      testing.expectEqual('PerformanceEntry', Object.getPrototypeOf(ctor.prototype).constructor.name,
+        { desc: name + ' inherits PerformanceEntry' });
+      testing.expectEqual('[object ' + name + ']', Object.prototype.toString.call(ctor.prototype),
+        { desc: name + ' prototype brand' });
+      testing.expectEqual(name, ctor.prototype[Symbol.toStringTag], { desc: name + ' toStringTag' });
+      testing.expectError("Failed to construct '" + name + "': Illegal constructor", () => new ctor());
+      testing.expectError('Illegal constructor', () => ctor());
+    }
+
+    // And none of them ever shows up in a buffer.
+    for (const type of ['long-animation-frame', 'script', 'soft-navigation',
+      'interaction-contentful-paint']) {
+      testing.expectEqual(0, performance.getEntriesByType(type).length, { desc: type + ' buffer' });
+    }
+  }
+</script>

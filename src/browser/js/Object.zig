@@ -109,6 +109,18 @@ pub fn persist(self: Object) !Global {
     return .{ .slot = try js.newTrackedSlot(self.local.ctx, self.handle) };
 }
 
+/// Whether the object carries a callable @@iterator, which is what WebIDL means
+/// by iterable and therefore by a sequence. Two refusals in
+/// webapi/animation/timelines.zig differ on exactly this bit: Chrome tells an
+/// object with no iterator that it needs one, while a primitive is told it
+/// cannot be converted to a sequence at all.
+pub fn hasIterator(self: Object) bool {
+    const local = self.local;
+    const symbol = v8.v8__Symbol__GetIterator(local.isolate.handle);
+    const value = v8.v8__Object__Get(self.handle, local.handle, @ptrCast(symbol)) orelse return false;
+    return v8.v8__Value__IsFunction(value);
+}
+
 pub fn getFunction(self: Object, name: []const u8) !?js.Function {
     if (self.isNullOrUndefined()) {
         return null;

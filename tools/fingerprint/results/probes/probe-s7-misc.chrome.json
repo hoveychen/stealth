@@ -1,0 +1,145 @@
+{
+ "href": "http://localhost:8777/",
+ "isSecureContext": true,
+ "out": {
+  "shapes": {
+   "Origin": "get opaque[ec-],isSameOrigin/1[ecw],isSameSite/1[ecw],@@toStringTag=Origin",
+   "TextFormat": "get rangeStart[ec-],get rangeEnd[ec-],get underlineStyle[ec-],get underlineThickness[ec-],@@toStringTag=TextFormat",
+   "MediaStreamTrackVideoStats": "get deliveredFrames[ec-],get discardedFrames[ec-],get totalFrames[ec-],toJSON/0[ecw],@@toStringTag=MediaStreamTrackVideoStats",
+   "NavigationPrecommitController": "redirect/1[ecw],addHandler/1[ecw],@@toStringTag=NavigationPrecommitController",
+   "Viewport": "get segments[ec-],@@toStringTag=Viewport",
+   "WebGLObject": "@@toStringTag=WebGLObject"
+  },
+  "origin": {
+   "bare": "true|[object Origin]",
+   "bareJson": "{}",
+   "withUrl": "true",
+   "withOriginString": "true",
+   "withGarbage": "true",
+   "withNumber": "true",
+   "withNull": "true",
+   "withEmpty": "true",
+   "fromArity": 1,
+   "fromBare": "TypeError: Failed to execute 'from' on 'Origin': 1 argument required, but only 0 present.",
+   "fromUrl": "false",
+   "fromOriginString": "false",
+   "fromGarbage": "TypeError: Failed to execute 'from' on 'Origin': The string provided cannot be parsed as a serialized URL.",
+   "fromNumber": "TypeError: Failed to execute 'from' on 'Origin': An origin cannot be extracted from the given parameter.",
+   "fromNull": "TypeError: Failed to execute 'from' on 'Origin': An origin cannot be extracted from the given parameter.",
+   "fromEmpty": "TypeError: Failed to execute 'from' on 'Origin': The string provided cannot be parsed as a serialized URL.",
+   "fromBrand": "[object Origin]",
+   "fromOrigin": "true",
+   "toStringOfReal": "[object Origin]",
+   "sameSelf": true,
+   "sameOther": false,
+   "siteSelf": true,
+   "siteOther": false,
+   "siteSubdomain": true,
+   "siteScheme": false,
+   "samePort": false,
+   "sitePort": true,
+   "opaqueVsOpaque": false,
+   "opaqueSelf": true,
+   "sameNoArgs": "TypeError: Failed to execute 'isSameOrigin' on 'Origin': 1 argument required, but only 0 present.",
+   "sameString": "TypeError: Failed to execute 'isSameOrigin' on 'Origin': parameter 1 is not of type 'Origin'.",
+   "sameNull": "TypeError: Failed to execute 'isSameOrigin' on 'Origin': parameter 1 is not of type 'Origin'."
+  },
+  "textFormat": {
+   "members": [
+    "rangeEnd",
+    "rangeStart",
+    "underlineStyle",
+    "underlineThickness"
+   ],
+   "outcome": "[object TextFormat]",
+   "bare": "0|0|none|none",
+   "nonDict": "TypeError: Failed to construct 'TextFormat': The provided value is not of type 'TextFormatInit'.",
+   "nullDict": "0|none",
+   "filled": "2|5|dotted|thick",
+   "negativeRange": 4294967295,
+   "floatRange": 2,
+   "hugeRange": 0,
+   "nanRange": 0,
+   "stringRange": 9,
+   "styles": {
+    "none": "none",
+    "solid": "solid",
+    "dotted": "dotted",
+    "dashed": "dashed",
+    "wavy": "wavy",
+    "squiggle": "TypeError: Failed to construct 'TextFormat': Failed to read the 'underlineStyle' property from 'TextFormatInit': The provided value 'squiggle' is not a valid enum value of type UnderlineStyle.",
+    "(empty)": "TypeError: Failed to construct 'TextFormat': Failed to read the 'underlineStyle' property from 'TextFormatInit': The provided value '' is not a valid enum value of type UnderlineStyle.",
+    "nope": "TypeError: Failed to construct 'TextFormat': Failed to read the 'underlineStyle' property from 'TextFormatInit': The provided value 'nope' is not a valid enum value of type UnderlineStyle."
+   },
+   "thicknesses": {
+    "none": "none",
+    "thin": "thin",
+    "thick": "thick",
+    "(empty)": "TypeError: Failed to construct 'TextFormat': Failed to read the 'underlineThickness' property from 'TextFormatInit': The provided value '' is not a valid enum value of type UnderlineThickness.",
+    "nope": "TypeError: Failed to construct 'TextFormat': Failed to read the 'underlineThickness' property from 'TextFormatInit': The provided value 'nope' is not a valid enum value of type UnderlineThickness."
+   },
+   "styleNull": "TypeError: Failed to construct 'TextFormat': Failed to read the 'underlineStyle' property from 'TextFormatInit': The provided value 'null' is not a valid enum value of type UnderlineStyle.",
+   "styleUndefined": "none",
+   "inEvent": 1
+  },
+  "viewport": {
+   "descriptor": "function|function|ec-",
+   "identity": true,
+   "brand": "[object Viewport]",
+   "ownProps": "",
+   "json": "{}",
+   "segments": "[{\"x\":0,\"y\":0,\"width\":1200,\"height\":818,\"top\":0,\"right\":1200,\"bottom\":818,\"left\":0}]",
+   "segmentsLength": 1,
+   "segmentsIdentity": false,
+   "segmentsFrozen": true,
+   "firstSegment": "{\"x\":0,\"y\":0,\"width\":1200,\"height\":818,\"top\":0,\"right\":1200,\"bottom\":818,\"left\":0}",
+   "firstSegmentBrand": "[object DOMRect]"
+  },
+  "webgl": {
+   "context": "[object WebGLRenderingContext]",
+   "rootOf": {
+    "WebGLBuffer": "WebGLObject",
+    "WebGLFramebuffer": "WebGLObject",
+    "WebGLProgram": "WebGLObject",
+    "WebGLQuery": "WebGLObject",
+    "WebGLRenderbuffer": "WebGLObject",
+    "WebGLSampler": "WebGLObject",
+    "WebGLShader": "WebGLObject",
+    "WebGLSync": "WebGLObject",
+    "WebGLTexture": "WebGLObject",
+    "WebGLTransformFeedback": "WebGLObject",
+    "WebGLVertexArrayObject": "WebGLObject",
+    "WebGLUniformLocation": "Object",
+    "WebGLActiveInfo": "Object",
+    "WebGLShaderPrecisionFormat": "Object"
+   },
+   "ctorParents": {
+    "WebGLBuffer": "WebGLObject",
+    "WebGLTexture": "WebGLObject",
+    "WebGLUniformLocation": "Function"
+   },
+   "instance": "true|true|[object WebGLBuffer]",
+   "uniformInstance": "true"
+  },
+  "unreachable": {
+   "MediaStreamTrackVideoStats": {
+    "deliveredFrames": "TypeError: Illegal invocation",
+    "discardedFrames": "TypeError: Illegal invocation",
+    "totalFrames": "TypeError: Illegal invocation",
+    "toJSON": "TypeError: Illegal invocation"
+   },
+   "NavigationPrecommitController": {
+    "redirect": "TypeError: Illegal invocation",
+    "addHandler": "TypeError: Illegal invocation"
+   },
+   "Viewport": {
+    "segments": "TypeError: Illegal invocation"
+   }
+  },
+  "trackStats": {
+   "hasStats": true,
+   "statsArity": "TypeError: Illegal invocation",
+   "onProto": "TypeError: Illegal invocation"
+  }
+ }
+}

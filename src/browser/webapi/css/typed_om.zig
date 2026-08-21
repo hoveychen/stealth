@@ -1030,9 +1030,12 @@ pub const CSSNumericValue = struct {
         return error.SyntaxError;
     }
 
-    const Dimension = struct { value: f64, unit: Unit };
+    pub const Dimension = struct { value: f64, unit: Unit };
 
-    fn parseDimension(text: []const u8) ?Dimension {
+    /// Public so the scroll-driven timelines can decide whether a token is a
+    /// <length-percentage> without a second number parser (see
+    /// animation/timelines.zig).
+    pub fn parseDimension(text: []const u8) ?Dimension {
         var end: usize = 0;
         var seen_digit = false;
         if (end < text.len and (text[end] == '+' or text[end] == '-')) end += 1;

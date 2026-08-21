@@ -58,6 +58,13 @@ pub fn registerTypes() []const type {
         LayoutShift,
         LayoutShiftAttribution,
         VisibilityStateEntry,
+
+        // Prototype surface only -- nothing queues one and Chrome does not let
+        // a page build one. See the section at the bottom of this file.
+        PerformanceLongAnimationFrameTiming,
+        PerformanceScriptTiming,
+        PerformanceSoftNavigation,
+        InteractionContentfulPaint,
     };
 }
 
@@ -977,5 +984,206 @@ pub const VisibilityStateEntry = struct {
             pub const prototype_chain = bridge.prototypeChain();
             pub var class_id: bridge.ClassId = undefined;
         };
+    };
+};
+
+// ---------------------------------------------------------------------------
+// Prototype surface only: four more entry subclasses
+// ---------------------------------------------------------------------------
+//
+// Chrome 151 puts four more PerformanceEntry subclasses on the window than the
+// eleven above. Nothing here queues one — there is no frame-timing pass, no
+// script attribution, no soft-navigation heuristic and no interaction paint —
+// and Chrome does not let a page build one either, so the interface object and
+// the prototype are the whole surface, same as LargestContentfulPaint's.
+//
+// Every member list, order and arity is Chrome's own, measured with
+// probes/probe-shapes.js on http://localhost:8777 (readings in
+// results/probes/probe-shapes.chrome.json). `paintTime` and `presentationTime`
+// come last on the three that have them, *after* toJSON, and they are own
+// properties of each prototype rather than inherited — which is the shape
+// LargestContentfulPaint already has here. None of the four is [SecureContext],
+// and a Chrome worker has none of them (measured, probe-shapes-worker).
+
+/// One `long-animation-frame` entry: a rendering frame that took long enough for
+/// Chrome to attribute the blocking work inside it. `scripts` would hold the
+/// PerformanceScriptTiming children below.
+pub const PerformanceLongAnimationFrameTiming = struct {
+    pub const Proto = Entry;
+
+    _proto: *Entry,
+
+    fn zero(_: *const PerformanceLongAnimationFrameTiming) f64 {
+        return 0;
+    }
+
+    fn scripts(_: *const PerformanceLongAnimationFrameTiming) []const js.Value {
+        return &.{};
+    }
+
+    fn json(_: *const PerformanceLongAnimationFrameTiming) struct {} {
+        return .{};
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(PerformanceLongAnimationFrameTiming);
+
+        pub const Meta = struct {
+            pub const name = "PerformanceLongAnimationFrameTiming";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const L = PerformanceLongAnimationFrameTiming;
+
+        pub const renderStart = bridge.accessor(L.zero, null, .{});
+        pub const styleAndLayoutStart = bridge.accessor(L.zero, null, .{});
+        pub const firstUIEventTimestamp = bridge.accessor(L.zero, null, .{});
+        pub const blockingDuration = bridge.accessor(L.zero, null, .{});
+        pub const scripts = bridge.accessor(L.scripts, null, .{});
+        pub const toJSON = bridge.function(L.json, .{});
+        pub const paintTime = bridge.accessor(L.zero, null, .{});
+        pub const presentationTime = bridge.accessor(L.zero, null, .{});
+    };
+};
+
+/// One `script` entry: a single callback or classic script inside a long
+/// animation frame, with who invoked it and where it came from. `window` is the
+/// window the invoker belonged to, which is why this one has no paintTime.
+pub const PerformanceScriptTiming = struct {
+    pub const Proto = Entry;
+
+    _proto: *Entry,
+
+    fn zero(_: *const PerformanceScriptTiming) f64 {
+        return 0;
+    }
+
+    fn empty(_: *const PerformanceScriptTiming) []const u8 {
+        return "";
+    }
+
+    fn position(_: *const PerformanceScriptTiming) i32 {
+        return -1;
+    }
+
+    /// A Window, and only the browser's own entry ever names one.
+    fn nullWindow(_: *const PerformanceScriptTiming) ?js.Value {
+        return null;
+    }
+
+    fn json(_: *const PerformanceScriptTiming) struct {} {
+        return .{};
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(PerformanceScriptTiming);
+
+        pub const Meta = struct {
+            pub const name = "PerformanceScriptTiming";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const S = PerformanceScriptTiming;
+
+        pub const invokerType = bridge.accessor(S.empty, null, .{});
+        pub const invoker = bridge.accessor(S.empty, null, .{});
+        pub const windowAttribution = bridge.accessor(S.empty, null, .{});
+        pub const executionStart = bridge.accessor(S.zero, null, .{});
+        pub const forcedStyleAndLayoutDuration = bridge.accessor(S.zero, null, .{});
+        pub const pauseDuration = bridge.accessor(S.zero, null, .{});
+        pub const window = bridge.accessor(S.nullWindow, null, .{});
+        pub const sourceURL = bridge.accessor(S.empty, null, .{});
+        pub const sourceFunctionName = bridge.accessor(S.empty, null, .{});
+        pub const sourceCharPosition = bridge.accessor(S.position, null, .{});
+        pub const toJSON = bridge.function(S.json, .{});
+    };
+};
+
+/// One `soft-navigation` entry: a route change a single-page app made without a
+/// document navigation, which Chrome detects heuristically. The only one of the
+/// four with no toJSON of its own — it inherits PerformanceEntry's.
+pub const PerformanceSoftNavigation = struct {
+    pub const Proto = Entry;
+
+    _proto: *Entry,
+
+    fn zero(_: *const PerformanceSoftNavigation) f64 {
+        return 0;
+    }
+
+    fn empty(_: *const PerformanceSoftNavigation) []const u8 {
+        return "";
+    }
+
+    fn interactionId(_: *const PerformanceSoftNavigation) u32 {
+        return 0;
+    }
+
+    fn largestInteractionContentfulPaint(_: *PerformanceSoftNavigation) []const js.Value {
+        return &.{};
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(PerformanceSoftNavigation);
+
+        pub const Meta = struct {
+            pub const name = "PerformanceSoftNavigation";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const N = PerformanceSoftNavigation;
+
+        pub const navigationType = bridge.accessor(N.empty, null, .{});
+        pub const interactionId = bridge.accessor(N.interactionId, null, .{});
+        pub const getLargestInteractionContentfulPaint =
+            bridge.function(N.largestInteractionContentfulPaint, .{});
+        pub const paintTime = bridge.accessor(N.zero, null, .{});
+        pub const presentationTime = bridge.accessor(N.zero, null, .{});
+    };
+};
+
+/// One `interaction-contentful-paint` entry: the largest paint attributable to
+/// one interaction, which is how INP gets a visual counterpart.
+pub const InteractionContentfulPaint = struct {
+    pub const Proto = Entry;
+
+    _proto: *Entry,
+
+    fn zero(_: *const InteractionContentfulPaint) f64 {
+        return 0;
+    }
+
+    fn interactionId(_: *const InteractionContentfulPaint) u32 {
+        return 0;
+    }
+
+    /// A LargestContentfulPaint, which only the browser's own entry carries.
+    fn largestContentfulPaint(_: *const InteractionContentfulPaint) ?*LargestContentfulPaint {
+        return null;
+    }
+
+    fn json(_: *const InteractionContentfulPaint) struct {} {
+        return .{};
+    }
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(InteractionContentfulPaint);
+
+        pub const Meta = struct {
+            pub const name = "InteractionContentfulPaint";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+
+        const I = InteractionContentfulPaint;
+
+        pub const largestContentfulPaint = bridge.accessor(I.largestContentfulPaint, null, .{});
+        pub const interactionId = bridge.accessor(I.interactionId, null, .{});
+        pub const toJSON = bridge.function(I.json, .{});
+        pub const paintTime = bridge.accessor(I.zero, null, .{});
+        pub const presentationTime = bridge.accessor(I.zero, null, .{});
     };
 };

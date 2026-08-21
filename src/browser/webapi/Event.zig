@@ -145,6 +145,14 @@ pub const Type = union(enum) {
     webgl_context_event: *@import("event/misc_events.zig").WebGLContextEvent,
     gpu_uncaptured_error_event: *@import("webgpu/errors.zig").GPUUncapturedErrorEvent,
     window_controls_overlay_geometry_change_event: *@import("event/misc_events.zig").WindowControlsOverlayGeometryChangeEvent,
+    character_bounds_update_event: *@import("event/surface_events.zig").CharacterBoundsUpdateEvent,
+    clipboard_change_event: *@import("event/surface_events.zig").ClipboardChangeEvent,
+    command_event: *@import("event/surface_events.zig").CommandEvent,
+    interest_event: *@import("event/surface_events.zig").InterestEvent,
+    page_reveal_event: *@import("event/surface_events.zig").PageRevealEvent,
+    page_swap_event: *@import("event/surface_events.zig").PageSwapEvent,
+    text_format_update_event: *@import("event/surface_events.zig").TextFormatUpdateEvent,
+    text_update_event: *@import("event/surface_events.zig").TextUpdateEvent,
 };
 
 pub const Options = struct {
@@ -336,6 +344,14 @@ pub fn is(self: *Event, comptime T: type) ?*T {
         .webgl_context_event => |e| return if (T == @import("event/misc_events.zig").WebGLContextEvent) e else null,
         .gpu_uncaptured_error_event => |e| return if (T == @import("webgpu/errors.zig").GPUUncapturedErrorEvent) e else null,
         .window_controls_overlay_geometry_change_event => |e| return if (T == @import("event/misc_events.zig").WindowControlsOverlayGeometryChangeEvent) e else null,
+        .character_bounds_update_event => |e| return if (T == @import("event/surface_events.zig").CharacterBoundsUpdateEvent) e else null,
+        .clipboard_change_event => |e| return if (T == @import("event/surface_events.zig").ClipboardChangeEvent) e else null,
+        .command_event => |e| return if (T == @import("event/surface_events.zig").CommandEvent) e else null,
+        .interest_event => |e| return if (T == @import("event/surface_events.zig").InterestEvent) e else null,
+        .page_reveal_event => |e| return if (T == @import("event/surface_events.zig").PageRevealEvent) e else null,
+        .page_swap_event => |e| return if (T == @import("event/surface_events.zig").PageSwapEvent) e else null,
+        .text_format_update_event => |e| return if (T == @import("event/surface_events.zig").TextFormatUpdateEvent) e else null,
+        .text_update_event => |e| return if (T == @import("event/surface_events.zig").TextUpdateEvent) e else null,
     }
     return null;
 }
