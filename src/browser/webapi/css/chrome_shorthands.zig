@@ -24,18 +24,18 @@
 //                     and the group repeats -- which is how `border` reaches all four
 //                     sides. Order does not matter: `1px solid red`, `solid red 1px`
 //                     and `red 1px solid` all land identically, measured.
-//   layers        8  a comma-separated list of layers, each with a position filling two
+//   layers       10  a comma-separated list of layers, each with a position filling two
 //                     longhands, a size only a `/` introduces, and slots shared by the
 //                     whole value that only the last layer may write (`background`).
 //   presets       1  a lookup over the whole value space, used where the keyword table says a
 //                     single keyword is all a page can write (`white-space`).
-//   unmodelled   31  no model reproduced every reading; the engine keeps the shorthand whole.
+//   unmodelled   29  no model reproduced every reading; the engine keeps the shorthand whole.
 //
 // The unmodelled ones are the shorthands with a real grammar behind them,
 // border-image, border-radius, column-rule-inset, columns, container, flex,
 // font, font-synthesis, font-variant, grid, grid-area, grid-column,
-// grid-row, grid-template, list-style, mask, offset, place-content,
-// position-try, row-rule-inset, rule-inset, text-box, text-emphasis,
+// grid-row, grid-template, list-style, offset, place-content, position-try,
+// row-rule-inset, rule-inset, text-box, text-emphasis,
 // plus their -webkit- spellings. The engine keeps those whole, so
 // `style.length` answers 1 where Chrome says 9: a visible difference, but a
 // smaller one than nine invented values.
@@ -119,6 +119,13 @@ pub const Shorthand = struct {
     /// origin, so `text border-box` lands the other way round from how it
     /// was written.
     boxes: [2]u8 = .{ no_slot, no_slot },
+    /// For `.layers`: whether the box pair is written as one component
+    /// when the two agree. `mask: content-box content-box` answers one
+    /// `content-box` where `background: content-box` answers two, and with
+    /// the origin at its initial the pair still writes it -- unless the clip
+    /// holds a value the origin could not take, which is why
+    /// `mask: border-box no-clip` answers just `no-clip`.
+    box_collapse: bool = false,
     /// For `.layers`: the longhand a `/` introduces, which may only sit
     /// straight after the position -- `url(a) / 20px` does not parse.
     size_slot: u8 = no_slot,
@@ -212,7 +219,7 @@ pub const shorthands = std.StaticStringMap(Shorthand).initComptime(.{
     .{ "-webkit-margin-before", Shorthand{ .kind = .alias, .longhands = &.{"margin-block-start"}, .fillers = &.{"initial"} } },
     .{ "-webkit-margin-end", Shorthand{ .kind = .alias, .longhands = &.{"margin-inline-end"}, .fillers = &.{"initial"} } },
     .{ "-webkit-margin-start", Shorthand{ .kind = .alias, .longhands = &.{"margin-inline-start"}, .fillers = &.{"initial"} } },
-    .{ "-webkit-mask", Shorthand{ .kind = .unmodelled, .longhands = &.{ "mask-image", "-webkit-mask-position-x", "-webkit-mask-position-y", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite", "mask-mode" }, .fillers = &.{} } },
+    .{ "-webkit-mask", Shorthand{ .kind = .layers, .longhands = &.{ "mask-image", "-webkit-mask-position-x", "-webkit-mask-position-y", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite", "mask-mode" }, .fillers = &.{ "initial", "0%", "0%", "auto", "repeat", "border-box", "border-box", "add", "match-source" }, .layer_width = 9, .axes = .{ 1, 2 }, .implied = "center", .boxes = .{ 5, 6 }, .box_collapse = true, .size_slot = 3, .offsets = &.{ &.{ "left", "right" }, &.{ "bottom", "top" } }, .omit = &.{ &.{"initial"}, &.{"0%"}, &.{"0%"}, &.{"auto"}, &.{"repeat"}, &.{"border-box"}, &.{"border-box"}, &.{"add"}, &.{"match-source"} }, .empty = "none" } },
     .{ "-webkit-mask-box-image", Shorthand{ .kind = .unmodelled, .longhands = &.{ "-webkit-mask-box-image-source", "-webkit-mask-box-image-slice", "-webkit-mask-box-image-width", "-webkit-mask-box-image-outset", "-webkit-mask-box-image-repeat" }, .fillers = &.{} } },
     .{ "-webkit-mask-clip", Shorthand{ .kind = .alias, .longhands = &.{"mask-clip"}, .fillers = &.{"initial"} } },
     .{ "-webkit-mask-composite", Shorthand{ .kind = .alias, .longhands = &.{"mask-composite"}, .fillers = &.{"initial"} } },
@@ -320,7 +327,7 @@ pub const shorthands = std.StaticStringMap(Shorthand).initComptime(.{
     .{ "margin-block", Shorthand{ .kind = .box2, .longhands = &.{ "margin-block-start", "margin-block-end" }, .fillers = &.{ "initial", "initial" } } },
     .{ "margin-inline", Shorthand{ .kind = .box2, .longhands = &.{ "margin-inline-start", "margin-inline-end" }, .fillers = &.{ "initial", "initial" } } },
     .{ "marker", Shorthand{ .kind = .components, .longhands = &.{ "marker-start", "marker-mid", "marker-end" }, .fillers = &.{ "initial", "initial", "initial" }, .group = 1, .groups = 3, .omit = &.{&.{}} } },
-    .{ "mask", Shorthand{ .kind = .unmodelled, .longhands = &.{ "mask-image", "-webkit-mask-position-x", "-webkit-mask-position-y", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite", "mask-mode" }, .fillers = &.{} } },
+    .{ "mask", Shorthand{ .kind = .layers, .longhands = &.{ "mask-image", "-webkit-mask-position-x", "-webkit-mask-position-y", "mask-size", "mask-repeat", "mask-origin", "mask-clip", "mask-composite", "mask-mode" }, .fillers = &.{ "initial", "0%", "0%", "auto", "repeat", "border-box", "border-box", "add", "match-source" }, .layer_width = 9, .axes = .{ 1, 2 }, .implied = "center", .boxes = .{ 5, 6 }, .box_collapse = true, .size_slot = 3, .offsets = &.{ &.{ "left", "right" }, &.{ "bottom", "top" } }, .omit = &.{ &.{"initial"}, &.{"0%"}, &.{"0%"}, &.{"auto"}, &.{"repeat"}, &.{"border-box"}, &.{"border-box"}, &.{"add"}, &.{"match-source"} }, .empty = "none" } },
     .{ "mask-position", Shorthand{ .kind = .layers, .longhands = &.{ "-webkit-mask-position-x", "-webkit-mask-position-y" }, .fillers = &.{ "initial", "initial" }, .layer_width = 2, .axes = .{ 0, 1 }, .implied = "center", .offsets = &.{ &.{ "left", "right" }, &.{ "bottom", "top" } }, .omit = &.{ &.{}, &.{} }, .empty = "" } },
     .{ "offset", Shorthand{ .kind = .unmodelled, .longhands = &.{ "offset-position", "offset-path", "offset-distance", "offset-rotate", "offset-anchor" }, .fillers = &.{} } },
     .{ "outline", Shorthand{ .kind = .components, .longhands = &.{ "outline-color", "outline-style", "outline-width" }, .fillers = &.{ "initial", "initial", "initial" }, .group = 3, .groups = 1, .omit = &.{ &.{"initial"}, &.{"initial"}, &.{"initial"} } } },

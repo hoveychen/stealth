@@ -787,14 +787,37 @@ function layerVector(parsed, m, fill, stored) {
 // Reading the shorthand back: every slot that is not at its dropped value, in
 // longhand order, with the size behind a `/` and the shared slots appended to
 // the last layer.
-function joinLayers(values, m, omit, empty, order) {
+function joinLayers(values, m, omit, empty, order, fill, accepts) {
     const per = values.map((v, s) => s < m.width ? layersOf(v) : [v]);
     const count = Math.max(...per.slice(0, m.width).map((l) => l.length));
     const out = [];
     for (let n = 0; n < count; n++) {
+        const at = (s) => s < m.width ? per[s][n] : (n === count - 1 ? per[s][0] : undefined);
         const kept = [];
         for (const s of order) {
-            const held = s < m.width ? per[s][n] : (n === count - 1 ? per[s][0] : undefined);
+            // A collapsing box pair is written as a unit, and `mask` is the
+            // reason the flag exists: with the two agreeing it writes one
+            // component where `background` writes both, and with the origin at
+            // its initial it still writes it -- unless the clip holds
+            // something the origin could not.
+            if (m.collapse && s === m.boxes[1]) continue;
+            if (m.collapse && s === m.boxes[0]) {
+                const [oi, ci] = m.boxes;
+                const origin = at(oi), clip = at(ci);
+                if (origin === undefined || clip === undefined) continue;
+                const bare = (slot, held) => omit[slot].includes(held.toLowerCase());
+                const o = bare(oi, origin) ? fill[oi] : origin;
+                const c = bare(ci, clip) ? fill[ci] : clip;
+                if (sameValue(o, c)) {
+                    if (!bare(oi, origin)) kept.push(o);
+                } else if (!accepts(oi, c) && bare(oi, origin)) {
+                    kept.push(c);
+                } else {
+                    kept.push(o, c);
+                }
+                continue;
+            }
+            const held = at(s);
             if (held === undefined || omit[s].includes(held.toLowerCase())) continue;
             kept.push(s === m.size ? `/ ${held}` : held);
         }
@@ -864,10 +887,13 @@ function layerCandidate(longhands, plain, canon, classes, keywords) {
     for (const axes of pairs) {
         for (const boxes of boxPairs) {
             if (axes && boxes && (boxes.includes(axes[0]) || boxes.includes(axes[1]))) continue;
+        for (const collapse of boxes ? [false, true] : [false]) {
         for (const size of [NO_SLOT, ...lengthy]) {
             if (axes && (size === axes[0] || size === axes[1])) continue;
             if (boxes && boxes.includes(size)) continue;
-            const m = { total, width, axes, boxes, size, implied: '', offsets: [[], []] };
+            const m = {
+                total, width, axes, boxes, collapse, size, implied: '', offsets: [[], []],
+            };
             if (axes) {
                 m.offsets = [offsetsFor(axes[0]), offsetsFor(axes[1])];
                 // What the axis the page did not write is left holding, taken
@@ -964,6 +990,7 @@ function layerCandidate(longhands, plain, canon, classes, keywords) {
                     const shown = components(layersOf(r.read)[0] ?? '');
                     const seen = [];
                     for (const s of identity) {
+                        if (m.collapse && s === m.boxes[1]) continue;
                         const held = s < width ? layersOf(r.v[s])[0] : r.v[s];
                         if (held === undefined || flat[s].includes(held.toLowerCase())) continue;
                         const at = shown.indexOf(components(held)[0]);
@@ -985,8 +1012,8 @@ function layerCandidate(longhands, plain, canon, classes, keywords) {
             let order = null;
             const empty = empties.find((candidate) => [identity, derived]
                 .filter(Boolean).some((attempt) => {
-                    const fits = rows.every(([, r]) =>
-                        sameValue(joinLayers(r.v, m, flat, candidate, attempt), r.read));
+                    const fits = rows.every(([, r]) => sameValue(
+                        joinLayers(r.v, m, flat, candidate, attempt, filler, accepts), r.read));
                     if (fits) order = attempt;
                     return fits;
                 }));
@@ -1006,18 +1033,19 @@ function layerCandidate(longhands, plain, canon, classes, keywords) {
             // Several shapes can reproduce the rows; the one that reproduces
             // the most of them is the one kept, and a position beats a box pair
             // on a tie because it is the narrower claim.
-            const score = [parsed.size, axes ? 1 : 0, boxes ? 0 : 1];
+            const score = [parsed.size, axes ? 1 : 0, boxes ? 0 : 1, collapse ? 0 : 1];
             if (best && !score.some((v, i) => v > best.score[i] &&
                 score.slice(0, i).every((w, j) => w === best.score[j]))) continue;
             best = { score, model: {
                 kind: 'layers', group: 0, groups: 0, blocked: false, fill: filler,
                 layer_width: width, axes, size, implied: m.implied,
-                boxes, offsets: m.offsets, omit: flat, empty,
+                boxes, collapse, offsets: m.offsets, omit: flat, empty,
                 order: order.every((v, i) => v === i) ? [] : order,
                 refuse: [...refuse].sort(),
                 declined: plain.filter(([v]) => !parsed.has(v)).map(([v]) => v),
                 reached: parsed.size,
             } };
+        }
         }
         }
     }
@@ -1387,6 +1415,13 @@ async function measure() {
         '    /// origin, so `text border-box` lands the other way round from how it',
         '    /// was written.',
         '    boxes: [2]u8 = .{ no_slot, no_slot },',
+        '    /// For `.layers`: whether the box pair is written as one component',
+        '    /// when the two agree. `mask: content-box content-box` answers one',
+        '    /// `content-box` where `background: content-box` answers two, and with',
+        '    /// the origin at its initial the pair still writes it -- unless the clip',
+        '    /// holds a value the origin could not take, which is why',
+        '    /// `mask: border-box no-clip` answers just `no-clip`.',
+        '    box_collapse: bool = false,',
         '    /// For `.layers`: the longhand a `/` introduces, which may only sit',
         '    /// straight after the position -- `url(a) / 20px` does not parse.',
         '    size_slot: u8 = no_slot,',
@@ -1429,6 +1464,7 @@ async function measure() {
                 if (s.axes) parts.push(`.axes = .{ ${s.axes[0]}, ${s.axes[1]} }`);
                 if (s.implied) parts.push(`.implied = ${zigString(s.implied)}`);
                 if (s.boxes) parts.push(`.boxes = .{ ${s.boxes[0]}, ${s.boxes[1]} }`);
+                if (s.collapse) parts.push('.box_collapse = true');
                 if (s.size !== 255) parts.push(`.size_slot = ${s.size}`);
                 if (s.refuse.length) parts.push(`.refuse = ${zigList(s.refuse)}`);
                 parts.push('.offsets = ' + zigSeq(s.offsets.map(zigList)));
