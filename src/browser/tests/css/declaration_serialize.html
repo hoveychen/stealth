@@ -92,5 +92,75 @@ function withStyle(text) {
     testing.expectEqual('width: 10px; display: block; --Case: 1px;', round.getAttribute('style'));
 }
 </script>
+
+<script id="value_case_is_canonicalised_in_four_places">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // A keyword the property takes, from the measured per-property table.
+    testing.expectEqual('display: block;', round('display: BLOCK'));
+    testing.expectEqual('position: absolute;', round('position: Absolute'));
+    testing.expectEqual('color: red;', round('color: RED'));
+    testing.expectEqual('overflow: hidden visible;', round('overflow: HIDDEN Visible'));
+
+    // A CSS-wide keyword, which every property takes.
+    testing.expectEqual('width: inherit;', round('width: INHERIT'));
+    testing.expectEqual('display: unset;', round('display: Unset'));
+
+    // A dimension's unit, wherever the dimension sits in the value.
+    testing.expectEqual('width: 10px;', round('width: 10PX'));
+    testing.expectEqual('width: 10em;', round('width: 10EM'));
+    testing.expectEqual('margin: 1px 2px;', round('margin: 1PX 2Px'));
+
+    // A function name, in Chrome's spelling rather than lowercased: the
+    // transform functions are the reason a blanket toLowerCase() is wrong.
+    testing.expectEqual('color: rgb(1, 2, 3);', round('color: RGB(1, 2, 3)'));
+    testing.expectEqual('background-color: rgba(1, 2, 3, 0.5);', round('background-color: RGBA(1, 2, 3, 0.5)'));
+    testing.expectEqual('transform: translateX(1px);', round('transform: TranslateX(1PX)'));
+
+    // !important is not part of the value, and was already lowercased.
+    testing.expectEqual('color: red !important;', round('color: RED !IMPORTANT'));
+
+    // setProperty and the camelCase attribute take the same path as parsing
+    // the attribute text.
+    const set = withStyle('');
+    set.style.setProperty('color', 'RED');
+    testing.expectEqual('red', set.style.color);
+    testing.expectEqual('color: red;', set.getAttribute('style'));
+    const camel = withStyle('');
+    camel.style.color = 'RED';
+    testing.expectEqual('red', camel.style.color);
+    testing.expectEqual('color: red;', camel.getAttribute('style'));
+}
+</script>
+
+<script id="value_case_is_left_alone_everywhere_else">
+{
+    const round = (text) => withStyle(text).style.cssText;
+
+    // A <custom-ident>: the property takes any identifier, so none of them is
+    // a keyword to canonicalise.
+    testing.expectEqual('font-family: MyOwnFont;', round('font-family: MyOwnFont'));
+    testing.expectEqual('animation-name: MyAnim;', round('animation-name: MyAnim'));
+    testing.expectEqual('grid-area: MyArea;', round('grid-area: MyArea'));
+    testing.expectEqual('counter-reset: MyCounter 3;', round('counter-reset: MyCounter 3'));
+    const family = withStyle('');
+    family.style.setProperty('font-family', 'MyOwnFont');
+    testing.expectEqual('MyOwnFont', family.style.fontFamily);
+
+    // A string is content, not syntax.
+    testing.expectEqual('content: "MiXeD";', round('content: "MiXeD"'));
+
+    // A custom property is stored as written, name and value both.
+    testing.expectEqual('--Case: MiXeD Value;', round('--Case: MiXeD Value'));
+    testing.expectEqual('MiXeD Value', withStyle('--Case: MiXeD Value').style.getPropertyValue('--Case'));
+
+    // A value whose real content is substituted later is frozen whole: the
+    // function name is not re-cased and neither is anything around it.
+    testing.expectEqual('width: VAR(--Foo);', round('width: VAR(--Foo)'));
+    testing.expectEqual('content: ATTR(Data-X);', round('content: ATTR(Data-X)'));
+    testing.expectEqual('width: CALC(1PX + VAR(--a));', round('width: CALC(1PX + VAR(--a))'));
+}
+</script>
 </body>
 </html>

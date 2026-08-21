@@ -30,7 +30,9 @@ const log = lp.log;
 const String = lp.String;
 const Allocator = std.mem.Allocator;
 
+const chrome_keywords = @import("chrome_keywords.zig");
 const chrome_properties = @import("chrome_properties.zig");
+const chrome_value_case = @import("chrome_value_case.zig");
 const typed_om = @import("typed_om.zig");
 
 const CSSStyleDeclaration = @This();
@@ -502,7 +504,8 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
     if (isCustomProperty(property_name)) {
         return std.mem.trim(u8, raw_value, &std.ascii.whitespace);
     }
-    const value = try normalizeLeadingZeros(arena, raw_value);
+    const cased = try normalizeValueCase(arena, property_name, raw_value);
+    const value = try normalizeLeadingZeros(arena, cased);
 
     // Per CSSOM spec, unitless zero in length properties should serialize as "0px"
     if (std.mem.eql(u8, value, "0") and isLengthProperty(property_name)) {
@@ -542,6 +545,231 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
     }
 
     return value;
+}
+
+/// Chrome rewrites the case of exactly four things inside a value and leaves
+/// everything else as the author wrote it (measured, probe-css13.js): a keyword
+/// the property takes, a CSS-wide keyword, a dimension's unit and a function
+/// name. Each is rewritten to the spelling Chrome answers with rather than
+/// lowercased -- `TranslateX(1PX)` comes back `translateX(1px)`, so a blanket
+/// `toLowerCase()` would trade one tell for another.
+///
+/// The tables are the limit of what is rewritten: a keyword the property is not
+/// measured as taking, a unit or a function name no measurement reached, and
+/// anything that is not one of those four shapes at all -- a `<custom-ident>`, a
+/// string, a hex colour, an unquoted url path -- all come through untouched.
+/// Under-normalising leaves a page working; over-normalising invents a spelling
+/// Chrome never uses.
+///
+/// `property_name` has already been lowercased by `storeProperty`, which is the
+/// spelling both keyword tables are keyed on.
+fn normalizeValueCase(arena: Allocator, property_name: []const u8, value: []const u8) ![]const u8 {
+    // Measured: a value whose real content is substituted later is kept byte
+    // for byte, and that covers everything around the substitution as well --
+    // `width: CALC(1PX + VAR(--a))` reads back exactly as written.
+    if (hasVerbatimFunction(value)) {
+        return value;
+    }
+
+    // A property taking an arbitrary `<custom-ident>` has no keyword to
+    // canonicalise: `font-family: MyOwnFont` and `grid-area: MyArea` keep their
+    // capitals. Units and function names are still rewritten there, since
+    // neither shape can be a custom ident.
+    const keywords: ?[]const []const u8 = if (chrome_keywords.any_identifier.has(property_name))
+        null
+    else
+        chrome_keywords.keywords.get(property_name);
+
+    // A CSS-wide keyword is only one when it is the whole value; inside a list
+    // the same word can be a family name.
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+    var changed = false;
+    var i: usize = 0;
+    while (i < value.len) {
+        const c = value[i];
+
+        // A string is content rather than syntax: `content: "MiXeD"` keeps its
+        // case, quotes and escapes.
+        if (c == '"' or c == '\'') {
+            const end = stringEnd(value, i);
+            try buf.writer.writeAll(value[i..end]);
+            i = end;
+            continue;
+        }
+
+        if (isIdentStart(value, i)) {
+            const end = identEnd(value, i);
+            const name = value[i..end];
+
+            if (end < value.len and value[end] == '(') {
+                const spelling = lookupSpelling(chrome_value_case.functions, name) orelse name;
+                try buf.writer.writeAll(spelling);
+                changed = changed or !std.mem.eql(u8, spelling, name);
+                i = end;
+                // A url()'s content is a single opaque token, not a value:
+                // `URL(Foo/Bar.PNG)` re-cases the name and nothing else.
+                if (std.ascii.eqlIgnoreCase(name, "url")) {
+                    const close = std.mem.indexOfScalarPos(u8, value, i, ')') orelse value.len - 1;
+                    try buf.writer.writeAll(value[i .. close + 1]);
+                    i = close + 1;
+                }
+                continue;
+            }
+
+            // The hex digits of `#AABBCC` only look like an identifier.
+            const spelling = if (i > 0 and value[i - 1] == '#')
+                name
+            else
+                keywordSpelling(keywords, name, std.mem.eql(u8, trimmed, name));
+            try buf.writer.writeAll(spelling);
+            changed = changed or !std.mem.eql(u8, spelling, name);
+            i = end;
+            continue;
+        }
+
+        if (numberEnd(value, i)) |number_end| {
+            try buf.writer.writeAll(value[i..number_end]);
+            i = number_end;
+            if (i < value.len and isIdentStart(value, i)) {
+                const end = identEnd(value, i);
+                const unit = value[i..end];
+                const spelling = lookupSpelling(chrome_value_case.units, unit) orelse unit;
+                try buf.writer.writeAll(spelling);
+                changed = changed or !std.mem.eql(u8, spelling, unit);
+                i = end;
+            }
+            continue;
+        }
+
+        try buf.writer.writeByte(c);
+        i += 1;
+    }
+
+    // Most values carry no capital at all, so the copy is thrown away far more
+    // often than it is kept.
+    if (!changed) {
+        buf.deinit();
+        return value;
+    }
+    return buf.written();
+}
+
+/// The canonical spelling of a bare identifier, or the one it was written with
+/// when no table vouches for it -- the same judgement `typed_om.lookupIdentifier`
+/// makes, and for the same reason: guessing at a name the measurement never
+/// covered is how an engine ends up stricter, or louder, than Chrome.
+fn keywordSpelling(keywords: ?[]const []const u8, name: []const u8, whole_value: bool) []const u8 {
+    if (whole_value) {
+        for (chrome_keywords.css_wide) |keyword| {
+            if (std.ascii.eqlIgnoreCase(keyword, name)) return keyword;
+        }
+    }
+    for (keywords orelse return name) |keyword| {
+        if (std.ascii.eqlIgnoreCase(keyword, name)) return keyword;
+    }
+    return name;
+}
+
+fn lookupSpelling(table: std.StaticStringMap([]const u8), name: []const u8) ?[]const u8 {
+    var buf: [64]u8 = undefined;
+    if (name.len > buf.len) {
+        return null;
+    }
+    return table.get(std.ascii.lowerString(buf[0..name.len], name));
+}
+
+/// Whether the value calls one of the functions Chrome does not re-case.
+fn hasVerbatimFunction(value: []const u8) bool {
+    for (chrome_value_case.verbatim_functions) |name| {
+        var from: usize = 0;
+        while (std.ascii.indexOfIgnoreCasePos(value, from, name)) |at| {
+            from = at + name.len;
+            // A function name is only one when it is a whole name followed
+            // immediately by the paren: `--myvar(` is not `var(`.
+            if (from < value.len and value[from] == '(' and (at == 0 or !isIdentChar(value[at - 1]))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+fn isIdentChar(c: u8) bool {
+    return std.ascii.isAlphanumeric(c) or c == '-' or c == '_';
+}
+
+fn isIdentStart(value: []const u8, index: usize) bool {
+    const c = value[index];
+    if (std.ascii.isAlphabetic(c) or c == '_') {
+        return true;
+    }
+    if (c != '-' or index + 1 >= value.len) {
+        return false;
+    }
+    const next = value[index + 1];
+    return std.ascii.isAlphabetic(next) or next == '_' or next == '-';
+}
+
+fn identEnd(value: []const u8, start: usize) usize {
+    var i = start;
+    while (i < value.len and isIdentChar(value[i])) : (i += 1) {}
+    return i;
+}
+
+/// Where the number starting at `index` ends, or null when one does not start
+/// there. The exponent is only taken when digits follow it, so the `e` of
+/// `1em` stays with the unit.
+fn numberEnd(value: []const u8, index: usize) ?usize {
+    var i = index;
+    if (value[i] == '+' or value[i] == '-') {
+        i += 1;
+    }
+    var digits: usize = 0;
+    while (i < value.len and std.ascii.isDigit(value[i])) : (i += 1) {
+        digits += 1;
+    }
+    if (i < value.len and value[i] == '.') {
+        var j = i + 1;
+        while (j < value.len and std.ascii.isDigit(value[j])) : (j += 1) {
+            digits += 1;
+        }
+        if (j > i + 1) {
+            i = j;
+        }
+    }
+    if (digits == 0) {
+        return null;
+    }
+    if (i < value.len and (value[i] == 'e' or value[i] == 'E')) {
+        var j = i + 1;
+        if (j < value.len and (value[j] == '+' or value[j] == '-')) {
+            j += 1;
+        }
+        const exponent_start = j;
+        while (j < value.len and std.ascii.isDigit(value[j])) : (j += 1) {}
+        if (j > exponent_start) {
+            i = j;
+        }
+    }
+    return i;
+}
+
+fn stringEnd(value: []const u8, start: usize) usize {
+    const quote = value[start];
+    var i = start + 1;
+    while (i < value.len) : (i += 1) {
+        if (value[i] == '\\') {
+            i += 1;
+            continue;
+        }
+        if (value[i] == quote) {
+            return i + 1;
+        }
+    }
+    return value.len;
 }
 
 // Insert a leading "0" before any bare ".<digit>". A value might have multiple
@@ -1472,6 +1700,53 @@ test "normalizePropertyValue: collapse duplicate two-value shorthands" {
     };
     inline for (cases) |case| {
         const result = try normalizePropertyValue(testing.allocator, case[0], case[1]);
+        try testing.expectEqual(case[2], result);
+    }
+}
+
+// The tokenising edges the fixture in tests/css/declaration_serialize.html does
+// not reach. Those rows are all Chrome's answer; three of these are not, and say
+// so -- they are shapes Chrome rewrites past a case change (a hex colour into
+// `rgb()`, an exponent into digits, an unquoted url into a quoted one), which is
+// out of this plan's scope. What is asserted there is that the case pass leaves
+// the rest of the value exactly where it found it.
+test "normalizePropertyValue: value case" {
+    const cases = .{
+        // The four shapes Chrome re-cases, in the spelling it answers with.
+        .{ "display", "BLOCK", "block" },
+        .{ "width", "INHERIT", "inherit" },
+        .{ "width", "10PX", "10px" },
+        .{ "transform", "TranslateX(1PX)", "translateX(1px)" },
+        .{ "margin", "-1PX -2.5EM", "-1px -2.5em" },
+        .{ "width", "CALC(1PX)", "calc(1px)" },
+        // Measured: only the whole value is a CSS-wide keyword. `font-family:
+        // Initial` is `initial`, where `font-family: MyFont, Initial` is not a
+        // list with a lowercased tail -- Chrome drops the declaration whole.
+        .{ "font-family", "Initial", "initial" },
+        .{ "font-family", "MyFont, Initial", "MyFont, Initial" },
+        // A keyword the property is not measured as taking is left alone.
+        // (Chrome drops this declaration; this engine keeps invalid values, a
+        // separate and already-recorded difference.)
+        .{ "display", "Nonsense", "Nonsense" },
+        // Not one of the four shapes. Chrome answers `rgb(170, 187, 204)` to
+        // the first; what matters here is that the hex digits are not read as
+        // an identifier.
+        .{ "color", "#AABBCC", "#AABBCC" },
+        .{ "content", "\"MiXeD\"", "\"MiXeD\"" },
+        .{ "content", "\"1PX\"", "\"1PX\"" },
+        // Chrome also quotes the path (`url("Foo/Bar.PNG")`); the case of the
+        // path itself survives either way.
+        .{ "background-image", "URL(Foo/Bar.PNG)", "url(Foo/Bar.PNG)" },
+        // An `e` only starts an exponent when digits follow it, or `1em` would
+        // lose its unit. Chrome folds the second to `100px`.
+        .{ "width", "1EM", "1em" },
+        .{ "width", "1E2PX", "1E2px" },
+        // A substituted value freezes whole, capitals and all.
+        .{ "width", "VAR(--Foo)", "VAR(--Foo)" },
+        .{ "width", "CALC(1PX + VAR(--a))", "CALC(1PX + VAR(--a))" },
+    };
+    inline for (cases) |case| {
+        const result = try normalizePropertyValue(testing.arena_allocator, case[0], case[1]);
         try testing.expectEqual(case[2], result);
     }
 }
