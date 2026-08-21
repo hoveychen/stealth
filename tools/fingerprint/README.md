@@ -5135,6 +5135,82 @@ declines, and not new here. Every earlier probe holds:
 identifiers 0 of 449, colours 0 of 304, CSS-wide 0 of 39, keyword spelling 0 of
 27, `probe-css13` 1 of 42 (the one deliberately unfixed case).
 
+## A pair is not always a fold (2026-08-21)
+
+The section above left five values declined and blamed the longhand: a
+two-value repeat or size "is the longhand's own collapse rule, not a
+distribution". Half of that was right and half was an alibi. The canonicaliser
+folded `X X` to `X` for a list of 24 properties, and folding is one of *three*
+things Chrome does to a pair — which `probe-css15.js` measured across every
+member of that list, both directions of every asymmetric pair, and the twins
+the list was missing:
+
+* **fold** — an equal pair becomes one value, an unequal one stays two. Right
+  for 22 of the 24: `gap: 10px 10px` is `10px`, `place-content: center center`
+  is `center`, `border-image-repeat: stretch repeat` is itself.
+* **size** — `background-size` / `mask-size` do *not* fold. `10px 10px` is two
+  values in Chrome and the fold was answering `10px`. What they do instead is
+  drop a trailing `auto` — the half a one-value size would have implied anyway
+  — so `10px auto` and `auto auto` shorten and `auto 10px` does not.
+* **repeat** — a fold *plus* a rename. `repeat no-repeat` is `repeat-x` and
+  `no-repeat repeat` is `repeat-y`; every other mixed pair (`space round`,
+  `repeat space`) stays a pair, and `repeat-x` is a single value no pair may
+  contain (`repeat-x no-repeat` is rejected). `background-repeat` was not in
+  the list at all, so `repeat repeat` came back as two.
+
+All three run per comma-separated layer: `background-repeat: repeat, repeat
+no-repeat` answers `repeat, repeat-x`.
+
+Two smaller readings came with it. A bare `0` takes its unit in *either* half
+of a size (`background-size: 0 0` is `0px 0px`, `0 auto` is `0px`), where the
+whole-value rule only reached a lone `0`. And `-webkit-mask-size` /
+`-webkit-mask-repeat` need no entry — they are stored under the unprefixed
+name and arrive already renamed — while `-webkit-mask-box-image-repeat` keeps
+its own name and did need one.
+
+**Which turns four of the five layer declines into ordinary layers.** With the
+longhand shortening the pair, the model no longer has to avoid producing one:
+the size after the `/` and the repeat each take a run of *two* components, and
+`left top / 10px 20px`, `10px 20px / 30px 40px`, `repeat no-repeat` and
+`space round` all expand. Which slots those are is measured rather than named,
+off the longhand's own canon: a slot takes a pair when its canon carries a
+two-component run Chrome kept, which `background-attachment` (throwing
+`scroll fixed` away) does not.
+
+The one trap there: an axis's canon carries `left 10px` too, and that is an
+edge and its offset rather than a pair. Counting it let a bare `mask-position`
+place `left top` on one axis and lose the other, which cost `mask-position` its
+model outright — `.layers` demoted to `.unmodelled` in the generated table. The
+`offsets` measurement already names those keywords, so excluding them is one
+condition, and the kind column is unchanged from before this work.
+
+Measured after: the layer probe goes from 185 of 224 matching Chrome to **197**,
+with three real declines left — `background: border-area` and the two
+`-webkit-mask` `text` forms, all three out of scope here and already recorded
+above. The 24 values Chrome rejects and this engine keeps whole are unchanged.
+`probe-css15` itself: 225 of 235 readings match. The ten that do not are six
+values Chrome rejects and this engine keeps (`place-content: baseline
+baseline`, `background-repeat: repeat-x repeat-x` and `repeat-x no-repeat`,
+`border-block`, `cue`) and four shapes this work did not touch
+(`text-emphasis: circle filled` reorders, `grid-row` / `grid-column`
+`auto / auto` folds). Every earlier probe holds unchanged: identifiers 0 of
+449, colours 0 of 304, CSS-wide 0 of 39, keyword spelling 0 of 27,
+`probe-css13` 1 of 42.
+
+Three things this measured and deliberately did not fix, each its own shape
+rather than a pair:
+
+* **The four-value box family already agrees** — `margin: 10px 20px 10px` is
+  `10px 20px`, `border-width: 1px 1px 1px 1px` is `1px` — because those go out
+  through the shorthand table, not through this fold. `border-radius` is the
+  exception: it keeps all four and its `/` form whole where Chrome elides both.
+* **A shadow list's zeros.** `text-shadow: 0 0 red` is `red 0px 0px` in Chrome
+  and `0 0 red` here: two rewrites, a reorder and a per-token unit, neither of
+  which is a pair.
+* **`background-position: 0 0, 10px 10px`** keeps its bare zeros where the
+  single-layer `0 0` does not — the shorthand expansion that fixes the first
+  does not reach a layered value.
+
 ## The commercial guards, and the regression that came with them (2026-08-20)
 
 Everything above this line measures a *detector*: a page that reads a
