@@ -200,6 +200,14 @@ pub fn init(
     // features like BroadcastChannel can reach across the page/worker boundary.
     try self.js.setOrigin(self.origin);
 
+    // Same for the [SecureContext] gate, and once is enough: a worker realm has
+    // no navigation, so its answer cannot change after this. Measured on a
+    // headed Chrome 151, a worker owned by an insecure page sees 243 globals
+    // against 336 for one owned by a trustworthy origin.
+    if (frame.secure_context == false) {
+        self.js.hideSecureContextGlobals();
+    }
+
     return leaf;
 }
 

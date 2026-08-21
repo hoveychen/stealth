@@ -34,6 +34,7 @@ const JsApis = bridge.JsApis;
 const PageJsApis = bridge.PageJsApis;
 const SharedWorkerJsApis = bridge.SharedWorkerJsApis;
 const DedicatedWorkerJsApis = bridge.DedicatedWorkerJsApis;
+const secure_context = @import("secure_context.zig");
 
 const Snapshot = @This();
 
@@ -510,6 +511,41 @@ fn memberExposed(value: anytype) Caller.Function.Opts.Exposed {
         return value.exposed;
     }
     return .both;
+}
+
+// The [SecureContext] gate works off a list of names, so a typo would silently
+// gate nothing at all. Every name in it has to be a global this engine puts on
+// the page realm: an interface object, one of its extra constructor names, a
+// namespace, or a Window member.
+comptime {
+    @setEvalBranchQuota(500_000);
+    for (secure_context.gated_interfaces) |name| {
+        if (isPageInterfaceName(name) == false) {
+            @compileError("secure_context.gated_interfaces: no interface object named " ++ name);
+        }
+    }
+    for (secure_context.gated_members) |name| {
+        if (@hasDecl(@import("../webapi/Window.zig").JsApi, name) == false) {
+            @compileError("secure_context.gated_members: Window has no member named " ++ name);
+        }
+    }
+}
+
+fn isPageInterfaceName(comptime name: []const u8) bool {
+    comptime {
+        for (PageJsApis) |JsApi| {
+            if (!@hasDecl(JsApi.Meta, "name")) continue;
+            if (std.mem.eql(u8, JsApi.Meta.name, name)) return true;
+            if (@hasDecl(JsApi.Meta, "constructor_alias") and
+                std.mem.eql(u8, JsApi.Meta.constructor_alias, name)) return true;
+            if (@hasDecl(JsApi.Meta, "constructor_aliases")) {
+                for (JsApi.Meta.constructor_aliases) |alias| {
+                    if (std.mem.eql(u8, alias, name)) return true;
+                }
+            }
+        }
+        return false;
+    }
 }
 
 fn countExternalReferences() comptime_int {

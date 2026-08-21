@@ -39,6 +39,11 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // assertion records which side of it we are on rather than asserting
       // Chrome's answer and failing.
       testing.expectEqual(true, data.on_self !== null);
+
+      // A secure owner, so nothing is gated away.
+      testing.expectEqual(8, data.gated.length);
+      testing.expectEqual(6, data.ungated.length);
+      testing.expectEqual(233, data.count);
     });
   }
 </script>

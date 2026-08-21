@@ -495,8 +495,9 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
     self.window._location = location;
 
     // A frame starts life as an about:blank document, so it already has a
-    // secure-context answer to inherit before anything navigates it.
-    self.refreshSecureContext();
+    // secure-context answer for an about:blank child to inherit before
+    // anything navigates it. No gate here -- see commitSecureContext.
+    self.secure_context = self.computeSecureContext();
 
     document._frame = self;
 
@@ -747,17 +748,41 @@ pub fn isSameOrigin(self: *const Frame, url: [:0]const u8) bool {
     return URL.isSameOrigin(url, current_origin);
 }
 
-// Recomputes `secure_context` for the document this frame has just committed.
-// Called from every point that settles `url` -- frame init, the synthetic
-// (about:/blob:) navigation branch, and the HTTP response-header commit, which
-// is where a redirect's final scheme lands.
-pub fn refreshSecureContext(self: *Frame) void {
+// Recomputes `secure_context` for the document this frame has just committed,
+// and takes the [SecureContext] globals off the context when the answer is no.
+// Called from the two points that settle `url` for a *committed* document: the
+// synthetic (about:/blob:) navigation branch, and the HTTP response-header
+// commit, which is where a redirect's final scheme lands.
+//
+// Not from frame init. A frame starts at about:blank with no creator, so the
+// provisional answer there is false, and gating on it would strip the surface
+// off every https page -- a root frame is born at about:blank and navigates to
+// its real URL inside the same context. Init only settles the value, so an
+// about:blank child has something to inherit.
+pub fn commitSecureContext(self: *Frame) void {
     self.secure_context = self.computeSecureContext();
+    if (self.secure_context == false) {
+        self.js.hideSecureContextGlobals();
+    }
 }
 
 fn computeSecureContext(self: *const Frame) bool {
-    // about:blank and about:srcdoc take their creator's answer. Any child of a
-    // secure page is one too, which is why this cannot be read off `url`.
+    // An embedded document is only a secure context if every ancestor is one
+    // too, whatever its own URL says. Measured on a headed Chrome 151: an
+    // http://localhost:8777 iframe -- loopback, so trustworthy on its own --
+    // inside an http://192.168.68.78:8777 page answers false and gets the
+    // 985-name surface. Recursion is not needed: the parent's own answer
+    // already folded its ancestors in.
+    if (self.parent) |parent| {
+        if (parent.secure_context == false) {
+            return false;
+        }
+    }
+
+    // about:blank and about:srcdoc have no URL to judge, so they take their
+    // creator's answer. An opener is not an ancestor -- a popup is not a child
+    // browsing context, so it is only consulted for this inheritance, never as
+    // a gate on a popup that navigates somewhere trustworthy.
     if (std.mem.eql(u8, self.url, "about:blank") or std.mem.eql(u8, self.url, "about:srcdoc")) {
         if (self.parent) |parent| {
             return parent.secure_context;
@@ -766,8 +791,8 @@ fn computeSecureContext(self: *const Frame) bool {
             return opener._frame.secure_context;
         }
         // A top-level about:blank has an opaque origin and no creator to
-        // inherit from. Chrome answers false there (measured: the CDP
-        // about:blank target reports 985 globals, the insecure count).
+        // inherit from. Chrome answers false there (measured: 985 globals on
+        // the CDP about:blank target).
         return false;
     }
     return isPotentiallyTrustworthy(self.url);
@@ -877,7 +902,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         } else {
             self.origin = null;
         }
-        self.refreshSecureContext();
+        self.commitSecureContext();
         try self.js.setOrigin(self.origin);
 
         // Assume we parsed the document.
@@ -1502,7 +1527,7 @@ fn frameHeaderDoneCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.
     }
     // After the redirect chain, so a http -> https hop lands on the final
     // scheme rather than the one the navigation started with.
-    self.refreshSecureContext();
+    self.commitSecureContext();
     try self.js.setOrigin(self.origin);
 
     // After any redirect, drop the original method/body/header so a later
