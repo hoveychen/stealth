@@ -1,0 +1,39 @@
+{
+ "out": {
+  "getExtension(WEBGL_debug_renderer_info)": {
+   "global": "undefined",
+   "tag": "[object WebGLDebugRendererInfo]",
+   "ctor": "Object",
+   "own_proto_names": "UNMASKED_VENDOR_WEBGL UNMASKED_RENDERER_WEBGL"
+  },
+  "getExtension(WEBGL_lose_context)": {
+   "global": "undefined",
+   "tag": "[object WebGLLoseContext]",
+   "ctor": "Object",
+   "own_proto_names": "loseContext restoreContext"
+  },
+  "getExtension(WEBGL_debug_shaders)": {
+   "global": "undefined",
+   "tag": "[object WebGLDebugShaders]",
+   "ctor": "Object",
+   "own_proto_names": "getTranslatedShaderSource"
+  },
+  "unknown svg element": {
+   "tag": "[object SVGElement]",
+   "ctor": "SVGElement",
+   "global_SVGGenericElement": "undefined"
+  },
+  "ReadableStream async iterator": {
+   "has_symbol": true,
+   "tag": "[object ReadableStream AsyncIterator]",
+   "ctor": "Object",
+   "global": "undefined",
+   "proto_names": "next return"
+  },
+  "cross-origin contentWindow": {
+   "tag": "[object Window]",
+   "global_CrossOriginWindow": "undefined",
+   "same_origin_tag": "[object Window]"
+  }
+ }
+}
