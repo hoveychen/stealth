@@ -4864,12 +4864,27 @@ three:
   style-value properties keep a keyword for their own lone value too
   (`will-change: auto`, `counter-*: none`, `view-transition-class: none`).
 
-What the 27 left are, none of them this dispatch: **24** are the declaration
-adding `counter-increment`'s implicit `1` (Chrome stores `red 1` where this
-engine stores `red`), **2** are a style map reading a *shorthand* by rebuilding
-it from longhands rather than echoing what was declared (`border: currentColor`
-reads back `undefined`, `column-rule: currentColor` reads back `medium`), and
-**1** is `view-transition-name: auto`, which Chrome rejects outright.
+The 27 left were three other things, and 25 of them closed too. **A counter name
+carries the count it was written without**: `counter-increment: c` is stored as
+`c 1` and `counter-reset` / `counter-set` as `c 0`, filled in per name rather
+than per declaration (`counter-reset: a b c` answers `a 0 b 0 c 0`), with `none`
+the whole value rather than a name. And **`view-transition-name` rejects `auto`**
+outright though it takes any other identifier -- the only such pair in the
+tables, and the safe direction of the rejection rule this engine otherwise
+holds, since Chrome drops it too. The identifier probe is **2 of 449**.
+
+**Those last 2 -- and the 13 the colour-property probe still has -- are all one
+thing, and it is not this dispatch.** Chrome *expands a shorthand into its
+longhands* in the declaration: `border: currentColor` becomes 17 longhands and
+`cssText` re-serialises them back (`border-width: medium; border-style: none;
+border-color: currentcolor; border-image: none`), `column-rule: currentColor`
+becomes 3, `background: red` becomes 9. A style map then reads a shorthand by
+reconstructing it from those longhands, which is why `get('column-rule')` answers
+`medium` and `get('border')` answers `undefined` where this engine echoes what
+was declared. It is the same gap already recorded against `margin: 1cm`
+(`style.length` is 4 in Chrome and 1 here), and closing it needs a grammar per
+shorthand -- both to expand and to re-serialise -- rather than anything in the
+identifier dispatch.
 
 `probe-win63` has 10 of 548 -- `DOMMatrix` /`WebKitCSSMatrix` /
 `SpeechRecognition` prototype sets and the `DOMMatrix` parse-error text.
