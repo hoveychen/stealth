@@ -1,0 +1,197 @@
+{
+  "engine": "chrome",
+  "pageUrl": "http://127.0.0.1:62389/",
+  "sitekey": "1x00000000000000000000AA",
+  "render": "implicit",
+  "settleMs": 12000,
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9226/devtools/browser/b3ce0a9a-94ae-44b0-9827-9b536f32007b"
+  },
+  "samples": [
+    {
+      "at": 1000,
+      "readyState": "complete",
+      "turnstile": "object",
+      "turnstileKeys": [
+        "_private",
+        "execute",
+        "getResponse",
+        "isExpired",
+        "ready",
+        "remove",
+        "render",
+        "reset"
+      ],
+      "renderReturned": null,
+      "apiScripts": 1,
+      "container": {
+        "childElementCount": 1,
+        "innerHTMLLength": 95,
+        "id": null
+      },
+      "widgetIds": [
+        "cf-chl-widget-17hgh_response"
+      ],
+      "iframes": [],
+      "inputs": [
+        {
+          "name": "cf-turnstile-response",
+          "type": "hidden",
+          "valueLength": 0
+        }
+      ],
+      "shadowRoots": [],
+      "bodyChildTags": [
+        "div",
+        "script"
+      ],
+      "docLength": 335
+    },
+    {
+      "at": 3000,
+      "readyState": "complete",
+      "turnstile": "object",
+      "turnstileKeys": [
+        "_private",
+        "execute",
+        "getResponse",
+        "isExpired",
+        "ready",
+        "remove",
+        "render",
+        "reset"
+      ],
+      "renderReturned": null,
+      "apiScripts": 1,
+      "container": {
+        "childElementCount": 1,
+        "innerHTMLLength": 125,
+        "id": null
+      },
+      "widgetIds": [
+        "cf-chl-widget-17hgh_response"
+      ],
+      "iframes": [],
+      "inputs": [
+        {
+          "name": "cf-turnstile-response",
+          "type": "hidden",
+          "valueLength": 21
+        }
+      ],
+      "shadowRoots": [],
+      "bodyChildTags": [
+        "div",
+        "script"
+      ],
+      "docLength": 365
+    },
+    {
+      "at": 6000,
+      "readyState": "complete",
+      "turnstile": "object",
+      "turnstileKeys": [
+        "_private",
+        "execute",
+        "getResponse",
+        "isExpired",
+        "ready",
+        "remove",
+        "render",
+        "reset"
+      ],
+      "renderReturned": null,
+      "apiScripts": 1,
+      "container": {
+        "childElementCount": 1,
+        "innerHTMLLength": 125,
+        "id": null
+      },
+      "widgetIds": [
+        "cf-chl-widget-17hgh_response"
+      ],
+      "iframes": [],
+      "inputs": [
+        {
+          "name": "cf-turnstile-response",
+          "type": "hidden",
+          "valueLength": 21
+        }
+      ],
+      "shadowRoots": [],
+      "bodyChildTags": [
+        "div",
+        "script"
+      ],
+      "docLength": 365
+    },
+    {
+      "at": 12000,
+      "readyState": "complete",
+      "turnstile": "object",
+      "turnstileKeys": [
+        "_private",
+        "execute",
+        "getResponse",
+        "isExpired",
+        "ready",
+        "remove",
+        "render",
+        "reset"
+      ],
+      "renderReturned": null,
+      "apiScripts": 1,
+      "container": {
+        "childElementCount": 1,
+        "innerHTMLLength": 125,
+        "id": null
+      },
+      "widgetIds": [
+        "cf-chl-widget-17hgh_response"
+      ],
+      "iframes": [],
+      "inputs": [
+        {
+          "name": "cf-turnstile-response",
+          "type": "hidden",
+          "valueLength": 21
+        }
+      ],
+      "shadowRoots": [],
+      "bodyChildTags": [
+        "div",
+        "script"
+      ],
+      "docLength": 365
+    }
+  ],
+  "console": [
+    "log.error: Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ],
+  "requests": [
+    "> http://127.0.0.1:62389/",
+    "> https://challenges.cloudflare.com/turnstile/v0/api.js",
+    "> https://challenges.cloudflare.com/turnstile/v0/g/aae2b9a1c261/api.js",
+    "> https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/f/av0/rch/17hgh/1x00000000000000000000AA/auto/fbE/new/normal?lang",
+    "> http://127.0.0.1:62389/favicon.ico"
+  ],
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:9226/devtools/browser/b3ce0a9a-94ae-44b0-9827-9b536f32007b",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[75647:2179815:0820/175128.825469:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[75647:2179815:0820/175128.826022:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[75647:2181349:0820/175132.006459:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[75647:2181349:0820/175132.006545:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[75647:2181349:0820/175132.006586:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU."
+  ],
+  "engineExit": {
+    "code": null,
+    "signal": "SIGKILL"
+  }
+}
