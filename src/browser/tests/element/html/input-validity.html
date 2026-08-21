@@ -177,7 +177,11 @@
   testing.expectEqual(-1, $('#filled-required').maxLength);
   testing.expectEqual(3, $('#too-short').minLength);
   testing.expectEqual(-1, $('#filled-required').minLength);
-  testing.expectEqual(true, $('#too-short').validity.tooShort);
+  // A value the `value` attribute seeded is not dirty, so it does not count as
+  // too short -- headless Chrome 151 reads false here too. (Chrome goes further
+  // and requires a *user* edit rather than any assignment, so its answer stays
+  // false even after `el.value = 'ab'`; that gap is not this one.)
+  testing.expectEqual(false, $('#too-short').validity.tooShort);
 
   const el = $('#filled-required');
   el.minLength = 2;

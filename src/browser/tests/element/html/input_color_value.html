@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<script src="../../testing.js"></script>
+
+<script id="color_hex_forms">
+  // The spec's sanitizer for type=color only accepts the 7-character lowercase
+  // hex "simple color", but Chrome runs the CSS color parser and serializes the
+  // result back to that form -- so the short and alpha hex forms come through,
+  // with the alpha dropped. Every expectation was read off headless Chrome 151
+  // (tools/fingerprint/probes/probe-input-color.js).
+  {
+    const read = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'color');
+      i.value = v;
+      return i.value;
+    };
+
+    testing.expectEqual('#aabbcc', read('#aabbcc'));
+    testing.expectEqual('#aabbcc', read('#AABBCC'));
+    testing.expectEqual('#aabbcc', read('#abc'));
+    testing.expectEqual('#aabbcc', read('#ABC'));
+    testing.expectEqual('#aabbcc', read('#abcd'));
+    testing.expectEqual('#aabbcc', read('#aabbccdd'));
+    testing.expectEqual('#aabbcc', read('#AABBCCDD'));
+
+    // Not a hex length the grammar has, or not hex at all.
+    testing.expectEqual('#000000', read('#aabbc'));
+    testing.expectEqual('#000000', read('#aabbccc'));
+    testing.expectEqual('#000000', read('#gggggg'));
+    testing.expectEqual('#000000', read('#abg'));
+    testing.expectEqual('#000000', read('aabbcc'));
+    testing.expectEqual('#000000', read(''));
+    testing.expectEqual('#000000', read(' '));
+
+    // An input that was never assigned at all reads the same default: the
+    // sanitizer's answer for the empty string, not the empty string.
+    const bare = document.createElement('input');
+    bare.setAttribute('type', 'color');
+    testing.expectEqual('#000000', bare.value);
+    testing.expectEqual('', bare.defaultValue);
+  }
+</script>
+
+<script id="color_named">
+  // Named colors resolve case-insensitively -- but unlike the hex and function
+  // forms they tolerate no surrounding whitespace at all, which is the one
+  // asymmetry in Chrome's answers here.
+  {
+    const read = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'color');
+      i.value = v;
+      return i.value;
+    };
+
+    testing.expectEqual('#ff0000', read('red'));
+    testing.expectEqual('#ff0000', read('RED'));
+    testing.expectEqual('#ff0000', read('Red'));
+    testing.expectEqual('#663399', read('rebeccapurple'));
+    testing.expectEqual('#663399', read('ReBeCcApUrPlE'));
+
+    // Whitespace around a name is fatal, where around hex it is not.
+    testing.expectEqual('#000000', read('red '));
+    testing.expectEqual('#000000', read(' red'));
+    testing.expectEqual('#000000', read(' red '));
+    testing.expectEqual('#000000', read('\tred'));
+    testing.expectEqual('#aabbcc', read('#aabbcc '));
+    testing.expectEqual('#aabbcc', read(' #aabbcc'));
+    testing.expectEqual('#aabbcc', read(' #aabbcc '));
+    testing.expectEqual('#aabbcc', read('\t#aabbcc\t'));
+    testing.expectEqual('#aabbcc', read('#abc '));
+    testing.expectEqual('#aabbcc', read(' #abc'));
+
+    // `transparent` names a colour whose alpha is dropped, which lands on the
+    // same answer as a rejection; the rest are not absolute colours at all.
+    testing.expectEqual('#000000', read('transparent'));
+    testing.expectEqual('#000000', read('currentcolor'));
+    testing.expectEqual('#000000', read('inherit'));
+    testing.expectEqual('#000000', read('initial'));
+    testing.expectEqual('#000000', read('unset'));
+    testing.expectEqual('#000000', read('var(--x)'));
+    testing.expectEqual('#000000', read('notacolor'));
+  }
+</script>
+
+<script id="color_rgb_function">
+  // rgb() / rgba() in both the legacy comma syntax and the modern
+  // space-separated one. Channels are clamped, not rejected, and rounded half
+  // away from zero; alpha in either spelling is parsed and then dropped.
+  {
+    const read = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'color');
+      i.value = v;
+      return i.value;
+    };
+
+    testing.expectEqual('#010203', read('rgb(1,2,3)'));
+    testing.expectEqual('#010203', read('rgb(1, 2, 3)'));
+    testing.expectEqual('#010203', read('rgb( 1 , 2 , 3 )'));
+    testing.expectEqual('#010203', read('rgb(1 2 3)'));
+    testing.expectEqual('#010203', read(' rgb(1,2,3) '));
+    testing.expectEqual('#010203', read('RGBA(1,2,3,1)'));
+    testing.expectEqual('#ffffff', read('rgb(255,255,255)'));
+
+    // Alpha, in all four spellings, is dropped.
+    testing.expectEqual('#010203', read('rgba(1,2,3,0.5)'));
+    testing.expectEqual('#010203', read('rgb(1,2,3,0.5)'));
+    testing.expectEqual('#010203', read('rgb(1 2 3 / 0.5)'));
+    testing.expectEqual('#010203', read('rgb(1 2 3 / 50%)'));
+    testing.expectEqual('#010203', read('rgba(1 2 3 / 0.5)'));
+    testing.expectEqual('#010203', read('rgba(1,2,3)'));
+
+    // Out of range clamps rather than rejecting.
+    testing.expectEqual('#00ff00', read('rgb(-1,255,0)'));
+    testing.expectEqual('#ffff00', read('rgb(300,255,0)'));
+    testing.expectEqual('#ff0000', read('rgb(256,0,0)'));
+
+    // Percentages, all-or-nothing: mixing them with numbers is a parse error.
+    testing.expectEqual('#800000', read('rgb(50%,0%,0%)'));
+    testing.expectEqual('#00ff00', read('rgb(-1%,100%,0%)'));
+    testing.expectEqual('#000000', read('rgb(50%,2,3)'));
+    testing.expectEqual('#000000', read('rgb(1,50%,3)'));
+
+    // Half rounds away from zero, not to even.
+    testing.expectEqual('#010203', read('rgb(0.5,1.5,2.5)'));
+    testing.expectEqual('#030405', read('rgb(2.5,3.5,4.5)'));
+    testing.expectEqual('#0001ff', read('rgb(0.4,0.6,254.5)'));
+    testing.expectEqual('#020203', read('rgb(1.5,2,3)'));
+
+    // `none` is a modern-syntax channel meaning zero.
+    testing.expectEqual('#000203', read('rgb(none 2 3)'));
+
+    // Rejections: wrong arity, mixed separators, trailing junk.
+    testing.expectEqual('#000000', read('rgb(1,2)'));
+    testing.expectEqual('#000000', read('rgb(1,2,3,)'));
+    testing.expectEqual('#000000', read('rgb(1, 2 3)'));
+    testing.expectEqual('#000000', read('rgb(1 2, 3)'));
+    testing.expectEqual('#000000', read('rgb(1,2,3) x'));
+    testing.expectEqual('#000000', read('xrgb(1,2,3)'));
+  }
+</script>
+
+<script id="color_hsl_function">
+  // hsl() / hsla(): the hue wraps and carries an optional angle unit, the
+  // saturation and lightness clamp, and the alpha is dropped like rgb()'s.
+  {
+    const read = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'color');
+      i.value = v;
+      return i.value;
+    };
+
+    testing.expectEqual('#ff0000', read('hsl(0,100%,50%)'));
+    testing.expectEqual('#ff0000', read('hsl(0 100% 50%)'));
+    testing.expectEqual('#00ff00', read('hsl(120,100%,50%)'));
+    testing.expectEqual('#000080', read('hsl(240 100% 25%)'));
+    testing.expectEqual('#bf4040', read('hsl(0,50%,50%)'));
+    testing.expectEqual('#808080', read('hsl(0,0%,50%)'));
+    testing.expectEqual('#000000', read('hsl(0,100%,0%)'));
+    testing.expectEqual('#ffffff', read('hsl(0,100%,100%)'));
+    testing.expectEqual('#a36629', read('hsl(30,60%,40%)'));
+
+    // The hue wraps in both directions; s and l clamp.
+    testing.expectEqual('#0000ff', read('hsl(-120,100%,50%)'));
+    testing.expectEqual('#00ff00', read('hsl(480,100%,50%)'));
+    testing.expectEqual('#ff0000', read('hsl(0,150%,50%)'));
+    testing.expectEqual('#808080', read('hsl(0,-10%,50%)'));
+
+    // Angle units on the hue.
+    testing.expectEqual('#ff0000', read('hsl(0deg,100%,50%)'));
+    testing.expectEqual('#00ffff', read('hsl(0.5turn 100% 50%)'));
+
+    // Alpha in either syntax is dropped.
+    testing.expectEqual('#ff0000', read('hsla(0,100%,50%,0.5)'));
+    testing.expectEqual('#ff0000', read('hsl(0 100% 50% / 0.5)'));
+  }
+</script>
+
+<script id="color_via_attribute">
+  // The same parser on the attribute path, where defaultValue keeps the raw
+  // text it was given.
+  {
+    const read = (v) => {
+      const i = document.createElement('input');
+      i.setAttribute('type', 'color');
+      i.setAttribute('value', v);
+      return `${i.value} ${i.defaultValue}`;
+    };
+
+    testing.expectEqual('#aabbcc #abc', read('#abc'));
+    testing.expectEqual('#ff0000 red', read('red'));
+    testing.expectEqual('#010203 rgb(1,2,3)', read('rgb(1,2,3)'));
+    testing.expectEqual('#aabbcc #aabbccdd', read('#aabbccdd'));
+    testing.expectEqual('#aabbcc #AABBCC ', read('#AABBCC '));
+    testing.expectEqual('#000000 notacolor', read('notacolor'));
+  }
+</script>
