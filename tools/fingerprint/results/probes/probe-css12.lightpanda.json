@@ -20,7 +20,7 @@
  "setUnknownUpper": "TypeError: Failed to execute 'set' on 'StylePropertyMap': Invalid propertyName: BOGUS",
  "deleteUpper": "|display: block; --Case: 1px;",
  "deleteUnknownUpper": "TypeError: Failed to execute 'delete' on 'StylePropertyMap': Invalid property name: BOGUS",
- "deleteCustomLower": "width: 10px; display: block; --Case: 1px;",
+ "deleteCustomLower": "width: 10px; display: block; --Case: 1px",
  "appendUpper": "TypeError: Failed to execute 'append' on 'StylePropertyMap': Property does not support multiple values",
  "appendUnknownUpper": "TypeError: Failed to execute 'append' on 'StylePropertyMap': Invalid propertyName: BOGUS",
  "appendCustomUpper": "TypeError: Failed to execute 'append' on 'StylePropertyMap': Appending to custom properties is not supported",

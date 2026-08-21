@@ -409,11 +409,10 @@ function chainOf(ctor) {
     const [face, page] = [...sheet.cssRules];
     testing.expectEqual(2, face.style.length);
     testing.expectEqual('Foo', face.style.getPropertyValue('font-family'));
-    // Chrome answers `src: url("foo.woff2")`: it re-quotes every unquoted
-    // url() token when it serialises a declaration, everywhere, not just
-    // here. That normalisation lives in CSSStyleDeclaration and is a separate
-    // engine-wide gap, so this asserts what we actually produce today.
-    testing.expectEqual('@font-face { font-family: Foo; src: url(foo.woff2); }', face.cssText);
+    // The url() is re-quoted, which is not a @font-face rule: every unquoted
+    // url() token gains quotes when a declaration is serialised, wherever it
+    // sits (see tests/css/declaration_serialize.html).
+    testing.expectEqual('@font-face { font-family: Foo; src: url("foo.woff2"); }', face.cssText);
 
     testing.expectEqual(':first', page.selectorText);
     // Chrome answers 4 here: it expands `margin` into its four longhands on
