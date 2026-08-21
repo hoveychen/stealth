@@ -139,3 +139,60 @@ script to this engine while serving Chrome a page without it. Cloudflare's JS
 detections ride along on ordinary pages. The rule now turns on the interstitial's
 own title and DOM, or a document that never stops being a 4xx; the marks are
 still recorded, as `jsDetect`.
+
+## Re-run after the two crash fixes, eight hours later
+
+Same script, same fifteen stations, same route — egress `108.211.179.124`, SJC,
+seven minutes apart. Engine `1.0.0-dev.664+8fc2ac1d0` (the pixiv bounds guard,
+the PerformanceObserver delivery loop, the CSP nonce fix and the 295-commit
+upstream merge are all in) against headed `Chrome/151.0.7922.172`.
+
+| station | vendor | Chrome (headed) | this engine |
+|---|---|---|---|
+| cf-scrapingcourse | cloudflare | **pass** / 34n [403→200] | cf-challenge / 46n [403] |
+| cf-nopecha | cloudflare | cf-challenge / 46n [403→200] | cf-challenge / 46n [403] |
+| cf-zeroclover | cloudflare | cf-blocked / 66n [403→502] | cf-challenge / 46n [403] |
+| cf-chatgpt | cloudflare | pass / 725n [200] | pass / 491n [200] |
+| cf-claude | cloudflare | pass / 1086n [200] | **pass** / 1066n [200] |
+| cf-indeed | cloudflare | pass / 1207n [200] | pass / 1208n [200] |
+| cf-nowsecure | cloudflare | pass / 51n [200] | pass / 51n [200] |
+| cf-discord | cloudflare | pass / 1196n [200] | pass / 1531n [200] |
+| cf-pixiv | cloudflare | pass / 311n [200] | **pass** / 311n [200] |
+| dd-datadome | datadome | datadome-challenge / 9n [403→200] | pass / 2044n [200] |
+| dd-g2 | datadome | datadome-challenge / 11n [403→200] | datadome-challenge / 11n [403→200] |
+| dd-leboncoin | datadome | datadome-challenge / 9n [403→200] | datadome-challenge / 1488n [200] |
+| dd-hermes | datadome | datadome-challenge / 10n [403→200] | pass / 2042n [200] |
+| x-sony | unattributed | pass / 1355n [200] | pass / 1535n [200] |
+| x-zillow | unattributed | pass / 1608n [200] | pass / 1866n [200] |
+| | | **9/15** | **10/15** |
+
+### What moved, and what it is worth
+
+**The two crashes are gone from the scoreboard.** pixiv reads 311 nodes, which is
+Chrome's 311 exactly; claude.ai reads 1066 against Chrome's 1086. Those were the
+`error` and `empty-document` rows above. Both are `results/engine-wedge.md`.
+
+**chatgpt.com went 40n → 491n**, against Chrome's 725n. It renders now rather than
+serving `Application Error!`; it is still not the whole page, and the gap has not
+been attributed.
+
+**The Cloudflare interstitial is now rendered the way Chrome renders it, and still
+not solved.** All three challenge stations read 46 nodes where they used to read
+16 — the same 46 headed Chrome reads on nopecha. So the interstitial's own DOM is
+no longer the difference; the 403 that never becomes a 200 still is. This is the
+one row that has reproduced across every sweep, and it is the open question the
+Turnstile widget note in the README belongs to.
+
+**Chrome's column reproduced almost exactly**, eight hours and one Chrome patch
+release apart: 34/46/66 on the challenges, 1086 on claude, 51 on nowsecure, 1196
+on discord, 311 on pixiv, all four DataDome stations challenged, 1355 and 1608 on
+sony and zillow. That is what makes the deltas above readable as ours rather than
+as the route's.
+
+**10/15 against Chrome's 9/15 is not a claim that this engine beats Chrome**, and
+should not be quoted as one. The whole of that lead is DataDome serving
+datadome.co and hermes.com to us and challenging headed Chrome — a policy
+difference about the client it thinks it is talking to, on a residential IP,
+which is the one thing on this table nobody here controls. The CF managed
+challenge is still 0/3 for us and 1/3 for Chrome, and that is the row that
+measures us.

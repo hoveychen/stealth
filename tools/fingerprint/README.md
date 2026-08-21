@@ -4644,14 +4644,20 @@ on status alone.
 The full table and the caveats that go with each row are
 `results/antibot-2026-08-20-vs-chrome.md`. The short version:
 
-| | Chrome (headed 151) | this engine (`dev.340+3d96734f2`) |
-|---|---|---|
-| Cloudflare **managed challenge** (3 stations) | scrapingcourse solved, 403→200 | **all three stuck on the interstitial, 403, `Just a moment...`** |
-| Cloudflare **passive scoring**, production sites | indeed 1216n, discord 1196n, nowsecure 51n | **indeed 1211n, discord 1531n, nowsecure 51n — passed** |
-| claude.ai | 1086n sign-in page | empty document, 121n |
-| chatgpt.com | 722n | 40n `Application Error!` |
-| pixiv | 311n | wedges the engine, 73s then no answer |
-| DataDome (4 stations) | 0/4 in this run, 3/4 in the run before | not attributable — see below |
+| | Chrome (headed 151) | `dev.340+3d96734f2` | re-run, `dev.664+8fc2ac1d0` |
+|---|---|---|---|
+| Cloudflare **managed challenge** (3 stations) | scrapingcourse solved, 403→200 | **all three stuck on the interstitial, 403, `Just a moment...`**, 16n | still 0/3, 403 — but **46n, the same DOM Chrome renders** |
+| Cloudflare **passive scoring**, production sites | indeed 1216n, discord 1196n, nowsecure 51n | **indeed 1211n, discord 1531n, nowsecure 51n — passed** | indeed 1208n, discord 1531n, nowsecure 51n — passed |
+| claude.ai | 1086n sign-in page | empty document, 121n | **pass, 1066n** |
+| chatgpt.com | 722n | 40n `Application Error!` | **pass, 491n** — renders, still short of Chrome's 725n |
+| pixiv | 311n | wedges the engine, 73s then no answer | **pass, 311n — Chrome's 311 exactly** |
+| DataDome (4 stations) | 0/4 in this run, 3/4 in the run before | not attributable — see below | 2/4 (datadome.co, hermes), Chrome 0/4 again — still not attributable |
+
+The re-run is the second table in `results/antibot-2026-08-20-vs-chrome.md`: same
+route, same egress, eight hours later, with the two crashes fixed. It reads
+**10/15 against headed Chrome's 9/15**, and that is not a claim about beating
+Chrome — the whole lead is DataDome's policy toward each client on a residential
+IP. The managed challenge is still 0/3, and that is the row that measures us.
 
 ### The Cloudflare challenge is refused by us, not by Cloudflare
 
@@ -4812,6 +4818,8 @@ fix it.
   script; it loads now, the app runs, and the engine stops answering
   `Runtime.evaluate` after 86s. Same shape as pixiv, which wedges regardless of
   this change, so the count of unattributed engine hangs went from one to two.
+  *(Both were crashes, both are fixed — the next section, and the re-run row in
+  the table above: claude.ai passes at 1066 nodes.)*
 - **indeed, discord and nowsecure are byte-for-byte unchanged**, which is the
   over-permissiveness check.
 
