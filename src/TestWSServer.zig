@@ -133,6 +133,29 @@ fn handleClient(client: posix.socket_t) void {
         @memcpy(origin_buf[0..origin_len], value[0..origin_len]);
     }
 
+    // The header NAMES, in the order they arrived, exposed via the
+    // `get-header-names` command. Chrome's handshake carries a specific set --
+    // no client hints, no Accept -- and sending one it does not is as loud as
+    // missing one, so the set is pinned by a test.
+    var names_buf: [1024]u8 = undefined;
+    var names_len: usize = 0;
+    {
+        var it = std.mem.splitSequence(u8, request, "\r\n");
+        _ = it.next(); // the request line
+        while (it.next()) |line| {
+            if (line.len == 0) break;
+            const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+            const name = line[0..colon];
+            if (names_len + name.len + 1 > names_buf.len) break;
+            if (names_len != 0) {
+                names_buf[names_len] = ',';
+                names_len += 1;
+            }
+            @memcpy(names_buf[names_len..][0..name.len], name);
+            names_len += name.len;
+        }
+    }
+
     // Compute accept key
     var hasher = std.crypto.hash.Sha1.init(.{});
     hasher.update(key);
@@ -166,7 +189,7 @@ fn handleClient(client: posix.socket_t) void {
 
         // Handle commands or echo
         if (frame.opcode == 1) { // Text
-            handleTextMessage(client, frame.payload, cookie_buf[0..cookie_len], origin_buf[0..origin_len]) catch break;
+            handleTextMessage(client, frame.payload, cookie_buf[0..cookie_len], origin_buf[0..origin_len], names_buf[0..names_len]) catch break;
         } else if (frame.opcode == 2) { // Binary
             handleBinaryMessage(client, frame.payload) catch break;
         }
@@ -271,7 +294,7 @@ const RecvBuffer = struct {
     }
 };
 
-fn handleTextMessage(client: posix.socket_t, payload: []const u8, cookie_header: []const u8, origin_header: []const u8) !void {
+fn handleTextMessage(client: posix.socket_t, payload: []const u8, cookie_header: []const u8, origin_header: []const u8, header_names: []const u8) !void {
     // Command: force-close - close socket immediately without close frame
     if (std.mem.eql(u8, payload, "force-close")) {
         return error.ForceClose;
@@ -282,6 +305,15 @@ fn handleTextMessage(client: posix.socket_t, payload: []const u8, cookie_header:
     // upgrade regression test.
     if (std.mem.eql(u8, payload, "get-cookie")) {
         try sendFrame(client, 1, "cookie:", cookie_header);
+        return;
+    }
+
+    // Command: get-header-names - the header NAMES the upgrade request
+    // carried, in wire order, comma separated. Used by the handshake
+    // header-set test: a browser sends no client hints and no Accept on an
+    // upgrade, and sending one it does not is as loud as missing one.
+    if (std.mem.eql(u8, payload, "get-header-names")) {
+        try sendFrame(client, 1, "header-names:", header_names);
         return;
     }
 

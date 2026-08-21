@@ -845,3 +845,36 @@
   });
 }
 </script>
+
+<script id=ws_handshake_headers type=module>
+  {
+    // The handshake header SET, measured on a headless Chrome 151 against a raw
+    // TCP recorder: Host, Connection, Pragma, Cache-Control, User-Agent,
+    // Upgrade, Origin, Sec-WebSocket-Version, Accept-Encoding, Accept-Language,
+    // Sec-WebSocket-Key, Sec-WebSocket-Extensions.
+    //
+    // What matters here is what a browser does NOT send on an upgrade: no
+    // client hints and no Accept. This engine used to seed the page baseline
+    // onto the handshake, which put Sec-Ch-Ua, Sec-Ch-Ua-Mobile,
+    // Sec-Ch-Ua-Platform and Accept on it -- four headers no browser sends.
+    const state = await testing.async();
+    const ws = new WebSocket('ws://127.0.0.1:9584/');
+    let names = null;
+    ws.onmessage = (e) => {
+      if (e.data.startsWith('header-names:')) {
+        names = e.data.slice('header-names:'.length).toLowerCase().split(',');
+        state.resolve();
+      }
+    };
+    ws.onopen = () => ws.send('get-header-names');
+
+    await state.done(() => {
+      for (const forbidden of ['sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform', 'accept']) {
+        testing.expectEqual(false, names.includes(forbidden), { desc: 'no ' + forbidden });
+      }
+      for (const expected of ['pragma', 'cache-control', 'user-agent', 'accept-encoding', 'accept-language', 'origin']) {
+        testing.expectEqual(true, names.includes(expected), { desc: 'has ' + expected });
+      }
+    });
+  }
+</script>
