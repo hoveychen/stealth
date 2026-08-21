@@ -1173,17 +1173,29 @@ function attach(el) {
     // A colour that is not `currentcolor` is not a keyword anywhere.
     testing.expectEqual('CSSStyleValue|transparent',
         brand(CSSStyleValue.parse('color', 'transparent')));
-    // The third axis of the same dispatch, measured but not modelled here: a
-    // property can be modelled for some of its values and not for others.
-    // `accent-color: auto` is a CSSKeywordValue in Chrome and here, but
-    // `accent-color: ButtonFace` is a `CSSStyleValue|ButtonFace` there -- a
-    // named or system colour parses to a colour rather than to an identifier,
-    // so it is not a keyword even on a property that is otherwise modelled.
-    // This engine has no notion of which identifiers are colours, so it answers
-    // a keyword (and canonicalises the spelling with it):
-    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('accent-color', 'auto')));
-    testing.expectEqual('CSSKeywordValue|buttonface',
+    // An identifier Blink parses as a *colour* is a colour value rather than a
+    // keyword, so it answers a bare CSSStyleValue holding the text as written --
+    // even on a property that is otherwise modelled. Measured over all 14264
+    // (property, keyword) pairs the tables carry: every colour-named keyword
+    // answers a CSSStyleValue, with `currentcolor` the only exception in either
+    // direction.
+    testing.expectEqual('CSSStyleValue|red', brand(CSSStyleValue.parse('accent-color', 'red')));
+    testing.expectEqual('CSSStyleValue|ButtonFace',
         brand(CSSStyleValue.parse('accent-color', 'ButtonFace')));
+    testing.expectEqual('CSSStyleValue|TRANSPARENT',
+        brand(CSSStyleValue.parse('accent-color', 'TRANSPARENT')));
+    testing.expectEqual('CSSStyleValue|rebeccapurple',
+        brand(CSSStyleValue.parse('accent-color', 'rebeccapurple')));
+    testing.expectEqual('CSSStyleValue|red',
+        brand(CSSStyleValue.parse('-webkit-text-emphasis-color', 'red')));
+    // ... where a non-colour keyword of the same property still is one,
+    testing.expectEqual('CSSKeywordValue|auto', brand(CSSStyleValue.parse('accent-color', 'auto')));
+    // ... and so is `currentcolor`, on the properties measured for it. The
+    // `-webkit-` alias is one of them, which the longhand-only sweep missed.
+    testing.expectEqual('CSSKeywordValue|currentcolor',
+        brand(CSSStyleValue.parse('accent-color', 'currentColor')));
+    testing.expectEqual('CSSKeywordValue|currentcolor',
+        brand(CSSStyleValue.parse('-webkit-text-emphasis-color', 'currentColor')));
 
     // A style map reads what the declaration stored, so the keyword spelling
     // there is the declaration's -- lower case even for a property whose values
@@ -1218,6 +1230,23 @@ function attach(el) {
         brand(CSSStyleValue.parse('page-break-after', 'inherit')));
     testing.expectEqual('CSSStyleValue|inherit', mapKw('page-break-after', 'inherit'));
     testing.expectEqual('CSSStyleValue|inherit', mapKw('page-break-inside', 'inherit'));
+    // A style map reads the declaration, so a colour there is the canonical
+    // text rather than the authored one.
+    testing.expectEqual('CSSStyleValue|buttonface', mapKw('accent-color', 'ButtonFace'));
+    testing.expectEqual('CSSStyleValue|red', mapKw('accent-color', 'red'));
+    testing.expectEqual('CSSKeywordValue|currentcolor', mapKw('accent-color', 'currentColor'));
+    // The map-only members of the `currentcolor` set, one of which the
+    // longhand-only sweep missed because it is an alias.
+    testing.expectEqual('CSSKeywordValue|currentcolor', mapKw('-webkit-column-rule-color', 'currentColor'));
+    testing.expectEqual('CSSStyleValue|red', mapKw('-webkit-column-rule-color', 'red'));
+    // A measured Blink oddity, reproduced twice: on a style map
+    // `row-rule-color` answers a keyword for *any* colour name, where its own
+    // sibling `column-rule-color` does so only for `currentcolor` -- and
+    // `row-rule-color` through `parse` answers a CSSStyleValue like the rest.
+    testing.expectEqual('CSSKeywordValue|red', mapKw('row-rule-color', 'red'));
+    testing.expectEqual('CSSKeywordValue|buttonface', mapKw('row-rule-color', 'ButtonFace'));
+    testing.expectEqual('CSSStyleValue|red', brand(CSSStyleValue.parse('row-rule-color', 'red')));
+    testing.expectEqual('CSSStyleValue|red', mapKw('column-rule-color', 'red'));
     // ... where the other unlisted longhands agree on both.
     testing.expectEqual('CSSKeywordValue|inherit', mapKw('word-wrap', 'inherit'));
     testing.expectEqual('CSSKeywordValue|inherit', mapKw('background-position-x', 'inherit'));
