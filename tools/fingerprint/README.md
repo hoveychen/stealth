@@ -7437,6 +7437,14 @@ Broken Image Dimensions   16x16   passed
 Diffing all 57 sannysoft rows against the run before it, that row is the only
 one that moved.
 
+Moving the decision off the status code (above) then re-collected into
+`results/after-image-decode-sniff-lightpanda.json`, and the row holds:
+comparing the two snapshots position by position, all 58 rows the page emits are
+byte-identical. (58, not 57: the page lists `navigator.cookieEnabled` twice.)
+Worth checking rather than assuming — the change makes `error` fire in cases
+that used to load *and* `load` fire in cases that used to error, and several
+rows on that page are written from image handlers.
+
 ### The global surface: 36 absent, and 2 that no Chrome has
 
 `window.ownPropertyNames.count` only records a number, so
