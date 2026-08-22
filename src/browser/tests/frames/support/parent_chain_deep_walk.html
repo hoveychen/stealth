@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<!--
+The leaf of the three-deep nesting built by frames/cross_origin_parent_chain.html
+-- cross-origin to the whole chain above it. Reads the two cross-origin
+WindowProxies it can reach and reports every safelisted frame-tree member of
+each: `window.parent`, which is a proxy whose parent and top are *different*
+windows, and `window.top`, which is its own parent. Reported to the top frame,
+which is the only one that can compare the reading with the browser's.
+-->
+<script>
+  // `kind` tells the top frame which of its two chains this reading came from.
+  var out = { kind: 'deep', depth: -1, err: null };
+  function read(name, fn) {
+    try { out[name] = fn(); } catch (e) { out[name] = 'threw: ' + (e && e.name ? e.name : 'Error'); }
+  }
+
+  try {
+    var w = window, d = 0;
+    while (w !== w.parent && d < 20) { w = w.parent; d++; }
+    out.depth = d;
+  } catch (e) {
+    out.err = (e && e.name ? e.name : 'Error') + ': ' + (e && e.message ? e.message : String(e));
+  }
+
+  var p = window.parent, t = window.top;
+  read('p_top_is_top', function () { return p.top === t; });
+  read('p_parent_is_top', function () { return p.parent === t; });
+  read('p_parent_is_p', function () { return p.parent === p; });
+  read('p_window_is_p', function () { return p.window === p; });
+  read('p_self_is_p', function () { return p.self === p; });
+  read('p_frames_is_p', function () { return p.frames === p; });
+  read('p_length', function () { return p.length; });
+  read('p_closed', function () { return p.closed; });
+  read('p_opener_type', function () { return typeof p.opener; });
+  read('p_opener_is_null', function () { return p.opener === null; });
+  read('t_parent_is_t', function () { return t.parent === t; });
+  read('t_grandparent_is_t', function () { return t.parent.parent === t; });
+  // No t.length here: the top frame's child count is whatever else the fixture
+  // page has appended, not something this engine decides. p.length covers the
+  // member against a count the leaf can predict.
+
+  top.postMessage(out, '*');
+</script>

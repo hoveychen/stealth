@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<!--
+One link in the nesting built by frames/cross_origin_parent_chain.html: loads
+whatever `?next=` names into a child iframe. Chaining two of these on the test
+page's own origin puts the cross-origin leaf three frames down, which is the
+only depth at which a window's `parent` and its `top` are different windows.
+-->
+<script>
+  var next = new URLSearchParams(location.search).get('next');
+  var f = document.createElement('iframe');
+  f.src = next;
+  document.documentElement.appendChild(f);
+</script>

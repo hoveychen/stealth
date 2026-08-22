@@ -24,7 +24,13 @@ real cross-origin frame without needing the network.
   const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
 
   const child = await new Promise((resolve) => {
-    window.addEventListener('message', (e) => resolve(e.data), { once: true });
+    // The deep chain below reports into the same window, so take only the
+    // reading that is not tagged.
+    window.addEventListener('message', function onMessage(e) {
+      if (e.data && e.data.kind) return;
+      window.removeEventListener('message', onMessage);
+      resolve(e.data);
+    });
     const iframe = document.createElement('iframe');
     iframe.src = ALT_BASE + 'frames/support/parent_chain_walk.html';
     document.documentElement.appendChild(iframe);
@@ -42,6 +48,65 @@ real cross-origin frame without needing the network.
       grandparentType: 'object',
       grandparentIsParent: true,
     }), JSON.stringify(child));
+  });
+}
+</script>
+
+<!--
+The walk above only needs `parent`; a widget that also asks where the *top* is
+needs the frame tree three deep before the two answers differ. With
+
+    top (this page) -> a (same origin) -> b (same origin) -> leaf (cross-origin)
+
+the leaf's `parent` is the proxy for b, whose parent is a and whose top is the
+top frame -- two different windows. A `top` that answers `parent` reads right at
+every shallower depth and wrong here. The same reading covers the rest of the
+cross-origin safelist this engine implements, so one assertion says whether a
+proxy answers about the frame tree the way a browser's does.
+-->
+
+<script id=cross_origin_proxy_answers_top_apart_from_parent type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+  const NEST = testing.BASE_URL + 'frames/support/parent_chain_nest.html?next=';
+
+  const leaf = ALT_BASE + 'frames/support/parent_chain_deep_walk.html';
+  const b = NEST + encodeURIComponent(leaf);
+  const a = NEST + encodeURIComponent(b);
+
+  const deep = await new Promise((resolve) => {
+    window.addEventListener('message', function onMessage(e) {
+      if (!e.data || e.data.kind !== 'deep') return;
+      window.removeEventListener('message', onMessage);
+      resolve(e.data);
+    });
+    const iframe = document.createElement('iframe');
+    iframe.src = a;
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    // Read off Chrome 151 with the same nesting
+    // (tools/fingerprint/cross-origin-frame-tree.mjs).
+    testing.expectEqual(JSON.stringify({
+      kind: 'deep',
+      depth: 3,
+      err: null,
+      p_top_is_top: true,
+      p_parent_is_top: false,
+      p_parent_is_p: false,
+      p_window_is_p: true,
+      p_self_is_p: true,
+      p_frames_is_p: true,
+      p_length: 1,
+      p_closed: false,
+      p_opener_type: 'object',
+      p_opener_is_null: true,
+      t_parent_is_t: true,
+      t_grandparent_is_t: true,
+    }), JSON.stringify(deep));
   });
 }
 </script>
