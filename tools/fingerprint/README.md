@@ -5136,6 +5136,99 @@ declines, and not new here. Every earlier probe holds:
 identifiers 0 of 449, colours 0 of 304, CSS-wide 0 of 39, keyword spelling 0 of
 27, `probe-css13` 1 of 42 (the one deliberately unfixed case).
 
+## A run of letters is not a unit, and one thing is not two (2026-08-21)
+
+The section below closes with 50 refusals it does not reach and names the six
+kinds: arity on a longhand (`margin-top: 1px 2px`), any comma list, an unknown
+unit (`width: 10foo`), a keyword no measured list carries, an unknown property
+name, and a custom property. This is the first two of those six — 34 of the 50
+— and they are unrelated to each other except in sharing the one property that
+governs everything in this family: each is a *negative* about a property, and a
+negative is only safe to act on when the sweep that produced it was wide enough
+to have been contradicted.
+
+**A unit is a closed list, and the engine had no list at all.** `classify`
+reads any run of letters after a number as a unit, which is the right guess for
+*placing* a component — it is how `border-top: 1px` finds the width — and the
+wrong one for judging it. There is no property `10foo` belongs to. So
+`dump-css-units.mjs` asks Chrome which runs of letters exist, and asks twice,
+because the risk is not symmetric: a spelling wrongly *in* the list costs
+nothing (it degrades to the length the engine already guessed) where a real
+unit wrongly *out* of it refuses a declaration Chrome keeps. Both halves:
+every unit the specs spell out — 62 of them — and then **every alphabetic
+spelling up to four letters, all 475 254**, batched by first letter so no
+single `Runtime.evaluate` outstays the CDP timeout. Five witness properties
+cover the families a unit can belong to (`width` and `font-size` for lengths,
+`rotate` for angles, `transition-duration` for times,
+`grid-template-columns` for `fr`).
+
+The sweep found nothing the spec list had not, which is the reading worth
+having: the 56-name table is complete rather than merely long. Six spellings
+the specs carry are *not* in it — `hz`, `khz`, `dpi`, `dpcm`, `dppx`, `x` —
+because no property value takes one, and the file says so in its header rather
+than claiming they were measured as units.
+
+Two implementation readings. The lookup folds case before it looks, because
+`10PX` is `10px`, and a spelling longer than anything in the table is answered
+without folding it anywhere. And the table is wired into the *rejection* path
+only — `unknownUnit` sits at the front of `outOfBounds` — deliberately not into
+`classify`. Placement and refusal are two different questions in that file:
+letting placement consult the table would turn a single missing spelling from
+"stored under a slightly wrong class" into "thrown away", which is the one
+direction this whole family of tables is built never to move.
+
+**Arity is the count, and no other table can be asked it.** Every test the
+engine had is asked one component at a time, so `margin-top: 1px 2px` passes
+all of them — each half is a `<length>` `margin-top` takes, in range, with a
+unit that exists — and Chrome throws the declaration away.
+`dump-css-arity.mjs` measures the count directly, over the same 711 property
+names: whether Chrome accepts *any* two-component value, and whether it accepts
+a comma-separated one. 461 names take no second component; 111 take a comma
+list; 63 are both, which is the combination the engine has to get right in two
+steps rather than one — `transition-duration: 1s, 2s` is kept where `1s 2s` is
+not.
+
+**The pair sweep is asymmetric, and that is the whole of what makes it safe.**
+One half of each pair is something the property visibly takes: one of 19
+generic values, or one of up to 16 identifiers it accepts alone. The other half
+is drawn from every identifier mdn-data carries, accepted or not. That second
+choice was not the first design and it was not free — it cost two regenerations
+— and both failures were the same shape. Pairing only *accepted* values left
+`font-feature-settings: "liga" 1` unreachable (an OpenType tag is exactly four
+characters, so a three-letter string is refused as surely as the bare number
+is) and `align-items: first baseline` unreachable (`first` is refused alone).
+Both properties were written down as one-component; both then refused a
+declaration Chrome keeps. Neither was caught by a probe. **Both were caught by
+the suite**, the same way the `1E1px` over-refusal was — which is now twice
+that the probes alone would have shipped an over-refusal, and worth knowing
+about the probes.
+
+Three things the count is not allowed to see. A `var()`, because it stands in
+for text this engine does not have and Chrome keeps `margin-top: var(--a)
+var(--b)` and resolves it later. A comment, because Chrome removes one before
+its own count (`margin-top: 10px /* c */` reads back `10px`) and nothing here
+does. And a property in neither table, which is never counted at all — the
+comma rule fires only for a property whose arity was measured, so
+`counter-reset: a 1, b 2` is not judged rather than being judged wrong.
+
+Measured after: `probe-css17` goes from 456 to **490 of 525** — 470 after the
+units table, 490 after the arity one — and the "Chrome keeps, we refuse" bucket
+still does not exist, on this probe or any other. Everything else byte for
+byte: `probe-css14` 197 of 224, `probe-css15` 210 of 235, `probe-css16` 162 of
+168, identifiers 449 of 449, colours 304 of 304, CSS-wide 39 of 39, keyword
+spelling 27 of 27, `probe-css13` 41 of 42, and the suite 1374 of 1374.
+
+Of the 35 left, 17 are the serialisation gaps listed below and 2 are expansion
+widths; the 16 refusals are four kinds and none of them is a unit or a count.
+Six are a keyword-only longhand handed a non-keyword (`width: none`,
+`overflow: 1px`, `border-style: 1px 2px 3px 4px`) — the class list for those
+properties is empty, so `accepts` is never asked, and closing it means deciding
+what an empty list means. One is `background-position: 1px 2px 3px`, which is
+not arity in the sense measured here: that property takes four components and
+refuses three, and a single maximum cannot say "1, 2 or 4". Two are a CSS-wide
+keyword mixed into a multi-component value (`margin: 10px inherit`). The last
+two are an unknown property name and a custom property.
+
 ## A sign is not a range (2026-08-21)
 
 The section below leaves 84 readings on `probe-css17` and sorts them: 18 are
