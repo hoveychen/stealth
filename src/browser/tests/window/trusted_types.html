@@ -175,3 +175,55 @@
     );
   }
 </script>
+
+<script id="eval_unwraps_trusted_script">
+  {
+    // A TrustedScript handed to eval runs its source. V8 on its own returns a
+    // non-string eval argument unchanged and unexecuted -- correct ECMAScript
+    // -- so this only works because the embedder unwraps the wrapper first,
+    // the way Blink does with an isolate-wide code-generation callback. It is
+    // the path Turnstile's widget declares its globals through under
+    // `require-trusted-types-for 'script'`, where a bare string is refused.
+    // Every value below measured on headed Chrome 150; the reading lives in
+    // tools/fingerprint/probes/probe-eval-trusted-script.js.
+    const p = window.trustedTypes.createPolicy('eval-tt', { createScript: (s) => s });
+
+    testing.expectEqual(42, (0, eval)(p.createScript('6 * 7')));
+    testing.expectEqual(48, eval(p.createScript('6 * 8')));
+
+    (0, eval)(p.createScript('var ttEvalVar = "set";'));
+    testing.expectEqual('set', window.ttEvalVar);
+
+    // the shape the widget actually uses -- a declaration, not an assignment
+    (0, eval)(p.createScript('function ttEvalDecl(n){return n+1}'));
+    testing.expectEqual('function', typeof window.ttEvalDecl);
+    testing.expectEqual(2, window.ttEvalDecl(1));
+
+    // the Function constructor goes through the same V8 entry point, for the
+    // parameter list as well as the body
+    testing.expectEqual(9, new Function(p.createScript('return 9'))());
+    testing.expectEqual(42, new Function(p.createScript('a'), p.createScript('return a*2'))(21));
+  }
+</script>
+
+<script id="eval_leaves_other_sources_alone">
+  {
+    // The unwrapping is TrustedScript-only. Everything else keeps V8's own
+    // behaviour -- handed back as-is, never stringified into code -- which is
+    // what stops the fix from turning `eval({toString(){...}})` into an
+    // execution primitive no engine offers.
+    const o = { toString: () => 'globalThis.ttEvalLeak = 1; 5' };
+    testing.expectEqual(true, (0, eval)(o) === o);
+    testing.expectEqual('undefined', typeof window.ttEvalLeak);
+
+    testing.expectEqual(2, (0, eval)(1 + 1));
+
+    const ph = window.trustedTypes.createPolicy('eval-tt-html', { createHTML: (s) => s });
+    const h = ph.createHTML('globalThis.ttEvalHtmlLeak = 1; 5');
+    testing.expectEqual(true, (0, eval)(h) === h);
+    testing.expectEqual('undefined', typeof window.ttEvalHtmlLeak);
+
+    // and a plain string is still just a string
+    testing.expectEqual(54, (0, eval)('6 * 9'));
+  }
+</script>
