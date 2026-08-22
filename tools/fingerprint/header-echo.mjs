@@ -31,7 +31,9 @@ const DECLARED_ICON = `<!DOCTYPE html>
 <link rel="shortcut icon" href="/brand.ico">
 </head><body>i</body></html>`;
 
-function body(path) {
+// Exported so h2-echo.mjs serves the byte-identical page set: the h1 and h2
+// captures are only comparable if both arms pulled the same subresources.
+export function body(path) {
     switch (path) {
         case '/':
         case '/nav':

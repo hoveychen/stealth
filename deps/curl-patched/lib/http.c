@@ -1840,6 +1840,15 @@ CURLcode Curl_add_custom_headers(struct Curl_easy *data,
               curlx_str_casecompare(&name, "Transfer-Encoding"))
         /* HTTP/2 does not support chunked requests */
         ;
+      /* LIGHTPANDA: drop the RFC 9218 priority hint below HTTP/2. Chrome sends
+         it on every h2 and h3 request and never on HTTP/1.1, where extensible
+         priorities do not exist -- so emitting it there would be a tell of its
+         own. The caller adds the field unconditionally because one header list
+         is reused across an h1 and an h2 attempt; this is where the version is
+         already known, and it is the mirror of the Connection field, which
+         h2_permissible_field drops in the other direction. */
+      else if((httpversion < 20) && curlx_str_casecompare(&name, "priority"))
+        ;
       else if((curlx_str_casecompare(&name, "Authorization") ||
                curlx_str_casecompare(&name, "Cookie")) &&
               /* be careful of sending this potentially sensitive header to

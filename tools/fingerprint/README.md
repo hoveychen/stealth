@@ -8303,9 +8303,31 @@ same URL, which is Chrome re-prioritising as the image becomes relevant, so that
 row is a range rather than a constant.
 
 The `priority` header on the *document* request is therefore the last structural
-difference on the one request whose answer x-zillow has already decided. Whether
-it is *the* discriminator is untested — the ladder for that is a fetch of the
-station with the header added and nothing else changed.
+difference on the one request whose answer x-zillow has already decided.
+
+### It was the discriminator (2026-08-22)
+
+Sending it clears the station. Two binaries, one sitting, one address, the
+change and nothing else between them:
+
+| | `x-zillow` |
+|---|---|
+| without the hint | `px-challenge`, doc `403 -> 200`, 22 nodes, "Access to this page has been denied" |
+| with the hint | **pass**, doc `200`, 1866 nodes, "Zillow: Real Estate, Apartments, Mortgag…" |
+
+The full sweep moves 10/15 to 11/15 (`results/h2pri-sweep-after.json`), and the
+one station that moved is that one. Two other rows changed on the same run and
+neither belongs to this change: `cf-chatgpt` renders 510 nodes of the real page
+where the previous sitting recorded 41 nodes of `Application Error!`, but the
+pre-change binary re-run in this sitting also gets 510 — that gap closed
+station-side, not here. And `cf-zeroclover` reads `cf-challenge` where it
+answered 502 to Chrome last sitting, which is the same station moving under us.
+
+So the remaining target list is one station long: **`cf-scrapingcourse`**.
+
+What is left on the request side after this is the h1 client-hint casing, which
+no h2 origin can see, and the image re-prioritisation, which is a value this
+engine holds constant where Chrome varies it.
 
 Two changes fall out of this, and only two. **Send the `priority` header**, per
 destination, on h2 and h3 and not on h1 — the vendored curl already carries the

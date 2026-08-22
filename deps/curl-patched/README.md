@@ -19,7 +19,18 @@ Upstream: curl 8.20.0, the version pinned in `build.zig.zon`.
 ## What differs
 
 Every change is marked with a `LIGHTPANDA:` comment, so
-`grep -n LIGHTPANDA lib/*.c` is the complete list. There are four hunks:
+`grep -n LIGHTPANDA lib/*.c` is the complete list.
+
+### `lib/http.c` — `Curl_add_custom_headers()`
+
+Drops a `priority` field when the request is going out below HTTP/2. Chrome
+sends an RFC 9218 hint on every h2 and h3 request and never on HTTP/1.1, where
+extensible priorities do not exist, so emitting one there would be a tell in its
+own right. `HttpClient.zig` adds the field unconditionally because a single
+header list is reused across an h1 and an h2 attempt; this function already
+receives the negotiated version, and the skip sits beside upstream's own
+version-gated skip of `Transfer-Encoding`. It is the mirror of `Connection`,
+which `h2_permissible_field()` drops in the other direction.
 
 ### `lib/http.c` — `Curl_http_req_to_h2()`
 
@@ -61,7 +72,7 @@ reads as 15663105 the way Chrome's does.
 
 1. Extract the new tarball and diff each file against the pristine copy whose
    hash is in the table above — that isolates upstream's changes from ours.
-2. Copy the new files here and re-apply the four `LIGHTPANDA:` hunks. They are
+2. Copy the new files here and re-apply every `LIGHTPANDA:` hunk. They are
    small and localised; none of them has moved between 8.x releases so far.
 3. Update the hash table above.
 4. Re-measure: `node tools/fingerprint/collect-tls.mjs --engine lightpanda`.
