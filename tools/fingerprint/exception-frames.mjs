@@ -269,6 +269,21 @@ const TRIPWIRE = String.raw`
       }
       return Reflect.get(t, k, receiver);
     },
+    // An assignment to a property that exists nowhere on the chain walks that
+    // chain looking for a setter, so it passes through here too. That is the
+    // discriminator for a name read back as undefined: if the page *installed*
+    // it and we lost it, the install shows up here and the read still fails; if
+    // it never installed it, the name was never theirs to begin with.
+    set: function (t, k, v, receiver) {
+      if (!depth && typeof k === 'string' && !/^-?[0-9]+$/.test(k)) {
+        depth++;
+        try {
+          missing.push('SET ' + k + ' on ' + OP.toString.call(receiver) + ' = ' + (typeof v));
+          if (missing.length > 60) missing.shift();
+        } catch (e) { } finally { depth--; }
+      }
+      return Reflect.set(t, k, v, receiver);
+    },
   });
 
   // Collect first, install second: installing as we walk makes the walk's own

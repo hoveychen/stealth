@@ -6502,3 +6502,54 @@ inside a string literal and got written off as "the column is nonsense". The too
 converts (`--col-base`), and the divergence is worth a look on its own: a page that
 throws in an inline script and parses `e.stack` gets different numbers from us than
 from Chrome.
+
+### `bGgjP8` was never installed — so the `.call` throw is a symptom, not the cause
+
+The two stories above are separable after all, and from our side. An assignment to
+a property that exists nowhere on the chain walks that chain looking for a setter,
+so it passes through the same proxy the `get` trap sits on. Adding a `set` trap
+turns "did they install this name?" into a reading rather than an argument.
+Validated first on a local page that installs one global under a computed name and
+reads it back the way the VM does: the install shows up as `SET`, the read then
+succeeds, and a name nobody installed shows up as a bare miss.
+
+On the real interstitial the widget document installs **27 globals** under
+obfuscated names before it fails:
+
+```
+SET UlwL3      on [object Window] = function
+SET WfQnx8     on [object Window] = function
+SET _cf_chl_opt on [object Window] = object
+SET runProgram on [object Window] = function
+SET ECAU8      on [object Window] = function
+…21 more…
+SET sYTa8      on [object Window] = object
+…
+bGgjP8 on [object Window]            <- the miss, and the throw
+```
+
+**`bGgjP8` is not among them.** Nothing ever installed it. So it is not a global
+this engine dropped, and it is not a missing browser API either — it is a name the
+bundle's own string decoder *produced wrongly*, because that decoder assembles
+names character by character out of a table indexed by running VM state (`oy +=
+V[…]` driven by the checksum `C`). Feed that VM one host value Chrome would not
+have given it, and every name it decodes afterwards is garbage.
+
+Which retires the whole line of attack this section opened with. The `.call` throw
+is **downstream**: the last visible consequence of a divergence that already
+happened somewhere earlier, in whatever host call answered differently. Adding the
+41 missing methods, or any single named member, would be fixing the ghost —
+`bGgjP8` is not a method anyone is missing.
+
+The one caveat, stated because the trap has a real blind spot:
+`Object.defineProperty(window, name, …)` does not go through the prototype-chain
+set path and would be invisible here. So what is established is "no *assignment*
+installed it", not "no mechanism installed it". Every one of the 27 that the widget
+does install arrives by plain assignment, which is at least the same mechanism the
+missing one would have used.
+
+**What the next measurement has to be** is therefore not "which member is missing"
+but "where does the VM first diverge" — the earliest host call whose answer differs
+from Chrome's. That is a different instrument: the two engines have to be run
+against the same document and compared step by step, not sampled at the point where
+one of them finally throws.

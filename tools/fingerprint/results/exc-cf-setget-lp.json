@@ -1,0 +1,1275 @@
+{
+  "engine": "lightpanda",
+  "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+  "settleMs": 30000,
+  "debugger": {
+    "requested": true,
+    "supported": false,
+    "pauses": 0,
+    "error": "-31998 UnknownDomain"
+  },
+  "records": [
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'call')",
+      "frames": [
+        {
+          "fn": "VO",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 137728,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "VK.<computed>.<computed>",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 14995,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Vf",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 80954,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "HxXZQ",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 83912,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "VP",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 94422,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "ja",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 234374,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "jw",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 230380,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "missing": [
+        "SET __EXC_TRIPWIRE on [object Window] = object",
+        "SET UlwL3 on [object Window] = function",
+        "SET UXeS6 on [object Window] = function",
+        "SET WfQnx8 on [object Window] = function",
+        "SET _cf_chl_opt on [object Window] = object",
+        "SET pwuPn1 on [object Window] = function",
+        "SET runProgram on [object Window] = function",
+        "SET gZAJ3 on [object Window] = boolean",
+        "SET gsnqe5 on [object Window] = function",
+        "SET ECAU8 on [object Window] = function",
+        "SET GNHLX2 on [object Window] = object",
+        "SET qUbHu8 on [object Window] = number",
+        "SET xBEPx7 on [object Window] = function",
+        "SET ykmX3 on [object Window] = function",
+        "SET PoSLZ4 on [object Window] = function",
+        "SET BppE3 on [object Window] = function",
+        "SET rCUjg1 on [object Window] = function",
+        "SET wdclO4 on [object Window] = function",
+        "SET MoAhr7 on [object Window] = function",
+        "SET GLLj2 on [object Window] = function",
+        "SET SRPD9 on [object Window] = function",
+        "SET MAEU9 on [object Window] = object",
+        "SET mUMum6 on [object Window] = function",
+        "SET gUsZ0 on [object Window] = function",
+        "SET Phaq1 on [object Window] = object",
+        "SET cwwX3 on [object Window] = function",
+        "-1 on [object Array]",
+        "SET sYTa8 on [object Window] = object",
+        "SET lang on [object HTMLDocument] = string",
+        "6 on [object Array]",
+        "18 on [object Array]",
+        "7 on [object Array]",
+        "185 on [object Array]",
+        "41 on [object Array]",
+        "-1 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "bGgjP8 on [object Window]  @     at Object.get (anonymous:142:44) |     at VK.VO (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:136207) |     at VK.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:14995) |     at Vf (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:80954)"
+      ]
+    },
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'call')",
+      "frames": [
+        {
+          "fn": "VO",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 138506,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "VK.<computed>.<computed>",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 14770,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Vf",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 141385,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "VP",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 116157,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "ja",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 220479,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "NJMwH",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 217035,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "jw",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 218933,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "missing": [
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "7 on [object Array]",
+        "SET runProgram on [object Window] = function",
+        "SET gZAJ3 on [object Window] = boolean",
+        "SET gsnqe5 on [object Window] = function",
+        "SET ECAU8 on [object Window] = function",
+        "SET GNHLX2 on [object Window] = object",
+        "SET qUbHu8 on [object Window] = number",
+        "SET xBEPx7 on [object Window] = function",
+        "SET ykmX3 on [object Window] = function",
+        "SET PoSLZ4 on [object Window] = function",
+        "SET BppE3 on [object Window] = function",
+        "SET rCUjg1 on [object Window] = function",
+        "SET wdclO4 on [object Window] = function",
+        "SET MoAhr7 on [object Window] = function",
+        "SET GLLj2 on [object Window] = function",
+        "SET SRPD9 on [object Window] = function",
+        "SET MAEU9 on [object Window] = object",
+        "SET mUMum6 on [object Window] = function",
+        "SET gUsZ0 on [object Window] = function",
+        "SET Phaq1 on [object Window] = object",
+        "9 on [object Array]",
+        "SET cwwX3 on [object Window] = function",
+        "-1 on [object Array]",
+        "SET sYTa8 on [object Window] = object",
+        "SET lang on [object HTMLDocument] = string",
+        "7 on [object Array]",
+        "18 on [object Array]",
+        "185 on [object Array]",
+        "5 on [object Array]",
+        "-1 on [object Array]",
+        "5 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "6 on [object Array]",
+        "bGgjP8 on [object Window]  @     at Object.get (anonymous:142:44) |     at VK.VO (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:138322) |     at VK.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:14770) |     at Vf (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:141385)"
+      ]
+    },
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'call')",
+      "frames": [
+        {
+          "fn": "fv",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 179258,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "fl.<computed>.<computed>",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 14679,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "fC",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 240730,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "gYZFC",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 194317,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "fQ",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 202727,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "nbUHw",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 86809,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "oX",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 94936,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "or",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 89258,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "missing": [
+        "SET __EXC_TRIPWIRE on [object Window] = object",
+        "SET UlwL3 on [object Window] = function",
+        "SET UXeS6 on [object Window] = function",
+        "SET WfQnx8 on [object Window] = function",
+        "SET _cf_chl_opt on [object Window] = object",
+        "SET pwuPn1 on [object Window] = function",
+        "SET runProgram on [object Window] = function",
+        "SET gZAJ3 on [object Window] = boolean",
+        "SET gsnqe5 on [object Window] = function",
+        "SET ECAU8 on [object Window] = function",
+        "SET GNHLX2 on [object Window] = object",
+        "SET qUbHu8 on [object Window] = number",
+        "SET xBEPx7 on [object Window] = function",
+        "SET ykmX3 on [object Window] = function",
+        "SET PoSLZ4 on [object Window] = function",
+        "SET BppE3 on [object Window] = function",
+        "SET rCUjg1 on [object Window] = function",
+        "SET wdclO4 on [object Window] = function",
+        "SET MoAhr7 on [object Window] = function",
+        "SET GLLj2 on [object Window] = function",
+        "SET SRPD9 on [object Window] = function",
+        "SET MAEU9 on [object Window] = object",
+        "SET mUMum6 on [object Window] = function",
+        "SET gUsZ0 on [object Window] = function",
+        "SET Phaq1 on [object Window] = object",
+        "SET cwwX3 on [object Window] = function",
+        "-1 on [object Array]",
+        "SET sYTa8 on [object Window] = object",
+        "SET lang on [object HTMLDocument] = string",
+        "7 on [object Array]",
+        "41 on [object Array]",
+        "5 on [object Array]",
+        "-1 on [object Array]",
+        "5 on [object Array]",
+        "12 on [object Array]",
+        "5 on [object Array]",
+        "bGgjP8 on [object Window]  @     at Object.get (anonymous:142:44) |     at fl.fv (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:179047) |     at fl.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:14679) |     at fC (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:240730)"
+      ]
+    },
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'call')",
+      "frames": [
+        {
+          "fn": "Vv",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 209899,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Vq.<computed>.<computed>",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 14945,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "VD",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 123094,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Vi",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 66683,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Kemku",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 71560,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "ja",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 78757,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "jw",
+          "file": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "line": 1,
+          "col": 73806,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "missing": [
+        "SET __EXC_TRIPWIRE on [object Window] = object",
+        "SET UlwL3 on [object Window] = function",
+        "SET UXeS6 on [object Window] = function",
+        "SET WfQnx8 on [object Window] = function",
+        "SET _cf_chl_opt on [object Window] = object",
+        "SET pwuPn1 on [object Window] = function",
+        "SET runProgram on [object Window] = function",
+        "SET gZAJ3 on [object Window] = boolean",
+        "SET gsnqe5 on [object Window] = function",
+        "SET ECAU8 on [object Window] = function",
+        "SET GNHLX2 on [object Window] = object",
+        "SET qUbHu8 on [object Window] = number",
+        "SET xBEPx7 on [object Window] = function",
+        "SET ykmX3 on [object Window] = function",
+        "SET PoSLZ4 on [object Window] = function",
+        "SET BppE3 on [object Window] = function",
+        "SET rCUjg1 on [object Window] = function",
+        "SET wdclO4 on [object Window] = function",
+        "SET MoAhr7 on [object Window] = function",
+        "SET GLLj2 on [object Window] = function",
+        "SET SRPD9 on [object Window] = function",
+        "SET MAEU9 on [object Window] = object",
+        "SET mUMum6 on [object Window] = function",
+        "SET gUsZ0 on [object Window] = function",
+        "SET Phaq1 on [object Window] = object",
+        "5 on [object Array]",
+        "SET cwwX3 on [object Window] = function",
+        "-1 on [object Array]",
+        "6 on [object Array]",
+        "SET sYTa8 on [object Window] = object",
+        "SET lang on [object HTMLDocument] = string",
+        "7 on [object Array]",
+        "6 on [object Array]",
+        "18 on [object Array]",
+        "7 on [object Array]",
+        "185 on [object Array]",
+        "-1 on [object Array]",
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "bGgjP8 on [object Window]  @     at Object.get (anonymous:142:44) |     at Vq.Vv (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:209721) |     at Vq.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:14945) |     at VD (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:123094)"
+      ]
+    }
+  ],
+  "pauses": [],
+  "console": [
+    "error: [Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call') , with debug info: MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==>yBgla3S5cQAO76N8I77BcQ==$wE+E8pQ95310FdAtNi7wqw==",
+    "warning: [Cloudflare Turnstile] Cannot find Widget cf-chl-widget-8cot8, consider using turnstile.remove() to clean up a widget.",
+    "error: [Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call') , with debug info: MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==>yBgla3S5cQAO76N8I77BcQ==$wE+E8pQ95310FdAtNi7wqw==",
+    "warning: [Cloudflare Turnstile] Cannot find Widget cf-chl-widget-iqvqs, consider using turnstile.remove() to clean up a widget.",
+    "error: [Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call') , with debug info: MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==>yBgla3S5cQAO76N8I77BcQ==$wE+E8pQ95310FdAtNi7wqw==",
+    "warning: [Cloudflare Turnstile] Cannot find Widget cf-chl-widget-m1k69, consider using turnstile.remove() to clean up a widget.",
+    "error: [Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call') , with debug info: MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==>yBgla3S5cQAO76N8I77BcQ==$wE+E8pQ95310FdAtNi7wqw=="
+  ],
+  "cdpExceptions": [],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee24d7fe34f9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee24d7fe34f9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee24d7fe34f9f1/IszW7lotWsR2",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee24d7fe34f9f1/IszW7lotWsR2",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee24d7fe34f9f1/IszW7lotWsR2",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee24d7fe34f9f1/IszW7lotWsR2",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25028f58f9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25028f58f9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25028f58f9f1/9eX832F_.oje",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25028f58f9f1/9eX832F_.oje",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25028f58f9f1/9eX832F_.oje",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25028f58f9f1/9eX832F_.oje",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25381c62f9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25381c62f9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25381c62f9f1/lP0_cDORq1vi",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25381c62f9f1/lP0_cDORq1vi",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25381c62f9f1/lP0_cDORq1vi",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25381c62f9f1/lP0_cDORq1vi",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25892c7bf9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25892c7bf9f1",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25892c7bf9f1/uS6htM7SnaZ7",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25892c7bf9f1/uS6htM7SnaZ7",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    }
+  ],
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.764+36bfd2d0a",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9237/"
+  },
+  "tripwire": true,
+  "tripwireSkip": [
+    "CSSStyleDeclaration"
+  ],
+  "frames": [
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 137728,
+      "scriptId": null,
+      "via": "Network.getResponseBody",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 155295,
+      "lineLength": 277039,
+      "before": ".jx)](ji,jW[0],jW[1],jW[2],jW[3],jW[4],jW[5],jW[6]);break;default:O[jo^jP]=VV[gE(CD.jx)](jx,ji,jW)}}}else jT=O[j[gE(CD.jW)](jT,j[gE(CD.jm)](j[gE(CD.jU)](jE[jI++],133),256)&255.68)^54^jo],O[jG]=jI,O[j[gE(CD.jZ)](jP,jo)]=void 0===ji?jx(jT):jx",
+      "at": "[gE(CD.jM)](ji,jT)}function ps(BS,h1,g,h){BS={j:1047,g:2007}",
+      "after": ",h1=uM,g={},g[h1(BS.j)]=h1(BS.g),h=g,pm(h[h1(BS.j)])}function U(fA,gg,O,jo,jT,jE,jG,jI,jP,ji,jJ,jx){fA={j:418,g:809,h:2287,O:753,b:2312,f:2073,jo:1584,jT:418,jE:809,jG:2312,jI:1584"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 14995,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 32562,
+      "lineLength": 277039,
+      "before": "s);break;case 171:Vu[gt(Lx.uF)](this);break;case 128:Vj[gt(Lx.uk)](this);break;case 29:Vg[gt(Lx.uo)](this);break;case 252:Vl[gt(Lx.uT)](this);break;case 116:VR[gt(Lx.uL)](this);break;case 246:Vh[gt(Lx.uE)](this);break;case 188:VO[gt(Lx.uu)]",
+      "at": "(this);break;case 71:Vv[gt(Lx.uG)](this);break;case 144:m[gt",
+      "after": "(Lx.u0)](this);break;case 11:U[gt(Lx.uI)](this);break;case 228:Z[gt(Lx.uP)](this);break;case 206:M[gt(Lx.ui)](this);break;case 167:i[gt(Lx.uJ)](this);break;case 219:J[gt(Lx.ux)](th"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 80954,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 98521,
+      "lineLength": 277039,
+      "before": "]);continue;case`5`:u1=(jU=O[0],jZ=O[1],jM=O[2],jH=O[3],ja=O[4],jc=O[5],jw=j.g,jX=j.h,js=j.m,jt=jw[jx[gP(k6.jx)](21,jX)],jS=jw[jX^137.43],jA=jw[js],u0=jw[jx[gP(k6.jW)](154,jX)],jw[jX^170.83]);continue;case`6`:return j;case`7`:j=j[gP(k6.jm)]",
+      "at": "(jU,jZ,jc?jM[gP(k6.jU)]():jM);continue;case`8`:jw[jx[gP(k6.j",
+      "after": "x)](21,jX)]=jt;continue;case`9`:jw[js]=jA;continue;case`10`:for(jU=jH[gP(k6.jJ)]-1;jU>=0;jw[jH[jU]]=O[jU],jU--);continue}break}}function pC(Bj,Rz,g,h,O){Bj={j:642,g:940,h:2382,O:23"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 83912,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 101479,
+      "lineLength": 277039,
+      "before": "ui:1832,uJ:1956,ux:1195,uW:1956,um:1765,uU:2029,yV:1605},l6=uM,j={\"srziK\":function(jT,jE){return jT===jE},\"TTaov\":l6(yg.j),\"rtXXO\":l6(yg.g),\"zFiAA\":function(jT,jE){return jT>jE},\"aOZjQ\":l6(yg.h),\"AFQGw\":l6(yg.O),\"HxXZQ\":function(jT){return ",
+      "at": "jT()},\"zItdk\":function(jT,jE){return jT+jE},\"wFgle\":function",
+      "after": "(jT,jE){return jT(jE)},\"oQzaz\":l6(yg.b),\"IrxXL\":l6(yg.f)},g=l6(yg.jo)[l6(yg.jT)](`|`),h=0;!![];){switch(g[h++]){case`0`:VW(function(l7,jT,jE,jG){for(l7=l6,jT=l7(y9.j)[l7(y9.g)](`|`"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 94422,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 111989,
+      "lineLength": 277039,
+      "before": ".jc)][l6(yg.jX)],`/`)+D[l6(yg.jc)][l6(yg.js)];continue;case`14`:D[l6(yg.jU)](`d/OJMhtEB8jtWV7jFb4nYabz4vCh/tHXLp/RFA06SVg=$h2dYXGXhzKFNVus1egrREA==`);continue;case`15`:D[l6(yg.jc)][l6(yg.jt)]=Date[l6(yg.jS)]();continue;case`16`:j[l6(yg.jA)]",
+      "at": "(b);continue;case`17`:D[l6(yg.u0)](`5msS/TCbjVCxzJ3aiczqdg==",
+      "after": "$d+Inoc4ctj5WlksXhGimhg==`);continue;case`18`:if(D[l6(yg.u1)][l6(yg.u2)]!==`d`)D[l6(yg.u1)][l6(yg.u2)]=`d`;else return void D[l6(yg.ji)]();continue;case`19`:if(VG()){(D[l6(yg.u3)]("
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 234374,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 251941,
+      "lineLength": 277039,
+      "before": "p.rv)]]||8e3;continue}break}}function ja(lG){lG=lL,D[lG(rj.j)](`zuSd+kwaQs9SR+JzrGlCDg==$iCsWJVzgw72hXXYmV6fOXQ==`),D[lG(rj.g)][lG(rj.h)]=Date[lG(rj.O)](),D[lG(rj.j)](`MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==`),",
+      "at": "VP()}function jM(lT){lT=lL,D[lT(rV.j)][lT(rV.g)]({\"source\":l",
+      "after": "T(rV.h),\"widgetId\":D[lT(rV.O)][lT(rV.b)],\"event\":lT(rV.f)},`*`)}function jU(jX,lF,js,jt,jS){if(lF=lL,js=D[lF(r8.j)][lF(r8.g)],js[lF(r8.h)]=0,jP()||!jX||typeof jX[lF(r8.h)]!==g[lF(r"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/8cot8/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 230380,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 247947,
+      "lineLength": 277039,
+      "before": "o)return;if(O!==js.ch&&!b&&!g[lI(rg.jZ)](VS,lI(rg.jM)))return void(jo=js,jT=jX[lI(rg.jG)],jZ());jH(js,jX[lI(rg.jG)],js[lI(rg.jx)]||0,js[lI(rg.jW)]||0),jc()}else if(g[lI(rg.jH)](js[lI(rg.ja)],lI(rg.jc))){if(jU(js.cs),!f)return void(jE=!![]);",
+      "at": "ja()}else g[lI(rg.jw)](js[lI(rg.jX)],lI(rg.js))?jU(js.cs):js",
+      "after": "[lI(rg.jt)]===lI(rg.jS)?!D[lI(rg.jA)]&&(D[lI(rg.u0)][lI(rg.u1)](),D[lI(rg.u2)][lI(rg.u3)](),D[lI(rg.u4)][lI(rg.u5)](),D[lI(rg.u6)]=!![]):js[lI(rg.ja)]===g[lI(rg.u7)]&&D[lI(rg.ji)]["
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 138506,
+      "scriptId": null,
+      "via": "Network.getResponseBody",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 156073,
+      "lineLength": 272169,
+      "before": "=O[j[gT(dx.jJ)](ji,jo)],jx=j[gT(dx.jx)](ji,void 0)?jW:ji[jW],jJ!==0){if(j[gT(dx.jU)](jJ,1))jT=O[j[gT(dx.jZ)](j[gT(dx.jJ)](jT,j[gT(dx.jM)](jE[jI++],133)+256&255.07)^54.43,jo)],O[jG]=jI,O[j[gT(dx.j)](jP,jo)]=void 0===ji?j[gT(dx.jH)](jx,jT):jx",
+      "at": "[gT(dx.ja)](ji,jT);else if(j[gT(dx.jc)](jJ,2))jJ=O[j[gT(dx.j",
+      "after": "w)](jT^j[gT(dx.jX)](j[gT(dx.jP)](j[gT(dx.js)](jE[jI++],133),256),255)^54.83,jo)],jT=O[j[gT(dx.jJ)](j[gT(dx.jt)](jT,j[gT(dx.g)](j[gT(dx.jS)](jE[jI++],133)+256,255))^54,jo)],O[jG]=jI"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 14770,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 32337,
+      "lineLength": 272169,
+      "before": "s);break;case 171:Vu[gs(Lp.uT)](this);break;case 128:Vj[gs(Lp.uE)](this);break;case 29:Vg[gs(Lp.ur)](this);break;case 252:Vl[gs(Lp.uv)](this);break;case 116:VR[gs(Lp.uG)](this);break;case 246:Vh[gs(Lp.jm)](this);break;case 188:VO[gs(Lp.uI)]",
+      "at": "(this);break;case 71:Vv[gs(Lp.uC)](this);break;case 144:m[gs",
+      "after": "(Lp.ja)](this);break;case 11:U[gs(Lp.uP)](this);break;case 228:Z[gs(Lp.jw)](this);break;case 206:M[gs(Lp.ui)](this);break;case 167:i[gs(Lp.uq)](this);break;case 219:J[gs(Lp.uJ)](th"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 141385,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 158952,
+      "lineLength": 272169,
+      "before": "I,ja>=5&&(jw[jX^214]=jP,jm[gI(Cn.O)](ja,6)&&(jw[jm[gI(Cn.b)](231,jX)]=ji,ja>=7&&(jw[jm[gI(Cn.jP)](47,jX)]=jJ,ja>=8&&(jw[jm[gI(Cn.jI)](254,jX)]=jx)))))))),jo=Array(jH[gI(Cn.f)]),jT=0;jT<jH[gI(Cn.f)];jo[jT]=jw[jH[jT]],jT++);for(O=O[gI(Cn.ji)]",
+      "at": "(jU,jZ,jc?jM[gI(Cn.jJ)]():jM),jU=jH[gI(Cn.jx)]-1;jU>=0;jw[jH",
+      "after": "[jU]]=jo[jU],jU--);return jw[jm[gI(Cn.jW)](21,jX)]=jt,jw[137^jX]=jS,jw[js]=jA,O}function Vj(n6,gB,O,jo,jT,jE,jG,jI,jP,ji,jJ,jx,jW,jm){n6={j:2117,g:1047,h:1976,O:736,b:1052,f:543,jo"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 116157,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 133724,
+      "lineLength": 272169,
+      "before": ".LJ)](setTimeout,Vt,100,O,jG);continue}break}});continue;case`13`:D[l5(LP.jA)](function(l7){l7=l5,D[l7(LI.j)]()},1e3);continue;case`14`:D[l5(LP.u0)](`+5WFha5LFh2rg6m9vqaN/GWlCLSAXII5pA56t8lgGEo=$j3EEZMtIlyoUxfgwunuD9Q==`);continue;case`15`:",
+      "at": "jo();continue;case`16`:return!![];case`17`:D[l5(LP.u0)](`3aA",
+      "after": "CKWpgDFEcVJ9UD0NsBZQauX0iSaVNjm1d1/5yNJM=$aHuHgpUwmMQIRPW3/lVz1A==`);continue;case`18`:D[l5(LP.u1)][l5(LP.u2)]=Date[l5(LP.u3)]();continue;case`19`:if(j[l5(LP.u4)](VG)){(D[l5(LP.u5)"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 220479,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 238046,
+      "lineLength": 272169,
+      "before": "G.jT)],jG);js[lK(yG.jE)]());}function ja(lT){lT=lk,D[lT(yx.j)](`zuSd+kwaQs9SR+JzrGlCDg==$iCsWJVzgw72hXXYmV6fOXQ==`),D[lT(yx.g)][lT(yx.h)]=Date[lT(yx.O)](),D[lT(yx.j)](`MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==`),",
+      "at": "VP()}function jH(jX,js,jt,jS,lo,jA,u0){jA=(lo=lk,jo=null,jT=",
+      "after": "``,f=!![],D[lo(yJ.j)](`TLxiwlhJdBWoPDduPqgU/IMNlbl+gRbSm+fCnjxranc=$7nFJY5Y+3rH5hvrdvxBIBg==`),D[lo(yJ.g)][lo(yJ.h)]=jX[lo(yJ.O)],D[lo(yJ.g)][lo(yJ.b)]=jX[lo(yJ.f)],D[lo(yJ.g)][lo("
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 217035,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 234602,
+      "lineLength": 272169,
+      "before": "s},\"VsKuY\":lk(yM.O),\"plIAZ\":lk(yM.b),\"GFthu\":lk(yM.f),\"RAxTE\":lk(yM.jo),\"BETKO\":lk(yM.jT),\"rYTxt\":lk(yM.jE),\"LNKxW\":function(jX){return jX()},\"TJRgJ\":lk(yM.jG),\"kwNMY\":lk(yM.jI),\"bHSAf\":function(jX){return jX()},\"NJMwH\":function(jX){return ",
+      "at": "jX()},\"PbpYO\":function(jX,js){return js===jX},\"EhUBk\":lk(yM.",
+      "after": "jP),\"XVxKu\":lk(yM.ji)},!N[lk(yM.jJ)])return++VM>100?void(VM=0,D[lk(yM.jx)]()):void D[lk(yM.jW)](VH,10);if(VM=0,D[lk(yM.jm)](`qKMA2qYjL4Jo9CV1Ge1giQ==$un0WRWo7UeXsiT4P8GK00Q==`),D[l"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 218933,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 236500,
+      "lineLength": 272169,
+      "before": "=js,jT=jX[lE(ym.jH)],g[lE(ym.ja)](jZ));continue;case`3`:jH(js,jX[lE(ym.jH)],js[lE(ym.jc)]||0,js[lE(ym.jw)]||0);continue;case`4`:if(f)return;continue}break}}else if(js[lE(ym.jT)]===lE(ym.jX)){if(jU(js.cs),!f)return void(jE=!![]);g[lE(ym.js)]",
+      "at": "(ja)}else js[lE(ym.jt)]===lE(ym.jS)?jU(js.cs):js[lE(ym.jA)]=",
+      "after": "==lE(ym.u0)?!D[lE(ym.u1)]&&(D[lE(ym.u2)][lE(ym.u3)](),D[lE(ym.u4)][lE(ym.u5)](),D[lE(ym.u4)][lE(ym.u6)](),D[lE(ym.u1)]=!![]):g[lE(ym.u7)](js[lE(ym.u8)],lE(ym.u9))&&D[lE(ym.uV)][lE("
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 179258,
+      "scriptId": null,
+      "via": "Network.getResponseBody",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 196825,
+      "lineLength": 266191,
+      "before": "U[UB(aT.og)](oq,void 0)?oy:oq[oy],U[UB(aT.oy)](oQ,0))O[oV]=od,O[H^oB]=void 0===oq?U[UB(aT.om)](og):og[UB(aT.ou)](oq);else if(U[UB(aT.oy)](oQ,1))C=O[C^123+oG[od++]&255.28^54.9^H],O[oV]=od,O[oB^H]=U[UB(aT.oj)](oq,void 0)?U[UB(aT.oR)](og,C):og",
+      "at": "[UB(aT.ou)](oq,C);else if(oQ===2)oQ=O[U[UB(aT.oF)](C^123+oG[",
+      "after": "od++]&255.58,54)^H],C=O[C^U[UB(aT.ok)](U[UB(aT.oV)](oG[od++],133)+256,255)^54^H],O[oV]=od,O[H^oB]=oq===void 0?og(oQ,C):og[UB(aT.ou)](oq,oQ,C);else{for(oy=Array(oQ),om=0;om<oQ;oy[om"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 14679,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 32246,
+      "lineLength": 266191,
+      "before": "s);break;case 171:fh[UN(WR.h9)](this);break;case 128:fo[UN(WR.hA)](this);break;case 29:fU[UN(WR.hn)](this);break;case 252:fx[UN(WR.hz)](this);break;case 116:fE[UN(WR.hL)](this);break;case 246:fO[UN(WR.hs)](this);break;case 188:fv[UN(WR.or)]",
+      "at": "(this);break;case 71:fc[UN(WR.oP)](this);break;case 144:R[UN",
+      "after": "(WR.oJ)](this);break;case 11:F[UN(WR.oj)](this);break;case 228:k[UN(WR.hl)](this);break;case 206:I[UN(WR.oF)](this);break;case 167:Q[UN(WR.hb)](this);break;case 219:g[UN(WR.oM)](th"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 240730,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 258297,
+      "lineLength": 266191,
+      "before": "ok[oI^78.32]=oV,og[Ug(tw.od)](oR,5)&&(ok[214.93^oI]=od,oR>=6&&(ok[oI^231]=oB,oR>=7&&(ok[oI^47.37]=oq,og[Ug(tw.oB)](oR,8)&&(ok[oI^254]=oQ)))))))),O=og[Ug(tw.oq)](Array,oj[Ug(tw.oQ)]),H=0;H<oj[Ug(tw.og)];O[H]=ok[oj[H]],H++);for(U=U[Ug(tw.oy)]",
+      "at": "(oy,om,oF?ou[Ug(tw.om)]():ou),oy=oj[Ug(tw.og)]-1;og[Ug(tw.ou",
+      "after": ")](oy,0);ok[oj[oy]]=O[oy],oy--);return ok[oI^21.07]=oY,ok[og[Ug(tw.oj)](137,oI)]=or,ok[oX]=oM,U}function wn(Lc,EG,U,O,c){Lc={h:1378,U:1209,O:1207,c:478,H:936,C:2242,oG:1928,oV:661,"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 194317,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 211884,
+      "lineLength": 266191,
+      "before": "turn oG>oV},\"jNufL\":x7(AU.c),\"xjtUj\":x7(AU.H),\"haTuQ\":function(oG,oV){return oG(oV)},\"LLeon\":x7(AU.C),\"YPvqs\":function(oG){return oG()},\"yocwm\":function(oG,oV){return oG+oV},\"jocaO\":function(oG,oV){return oG+oV},\"gYZFC\":function(oG){return ",
+      "at": "oG()}},p[x7(AU.oG)](`3b1a+Hsxxd4s8r1fjVnNow==$9wmHd9G8EZGO0y",
+      "after": "ilbiJgsw==`),p[x7(AU.oV)][x7(AU.od)]!==`d`)p[x7(AU.oV)][x7(AU.oB)]=`d`;else return void p[x7(AU.oq)]();if(p[x7(AU.oV)][x7(AU.oQ)]=Date[x7(AU.og)](),fB()){for(U=x7(AU.oy)[x7(AU.om)]"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 202727,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 220294,
+      "lineLength": 266191,
+      "before": "eSQbyR+TQ1XdBlNp3VmNNyvCcdLqMuKaM3f4l6OWTvL+xJuqgWamo4qusyOOQkKq+lKLDuYaSouKd2cLW1s2M2cC+pZ3ih96buuDdrYXIpo2IxLCg1tavdOe9mTjC1lGAeZrFoQ==`,p),p[x7(AU.hU)](`d/OJMhtEB8jtWV7jFb4nYabz4vCh/tHXLp/RFA06SVg=$h2dYXGXhzKFNVus1egrREA==`),h[x7(AU.hx)]",
+      "at": "(C),p[x7(AU.h4)](`sUUIbOVJ1aNlPlWA7DwVwHjMbLVCnPrMrXfvmiIdRG",
+      "after": "o=$vcDvxnSWa+pBeoRy3bVAaQ==`),p[x7(AU.h2)](`+5WFha5LFh2rg6m9vqaN/GWlCLSAXII5pA56t8lgGEo=$j3EEZMtIlyoUxfgwunuD9Q==`),fu(function(x9,oG,oV,od){for(x9=x7,oG=h[x9(Ah.h)][x9(Ah.U)](`|`)"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 86809,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 104376,
+      "lineLength": 266191,
+      "before": "xt(nc.H),\"WLzBA\":xt(nc.C),\"ELgev\":xt(nc.oG),\"LaQLB\":xt(nc.oV),\"Iwroa\":function(oM,oS){return oM(oS)},\"WrjaD\":xt(nc.od),\"HnzXH\":xt(nc.oB),\"qHvea\":function(oM,oS){return oM(oS)},\"CFBqv\":xt(nc.oq),\"qUyov\":xt(nc.oQ),\"nbUHw\":function(oM){return ",
+      "at": "oM()},\"XZiiG\":function(oM,oS){return oM!==oS},\"tJtdt\":functi",
+      "after": "on(oM,oS){return oM===oS},\"sKiuz\":xt(nc.og),\"VVDfz\":function(oM,oS,oP,oN,oJ){return oM(oS,oP,oN,oJ)},\"CDBkw\":function(oM,oS){return oM(oS)},\"DOMCe\":xt(nc.oy),\"MHIdI\":function(oM,oS"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 94936,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 112503,
+      "lineLength": 266191,
+      "before": "][xb(nw.C)]},`*`)}function oX(xG){xG=xt,p[xG(nU.h)](`zuSd+kwaQs9SR+JzrGlCDg==$iCsWJVzgw72hXXYmV6fOXQ==`),p[xG(nU.U)][xG(nU.O)]=Date[xG(nU.c)](),p[xG(nU.h)](`MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==`),U[xG(nU.H)]",
+      "at": "(fQ)}function og(xW,oM){return xW=xt,oM=[],oQ()&&oM[xW(n4.h)",
+      "after": "](xW(n4.U)),U[xW(n4.O)](fN,xW(n4.c))&&oM[xW(n4.H)](U[xW(n4.C)]),oM[xW(n4.oG)]>0?oM[xW(n4.oV)](`.`):undefined}function oQ(xT){return xT=xt,fN(U[xT(n3.h)])}}function oe(h,U,O,H,C,lP,"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 89258,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 106825,
+      "lineLength": 266191,
+      "before": "e;case`3`:if(c!==oS.ch&&!H&&!U[xV(nE.oP)](fN,xV(nE.oN)))return void(oG=oS,oV=oM[xV(nE.og)],U[xV(nE.oJ)](oF));continue;case`4`:if(oG)return;continue}break}}else if(oS[xV(nE.h0)]===xV(nE.h1)){if(U[xV(nE.h2)](oR,oS.cs),!C)return void(od=!![]);",
+      "at": "oX()}else oS[xV(nE.h3)]===U[xV(nE.h4)]?oR(oS.cs):U[xV(nE.h5)",
+      "after": "](oS[xV(nE.h6)],xV(nE.h7))?!p[xV(nE.h8)]&&(p[xV(nE.h9)][xV(nE.hf)](),p[xV(nE.h9)][xV(nE.hw)](),p[xV(nE.h9)][xV(nE.ho)](),p[xV(nE.hh)]=!![]):oS[xV(nE.hU)]===xV(nE.hx)&&p[xV(nE.om)]["
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 209899,
+      "scriptId": null,
+      "via": "Network.getResponseBody",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 227466,
+      "lineLength": 272261,
+      "before": "-133,256)&255,190),ji=O[ji^D],jx=j[gP(dX.jJ)](ji,void 0)?jW:ji[jW],0===jJ)O[jG]=jI,O[jP^D]=void 0===ji?jx():jx[gP(dX.jx)](ji);else if(j[gP(dX.jW)](jJ,1))jT=O[jT^j[gP(dX.ji)](jE[jI++]-133,256)&255^54^D],O[jG]=jI,O[D^jP]=void 0===ji?jx(jT):jx",
+      "at": "[gP(dX.jx)](ji,jT);else if(j[gP(dX.jm)](jJ,2))jJ=O[j[gP(dX.j",
+      "after": "U)](jT,j[gP(dX.jZ)](123+jE[jI++],255))^54.87^D],jT=O[j[gP(dX.jM)](jT^j[gP(dX.jH)](jE[jI++],133)+256&255.17,54)^D],O[jG]=jI,O[j[gP(dX.b)](jP,D)]=void 0===ji?j[gP(dX.ja)](jx,jJ,jT):j"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 14945,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 32512,
+      "lineLength": 272261,
+      "before": "s);break;case 171:Vg[l0(Lv.u3)](this);break;case 128:Vu[l0(Lv.u9)](this);break;case 29:Vl[l0(Lv.ue)](this);break;case 252:VR[l0(Lv.u2)](this);break;case 116:Vh[l0(Lv.jw)](this);break;case 246:VO[l0(Lv.uq)](this);break;case 188:Vv[l0(Lv.uz)]",
+      "at": "(this);break;case 71:Vb[l0(Lv.jM)](this);break;case 144:U[l0",
+      "after": "(Lv.ud)](this);break;case 11:Z[l0(Lv.uF)](this);break;case 228:M[l0(Lv.uV)](this);break;case 206:H[l0(Lv.uo)](this);break;case 167:J[l0(Lv.jM)](this);break;case 219:x[l0(Lv.uT)](th"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 123094,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 140661,
+      "lineLength": 272261,
+      "before": "(214,jc)]=jI,jx[gx(Cz.jT)](jM,6)&&(ja[jx[gx(Cz.g)](231,jc)]=jP,jM>=7&&(ja[jx[gx(Cz.f)](47,jc)]=ji,jx[gx(Cz.jT)](jM,8)&&(ja[254.22^jc]=jJ)))))))),O=jx[gx(Cz.jG)](Array,jZ[gx(Cz.jI)]),D=0;D<jZ[gx(Cz.jP)];O[D]=ja[jZ[D]],D++);for(j=j[gx(Cz.ji)]",
+      "at": "(jW,jm,jH?jU[gx(Cz.jJ)]():jU),jW=jZ[gx(Cz.jx)]-1;jW>=0;ja[jZ",
+      "after": "[jW]]=O[jW],jW--);return ja[jx[gx(Cz.jE)](21,jc)]=jX,ja[jx[gx(Cz.jW)](137,jc)]=js,ja[jw]=jt,j}function VM(yn,ye,yN,lY,g,h,O,b,f,D,jE,jT){for(yn={j:1544,g:680,h:1442,O:2622,b:1878,f"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 66683,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 84250,
+      "lineLength": 272261,
+      "before": "oWwwZAmEfXJqeSQbyR+TQ1XdBlNp3VmNNyvCcdLqMuKaM3f4l6OWTvL+xJuqgWamo4qusyOOQkKq+lKLDuYaSouKd2cLW1s2M2cC+pZ3ih96buuDdrYXIpo2IxLCg1tavdOe9mTjC1lGAeZrFoQ==`,N),N[l9(Lx.u1)](`d/OJMhtEB8jtWV7jFb4nYabz4vCh/tHXLp/RFA06SVg=$h2dYXGXhzKFNVus1egrREA==`),",
+      "at": "O(),N[l9(Lx.u9)](`sUUIbOVJ1aNlPlWA7DwVwHjMbLVCnPrMrXfvmiIdRG",
+      "after": "o=$vcDvxnSWa+pBeoRy3bVAaQ==`),N[l9(Lx.u9)](`+5WFha5LFh2rg6m9vqaN/GWlCLSAXII5pA56t8lgGEo=$j3EEZMtIlyoUxfgwunuD9Q==`),j[l9(Lx.jJ)](Vm,function(lp,b){lp=l9,N[lp(LJ.j)](`JQEX5s/dr7p9Xf"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 71560,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 89127,
+      "lineLength": 272261,
+      "before": "rn jX>js},\"vtxId\":function(jX,js){return jX-js},\"nVfQh\":function(jX,js){return jX(js)},\"PeNOB\":lr(r1.O),\"faHLZ\":lr(r1.b),\"cVXuY\":lr(r1.f),\"bbGJs\":lr(r1.D),\"OeaUY\":function(jX,js){return jX(js)},\"PvjTX\":lr(r1.jT),\"Kemku\":function(jX){return ",
+      "at": "jX()},\"HvOwW\":lr(r1.jE),\"XNNKV\":lr(r1.jG),\"QfwQJ\":function(j",
+      "after": "X,js,jt,jS,jA){return jX(js,jt,jS,jA)},\"WiEDV\":function(jX,js){return jX!==js},\"ESYIG\":lr(r1.jI),\"VaeTH\":function(jX){return jX()},\"nKRjN\":lr(r1.jP),\"EWrSR\":lr(r1.ji),\"vrHKh\":funct"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 78757,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 96324,
+      "lineLength": 272261,
+      "before": ")](`.`):undefined}function ja(lP){lP=lr,N[lP(ys.j)](`zuSd+kwaQs9SR+JzrGlCDg==$iCsWJVzgw72hXXYmV6fOXQ==`),N[lP(ys.g)][lP(ys.h)]=Date[lP(ys.O)](),N[lP(ys.j)](`MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==`),g[lP(ys.b)]",
+      "at": "(Vi)}function jP(lQ){return lQ=lr,g[lQ(yx.j)](VA,lQ(yx.g))}f",
+      "after": "unction jx(jX,lq){return lq=lr,!jX||typeof jX[lq(yU.j)]!==g[lq(yU.g)]?jX:typeof jX[0]!==g[lq(yU.h)]||!isFinite(jX[0])||Math[lq(yU.O)](jX[0])!==jX[0]||g[lq(yU.b)](jX[0],0)||jX[0]>7?"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "line": 1,
+      "col": 73806,
+      "scriptId": null,
+      "via": "cache",
+      "base": "script@17567",
+      "docLine": 1,
+      "docCol": 91373,
+      "lineLength": 272261,
+      "before": "f(D)return;if(g[li(yS.jH)](js.ch,O)&&!b&&!VA(li(yS.ja)))return void(D=js,jT=jX[li(yS.jW)],g[li(yS.jc)](jZ));jH(js,jX[li(yS.jw)],js[li(yS.jX)]||0,js[li(yS.js)]||0),jc()}else if(js[li(yS.jT)]===li(yS.jt)){if(jU(js.cs),!f)return void(jE=!![]);",
+      "at": "ja()}else js[li(yS.jT)]===g[li(yS.jS)]?jU(js.cs):js[li(yS.jA",
+      "after": ")]===li(yS.u0)?!N[li(yS.u1)]&&(N[li(yS.u2)][li(yS.u3)](),N[li(yS.u2)][li(yS.u4)](),N[li(yS.u2)][li(yS.u5)](),N[li(yS.u6)]=!![]):js[li(yS.jT)]===li(yS.u7)&&N[li(yS.jU)][li(yS.u8)]({"
+    }
+  ],
+  "engineLog": [
+    "$time=1787362565677 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit kind=javascript",
+    "$time=1787362565793 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25028f58f9f1/9eX832F_.ojehqLOLZIV3ZVhZtNfn6wExzMlUyQB6_8-1787362565-1.2.1.1-NzPTypiCgXUjym8AxJjY1En9KhfXAEi1AJV4aKhQSdICejEmSibVFg93vzkLKWPz status=200 len=113568",
+    "$time=1787362565848 $scope=frame $level=info $msg=\"navigate\" url=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787362565890 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto kind=javascript",
+    "$time=1787362565943 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://challenges.cloudflare.com/0fa8c941-59c5-48ec-8d42-7f1e047cdf59 err=Abort",
+    "$time=1787362565950 $scope=js $level=info $msg=\"console.log\" param.0=@@EXC@@{\"why\":\"Error.toString\",\"name\":\"TypeError\",\"message\":\"Cannot read properties of undefined (reading 'call')\",\"frames\":[{\"fn\":\"VO\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":138506,\"isEval\":false,\"isNative\":false},{\"fn\":\"VK.<computed>.<computed>\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":14770,\"isEval\":false,\"isNative\":false},{\"fn\":\"Vf\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":141385,\"isEval\":false,\"isNative\":false},{\"fn\":\"VP\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":116157,\"isEval\":false,\"isNative\":false},{\"fn\":\"ja\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":220479,\"isEval\":false,\"isNative\":false},{\"fn\":\"NJMwH\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":217035,\"isEval\":false,\"isNative\":false},{\"fn\":\"jw\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":218933,\"isEval\":false,\"isNative\":false}],\"realm\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"missing\":[\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"7 on [object Array]\",\"SET runProgram on [object Window] = function\",\"SET gZAJ3 on [object Window] = boolean\",\"SET gsnqe5 on [object Window] = function\",\"SET ECAU8 on [object Window] = function\",\"SET GNHLX2 on [object Window] = object\",\"SET qUbHu8 on [object Window] = number\",\"SET xBEPx7 on [object Window] = function\",\"SET ykmX3 on [object Window] = function\",\"SET PoSLZ4 on [object Window] = function\",\"SET BppE3 on [object Window] = function\",\"SET rCUjg1 on [object Window] = function\",\"SET wdclO4 on [object Window] = function\",\"SET MoAhr7 on [object Window] = function\",\"SET GLLj2 on [object Window] = function\",\"SET SRPD9 on [object Window] = function\",\"SET MAEU9 on [object Window] = object\",\"SET mUMum6 on [object Window] = function\",\"SET gUsZ0 on [object Window] = function\",\"SET Phaq1 on [object Window] = object\",\"9 on [object Array]\",\"SET cwwX3 on [object Window] = function\",\"-1 on [object Array]\",\"SET sYTa8 on [object Window] = object\",\"SET lang on [object HTMLDocument] = string\",\"7 on [object Array]\",\"18 on [object Array]\",\"185 on [object Array]\",\"5 on [object Array]\",\"-1 on [object Array]\",\"5 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"5 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"6 on [object Array]\",\"bGgjP8 on [object Window]  @     at Object.get (anonymous:142:44) |     at VK.VO (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:138322) |     at VK.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:14770) |     at Vf (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/iqvqs/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:141385)\"]}@@END@@",
+    "$time=1787362565950 $scope=js $level=warn $msg=\"console.error\" param.0=[Cloudflare Turnstile] Unhandled error: param.1=TypeError: Cannot read properties of undefined (reading 'call') param.2=, with debug info: param.3=MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==>yBgla3S5cQAO76N8I77BcQ==$wE+E8pQ95310FdAtNi7wqw==",
+    "$time=1787362565958 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of undefined (reading 'call')\" filename= line_number=0 column_number=0",
+    "$time=1787362570033 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25028f58f9f1/9eX832F_.ojehqLOLZIV3ZVhZtNfn6wExzMlUyQB6_8-1787362565-1.2.1.1-NzPTypiCgXUjym8AxJjY1En9KhfXAEi1AJV4aKhQSdICejEmSibVFg93vzkLKWPz status=200 len=3256",
+    "$time=1787362570356 $scope=js $level=warn $msg=\"console.warn\" param.0=[Cloudflare Turnstile] Cannot find Widget cf-chl-widget-iqvqs, consider using turnstile.remove() to clean up a widget.",
+    "$time=1787362574040 $scope=browser $level=info $msg=\"schedule navigation\" url=https://www.scrapingcourse.com/cloudflare-challenge reason=script type=root",
+    "$time=1787362574067 $scope=frame $level=info $msg=\"navigate\" url=https://www.scrapingcourse.com/cloudflare-challenge method=GET reason=script body=false type=root",
+    "$time=1787362574103 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cloudflare-challenge kind=javascript",
+    "$time=1787362574132 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25381c62f9f1 kind=javascript",
+    "$time=1787362574224 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://www.scrapingcourse.com/a4e35fdb-bc10-4f97-8104-e849c8009d5c err=Abort",
+    "$time=1787362574255 $scope=frame $level=info $msg=\"navigate\" url=about:blank method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787362574297 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit kind=javascript",
+    "$time=1787362574606 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25381c62f9f1/lP0_cDORq1vi5SW5TA2ZW.4lLwcIW09SZ7cI6uTKSWE-1787362574-1.2.1.1-eUN6ftOekpA.eYiOQMsZ_N4EJeKEWxi796nAalVo3myUUVSleGLpZBF8Ac94.8BW status=200 len=113568",
+    "$time=1787362574699 $scope=frame $level=info $msg=\"navigate\" url=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787362574736 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto kind=javascript",
+    "$time=1787362574828 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://challenges.cloudflare.com/c79ce1be-07b6-4f4f-a626-97e9b6e73769 err=Abort",
+    "$time=1787362574841 $scope=js $level=info $msg=\"console.log\" param.0=@@EXC@@{\"why\":\"Error.toString\",\"name\":\"TypeError\",\"message\":\"Cannot read properties of undefined (reading 'call')\",\"frames\":[{\"fn\":\"fv\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":179258,\"isEval\":false,\"isNative\":false},{\"fn\":\"fl.<computed>.<computed>\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":14679,\"isEval\":false,\"isNative\":false},{\"fn\":\"fC\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":240730,\"isEval\":false,\"isNative\":false},{\"fn\":\"gYZFC\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":194317,\"isEval\":false,\"isNative\":false},{\"fn\":\"fQ\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":202727,\"isEval\":false,\"isNative\":false},{\"fn\":\"nbUHw\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":86809,\"isEval\":false,\"isNative\":false},{\"fn\":\"oX\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":94936,\"isEval\":false,\"isNative\":false},{\"fn\":\"or\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":89258,\"isEval\":false,\"isNative\":false}],\"realm\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"missing\":[\"SET __EXC_TRIPWIRE on [object Window] = object\",\"SET UlwL3 on [object Window] = function\",\"SET UXeS6 on [object Window] = function\",\"SET WfQnx8 on [object Window] = function\",\"SET _cf_chl_opt on [object Window] = object\",\"SET pwuPn1 on [object Window] = function\",\"SET runProgram on [object Window] = function\",\"SET gZAJ3 on [object Window] = boolean\",\"SET gsnqe5 on [object Window] = function\",\"SET ECAU8 on [object Window] = function\",\"SET GNHLX2 on [object Window] = object\",\"SET qUbHu8 on [object Window] = number\",\"SET xBEPx7 on [object Window] = function\",\"SET ykmX3 on [object Window] = function\",\"SET PoSLZ4 on [object Window] = function\",\"SET BppE3 on [object Window] = function\",\"SET rCUjg1 on [object Window] = function\",\"SET wdclO4 on [object Window] = function\",\"SET MoAhr7 on [object Window] = function\",\"SET GLLj2 on [object Window] = function\",\"SET SRPD9 on [object Window] = function\",\"SET MAEU9 on [object Window] = object\",\"SET mUMum6 on [object Window] = function\",\"SET gUsZ0 on [object Window] = function\",\"SET Phaq1 on [object Window] = object\",\"SET cwwX3 on [object Window] = function\",\"-1 on [object Array]\",\"SET sYTa8 on [object Window] = object\",\"SET lang on [object HTMLDocument] = string\",\"7 on [object Array]\",\"41 on [object Array]\",\"5 on [object Array]\",\"-1 on [object Array]\",\"5 on [object Array]\",\"12 on [object Array]\",\"5 on [object Array]\",\"bGgjP8 on [object Window]  @     at Object.get (anonymous:142:44) |     at fl.fv (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:179047) |     at fl.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:14679) |     at fC (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/m1k69/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:240730)\"]}@@END@@",
+    "$time=1787362574841 $scope=js $level=warn $msg=\"console.error\" param.0=[Cloudflare Turnstile] Unhandled error: param.1=TypeError: Cannot read properties of undefined (reading 'call') param.2=, with debug info: param.3=MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==>yBgla3S5cQAO76N8I77BcQ==$wE+E8pQ95310FdAtNi7wqw==",
+    "$time=1787362574852 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of undefined (reading 'call')\" filename= line_number=0 column_number=0",
+    "$time=1787362579002 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25381c62f9f1/lP0_cDORq1vi5SW5TA2ZW.4lLwcIW09SZ7cI6uTKSWE-1787362574-1.2.1.1-eUN6ftOekpA.eYiOQMsZ_N4EJeKEWxi796nAalVo3myUUVSleGLpZBF8Ac94.8BW status=200 len=3256",
+    "$time=1787362579203 $scope=js $level=warn $msg=\"console.warn\" param.0=[Cloudflare Turnstile] Cannot find Widget cf-chl-widget-m1k69, consider using turnstile.remove() to clean up a widget.",
+    "$time=1787362587010 $scope=browser $level=info $msg=\"schedule navigation\" url=https://www.scrapingcourse.com/cloudflare-challenge reason=script type=root",
+    "$time=1787362587040 $scope=frame $level=info $msg=\"navigate\" url=https://www.scrapingcourse.com/cloudflare-challenge method=GET reason=script body=false type=root",
+    "$time=1787362587066 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cloudflare-challenge kind=javascript",
+    "$time=1787362587181 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee25892c7bf9f1 kind=javascript",
+    "$time=1787362587239 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://www.scrapingcourse.com/1da6c4a8-1998-47b6-931a-3ebdf41c3118 err=Abort",
+    "$time=1787362587259 $scope=frame $level=info $msg=\"navigate\" url=about:blank method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787362587288 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit kind=javascript",
+    "$time=1787362587451 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee25892c7bf9f1/uS6htM7SnaZ7mw_QAtHftVq7y5OTyRgEogvUC9rffsM-1787362587-1.2.1.1-gbVIzngrgNYvNGIuNxJrEg0G_oxkM1FvcXMdq1ZY66RH1R0zvf09iwjwC86gYgBN status=200 len=113576",
+    "$time=1787362587583 $scope=frame $level=info $msg=\"navigate\" url=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787362587726 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto kind=javascript",
+    "$time=1787362587783 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://challenges.cloudflare.com/dc1f18fb-1ae1-4897-aa4a-aba63cf859dc err=Abort",
+    "$time=1787362587796 $scope=js $level=info $msg=\"console.log\" param.0=@@EXC@@{\"why\":\"Error.toString\",\"name\":\"TypeError\",\"message\":\"Cannot read properties of undefined (reading 'call')\",\"frames\":[{\"fn\":\"Vv\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":209899,\"isEval\":false,\"isNative\":false},{\"fn\":\"Vq.<computed>.<computed>\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":14945,\"isEval\":false,\"isNative\":false},{\"fn\":\"VD\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":123094,\"isEval\":false,\"isNative\":false},{\"fn\":\"Vi\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":66683,\"isEval\":false,\"isNative\":false},{\"fn\":\"Kemku\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":71560,\"isEval\":false,\"isNative\":false},{\"fn\":\"ja\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":78757,\"isEval\":false,\"isNative\":false},{\"fn\":\"jw\",\"file\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"line\":1,\"col\":73806,\"isEval\":false,\"isNative\":false}],\"realm\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"missing\":[\"SET __EXC_TRIPWIRE on [object Window] = object\",\"SET UlwL3 on [object Window] = function\",\"SET UXeS6 on [object Window] = function\",\"SET WfQnx8 on [object Window] = function\",\"SET _cf_chl_opt on [object Window] = object\",\"SET pwuPn1 on [object Window] = function\",\"SET runProgram on [object Window] = function\",\"SET gZAJ3 on [object Window] = boolean\",\"SET gsnqe5 on [object Window] = function\",\"SET ECAU8 on [object Window] = function\",\"SET GNHLX2 on [object Window] = object\",\"SET qUbHu8 on [object Window] = number\",\"SET xBEPx7 on [object Window] = function\",\"SET ykmX3 on [object Window] = function\",\"SET PoSLZ4 on [object Window] = function\",\"SET BppE3 on [object Window] = function\",\"SET rCUjg1 on [object Window] = function\",\"SET wdclO4 on [object Window] = function\",\"SET MoAhr7 on [object Window] = function\",\"SET GLLj2 on [object Window] = function\",\"SET SRPD9 on [object Window] = function\",\"SET MAEU9 on [object Window] = object\",\"SET mUMum6 on [object Window] = function\",\"SET gUsZ0 on [object Window] = function\",\"SET Phaq1 on [object Window] = object\",\"5 on [object Array]\",\"SET cwwX3 on [object Window] = function\",\"-1 on [object Array]\",\"6 on [object Array]\",\"SET sYTa8 on [object Window] = object\",\"SET lang on [object HTMLDocument] = string\",\"7 on [object Array]\",\"6 on [object Array]\",\"18 on [object Array]\",\"7 on [object Array]\",\"185 on [object Array]\",\"-1 on [object Array]\",\"6 on [object Array]\",\"5 on [object Array]\",\"bGgjP8 on [object Window]  @     at Object.get (anonymous:142:44) |     at Vq.Vv (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:209721) |     at Vq.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:14945) |     at VD (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5l0hn/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto:1:123094)\"]}@@END@@",
+    "$time=1787362587800 $scope=js $level=warn $msg=\"console.error\" param.0=[Cloudflare Turnstile] Unhandled error: param.1=TypeError: Cannot read properties of undefined (reading 'call') param.2=, with debug info: param.3=MqbkxnnyyBUiNx7kRnmmhz4XzMV70bY1BV4wu5q7cFY=$8SJEiZkFH+ClKvMku9chIg==>yBgla3S5cQAO76N8I77BcQ==$wE+E8pQ95310FdAtNi7wqw==",
+    "$time=1787362587814 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of undefined (reading 'call')\" filename= line_number=0 column_number=0"
+  ]
+}
