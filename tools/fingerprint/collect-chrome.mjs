@@ -4,6 +4,14 @@
 // Chrome" needs measured ground truth, not remembered values.
 //
 //   node tools/fingerprint/collect-chrome.mjs [--headed] [--out results/x.json]
+//                                             [--chrome-arg SWITCH]...
+//
+// `--chrome-arg` is repeatable and goes straight to the browser. The reason it
+// exists: `--headless=new` fails the scrapingcourse challenge over one token in
+// the user agent, so a reference taken headless was a reference taken from a
+// client the guard rejects. `--chrome-arg --user-agent=<the headed string>`
+// makes the headless arm pass (3/3, results/e4/), which turns it back into a
+// legitimate target column that also runs unattended.
 //
 // Driven over raw CDP rather than Playwright so both engines go through one
 // client and any difference in the snapshot comes from the engine, not the
@@ -20,6 +28,10 @@ import { extractSannysoft, extractCreepJs, SANNYSOFT_URL, CREEPJS_URL } from './
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const headed = process.argv.includes('--headed');
+const chromeArgs = process.argv.reduce(
+    (acc, a, i) => (a === '--chrome-arg' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc),
+    [],
+);
 const outArg = process.argv.indexOf('--out');
 const outPath = path.resolve(
     repo,
@@ -42,13 +54,17 @@ const flags = [
     '--no-default-browser-check',
 ];
 if (!headed) flags.push('--headless=new');
+flags.push(...chromeArgs);
 
 const proc = spawn(CHROME, flags, { stdio: ['ignore', 'pipe', 'pipe'] });
 const chromeLog = [];
 proc.stdout.on('data', (d) => chromeLog.push(String(d)));
 proc.stderr.on('data', (d) => chromeLog.push(String(d)));
 
-const snapshot = { engine: headed ? 'chrome-headed' : 'chrome-headless', flags, version: null, steps: {} };
+const engine =
+    (headed ? 'chrome-headed' : 'chrome-headless') +
+    (chromeArgs.some((a) => a.startsWith('--user-agent=')) ? '-ua' : '');
+const snapshot = { engine, flags, version: null, steps: {} };
 const fail = (step, e) => {
     snapshot.steps[step] = { __err: String((e && e.stack) || e) };
     console.error(`  ! ${step}: ${(e && e.message) || e}`);

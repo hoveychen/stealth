@@ -7082,3 +7082,157 @@ The bodies are ciphertext in a custom alphabet (`…oHIJq1LLVY5IR-0ghveZjOk8…`
 verdict lands, never *what* was judged. Localising further has to come from the
 property side, which is what `probe-headless-tells.js` does for Chrome and what
 the collectors do for this engine.
+
+## Re-reading the property diff against a reference that passes (E1, 2026-08-21)
+
+Every "reference Chrome" column above was measured from a browser the
+scrapingcourse guard rejects — `--headless=new`, for the one-word reason the
+previous section isolated. That does not make those columns wrong, but it does
+make them unranked: a difference from a rejected client is not evidence about
+what an accepted one needs.
+
+Two references fix that, and the fix is the *pair*, not either one:
+
+- **reference** — `--headless=new` plus `--chrome-arg --user-agent=<the headed
+  string>`, which clears the interstitial 3/3.
+- **control** — headed Chrome, which clears it 5/5.
+
+Both are accepted, and re-confirmed in the same sitting as the snapshots below
+rather than carried over from the previous one — `results/e1b/`, two interleaved
+trials: reference 2/2 pass, this engine 0/2. So wherever the two disagree, no
+single value can be what the guard demands, and a third engine differing there
+has not been caught at anything. `diff.mjs --control <second-reference.json>` marks those rows ➖ and
+counts them separately; what is left is the set where every accepted browser
+agrees and this engine does not. `collect-chrome.mjs` takes repeatable
+`--chrome-arg` for the same reason.
+
+Snapshots `e1b-lightpanda.json` (`dev.788+6d57e9ce9`),
+`e1b-chrome-headless-ua.json`, `e1b-chrome-headed.json` (both Chrome
+151.0.7922.172), rendered to `e1b-lp-vs-passing-oracle.md`:
+
+| | count |
+|---|---|
+| probe keys identical to the reference | 70/90 |
+| differ, but the two references also differ (➖) | 12 |
+| **differ, both references agreeing (❌)** | **8** |
+
+The twelve excused rows are the screen/window box, `screen.availTop`,
+`navigator.connection`'s live rtt/downlink, and the client-hint entropy — see
+the caveat at the end of this section for that last one. The eight that survive:
+
+| key | lightpanda | both Chromes | what it is |
+|---|---|---|---|
+| `navigator.hardwareConcurrency` | 8 | 10 | deliberate — `Navigator.zig` |
+| `navigator.deviceMemory` | 8 | **16** | deliberate, on a stale premise |
+| `navigator.ownPropertyNames` | +`modelContext` | — | WebMCP, kept on purpose |
+| `window.ownPropertyNames.count` | 1203 | 1237 | 36 absent, **2 present** |
+| `window.screenX` | 0 | 22 | hardcoded — `Window.zig:1178` |
+| `canvas.toDataURL.fingerprint` | 370 B | 7614 B | no glyph rasteriser, by design |
+| `fonts.widths` | see below | see below | **a bug** |
+| `matchMedia.dark` | `false` | `true` | `MediaQuery.zig:426` |
+
+Four of those are decisions already written down, and the pair of references
+does not overturn any of them — it only prices them. Two are new.
+
+### A quoted generic family is not a generic family
+
+`fonts.widths` looked like a metrics difference and is not. A generic family is
+a CSS keyword, so `font-family: 'monospace'` names an ordinary family — one no
+system has installed — and must fall back to the default font. Measuring
+`mmmmmmmmmmlli` at 72px through `expr-quoted-generic-family.js`:
+
+| `font-family` | Chrome | lightpanda |
+|---|---|---|
+| `monospace` | 564 | 564 |
+| `'monospace'` | **620** | 564 |
+| `"monospace"` | **620** | 564 |
+| `sans-serif` | 648 | 648 |
+| `'sans-serif'` | **620** | 648 |
+| `serif` | 620 | 620 |
+| `'serif'` | 620 | 620 |
+| `NoSuchFamilyAtAll` | 620 | 620 |
+| `'NoSuchFamilyAtAll'` | 620 | 620 |
+
+620 is the default font's width — what Chrome gives for any name it cannot
+resolve, quoted or not. Unquoted, the two engines agree on all three generics.
+Quoted, lightpanda keeps resolving them as generics.
+
+It is not a parsing problem: `getComputedStyle().fontFamily` reads `"monospace"`
+with the quotes in *both* engines, so the declared value survives correctly and
+only font selection reads it wrong. `'serif'` matching is a coincidence — serif
+is the fallback, so the right answer and the wrong one collide there.
+
+This matters more than the widths suggest, because quoting family names is the
+ordinary idiom in font-enumeration code — `probe.js` quotes them, which is how
+this surfaced. A page that measures a quoted generic gets a number from this
+engine that no real browser produces.
+
+### A broken image still has a box
+
+bot.sannysoft.com has a row named "Broken Image Dimensions", and it is blank in
+the lightpanda column of every table above. Reading it directly
+(`expr-broken-image.js`, an `<img>` pointed at undecodable data):
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `img.width` / `img.height` | 16 | **0** |
+| `naturalWidth` / `naturalHeight` | 0 | 0 |
+| `offsetWidth` / `offsetHeight` | 16 | **5** |
+| `getBoundingClientRect()` | 16×16 | **5×5** |
+| `complete` | true | true |
+
+Chrome lays out the broken-image icon, so the element is 16×16 while the
+intrinsic size stays 0. lightpanda gets the intrinsic size right and the box
+wrong, and 5×5 is a reading no browser gives. The blank cell was not a
+collection failure; it was the answer.
+
+### The global surface: 36 absent, and 2 that no Chrome has
+
+`window.ownPropertyNames.count` only records a number, so
+`expr-window-globals.js` reads the names. It has to be run on the same origin
+for both engines — `run-expr.mjs` puts Chrome on `about:blank`, where Chrome
+gates 252 globals off an opaque origin and lightpanda gates none, which turns a
+name diff into a comparison of two different questions. On the collectors' local
+http origin, Chrome 1237 against lightpanda 1203:
+
+- **absent from lightpanda (36)** — `BarcodeDetector`, `CloseWatcher`,
+  `CreateMonitor`, `DigitalCredential`, `DocumentPictureInPicture(Event)`,
+  `Fence`, `FencedFrameConfig`, `FetchLaterResult`, `FileSystemObserver`,
+  `HTMLFencedFrameElement`, `IdentityCredentialError`, `IdentityProvider`,
+  `LanguageDetector`, `LanguageModel`, `Observable`, `PressureObserver`,
+  `PressureRecord`, `RestrictionTarget`, the six `SharedStorage*`, `Subscriber`,
+  `Summarizer`, `Temporal`, `Translator`, `WebSocketError`, `WebSocketStream`,
+  and the lowercase `documentPictureInPicture` / `fence` / `fetchLater` /
+  `sharedStorage`.
+- **present only in lightpanda (2)** — `ModelContext` and `ModelContextClient`,
+  plus `navigator.modelContext` on the navigator prototype.
+
+The asymmetry is the point. Missing names put this engine somewhere in Chrome's
+release history; the two extra ones put it nowhere, and `'ModelContext' in
+window` is a one-expression identification. That WebMCP surface is a deliberate
+product feature — this only measures what carrying it in the default persona
+costs.
+
+### Two things this did *not* find
+
+**Header-name casing is real and cannot reach this guard.** With both references
+in the table, section 2 shows lightpanda sending `Sec-Ch-Ua`,
+`Sec-Ch-Ua-Mobile` and `Sec-Ch-Ua-Platform` where both Chromes send them
+lowercase — Chromium writes exactly those three in lower case and title-cases
+the rest. It is a genuine tell over HTTP/1.1. It is also invisible to
+Cloudflare: `Curl_http_req_to_h2()` sets `DYNHDS_OPT_LOWERCASE`
+(`deps/curl-patched/lib/http.c:4972`), so every field name is lowercased on the
+way into HPACK, and this engine negotiates h2 with the challenge origin
+(measured — `nextHopProtocol` is `h2` on `scrapingcourse.com/antibot-challenge`).
+An h1 origin can read it; this one cannot.
+
+**The oracle blanks its own client hints.** `--user-agent=` is not the
+single-variable change it looks like from the UA string alone: overriding it
+also empties Chrome's high-entropy hints. The reference reports `architecture`
+`""`, `bitness` `""`, `platformVersion` `""`, `uaFullVersion` `""` and an empty
+`fullVersionList`, where headed Chrome reports `arm` / `64` / `26.3.1` /
+`151.0.7922.172` — and lightpanda fills all of them in. So on this row the
+engine already resembles headed Chrome more than the oracle does, and the oracle
+clears the challenge anyway. Useful as an exclusion — populated high-entropy
+hints are not required for a pass — and a warning: for client-hint work the
+target column is the headed snapshot, not this one.
