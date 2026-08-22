@@ -7496,10 +7496,28 @@ in the table, section 2 shows lightpanda sending `Sec-Ch-Ua`,
 lowercase — Chromium writes exactly those three in lower case and title-cases
 the rest. It is a genuine tell over HTTP/1.1. It is also invisible to
 Cloudflare: `Curl_http_req_to_h2()` sets `DYNHDS_OPT_LOWERCASE`
-(`deps/curl-patched/lib/http.c:4972`), so every field name is lowercased on the
+(`deps/curl-patched/lib/http.c:4981`), so every field name is lowercased on the
 way into HPACK, and this engine negotiates h2 with the challenge origin
 (measured — `nextHopProtocol` is `h2` on `scrapingcourse.com/antibot-challenge`).
 An h1 origin can read it; this one cannot.
+
+> **Closed since (2026-08-22).** The three literals in
+> `Client.baselineHeaders` are lowercase now, so an h1 origin reads the same
+> field names Chromium writes. Measured the same way the gap was:
+> `collect-lightpanda.mjs`'s `localHeaders` step against the same echo server
+> (`results/h1-casing-after-lightpanda.json` against `px-hdr-chrome-ua.json`) —
+> **nine of nine probe paths agree on the full name sequence and on every value**,
+> Host and Referer's ephemeral port aside. Nothing in the engine reads these
+> names case-sensitively: every header lookup in the network layer goes through
+> `std.ascii.eqlIgnoreCase`, and the forbidden-name protection on a `Sec-*` name
+> is a `HeaderSource` rank rather than a name match. h2 is untouched, as the
+> paragraph above predicts and a re-measurement confirms:
+> `results/h1-casing-after-h2-lightpanda.json` is name-for-name identical to the
+> pre-change `h2-lightpanda-after.json`, and per path identical to
+> `h2-chrome.json`. So this closes an h1 tell and moves nothing at the
+> Cloudflare station — the h1 header surface is now byte-exact, which is worth
+> having on its own, but it is not a candidate explanation for
+> `cf-scrapingcourse`.
 
 **The oracle blanks its own client hints.** `--user-agent=` is not the
 single-variable change it looks like from the UA string alone: overriding it
