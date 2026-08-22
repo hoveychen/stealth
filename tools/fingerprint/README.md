@@ -7314,3 +7314,24 @@ reports real byte counts, so `antibot-sweep --trace` now records response sizes
 field in. The `fo/` reply size is exactly the number worth cross-checking the
 page-side instrument against, which is what made the missing field cost
 something here rather than merely being absent.
+
+### Fixed: the quoted generic family (2026-08-22)
+
+`findInList` unquoted every name before looking it up, so `'monospace'`
+selected the monospace face. The guard now reads the same `font-family` keyword
+list the serialiser's `isBareFamilyName` reads, so a quoted generic skips like
+any other name with no table. All nine rows of
+`expr-quoted-generic-family.js` now match Chrome 151:
+
+| `font-family` | Chrome | before | after |
+|---|---|---|---|
+| `monospace` | 564 | 564 | 564 |
+| `'monospace'` | 620 | 564 | **620** |
+| `"monospace"` | 620 | 564 | **620** |
+| `sans-serif` | 648 | 648 | 648 |
+| `'sans-serif'` | 620 | 648 | **620** |
+| `serif` / `'serif'` | 620 | 620 | 620 |
+| `NoSuchFamilyAtAll`, quoted or not | 620 | 620 | 620 |
+
+`probe.js`'s `fonts.widths` step quotes its families, so that key moves from a
+reading no browser produces to Chrome's.
