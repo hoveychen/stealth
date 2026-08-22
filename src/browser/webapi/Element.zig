@@ -1751,6 +1751,35 @@ fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 }
     return .{ .width = @round(width), .height = @round(box.ascent + box.descent) };
 }
 
+/// Chrome draws a broken-image icon in place of an <img> whose bytes never
+/// became a picture, so the element still has a box even though it has no
+/// intrinsic size. Measured on Chrome 151 (probe `expr-broken-image.js`): a
+/// connected <img> with an unresolvable src reads 16 for width, height,
+/// offsetWidth, offsetHeight and getBoundingClientRect, while naturalWidth and
+/// naturalHeight stay 0. bot.sannysoft.com's "Broken Image Dimensions" row
+/// reads exactly this pair.
+pub const broken_image_icon_size = 16.0;
+
+/// Is this element laid out as the broken-image icon?
+///
+/// Nothing here decodes -- the bytes are fetched and dropped (see
+/// `Frame.loadImage`) -- so every <img> that asked for bytes is in the broken
+/// state, which is the state a real browser draws the icon for.
+///
+/// Drawing one takes a rendering. Chrome reads 0 for a detached <img> and 0
+/// for a connected one with no src, and in both cases that is what the
+/// reflected width/height attribute already answers, so neither gets an icon.
+pub fn hasBrokenImageBox(self: *const Element) bool {
+    if (self.getTag() != .img) {
+        return false;
+    }
+    const src = self.getAttributeSafe(comptime .wrap("src")) orelse return false;
+    if (src.len == 0) {
+        return false;
+    }
+    return self.asConstNode().isConnected();
+}
+
 pub const Dimensions = struct {
     width: f64,
     height: f64,
@@ -1795,6 +1824,16 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
                     dims.height = parsed;
                     dims.explicit_height = true;
                 } else |_| {}
+            }
+
+            // Whatever the attributes left undeclared, a broken <img> fills
+            // with the icon rather than the generic placeholder above. Not
+            // `explicit`: it is what the element renders as, not a declared
+            // value, so clientWidth/clientHeight still take the max with the
+            // content extent the way a measured size does.
+            if (self.hasBrokenImageBox()) {
+                if (dims.width == 5.0) dims.width = broken_image_icon_size;
+                if (dims.height == 5.0) dims.height = broken_image_icon_size;
             }
         }
     }

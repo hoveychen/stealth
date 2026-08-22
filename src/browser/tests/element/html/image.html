@@ -122,6 +122,67 @@
 
 <body></body>
 
+<script id="broken_image_box">
+{
+    // An image whose bytes never become a picture still occupies a box: Chrome
+    // draws the 16x16 broken-image icon for it. bot.sannysoft.com has a row
+    // ("Broken Image Dimensions") that reads exactly this, and 0x0 -- or this
+    // engine's old 5x5 placeholder -- is a reading no browser gives.
+    //
+    // Every image is broken here: the bytes are fetched but never decoded (see
+    // `Frame.loadImage`), which is why the intrinsic size stays 0 while the box
+    // does not. Readings below are from Chrome 151 (probe expr-broken-image.js).
+    const img = document.createElement('img');
+    img.src = 'broken.png';
+    document.body.appendChild(img);
+
+    testing.expectEqual(16, img.width);
+    testing.expectEqual(16, img.height);
+    testing.expectEqual(16, img.offsetWidth);
+    testing.expectEqual(16, img.offsetHeight);
+    testing.expectEqual(16, img.getBoundingClientRect().width);
+    testing.expectEqual(16, img.getBoundingClientRect().height);
+
+    // The icon is the layout box, not the image: nothing was decoded, so the
+    // intrinsic size stays 0 and the request is settled.
+    testing.expectEqual(0, img.naturalWidth);
+    testing.expectEqual(0, img.naturalHeight);
+    testing.expectEqual(true, img.complete);
+
+    // A declared size wins over the icon, on both the IDL and the box.
+    img.setAttribute('width', '100');
+    img.setAttribute('height', '40');
+    testing.expectEqual(100, img.width);
+    testing.expectEqual(40, img.height);
+    testing.expectEqual(100, img.offsetWidth);
+    testing.expectEqual(40, img.offsetHeight);
+
+    img.remove();
+}
+</script>
+
+<script id="broken_image_box_needs_rendering">
+{
+    // The icon is a rendering, so it needs an element that renders. Chrome
+    // reports 0 for a detached <img>, and 0 for a connected one with no src --
+    // in both cases `width` falls back to the content attribute.
+    const detached = document.createElement('img');
+    detached.src = 'broken.png';
+    testing.expectEqual(0, detached.width);
+    testing.expectEqual(0, detached.height);
+
+    detached.setAttribute('width', '100');
+    testing.expectEqual(100, detached.width);
+    testing.expectEqual(0, detached.height);
+
+    const srcless = document.createElement('img');
+    document.body.appendChild(srcless);
+    testing.expectEqual(0, srcless.width);
+    testing.expectEqual(0, srcless.height);
+    srcless.remove();
+}
+</script>
+
 <script id="img-load-event" type=module>
   // An img fires a load event when src is set.
   const state = await testing.async();
