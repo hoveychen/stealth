@@ -61,6 +61,32 @@
 // reach, while `Runtime.consoleAPICalled` arrives from every realm in both
 // engines (which is how exception-frames.mjs read the widget's throw).
 //
+// WHAT `--postmessage` CAN AND CANNOT SEE. The last unexplained step at this
+// station is in the *parent* realm: the widget posts its large second `fo/`
+// round and the parent then never posts the solved challenge (README, "the
+// parent is never told to finish"). The step between them crosses the frame
+// boundary, so it is a `postMessage` and not a call inside either realm.
+//
+// A cross-origin send cannot be seen from the sender. `parent.postMessage` on a
+// cross-origin WindowProxy is not the sending realm's own `postMessage` -- and
+// the realm's own is where Chrome keeps Window's operations, as own properties
+// of the global object rather than on `Window.prototype` -- so no sender-side
+// wrap is on that path. Measured on a two-port parent/child fixture, in both
+// engines: the child's `parent.postMessage` and the parent's
+// `e.source.postMessage` are recorded by neither sender and by both receivers.
+//
+// So the instrument reads the receiving side: a capture-phase `message`
+// listener, installed before any page script in every realm, which sees every
+// message actually delivered in either direction and changes nothing about
+// delivery. Its blind spot is the send that is *dropped* -- a `targetOrigin`
+// that does not match the receiver fails silently at the sender and appears
+// nowhere here, though Chrome logs it and `state.console` keeps that.
+// `--postmessage-sends` adds the two sender-side wraps that can be had (the
+// realm's own `postMessage`, and `MessagePort.prototype.postMessage` for a
+// transferred port, whose object does live in the receiving realm) and is a
+// separate flag because they change function identity, the same reason
+// `--reach` is one.
+//
 // WHAT THIS ACTUALLY FOUND, so the next reader does not re-run it expecting a
 // trace: offline the widget records **zero** opcodes in both engines, because
 // its VM entry point is runProgram(base64Program, window) and the program is an
@@ -74,6 +100,7 @@
 //   node tools/fingerprint/vm-trace.mjs <lightpanda|chrome> [--doc path]
 //        [--settle ms] [--cap n] [--out results/x.json] [--port n]
 //        [--top-level] [--no-determinize] [--reach] [--kick name|''] [--kick-after ms]
+//        [--postmessage] [--postmessage-sends]
 //        [--url live-url] [--attach-frames] [--same-process] [--no-patch] [--serve]
 //        [--headed] [--chrome-arg SWITCH]... [--log-level debug] [--keep]
 //   node tools/fingerprint/vm-trace.mjs diff <a.json> <b.json> [--window 8]
@@ -369,6 +396,166 @@ const REACH_SRC = String.raw`
 })();
 `;
 
+// `--postmessage`. One record per message this realm receives, and -- with
+// `--postmessage-sends` -- per message it sends to a window in its own realm or
+// over a MessagePort. Origin, sender, payload kind and payload length, in
+// arrival order, from every realm the bootstrap reached; see the header note for
+// why the receiving side is the one that can be read.
+//
+// Nothing here touches delivery: the listener is registered before any page
+// script, in the capture phase, and never stops propagation. The sends half
+// replaces two functions and is behind its own flag for that reason.
+const PM_SRC = String.raw`
+(function () {
+  if (globalThis.__PM) return;
+  globalThis.__PM = 1;
+  var CAP = 500;
+  var SENDS = __PM_SENDS__;
+  var origLog = console.log.bind(console);
+  var seq = 0;
+  var capped = false;
+
+  // Which realm this is, said three ways, because no one way is enough. The
+  // href repeats -- an interactive Turnstile runs a second document at the same
+  // URL inside the first -- and this engine reports the same
+  // executionContextId for every realm on the console, so the host cannot tell
+  // them apart either. Depth in the frame tree separates a nested widget from
+  // its container; the random tag separates two realms at the same depth (and
+  // is worthless under --determinize, where both realms draw the same first
+  // number from the same fixed PRNG).
+  var DEPTH = (function () {
+    try {
+      var d = 0, w = window;
+      while (w !== w.parent && d < 20) { w = w.parent; d++; }
+      return d;
+    } catch (e) { return -1; }
+  })();
+  var RID = (function () {
+    try { return Math.random().toString(36).slice(2, 8); } catch (e) { return '?'; }
+  })();
+
+  function say(rec) {
+    if (seq >= CAP) {
+      if (!capped) {
+        capped = true;
+        try { origLog('@@VTPM@@' + JSON.stringify({ dir: 'capped', at: CAP, realm: where() }) + '@@END@@'); } catch (e) { }
+      }
+      return;
+    }
+    rec.seq = seq++;
+    rec.realm = where();
+    rec.depth = DEPTH;
+    rec.rid = RID;
+    try { rec.kids = frames.length; } catch (e) { }
+    try { origLog('@@VTPM@@' + JSON.stringify(rec) + '@@END@@'); } catch (e) { }
+  }
+
+  function where() {
+    try { return location.href; } catch (e) { return '?'; }
+  }
+
+  // Kind and *length*, which is the whole comparison: the payloads are the same
+  // ciphertext the wire carries, so what tells a passing conversation from a
+  // stuck one is which messages exist and how big each is. Everything is
+  // guarded -- a getter on a page object must not take the instrument down --
+  // and the head of a string is kept short enough not to be a copy of it.
+  function shape(v) {
+    var t = typeof v;
+    if (v === null) return { kind: 'null' };
+    if (t === 'string') return { kind: 'string', len: v.length, head: v.slice(0, 64) };
+    if (t === 'undefined' || t === 'number' || t === 'boolean' || t === 'bigint') return { kind: t, head: String(v) };
+    if (t === 'function') return { kind: 'function' };
+    try { if (v instanceof ArrayBuffer) return { kind: 'ArrayBuffer', len: v.byteLength }; } catch (e) { }
+    try { if (globalThis.ArrayBuffer && ArrayBuffer.isView(v)) return { kind: 'view', len: v.byteLength }; } catch (e) { }
+    var out = { kind: 'object' };
+    try { out.keys = Object.keys(v).slice(0, 16); } catch (e) { }
+    try { out.len = JSON.stringify(v).length; } catch (e) { out.len = -1; }
+    // These payloads are named events -- {source, widgetId, event, seq} -- and
+    // *which* event is missing is the question, so the short scalar fields are
+    // kept by value. Anything past 48 characters is the ciphertext the wire
+    // already carries and only its length is worth having.
+    try {
+      var vals = {};
+      var ks = out.keys || [];
+      for (var i = 0; i < ks.length; i++) {
+        var x = v[ks[i]];
+        var xt = typeof x;
+        if (xt === 'string') vals[ks[i]] = x.length <= 48 ? x : 'len/' + x.length;
+        else if (xt === 'number' || xt === 'boolean') vals[ks[i]] = x;
+      }
+      out.vals = vals;
+    } catch (e) { }
+    return out;
+  }
+
+  // Named the way the frame tree names it, because "which window" is the
+  // question -- a message from the challenge iframe and one from an ad frame
+  // are not the same event.
+  function who(w) {
+    if (w === null || w === undefined) return 'none';
+    try { if (w === window) return 'self'; } catch (e) { }
+    try { if (w === parent && parent !== window) return 'parent'; } catch (e) { }
+    try { if (w === top && top !== window) return 'top'; } catch (e) { }
+    try {
+      var fs = document.getElementsByTagName('iframe');
+      for (var i = 0; i < fs.length; i++) {
+        try {
+          if (fs[i].contentWindow === w) return 'iframe[' + i + '] ' + String(fs[i].getAttribute('src') || '').slice(0, 90);
+        } catch (e) { }
+      }
+    } catch (e) { }
+    return 'other';
+  }
+
+  try {
+    addEventListener('message', function (e) {
+      var rec = { dir: 'in' };
+      try { rec.origin = e.origin; } catch (x) { rec.origin = '?'; }
+      try { rec.from = who(e.source); } catch (x) { rec.from = '?'; }
+      try { rec.ports = (e.ports && e.ports.length) || 0; } catch (x) { }
+      try { rec.data = shape(e.data); } catch (x) { rec.data = { kind: '<unreadable>' }; }
+      say(rec);
+    }, true);
+  } catch (e) {
+    say({ dir: 'error', what: 'listener: ' + String((e && e.message) || e) });
+  }
+
+  if (SENDS) {
+    var ownPost = null;
+    try { ownPost = globalThis.postMessage; } catch (e) { }
+    try {
+      if (typeof ownPost === 'function') {
+        Object.defineProperty(globalThis, 'postMessage', {
+          configurable: true, writable: true,
+          value: function (msg, target) {
+            // The receiver matters: a same-origin sibling's postMessage
+            // resolves to *its* global's own property, and forcing the call
+            // onto this realm would redirect the message.
+            var self = this || globalThis;
+            say({ dir: 'out', to: who(self), target: String(target), data: shape(msg) });
+            return ownPost.apply(self, arguments);
+          },
+        });
+      }
+    } catch (e) {
+      say({ dir: 'error', what: 'own postMessage: ' + String((e && e.message) || e) });
+    }
+    try {
+      var MP = globalThis.MessagePort && MessagePort.prototype;
+      if (MP && typeof MP.postMessage === 'function') {
+        var origPort = MP.postMessage;
+        MP.postMessage = function (msg) {
+          say({ dir: 'out-port', data: shape(msg) });
+          return origPort.apply(this, arguments);
+        };
+      }
+    } catch (e) {
+      say({ dir: 'error', what: 'MessagePort.postMessage: ' + String((e && e.message) || e) });
+    }
+  }
+})();
+`;
+
 // Same numbers on both engines, so a trace difference is a host difference and
 // not the clock. Everything is guarded: this engine has no `performance` on
 // some paths and no `crypto.getRandomValues` on others, and a throw here would
@@ -470,12 +657,17 @@ if (has('--serve')) {
 // One source, installed into the page target and into every frame target that
 // attaches, so a realm's readings do not depend on which process it landed in.
 const attachFrames = has('--attach-frames');
+// Asking for the sends half is asking for the instrument.
+const PM_SENDS = has('--postmessage-sends');
+const PM = PM_SENDS || has('--postmessage');
 const bootstrapSrc = (DETERMINIZE ? DETERMINIZE_SRC : '')
     + BOOTSTRAP
         .replace('__CAP__', String(CAP))
         .replace('__KICK__', JSON.stringify(KICK))
         .replace('__KICK_MS__', String(KICK_MS))
-    + (has('--reach') ? REACH_SRC : '');
+    + (has('--reach') ? REACH_SRC : '')
+    + (PM ? PM_SRC.replace('__PM_SENDS__', PM_SENDS ? 'true' : 'false') : '');
+state.postMessage = PM ? (PM_SENDS ? 'in+out' : 'in') : 'off';
 
 // startIndex -> entries, as they arrive over the console.
 const chunks = new Map();
@@ -562,6 +754,26 @@ try {
                 }
                 const kick = /^@@VTKICK@@([\s\S]*)$/.exec(text);
                 if (kick) { state.kick = kick[1]; break; }
+                // Arrival order across realms is the only ordering there is:
+                // each realm numbers its own records and no realm can see
+                // another's, so `i` is what puts the conversation in sequence.
+                const pm = /^@@VTPM@@([\s\S]*)@@END@@$/.exec(text);
+                if (pm) {
+                    try {
+                        const rec = JSON.parse(pm[1]);
+                        rec.i = (state.messages ??= []).length;
+                        // Two realms can carry the same URL -- the widget is
+                        // re-created on a retry -- so the realm a record came
+                        // from is the host's execution context, not the href
+                        // the page reports.
+                        rec.ctx = p.executionContextId;
+                        rec.ses = msg.sessionId ?? 'page';
+                        state.messages.push(rec);
+                    } catch {
+                        state.messageErrors = (state.messageErrors ?? 0) + 1;
+                    }
+                    break;
+                }
                 const reach = /^@@VTREACH@@([\s\S]*)@@END@@$/.exec(text);
                 if (reach) {
                     // Per realm, last report wins: the counters only grow.
@@ -647,7 +859,11 @@ try {
 }
 
 state.console = state.console.slice(-40);
-state.wire = state.wire.slice(-40);
+// The wire is the frame the messages have to be read in -- which `fo/` POSTs
+// happened, and whether the parent ever made its second one. A live challenge
+// run makes well over forty requests, and the last forty of them are the tail
+// of the widget's conversation with the last one cut off.
+state.wire = state.wire.slice(-400);
 state.engineLog = engineLog.join('').split('\n').filter(Boolean).slice(-30);
 if (exit) state.engineExit = exit;
 
@@ -669,11 +885,60 @@ if (out) {
 console.log(`\n${engine}  ${state.doc}`);
 console.log(`url: ${url}   patched sites: ${sites.length}   determinize: ${DETERMINIZE}   kick: ${state.kick ?? (KICK ? 'no report' : 'off')}`);
 console.log(`trace: ${state.trace.length} entries from ${state.chunks ?? 0} chunk(s)${state.traceGapAt === undefined ? '' : `, TRUNCATED at a missing chunk (index ${state.traceGapAt})`}`);
+if (PM) printMessages();
 if (state.error) console.log(`ERROR: ${state.error}`);
 if (state.bootstrapError) console.log(`bootstrap not installed: ${state.bootstrapError}`);
 for (const e of state.exceptions) console.log(`exception: ${e.text}  @${e.line}:${e.col}`);
 for (const c of state.console.slice(-8)) console.log(`  ${c}`);
 process.exit(0);
+
+// ---------------------------------------------------------------------------
+// postMessage summary
+// ---------------------------------------------------------------------------
+
+// One line per message, in arrival order, with the realm that recorded it. Long
+// enough to read the conversation off the terminal; `--out` keeps the rest.
+function printMessages() {
+    const msgs = state.messages ?? [];
+    if (msgs.length === 0) {
+        console.log('messages: none recorded');
+        return;
+    }
+    const realms = new Map();
+    for (const m of msgs) {
+        const k = `depth ${m.depth} ${m.rid} ctx ${m.ctx}  ${m.realm}`;
+        realms.set(k, (realms.get(k) ?? 0) + 1);
+    }
+    console.log(`messages: ${msgs.length} across ${realms.size} realm(s)${state.messageErrors ? `, ${state.messageErrors} unparseable` : ''}`);
+    for (const [realm, n] of realms) console.log(`  ${n.toString().padStart(4)}  ${realm.slice(0, 118)}`);
+    const SHOW = 60;
+    for (const m of msgs.slice(0, SHOW)) console.log(`  ${fmtMessage(m)}`);
+    if (msgs.length > SHOW) console.log(`  … ${msgs.length - SHOW} more (only in --out)`);
+}
+
+function fmtMessage(m) {
+    if (m.dir === 'capped') return `${String(m.i).padStart(3)}  CAPPED at ${m.at} in ${short(m.realm)}`;
+    if (m.dir === 'error') return `${String(m.i).padStart(3)}  ERROR ${m.what} in ${short(m.realm)}`;
+    const d = m.data ?? {};
+    const size = d.len === undefined ? '' : ` len=${d.len}`;
+    // The event name first, because that is what a message is called; the key
+    // list only when there is no name to print.
+    const ev = d.vals?.event ?? d.vals?.type ?? d.vals?.action;
+    const keys = ev !== undefined
+        ? ` ${ev}${d.vals?.seq === undefined ? '' : `#${d.vals.seq}`}`
+        : d.keys?.length ? ` {${d.keys.join(',')}}` : '';
+    // A port has neither a target window nor a target origin -- it is the
+    // channel -- so those two columns are left off rather than printed empty.
+    const peer = m.dir === 'in' ? `from ${m.from}` : m.dir === 'out' ? `to ${m.to ?? '?'}` : 'over a port';
+    const org = m.dir === 'in' ? ` origin=${m.origin}` : m.dir === 'out' ? ` targetOrigin=${m.target}` : '';
+    return `${String(m.i).padStart(3)}  ${m.dir.padEnd(8)} d${m.depth}/${m.rid} ${short(m.realm).padEnd(38)} ${peer}${org}  ${d.kind ?? '?'}${size}${keys}${m.ports ? ` ports=${m.ports}` : ''}`;
+}
+
+// A function declaration, not a const: printMessages runs above this point in
+// the file and a const would still be in its temporal dead zone there.
+function short(u) {
+    return String(u ?? '?').replace(/^https?:\/\//, '').slice(0, 44);
+}
 
 // ---------------------------------------------------------------------------
 // diff

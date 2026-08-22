@@ -1,0 +1,2143 @@
+{
+  "engine": "chrome",
+  "doc": "tools/fingerprint/results/exc-src4/are.com_cdn-cgi_challenge-platform_h_b_turnstile_f_av0_rch_2n80d_0x4AAAAAAADnPIDROrmt1Wwj_light_fbE_new_normal_lang_auto",
+  "docBytes": 266382,
+  "settleMs": 40000,
+  "determinize": true,
+  "topLevel": false,
+  "patchedSites": [
+    {
+      "offset": 123575,
+      "text": "?oQ:oq[oQ]"
+    },
+    {
+      "offset": 128640,
+      "text": "?ou:om[ou]"
+    },
+    {
+      "offset": 202786,
+      "text": "?oy:og[oy]"
+    },
+    {
+      "offset": 206720,
+      "text": "?oy:oq[oy]"
+    },
+    {
+      "offset": 218406,
+      "text": "?oy:oQ[oy]"
+    },
+    {
+      "offset": 240673,
+      "text": "?oF:ou[oF]"
+    }
+  ],
+  "console": [
+    "log.error: Failed to load resource: the server responded with a status of 403 ()",
+    "log.warning: No available adapters.",
+    "startGroupCollapsed: ",
+    "debug: Error",
+    "log: /.*.*=.*/",
+    "log: /.*.*=.*/",
+    "log: function () { [native code] }",
+    "log: function () { [native code] }",
+    "log: a",
+    "log: a",
+    "count: \u0000: 1",
+    "count: \u0000: 1",
+    "debug: %c%d font-size:0;color:transparent NaN",
+    "debug: %c%d font-size:0;color:transparent NaN",
+    "dir:  Error",
+    "dir:  Error",
+    "dirxml: %c%d font-size:0;color:transparent Error",
+    "dirxml: %c%d font-size:0;color:transparent Error",
+    "error: %c%d font-size:0;color:transparent NaN",
+    "error: %c%d font-size:0;color:transparent NaN",
+    "info: %c%d font-size:0;color:transparent NaN",
+    "info: %c%d font-size:0;color:transparent NaN",
+    "log: %c%d font-size:0;color:transparent NaN",
+    "log: %c%d font-size:0;color:transparent NaN",
+    "table: %c%d font-size:0;color:transparent Error",
+    "table: %c%d font-size:0;color:transparent Error",
+    "trace: %c%d font-size:0;color:transparent NaN",
+    "trace: %c%d font-size:0;color:transparent NaN",
+    "warning: %c%d font-size:0;color:transparent NaN",
+    "warning: %c%d font-size:0;color:transparent NaN",
+    "endGroup: console.groupEnd",
+    "log.warning: OTS parsing error: Size of decompressed WOFF 2.0 is less than compressed size"
+  ],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/antibot-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/antibot-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/antibot-challenge"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2f02d509bdeef28",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2f02d509bdeef28"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://www.scrapingcourse.com/c9a26c8c-a288-4a42-8e21-404cb7aae1ab",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Other"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/1633739253:1787382007:trImJHBidMx4PBndRagwrR5joBQqUOpT_yG6DxrRg04/a2f02d509",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/1633739253:1787382007:trImJHBidMx4PBndRagwrR5joBQqUOpT_yG6DxrRg04/a2f02d509"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://www.scrapingcourse.com/7380f3c9-2146-4763-839d-ef1cf649f1f7",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "blob:https://www.scrapingcourse.com/7380f3c9-2146-4763-839d-ef1cf649f1f7"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://challenges.cloudflare.com/80f6afa8-2739-40bd-af7b-6574bca2f473",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3982386615:1787382009:CO5zd_blFYGX6kwRXctrZGWEiB2e4RSJQpvzCN_Srh0/a2f02d",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3982386615:1787382009:CO5zd_blFYGX6kwRXctrZGWEiB2e4RSJQpvzCN_Srh0/a2f02d"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169"
+    },
+    {
+      "ev": "req",
+      "url": "https://brunhild.challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/i/a2f02d531b265527/_BVIzgHKr_vIKVxYTbHyfEeNhUYemPSuDDvK0oHCnXg-178",
+      "type": "Fetch"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/pat/a2f02d531b265527/1787383878784/fadd9e43a4f8b9bd72eaa9c503f73b4c8eca0397",
+      "type": "Fetch"
+    },
+    {
+      "ev": "fail",
+      "text": "net::ERR_NAME_NOT_RESOLVED",
+      "url": ""
+    },
+    {
+      "ev": "res",
+      "status": 401,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/pat/a2f02d531b265527/1787383878784/fadd9e43a4f8b9bd72eaa9c503f73b4c8eca0397"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2f02d531b265527/1787383878786/evtHxkvpuewZuBdvR4Abkbjg2oh5Viqc71zkLqmrl",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2f02d531b265527/1787383878786/evtHxkvpuewZuBdvR4Abkbjg2oh5Viqc71zkLqmrl"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3982386615:1787382009:CO5zd_blFYGX6kwRXctrZGWEiB2e4RSJQpvzCN_Srh0/a2f02d",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3982386615:1787382009:CO5zd_blFYGX6kwRXctrZGWEiB2e4RSJQpvzCN_Srh0/a2f02d"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://challenges.cloudflare.com/8fdaf813-3236-4bb5-81e1-23d0fefefa14",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "blob:https://challenges.cloudflare.com/8fdaf813-3236-4bb5-81e1-23d0fefefa14"
+    }
+  ],
+  "exceptions": [],
+  "trace": [],
+  "url": "https://www.scrapingcourse.com/antibot-challenge",
+  "live": true,
+  "postMessage": "in",
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9702/devtools/browser/234fe817-0db1-4fd8-901e-b873ef525d3e"
+  },
+  "realms": [
+    "https://www.scrapingcourse.com/antibot-challenge",
+    "about:blank",
+    "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+    "about:blank",
+    "about:blank",
+    "about:blank",
+    "about:blank",
+    "about:blank",
+    "about:srcdoc",
+    "about:blank"
+  ],
+  "frameSessions": [
+    "blob:https://www.scrapingcourse.com/7380f3c9-2146-4763-839d-ef1cf649f1f7",
+    "",
+    "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169",
+    "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169",
+    "blob:https://challenges.cloudflare.com/8a493540-28ec-40a8-8d9b-42bfa17f9169",
+    "blob:https://challenges.cloudflare.com/8fdaf813-3236-4bb5-81e1-23d0fefefa14"
+  ],
+  "messages": [
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "kills",
+          "mode",
+          "nextRcV"
+        ],
+        "len": 203
+      },
+      "seq": 0,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 0
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event"
+        ],
+        "len": 81
+      },
+      "seq": 1,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 1
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "source",
+          "widgetId"
+        ],
+        "len": 67
+      },
+      "seq": 0,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 2
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "action",
+          "apiJsMismatchReloadAttempts",
+          "apiJsMismatchReloadCompletedCount",
+          "apiJsResourceTiming",
+          "appearance",
+          "au",
+          "cData",
+          "ch",
+          "chlPageData",
+          "cs",
+          "event",
+          "execution",
+          "expiry-interval",
+          "language",
+          "rcV",
+          "refresh-expired"
+        ],
+        "len": 4398
+      },
+      "seq": 1,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 3
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "cs",
+          "event",
+          "source",
+          "widgetId"
+        ],
+        "len": 1444
+      },
+      "seq": 2,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 4
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "displayLanguage",
+          "displayRtl",
+          "translationData"
+        ],
+        "len": 218
+      },
+      "seq": 2,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 5
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 3,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 6
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 3,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 7
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 4,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 8
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 4,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 9
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event"
+        ],
+        "len": 79
+      },
+      "seq": 5,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 10
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 5,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 11
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 6,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 12
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 6,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 13
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 7,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 14
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 7,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 15
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 8,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 16
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 8,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 17
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 9,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 18
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 9,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 19
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 10,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 20
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 10,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 21
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 11,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 22
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 75
+      },
+      "seq": 11,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 23
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 75
+      },
+      "seq": 12,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 24
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 12,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 25
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 13,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 26
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 13,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 27
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 14,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 28
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 14,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 29
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 15,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 30
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 15,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 31
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 16,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 32
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 16,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 33
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 17,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 34
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 17,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 35
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 18,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 36
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 18,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 37
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 19,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 38
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 19,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 39
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 20,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 40
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 20,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 41
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 21,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 42
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 21,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 43
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 22,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 44
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 22,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 45
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 23,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 46
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 23,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 47
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 24,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 48
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 24,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 49
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 25,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 50
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 25,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 51
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 26,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 52
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 26,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 53
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 27,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 54
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 27,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 55
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 28,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 56
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 28,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 57
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 29,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 58
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 29,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 59
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 30,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 60
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 30,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 61
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 31,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 62
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 31,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 63
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 32,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 64
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 32,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 65
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 33,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 66
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 33,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 67
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 34,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 68
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 34,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 69
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 35,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 70
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 35,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 71
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 36,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 72
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 36,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 73
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 37,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 74
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 37,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 75
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 38,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 76
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 38,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 77
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 39,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 78
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 39,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 79
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 40,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 80
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 40,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 81
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 41,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 82
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 41,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 83
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 42,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 84
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 42,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 85
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 43,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 86
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 43,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 87
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 44,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 88
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 44,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 89
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 45,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 90
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 45,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 91
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 46,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 92
+    },
+    {
+      "dir": "in",
+      "origin": "https://www.scrapingcourse.com",
+      "from": "parent",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "event",
+          "seq",
+          "source",
+          "widgetId"
+        ],
+        "len": 76
+      },
+      "seq": 46,
+      "realm": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/sx8p3/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+      "i": 93
+    },
+    {
+      "dir": "in",
+      "origin": "https://challenges.cloudflare.com",
+      "from": "other",
+      "ports": 0,
+      "data": {
+        "kind": "object",
+        "keys": [
+          "source",
+          "widgetId",
+          "event",
+          "seq"
+        ],
+        "len": 76
+      },
+      "seq": 47,
+      "realm": "https://www.scrapingcourse.com/antibot-challenge",
+      "i": 94
+    }
+  ],
+  "traceLen": 0,
+  "chunks": 0,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:9702/devtools/browser/234fe817-0db1-4fd8-901e-b873ef525d3e",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[72007:12143096:0822/003116.971338:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[72007:12143096:0822/003116.971845:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[72014:12143222:0822/003117.448935:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003117.449112:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003117.449115:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003117.449123:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[72014:12143222:0822/003117.449126:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[72014:12143222:0822/003117.449129:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[72014:12143222:0822/003117.461874:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003117.461890:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003117.461894:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679964:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679977:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679980:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679986:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679988:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679991:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679996:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003118.679999:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[72014:12143222:0822/003118.680001:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[72007:12143158:0822/003120.131852:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "[72007:12143158:0822/003120.291528:ERROR:google_apis/gcm/engine/mcs_client.cc:702]   Error code: 401  Error message: Authentication Failed: wrong_secret",
+    "[72007:12143158:0822/003120.291547:ERROR:google_apis/gcm/engine/mcs_client.cc:704] Failed to log in to GCM, resetting connection.",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[72007:12143158:0822/003142.832549:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT"
+  ],
+  "engineExit": {
+    "code": null,
+    "signal": "SIGKILL"
+  }
+}

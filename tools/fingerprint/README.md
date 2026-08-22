@@ -7396,7 +7396,9 @@ second round from the widget — and then the parent never posts the solved
 challenge. The step between those two is the widget telling its parent it is
 done, which is a `postMessage` across the frame boundary, not a call inside
 either realm. That is the next thing to instrument, and neither of the two
-instruments in this directory currently records it.
+instruments in this directory currently records it. (Instrumented since — and
+the answer is that the message layer is not where this engine differs. See "The
+parent is never told to finish because nobody finished".)
 
 ### An instrumentation gap this turned up
 
@@ -7428,3 +7430,105 @@ any other name with no table. All nine rows of
 
 `probe.js`'s `fonts.widths` step quotes its families, so that key moves from a
 reading no browser produces to Chrome's.
+
+## The parent is never told to finish because nobody finished (2026-08-22)
+
+The `postMessage` step the previous sections left uninstrumented is instrumented
+now. `vm-trace.mjs --postmessage` records every message a realm *receives* —
+origin, sender, payload kind, payload length, and for these payloads the event
+name — in every realm the bootstrap reaches; `--postmessage-sends` adds the two
+sender-side wraps that can be had.
+
+**A cross-origin send cannot be read from the sender.** `parent.postMessage` on
+a cross-origin WindowProxy is not the sending realm's own `postMessage`, and the
+realm's own is where Chrome keeps Window's operations — as own properties of the
+global object, so there is nothing on `Window.prototype` to wrap. Measured on a
+two-port parent/child fixture in both engines: the child's `parent.postMessage`
+and the parent's `e.source.postMessage` are recorded by neither sender and by
+both receivers. Hence the receiving side is the one that is read, and the one
+thing this cannot see is a send *dropped* for a `targetOrigin` mismatch (Chrome
+logs that, and `state.console` keeps it). Checked against a fixture whose census
+is fixed in advance — six delivered messages plus one port message — which both
+engines report in full, same origins, same lengths.
+
+*(A tell in passing: `Window.prototype.hasOwnProperty('postMessage')` is `false`
+in Chrome and `true` here, and Chrome's `Window.prototype` carries 3 own property
+names against this engine's 239. Measured with one expression on both.)*
+
+**The conversation, live.** `--url https://www.scrapingcourse.com/antibot-challenge
+--attach-frames --postmessage --no-determinize --settle 40000`, Chrome with
+`--chrome-arg --user-agent=<the headed string>`, four interleaved runs per arm
+(`results/pm/pm{b,c}-{cr,lp}-{1,2}.json`):
+
+| | Chrome 151.0.7922.172 | lightpanda dev.788+6d57e9ce9 |
+|---|---|---|
+| messages | 9–13 | 93–95 |
+| `init`, `requestExtraParams`, `init`, `extraParams`, `execute`, `translationInit` | in that order | the same, in the same order |
+| `meow`/`food` heartbeat | 1–3 pairs | 43–44 pairs |
+| `interactiveBegin` | — | 1, 79 B |
+| **`complete`** | **1, 2 531–2 553 B** | **never** |
+| `fo/` POSTs | parent, widget, widget, **parent** | parent, widget, widget |
+
+So the missing message has a name — `complete`, widget → parent, ~2.5 KB, and
+the parent's second `fo/` follows it. Everything before it is identical across
+the two engines: same events, same order, same origins, sizes within 0.1 %.
+
+**It is not a postMessage difference.** Run the same command against Chrome with
+determinizing left *on* — fixed clock, fixed PRNG, fixed
+`crypto.getRandomValues` — and the browser that passes produces this engine's
+census exactly: 95 messages, `interactiveBegin` at 79 B, 44 `meow`/`food` pairs,
+no `complete`, three `fo/` POSTs (`results/pm/pmd-cr-determinized.json`; the
+first round, `pm-{cr,lp}-{1,2}.json`, is the same reading from before the
+instrument recorded event names). A stuck client looks like this whichever engine
+is stuck. Every message the two engines do exchange is delivered, in order, with
+the right origins, and the one that is missing is missing because **nobody
+produced it**: `interactiveBegin` is the widget being told to show the
+interactive variant, the checkbox a person clicks, and in a run with no person
+that is where the conversation ends.
+
+This closes as a negative result about the message layer and hands the question
+back to the telemetry that earns the escalation. Two notes for whoever picks
+that up. Clicking is not a shortcut from here: in the escalated run the widget
+realm's `document.body.innerHTML` is empty and holds no input, label or button
+(three runs), so there is no target in this engine today — whether an escalated
+*Chrome* renders one was not measured. And `--determinize` costs the verdict the
+way `--same-process` does; a reading taken with it is a reading from a stuck
+client.
+
+### Two deviations the instrument turned up on the side
+
+**The top frame's URL reads as the widget iframe's.** On the live page, three
+lightpanda runs out of three, the top realm — `window === top`, DOM plainly the
+interstitial (`Just a moment...`, `input#cf-chl-widget-<id>_response`, the
+Cloudflare footer links) — answers with the *widget's* URL:
+
+| read in the top realm | lightpanda | what the DOM says it should be |
+|---|---|---|
+| `location.href` / `document.URL` / `document.baseURI` / `document.documentURI` | `https://challenges.cloudflare.com/cdn-cgi/challenge-platform/…/turnstile/…` | `https://www.scrapingcourse.com/antibot-challenge` |
+| `location.origin` | `https://challenges.cloudflare.com` | `https://www.scrapingcourse.com` |
+| `window.origin`, `document.domain` | `https://www.scrapingcourse.com`, `www.scrapingcourse.com` | — correct |
+
+One realm contradicting itself, `location.origin` against `window.origin`, is a
+one-expression identification, and any page script that reports the URL it is
+running on — Turnstile's `api.js` among them — reports the wrong one. It does
+**not** reproduce in a fixture yet: a cross-origin child navigated three times by
+its parent, the same created by script rather than markup, and the same
+navigating *itself* across a hostname change all leave the top realm's URL
+correct in both engines. What the live page has and those do not is nested
+`blob:` and `about:srcdoc` frames, which is where the next attempt should look.
+
+**`window.parent.parent` throws from a cross-origin child.** Walking up the
+frame tree — `while (w !== w.parent) w = w.parent` — reports depth 1 in Chrome
+from inside a cross-origin iframe and throws in this engine, in the same
+two-port fixture and on every live widget realm. The first hop is fine
+(`parent === window` answers `false`); the throw is on reading `parent` of the
+cross-origin WindowProxy.
+
+**And one gap that gets in the instrument's way:** every `consoleAPICalled` from
+this engine carries the same `executionContextId`, so the host cannot tell two
+realms apart by it. The instrument tags realms page-side instead — frame depth
+plus a random id — which is also how a second widget realm at the same URL would
+be caught. (A second Math.random detail fell out of that: under `--determinize`
+the tag is identical in every realm, because both realms then draw the same first
+number from the same fixed PRNG. That is the instrument's own doing, not the
+engine's.)
