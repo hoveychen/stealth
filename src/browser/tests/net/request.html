@@ -1,5 +1,40 @@
 <!DOCTYPE html>
 <script src="../testing.js"></script>
+
+<script id=ctor_error_message>
+  // An empty `e.message` is a reading no browser has, so it is worth more to a
+  // detector than any wording difference. Blink names the interface and quotes
+  // the input *as given*, not the resolved URL. Measured on Chrome 151; the
+  // inputs here are absolute-but-unparseable so the readings do not depend on
+  // the document base the way `new Request('')` does.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  testing.expectEqual(
+    "TypeError: Failed to construct 'Request': Failed to parse URL from http://[",
+    msg(() => new Request('http://[')));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'Request': Failed to parse URL from ht tp://x",
+    msg(() => new Request('ht tp://x')));
+
+  const no_body = "TypeError: Failed to construct 'Request': Request with GET/HEAD method cannot have body.";
+  testing.expectEqual(no_body, msg(() => new Request('https://example.com/a', { body: 'x' })));
+  testing.expectEqual(no_body, msg(() => new Request('https://example.com/a', { method: 'HEAD', body: 'x' })));
+  testing.expectEqual(no_body, msg(() => new Request(new Request('https://example.com/a'), { body: 'x' })));
+
+  // The enum rejection quotes the value it was handed.
+  testing.expectEqual(
+    "TypeError: Failed to construct 'Request': Failed to read the 'duplex' property from 'RequestInit': The provided value 'full' is not a valid enum value of type RequestDuplex.",
+    msg(() => new Request('https://example.com/a', { duplex: 'full' })));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'Request': Failed to read the 'duplex' property from 'RequestInit': The provided value '' is not a valid enum value of type RequestDuplex.",
+    msg(() => new Request('https://example.com/a', { duplex: '' })));
+
+  // Backticks around `duplex`, and no full stop -- Blink's own inconsistency.
+  testing.expectEqual(
+    'TypeError: Failed to construct \'Request\': The `duplex` member must be specified for a request with a streaming body',
+    msg(() => new Request('https://example.com/a', { method: 'POST', body: new ReadableStream() })));
+</script>
+
 <script id=basic>
 {
   const req = new Request('https://example.com/api');
