@@ -559,6 +559,27 @@ fn platformHeader(self: *const Client) []const u8 {
     return self.platform_quoted_override orelse self.httpHeaders().sec_ch_ua_platform;
 }
 
+// The wire value of a high-entropy hint, for an origin that asked. Four of the
+// six are fixed by the claimed platform and two follow the brand list, and each
+// is the same value navigator.userAgentData.getHighEntropyValues answers -- the
+// header and the JS call have to describe one machine.
+//
+// Emulation.setUserAgentOverride can carry a userAgentMetadata with its own
+// architecture/model/platformVersion; this engine reads only the platform out
+// of it (Client.platform_quoted_override), so a driver that overrides the rest
+// is not honoured here either. Consistent, if incomplete.
+fn clientHintValue(self: *const Client, hint: ClientHints.Hint) []const u8 {
+    const H = Config.HttpHeaders;
+    return switch (hint) {
+        .arch => H.sec_ch_ua_arch,
+        .bitness => H.sec_ch_ua_bitness,
+        .model => H.sec_ch_ua_model,
+        .platform_version => H.sec_ch_ua_platform_version,
+        .full_version => self.httpHeaders().sec_ch_ua_full_version,
+        .full_version_list => self.httpHeaders().sec_ch_ua_full_version_list,
+    };
+}
+
 pub fn abort(self: *Client) void {
     // Snapshot before killing: kill() -> deinit removes entries from
     // self.transfers, which would invalidate a live iterator.
@@ -2177,6 +2198,11 @@ pub const Transfer = struct {
     // notification at delivery.
     _from_cache: bool = false,
 
+    // This request carries at least one negotiated high-entropy client hint,
+    // which changes where a subresource puts User-Agent. Set by
+    // seedClientHints, read by emitHeaders.
+    _high_entropy_hints: bool = false,
+
     // What the cache wants from this transfer's response.
     _cache_intent: CacheIntent = .none,
 
@@ -3085,10 +3111,21 @@ pub const Transfer = struct {
     // that reaches the wire is the one baselineHeaders and seedFetchMetadata
     // spell. Written here the same way anyway, so each field name has one
     // spelling in this file.
+    // The six negotiated hints are interleaved with the three baseline ones
+    // rather than appended -- measured, the nine-hint navigations in
+    // tools/fingerprint/results/acceptch-chrome.json. A name nothing set simply
+    // doesn't match, so the three-hint case this table described before comes
+    // out of it byte-identical.
     const chrome_navigation_order = [_][]const u8{
         "sec-ch-ua",
         "sec-ch-ua-mobile",
+        "sec-ch-ua-full-version",
+        "sec-ch-ua-arch",
         "sec-ch-ua-platform",
+        "sec-ch-ua-platform-version",
+        "sec-ch-ua-model",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-full-version-list",
         "Upgrade-Insecure-Requests",
         "User-Agent",
         "Accept",
@@ -3118,6 +3155,35 @@ pub const Transfer = struct {
         "priority",
     };
 
+    // A subresource carrying the negotiated hints, which is NOT the table above
+    // with six names slotted in: Chrome moves User-Agent from second to ninth,
+    // so the two cases cannot share a table the way the navigation ones can.
+    // Measured, the nine-hint subresources (fetch, XHR and favicon, all in
+    // agreement) in tools/fingerprint/results/acceptch-chrome.json. That
+    // capture is of an origin that asked for all nine; an origin asking for a
+    // subset gets this sequence with the missing names skipped, which is a
+    // guess at Chrome's ordering there and not a measurement of it.
+    const chrome_subresource_hinted_order = [_][]const u8{
+        "sec-ch-ua-full-version-list",
+        "sec-ch-ua-platform",
+        "sec-ch-ua",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-model",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-full-version",
+        "User-Agent",
+        "sec-ch-ua-platform-version",
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "priority",
+    };
+
     // Materializes req_headers onto the connection in Chrome's order.
     //
     // One emission stays out of our hands: curl writes `Host` first, which is
@@ -3128,6 +3194,8 @@ pub const Transfer = struct {
     fn emitHeaders(self: *Transfer, conn: *http.Connection, arena: Allocator) !void {
         const order: []const []const u8 = if (self.req.resource_type == .document)
             &chrome_navigation_order
+        else if (self._high_entropy_hints)
+            &chrome_subresource_hinted_order
         else
             &chrome_subresource_order;
 
@@ -3160,6 +3228,8 @@ pub const Transfer = struct {
             try self.addHeader(hdr.name, hdr.value, .{ .source = hdr.source });
         }
 
+        try self.seedClientHints();
+
         // --http-header extras; setHeader so a same-name header (e.g.
         // Accept-Language) overrides the baseline instead of duplicating.
         for (self.client.network.config.httpHeaders()) |hdr| {
@@ -3167,6 +3237,27 @@ pub const Transfer = struct {
         }
 
         try self.seedFetchMetadata();
+    }
+
+    // The high-entropy hints this request's origin asked for via Accept-CH,
+    // and only those. They are not in baselineHeaders because unsolicited they
+    // are a tell of their own -- see the note there. Once an origin has asked,
+    // Chrome puts them on every request to it, navigation and subresource
+    // alike, which is what makes the difference visible on every hop rather
+    // than only on the document.
+    //
+    // Forbidden header names, so they enter at `.cdp`, the same rank the three
+    // baseline hints use: page script cannot rewrite one, a driver still can.
+    //
+    // Read against the request's own URL. A cross-origin redirect therefore
+    // keeps the hints the first hop's origin asked for, where Chrome would
+    // re-resolve per hop; the seeding happens once, when the transfer is built.
+    fn seedClientHints(self: *Transfer) !void {
+        var it = self.client.client_hints.acceptedFor(self.req.url).iterator();
+        while (it.next()) |hint| {
+            try self.addHeader(hint.header(), self.client.clientHintValue(hint), .{ .source = .cdp });
+            self._high_entropy_hints = true;
+        }
     }
 
     // The destination's `Accept` plus the Sec-Fetch-* set, which real Chrome
@@ -3863,6 +3954,47 @@ test "HttpClient: the priority hint goes out last, after Accept-Language" {
     try testing.expectString("Accept-Language", sub[sub.len - 2]);
 }
 
+test "HttpClient: the negotiated hints sit where Chrome puts them" {
+    // Both sequences are read straight off
+    // tools/fingerprint/results/acceptch-chrome.json, where a headless Chrome
+    // 151 met an origin asking for all nine. Position is fingerprint, and it is
+    // not insertion order, so the tables are the thing worth pinning.
+    try testing.expectEqualSlices([]const u8, &.{
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-full-version",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-platform",
+        "sec-ch-ua-platform-version",
+        "sec-ch-ua-model",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-full-version-list",
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+    }, Transfer.chrome_navigation_order[0..11]);
+
+    // The one that surprises: with hints, User-Agent falls from second to
+    // ninth. Dropping the six names into the unhinted table would have put it
+    // back at second and been wrong on every subresource.
+    try testing.expectEqualSlices([]const u8, &.{
+        "sec-ch-ua-full-version-list",
+        "sec-ch-ua-platform",
+        "sec-ch-ua",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-model",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-full-version",
+        "User-Agent",
+        "sec-ch-ua-platform-version",
+        "Accept",
+    }, Transfer.chrome_subresource_hinted_order[0..11]);
+
+    // Which table a subresource uses is decided by whether it carries any.
+    try testing.expectString("sec-ch-ua-platform", Transfer.chrome_subresource_order[0]);
+    try testing.expectString("User-Agent", Transfer.chrome_subresource_order[1]);
+}
+
 test "HttpClient: the three client hints go on the wire lowercase" {
     // Over HTTP/1.1 Chromium spells exactly the three client hints in
     // lowercase and Title-Cases every other field name -- measured, the
@@ -3898,6 +4030,110 @@ test "HttpClient: the three client hints go on the wire lowercase" {
     for (client.baselineHeaders(), expected) |hdr, name| {
         try testing.expectString(name, hdr.name);
     }
+}
+
+// A Client with just enough set for the header-seeding paths: they read the
+// config's resolved header values, the CDP override fields and the hint store,
+// and touch no curl handle and no event loop.
+fn testHeaderClient(network: *Network, config: *Config) Client {
+    network.config = config;
+    var client: Client = undefined;
+    client.network = network;
+    client.allocator = testing.allocator;
+    client.user_agent_override = null;
+    client.accept_language_override = null;
+    client.platform_quoted_override = null;
+    client.client_hints = .{};
+    return client;
+}
+
+test "HttpClient: only an origin that asked gets the six high-entropy hints" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+    var network: Network = undefined;
+    var client = testHeaderClient(&network, &config);
+    defer client.client_hints.deinit(testing.allocator);
+
+    // Before the origin asks, it gets the low-entropy three and nothing more.
+    var quiet = testTransfer(arena);
+    quiet.client = &client;
+    quiet.req.url = "https://www.scrapingcourse.com/cloudflare-challenge";
+    try quiet.seedHeaders();
+    for (comptime std.enums.values(ClientHints.Hint)) |hint| {
+        try testing.expectEqual(null, quiet.findRequestHeader(hint.header()));
+    }
+    try testing.expectString(
+        "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        seededValue(&quiet, "sec-ch-ua"),
+    );
+
+    try client.client_hints.negotiate(
+        testing.allocator,
+        "https://www.scrapingcourse.com/cloudflare-challenge",
+        "Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Full-Version, Sec-CH-UA-Mobile, " ++
+            "Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List, " ++
+            "Sec-CH-UA-Platform, Sec-CH-UA",
+    );
+
+    var loud = testTransfer(arena);
+    loud.client = &client;
+    loud.req.url = "https://www.scrapingcourse.com/cloudflare-challenge";
+    try loud.seedHeaders();
+
+    // The values are the ones navigator.userAgentData.getHighEntropyValues
+    // answers, quoted as the header spells them: a page that reads both must
+    // not find two different machines.
+    try testing.expectString("\"arm\"", seededValue(&loud, "sec-ch-ua-arch"));
+    try testing.expectString("\"64\"", seededValue(&loud, "sec-ch-ua-bitness"));
+    try testing.expectString("\"\"", seededValue(&loud, "sec-ch-ua-model"));
+    try testing.expectString("\"26.3.1\"", seededValue(&loud, "sec-ch-ua-platform-version"));
+    try testing.expectString("\"151.0.7922.137\"", seededValue(&loud, "sec-ch-ua-full-version"));
+    try testing.expectString(
+        "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\"",
+        seededValue(&loud, "sec-ch-ua-full-version-list"),
+    );
+
+    // A different origin is still a stranger, even mid-page.
+    var other = testTransfer(arena);
+    other.client = &client;
+    other.req.url = "https://www.google-analytics.com/g/collect";
+    other.req.resource_type = .fetch;
+    try other.seedHeaders();
+    for (comptime std.enums.values(ClientHints.Hint)) |hint| {
+        try testing.expectEqual(null, other.findRequestHeader(hint.header()));
+    }
+}
+
+test "HttpClient: a page cannot forge a high-entropy hint" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+    var network: Network = undefined;
+    var client = testHeaderClient(&network, &config);
+    defer client.client_hints.deinit(testing.allocator);
+
+    try client.client_hints.negotiate(testing.allocator, "https://example.com/", "Sec-CH-UA-Arch");
+
+    var transfer = testTransfer(arena);
+    transfer.client = &client;
+    transfer.req.url = "https://example.com/";
+    try transfer.seedHeaders();
+
+    // Sec-* is a forbidden header name, so these enter at .cdp like the three
+    // baseline hints: script cannot rewrite one, a driver still can.
+    try transfer.setHeader("sec-ch-ua-arch", "\"x86\"", .{ .source = .author });
+    try testing.expectString("\"arm\"", seededValue(&transfer, "sec-ch-ua-arch"));
+    try transfer.setHeader("sec-ch-ua-arch", "\"x86\"", .{ .source = .cdp });
+    try testing.expectString("\"x86\"", seededValue(&transfer, "sec-ch-ua-arch"));
 }
 
 test "HttpClient: a navigation's Accept-CH is remembered, a subresource's is not" {

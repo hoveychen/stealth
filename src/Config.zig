@@ -979,6 +979,23 @@ pub const HttpHeaders = struct {
     /// Mobile-ness of the client hint. Desktop Chrome sends "?0".
     pub const sec_ch_ua_mobile: [:0]const u8 = "?0";
 
+    /// The high-entropy hints whose value the claim fixes rather than a flag,
+    /// only ever sent to an origin that asked for them via Accept-CH. Quoted:
+    /// every UA client hint but the boolean-ish sec-ch-ua-mobile is a
+    /// structured-field string, and Chrome sends the quotes even around the
+    /// empty ones.
+    ///
+    /// Same source as navigator.userAgentData.getHighEntropyValues reads
+    /// (NavigatorUAData.uaArchitecture and friends), because a header and a JS
+    /// call describing different machines is a contradiction one page can see.
+    pub const sec_ch_ua_arch: [:0]const u8 = "\"" ++ claimed_platform.architecture ++ "\"";
+    pub const sec_ch_ua_bitness: [:0]const u8 = "\"" ++ claimed_platform.bitness ++ "\"";
+    pub const sec_ch_ua_platform_version: [:0]const u8 = "\"" ++ claimed_platform.platform_version ++ "\"";
+    /// A desktop has no device model, and Chrome answers the empty string
+    /// rather than dropping the hint -- measured, the nine-hint requests in
+    /// tools/fingerprint/results/acceptch-chrome.json.
+    pub const sec_ch_ua_model: [:0]const u8 = "\"\"";
+
     user_agent: [:0]const u8, // Full User-Agent value
 
     /// Source of truth for client-hints brand data. Both the Sec-Ch-Ua HTTP
@@ -991,6 +1008,13 @@ pub const HttpHeaders = struct {
     /// --sec-ch-ua is given, since a bare major is all that flag carries.
     full_version_brands: []const Brand,
     sec_ch_ua: [:0]const u8,
+    /// The same list with four-part versions, which is the whole difference
+    /// between the two headers. Derived from full_version_brands, so
+    /// --sec-ch-ua moves this too.
+    sec_ch_ua_full_version_list: [:0]const u8,
+    /// Chrome's own full version: the last brand's, which is the rule
+    /// navigator.userAgentData's uaFullVersion already follows.
+    sec_ch_ua_full_version: [:0]const u8,
     sec_ch_ua_platform: [:0]const u8,
     /// Bare value (e.g. "macOS"), for navigator.userAgentData.platform.
     platform: []const u8,
@@ -1038,6 +1062,14 @@ pub const HttpHeaders = struct {
         const sec_ch_ua = try formatSecChUa(allocator, brands);
         errdefer allocator.free(sec_ch_ua);
 
+        const sec_ch_ua_full_version_list = try formatSecChUa(allocator, full_version_brands);
+        errdefer allocator.free(sec_ch_ua_full_version_list);
+
+        const sec_ch_ua_full_version = try std.fmt.allocPrintSentinel(allocator, "\"{s}\"", .{
+            if (full_version_brands.len == 0) "" else full_version_brands[full_version_brands.len - 1].version,
+        }, 0);
+        errdefer allocator.free(sec_ch_ua_full_version);
+
         const platform = config.secChUaPlatform() orelse default_platform;
         const sec_ch_ua_platform = try std.fmt.allocPrintSentinel(allocator, "\"{s}\"", .{platform}, 0);
         errdefer allocator.free(sec_ch_ua_platform);
@@ -1055,6 +1087,8 @@ pub const HttpHeaders = struct {
             .brands = brands,
             .full_version_brands = full_version_brands,
             .sec_ch_ua = sec_ch_ua,
+            .sec_ch_ua_full_version_list = sec_ch_ua_full_version_list,
+            .sec_ch_ua_full_version = sec_ch_ua_full_version,
             .sec_ch_ua_platform = sec_ch_ua_platform,
             .platform = platform,
             .accept_language = accept_language,
@@ -1143,6 +1177,8 @@ pub const HttpHeaders = struct {
         }
         allocator.free(self.accept_language);
         allocator.free(self.sec_ch_ua_platform);
+        allocator.free(self.sec_ch_ua_full_version);
+        allocator.free(self.sec_ch_ua_full_version_list);
         allocator.free(self.sec_ch_ua);
         if (self.brands.ptr != &default_brands) {
             freeBrands(allocator, self.brands);
