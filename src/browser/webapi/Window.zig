@@ -1115,12 +1115,19 @@ pub fn postMessage(self: *Window, message: js.Value, target_origin: ?[]const u8,
 }
 
 const base64 = @import("encoding/base64.zig");
+const base64_messages = base64.Messages("Window");
+
 pub fn btoa(_: *const Window, input: base64.BinInput, frame: *Frame) ![]const u8 {
-    return base64.encode(frame.local_arena, input);
+    const bytes = try input.bytes(frame.local_arena, frame.js, base64_messages.btoa_not_latin1);
+    return base64.encode(frame.local_arena, bytes);
 }
 
 pub fn atob(_: *const Window, input: base64.BinInput, frame: *Frame) !js.String.OneByte {
-    const decoded = try base64.decode(frame.local_arena, input);
+    const bytes = try input.bytes(frame.local_arena, frame.js, base64_messages.atob_not_latin1);
+    const decoded = base64.decode(frame.local_arena, bytes) catch |err| switch (err) {
+        error.InvalidCharacterError => return frame.js.fail(err, base64_messages.atob_not_encoded),
+        else => return err,
+    };
     return .{ .bytes = decoded };
 }
 

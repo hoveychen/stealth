@@ -390,12 +390,21 @@ pub fn setOnUnhandledRejection(self: *WorkerGlobalScope, setter: ?FunctionSetter
 }
 
 const base64 = @import("encoding/base64.zig");
+// Not 'DedicatedWorkerGlobalScope' / 'SharedWorkerGlobalScope': Chrome names the
+// mixin's own interface here, whichever worker flavour is calling.
+const base64_messages = base64.Messages("WorkerGlobalScope");
+
 pub fn btoa(_: *const WorkerGlobalScope, input: base64.BinInput, exec: *JS.Execution) ![]const u8 {
-    return base64.encode(exec.local_arena, input);
+    const bytes = try input.bytes(exec.local_arena, exec.js, base64_messages.btoa_not_latin1);
+    return base64.encode(exec.local_arena, bytes);
 }
 
 pub fn atob(_: *const WorkerGlobalScope, input: base64.BinInput, exec: *JS.Execution) !JS.String.OneByte {
-    const bytes = try base64.decode(exec.local_arena, input);
+    const input_bytes = try input.bytes(exec.local_arena, exec.js, base64_messages.atob_not_latin1);
+    const bytes = base64.decode(exec.local_arena, input_bytes) catch |err| switch (err) {
+        error.InvalidCharacterError => return exec.js.fail(err, base64_messages.atob_not_encoded),
+        else => return err,
+    };
     return .{ .bytes = bytes };
 }
 

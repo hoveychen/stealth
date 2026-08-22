@@ -852,8 +852,12 @@ fn jsValueToStruct(self: *const Local, comptime T: type, js_val: js.Value) !?T {
         js.String.OneByte => {
             // Receives a "binary string": each JS code unit must fit in a byte
             // (0..255). Throws InvalidCharacterError if any code unit is out
-            // of range, matching the WHATWG btoa spec — which is the main
-            // intended caller, but applicable to any binary-string input.
+            // of range, per the WHATWG binary-string read.
+            //
+            // btoa/atob deliberately do *not* come through here — they take a
+            // `base64.BinInput` and run the same check themselves, because the
+            // exception has to name the operation ("Failed to execute 'btoa' on
+            // 'Window': …") and this layer does not know which one it serves.
             const js_str = js_val.isString() orelse return null;
             if (!js_str.containsOnlyOneByte()) return error.InvalidCharacterError;
             return .{ .bytes = try js_str.toOneByteSlice(self.call_arena) };
