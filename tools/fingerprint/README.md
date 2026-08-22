@@ -7114,9 +7114,16 @@ so.
 
 **Two consequences.**
 
-*The oracle can be headless again, with `--chrome-arg --user-agent=…`.* That is
-worth having: the headed arm pops a window every 45 seconds and cannot be run
-unattended, and a headless arm that clears the challenge 3/3 can.
+*The oracle can be headless again, with `--headed-ua`.* That is worth having:
+the headed arm pops a window every 45 seconds and cannot be run unattended, and
+a headless arm that clears the challenge 3/3 can. It is a flag rather than a
+pasted string because Chrome's user agent is version-reduced and
+platform-specific: `--headed-ua` reads the browser's own answer off
+`/json/version` on a throwaway launch and swaps the one token, which is the
+same string a headed launch reports (verified against both). Off by default, and
+the arm a run took is now in the snapshot header (`chromeArgs`,
+`userAgentOverride`) -- two snapshots that differ only in this are two different
+browsers, and the older files predate the flag.
 
 *lightpanda's failure is not headless Chrome's failure.* This fork already sends
 a complete Chrome UA with no headless token (`Config.zig`, `user_agent_base`),
@@ -8138,3 +8145,71 @@ Live, on the same address, minutes apart:
 Chrome's pass goes through a `?__cf_chl_tk=…` navigation on the interstitial and
 then lands on the real page; this engine never gets that far. One more tell
 removed, still not the door.
+
+## The one-word oracle holds across all fifteen stations (2026-08-22)
+
+The 2026-08-21 finding was one station, five interleaved trials, one guard:
+swapping `HeadlessChrome` for `Chrome` in the user agent took `--headless=new`
+from 0/5 to 3/3 at `cf-scrapingcourse`. It generalises. Four arms, one sitting,
+one address, `antibot-sweep` over the same fifteen stations:
+
+| arm | pass | snapshot |
+|---|---|---|
+| Chrome 151 `--headless=new` | **2/15** | `antibot-2026-08-22-headless-control.json` |
+| Chrome 151 `--headless=new --headed-ua` | **10/15** | `antibot-2026-08-22-headless-uafix.json` |
+| Chrome 151 headed | **10/15** | `antibot-2026-08-22-headed-2.json` |
+| lightpanda `dev.830+cd14e6e4b` | **10/15** | `antibot-lightpanda.json` |
+
+Eight stations turn on that one token. And the two ten-station arms agree on
+every station, not just the total — same verdict, same node count to within the
+page's own variation:
+
+| station | lightpanda | headless | headless +UA | headed |
+|---|---|---|---|---|
+| `cf-scrapingcourse` | cf-challenge | cf-challenge | **pass** | **pass** |
+| `cf-nopecha` | cf-challenge | cf-challenge | cf-challenge | cf-challenge |
+| `cf-zeroclover` | cf-challenge | cf-challenge | 502 | 502 |
+| `cf-chatgpt` | pass (41 nodes) | cf-challenge | pass (510) | pass (510) |
+| `cf-claude` | pass | cf-challenge | pass | pass |
+| `cf-indeed` | pass | dd-challenge | pass | pass |
+| `cf-nowsecure` | pass | pass | pass | pass |
+| `cf-discord` | pass | pass | pass | pass |
+| `cf-pixiv` | pass | cf-challenge | pass | pass |
+| `dd-datadome` | **pass** | dd-challenge | dd-challenge | dd-challenge |
+| `dd-g2` | dd-challenge | dd-challenge | dd-challenge | dd-challenge |
+| `dd-leboncoin` | pass | dd-challenge | pass | pass |
+| `dd-hermes` | **pass** | dd-challenge | dd-challenge | dd-challenge |
+| `x-sony` | pass | refused-403 | pass | pass |
+| `x-zillow` | px-challenge | px-challenge | **pass** | **pass** |
+
+**So the oracle is now a headless browser**, which is the point: an arm that can
+be run unattended, in a loop, beside this engine's arm, at every station rather
+than the one. `--headed-ua` is that arm; the headed column exists here only to
+prove the substitution, and it is the last time it needs to pop a window. (It
+took two attempts to get it: the first headed run lost its CDP session after
+`cf-chatgpt` and reported the remaining eleven stations as errors — the cascade
+this sweep's header warns about, which is why the file is `-headed-2`.)
+
+**And 10/15 is not the same 10/15.** The totals match and the sets do not, which
+the aggregate hides:
+
+* Two stations are this engine's gap against a browser that passes them:
+  `cf-scrapingcourse` (Cloudflare managed challenge) and `x-zillow`
+  (PerimeterX). Both are now diffable against a *headless* reference, which they
+  were not this morning.
+* Two are this engine ahead of Chrome: `dd-datadome` and `dd-hermes` hand
+  lightpanda the real page (2044 and 2042 nodes) and hand every Chrome arm a
+  DataDome interstitial. Whatever DataDome dislikes about Chrome 151 on this
+  address, it does not dislike about this fork.
+* Two are nobody's pass: `cf-nopecha` challenges all four arms, and
+  `dd-g2` does. Neither is evidence about this engine.
+* One is a station-side error today: `cf-zeroclover` answers 502 to both Chrome
+  arms and an interstitial to lightpanda.
+* One passes on status and not on content: `cf-chatgpt` gives this engine 41
+  nodes of `Application Error!` where Chrome gets 510 nodes of the real page.
+  The verdict says pass because the document is a 200 with no guard marks on it;
+  the node count says the app did not run.
+
+That is the whole target list: **`cf-scrapingcourse`, `x-zillow`, and the
+`cf-chatgpt` content gap**, with a reference that clears all three and can be
+run at will.

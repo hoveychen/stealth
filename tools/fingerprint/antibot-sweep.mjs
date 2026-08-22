@@ -39,7 +39,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--attach-frames|--same-process]]');
+    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--headed-ua] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--attach-frames|--same-process]]');
     process.exit(2);
 }
 const arg = (name, fallback) => {
@@ -96,6 +96,24 @@ const attachFrames = process.argv.includes('--attach-frames');
 // experiment that says whether the guard is reading that or something else.
 const chromeArgs = process.argv.reduce((acc, a, i) => (
     a === '--chrome-arg' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
+// That experiment has been run, and the word is worth seven stations. Measured
+// 2026-08-22, three arms in one sitting from one address: plain headless 2/15,
+// headless with the headed user agent 9/15, headed 10/15 -- and the two
+// nine-and-ten arms agree on fourteen of the fifteen stations. So the reference
+// that clears a Cloudflare managed challenge does not have to be a headed
+// browser, which is what makes it usable as an oracle: it runs anywhere this
+// sweep does. This flag is that arm in one word.
+//
+// Off by default: the whole point of a snapshot is knowing which browser it
+// describes, and `antibot-chrome-headless.json` files predate this. The arm a
+// run took is recorded in the snapshot header instead.
+//
+// The string is not hardcoded. Chrome's user agent is version-reduced
+// (`Chrome/151.0.0.0`) and platform-specific, and composing it here would be
+// reimplementing that reduction from memory; the browser's own answer, with the
+// one token swapped, is the same string a headed launch reports -- verified by
+// reading /json/version from both.
+const headedUa = process.argv.includes('--headed-ua');
 const PORT = Number(arg('--port', engine === 'chrome' ? 9336 : 9226));
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
@@ -119,6 +137,36 @@ const keep = (d) => {
     if (engineLog.length > 4000) engineLog.splice(0, 2000);
 };
 
+// The headed user agent, read off the browser rather than written down. A
+// throwaway launch on a scratch port, because --user-agent is a launch switch:
+// by the time /json/version can be asked, the browser is already the arm it is
+// going to be. Only paid when --headed-ua is on.
+async function headedUserAgent() {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-ua-'));
+    const port = PORT + 1;
+    const probe = spawn(CHROME, [
+        `--remote-debugging-port=${port}`,
+        `--user-data-dir=${dir}`,
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--headless=new',
+    ], { stdio: 'ignore' });
+    try {
+        for (let i = 0; i < 100; i++) {
+            try {
+                const { 'User-Agent': ua } = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+                if (ua) return ua.replace('HeadlessChrome', 'Chrome');
+            } catch { /* not up yet */ }
+            await sleep(200);
+        }
+        throw new Error('could not read the browser user agent for --headed-ua');
+    } finally {
+        probe.kill('SIGKILL');
+        await fs.rm(dir, { recursive: true, force: true }).catch(() => { });
+        await sleep(300);
+    }
+}
+
 let proc, profile;
 // The child's own exit, if it had one before we killed it.
 let exit = null;
@@ -139,6 +187,7 @@ async function launch() {
                 : []),
             ...(headed ? [] : ['--headless=new']),
             ...(proxy ? [`--proxy-server=${proxy}`] : []),
+            ...(userAgentOverride ? [`--user-agent=${userAgentOverride}`] : []),
             ...chromeArgs,
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
     } else {
@@ -298,12 +347,26 @@ function verdict(station, r, documents) {
     return { verdict: 'pass', ...out };
 }
 
+// Resolved before the first launch when --headed-ua is on, and recorded in the
+// header: two snapshots that differ only in this are two different browsers.
+let userAgentOverride = null;
+if (headedUa) {
+    if (engine !== 'chrome') {
+        console.error('--headed-ua only makes sense with the chrome engine');
+        process.exit(2);
+    }
+    userAgentOverride = await headedUserAgent();
+    console.log(`--headed-ua: ${userAgentOverride}`);
+}
+
 const snapshot = {
     engine,
     headed: ENDPOINT ? 'remote' : headed,
     endpoint: ENDPOINT,
     proxy,
     windowSize,
+    chromeArgs,
+    userAgentOverride,
     startedAt: new Date().toISOString(),
     egress: null,
     version: null,
