@@ -2641,35 +2641,95 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
 // because their rules have to be in `document.styleSheets` before script runs;
 // image bytes are never read, so there is nothing to wait for, and a page with
 // fifty images would otherwise serialise fifty blocking round-trips.
-pub fn loadImage(self: *Frame, src: []const u8) !void {
+//
+// The element rides along so the transfer can report back to it. A page learns
+// whether an image arrived from the `load`/`error` event, and answering `load`
+// for one that 404'd is a plain disagreement with every browser -- it is what
+// bot.sannysoft.com's "Broken Image Dimensions" row reads, since that cell is
+// written from `onerror`.
+pub fn loadImage(self: *Frame, element: *Element.Html, src: []const u8) !void {
     if (self.isGoingAway() or src.len == 0) {
         return;
     }
 
     // Matches loadExternalStylesheet: fragment-parsed nodes (innerHTML,
-    // DOMParser) are not attached to this frame's document.
+    // DOMParser) are not attached to this frame's document. Chrome does not
+    // fetch those either, so there is no outcome to report.
     if (self._parse_mode == .fragment) {
         return;
     }
 
     const resolved = URL.resolve(self.arena, self.base(), src, .{ .encoding = self.charset }) catch |err| {
         log.warn(.http, "image resolve", .{ .err = err, .src = src });
-        return;
+        // A src that resolves to nothing is a request that cannot be made, and
+        // Chrome reports it the same way as one that fails: measured on Chrome
+        // 151 (probe `expr-img-events.js`), `nonsense://x/y.png` fires `error`.
+        return self.queueElementEvent(element, .@"error");
     };
 
-    return self.requestImage(resolved);
+    return self.requestImage(resolved, element);
 }
 
+// One in-flight `<img>` request, holding what the transfer needs to report an
+// outcome to the page.
+//
+// The element outlives the request -- it belongs to the document, not to us --
+// which is the same assumption `ScriptManagerBase.Script.queueHintEvent`
+// makes, and it is why nothing here has to be unwound when the element is
+// removed mid-flight.
+const ImageRequest = struct {
+    frame: *Frame,
+    element: *Element.Html,
+
+    // Recorded from the headers, read once the body has drained. Nothing here
+    // decodes, so a 2xx is as close to "it became a picture" as this engine
+    // gets: Chrome also errors on a 200 whose bytes are not an image, which
+    // this cannot see (`tools/fingerprint/README.md`).
+    arrived: bool = false,
+
+    fn headerCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.HeaderResult {
+        const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
+        const status = transfer.responseStatus() orelse 0;
+        self.arrived = status >= 200 and status < 300;
+
+        // Read a failed response to the end anyway. The bytes are discarded
+        // either way, and hanging up on a 404 mid-body is a traffic shape a
+        // browser does not have -- the same reason the fetch happens at all.
+        return .proceed;
+    }
+
+    fn doneCallback(ctx: *anyopaque) !void {
+        const self: *ImageRequest = @ptrCast(@alignCast(ctx));
+        self.report(if (self.arrived) .load else .@"error");
+    }
+
+    fn errorCallback(ctx: *anyopaque, err: anyerror) void {
+        const self: *ImageRequest = @ptrCast(@alignCast(ctx));
+        log.debug(.http, "image fetch failed", .{ .err = err });
+        self.report(.@"error");
+    }
+
+    // Queued, not dispatched: these callbacks run inside the HTTP pump, where
+    // running page JS would be a re-entrancy point that does not exist today.
+    // `Script.queueHintEvent` queues for the same reason.
+    fn report(self: *ImageRequest, kind: QueuedEvent.Kind) void {
+        self.frame.queueElementEvent(self.element, kind) catch |err| {
+            log.warn(.http, "image event", .{ .err = err, .kind = kind });
+        };
+    }
+};
+
 // Shared tail of loadImage and the favicon fetch: same destination, same
-// discarded body, only the URL resolution differs.
-fn requestImage(self: *Frame, resolved: [:0]const u8) !void {
+// discarded body, only the URL resolution differs. The favicon passes no
+// element -- there is nothing on the page it belongs to -- and keeps the
+// default callbacks, which drop the body and say nothing.
+fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !void {
     const session = self._session;
 
     // Accept and the Sec-Fetch-* set come from Transfer.seedFetchMetadata via
     // resource_type = .image, and makeRequest runs headersForRequest (the
-    // Referer) on the transfer itself. The default callbacks discard the body,
-    // which is exactly what we want.
-    self.makeRequest(.{
+    // Referer) on the transfer itself.
+    var request: HttpClient.Request = .{
         .url = resolved,
         .method = .GET,
         .frame_id = self._frame_id,
@@ -2679,10 +2739,25 @@ fn requestImage(self: *Frame, resolved: [:0]const u8) !void {
         .resource_type = .image,
         .notification = session.notification,
         .shutdown_callback = HttpClient.noopShutdown,
-    }) catch |err| {
-        // A failed image never blocks the page; Chrome would fire `error` on
-        // the element, but we have no decode result to report either way.
+    };
+
+    if (element) |el| {
+        // Frame-arena'd: the transfer is torn down with the frame, so there is
+        // no lifetime here that outlasts one.
+        const pending = try self.arena.create(ImageRequest);
+        pending.* = .{ .frame = self, .element = el };
+        request.ctx = pending;
+        request.header_callback = ImageRequest.headerCallback;
+        request.done_callback = ImageRequest.doneCallback;
+        request.error_callback = ImageRequest.errorCallback;
+    }
+
+    self.makeRequest(request) catch |err| {
+        // The request never went out, so no callback of ours will ever run.
         log.warn(.http, "image fetch", .{ .err = err, .url = resolved });
+        if (element) |el| {
+            self.queueElementEvent(el, .@"error") catch {};
+        }
     };
 }
 
@@ -2742,7 +2817,7 @@ fn requestFavicon(self: *Frame) void {
             return;
         };
 
-    self.requestImage(resolved) catch |err| {
+    self.requestImage(resolved, null) catch |err| {
         log.warn(.http, "favicon fetch", .{ .err = err, .url = resolved });
     };
 }
