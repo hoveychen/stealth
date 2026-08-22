@@ -58,6 +58,36 @@ pub fn parse(url: []const u8, maybe_base: ?[]const u8, exec: *const Execution) ?
     return URL.init(url, maybe_base, exec) catch null;
 }
 
+// Blink names the interface and which of the two arguments it blames. The
+// sentences live here rather than in `init` because `init` is also reached from
+// Location and from `parse`, where "Failed to construct" would be the wrong
+// thing to say.
+const invalid_url = "Failed to construct 'URL': Invalid URL";
+const invalid_base_url = "Failed to construct 'URL': Invalid base URL";
+
+/// `new URL(url, base)`.
+pub fn constructor(url: []const u8, maybe_base: ?[]const u8, exec: *const Execution) !*URL {
+    return URL.init(url, maybe_base, exec) catch |err| switch (err) {
+        // One combined parse cannot say which argument was at fault, so ask the
+        // base on its own. Blink checks the base first: `new URL('http://[',
+        // 'nope')` reads "Invalid base URL" even though the first argument is
+        // unparseable too, while against a good base the same first argument
+        // reads "Invalid URL" (measured, Chrome 151).
+        error.TypeError => {
+            if (maybe_base) |base| {
+                var base_err: i32 = 0;
+                if (U.url_parse(base.ptr, base.len, &base_err)) |parsed_base| {
+                    U.url_free(parsed_base);
+                } else {
+                    return exec.js.fail(err, invalid_base_url);
+                }
+            }
+            return exec.js.fail(err, invalid_url);
+        },
+        else => err,
+    };
+}
+
 pub fn deinit(self: *URL, page: *Page) void {
     if (self._search_params) |search_params| {
         search_params.releaseRef(page);
@@ -342,7 +372,7 @@ pub const JsApi = struct {
         pub const constructor_aliases = [_][]const u8{"webkitURL"};
     };
 
-    pub const constructor = bridge.constructor(URL.init, .{});
+    pub const constructor = bridge.constructor(URL.constructor, .{});
     pub const parse = bridge.function(URL.parse, .{ .static = true });
     pub const canParse = bridge.function(URL.canParse, .{ .static = true });
     pub const createObjectURL = bridge.function(URL.createObjectURL, .{ .static = true });

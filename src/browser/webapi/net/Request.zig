@@ -101,12 +101,43 @@ const Cache = enum {
     pub const js_enum_from_string = true;
 };
 
+// Blink words the *detail* of a rejection the same wherever the Request is
+// built, and varies only the lead-in: `new Request(...)` says "Failed to
+// construct 'Request': ", `fetch(...)` says "Failed to execute 'fetch' on
+// 'Window': " (both measured, Chrome 151). So `init` takes the lead-in from
+// whoever called it, and `null` means "this path's wording is not measured" —
+// the Cache API — which keeps the bare TypeError it throws today rather than a
+// guessed sentence.
+const ctor_prefix = "Failed to construct 'Request': ";
+// Reached from both body branches, streaming and not.
+const no_body_for_method = "Request with GET/HEAD method cannot have body.";
+
+fn fail(exec: *const Execution, prefix: ?[]const u8, comptime fmt: []const u8, args: anytype) anyerror {
+    const p = prefix orelse return error.TypeError;
+    const detail = std.fmt.allocPrint(exec.local_arena, fmt, args) catch return error.TypeError;
+    const message = std.fmt.allocPrint(exec.local_arena, "{s}{s}", .{ p, detail }) catch return error.TypeError;
+    return exec.js.fail(error.TypeError, message);
+}
+
+/// `new Request(input, init)`.
+pub fn constructor(input: Input, opts: ?InitOpts, exec: *const Execution) !*Request {
+    return initWithContext(input, opts, exec, ctor_prefix);
+}
+
 pub fn init(input: Input, opts_: ?InitOpts, exec: *const Execution) !*Request {
+    return initWithContext(input, opts_, exec, null);
+}
+
+fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefix: ?[]const u8) !*Request {
     const arena = try exec.getPinnedArena(.medium, "Request");
     errdefer arena.release();
 
     const url = switch (input) {
-        .url => |u| try URL.resolve(arena.allocator(), exec.base(), u, .{ .encoding = exec.charset.* }),
+        // Blink quotes the input as it was handed in, not the resolved URL.
+        .url => |u| URL.resolve(arena.allocator(), exec.base(), u, .{ .encoding = exec.charset.* }) catch |err| switch (err) {
+            error.TypeError => return fail(exec, prefix, "Failed to parse URL from {s}", .{u}),
+            else => return err,
+        },
         .request => |r| try arena.dupeZ(u8, r._url),
     };
 
@@ -134,7 +165,8 @@ pub fn init(input: Input, opts_: ?InitOpts, exec: *const Execution) !*Request {
 
     if (opts.duplex) |duplex| {
         if (!std.mem.eql(u8, duplex, DUPLEX_HALF)) {
-            return error.TypeError;
+            return fail(exec, prefix, "Failed to read the 'duplex' property from 'RequestInit': " ++
+                "The provided value '{s}' is not a valid enum value of type RequestDuplex.", .{duplex});
         }
     }
 
@@ -142,16 +174,18 @@ pub fn init(input: Input, opts_: ?InitOpts, exec: *const Execution) !*Request {
     const body = if (opts.body) |b| blk: {
         if (b == .stream) {
             if (opts.duplex == null) {
-                return error.TypeError;
+                // Backticks around `duplex` and no full stop: Blink's own
+                // inconsistency, kept verbatim (measured, Chrome 151).
+                return fail(exec, prefix, "The `duplex` member must be specified for a request with a streaming body", .{});
             }
             if (method == .GET or method == .HEAD) {
-                return error.TypeError;
+                return fail(exec, prefix, no_body_for_method, .{});
             }
             body_stream = b.stream;
             break :blk null;
         }
         if (method == .GET or method == .HEAD) {
-            return error.TypeError;
+            return fail(exec, prefix, no_body_for_method, .{});
         }
         const extracted = try b.extract(arena.allocator());
         // Per Fetch §6.5 step 11, the default Content-Type only applies if
@@ -441,7 +475,7 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const constructor = bridge.constructor(Request.init, .{});
+    pub const constructor = bridge.constructor(Request.constructor, .{});
     pub const url = bridge.accessor(Request.getUrl, null, .{});
     pub const method = bridge.accessor(Request.getMethod, null, .{});
     pub const headers = bridge.accessor(Request.getHeaders, null, .{});

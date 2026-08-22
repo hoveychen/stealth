@@ -1361,3 +1361,28 @@
     testing.expectEqual('sc:///', url.href);
   }
 </script>
+
+<script id=ctor_error_message>
+  // An *empty* `e.message` is a louder reading than a differently worded one:
+  // no browser has one, so a detector needs no wording table to spot it. Blink
+  // names the interface it was constructing and which of the two inputs it
+  // blames. Measured on Chrome 151 -- and the rule for picking between them is
+  // "bad base wins": `new URL('http://[', 'nope')` blames the base even though
+  // the first argument is also unparseable, while `new URL('http://[',
+  // 'http://a.com/')` blames the URL.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  const bad_url = "TypeError: Failed to construct 'URL': Invalid URL";
+  const bad_base = "TypeError: Failed to construct 'URL': Invalid base URL";
+
+  testing.expectEqual(bad_url, msg(() => new URL('nope')));
+  testing.expectEqual(bad_url, msg(() => new URL('/x')));
+  testing.expectEqual(bad_url, msg(() => new URL('http://[', 'http://a.com/')));
+  // A base that parses but cannot resolve a relative reference still blames
+  // the URL, not the base.
+  testing.expectEqual(bad_url, msg(() => new URL('x', 'data:,y')));
+
+  testing.expectEqual(bad_base, msg(() => new URL('x', 'nope')));
+  testing.expectEqual(bad_base, msg(() => new URL('nope', 'nope')));
+  testing.expectEqual(bad_base, msg(() => new URL('http://[', 'nope')));
+</script>
