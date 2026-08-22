@@ -417,12 +417,19 @@ const PM_SRC = String.raw`
 
   // Which realm this is, said three ways, because no one way is enough. The
   // href repeats -- an interactive Turnstile runs a second document at the same
-  // URL inside the first -- and this engine reports the same
-  // executionContextId for every realm on the console, so the host cannot tell
-  // them apart either. Depth in the frame tree separates a nested widget from
-  // its container; the random tag separates two realms at the same depth (and
-  // is worthless under --determinize, where both realms draw the same first
-  // number from the same fixed PRNG).
+  // URL inside the first. Depth in the frame tree separates a nested widget
+  // from its container; the random tag separates two realms at the same depth,
+  // and is worthless under --determinize, where both realms draw the same first
+  // number from the same fixed PRNG.
+  //
+  // The host's own `executionContextId` used to be worthless too -- this engine
+  // reported the main frame's for every realm, so the census could only group
+  // by the page-side tags. That is fixed (README, "Every realm answers with its
+  // own execution context"): a parent and its child now come back as ctx 2 and
+  // ctx 3 where both were ctx 2 before, which agrees with `depth` one for one.
+  // The page-side tags stay because they are what makes that agreement
+  // checkable, and because `depth` says something ctx does not -- where in the
+  // tree the realm sits.
   var DEPTH = (function () {
     try {
       var d = 0, w = window;
