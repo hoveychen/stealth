@@ -46,6 +46,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `webrtc-protochain.mjs` | Ground truth for every `RTC*` global: prototype chain, class-side inheritance, the window property descriptor, and the exact `TypeError` text for a few argument shapes. |
 | `webrtc-worker-surface.mjs` | The same question for a `DedicatedWorkerGlobalScope` — which `RTC*` names a worker carries, and the full shape of each. |
 | `run-iphey.mjs` | Reproduces iphey's `i20: TypeError: Illegal invocation` and attributes it, by patching `alert()` to record a stack and wrapping the reflection entry points so a throw names its receiver. |
+| `vm-trace.mjs` | Instruments Turnstile's own bytecode VM instead of the host around it. Patches the member-access opcode in a captured widget document, serves it back framed, and streams an ordered `(receiver, decoded name) -> answer` trace out over the console; `diff` reports the first entry where two engines disagree. `--reach` wraps every global the widget installs and reports call counts, first-call arguments, and whether a declaration handed to `createScript` actually took — which is what found the divergence below. `--url` points the same instruments at the live interstitial. |
 
 ## Two things to know before trusting a result
 
@@ -6599,3 +6600,97 @@ and Location included. That is a real difference and a cheap one to check:
 `Object.setPrototypeOf(EventTarget.prototype, {})` throws in Chrome and succeeds
 here. It sits in the same family as the inline-script `line:col` base — small,
 certain, reproducible, and nothing to do with Turnstile.
+
+### `eval` does not unwrap a `TrustedScript`, and that is where Turnstile actually breaks
+
+The section above ends on "find where the VM first diverges, not which member is
+missing". It does, and the answer retires most of what precedes it. One
+mechanism, isolated in both directions:
+
+```js
+const p = trustedTypes.createPolicy('x', { createScript: (s) => s });
+(0, eval)(p.createScript('function f(){}'));   // Chrome: f is a global function
+                                               // here:   nothing. no global, no throw.
+(0, eval)(String(p.createScript('function f(){}')));  // both: f is a global function
+```
+
+`probe-injected-function-declaration.js`, run on both engines, tests eight ways a
+function *declaration* can arrive. Seven agree — direct eval (local in both, the
+control), indirect eval, `script.text`, a script text node, `script.text` fed a
+`TrustedScript`, a `blob:` URL script, and the stringified eval above. The eighth
+is the divergence, and it is silent: V8 on its own returns a non-string argument
+from `eval` **unchanged and unexecuted**, which is correct ECMAScript. Chrome is
+not doing ECMAScript there — Blink installs a code-generation callback that
+unwraps `TrustedScript` first. Without that callback the call is a no-op that
+reports nothing.
+
+**This is the `bGgjP8` the last three sections were about.** The widget document
+runs under `require-trusted-types-for 'script'`, so a bare string is refused by
+`eval` and the source has to arrive as a `TrustedScript` — through the document's
+own `window.UXeS6 = (s) => p.createScript(s)` wrapper, declared in its first
+inline script. `vm-trace.mjs --reach --url <interstitial>` wraps that wrapper and
+watches what happens next:
+
+```
+lightpanda, widget realm
+  UXeS6:function/1  <- (str(137)"function bGgjP8(s){return function(k){for(var o=new Uint8Array(k.length),i=0;i<k.…")
+  declared: { "bGgjP8": "UXeS6 -> typeof window.bGgjP8 = undefined" }
+  bGgjP8: absent from globals
+
+chrome, widget realm
+  bGgjP8: function/0                          <- present
+```
+
+So `window["bGgjP8"]` is undefined here because the declaration that would have
+created it was handed to an `eval` that dropped it on the floor. The `.call` on
+that undefined is the `TypeError` three sessions have been chasing.
+
+**Two earlier conclusions are wrong and should not be reused.**
+
+*"Nobody installed `bGgjP8`, so it is not the bug."* It is installed, in Chrome,
+in the same realm. The `set` trap that produced that reading could not have seen
+it: a function declaration goes in through `CreateGlobalFunctionBinding`, i.e.
+`[[DefineOwnProperty]]` on the global object, which never walks the prototype
+chain the trap sits on. The previous session named that blind spot itself and
+then reasoned as if it were closed.
+
+*"Chrome bails early on the replay at `reading 'appendChild'`, an artefact of
+replaying a document that expects a container."* Both engines do it, and the
+cause is not a missing container. Served top-level the widget takes an early bail
+— `if (top == self || …) return void(…, wX(…), …)` — and `wX` is its *error
+renderer*, which appends into an element the host page never created. Serve the
+same document inside a cross-origin iframe (`vm-trace.mjs` does, `--top-level`
+reproduces the dead end) and neither engine throws it.
+
+**What the opcode tracer measured, and why its trace is empty.** The instrument
+works: six member-access sites patched, both engines determinized to the same
+clock and PRNG, ordered trace streamed out of the cross-origin child realm over
+the console. What it recorded offline is **zero opcodes, in both engines** —
+which retires the replay as an A/B harness and corrects the note that this engine
+"executes deep into the VM" offline. It does not. `--reach` says why: the widget
+installs its 25 globals and then calls **none** of them, because the VM entry
+point is `runProgram(base64Program, window)` and the program is an *argument*
+supplied by the host page's `api.js` over `postMessage`, not something in the
+document. Calling `runProgram()` unarmed fails inside `atob` in both engines
+(`--kick` does exactly that, and the two error strings differ only in wording).
+Live, no request to `challenges.cloudflare.com` follows the widget document in
+any of the seven captured `exc-cf-*.json` wire logs — those keep the last 80
+events, which is the window the throw happens in — so the program looks derived
+rather than fetched, and reconstructing it offline means reimplementing the embed
+handshake.
+
+**One more live divergence, measured but not attributed.** Same page, one run
+each, the two engines get very different programs and do very different amounts
+of work in the widget realm:
+
+| | lightpanda | Chrome |
+|---|---|---|
+| `runProgram` first argument | 6 944 chars | 634 784 chars |
+| `runProgram` calls | 1 | 2 |
+| `UXeS6` (createScript) calls | 1 | 51 |
+| `xBEPx7` calls | 6 | 83 |
+| `ykmX3` calls | 11 | 56 |
+
+Whether that gap is downstream of the `eval` hole or a second, earlier
+divergence is open. It is the next thing to settle, and settling it is cheap now:
+the same `--reach` run with the `eval` unwrapping in place answers it directly.

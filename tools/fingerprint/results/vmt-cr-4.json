@@ -1,0 +1,101 @@
+{
+  "engine": "chrome",
+  "doc": "tools/fingerprint/results/exc-src4/are.com_cdn-cgi_challenge-platform_h_b_turnstile_f_av0_rch_2n80d_0x4AAAAAAADnPIDROrmt1Wwj_light_fbE_new_normal_lang_auto",
+  "docBytes": 266382,
+  "settleMs": 15000,
+  "determinize": true,
+  "topLevel": false,
+  "patchedSites": [
+    {
+      "offset": 123575,
+      "text": "?oQ:oq[oQ]"
+    },
+    {
+      "offset": 128640,
+      "text": "?ou:om[ou]"
+    },
+    {
+      "offset": 202786,
+      "text": "?oy:og[oy]"
+    },
+    {
+      "offset": 206720,
+      "text": "?oy:oq[oy]"
+    },
+    {
+      "offset": 218406,
+      "text": "?oy:oQ[oy]"
+    },
+    {
+      "offset": 240673,
+      "text": "?oF:ou[oF]"
+    }
+  ],
+  "console": [],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9340/host.html",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9340/host.html"
+    },
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9440/widget.html",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9440/widget.html"
+    },
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9340/favicon.ico",
+      "type": "Other"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9340/favicon.ico"
+    }
+  ],
+  "exceptions": [],
+  "trace": [],
+  "url": "http://127.0.0.1:9340/host.html",
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9240/devtools/browser/f0f929e9-f9aa-4445-8137-2f30340a057d"
+  },
+  "realms": [
+    "http://127.0.0.1:9340/host.html",
+    "http://127.0.0.1:9440/widget.html"
+  ],
+  "kick": "threw:runProgram:Failed to execute 'atob' on 'Window': The string to be decoded is not correctly encoded.",
+  "traceLen": 0,
+  "chunks": 0,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:9240/devtools/browser/f0f929e9-f9aa-4445-8137-2f30340a057d",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[49452:9547780:0821/190649.166686:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[49452:9547780:0821/190649.167022:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[49452:9547854:0821/190651.622407:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[49452:9547854:0821/190651.622640:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[49452:9547854:0821/190651.623343:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[49452:9547854:0821/190651.692484:ERROR:google_apis/gcm/engine/mcs_client.cc:702]   Error code: 401  Error message: Authentication Failed: wrong_secret",
+    "[49452:9547854:0821/190651.692496:ERROR:google_apis/gcm/engine/mcs_client.cc:704] Failed to log in to GCM, resetting connection.",
+    "Created TensorFlow Lite XNNPACK delegate for CPU."
+  ],
+  "engineExit": {
+    "code": null,
+    "signal": "SIGKILL"
+  }
+}

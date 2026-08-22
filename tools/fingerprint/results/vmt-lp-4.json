@@ -1,0 +1,116 @@
+{
+  "engine": "lightpanda",
+  "doc": "tools/fingerprint/results/exc-src4/are.com_cdn-cgi_challenge-platform_h_b_turnstile_f_av0_rch_2n80d_0x4AAAAAAADnPIDROrmt1Wwj_light_fbE_new_normal_lang_auto",
+  "docBytes": 266382,
+  "settleMs": 15000,
+  "determinize": true,
+  "topLevel": false,
+  "patchedSites": [
+    {
+      "offset": 123575,
+      "text": "?oQ:oq[oQ]"
+    },
+    {
+      "offset": 128640,
+      "text": "?ou:om[ou]"
+    },
+    {
+      "offset": 202786,
+      "text": "?oy:og[oy]"
+    },
+    {
+      "offset": 206720,
+      "text": "?oy:oq[oy]"
+    },
+    {
+      "offset": 218406,
+      "text": "?oy:oQ[oy]"
+    },
+    {
+      "offset": 240673,
+      "text": "?oF:ou[oF]"
+    }
+  ],
+  "console": [],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9341/host.html",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9341/host.html"
+    },
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9441/widget.html",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9441/widget.html"
+    },
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9341/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9341/favicon.ico"
+    }
+  ],
+  "exceptions": [],
+  "trace": [],
+  "url": "http://127.0.0.1:9341/host.html",
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.768+069870ec8",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9241/"
+  },
+  "realms": [
+    "http://127.0.0.1:9341/host.html",
+    "http://127.0.0.1:9441/widget.html"
+  ],
+  "kick": "threw:runProgram:The string contains invalid characters",
+  "traceLen": 0,
+  "chunks": 0,
+  "engineLog": [
+    "      ip = 127.0.0.1:52256",
+    "\u001b[0;32mINFO\u001b[0m  app : client connected . . . . . . . . . . . . . . . . . \u001b[0m[+238ms]",
+    "      ip = 127.0.0.1:52257",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+263ms]",
+    "      url = http://127.0.0.1:9341/host.html",
+    "      method = GET",
+    "      reason = address_bar",
+    "      body = false",
+    "      type = root",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+284ms]",
+    "      0 = ",
+    "  arg(1): @@VTHELLO@@http://127.0.0.1:9341/host.html (string)",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+296ms]",
+    "      url = http://127.0.0.1:9441/widget.html",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+303ms]",
+    "      0 = ",
+    "  arg(1): @@VTHELLO@@http://127.0.0.1:9441/widget.html (string)",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+311ms]",
+    "      src = http://127.0.0.1:9441/widget.html",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+1787ms]",
+    "      0 = ",
+    "  arg(1): @@VTKICK@@absent:runProgram (string)",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+1807ms]",
+    "      0 = ",
+    "  arg(1): @@VTKICK@@threw:runProgram:The string contains invalid characters (string)"
+  ]
+}
