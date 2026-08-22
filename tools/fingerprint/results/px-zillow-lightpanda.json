@@ -1,0 +1,523 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-22T21:10:49.618Z",
+  "egress": {
+    "fl": "467f54",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787433049.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "010-tier1",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.839+75b7ec0b3",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9422/"
+  },
+  "stations": [
+    {
+      "name": "x-zillow",
+      "vendor": "perimeterx",
+      "url": "https://www.zillow.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.zillow.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://crcldu.com/bd/sync.html?v=1787433000000#1787433052879|1",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "id": "LID-0000000001",
+          "method": "GET",
+          "url": "https://www.zillow.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000001",
+          "status": 403,
+          "url": "https://www.zillow.com/",
+          "type": "Document"
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000001",
+          "len": 5776
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000002",
+          "method": "GET",
+          "url": "https://www.zillow.com/HYx10rg3/captcha/captcha.js?a=c&u=f4e68fbb-9e6d-11f1-a323-f21e4e07e860&v=&m=0&b=aHR0cHM6Ly93d3cuemlsbG93LmNvbS8=&h=R0VU",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000002",
+          "status": 200,
+          "url": "https://www.zillow.com/HYx10rg3/captcha/captcha.js?a=c&u=f4e68fbb-9e6d-11f1-a323-f21e4e07e860&v=&m=0&b=aHR0cHM6Ly93d3cuemlsbG93LmNvbS8=&h=R0VU",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000002",
+          "len": 276708
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000003",
+          "method": "GET",
+          "url": "https://client.px-cloud.net/PXHYx10rg3/main.min.js",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000003",
+          "status": 200,
+          "url": "https://client.px-cloud.net/PXHYx10rg3/main.min.js",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000003",
+          "len": 96507
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000004",
+          "method": "GET",
+          "url": "https://ift.px-cloud.net/ns?c=f4e68fbb-9e6d-11f1-a323-f21e4e07e860",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000006",
+          "method": "POST",
+          "url": "https://collector-pxhyx10rg3.px-cloud.net/assets/js/bundle",
+          "type": "XHR",
+          "postLen": 918,
+          "post": "payload=aUkQRhAIEGZwdAFnVV4LUV9nDxAeEFYQCEkQf3ZkfnxcaFRjRXcPEAgQWkZGQkEIHR1FRUUcSFteXl1FHFFdXx0QHhBTegJmVFsCZnoCQQ8QCAIeEGZeVgN0c0EdVHEGDxAIEH9TUXtcRldeEB4Qa2NgU3BLVlpkWFEPEAgCHhB5dgNmYl8HZ2VjRQ8QCAcLBB4QVEtod2hmQntmdAoPEAgBBAICHhBUd3d6c1hdR3NIZw8QCAMFCgUGAQECBwAFAQAeEGRbC0Z+cHxwU2AGDxAGIAwUKBQYB^AQ"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000007",
+          "method": "GET",
+          "url": "https://www.zillow.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000007",
+          "status": 200,
+          "url": "https://www.zillow.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000007",
+          "len": 4286
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000006",
+          "status": 200,
+          "url": "https://collector-pxhyx10rg3.px-cloud.net/assets/js/bundle",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000006",
+          "len": 1568
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000008",
+          "method": "GET",
+          "url": "blob:https://www.zillow.com/7eb48727-e107-4086-abcf-56e4ede7095f",
+          "type": "Script"
+        },
+        {
+          "ev": "fail",
+          "text": "Abort"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000009",
+          "method": "GET",
+          "url": "blob:https://www.zillow.com/e818c6a0-96f0-40c4-93eb-f1edeb9b0f14",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000010",
+          "method": "GET",
+          "url": "blob:https://www.zillow.com/f92df438-fe95-4f60-9b99-1bed9b5f66d5",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000011",
+          "method": "GET",
+          "url": "blob:https://www.zillow.com/3fe17c11-3626-45c5-9dcb-e0c655bb2564",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000012",
+          "method": "GET",
+          "url": "blob:https://www.zillow.com/5838d633-06a1-4101-b341-ef2051f367e2",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000013",
+          "method": "GET",
+          "url": "blob:https://www.zillow.com/2c5f2fb5-6ba9-4354-be75-a9de1b9d85c6",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000017",
+          "method": "GET",
+          "url": "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000017",
+          "status": 200,
+          "url": "https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap",
+          "type": "Stylesheet"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000017",
+          "len": 0
+        },
+        {
+          "ev": "req",
+          "id": "LID-0000000015",
+          "method": "GET",
+          "url": "https://crcldu.com/bd/sync.html?v=1787433000000#1787433052879|1",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000022",
+          "method": "GET",
+          "url": "chrome://juggler/content",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000023",
+          "method": "GET",
+          "url": "https://collector-pxhyx10rg3.px-client.net/b/g?payload=aUkQRhAIEGVbfFp7cEp1U2B7DxAeEFYQCEkQa1hBaH1xYGd3VX8PEAhUU15BVx4Qc0hCBldnaGRWd0UPEAgQYmoDAwUGBxAeEH92ZH58XGhUY2NFDxAIEEJKWlEQHhB0Z1pHYGQNzX^Ghcdw8QCFRTXkFXHhBhXnix%3EKDd3MKBldxepw8QCEkQYmoDAAUBC[phAIBwGYLHhBiagMABpQELEAgCHhBiKagMA;BG`QYCmEAgCHhBia9gE[MABQYDEAgfA08eEH92ZH58XGh7UY0V3DxAIEFpGRkJBCB0dRUVFHEh7bXl5dRRxRXV8dEE9Pbw==&appId=PXHYx10rg3&tag=YQRaQCdoSDFlCg==&uuid=f4e68fbb-9e6d-11f1-a323-f21e4e07e860&ft=408&seq=1&en=NTA&bi=OSwCJWwSSwR/cWwAIHkwBjgMHmIoIEMNNTsfaABsQCs+Ck4cfWZAH1d+fl44Cwd8Oh9GGxEtT0ZQKgtofUMLW3Y4C1p9fT8ILQkXfSc/FQM1MUgNU21DLGsGHx8xdwU=&cs=f1f3ab03745c9765b3dbc310f7e1f71c4a1a499af68fcaa3ec20ae5c5058ade8&pc=6032316431918091&sid=f540c7ad-9e6d-11f1-ba6c-927fec871b4e%F3%A0%84%B1%F3%A0%84%B7%F3%A0%84%B8%F3%A0%84%B7%F3%A0%84%B4%F3%A0%84%B3%F3%A0%84%B3%F3%A0%84%B0%F3%A0%84%B5%F3%A0%84%B2%F3%A0%84%B8%F3%A0%84%B7%F3%A0%84%B9&vid=f540c2f3-9e6d-11f1-ba6c-4036b4d7f85b&ci=f54575f0-9e6d-11f1-8f99-b5630c1c83f0&cts=f540c94b-9e6d-11f1-ba6c-927fec871b4e&hid=zBwywm/i-HDPhgqdw6X1L14fkBQ-4rm0wBFeRoqlt4Y=:pvIQ5W3avN8xkZeVzZEtMZaqvqByhRzZ5fMNtuuw1giUNaf7Lx1oS-iS9JqSgwwu6obVs7PdcmfM90p2f/OppR0DkDKNQd-GgQ9ch4Qd5kWxkWkyz46NYzvS8K//0tHc1vKhU4eFMlwY-FPDyaWhhC5qdahq4kBLHOJmRsKJasZ2LraZrzNtgrG48hfUURP3",
+          "type": "XHR"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000009",
+          "status": 200,
+          "url": "blob:https://www.zillow.com/e818c6a0-96f0-40c4-93eb-f1edeb9b0f14",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000009",
+          "len": 4997
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000010",
+          "status": 200,
+          "url": "blob:https://www.zillow.com/f92df438-fe95-4f60-9b99-1bed9b5f66d5",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000010",
+          "len": 5001
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000011",
+          "status": 200,
+          "url": "blob:https://www.zillow.com/3fe17c11-3626-45c5-9dcb-e0c655bb2564",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000011",
+          "len": 5002
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000012",
+          "status": 200,
+          "url": "blob:https://www.zillow.com/5838d633-06a1-4101-b341-ef2051f367e2",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000012",
+          "len": 5002
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000013",
+          "status": 200,
+          "url": "blob:https://www.zillow.com/2c5f2fb5-6ba9-4354-be75-a9de1b9d85c6",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000013",
+          "len": 5002
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000004",
+          "status": 200,
+          "url": "https://ift.px-cloud.net/ns?c=f4e68fbb-9e6d-11f1-a323-f21e4e07e860",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000004",
+          "len": 512
+        },
+        {
+          "ev": "fail",
+          "text": "UnsupportedProtocol"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000024",
+          "method": "POST",
+          "url": "https://collector-pxhyx10rg3.px-cloud.net/assets/js/bundle",
+          "type": "XHR",
+          "postLen": 10601,
+          "post": "payload=aUkQRhAIEGh6WVRXW3tjdVlVDxAeEFYQCEkQaltWXnhwWmJTWlEPEAgDBQoFBgEBAgcACgULHhBiAGt3eGpdYnZKYw8QCBADAQJWUBAeEHNIQgZXZ2RgVnddDxAIEAUBBAEBBAIBBwUABQcHBgMFAwsFEB4QDgoPCgoPCQoMDgsODAwNCA4IAA4QCBAPCw4LCw4ICw0PCg8NDQwJDwkBDxAeEH1zA3ZmXANeYVxVDxAIBwMHAh4QZHVeRFNad3RrdAYPEAhGQEdXHhBlW3xae3ALf1NwYw8QCEZA"
+        },
+        {
+          "ev": "res",
+          "id": "LID-0000000015",
+          "status": 200,
+          "url": "https://crcldu.com/bd/sync.html?v=1787433000000#1787433052879|1",
+          "type": "Document"
+        },
+        {
+          "ev": "done",
+          "id": "LID-0000000015",
+          "len": 527
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000025",
+          "method": "GET",
+          "url": "https://crcldu.com/bd/auditor.js?v=1787433000000",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000024",
+          "status": 200,
+          "url": "https://collector-pxhyx10rg3.px-cloud.net/assets/js/bundle",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000024",
+          "len": 1280
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000023",
+          "status": 200,
+          "url": "https://collector-pxhyx10rg3.px-client.net/b/g?payload=aUkQRhAIEGVbfFp7cEp1U2B7DxAeEFYQCEkQa1hBaH1xYGd3VX8PEAhUU15BVx4Qc0hCBldnaGRWd0UPEAgQYmoDAwUGBxAeEH92ZH58XGhUY2NFDxAIEEJKWlEQHhB0Z1pHYGQNzX^Ghcdw8QCFRTXkFXHhBhXnix%3EKDd3MKBldxepw8QCEkQYmoDAAUBC[phAIBwGYLHhBiagMABpQELEAgCHhBiKagMA;BG`QYCmEAgCHhBia9gE[MABQYDEAgfA08eEH92ZH58XGh7UY0V3DxAIEFpGRkJBCB0dRUVFHEh7bXl5dRRxRXV8dEE9Pbw==&appId=PXHYx10rg3&tag=YQRaQCdoSDFlCg==&uuid=f4e68fbb-9e6d-11f1-a323-f21e4e07e860&ft=408&seq=1&en=NTA&bi=OSwCJWwSSwR/cWwAIHkwBjgMHmIoIEMNNTsfaABsQCs+Ck4cfWZAH1d+fl44Cwd8Oh9GGxEtT0ZQKgtofUMLW3Y4C1p9fT8ILQkXfSc/FQM1MUgNU21DLGsGHx8xdwU=&cs=f1f3ab03745c9765b3dbc310f7e1f71c4a1a499af68fcaa3ec20ae5c5058ade8&pc=6032316431918091&sid=f540c7ad-9e6d-11f1-ba6c-927fec871b4e%F3%A0%84%B1%F3%A0%84%B7%F3%A0%84%B8%F3%A0%84%B7%F3%A0%84%B4%F3%A0%84%B3%F3%A0%84%B3%F3%A0%84%B0%F3%A0%84%B5%F3%A0%84%B2%F3%A0%84%B8%F3%A0%84%B7%F3%A0%84%B9&vid=f540c2f3-9e6d-11f1-ba6c-4036b4d7f85b&ci=f54575f0-9e6d-11f1-8f99-b5630c1c83f0&cts=f540c94b-9e6d-11f1-ba6c-927fec871b4e&hid=zBwywm/i-HDPhgqdw6X1L14fkBQ-4rm0wBFeRoqlt4Y=:pvIQ5W3avN8xkZeVzZEtMZaqvqByhRzZ5fMNtuuw1giUNaf7Lx1oS-iS9JqSgwwu6obVs7PdcmfM90p2f/OppR0DkDKNQd-GgQ9ch4Qd5kWxkWkyz46NYzvS8K//0tHc1vKhU4eFMlwY-FPDyaWhhC5qdahq4kBLHOJmRsKJasZ2LraZrzNtgrG48hfUURP3",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000023",
+          "len": 799
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000025",
+          "status": 200,
+          "url": "https://crcldu.com/bd/auditor.js?v=1787433000000",
+          "type": "Script"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000025",
+          "len": 307993
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000026",
+          "method": "GET",
+          "url": "https://fst-ec.perimeterx.net/?id=f540c2f3-9e6d-11f1-ba6c-4036b4d7f85b",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "id": "REQ-0000000027",
+          "method": "POST",
+          "url": "https://dvp.px-cloud.net/v",
+          "type": "XHR",
+          "postLen": 11857,
+          "post": "QtT1kByKnXTqpvl/wUvE2Elt0k6S6W4Cmq4k5OIcMd0VGbSaVzQVIn6JfVpemU+x84ncX4GanyW2nY2MOntMbvuoT1DQ1TGKs1XJbbMgsRNcrhmUX4S5YhrGy33GziDjs+yfHGkosaUtBi0wEZN5fGPqEfazPfrvfOvAlUfAMhCeCC6Y3Hf1+TvYotsiqZHsV9r+eJj6xMIcV6+3UE9a3nQEpk07JZYh3GLUucILoOVxBEq78vH7sBXYtC0RJo5LzyTbTUMOa+Fzs9GXE7IC8jfSP92E0Wid9iGa6dAxtCCc"
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000027",
+          "status": 200,
+          "url": "https://dvp.px-cloud.net/v",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000027",
+          "len": 1380
+        },
+        {
+          "ev": "res",
+          "id": "REQ-0000000026",
+          "status": 200,
+          "url": "https://fst-ec.perimeterx.net/?id=f540c2f3-9e6d-11f1-ba6c-4036b4d7f85b",
+          "type": "XHR"
+        },
+        {
+          "ev": "done",
+          "id": "REQ-0000000026",
+          "len": 1404
+        }
+      ],
+      "verdict": "px-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Access to this page has been denied",
+      "landedOn": "https://www.zillow.com/",
+      "nodes": 21,
+      "textLength": 106,
+      "snippet": "Press & Hold to confirm you are a human (and not a bot). Reference ID f4e68fbb-9e6d-11f1-a323-f21e4e07e860",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": true,
+        "refId": true,
+        "captchaDom": true,
+        "appId": true,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25694
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "      method = GET",
+    "      reason = script",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+1381ms]",
+    "      url = blob:https://www.zillow.com/e818c6a0-96f0-40c4-93eb-f1edeb9b0f14",
+    "      len = 4997",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+1525ms]",
+    "      url = blob:https://www.zillow.com/f92df438-fe95-4f60-9b99-1bed9b5f66d5",
+    "      len = 5001",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+1652ms]",
+    "      url = blob:https://www.zillow.com/3fe17c11-3626-45c5-9dcb-e0c655bb2564",
+    "      len = 5002",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+1773ms]",
+    "      url = blob:https://www.zillow.com/5838d633-06a1-4101-b341-ef2051f367e2",
+    "      len = 5002",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+1897ms]",
+    "      url = blob:https://www.zillow.com/2c5f2fb5-6ba9-4354-be75-a9de1b9d85c6",
+    "      len = 5002",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2021ms]",
+    "      source = xhr",
+    "      url = https://ift.px-cloud.net/ns?c=f4e68fbb-9e6d-11f1-a323-f21e4e07e860",
+    "      status = 200",
+    "      len = 512",
+    "\u001b[0;31mERROR browser : worker fetch error . . . . . . . . . . . . . . \u001b[0m[+2025ms]",
+    "      url = chrome://juggler/content",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+2124ms]",
+    "      src = https://crcldu.com/bd/sync.html?v=1787433000000#1787433052879|1",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+2125ms]",
+    "      src = https://crcldu.com/bd/sync.html?v=1787433000000#1787433052879|1",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2170ms]",
+    "      source = xhr",
+    "      url = https://collector-pxhyx10rg3.px-cloud.net/assets/js/bundle",
+    "      status = 200",
+    "      len = 1280",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2206ms]",
+    "      source = xhr",
+    "      url = https://collector-pxhyx10rg3.px-client.net/b/g?payload=aUkQRhAIEGVbfFp7cEp1U2B7DxAeEFYQCEkQa1hBaH1xYGd3VX8PEAhUU15BVx4Qc0hCBldnaGRWd0UPEAgQYmoDAwUGBxAeEH92ZH58XGhUY2NFDxAIEEJKWlEQHhB0Z1pHYGQNzX^Ghcdw8QCFRTXkFXHhBhXnix%3EKDd3MKBldxepw8QCEkQYmoDAAUBC[phAIBwGYLHhBiagMABpQELEAgCHhBiKagMA;BG`QYCmEAgCHhBia9gE[MABQYDEAgfA08eEH92ZH58XGh7UY0V3DxAIEFpGRkJBCB0dRUVFHEh7bXl5dRRxRXV8dEE9Pbw==&appId=PXHYx10rg3&tag=YQRaQCdoSDFlCg==&uuid=f4e68fbb-9e6d-11f1-a323-f21e4e07e860&ft=408&seq=1&en=NTA&bi=OSwCJWwSSwR/cWwAIHkwBjgMHmIoIEMNNTsfaABsQCs+Ck4cfWZAH1d+fl44Cwd8Oh9GGxEtT0ZQKgtofUMLW3Y4C1p9fT8ILQkXfSc/FQM1MUgNU21DLGsGHx8xdwU=&cs=f1f3ab03745c9765b3dbc310f7e1f71c4a1a499af68fcaa3ec20ae5c5058ade8&pc=6032316431918091&sid=f540c7ad-9e6d-11f1-ba6c-927fec871b4e%F3%A0%84%B1%F3%A0%84%B7%F3%A0%84%B8%F3%A0%84%B7%F3%A0%84%B4%F3%A0%84%B3%F3%A0%84%B3%F3%A0%84%B0%F3%A0%84%B5%F3%A0%84%B2%F3%A0%84%B8%F3%A0%84%B7%F3%A0%84%B9&vid=f540c2f3-9e6d-11f1-ba6c-4036b4d7f85b&ci=f54575f0-9e6d-11f1-8f99-b5630c1c83f0&cts=f540c94b-9e6d-11f1-ba6c-927fec871b4e&hid=zBwywm/i-HDPhgqdw6X1L14fkBQ-4rm0wBFeRoqlt4Y=:pvIQ5W3avN8xkZeVzZEtMZaqvqByhRzZ5fMNtuuw1giUNaf7Lx1oS-iS9JqSgwwu6obVs7PdcmfM90p2f/OppR0DkDKNQd-GgQ9ch4Qd5kWxkWkyz46NYzvS8K//0tHc1vKhU4eFMlwY-FPDyaWhhC5qdahq4kBLHOJmRsKJasZ2LraZrzNtgrG48hfUURP3",
+    "      status = 200",
+    "      len = 799",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+2363ms]",
+    "      src = https://crcldu.com/bd/auditor.js?v=1787433000000",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  js : console.context.groupEnd . . . . . . . . . . . . .  \u001b[0m[+2438ms]",
+    "      0 = ",
+    "  arg(1): %c (string)",
+    "  arg(2): ",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2533ms]",
+    "      source = xhr",
+    "      url = https://dvp.px-cloud.net/v",
+    "      status = 200",
+    "      len = 1380",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2537ms]",
+    "      source = xhr",
+    "      url = https://fst-ec.perimeterx.net/?id=f540c2f3-9e6d-11f1-ba6c-4036b4d7f85b",
+    "      status = 200",
+    "      len = 1404"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

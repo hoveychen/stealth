@@ -8213,3 +8213,30 @@ the aggregate hides:
 That is the whole target list: **`cf-scrapingcourse`, `x-zillow`, and the
 `cf-chatgpt` content gap**, with a reference that clears all three and can be
 run at will.
+
+### x-zillow decides before any script runs
+
+The first station off that target list, traced on both arms in one sitting
+(`antibot-sweep --only x-zillow --trace`, `results/px-zillow-oracle.json` and
+`results/px-zillow-lightpanda.json`):
+
+| | oracle (`--headless=new --headed-ua`) | lightpanda |
+|---|---|---|
+| document | **200** | 403 -> 200 (the interstitial) |
+| nodes | 1607 | 21, "Access to this page has been denied" |
+| requests recorded | 400 (capped) | 58 |
+| PerimeterX endpoints | `ift/ns`, `POST /api/v2/collector` x2 | `client.px-cloud.net/PXHYx10rg3/main.min.js`, `POST /assets/js/bundle` x2, `crcldu.com/bd/auditor.js`, `dvp.px-cloud.net/v`, `fst-ec.perimeterx.net` |
+
+The two PerimeterX flows are not the same conversation. The oracle's page runs
+the site's embedded sensor and posts to the v2 collector; this engine runs the
+*interstitial's* sensor bundle, which is a different set of endpoints entirely.
+That is downstream of the verdict, not the cause of it: the first document
+response is already 403 here and already 200 there.
+
+Which puts the decision on the request, before a line of script executes. And
+the arm that passes differs from the arm that does not (plain `--headless=new`,
+which gets the same `px-challenge`) **only in the user agent header** -- so at
+this station the guard is reading the request, and one header in it was enough
+to move the answer. The request side is where the diff continues: byte-exact
+header set and order, whether `sec-ch-ua` is present at all (the `--user-agent=`
+override blanks Chrome's client hints, noted above), JA4, HTTP/2 settings.
