@@ -8354,3 +8354,115 @@ the place to hang it is known. And **lowercase the three client-hint field
 names**, which closes the h1 tell recorded above and costs three string
 literals. Everything else on the request side is measured identical, so there is
 nothing else here to change.
+
+## The widget is not a demotion, and the request surface was not byte-exact (E1–E2, 2026-08-22)
+
+The station list is one long: `cf-scrapingcourse`. `--headed-ua` Chrome clears
+it in the same sitting from the same address where this engine does not, so it
+is diffable against an oracle rather than against a guess.
+`results/cfsc-oracle-diff.md` carries the readings; two of them overturn things
+recorded above.
+
+### Both arms enter the Turnstile widget
+
+The first pass at this put the divergence at the second `fo/` telemetry POST and
+read it as an escalation: the page-level challenge declines round 1, the
+orchestrator falls back to the interactive widget, and everything after is the
+widget grinding. That framing was an artefact of the instrument. The widget is
+an out-of-process iframe, the trace was taken without `--attach-frames`, and so
+the oracle's widget traffic was simply absent from the file it was compared
+against. `cfsc-fo-diff.mjs` auto-attaches to child targets, and with the widget
+attached the two arms walk together three steps further than that:
+
+| # | step | oracle | lightpanda |
+|---|---|---|---|
+| 4 | `POST {sc} fo/2851973148` round 1 | 2306 | 2306 |
+| 6 | `POST {cf} fo/2058561374` round 1 | 4706 | 4663 |
+| 7 | widget probes: blob, `brunhild` (fails), `/pat/` 401, `/ci/` | yes | **yes** |
+| 8 | `POST {cf} fo/2058561374` round 2 | 89 282 | > 65 536 |
+| 9 | what round 2 is answered with | **`cf-chl-out`** | **`cf-chl-gen`** |
+| 10 | `POST {sc} fo/2851973148` round 2 | 8759 | never |
+| 11 | `POST /cloudflare-challenge` clearance | 2605 → real page | never |
+
+Step 9 is the divergence. `cf-chl-out` / `cf-chl-out-s` is the widget's solve —
+about 6KB of it — and the page-level challenge turns that straight into round 2
+and then the clearance form. `cf-chl-gen` is another program: the submission was
+declined and more work issued. This engine fetches that program (127 724
+bytes), runs it — a fresh blob appears after it — and goes quiet. A
+100-second settle reproduces the stop byte for byte, so it is not slowness.
+
+Two consequences worth keeping. `brunhild.challenges.cloudflare.com` failing to
+resolve and the `/pat/` 401 happen on **both** arms, so neither is a tell; the
+earlier note that cleared them by claiming the oracle never requests them was
+right about the verdict and wrong about the reason. And a trace of a
+Turnstile-bearing page taken without `--attach-frames` is missing the half of
+the flow that matters — a divergence "found" in it may only be a frame the
+instrument could not see.
+
+### Cloudflare asks for nine client hints and gets three
+
+"The h1 and h2 request surfaces are byte-exact against Chrome" was measured on
+a request no origin had asked hints of. The challenge response asks, twice
+over:
+
+```
+cf-mitigated: challenge
+accept-ch:   Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Full-Version,
+             Sec-CH-UA-Mobile, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version,
+             Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform, Sec-CH-UA, …
+critical-ch: (the same list)
+```
+
+`challenges.cloudflare.com` sends the identical pair on the widget frame. From
+the request *after* the document onwards the two arms differ on every
+same-origin request — `orchestrate`, the favicon, both `fo/` POSTs, the
+clearance POST, and every asset of the page the oracle goes on to render:
+
+| arm | document | everything after |
+|---|---|---|
+| oracle | 3 hints | **9 hints** |
+| lightpanda | 3 hints | **3 hints** |
+
+Cross-origin requests carry 3 on both, so this is per-origin negotiated state
+and not a blanket header set.
+
+`accept-ch-echo.mjs` serves Cloudflare's exact list off localhost and settles
+the mechanism on three arms:
+
+- Real headless Chrome answers `Critical-CH` by **re-issuing the navigation at
+  once** — two `GET`s, 3 hints then 9 — and then carries 9 on every subsequent
+  request to that origin, subresource and XHR alike. On this machine:
+  `-arch: "arm"`, `-bitness: "64"`, `-model: ""`,
+  `-platform-version: "26.3.1"`, `-full-version: "151.0.7922.172"`, and
+  `-full-version-list` spelling the same three brands at full version.
+- The `--headed-ua` oracle restarts too and sends all nine names, but five of
+  the six high-entropy **values are the empty string** — overriding the user
+  agent detaches Chrome's hints from it. It clears the station anyway.
+- This engine ignores both headers: three hints everywhere, no restart, and
+  nothing carried into a later navigation to the same origin.
+- Chrome sends none of the pre-standard `UA-*` spellings, despite the ask.
+
+The oracle clearing the station with **empty** values is the useful half of
+that. Whatever Cloudflare does with these, it is not reading them; the
+implementable target is the presence of the names. Which also makes it cheap to
+falsify — send the six names, re-run the station, and the answer is one sweep
+away.
+
+### What the round-2 payload weighs is still unmeasured
+
+The oracle posts 89 282 bytes at step 8. This engine's is known only to exceed
+65 536, because `Network.requestWillBeSent` drops `postData` above
+`network.max_post_data_size` — a hard-coded 64KB that ignores the
+`maxPostDataSize` the client passed to `Network.enable` (`network.zig:40`,
+`:480`), and `CDP.zig:1053` skips the capture on the same bound so
+`getRequestPostData` cannot recover it either. Chrome honours the parameter.
+Until that is fixed, "does our widget submit as much as theirs" cannot be
+asked, which makes it the prerequisite for reading step 9 rather than a tidying
+job.
+
+One instrumentation note that did *not* hold up: `Network.dataReceived` being
+absent was recorded as the blocker on comparing these bodies. It is not.
+`Network.getResponseBody` works on both engines — lightpanda captures every
+response body into the frame arena (`CDP.zig:onHttpResponseData`) — so response
+sizes and bodies were readable all along. The gap is real; it was not on this
+critical path.
