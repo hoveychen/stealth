@@ -5136,6 +5136,70 @@ declines, and not new here. Every earlier probe holds:
 identifiers 0 of 449, colours 0 of 304, CSS-wide 0 of 39, keyword spelling 0 of
 27, `probe-css13` 1 of 42 (the one deliberately unfixed case).
 
+## A sign is not a range (2026-08-21)
+
+The section below leaves 84 readings on `probe-css17` and sorts them: 18 are
+unrelated serialisation gaps, and 66 are refusals its two per-property bits
+cannot reach. The largest block of the 66 is named there — numeric *ranges*
+rather than signs. This is that block, and it is a third bit rather than a
+sharper reading of the second: `chrome_bounds.zig` now also holds the interval
+of bare `<number>` each property takes, measured by `dump-css-bounds.mjs`
+bisecting both ends of it over all 736 names.
+
+Three facts came out, and the measurements say they are independent of each
+other and of the sign rule:
+
+* **A bound and a whole-number rule are separate bits, and either can appear
+  without the other.** `z-index` and `order` have no bound in either direction
+  — they take -1000000 and 1000000 — and still refuse `1.5`. `font-weight` has
+  both bounds, [1, 1000], and takes 399.5 between them. `column-count`,
+  `widows` and `orphans` have a lower bound *and* want a whole number, which is
+  why `-0` is refused there and accepted on `flex-grow`: the test is on the
+  number, and 0 is below 1.
+* **A property can refuse every bare number, `0` included, and the value
+  classes cannot say so.** `classify` reads a unitless zero as a `<length>` as
+  much as a `<number>` — which is right, and is how `border-top: 0` reaches the
+  width — so a property wanting a unit on every number slips past. `rotate: 90`
+  and `rotate: 0` are both refused where `rotate: 90deg` is kept, and
+  `overflow-clip-margin: 0` is refused where `0px` is kept. Nineteen names
+  measured that way, so it is a list rather than a special case.
+* **`opacity` is why absence from the table has to mean something.** It takes
+  `-1` and it takes `2`; the clamp happens long after the declaration is
+  stored. It is in none of the four lists, and a property in none of them is
+  one nothing here will refuse.
+
+**Three ways to answer "I could not measure that".** The generator walks a grid
+of bare numbers per property, bisects from the outermost rejected value to the
+innermost accepted one, and then refuses to write the result down unless the
+bound itself is taken and the next value outside it refused. A bisection that
+does not survive that is dropped and printed. So is an acceptance that is not
+one contiguous run: the seven grid-line properties (`grid-row-start` and
+friends) take every integer except `0`, and a `min`/`max` pair cannot say
+"punctured", so nothing is written and `grid-row-start: 0` stays kept — wrong
+in the direction that keeps pages working. And a property taking no bare number
+at all goes to the `needs_unit` list rather than to an interval of nothing.
+
+Most of the resulting table is `.min = 0, .max = 0`, which is not padding: it
+is a length property saying it takes `0` and no other bare number. For the ones
+the class table already grades that reading is left out as a rule already in
+force, but the engine has no measured class list for `width`, `height`,
+`z-index` or `rotate` at all, and for those the interval is the only thing that
+answers.
+
+Measured after: `probe-css17` goes from 441 to **456 of 525**, all 15 out of the
+"Chrome refuses, we keep" bucket (65 → 50) and nothing out of the other two.
+Zero over-refusals — the whole-object comparison has no "Chrome keeps, we
+refuse" bucket at all, on this probe or any other. Everything else is byte for
+byte: `probe-css14` 197 of 224, `probe-css15` 210 of 235, `probe-css16` 162 of
+168, identifiers 449 of 449, colours 304 of 304, CSS-wide 39 of 39, keyword
+spelling 27 of 27, `probe-css13` 41 of 42, and the suite 1374 of 1374.
+
+Of the 69 left, 19 are the serialisation gaps listed below and 50 are still
+refusals: arity on a longhand (`margin-top: 1px 2px`), any comma list, an
+unknown unit (`width: 10foo`, which classifies as a length because the unit is
+alphabetic), a keyword no measured list carries (`width: none`), an unknown
+property name, and a custom property. None of them is a range.
+
 ## The third answer: throwing a declaration away (2026-08-21)
 
 The section below ends with 46 readings it could not close and a diagnosis
