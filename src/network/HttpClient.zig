@@ -3048,6 +3048,8 @@ pub const Transfer = struct {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
+        // Last on the wire, which is where Chrome puts it.
+        "priority",
     };
 
     const chrome_subresource_order = [_][]const u8{
@@ -3062,6 +3064,7 @@ pub const Transfer = struct {
         "Referer",
         "Accept-Encoding",
         "Accept-Language",
+        "priority",
     };
 
     // Materializes req_headers onto the connection in Chrome's order.
@@ -3181,6 +3184,28 @@ pub const Transfer = struct {
                 if (n.user_activated) try self.setHeader("Sec-Fetch-User", "?1", .{ .source = .cdp });
             }
         }
+
+        // RFC 9218 extensible priorities. Chrome sends a hint on every HTTP/2
+        // and HTTP/3 request and nothing at all on HTTP/1.1, where the field
+        // has no meaning -- measured, 16 of 16 requests against a local http2
+        // echo and 0 of 14 against the h1 one. Emitted unconditionally here
+        // because this header list is reused across an h1 and an h2 attempt
+        // (see the note on emitHeaders); the vendored curl drops the field
+        // below h2, the mirror of what it already does for Connection.
+        //
+        // The values are per destination: u=0 for the render-blocking
+        // destinations, u=1 for the rest, and incremental everywhere except
+        // style and script. Chrome re-sends a bare `i` for an image once it
+        // matters on screen; that re-prioritisation is not modelled, so an
+        // image always carries the value of its first request.
+        try self.setHeader("priority", switch (req.resource_type) {
+            .document => "u=0, i",
+            .stylesheet => "u=0",
+            .script => "u=1",
+            // EventSource was not in the capture, grouped with fetch and XHR
+            // the way every other per-destination switch here groups it.
+            .image, .fetch, .xhr, .eventsource => "u=1, i",
+        }, .{ .source = .cdp });
     }
 
     // CDP Fetch.continueRequest: the intercepting client supplies the
@@ -3719,6 +3744,72 @@ test "HttpClient: seedFetchMetadata labels a cross-origin image" {
     try testing.expectString("cross-site", seededValue(&transfer, "Sec-Fetch-Site"));
     try testing.expectString("", seededValue(&transfer, "Sec-Fetch-User"));
     try testing.expectString("", seededValue(&transfer, "Upgrade-Insecure-Requests"));
+}
+
+test "HttpClient: seedFetchMetadata sends Chrome's priority hint per destination" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    // Measured against a local http2 echo that keeps the wire header block
+    // (tools/fingerprint/h2-arms.mjs): Chrome carries an RFC 9218 hint on every
+    // request, u=0 for the render-blocking destinations and u=1 for the rest,
+    // incremental everywhere except style and script.
+    const cases = [_]struct { Request.ResourceType, []const u8 }{
+        .{ .document, "u=0, i" },
+        .{ .stylesheet, "u=0" },
+        .{ .script, "u=1" },
+        .{ .image, "u=1, i" },
+        .{ .fetch, "u=1, i" },
+        .{ .xhr, "u=1, i" },
+        // EventSource was not in the capture; grouped with fetch and XHR, which
+        // is how every other per-destination switch here already treats it.
+        .{ .eventsource, "u=1, i" },
+    };
+
+    for (cases) |case| {
+        const arena = try pool.acquire(.small, "test");
+        defer arena.release();
+
+        var transfer = testTransfer(arena);
+        transfer.req.resource_type = case[0];
+        transfer.req.url = "https://example.com/a";
+        if (case[0] == .document) {
+            transfer.req.nav = .{ .initiator_origin = null, .subframe = false, .user_activated = true };
+        } else {
+            transfer.req.cookie_origin = "https://example.com/";
+        }
+        try transfer.seedFetchMetadata();
+
+        try testing.expectString(case[1], seededValue(&transfer, "priority"));
+    }
+}
+
+test "HttpClient: a subframe navigation gets the same priority as a top-level one" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var transfer = testTransfer(arena);
+    transfer.req.url = "https://widget.example.com/frame";
+    transfer.req.nav = .{ .initiator_origin = "https://example.com/", .subframe = true, .user_activated = false };
+    try transfer.seedFetchMetadata();
+
+    // Chrome splits Sec-Fetch-Dest into document/iframe but hints both the same.
+    try testing.expectString("iframe", seededValue(&transfer, "Sec-Fetch-Dest"));
+    try testing.expectString("u=0, i", seededValue(&transfer, "priority"));
+}
+
+test "HttpClient: the priority hint goes out last, after Accept-Language" {
+    // Position is part of the fingerprint, not just presence, and the wire
+    // order comes from these tables rather than from insertion order -- so
+    // this asserts the tables, which is the thing emitHeaders actually reads.
+    const nav = Transfer.chrome_navigation_order;
+    const sub = Transfer.chrome_subresource_order;
+    try testing.expectString("priority", nav[nav.len - 1]);
+    try testing.expectString("Accept-Language", nav[nav.len - 2]);
+    try testing.expectString("priority", sub[sub.len - 1]);
+    try testing.expectString("Accept-Language", sub[sub.len - 2]);
 }
 
 test "HttpClient: ResourceType.image reports Chrome's CDP name" {
