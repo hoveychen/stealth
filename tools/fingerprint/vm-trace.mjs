@@ -422,14 +422,18 @@ const PM_SRC = String.raw`
   // and is worthless under --determinize, where both realms draw the same first
   // number from the same fixed PRNG.
   //
-  // The host's own `executionContextId` used to be worthless too -- this engine
+  // The host's own executionContextId used to be worthless too -- this engine
   // reported the main frame's for every realm, so the census could only group
   // by the page-side tags. That is fixed (README, "Every realm answers with its
   // own execution context"): a parent and its child now come back as ctx 2 and
-  // ctx 3 where both were ctx 2 before, which agrees with `depth` one for one.
+  // ctx 3 where both were ctx 2 before, which agrees with depth one for one.
   // The page-side tags stay because they are what makes that agreement
-  // checkable, and because `depth` says something ctx does not -- where in the
+  // checkable, and because depth says something ctx does not -- where in the
   // tree the realm sits.
+  //
+  // No backticks anywhere in this comment, or in any other comment inside these
+  // instrument sources: they are String.raw template literals, so a backtick
+  // ends the template and the whole module stops parsing.
   var DEPTH = (function () {
     try {
       var d = 0, w = window;
