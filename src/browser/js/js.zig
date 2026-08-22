@@ -41,6 +41,7 @@ pub const Snapshot = @import("Snapshot.zig");
 pub const Platform = @import("Platform.zig");
 pub const Isolate = @import("Isolate.zig");
 pub const HandleScope = @import("HandleScope.zig");
+pub const TaggedOpaque = @import("TaggedOpaque.zig");
 
 pub const Value = @import("Value.zig");
 pub const StructuredWriter = Value.StructuredWriter;

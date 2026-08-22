@@ -29,6 +29,7 @@ const Inspector = @import("Inspector.zig");
 const App = @import("../../App.zig");
 const Frame = @import("../Frame.zig");
 const Window = @import("../webapi/Window.zig");
+const trusted_types = @import("../webapi/trusted_types.zig");
 const WorkerGlobalScope = @import("../webapi/WorkerGlobalScope.zig");
 const SharedWorkerGlobalScope = @import("../webapi/SharedWorkerGlobalScope.zig");
 const DedicatedWorkerGlobalScope = @import("../webapi/DedicatedWorkerGlobalScope.zig");
@@ -151,6 +152,7 @@ pub fn init(app: *App, opts: InitOpts) !Env {
     v8.v8__Isolate__SetMicrotasksPolicy(isolate_handle, v8.kExplicit);
     v8.v8__Isolate__SetFatalErrorHandler(isolate_handle, fatalCallback);
     v8.v8__Isolate__SetOOMErrorHandler(isolate_handle, oomCallback);
+    trusted_types.installCodeGenerationCallback(isolate_handle);
 
     if (comptime lp.IS_DEBUG) {
         v8.v8__Isolate__SetCaptureStackTraceForUncaughtExceptions(isolate_handle, true, 64);

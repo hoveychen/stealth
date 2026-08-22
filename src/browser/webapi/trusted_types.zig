@@ -31,6 +31,7 @@ const std = @import("std");
 const js = @import("../js/js.zig");
 const Frame = @import("../Frame.zig");
 const Execution = js.Execution;
+const v8 = js.v8;
 
 pub fn registerTypes() []const type {
     return &.{
@@ -76,6 +77,43 @@ fn TrustedValue(comptime type_name: [:0]const u8) type {
 pub const TrustedHTML = TrustedValue("TrustedHTML");
 pub const TrustedScript = TrustedValue("TrustedScript");
 pub const TrustedScriptURL = TrustedValue("TrustedScriptURL");
+
+// The one place trusted types are not merely a branded box: `eval` and the
+// Function constructor. V8 hands a non-string source straight back without
+// compiling it -- correct ECMAScript, and the reason a page that only ever
+// passes eval a TrustedScript would silently lose the code. Chrome runs it,
+// because Blink registers an isolate-wide callback that unwraps the wrapper
+// first, and a page under `require-trusted-types-for 'script'` has no other
+// way to reach eval. Cloudflare's Turnstile widget declares its globals this
+// way, so without this the function it later calls is undefined.
+//
+// browser/js/code_generation.cpp holds the V8 side; Env.init calls install()
+// once per isolate.
+extern fn lp_code_generation__install(isolate: *v8.Isolate) void;
+
+pub fn installCodeGenerationCallback(isolate: *v8.Isolate) void {
+    lp_code_generation__install(isolate);
+}
+
+// Called from the shim for every eval / new Function whose source is not a
+// plain string. Returning null leaves V8's own handling in place, which is
+// what keeps `eval({toString(){...}})` from becoming an execution primitive:
+// only a TrustedScript is unwrapped, and a TrustedHTML or TrustedScriptURL
+// comes back untouched, exactly as measured on Chrome.
+pub export fn lp_code_generation__unwrap_source(
+    _: ?*const v8.Context,
+    source: ?*const v8.Value,
+) callconv(.c) ?*const v8.String {
+    const handle = source orelse return null;
+    if (!v8.v8__Value__IsObject(handle)) {
+        return null;
+    }
+
+    const script = js.TaggedOpaque.fromJS(*TrustedScript, @ptrCast(handle)) catch return null;
+    const isolate = v8.v8__Isolate__GetCurrent() orelse return null;
+    const value = script._value;
+    return v8.v8__String__NewFromUtf8(isolate, value.ptr, v8.kNormal, @intCast(value.len));
+}
 
 // Which of the three types a given attribute or property is a sink for. Blink
 // keeps one table for both questions; getTypeMapping() returns it whole.
