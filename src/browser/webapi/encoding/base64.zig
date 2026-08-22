@@ -17,30 +17,54 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 //! Pure-byte base64 helpers for btoa/atob. The "binary string" semantics
-//! (each JS code unit 0..255 = one byte) are handled at the JS boundary in
-//! Window.atob / Window.btoa via the one-byte string APIs — this module
-//! just deals in bytes.
+//! (each JS code unit 0..255 = one byte) are handled by `BinInput.bytes` —
+//! the coding below just deals in bytes.
 
 const std = @import("std");
 const js = @import("../../js/js.zig");
 
 const Allocator = std.mem.Allocator;
 
+/// The sentences Blink answers, which name both the operation and the interface
+/// it was called on. `interface` is "Window" on a page and "WorkerGlobalScope"
+/// in a worker — measured against Chrome 151: a DedicatedWorkerGlobalScope still
+/// says 'WorkerGlobalScope', not its own name. atob words its two failure modes
+/// differently, so the "not Latin-1" case is not the "not base64" case.
+pub fn Messages(comptime interface: []const u8) type {
+    const on = "' on '" ++ interface ++ "': ";
+    return struct {
+        pub const atob_not_latin1 = "Failed to execute 'atob" ++ on ++
+            "The string to be decoded contains characters outside of the Latin1 range.";
+        pub const atob_not_encoded = "Failed to execute 'atob" ++ on ++
+            "The string to be decoded is not correctly encoded.";
+        pub const btoa_not_latin1 = "Failed to execute 'btoa" ++ on ++
+            "The string to be encoded contains characters outside of the Latin1 range.";
+    };
+}
+
 pub const BinInput = union(enum) {
     // order matters
-    js_string: js.String.OneByte,
+    js_string: js.String,
     raw: []const u8,
 
-    fn bytes(self: BinInput) []const u8 {
-        return switch (self) {
-            .js_string => |v| v.bytes,
-            .raw => |v| v,
+    /// The "binary string" read: every JS code unit has to fit in a byte
+    /// (0..255). The check is here rather than in the argument conversion (which
+    /// is where `js.String.OneByte` would put it) so the exception can carry
+    /// Blink's own sentence: the conversion layer has no idea whether it serves
+    /// atob or btoa, and those two word this same failure differently.
+    pub fn bytes(self: BinInput, allocator: Allocator, ctx: *js.Context, message: []const u8) ![]const u8 {
+        const js_str = switch (self) {
+            .raw => |v| return v,
+            .js_string => |v| v,
         };
+        if (!js_str.containsOnlyOneByte()) {
+            return ctx.fail(error.InvalidCharacterError, message);
+        }
+        return js_str.toOneByteSlice(allocator);
     }
 };
 
-pub fn encode(alloc: Allocator, in: BinInput) ![]const u8 {
-    const input = in.bytes();
+pub fn encode(alloc: Allocator, input: []const u8) ![]const u8 {
     const encoded_len = std.base64.standard.Encoder.calcSize(input.len);
     const encoded = try alloc.alloc(u8, encoded_len);
     return std.base64.standard.Encoder.encode(encoded, input);
@@ -52,9 +76,7 @@ pub fn encode(alloc: Allocator, in: BinInput) ![]const u8 {
 /// std's decoders reject non-canonical trailing bits (e.g. "ab") and only trim
 /// padding from the ends, neither of which match forgiving-base64 — so decode by
 /// hand: strip *all* ASCII whitespace, validate padding, tolerate trailing bits.
-pub fn decode(alloc: Allocator, in: BinInput) ![]const u8 {
-    const input = in.bytes();
-
+pub fn decode(alloc: Allocator, input: []const u8) ![]const u8 {
     // Step 1: remove all ASCII whitespace (tab, LF, FF, CR, space) from anywhere.
     const buf = try alloc.alloc(u8, input.len);
     var n: usize = 0;
