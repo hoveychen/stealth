@@ -2681,16 +2681,32 @@ const ImageRequest = struct {
     frame: *Frame,
     element: *Element.Html,
 
-    // Recorded from the headers, read once the body has drained. Nothing here
-    // decodes, so a 2xx is as close to "it became a picture" as this engine
-    // gets: Chrome also errors on a 200 whose bytes are not an image, which
-    // this cannot see (`tools/fingerprint/README.md`).
-    arrived: bool = false,
+    // The head of the body, kept until it has all arrived. Nothing here
+    // decodes, so a signature is as close to "it became a picture" as this
+    // engine gets -- close enough that the residual gap is a truncated image,
+    // which Chrome errors on and this reads as a load.
+    prefix: [Mime.IMAGE_SIGNATURE_LEN]u8 = undefined,
+    prefix_len: usize = 0,
+
+    // Set when the response declares `image/svg+xml`. SVG is the one image
+    // type with nothing to sniff, so the declaration is all there is to go on
+    // (see `Mime.isImageSignature`).
+    declared_svg: bool = false,
 
     fn headerCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.HeaderResult {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
-        const status = transfer.responseStatus() orelse 0;
-        self.arrived = status >= 200 and status < 300;
+
+        // The status is not consulted, on purpose. Chrome 151 fires `load` for
+        // an <img> whose response answers 404 or 500 with real PNG bytes, and
+        // `error` for one that answers 200 with a page (probe
+        // `expr-img-sniff.js`): what settles it is the body, and a status code
+        // does not see the body.
+        if (transfer.contentType()) |ct| {
+            const mime = Mime.parse(ct) catch null;
+            if (mime) |m| {
+                self.declared_svg = m.content_type == .image_svg_xml;
+            }
+        }
 
         // Read a failed response to the end anyway. The bytes are discarded
         // either way, and hanging up on a 404 mid-body is a traffic shape a
@@ -2698,9 +2714,40 @@ const ImageRequest = struct {
         return .proceed;
     }
 
+    // Keep the first `IMAGE_SIGNATURE_LEN` bytes and drop the rest: a
+    // signature is a prefix, so nothing past it changes the answer, and
+    // buffering a whole image to throw it away would be paying decoder memory
+    // for a decoder we do not have.
+    fn dataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
+        const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
+        const room = self.prefix.len - self.prefix_len;
+        if (room == 0) {
+            return;
+        }
+        const take = @min(room, data.len);
+        @memcpy(self.prefix[self.prefix_len..][0..take], data[0..take]);
+        self.prefix_len += take;
+    }
+
     fn doneCallback(ctx: *anyopaque) !void {
         const self: *ImageRequest = @ptrCast(@alignCast(ctx));
-        self.report(if (self.arrived) .load else .@"error");
+        self.report(if (self.arrived()) .load else .@"error");
+    }
+
+    // Whether the bytes became a picture, as far as this engine can tell.
+    fn arrived(self: *const ImageRequest) bool {
+        const prefix = self.prefix[0..self.prefix_len];
+        if (Mime.isImageSignature(prefix)) {
+            return true;
+        }
+        if (self.declared_svg == false) {
+            return false;
+        }
+        // A declared SVG still has to look like markup. An empty body under
+        // `image/svg+xml` is an `error` in Chrome, and taking the declaration
+        // on its own would read it as a load.
+        const markup = std.mem.trimStart(u8, prefix, &.{ ' ', '\t', '\n', '\r', 0x0C });
+        return markup.len > 0 and markup[0] == '<';
     }
 
     fn errorCallback(ctx: *anyopaque, err: anyerror) void {
@@ -2748,6 +2795,7 @@ fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !
         pending.* = .{ .frame = self, .element = el };
         request.ctx = pending;
         request.header_callback = ImageRequest.headerCallback;
+        request.data_callback = ImageRequest.dataCallback;
         request.done_callback = ImageRequest.doneCallback;
         request.error_callback = ImageRequest.errorCallback;
     }
