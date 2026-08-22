@@ -7771,3 +7771,70 @@ from the same address:
 identification is closed. The challenge outcome did **not** move: all five runs
 end on `Just a moment...` with the same 5.4 KB interstitial body. This was one
 tell, not the door.
+
+## The colour-scheme tell is not one (2026-08-22)
+
+`prefers-color-scheme` was on the list of things to fix because the Turnstile
+iframe URL carries the answer in plain sight — `.../turnstile/f/av0/rch/<id>/
+<sitekey>/light/...` — and every recorded lightpanda run reads `light` while
+`e2b-chrome.json`, `vmt-after-cr.json` and `po-chrome-final.json` read `dark`,
+three tool-paired runs out of three. `MediaQuery.zig` did hardcode the answer,
+which made the story fit.
+
+Asked directly, it does not hold. One expression, eight media features, both
+engines through `run-expr.mjs` on this host:
+
+| | headless Chrome 151 | lightpanda dev.820 |
+|---|---|---|
+| `prefers-color-scheme: dark` / `light` | false / **true** | false / **true** |
+| `forced-colors: active` | false | false |
+| `prefers-reduced-motion: reduce` | false | false |
+| `prefers-contrast: more` | false | false |
+| `color-gamut: srgb` / `p3` | true / false | true / false |
+| `dynamic-range: high` | false | false |
+
+Identical, `prefers-color-scheme` included, and `defaults read -g
+AppleInterfaceStyle` is unset — the host is in light mode, so the hardcoded
+`light` is also the *correct* answer here rather than a coincidence. The
+`antibot-sweep` Chrome snapshots from the same period agree: `/light/` in both
+the headed and the headless column.
+
+So the `dark` readings are not a live divergence between the engines; they are
+three runs of one tool under a condition this comparison does not reproduce
+(the host's appearance on that day is the obvious candidate, and it was not
+recorded). **The lesson is about the evidence, not about the feature.** A field
+that differs between two *files* is not a field that differs between two
+engines: the files were written by different tools, on different days, and the
+one input that decides this feature lives outside the repo. Nothing was changed
+in `MediaQuery.zig` — but if that host was in dark mode, a headed Chrome there
+would have answered `dark` while this engine answered `light` regardless, so the
+hardcode is still a latent tell on any machine that is not in light mode. It is
+a real defect with no evidence of being *this* door, which is a different thing
+from a non-issue.
+
+`colorGamut_p3: false` deserves the same caution before anyone files it: a Mac
+with a P3 display reports `p3: true` in a *headed* Chrome, and this reading came
+from a headless one. The passing reference is headless, so matching it is not
+the wrong call — it just is not a reading about headed Chrome.
+
+### `cf-chatgpt` looked like a regression and is the station moving
+
+The 2026-08-22 sweep reads `cf-chatgpt` as 41 nodes of `Application Error!`
+where the 2026-08-21 one read 509 nodes of `ChatGPT: Chat, Work, Create & Code
+with AI`. Both are recorded `pass` on status, so the drop only shows in the node
+count — and it lines up with a day of merges, which makes a bisect the obvious
+next move.
+
+Asking the reference first costs one run and answers it. Headless Chrome 151, at
+that station, minutes later, same address:
+
+```
+30372ms cf-chatgpt  cf-challenge  doc=403->200 nodes=33 "Just a moment..."
+```
+
+Chrome is now stopped at a Cloudflare managed challenge there and does *worse*
+than this engine, which still gets a 200 and the app's own error page. The
+station's posture toward this address changed; nothing in the engine did. This
+is the second instance in one sitting of the same trap — two snapshots differing
+is not two engines differing — and the cheap discriminator both times was to run
+the reference now rather than to trust a column recorded on another day.
