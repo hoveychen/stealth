@@ -27,6 +27,17 @@
 //   T8  child replaceState first, top replaceState second          **LEAK**
 //   T9  T5 with the child on the *same* origin                     **LEAK**
 //
+// All fifteen read clean since History and Navigation became per-frame objects
+// (src/browser/Frame.zig `_history` / `_navigation`, over the session-wide entry
+// list in Navigation.State), and T9 now reports `sameHistory=false
+// sameNavigation=false` the way Chrome does. The regression test is
+// src/browser/tests/frames/frame_own_url.html.
+//
+// T8's verdict came from a broken predicate and was wrong in both directions;
+// see the `okTop` comment near the bottom. Its real leak is the mirror of T5's:
+// the *child* ended up on the top's path (`localhost:PORT/host.html?child_first=1`)
+// because its replaceState resolved against the top's URL.
+//
 // So it needs two frames both using the history API, and it does not need
 // cross-origin: T9 leaks with a same-origin child, which is what makes it
 // writable as an ordinary test. Chrome is clean on T4, T5 and T9. In the leaking
@@ -226,12 +237,38 @@ try {
     if (profile) await fs.rm(profile, { recursive: true, force: true }).catch(() => { });
 }
 
-const expectedTop = (SHAPE === 'T4' || SHAPE === 'T5' || SHAPE === 'T6' || SHAPE === 'T9')
-    ? `http://127.0.0.1:${TOP}/host.html?__cf_chl_rt_tk=TOPTOKEN`
-    : `http://127.0.0.1:${TOP}/host.html`;
+// Shapes where the top moves *itself* and is supposed to: those end on the
+// URL its own replaceState asked for, not on host.html. T8 was missing here,
+// which made the predicate lie in both directions -- it called the pre-fix
+// engine clean (the top never moved, because its replaceState had been routed
+// to the child) and called a correct engine a leak. Chrome 151 measured on T8
+// reports exactly `host.html?top_second=1`.
+// Every URL the top is allowed to be reporting. More than one when the top
+// moves *itself* partway through the run: the ticks before its own
+// replaceState still legitimately read the URL it loaded on.
+const okTop = [`http://127.0.0.1:${TOP}/host.html`];
+if (SHAPE === 'T4' || SHAPE === 'T5' || SHAPE === 'T6' || SHAPE === 'T9') {
+    okTop.length = 0;
+    okTop.push(`http://127.0.0.1:${TOP}/host.html?__cf_chl_rt_tk=TOPTOKEN`);
+} else if (SHAPE === 'T8') {
+    // T8 was missing here, which made the predicate lie in both directions: it
+    // called the pre-fix engine clean (the top never moved, because its own
+    // replaceState had been routed to the child) and called a correct engine a
+    // leak. Chrome 151 on T8 reports exactly `host.html?top_second=1`.
+    okTop.push(`http://127.0.0.1:${TOP}/host.html?top_second=1`);
+}
 const tops = rows.filter((r) => r.who === 'top' && r.tick > 0);
-const bad = tops.filter((r) => r.href.split('#')[0] !== expectedTop || r.docURL.split('#')[0] !== expectedTop || r.baseURI.split('#')[0] !== expectedTop
+const isOk = (u) => okTop.includes(u.split('#')[0]);
+const bad = tops.filter((r) => !isOk(r.href) || !isOk(r.docURL) || !isOk(r.baseURI)
     || r.lorigin !== `http://127.0.0.1:${TOP}`);
+// A top that moves itself must actually arrive. Without this, a shape whose
+// starting URL is also an allowed one (T8) reads as clean on an engine that
+// routed the top's own replaceState to the child and left it where it began.
+const endTop = okTop[okTop.length - 1];
+const lastTop = tops[tops.length - 1];
+if (bad.length === 0 && (!lastTop || lastTop.href.split('#')[0] !== endTop)) {
+    bad.push(lastTop ?? { tick: -1, href: `no top reports; expected to end on ${endTop}`, docURL: '', baseURI: '', lorigin: '', worigin: '' });
+}
 const kidRows = rows.filter((r) => r.who === 'kid');
 console.log(`--- ${engine} ${SHAPE} --- top reports: ${tops.length}, wrong: ${bad.length}`);
 for (const r of (bad.length ? bad : tops).slice(0, 6)) {
