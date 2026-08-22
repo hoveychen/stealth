@@ -110,9 +110,11 @@ pub fn imageAddedCallback(self: *Image, frame: *Frame) !void {
 
     // Request the bytes without decoding them. Never fetching images at all is
     // a server-visible tell; see `Frame.loadImage`.
-    try frame.loadImage(src);
-
-    try frame.queueLoad(Factory.protoOf(self));
+    //
+    // The load/error event comes from the transfer, not from here: queueing
+    // `load` the moment a src was set -- what this used to do -- reported
+    // success for images that 404'd, which no browser does.
+    try frame.loadImage(Factory.protoOf(self), src);
 }
 
 pub const JsApi = struct {

@@ -203,6 +203,53 @@
   });
 </script>
 
+<script id="img-error-on-failed-request" type=module>
+  // A request that fails fires `error`, not `load`. Chrome 151 answers `error`
+  // for a 404, a refused connection, an unknown scheme and an undecodable
+  // data: URL, and `load` only for bytes that arrive (probe
+  // `expr-img-events.js`). This engine queued `load` the moment a src was set,
+  // whatever the fetch then did -- which is what leaves bot.sannysoft.com's
+  // "Broken Image Dimensions" row blank, since that cell is written from
+  // onerror.
+  //
+  // `broken.png` is under /src/browser/tests/, where the test server serves
+  // real files and 404s for the ones that are missing.
+  const state = await testing.async();
+  const img = document.createElement("img");
+  const seen = [];
+  img.addEventListener("load", () => { seen.push("load"); state.resolve(seen); });
+  img.addEventListener("error", (e) => { seen.push("error"); state.resolve(e); });
+  document.body.appendChild(img);
+  img.src = "broken.png";
+
+  await state.done((e) => {
+    testing.expectEqual("error", seen.join(","));
+    // Same shape as the load event next to it: an untrusted-looking event
+    // would be its own tell.
+    testing.expectEqual(false, e.bubbles);
+    testing.expectEqual(false, e.cancelable);
+    testing.expectEqual(true, e.isTrusted);
+    testing.expectEqual(img, e.target);
+  });
+</script>
+
+<script id="img-load-on-served-bytes" type=module>
+  // The other side of the same line: a request that answers 2xx still fires
+  // `load` and nothing else. Any path ending in an image extension is served a
+  // one-pixel PNG by the test server.
+  const state = await testing.async();
+  const img = document.createElement("img");
+  const seen = [];
+  img.addEventListener("load", () => { seen.push("load"); state.resolve(seen); });
+  img.addEventListener("error", () => { seen.push("error"); state.resolve(seen); });
+  document.body.appendChild(img);
+  img.src = "/served/pixel.png";
+
+  await state.done(() => {
+    testing.expectEqual("load", seen.join(","));
+  });
+</script>
+
 <script id="img-no-load-without-src">
 {
   // An img without src should not fire a load event.
