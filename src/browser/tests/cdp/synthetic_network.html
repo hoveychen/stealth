@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>synthetic network</title>
+    <!-- A data: URL is a synthetic scheme: the response is materialized
+         in-process rather than fetched. Chrome still reports the whole Network
+         lifecycle for it (requestWillBeSent / responseReceived / dataReceived /
+         loadingFinished, type Script, status 200), which is what this fixture
+         is here to pin. Unlike a blob: URL the address is deterministic, so the
+         test can assert it. -->
+    <script src="data:text/javascript,window.__data_ran=1"></script>
+</head>
+
+<body>
+    <!-- A second resource type, because the reporting is per-transfer and a
+         script is the one that already had a reason to work. Chrome calls this
+         one Image, 42 bytes, status 200. -->
+    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+</body>
+
+</html>

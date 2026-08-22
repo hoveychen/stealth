@@ -2282,6 +2282,16 @@ pub const Transfer = struct {
         // interception. The response is materialized here and delivered by
         // the dispatcher like any other transfer.
         if (Synthetic.isSynthetic(self.req.url)) {
+            // Skipping the pipeline also skipped the only site that arms CDP
+            // reporting, so a blob: or data: subresource used to load and run
+            // while every Network consumer saw nothing at all. Chrome reports
+            // these like any other request, and a wire log that silently omits
+            // them reads as "not loaded" — it cost a debugging session exactly
+            // that. Interception stays out: there is no socket to hold.
+            if (self.client.serve_mode) {
+                self._notify_cdp = true;
+                self.req.notification.dispatch(.http_request_start, &.{ .transfer = self });
+            }
             Synthetic.buffer(self) catch |err| {
                 // Buffer the failure too (blob-not-found is a normal
                 // JS-visible TypeError). Delivered like any other error (e.g

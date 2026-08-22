@@ -1384,3 +1384,53 @@ test "cdp.Network: worker requests emit network events" {
         .request = .{ .url = api_url },
     }, .{ .session_id = "SID-NW" });
 }
+
+test "cdp.Network: a data: subresource emits the same events a fetched one does" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const cdp = ctx.cdp();
+    _ = try cdp.createBrowserContext();
+    var bc = &cdp.browser_context.?;
+    bc.id = "BID-SY";
+    bc.session_id = "SID-SY";
+    bc.target_id = "TID-SY-0000000".*;
+
+    try ctx.processMessage(.{ .id = 1, .method = "Network.enable" });
+    try ctx.expectSentResult(null, .{ .id = 1 });
+
+    const page_url = "http://127.0.0.1:9582/src/browser/tests/cdp/synthetic_network.html";
+    const data_url = "data:text/javascript,window.__data_ran=1";
+    const page = try bc.session.createPage();
+    try page.navigate(page_url, .{});
+    try testing.waitForPage(bc);
+
+    // A synthetic scheme never touches the network, but a CDP client cannot
+    // see the difference and must not have to: Chrome reports the full
+    // lifecycle for a data: script, and anything reading requests off CDP
+    // (Playwright interception, a HAR recorder, our own wire logs) counts on
+    // it. Measured against Chrome 151 on the same document: type Script,
+    // status 200, 15 bytes.
+    try ctx.expectSentEvent("Network.requestWillBeSent", .{
+        .documentURL = page_url,
+        .type = "Script",
+        .request = .{ .url = data_url },
+    }, .{ .session_id = "SID-SY" });
+    try ctx.expectSentEvent("Network.responseReceived", .{
+        .type = "Script",
+        .response = .{ .url = data_url, .status = 200 },
+    }, .{ .session_id = "SID-SY" });
+
+    // Reporting is per-transfer, so a second resource type is worth pinning:
+    // the script path is the one that already had a reason to work.
+    const image_url = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    try ctx.expectSentEvent("Network.requestWillBeSent", .{
+        .documentURL = page_url,
+        .type = "Image",
+        .request = .{ .url = image_url },
+    }, .{ .session_id = "SID-SY" });
+    try ctx.expectSentEvent("Network.responseReceived", .{
+        .type = "Image",
+        .response = .{ .url = image_url, .status = 200 },
+    }, .{ .session_id = "SID-SY" });
+}

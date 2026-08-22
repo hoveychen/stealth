@@ -6923,7 +6923,8 @@ The "off" column reproduces the pre-fix `main` binary exactly. The widget never
 reaches `runProgram` without the unwrap, so it never posts telemetry, so no
 program is ever sent to it. One cause, not two.
 
-**The wire logs never showed lightpanda's blob scripts, and never will.**
+**The wire logs never showed lightpanda's blob scripts** (fixed since — see the
+end of this section).
 Chrome reports six `Script blob:…` requests on this page and lightpanda reports
 zero — which reads as "lightpanda does not load them" and is not what it means.
 `Transfer.submit` (`src/network/HttpClient.zig:2284`) hands `blob:` and `data:`
@@ -6939,3 +6940,18 @@ Headless Chrome does not — it is still on `Just a moment…` with no
 `cf_clearance`, exactly like lightpanda. Comparing outcomes against headless
 Chrome will therefore score a pass that the reference itself does not achieve.
 Per-API comparisons against headless are still fine; verdicts are not.
+
+**Synthetic transfers now report, so the wire logs can be trusted again.**
+`Transfer.submit` arms `_notify_cdp` and dispatches `http_request_start` for
+`blob:` and `data:` before handing off to `Synthetic.buffer`; the response
+events downstream were already gated on that flag, so nothing else had to
+change. Interception stays out — there is no socket to park.
+
+Measured on a fixture carrying a `data:` script, a `data:` image and a `blob:`
+script: Chrome and lightpanda both report five requests, same URLs, same types
+(`Script` / `Image` / `Script`), same 200s. On the Cloudflare page the six
+`Script blob:…` requests that only Chrome used to show now show on both.
+
+Two gaps stay open and are *not* about synthetic schemes: lightpanda emits no
+`Network.dataReceived` for **any** request (so byte counts read as 0 across the
+board), and it types a favicon `Image` where Chrome says `Other`.
