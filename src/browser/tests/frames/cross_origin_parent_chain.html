@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A script inside a cross-origin iframe that wants to know how deep it is walks up
+until a window is its own parent: `while (w !== w.parent) w = w.parent`. On the
+top frame's document that is a one-line answer, and Chrome gives it from a
+cross-origin child too -- depth 1, because the child's `parent` is the top's
+cross-origin WindowProxy and *that* proxy's `parent` is itself.
+
+Here the walk does not end that way, on every live Cloudflare widget realm as
+well as in this fixture (tools/fingerprint/README.md, "Two deviations the
+instrument turned up on the side"). The first hop is fine: `parent === window`
+answers false. It is the second one, reading `parent` off the cross-origin
+WindowProxy, that does not behave.
+
+localhost is cross-origin to the 127.0.0.1 test page, so the child below is a
+real cross-origin frame without needing the network.
+-->
+
+<script id=cross_origin_child_walks_up_to_depth_one type=module>
+{
+  const state = await testing.async();
+  const ALT_BASE = testing.BASE_URL.replace('127.0.0.1', 'localhost');
+
+  const child = await new Promise((resolve) => {
+    window.addEventListener('message', (e) => resolve(e.data), { once: true });
+    const iframe = document.createElement('iframe');
+    iframe.src = ALT_BASE + 'frames/support/parent_chain_walk.html';
+    document.documentElement.appendChild(iframe);
+  });
+  state.resolve();
+
+  await state.done(() => {
+    // One assertion over the whole reading, so a failure names every hop at
+    // once rather than stopping at the first. Read off a headed Chrome 151.
+    testing.expectEqual(JSON.stringify({
+      depth: 1,
+      err: null,
+      parentIsSelf: false,
+      topIsParent: true,
+      grandparentType: 'object',
+      grandparentIsParent: true,
+    }), JSON.stringify(child));
+  });
+}
+</script>
