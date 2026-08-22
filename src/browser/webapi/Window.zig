@@ -255,7 +255,13 @@ pub fn getParent(self: *Window, frame: *Frame) Access {
     if (self._frame.parent) |p| {
         return Access.init(frame.window, p.window);
     }
-    return .{ .window = self };
+    // A frame with no parent is its own parent -- but which *object* answers
+    // that still depends on who is asking. Handing back the bare window let a
+    // cross-origin child hold the top's real Window: reading anything off it
+    // then hit V8's own cross-context check ("TypeError: no access"), so
+    // `while (w !== w.parent) w = w.parent` -- how a script asks how deep it is
+    // -- threw instead of terminating.
+    return Access.init(frame.window, self);
 }
 
 pub fn getDocument(self: *Window) *Document {
@@ -1792,8 +1798,11 @@ const CrossOriginWindow = struct {
         return self.window.postMessage(message, target_origin, transfer, frame);
     }
 
+    // Reads right at every depth a two-frame test can reach -- at depth 1 the
+    // parent *is* the top -- and wrong from three frames down, where the window
+    // behind this proxy has a parent that is not the top.
     pub fn getTop(self: *CrossOriginWindow, frame: *Frame) Access {
-        return self.window.getParent(frame);
+        return self.window.getTop(frame);
     }
 
     pub fn getParent(self: *CrossOriginWindow, frame: *Frame) Access {

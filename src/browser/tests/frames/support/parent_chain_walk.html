@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!--
+Loaded cross-origin by frames/cross_origin_parent_chain.html. Walks up the frame
+tree the way a script that wants to know how deep it is does, and reports what
+it saw -- including the throw, if reading `parent` off the cross-origin
+WindowProxy is what ends the walk.
+-->
+<script>
+  var out = { depth: -1, err: null };
+  try {
+    var w = window, d = 0;
+    while (w !== w.parent && d < 20) { w = w.parent; d++; }
+    out.depth = d;
+  } catch (e) {
+    out.err = (e && e.name ? e.name : 'Error') + ': ' + (e && e.message ? e.message : String(e));
+  }
+  try { out.parentIsSelf = window.parent === window; } catch (e) { out.parentIsSelf = 'threw: ' + e.name; }
+  try { out.topIsParent = window.top === window.parent; } catch (e) { out.topIsParent = 'threw: ' + e.name; }
+  try { out.grandparentType = typeof window.parent.parent; } catch (e) { out.grandparentType = 'threw: ' + e.name; }
+  try { out.grandparentIsParent = window.parent.parent === window.parent; } catch (e) { out.grandparentIsParent = 'threw: ' + e.name; }
+  parent.postMessage(out, '*');
+</script>

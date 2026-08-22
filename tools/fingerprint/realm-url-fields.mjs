@@ -62,6 +62,18 @@ const SRC = String.raw`
       'document.domain': function () { return document.domain; },
       'window===top': function () { return String(window === top); },
       'frames.length': function () { return String(frames.length); },
+      // How deep a script thinks it is, and what the proxy it walked through
+      // answers about the rest of the tree. A cross-origin realm reads these off
+      // a WindowProxy, not a Window, so they are a different set of accessors --
+      // see cross-origin-frame-tree.mjs for the offline reading of the same
+      // names. '-' where the realm is the top and has no proxy to ask.
+      'depth': function () { return String(o.depth); },
+      'parent.parent===parent': function () { return window === top ? '-' : String(parent.parent === parent); },
+      'parent.top===top': function () { return window === top ? '-' : String(parent.top === top); },
+      'parent.length': function () { return window === top ? '-' : String(parent.length); },
+      'parent.closed': function () { return window === top ? '-' : String(parent.closed); },
+      'typeof parent.opener': function () { return window === top ? '-' : typeof parent.opener; },
+      'toString(parent)': function () { return window === top ? '-' : Object.prototype.toString.call(parent); },
       'base.href': function () { var b = document.querySelector('base'); return b ? b.href : '(no base)'; },
     };
     for (var k in probes) { try { f[k] = String(probes[k]()); } catch (e) { f[k] = 'threw: ' + e.message; } }
@@ -111,6 +123,11 @@ try {
             (async () => {
                 for (const d of ['Runtime', 'Page']) await cdp.send(`${d}.enable`, undefined, child).catch(() => { });
                 await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: SRC }, child).catch(() => { });
+                // Chrome puts a cross-origin frame in its own target and attaches
+                // *after* its document exists, so the on-new-document hook alone
+                // never runs there. The source guards on __PEEK, so evaluating it
+                // as well is idempotent.
+                await cdp.send('Runtime.evaluate', { expression: SRC }, child).catch(() => { });
                 await cdp.send('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, child).catch(() => { });
                 await cdp.send('Runtime.runIfWaitingForDebugger', undefined, child).catch(() => { });
             })();

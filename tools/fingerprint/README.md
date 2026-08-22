@@ -7683,10 +7683,11 @@ the history API, and it is fixed: see *A frame's URL is its own* below.
 
 **`window.parent.parent` throws from a cross-origin child.** Walking up the
 frame tree — `while (w !== w.parent) w = w.parent` — reports depth 1 in Chrome
-from inside a cross-origin iframe and throws in this engine, in the same
+from inside a cross-origin iframe and threw in this engine, in the same
 two-port fixture and on every live widget realm. The first hop is fine
-(`parent === window` answers `false`); the throw is on reading `parent` of the
-cross-origin WindowProxy.
+(`parent === window` answers `false`); the throw was on reading `parent` of the
+cross-origin WindowProxy. Fixed: see *A cross-origin proxy answers about the
+frame tree* below.
 
 **And one gap that gets in the instrument's way:** every `consoleAPICalled` from
 this engine carries the same `executionContextId`, so the host cannot tell two
@@ -7905,3 +7906,66 @@ station's posture toward this address changed; nothing in the engine did. This
 is the second instance in one sitting of the same trap — two snapshots differing
 is not two engines differing — and the cheap discriminator both times was to run
 the reference now rather than to trust a column recorded on another day.
+
+## A cross-origin proxy answers about the frame tree (2026-08-22)
+
+The other deviation the section above parked. `while (w !== w.parent) w = w.parent`
+is how a script asks how deep it is, and Cloudflare's widget asks. Chrome answers
+1 from inside a cross-origin iframe. This engine threw `TypeError: no access` —
+a string that appears nowhere in this repository, because it is V8's own
+cross-context check, which is the tell: the child had been handed a real `Window`
+from another context instead of a proxy.
+
+**Two members were wrong, and one of them only shows from three frames down.**
+
+* `Window.getParent` returned `.{ .window = self }` for a frame with no parent —
+  the one return in the file that skipped `Access.init`. A frame with no parent is
+  its own parent, but *which object* answers that depends on who is asking; the
+  top handed its real `Window` to a cross-origin child, which then had two
+  problems: `w.parent.parent !== w.parent` (one is a proxy, one is the window),
+  so the walk took a step it should not have, and the read after that step was
+  the one V8 refused.
+* `CrossOriginWindow.getTop` delegated to `getParent`. At depth 1 the parent *is*
+  the top, so that reads correctly in any two-frame test and is wrong deeper.
+  `cross-origin-frame-tree.mjs` nests four deep for exactly this reason —
+  `top → a → b → leaf`, the leaf cross-origin — so that the proxy the leaf holds
+  has a parent and a top that are different windows. A two-deep tree cannot tell
+  a wrong `top` from a right one.
+
+`frames`, `length`, `opener` and `closed` were checked against Chrome member by
+member on the same nesting and were **already right**, so nothing was "completed"
+there: `frames` answers the proxy itself, `length` the real child count, `opener`
+JS `null` (not `undefined`), `closed` `false`.
+
+Of the 24 fields the oracle reads, 23 now match Chrome 151 exactly. The
+twenty-fourth is `Object.prototype.toString`: `[object Window]` here against
+Chrome's `[object Object]`, which needs the null-prototype proxy shape already
+noted at the class in `Window.zig` and in the cross-origin section above.
+
+### On the live page
+
+`realm-url-fields.mjs` now reports each realm's depth and what the proxy above it
+answers. Two runs on the live interstitial, minutes apart, pre-fix binary as the
+control:
+
+| read in the Turnstile widget realm | pre-fix (control) | fixed |
+|---|---|---|
+| `depth` (the walk) | `-1` — threw | `1` |
+| `parent.parent === parent` | `false` | `true` |
+| `parent.top === top` | `false` | `true` |
+
+Every realm below the widget went from `depth -1` to its real depth too. A
+same-origin `about:blank` child answered `depth 1` in both runs, which is the
+control inside the control: same-origin children never get a proxy, so they were
+never affected.
+
+Chrome's own live widget realm is **not** in this table. Chrome runs that frame
+in a separate process and attaches to it after its document exists, so the
+instrument's page-side tag never gets in, and by the time the challenge resolves
+the frame is gone. The Chrome column of this reading is the offline nesting in
+`cross-origin-frame-tree.mjs`, which measures the same member names.
+
+The challenge outcome did **not** move: both runs end on `Just a moment...` with
+the same ~5.4 KB interstitial body, while Chrome on the same address flips to the
+real page (`Antibot Challenge - ScrapingCourse.com`, 2.9 KB). One more tell
+removed, still not the door.
