@@ -12,9 +12,10 @@
   testing.expectEqual(
     "TypeError: Failed to construct 'Request': Failed to parse URL from http://[",
     msg(() => new Request('http://[')));
+  // Verbatim: the scheme is not lower-cased on its way into the message.
   testing.expectEqual(
-    "TypeError: Failed to construct 'Request': Failed to parse URL from ht tp://x",
-    msg(() => new Request('ht tp://x')));
+    "TypeError: Failed to construct 'Request': Failed to parse URL from HTTP://[?a",
+    msg(() => new Request('HTTP://[?a')));
 
   const no_body = "TypeError: Failed to construct 'Request': Request with GET/HEAD method cannot have body.";
   testing.expectEqual(no_body, msg(() => new Request('https://example.com/a', { body: 'x' })));
