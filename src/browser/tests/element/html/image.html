@@ -273,6 +273,49 @@
   });
 </script>
 
+<script id="img-event-is-decided-by-the-bytes" type=module>
+  // Which of the three inputs -- status, declared type, body -- settles the
+  // event? Each fixture below varies exactly one of them, and every expected
+  // value here was read off Chrome 151 by
+  // `node tools/fingerprint/img-sniff.mjs chrome`, which serves the same set
+  // and asks an engine the same question.
+  //
+  // The answer is that only the body has a say: PNG bytes load while disowned
+  // by the header and while behind a 404, and HTML bytes error while dressed as
+  // image/png. SVG is the exception -- no signature to match, so it is taken
+  // from the declared type -- and the run confirms Chrome refuses it under any
+  // other type.
+  const state = await testing.async();
+  const cases = {
+    "/served/octet-stream.png": "load",
+    "/served/no-content-type.png": "load",
+    "/served/png-bytes-404.png": "load",
+    "/served/html-as-png.png": "error",
+    "/served/truncated.png": "error",
+    "/served/vector.svg": "load",
+    "/served/svg-as-text.svg": "error",
+  };
+
+  const seen = {};
+  for (const src of Object.keys(cases)) {
+    const img = document.createElement("img");
+    document.body.appendChild(img);
+    seen[src] = await new Promise((resolve) => {
+      img.addEventListener("load", () => resolve("load"));
+      img.addEventListener("error", () => resolve("error"));
+      img.src = src;
+    });
+    img.remove();
+  }
+  state.resolve(seen);
+
+  await state.done((seen) => {
+    // One comparison rather than seven: a mismatch names the fixture that
+    // moved, instead of only the first one.
+    testing.expectEqual(JSON.stringify(cases), JSON.stringify(seen));
+  });
+</script>
+
 <script id="img-no-load-without-src">
 {
   // An img without src should not fire a load event.

@@ -1209,16 +1209,49 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         return TestHTTPServer.sendFile(req, path[1..]);
     }
 
-    // A 200 whose body is not a picture. Chrome answers `error` for this --
-    // measured on Chrome 151, probe `expr-img-events.js` -- because the line it
-    // draws is decoding, not the status code. Registered ahead of the image
-    // catch-all below so the extension does not win.
-    if (std.mem.eql(u8, path, "/served/html-bytes.png")) {
-        return req.respond("<html><body>not a picture</body></html>", .{
-            .extra_headers = &.{
-                .{ .name = "Content-Type", .value = "text/html" },
-            },
-        });
+    // Responses whose bytes, declared type and status deliberately disagree:
+    // one per row of the Chrome 151 measurement in
+    // `tools/fingerprint/img-sniff.mjs`. What settles an `<img>`'s event is the
+    // body, so each of these pins one input that gets no say. Registered ahead
+    // of the image catch-all below, which would otherwise win on the extension.
+    {
+        const SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\"></svg>";
+        const Fixture = struct {
+            path: []const u8,
+            body: []const u8,
+            status: std.http.Status = .ok,
+            // null omits the header entirely, which is a case of its own.
+            content_type: ?[]const u8,
+        };
+        const fixtures = [_]Fixture{
+            // A page in an image's clothing, twice over.
+            .{ .path = "/served/html-bytes.png", .content_type = "text/html", .body = "<html><body>not a picture</body></html>" },
+            .{ .path = "/served/html-as-png.png", .content_type = "image/png", .body = "<html><body>not a picture</body></html>" },
+            // Real bytes the header disowns, or never claims.
+            .{ .path = "/served/octet-stream.png", .content_type = "application/octet-stream", .body = &ONE_PIXEL_PNG },
+            .{ .path = "/served/no-content-type.png", .content_type = null, .body = &ONE_PIXEL_PNG },
+            // Real bytes behind a failing status.
+            .{ .path = "/served/png-bytes-404.png", .status = .not_found, .content_type = "image/png", .body = &ONE_PIXEL_PNG },
+            // Not enough bytes to carry a signature.
+            .{ .path = "/served/truncated.png", .content_type = "image/png", .body = ONE_PIXEL_PNG[0..4] },
+            // SVG, the one image type that is answered from the header.
+            .{ .path = "/served/vector.svg", .content_type = "image/svg+xml", .body = SVG },
+            .{ .path = "/served/svg-as-text.svg", .content_type = "text/plain", .body = SVG },
+        };
+        for (fixtures) |f| {
+            if (std.mem.eql(u8, path, f.path) == false) {
+                continue;
+            }
+            const content_type = f.content_type orelse {
+                return req.respond(f.body, .{ .status = f.status });
+            };
+            return req.respond(f.body, .{
+                .status = f.status,
+                .extra_headers = &.{
+                    .{ .name = "Content-Type", .value = content_type },
+                },
+            });
+        }
     }
 
     // `<img src>` is fetched for real now (see `Frame.loadImage`), so any test

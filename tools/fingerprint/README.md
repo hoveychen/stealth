@@ -7330,12 +7330,15 @@ boundary.
 
 #### Which event, per outcome
 
-`expr-img-events.js` puts every way an image request can end to Chrome 151:
+`expr-img-events.js` puts every way an image request can end to Chrome 151. (It
+was a scratch expression and never landed in `probes/`; the byte-level rows it
+covered are re-measured by the committed `img-sniff.mjs` below, and † marks the
+one row whose second column this section predates.)
 
 | `<img src>` | Chrome | lightpanda, after |
 |---|---|---|
 | 200, real PNG | `load` | `load` |
-| 200, `text/html` body | **`error`** | `load` |
+| 200, `text/html` body | **`error`** | `load`, then fixed † |
 | 404 | `error` | `error` |
 | connection refused | `error` | `error` |
 | unknown scheme (`nonsense://`) | `error` | `error` |
@@ -7349,20 +7352,78 @@ the event from the done/error callback against the recorded status — queued
 rather than dispatched inline for the reason `Script.queueHintEvent` gives, so
 page JS never runs inside the HTTP pump.
 
-Two rows still disagree, both because the line this engine can draw is the HTTP
-one and Chrome's is the decode:
+One row still disagrees, and one turned out to be the visible end of a bigger
+mistake:
 
-- **200 with bytes that are not an image.** Chrome sniffs, fails to decode and
-  fires `error`; nothing here decodes, so a 2xx is the closest available stand-in
-  for "it became a picture". Matching it needs either content-type matching —
-  which would fire `error` on the real images served as
-  `application/octet-stream` that Chrome loads fine — or a magic-byte sniff in
-  the data callback. Left alone rather than guessed at.
+- **200 with bytes that are not an image** — since fixed; see *What actually
+  decides the event* below.
 - **`src = ''`.** Chrome fires `error`; `loadImage` returns early on an empty
   src and fires nothing. Note it is *not* the same as an absent `src`, which
   fires nothing in Chrome either, and that the empty-src image gets no
   broken-image icon in Chrome (0×0, not 16×16) — so it is a third state, not a
   broken image with a missing event.
+
+#### What actually decides the event
+
+The row above was read as "we cannot see the decode, so a 2xx is the best proxy
+available". Measuring the proxy instead of assuming it says otherwise.
+`img-sniff.mjs` serves one fixture per hypothesis from a local server — the same
+bytes under four different Content-Types, under no Content-Type at all, and
+behind a 404 — and asks an engine which event each one produces:
+
+```
+node tools/fingerprint/img-sniff.mjs chrome
+node tools/fingerprint/img-sniff.mjs lightpanda
+```
+
+Chrome 151, and this engine after the change:
+
+| body | status | `Content-Type` | Chrome | lightpanda, after |
+|---|---|---|---|---|
+| 1×1 PNG | 200 | `image/png` | `load` | `load` |
+| 1×1 PNG | 200 | `application/octet-stream` | `load` | `load` |
+| 1×1 PNG | 200 | `text/html` | `load` | `load` |
+| 1×1 PNG | 200 | *absent* | `load` | `load` |
+| 1×1 PNG | **404** | `image/png` | **`load`** | `load` |
+| 1×1 PNG | **500** | `image/png` | **`load`** | `load` |
+| HTML page | 200 | `text/html` | `error` | `error` |
+| HTML page | 200 | **`image/png`** | `error` | `error` |
+| *empty* | 200 | `image/png` | `error` | `error` |
+| *empty* | 204 | `image/png` | `error` | `error` |
+| PNG cut to 4 bytes | 200 | `image/png` | `error` | `error` |
+| PNG cut to 12 bytes | 200 | `image/png` | `error` | **`load`** |
+| SVG | 200 | `image/svg+xml` | `load` | `load` |
+| SVG | 200 | `text/plain` | `error` | `error` |
+| SVG | 200 | `application/octet-stream` | `error` | `error` |
+| SVG | 200 | *absent* | `error` | `error` |
+
+Three readings that a content-type rule, a status rule, or a guess would each
+have gotten wrong:
+
+- **The declared type gets no say.** The same PNG loads as `image/png`, as
+  `application/octet-stream`, as `text/html`, and with no `Content-Type` at all.
+  A content-type check would have fired `error` on two of those, which is the
+  reason it was rejected in favour of sniffing — and now there is a measurement
+  behind that, not an expectation.
+- **The status gets no say either.** A 404 carrying real PNG bytes fires `load`.
+  The old code's `arrived = 2xx` was therefore wrong in *both* directions, not
+  just the one the sannysoft row exposed; it only looked right because a 404
+  body is usually an error page, which is not a picture.
+- **SVG is the one type read from the header.** It is XML, so it has no
+  signature — mimesniff excludes it from image sniffing for that reason — and
+  Chrome refuses SVG bytes under `text/plain`, under
+  `application/octet-stream`, and with no type at all. So it is not an omission
+  in the signature table; it is a different rule, and `Mime.image_svg_xml`
+  exists to carry it.
+
+`Mime.isImageSignature` holds the patterns: the image rows of the mimesniff
+table, plus AVIF from Chromium's `net/base/mime_sniffer.cc` (the table predates
+it). `ImageRequest` keeps the first 14 bytes — the longest pattern is
+`RIFF????WEBPVP` — and discards the rest of the body, so nothing buffers an
+image this engine cannot decode anyway.
+
+The one row still red is a truncated image: enough bytes for the signature, not
+enough to decode. Closing it means decoding, which is a different project.
 
 #### The row, finally
 

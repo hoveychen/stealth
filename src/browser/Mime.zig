@@ -422,7 +422,7 @@ pub const IMAGE_SIGNATURE_LEN = 14;
 ///
 /// This is what decides whether an `<img>` fires `load` or `error`, and the
 /// header plays no part in it. Measured on Chrome 151 (probe
-/// `tools/fingerprint/probes/expr-img-sniff.js`): PNG bytes load when the
+/// `tools/fingerprint/img-sniff.mjs`): PNG bytes load when the
 /// response declares `image/png`, `application/octet-stream`, `text/html`, or
 /// no Content-Type at all -- and even when it answers 404 or 500. HTML bytes
 /// error under every one of those, `image/png` included.

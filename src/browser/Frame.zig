@@ -2699,8 +2699,8 @@ const ImageRequest = struct {
         // The status is not consulted, on purpose. Chrome 151 fires `load` for
         // an <img> whose response answers 404 or 500 with real PNG bytes, and
         // `error` for one that answers 200 with a page (probe
-        // `expr-img-sniff.js`): what settles it is the body, and a status code
-        // does not see the body.
+        // `tools/fingerprint/img-sniff.mjs`): what settles it is the body, and
+        // a status code does not see the body.
         if (transfer.contentType()) |ct| {
             const mime = Mime.parse(ct) catch null;
             if (mime) |m| {
