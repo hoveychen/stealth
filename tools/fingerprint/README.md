@@ -7236,3 +7236,81 @@ engine already resembles headed Chrome more than the oracle does, and the oracle
 clears the challenge anyway. Useful as an exclusion — populated high-entropy
 hints are not required for a pass — and a warning: for client-hint work the
 target column is the headed snapshot, not this one.
+
+## Inside the widget realm, with site isolation left on (E2, 2026-08-21)
+
+Reading what the challenge widget does has needed `--same-process` until now,
+and that flag cannot be used to observe a run that passes: headed Chrome goes
+5/5 to 0/3 with it. So every previous widget-realm reading from Chrome came from
+a Chrome the guard rejects — the same defect the section above fixed for the
+property diff, one layer down.
+
+`vm-trace.mjs --attach-frames` closes it. `Target.setAutoAttach` with
+`waitForDebuggerOnStart`, recursively, gives each out-of-process frame its own
+session; the bootstrap is installed on that session and the target is released
+only afterwards, so the instrument is in place before the widget's first inline
+script — which is the script that installs its globals. `--chrome-arg` came
+along for the user-agent fix. With both, the reference is a Chrome that clears
+the challenge and whose widget realm is fully readable:
+
+```
+realms: https://www.scrapingcourse.com/antibot-challenge
+        https://challenges.cloudflare.com/cdn-cgi/challenge-platform/…/new/normal
+```
+
+### The widget realm is not where this engine differs
+
+`--reach` wraps every global the widget installs and counts calls. Keyed by name
+rather than by position — the obfuscated names are stable within a delivery, so
+the two columns line up — Chrome against lightpanda in the widget realm:
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `runProgram` first argument | 617 664 | 617 272 |
+| `xBEPx7` calls | 83 | 83 |
+| `ykmX3` calls | 56 | 56 |
+| `UXeS6` calls | 55 | 58 |
+| `Runtime.exceptionThrown` | none | none |
+
+Nothing throws, nothing is absent, and the volume of work matches. Whatever the
+guard reads, it is not a call the widget makes and this engine refuses.
+
+**A retraction, and the reason it is here.** The first paired run said something
+else entirely — lightpanda's `runProgram` taking 6 028 characters where Chrome
+took 617 664, both realms reporting the identical string, every call count three
+to nine times lower. Read alone that is a clean story: the server hands this
+engine a stub. It is wrong. The very next run of the same command on the same
+binary produced the table above. The pass/fail verdict at this station has been
+stable across 27 trials and it is tempting to generalise that stability to
+everything else measured here; the program the server returns is *not* stable,
+and a single `--reach` run cannot carry a conclusion about it. Two runs minimum,
+and prefer the one that agrees with the wire.
+
+### What is still unexplained: the parent is never told to finish
+
+The one asymmetry that survives both runs is at the end of the conversation, and
+it is in the *parent* realm. Chrome, with frames attached:
+
+| POST | Chrome | lightpanda |
+|---|---|---|
+| parent `fo/` #1 | 2 306 | 2 306 |
+| widget `fo/` #1 | 4 716 | 4 663 |
+| widget `fo/` #2 | >64 KB | >64 KB |
+| **parent `fo/` #2** | **8 770 → 200, pass** | **never sent** |
+
+lightpanda gets the same program, runs it as hard, and posts the same large
+second round from the widget — and then the parent never posts the solved
+challenge. The step between those two is the widget telling its parent it is
+done, which is a `postMessage` across the frame boundary, not a call inside
+either realm. That is the next thing to instrument, and neither of the two
+instruments in this directory currently records it.
+
+### An instrumentation gap this turned up
+
+`Network.loadingFinished.encodedDataLength` is `0` from this engine for every
+request (`1` and `188` on two of them, which is not a size either). Chrome
+reports real byte counts, so `antibot-sweep --trace` now records response sizes
+— useful on the reference, unusable as a comparison until this engine fills the
+field in. The `fo/` reply size is exactly the number worth cross-checking the
+page-side instrument against, which is what made the missing field cost
+something here rather than merely being absent.

@@ -215,13 +215,20 @@ const onEvent = (msg) => {
             // a browser is exactly the wrong audience for a patched prototype.
             const body = p.request?.postData;
             push({
-                ev: 'req', method: p.request?.method, url: p.request?.url, type: p.type,
+                ev: 'req', id: p.requestId, method: p.request?.method, url: p.request?.url, type: p.type,
                 ...(body === undefined
                     ? (p.request?.hasPostData ? { postLen: -1 } : {})
                     : { postLen: body.length, post: body.slice(0, 300) }),
             });
         } else if (msg.method === 'Network.responseReceived') {
-            push({ ev: 'res', status: p.response?.status, url: p.response?.url, type: p.type });
+            push({ ev: 'res', id: p.requestId, status: p.response?.status, url: p.response?.url, type: p.type });
+        } else if (msg.method === 'Network.loadingFinished') {
+            // How big the reply was, not just that it came. A Cloudflare `fo/`
+            // response *is* the VM program the client then runs -- its length
+            // decides how much work the challenge asks for -- and the page-side
+            // instruments can only see it after the engine has parsed it. This
+            // is the same number off the wire, so the two can be cross-checked.
+            push({ ev: 'done', id: p.requestId, len: p.encodedDataLength });
         } else if (msg.method === 'Network.loadingFailed') {
             push({ ev: 'fail', text: p.errorText, url: p.request?.url });
         } else if (msg.method === 'Runtime.consoleAPICalled') {

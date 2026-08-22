@@ -74,8 +74,8 @@
 //   node tools/fingerprint/vm-trace.mjs <lightpanda|chrome> [--doc path]
 //        [--settle ms] [--cap n] [--out results/x.json] [--port n]
 //        [--top-level] [--no-determinize] [--reach] [--kick name|''] [--kick-after ms]
-//        [--url live-url] [--same-process] [--no-patch] [--serve]
-//        [--headed] [--log-level debug] [--keep]
+//        [--url live-url] [--attach-frames] [--same-process] [--no-patch] [--serve]
+//        [--headed] [--chrome-arg SWITCH]... [--log-level debug] [--keep]
 //   node tools/fingerprint/vm-trace.mjs diff <a.json> <b.json> [--window 8]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
@@ -94,6 +94,13 @@ const arg = (name, fallback) => {
     return i < 0 ? fallback : process.argv[i + 1];
 };
 const has = (name) => process.argv.includes(name);
+// Repeatable, straight through to the browser. `--chrome-arg
+// --user-agent=<the headed string>` is what makes the headless reference a
+// browser this guard accepts (README, "the headless tell is one word").
+const chromeArgs = process.argv.reduce(
+    (acc, a, i) => (a === '--chrome-arg' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc),
+    [],
+);
 
 // Paths land under tools/fingerprint/ unless they already say tools/, matching
 // exception-frames.mjs -- an --out that silently wrote somewhere else once put
@@ -460,6 +467,16 @@ if (has('--serve')) {
     await new Promise(() => { });
 }
 
+// One source, installed into the page target and into every frame target that
+// attaches, so a realm's readings do not depend on which process it landed in.
+const attachFrames = has('--attach-frames');
+const bootstrapSrc = (DETERMINIZE ? DETERMINIZE_SRC : '')
+    + BOOTSTRAP
+        .replace('__CAP__', String(CAP))
+        .replace('__KICK__', JSON.stringify(KICK))
+        .replace('__KICK_MS__', String(KICK_MS))
+    + (has('--reach') ? REACH_SRC : '');
+
 // startIndex -> entries, as they arrive over the console.
 const chunks = new Map();
 const engineLog = [];
@@ -476,10 +493,17 @@ const proc = engine === 'chrome'
         // which reads as "Chrome recorded nothing" when in fact nothing was
         // listened to. Only for reading the child realm; it does change how
         // the reference browser is configured, so it stays behind a flag.
+        //
+        // Prefer `--attach-frames`. Turning site isolation off costs the
+        // verdict: headed Chrome goes 5/5 to 0/3 on the same station with it
+        // (README, results/e2/), so whatever the widget does under this flag is
+        // what a *rejected* Chrome's widget does. Attaching to the iframe's own
+        // target reads the same realm and leaves the browser alone.
         ...(has('--same-process')
             ? ['--disable-features=IsolateOrigins,site-per-process', '--disable-site-isolation-trials']
             : []),
         ...(has('--headed') ? [] : ['--headless=new']),
+        ...chromeArgs,
     ], { stdio: ['ignore', 'pipe', 'pipe'] })
     : spawn(LIGHTPANDA, [
         'serve', '--host', '127.0.0.1', '--port', String(PORT),
@@ -507,6 +531,28 @@ try {
     cdp.on((msg) => {
         const p = msg.params ?? {};
         switch (msg.method) {
+            // An out-of-process iframe is a target of its own, and it starts
+            // paused so the instrument can be in place before its first inline
+            // script runs -- which is the whole point here, since that script
+            // is what installs the widget's globals. Enable, inject, release,
+            // in that order; releasing early loses the realm.
+            case 'Target.attachedToTarget': {
+                if (!attachFrames || !p.sessionId) break;
+                const child = p.sessionId;
+                (state.frameSessions ??= []).push(p.targetInfo?.url?.slice(0, 140) ?? child);
+                (async () => {
+                    for (const domain of ['Runtime', 'Log', 'Network', 'Page']) {
+                        await cdp.send(`${domain}.enable`, undefined, child).catch(() => { });
+                    }
+                    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: bootstrapSrc }, child)
+                        .catch(() => { });
+                    // Nested iframes are targets of the target, not of the page.
+                    await cdp.send('Target.setAutoAttach',
+                        { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, child).catch(() => { });
+                    await cdp.send('Runtime.runIfWaitingForDebugger', undefined, child).catch(() => { });
+                })();
+                break;
+            }
             case 'Runtime.consoleAPICalled': {
                 const text = (p.args ?? []).map((a) => a.value ?? a.description ?? a.type).join(' ');
                 const hello = /^@@VTHELLO@@([\s\S]*)$/.exec(text);
@@ -563,14 +609,14 @@ try {
         await cdp.send(`${domain}.enable`, undefined, sessionId).catch(() => { });
     }
 
-    await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
-        source: (DETERMINIZE ? DETERMINIZE_SRC : '')
-            + BOOTSTRAP
-                .replace('__CAP__', String(CAP))
-                .replace('__KICK__', JSON.stringify(KICK))
-                .replace('__KICK_MS__', String(KICK_MS))
-            + (has('--reach') ? REACH_SRC : ''),
-    }, sessionId).catch((err) => { state.bootstrapError = String(err.message ?? err); });
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: bootstrapSrc }, sessionId)
+        .catch((err) => { state.bootstrapError = String(err.message ?? err); });
+
+    if (attachFrames) {
+        await cdp.send('Target.setAutoAttach',
+            { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sessionId)
+            .catch((err) => { state.attachError = String(err.message ?? err); });
+    }
 
     await cdp.send('Page.navigate', { url }, sessionId);
     await sleep(SETTLE);
