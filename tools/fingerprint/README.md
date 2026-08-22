@@ -7279,6 +7279,56 @@ intrinsic size stays 0. lightpanda gets the intrinsic size right and the box
 wrong, and 5×5 is a reading no browser gives. The blank cell was not a
 collection failure; it was the answer.
 
+**Fixed** (`Element.hasBrokenImageBox`): a connected `<img>` with a src that
+never became a picture now lays out as the icon, and the same probe reads
+identically on both engines — 16 for `width`, `height`, `offsetWidth`,
+`offsetHeight` and the rect, 0 for `naturalWidth`. The icon fills only what no
+attribute declared, and only where one would be drawn. Chrome, measured across
+ten shapes:
+
+| `<img>` | Chrome `width` | why |
+|---|---|---|
+| connected, broken, no size attribute | 16 | the icon |
+| `width="100"` | 100 | declared size wins |
+| `width="invalid"`, `width="-5"` | 16 | nothing usable declared |
+| detached, broken | 0 | not rendered — reflects the attribute |
+| detached, broken, `width="100"` | 100 | ditto |
+| connected, no src / `src=""` | 0 | never asked for bytes, so nothing broke |
+| `alt=""` | 0 | explicitly decorative; Chrome draws nothing |
+| `display:none` | 0 | not rendered |
+| `width="0"` | 0 (and height 0) | a declared zero collapses the whole box |
+| `width="50%"` | 370 | resolved against the container |
+
+The first six are what the fix implements. The last four are untouched:
+`alt=""` and `width="0"` read 16 here where Chrome reads 0, and percentage
+widths are not modelled anywhere in this engine. None is a row any detector
+reads, and each would be a branch with no probe behind it.
+
+#### …but the sannysoft row is still blank, for a second reason
+
+Re-collecting the live site with the fix in place, the row is *still* empty
+while the rows after it in the same script (`webgl-vendor`, the canvas set) all
+report — so the page got there and past it. Its source says why:
+
+```js
+image.onerror = function () {
+  brokenImageDimensionsElement.innerHTML = `${image.width}x${image.height}`;
+```
+
+The cell is written from `onerror`, and **no `<img>` in this engine ever fires
+`error`**. `Image.imageAddedCallback` queues `load` the moment a src is set,
+whatever the fetch then does; `Frame.requestImage` discards the response and
+says so in a comment. `<script>` and `<link>` both report their failures
+(`Frame.loadExternalStylesheet` fires `error` on a resolve failure, a transport
+failure, a non-2xx status and an oversized body), so the gap is images alone.
+
+That is a larger tell than the dimensions were, and a separate change: the
+stylesheet path can answer synchronously because it blocks on `syncRequest`,
+while images go out through the async `makeRequest` whose callbacks drop the
+body, so reporting per-image failure means carrying the element across that
+boundary. Tracked on its own; the dimensions are correct underneath it, and
+the row will read `16x16` the moment the event arrives.
+
 ### The global surface: 36 absent, and 2 that no Chrome has
 
 `window.ownPropertyNames.count` only records a number, so
