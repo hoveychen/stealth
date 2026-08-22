@@ -1,0 +1,835 @@
+{
+  "engine": "lightpanda",
+  "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+  "settleMs": 30000,
+  "debugger": {
+    "requested": true,
+    "supported": false,
+    "pauses": 0,
+    "error": "-31998 UnknownDomain"
+  },
+  "records": [
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'length')",
+      "frames": [
+        {
+          "fn": "Ma",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 21189,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "La",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 22644,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "tr",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 23064,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Da",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 25215,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "_e",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 72035,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Ve",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 74556,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "missing": [
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "contentVisibility on [object CSSStyleDeclaration]",
+        "display on [object CSSStyleDeclaration]",
+        "opacity on [object CSSStyleDeclaration]",
+        "position on [object CSSStyleDeclaration]",
+        "transform on [object CSSStyleDeclaration]"
+      ]
+    },
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'length')",
+      "frames": [
+        {
+          "fn": "Ma",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 21189,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "La",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 22644,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "tr",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 23064,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Da",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 25215,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "_e",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 72035,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Ve",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 74556,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "missing": [
+        "globalThis on [object Array]",
+        "5 on [object Array]",
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "Hqio5 on [object Window]",
+        "6 on [object Array]",
+        "contentVisibility on [object CSSStyleDeclaration]",
+        "display on [object CSSStyleDeclaration]",
+        "opacity on [object CSSStyleDeclaration]",
+        "position on [object CSSStyleDeclaration]",
+        "transform on [object CSSStyleDeclaration]"
+      ]
+    },
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'length')",
+      "frames": [
+        {
+          "fn": "Ma",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 21189,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "La",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 22644,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "tr",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 23064,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Da",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 25215,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "_e",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 72035,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Ve",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 74556,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "missing": [
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "8 on [object Array]",
+        "5 on [object Array]",
+        "8 on [object Array]",
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "contentVisibility on [object CSSStyleDeclaration]",
+        "display on [object CSSStyleDeclaration]",
+        "opacity on [object CSSStyleDeclaration]",
+        "position on [object CSSStyleDeclaration]",
+        "transform on [object CSSStyleDeclaration]"
+      ]
+    },
+    {
+      "why": "Error.toString",
+      "name": "TypeError",
+      "message": "Cannot read properties of undefined (reading 'length')",
+      "frames": [
+        {
+          "fn": "Ma",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 21189,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "La",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 22644,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "tr",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 23064,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Da",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 25215,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "_e",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 72035,
+          "isEval": false,
+          "isNative": false
+        },
+        {
+          "fn": "Ve",
+          "file": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "line": 1,
+          "col": 74556,
+          "isEval": false,
+          "isNative": false
+        }
+      ],
+      "realm": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "missing": [
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "5 on [object Array]",
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "6 on [object Array]",
+        "5 on [object Array]",
+        "contentVisibility on [object CSSStyleDeclaration]",
+        "display on [object CSSStyleDeclaration]",
+        "opacity on [object CSSStyleDeclaration]",
+        "position on [object CSSStyleDeclaration]",
+        "transform on [object CSSStyleDeclaration]"
+      ]
+    }
+  ],
+  "pauses": [],
+  "console": [
+    "error: [Cloudflare Turnstile] Unexpected error caught: TypeError: Cannot read properties of undefined (reading 'length') , with debug info: SCTYgo5clX4vhrgu3iktyY83TGCM60x07KJs/juAReM=$vGv8KplDl3Yx4w1WIffAIQ==>TB31hFOw/LbaTRtsdA0PFw==$3OlVvfTaM+3R5iyZhx0mvw==",
+    "error: [Cloudflare Turnstile] Unexpected error caught: TypeError: Cannot read properties of undefined (reading 'length') , with debug info: SCTYgo5clX4vhrgu3iktyY83TGCM60x07KJs/juAReM=$vGv8KplDl3Yx4w1WIffAIQ==>AKG+Di5iFUvTgRa4Qe26NP72NK19PaOHnjZw0K/QsZ8=$gN/XsTR0Fzxw+sfQgHo+lA==",
+    "error: [Cloudflare Turnstile] Unexpected error caught: TypeError: Cannot read properties of undefined (reading 'length') , with debug info: SCTYgo5clX4vhrgu3iktyY83TGCM60x07KJs/juAReM=$vGv8KplDl3Yx4w1WIffAIQ==>tuvyPzBDj3QTuNg0ADeOHedFr/UUAqmASVDoy/eViME=$9/+7Lmjvg0ZYEs+oZncXeA==",
+    "error: [Cloudflare Turnstile] Unexpected error caught: TypeError: Cannot read properties of undefined (reading 'length') , with debug info: SCTYgo5clX4vhrgu3iktyY83TGCM60x07KJs/juAReM=$vGv8KplDl3Yx4w1WIffAIQ==>TB31hFOw/LbaTRtsdA0PFw==$3OlVvfTaM+3R5iyZhx0mvw=="
+  ],
+  "cdpExceptions": [],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed26d71ff55e49",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed26d71ff55e49",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26d71ff55e49/oh5R01zC2Zjg9",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26d71ff55e49/oh5R01zC2Zjg9",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/h71yz/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/h71yz/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26d71ff55e49/oh5R01zC2Zjg9",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26d71ff55e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26d71ff55e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26d71ff55e49/oh5R01zC2Zjg9",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed26ec8ffb5e49",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed26ec8ffb5e49",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/QDwu98EzKYEwL",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/QDwu98EzKYEwL",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4czeg/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4czeg/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/QDwu98EzKYEwL",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/QDwu98EzKYEwL",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed270d5fca5e49",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed270d5fca5e49",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/0Lt3zLXTGM8vK",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/0Lt3zLXTGM8vK",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/97z5e/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/97z5e/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/0Lt3zLXTGM8vK",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/0Lt3zLXTGM8vK",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed27477f585e49",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed27477f585e49",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/jO3CVVn923VJd",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/jO3CVVn923VJd",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/dzfx5/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/dzfx5/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/jO3CVVn923VJd",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/jO3CVVn923VJd",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/managed",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    }
+  ],
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.764+36bfd2d0a",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9237/"
+  },
+  "tripwire": true,
+  "frames": [
+    {
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "line": 1,
+      "col": 21189,
+      "scriptId": null,
+      "via": "Network.getResponseBody",
+      "base": "doc (no inline script)",
+      "docLine": 1,
+      "docCol": 21189,
+      "lineLength": 84235,
+      "before": "unction Wr(e){return e.w>0&&e.h>0&&e.x+e.w>0&&e.y+e.h>0&&e.x<window.innerWidth&&e.y<window.innerHeight}function Yi(e){return e.isConnected?Wr(Oa(e)):!1}function Ma(e){var t=arguments.length>1&&arguments[1]!==void 0?arguments[1]:80;return e.",
+      "at": "length<=t?e:\"\".concat(e.slice(0,t-Ra.length)).concat(Ra)}fun",
+      "after": "ction Ur(e,t){return e?e===t.wrapper?\"wrapper\":e===t.iframeHost?\"iframe-host\":e===t.iframe?\"iframe\":e===document.body?\"body\":e===document.documentElement?\"document-element\":e===t.w"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "line": 1,
+      "col": 22644,
+      "scriptId": null,
+      "via": "cache",
+      "base": "doc (no inline script)",
+      "docLine": 1,
+      "docCol": 22644,
+      "lineLength": 84235,
+      "before": "tyle(e);return{connected:e.isConnected,element:(r=Ur(e,t))!==null&&r!==void 0?r:\"unknown\",inViewport:e.isConnected&&Wr(n),rect:n,style:{contentVisibility:a.contentVisibility,display:a.display,opacity:a.opacity,position:a.position,transform:",
+      "at": "Ma(a.transform),visibility:a.visibility}}}function Na(e,t){v",
+      "after": "ar r,n=window.getComputedStyle(e);return{connected:e.isConnected,element:(r=Ur(e,t))!==null&&r!==void 0?r:\"unknown\",inViewport:!1,rect:{h:0,w:0,x:0,y:0},style:{contentVisibility:n."
+    },
+    {
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "line": 1,
+      "col": 23064,
+      "scriptId": null,
+      "via": "cache",
+      "base": "doc (no inline script)",
+      "docLine": 1,
+      "docCol": 23064,
+      "lineLength": 84235,
+      "before": "ewport:!1,rect:{h:0,w:0,x:0,y:0},style:{contentVisibility:n.contentVisibility,display:n.display,opacity:n.opacity,position:n.position,transform:Ma(n.transform),visibility:n.visibility}}}function tr(e,t,r){var n=r.get(e);if(n)return n;var a=",
+      "at": "La(e,t);return r.set(e,a),a}function nr(e,t){return t.length",
+      "after": "===0?null:{element:Fa(e.element),reasons:t}}function Pa(e,t,r,n){var a=arguments.length>4&&arguments[4]!==void 0?arguments[4]:!1,u=Ca(t);if(t.connected||u.push(\"dt\"),u.length>0)ret"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "line": 1,
+      "col": 25215,
+      "scriptId": null,
+      "via": "cache",
+      "base": "doc (no inline script)",
+      "docLine": 1,
+      "docCol": 25215,
+      "lineLength": 84235,
+      "before": ".appearance)!==null&&v!==void 0?v:ae.Always,expectedHidden:!0,expectedHiddenReason:l.reason,hostParent:f,isExecuting:e.isExecuting,mode:(_=e.mode)!==null&&_!==void 0?_:null,mount:d,reasons:[],unexpectedHidden:!1,viewport:p}}var w=new Map,L=",
+      "at": "tr(e.wrapper,u,w),x=tr(a,u,w),N=tr(t,u,w),k=Fr(e.wrapper,L,u",
+      "after": ",w),I=Fr(a,x,u,w),O=Fr(t,N,u,w),oe=[d===\"wrapper\"?null:\"m:\".concat(ro(d),\":\").concat(Fa(f)),Dr(\"wrapper\",k),Dr(\"iframeHost\",I),Dr(\"iframe\",O)].filter(function(te){return te!==null}"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "line": 1,
+      "col": 72035,
+      "scriptId": null,
+      "via": "cache",
+      "base": "doc (no inline script)",
+      "docLine": 1,
+      "docCol": 72035,
+      "lineLength": 84235,
+      "before": "d 0||Re.call(o);break}case\"widgetStale\":{o.isStale=!0;break}case\"requestExtraParams\":{o.widgetParamsStartTimeTsMs=X();var Q=Le(o,s);Q||E(\"Received state for an unknown widget: \".concat(i.widgetId),3078),o.isResetting=!1;var Pt={},Ft=X(),ce=",
+      "at": "Da(o,Q),he=Bo(o)?aa(o.wrapper):void 0,dt={\"d.cT\":p(),\"ht.atr",
+      "after": "s\":f(document.body.parentElement),\"pg.ref\":document.referrer,pi:{ffp:ea(o.wrapper),ii:window.self!==window.top,lH:window.location.href,mL:document.querySelectorAll(\"meta\").length,p"
+    },
+    {
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "line": 1,
+      "col": 74556,
+      "scriptId": null,
+      "via": "cache",
+      "base": "doc (no inline script)",
+      "docLine": 1,
+      "docCol": 74556,
+      "lineLength": 84235,
+      "before": "t(i.origin,\".\"));return}if(!(c.widgetId===\"\"||!g.widgetMap.has(c.widgetId))){var m=G(c.widgetId),s=g.widgetMap.get(c.widgetId);if(s!==void 0){if(!Xo(i,s,m)){S(\"Ignored message from unexpected source for event: \".concat(c.event,\".\"));return}",
+      "at": "_e(c)}}}};g.msgHandler=Ve,g.internalMsgHandler=_e,window.add",
+      "after": "EventListener(\"message\",Ve);function le(C){var i;if(typeof C==\"string\"){var c=ur(C);if(c!==null)return c;try{var m=document.querySelector(C);return m===null?null:le(m)}catch(o){ret"
+    }
+  ],
+  "engineLog": [
+    "$time=1787352158374 $scope=frame $level=info $msg=\"navigate\" url=about:blank method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787352158401 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit kind=javascript",
+    "$time=1787352158597 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/QDwu98EzKYEwLwAvmNPcDBYAYLw8UlRDh.uhZmXHPds-1787352158-1.2.1.1-TZ5igbhnCQ5mMdhpfPw0KfVyBbWlV7hPa6tBHCQ4mC3oUWxIIDhrMy72IUBk5kYr status=200 len=113576",
+    "$time=1787352158642 $scope=frame $level=info $msg=\"navigate\" url=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4czeg/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787352158731 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4czeg/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto kind=javascript",
+    "$time=1787352158762 $scope=js $level=info $msg=\"console.log\" param.0=@@EXC@@{\"why\":\"Error.toString\",\"name\":\"TypeError\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"frames\":[{\"fn\":\"Ma\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":21189,\"isEval\":false,\"isNative\":false},{\"fn\":\"La\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":22644,\"isEval\":false,\"isNative\":false},{\"fn\":\"tr\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":23064,\"isEval\":false,\"isNative\":false},{\"fn\":\"Da\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":25215,\"isEval\":false,\"isNative\":false},{\"fn\":\"_e\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":72035,\"isEval\":false,\"isNative\":false},{\"fn\":\"Ve\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":74556,\"isEval\":false,\"isNative\":false}],\"realm\":\"https://www.scrapingcourse.com/cloudflare-challenge\",\"missing\":[\"globalThis on [object Array]\",\"5 on [object Array]\",\"6 on [object Array]\",\"5 on [object Array]\",\"5 on [object Array]\",\"Hqio5 on [object Window]\",\"6 on [object Array]\",\"contentVisibility on [object CSSStyleDeclaration]\",\"display on [object CSSStyleDeclaration]\",\"opacity on [object CSSStyleDeclaration]\",\"position on [object CSSStyleDeclaration]\",\"transform on [object CSSStyleDeclaration]\"]}@@END@@",
+    "$time=1787352158763 $scope=js $level=warn $msg=\"console.error\" param.0=[Cloudflare Turnstile] Unexpected error caught: param.1=TypeError: Cannot read properties of undefined (reading 'length') param.2=, with debug info: param.3=SCTYgo5clX4vhrgu3iktyY83TGCM60x07KJs/juAReM=$vGv8KplDl3Yx4w1WIffAIQ==>AKG+Di5iFUvTgRa4Qe26NP72NK19PaOHnjZw0K/QsZ8=$gN/XsTR0Fzxw+sfQgHo+lA==",
+    "$time=1787352158785 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of undefined (reading 'length')\" filename= line_number=0 column_number=0",
+    "$time=1787352158865 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/QDwu98EzKYEwLwAvmNPcDBYAYLw8UlRDh.uhZmXHPds-1787352158-1.2.1.1-TZ5igbhnCQ5mMdhpfPw0KfVyBbWlV7hPa6tBHCQ4mC3oUWxIIDhrMy72IUBk5kYr status=200 len=3256",
+    "$time=1787352158867 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed26ec8ffb5e49/managed status=200 len=2",
+    "$time=1787352163370 $scope=browser $level=info $msg=\"schedule navigation\" url=https://www.scrapingcourse.com/cloudflare-challenge reason=script type=root",
+    "$time=1787352163375 $scope=frame $level=info $msg=\"navigate\" url=https://www.scrapingcourse.com/cloudflare-challenge method=GET reason=script body=false type=root",
+    "$time=1787352163544 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cloudflare-challenge kind=javascript",
+    "$time=1787352163632 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed270d5fca5e49 kind=javascript",
+    "$time=1787352163669 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://www.scrapingcourse.com/bb4e73e8-ff26-48f7-9c85-8e7810c58fa1 err=Abort",
+    "$time=1787352163677 $scope=frame $level=info $msg=\"navigate\" url=about:blank method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787352163702 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit kind=javascript",
+    "$time=1787352163837 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/0Lt3zLXTGM8vK7RA6sN7pvP3kklNDcP5wI0sJNzhD2o-1787352163-1.2.1.1-mc3KX0jPAeA8RD0ZA1ZDI48v5zU.PfAZJ7.BAAd5Dsx2qDo4eO4iyCTcwSDj2sLr status=200 len=113580",
+    "$time=1787352163872 $scope=frame $level=info $msg=\"navigate\" url=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/97z5e/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787352163924 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/97z5e/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto kind=javascript",
+    "$time=1787352163959 $scope=js $level=info $msg=\"console.log\" param.0=@@EXC@@{\"why\":\"Error.toString\",\"name\":\"TypeError\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"frames\":[{\"fn\":\"Ma\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":21189,\"isEval\":false,\"isNative\":false},{\"fn\":\"La\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":22644,\"isEval\":false,\"isNative\":false},{\"fn\":\"tr\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":23064,\"isEval\":false,\"isNative\":false},{\"fn\":\"Da\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":25215,\"isEval\":false,\"isNative\":false},{\"fn\":\"_e\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":72035,\"isEval\":false,\"isNative\":false},{\"fn\":\"Ve\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":74556,\"isEval\":false,\"isNative\":false}],\"realm\":\"https://www.scrapingcourse.com/cloudflare-challenge\",\"missing\":[\"6 on [object Array]\",\"5 on [object Array]\",\"8 on [object Array]\",\"5 on [object Array]\",\"8 on [object Array]\",\"6 on [object Array]\",\"5 on [object Array]\",\"contentVisibility on [object CSSStyleDeclaration]\",\"display on [object CSSStyleDeclaration]\",\"opacity on [object CSSStyleDeclaration]\",\"position on [object CSSStyleDeclaration]\",\"transform on [object CSSStyleDeclaration]\"]}@@END@@",
+    "$time=1787352163960 $scope=js $level=warn $msg=\"console.error\" param.0=[Cloudflare Turnstile] Unexpected error caught: param.1=TypeError: Cannot read properties of undefined (reading 'length') param.2=, with debug info: param.3=SCTYgo5clX4vhrgu3iktyY83TGCM60x07KJs/juAReM=$vGv8KplDl3Yx4w1WIffAIQ==>tuvyPzBDj3QTuNg0ADeOHedFr/UUAqmASVDoy/eViME=$9/+7Lmjvg0ZYEs+oZncXeA==",
+    "$time=1787352163978 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of undefined (reading 'length')\" filename= line_number=0 column_number=0",
+    "$time=1787352164073 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/0Lt3zLXTGM8vK7RA6sN7pvP3kklNDcP5wI0sJNzhD2o-1787352163-1.2.1.1-mc3KX0jPAeA8RD0ZA1ZDI48v5zU.PfAZJ7.BAAd5Dsx2qDo4eO4iyCTcwSDj2sLr status=200 len=3256",
+    "$time=1787352164108 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed270d5fca5e49/managed status=200 len=2",
+    "$time=1787352172672 $scope=browser $level=info $msg=\"schedule navigation\" url=https://www.scrapingcourse.com/cloudflare-challenge reason=script type=root",
+    "$time=1787352172679 $scope=frame $level=info $msg=\"navigate\" url=https://www.scrapingcourse.com/cloudflare-challenge method=GET reason=script body=false type=root",
+    "$time=1787352172756 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cloudflare-challenge kind=javascript",
+    "$time=1787352172825 $scope=browser $level=info $msg=\"executing script\" src=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ed27477f585e49 kind=javascript",
+    "$time=1787352172849 $scope=browser $level=error $msg=\"worker fetch error\" url=blob:https://www.scrapingcourse.com/8e0c2b14-aab4-4b50-af70-8cae4845784a err=Abort",
+    "$time=1787352172860 $scope=frame $level=info $msg=\"navigate\" url=about:blank method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787352173028 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/jO3CVVn923VJdUy0FswSuqH6XE4V54vqEHG1lYjFH0k-1787352172-1.2.1.1-ELG14aYl8WjYf1E5PkflzvIkeESAbqKjHOtgMhxbnXOuxKFfUTXN.IB6UL.Iwjkz status=200 len=113580",
+    "$time=1787352173186 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit kind=javascript",
+    "$time=1787352173199 $scope=frame $level=info $msg=\"navigate\" url=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/dzfx5/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto method=GET reason=initialFrameNavigation body=false type=frame",
+    "$time=1787352173251 $scope=browser $level=info $msg=\"executing script\" src=https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/dzfx5/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto kind=javascript",
+    "$time=1787352173294 $scope=js $level=info $msg=\"console.log\" param.0=@@EXC@@{\"why\":\"Error.toString\",\"name\":\"TypeError\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"frames\":[{\"fn\":\"Ma\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":21189,\"isEval\":false,\"isNative\":false},{\"fn\":\"La\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":22644,\"isEval\":false,\"isNative\":false},{\"fn\":\"tr\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":23064,\"isEval\":false,\"isNative\":false},{\"fn\":\"Da\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":25215,\"isEval\":false,\"isNative\":false},{\"fn\":\"_e\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":72035,\"isEval\":false,\"isNative\":false},{\"fn\":\"Ve\",\"file\":\"https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit\",\"line\":1,\"col\":74556,\"isEval\":false,\"isNative\":false}],\"realm\":\"https://www.scrapingcourse.com/cloudflare-challenge\",\"missing\":[\"6 on [object Array]\",\"5 on [object Array]\",\"5 on [object Array]\",\"6 on [object Array]\",\"5 on [object Array]\",\"6 on [object Array]\",\"5 on [object Array]\",\"contentVisibility on [object CSSStyleDeclaration]\",\"display on [object CSSStyleDeclaration]\",\"opacity on [object CSSStyleDeclaration]\",\"position on [object CSSStyleDeclaration]\",\"transform on [object CSSStyleDeclaration]\"]}@@END@@",
+    "$time=1787352173295 $scope=js $level=warn $msg=\"console.error\" param.0=[Cloudflare Turnstile] Unexpected error caught: param.1=TypeError: Cannot read properties of undefined (reading 'length') param.2=, with debug info: param.3=SCTYgo5clX4vhrgu3iktyY83TGCM60x07KJs/juAReM=$vGv8KplDl3Yx4w1WIffAIQ==>TB31hFOw/LbaTRtsdA0PFw==$3OlVvfTaM+3R5iyZhx0mvw==",
+    "$time=1787352173318 $scope=js $level=warn $msg=\"window.reportError\" message=\"TypeError: Cannot read properties of undefined (reading 'length')\" filename= line_number=0 column_number=0",
+    "$time=1787352173363 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/jO3CVVn923VJdUy0FswSuqH6XE4V54vqEHG1lYjFH0k-1787352172-1.2.1.1-ELG14aYl8WjYf1E5PkflzvIkeESAbqKjHOtgMhxbnXOuxKFfUTXN.IB6UL.Iwjkz status=200 len=3256",
+    "$time=1787352173365 $scope=http $level=info $msg=\"request complete\" source=xhr url=https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/eb/214679268:1787349612:GWprpcAkl8GdUUn-wlWnJ5jqWhYCLCkyJoXtu6FcwcU/a2ed27477f585e49/managed status=200 len=2"
+  ]
+}

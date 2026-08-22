@@ -1,0 +1,108 @@
+{
+  "engine": "lightpanda",
+  "url": "http://127.0.0.1:8792/",
+  "settleMs": 8000,
+  "debugger": {
+    "requested": true,
+    "supported": false,
+    "pauses": 0,
+    "error": "-31998 UnknownDomain"
+  },
+  "records": [],
+  "pauses": [],
+  "console": [],
+  "cdpExceptions": [],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:8792/",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:8792/",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:8792/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 404,
+      "url": "http://127.0.0.1:8792/favicon.ico",
+      "type": "Image"
+    }
+  ],
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.764+36bfd2d0a",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9237/"
+  },
+  "tripwire": true,
+  "tripwireSkip": [
+    "CSSStyleDeclaration"
+  ],
+  "tripwireStats": {
+    "wrapped": 389,
+    "candidates": 389,
+    "skipped": [
+      "CSSStyleDeclaration"
+    ]
+  },
+  "topRealmMissing": [
+    "SET __EXC_TRIPWIRE on [object Window] = object",
+    "SET UlwL3 on [object Window] = function",
+    "SET UXeS6 on [object Window] = function",
+    "SET WfQnx8 on [object Window] = function",
+    "SET _cf_chl_opt on [object Window] = object",
+    "SET pwuPn1 on [object Window] = function",
+    "SET runProgram on [object Window] = function",
+    "SET gZAJ3 on [object Window] = boolean",
+    "SET gsnqe5 on [object Window] = function",
+    "SET ECAU8 on [object Window] = function",
+    "SET GNHLX2 on [object Window] = object",
+    "SET qUbHu8 on [object Window] = number",
+    "SET xBEPx7 on [object Window] = function",
+    "SET ykmX3 on [object Window] = function",
+    "SET PoSLZ4 on [object Window] = function",
+    "SET BppE3 on [object Window] = function",
+    "SET rCUjg1 on [object Window] = function",
+    "SET wdclO4 on [object Window] = function",
+    "SET MoAhr7 on [object Window] = function",
+    "SET GLLj2 on [object Window] = function",
+    "SET SRPD9 on [object Window] = function",
+    "SET MAEU9 on [object Window] = object",
+    "SET mUMum6 on [object Window] = function",
+    "SET gUsZ0 on [object Window] = function",
+    "SET Phaq1 on [object Window] = object",
+    "9 on [object Array]",
+    "5 on [object Array]",
+    "qJByo6 on [object Window]  @     at Object.get (anonymous:142:44) |     at http://127.0.0.1:8792/:1:23063",
+    "qJByo6 on [object Window]",
+    "qJByo6 on [object Window]",
+    "qJByo6 on [object Window]",
+    "qJByo6 on [object Window]",
+    "qJByo6 on [object Window]",
+    "qJByo6 on [object Window]",
+    "toJSON on [object Array]  @     at Object.get (anonymous:142:44) |     at JSON.stringify (<anonymous>) |     at <anonymous>:1:6",
+    "toJSON on [object Array]",
+    "toJSON on [object Array]"
+  ],
+  "frames": [],
+  "engineLog": [
+    "$time=1787363015934 $scope=telemetry $level=info $msg=\"telemetry status\" disabled=false",
+    "$time=1787363015935 $scope=app $level=note $msg=\"server running\" address=127.0.0.1:9237",
+    "$time=1787363016159 $scope=app $level=info $msg=\"client connected\" ip=127.0.0.1:63199",
+    "$time=1787363016166 $scope=app $level=info $msg=\"client connected\" ip=127.0.0.1:63201",
+    "$time=1787363016169 $scope=app $level=info $msg=\"client connected\" ip=127.0.0.1:63202",
+    "$time=1787363016190 $scope=frame $level=info $msg=\"navigate\" url=http://127.0.0.1:8792/ method=GET reason=address_bar body=false type=root",
+    "$time=1787363016202 $scope=browser $level=info $msg=\"executing script\" src=http://127.0.0.1:8792/ kind=javascript",
+    "$time=1787363016243 $scope=js $level=warn $msg=\"call caught\" err=JsException caught.exception=\"Cannot read properties of null (reading 'appendChild')\" caught.stack=\"TypeError: Cannot read properties of null (reading 'appendChild')\\n    at wX (http://127.0.0.1:8792/:1:134349)\\n    at fI (http://127.0.0.1:8792/:1:119924)\" caught.line=1 caught.caught=true",
+    "$time=1787363016243 $scope=js $level=warn $msg=\"timer\" name=window.setTimeout err=JsException"
+  ]
+}

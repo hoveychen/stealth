@@ -6553,3 +6553,49 @@ but "where does the VM first diverge" — the earliest host call whose answer di
 from Chrome's. That is a different instrument: the two engines have to be run
 against the same document and compared step by step, not sampled at the point where
 one of them finally throws.
+
+### The captured widget document replays offline — in one engine
+
+Finding the *first* divergence needs both engines running the same document, which
+the live page cannot give: every fetch is a differently-obfuscated build behind a
+different session. So capture one and serve it back. `--sources` already writes the
+documents out; a plain `python3 -m http.server` on another origin, no Cloudflare
+session, no nonce ceremony beyond the one in the document's own `<meta>` CSP.
+
+**It runs.** This engine installs 25 of the 27 obfuscated globals (`UlwL3`,
+`WfQnx8`, `runProgram`, `ECAU8`, …) and executes deep into the VM. So the harness
+the next step needs is available, and `Fetch.enable` supporting only
+`requestStage: Request` stops mattering: a local copy can be rewritten freely.
+
+Two things it does *not* yet give, both worth knowing before building on it:
+
+* **It does not reproduce the throw.** Offline, the same VM reaches a comparable
+  undefined-global read — `qJByo6` this time, again a name nobody installed, seven
+  times — and does not throw. So the live context still supplies something
+  (`_cf_chl_opt`, the parent frame, the network round trips) that the offline copy
+  does not.
+* **Chrome bails early on the same file**, on `reading 'appendChild'` against
+  `null` — an artefact of replaying a document that expects a container, not the
+  bug. So this is not yet an apples-to-apples A/B; the replay needs the missing
+  context supplied before the two engines can be compared step for step.
+
+### The tripwire does not cover `window` in Chrome, and that is a divergence
+
+Chrome's run of the replay pauses on two exceptions the tool caused itself:
+
+```
+TypeError: Immutable prototype object '#<Location>'    cannot have their prototype set
+TypeError: Immutable prototype object '#<EventTarget>' cannot have their prototype set
+```
+
+`Object.prototype` is not the only immutable-prototype object in Chrome —
+`EventTarget.prototype` and `Location.prototype` are too. So in Chrome the trap
+never gets into `window`'s chain, which is why its buffer recorded **zero** `SET`
+entries while ours recorded 25. Any comparison of the two buffers has to account
+for that; the readings above are ours alone.
+
+This engine, by contrast, accepted **389 of 389** candidate prototypes, EventTarget
+and Location included. That is a real difference and a cheap one to check:
+`Object.setPrototypeOf(EventTarget.prototype, {})` throws in Chrome and succeeds
+here. It sits in the same family as the inline-script `line:col` base — small,
+certain, reproducible, and nothing to do with Turnstile.

@@ -530,6 +530,18 @@ try {
         state.windowReadError = String(err.message ?? err);
     }
 
+    // The tripwire's own buffer, for a run that never threw: "nothing failed"
+    // and "nothing ran" look identical from the records alone.
+    try {
+        const res = await cdp.send('Runtime.evaluate', {
+            expression: 'JSON.stringify({ t: globalThis.__EXC_TRIPWIRE || null, m: globalThis.__EXC_MISSING || [] })',
+            returnByValue: true,
+        }, sessionId);
+        const { t, m } = JSON.parse(res.result?.value ?? '{}');
+        state.tripwireStats = t;
+        state.topRealmMissing = m;
+    } catch { /* no tripwire in this run */ }
+
     // Every position any mechanism named, deduped, with its source context.
     const wanted = new Map();
     const want = (url, line, col, scriptId) => {
