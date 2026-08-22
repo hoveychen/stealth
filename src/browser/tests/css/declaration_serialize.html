@@ -1028,5 +1028,93 @@ function withStyle(text) {
     testing.expectEqual('', removed.style.getPropertyValue('border-top-width'));
 }
 </script>
+
+<script id="a_declaration_chrome_refuses_is_not_stored">
+{
+    // Measured on headed Chrome 151 by tools/fingerprint/probes/probe-css17.js,
+    // 525 readings. A declaration Chrome will not take is not stored at all --
+    // not partially, and not over what was already there.
+    const fresh = () => document.createElement('div');
+    const set = (property, value) => {
+        const el = fresh();
+        el.style.setProperty(property, value);
+        return el;
+    };
+
+    // A shorthand: nothing lands, and the object is indistinguishable from one
+    // that was never touched.
+    for (const value of ['-10px', '10px 20px 30px 40px 50px', 'auto', 'none',
+        '10px / ', '/ 10px', '10px / 20px / 30px', '10']) {
+        const el = set('border-radius', value);
+        testing.expectEqual(0, el.style.length);
+        testing.expectEqual('', el.style.getPropertyValue('border-radius'));
+        testing.expectEqual('', el.style.cssText);
+    }
+
+    // A corner longhand takes one or two components and nothing else -- no
+    // slash, no keyword, no third component.
+    for (const property of ['border-top-left-radius', 'border-start-start-radius']) {
+        for (const value of ['-10px', '10px 20px 30px', '10px / 20px', 'auto', 'none', '10']) {
+            const el = set(property, value);
+            testing.expectEqual(0, el.style.length);
+            testing.expectEqual('', el.style.cssText);
+        }
+    }
+
+    // The values right beside them are still taken, so this is a refusal and
+    // not a retreat.
+    const kept = set('border-radius', '10px 20px / 30px 40px');
+    testing.expectEqual(4, kept.style.length);
+    testing.expectEqual('10px 20px / 30px 40px', kept.style.getPropertyValue('border-radius'));
+
+    // Refusing is not a write: what was there stays, byte for byte.
+    const over = fresh();
+    over.style.setProperty('border-radius', '1px 2px 3px 4px');
+    over.style.setProperty('border-radius', '-1px');
+    testing.expectEqual('1px 2px 3px 4px', over.style.getPropertyValue('border-radius'));
+    testing.expectEqual('border-radius: 1px 2px 3px 4px;', over.style.cssText);
+
+    // Nor a partial one: no longhand of a refused shorthand lands on its own.
+    const partial = set('border-radius', '10px 20px 30px 40px 50px');
+    testing.expectEqual('', partial.style.getPropertyValue('border-top-left-radius'));
+
+    // The sign rule is per property. Neither half of this list is guessable
+    // from the grammar -- it is the measured split between an offset and a size.
+    for (const property of ['margin', 'margin-top', 'top', 'letter-spacing',
+        'word-spacing', 'text-indent', 'outline-offset']) {
+        testing.expectEqual('-10px', set(property, '-10px').style.getPropertyValue(property));
+    }
+    for (const property of ['padding', 'padding-top', 'width', 'height',
+        'border-top-width', 'gap', 'font-size', 'line-height', 'flex-basis']) {
+        testing.expectEqual('', set(property, '-10px').style.getPropertyValue(property));
+    }
+
+    // The test is on the number rather than on the leading minus: negative zero
+    // is not negative, and comes back with the sign dropped.
+    testing.expectEqual('0px', set('padding', '-0px').style.getPropertyValue('padding'));
+    testing.expectEqual('0px', set('border-radius', '-0px').style.getPropertyValue('border-radius'));
+
+    // The percentage rule is a second, independent bit. `outline-offset` is the
+    // property that proves it: it takes a negative length and refuses a
+    // percentage of either sign.
+    testing.expectEqual('', set('outline-offset', '10%').style.getPropertyValue('outline-offset'));
+    testing.expectEqual('', set('border-top-width', '10%').style.getPropertyValue('border-top-width'));
+    testing.expectEqual('10%', set('padding-top', '10%').style.getPropertyValue('padding-top'));
+    testing.expectEqual('10%', set('border-radius', '10%').style.getPropertyValue('border-radius'));
+
+    // Inside a block each declaration is judged alone; a refused one takes no
+    // neighbour with it.
+    const block = withStyle('color: red; border-radius: -1px; padding: 5px');
+    testing.expectEqual('red', block.style.getPropertyValue('color'));
+    testing.expectEqual('', block.style.getPropertyValue('border-radius'));
+    testing.expectEqual('5px', block.style.getPropertyValue('padding'));
+
+    // And a value this engine cannot judge is kept whole rather than refused.
+    // Chrome evaluates the calc and this engine does not, so the reading is
+    // wrong either way -- keeping it is the wrong answer that is not a refusal.
+    testing.expectEqual('calc(10px + 5px)',
+        set('border-radius', 'calc(10px + 5px)').style.getPropertyValue('border-radius'));
+}
+</script>
 </body>
 </html>

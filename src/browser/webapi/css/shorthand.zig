@@ -13,6 +13,7 @@
 const std = @import("std");
 
 const table = @import("chrome_shorthands.zig");
+const chrome_bounds = @import("chrome_bounds.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
 
 const Allocator = std.mem.Allocator;
@@ -727,6 +728,133 @@ fn accepts(longhand: []const u8, component: []const u8) bool {
     return false;
 }
 
+// -- refusing a declaration --------------------------------------------------
+//
+// Everything above answers what a value *becomes*. This answers whether it
+// becomes anything at all: Chrome throws a declaration it cannot parse away,
+// where this engine's only other answer is to keep it whole. Measured over 525
+// readings by tools/fingerprint/probes/probe-css17.js.
+//
+// The whole of it is conservative in one direction, deliberately. Keeping a
+// declaration Chrome refused is the reading this engine already gave before any
+// of this existed -- wrong, but wrong in a way pages survive. Refusing one
+// Chrome kept is a new kind of wrong: the page loses a style it was written
+// with. So every test here is a licence to refuse rather than a requirement to
+// accept, and anything it cannot judge is kept.
+
+/// Whether Chrome throws a *longhand* declaration away. Two independent tests,
+/// measured: the value classes the property takes (`accepts`), and the range it
+/// takes them in (`chrome_bounds`, which the classes cannot see -- `-10px` and
+/// `10px` are both a `<length>` and `margin` takes one where `padding` does not).
+pub fn refusesLonghand(name: []const u8, value: []const u8) bool {
+    if (!judgeable(value)) return false;
+    if (cssWide(std.mem.trim(u8, value, &std.ascii.whitespace)) != null) return false;
+
+    // The grammar half is only asked of a property the generator measured a
+    // value class for. A keyword-only longhand has an empty class list, so
+    // `accepts` there is the keyword table alone, and a keyword missing from it
+    // would read as a refusal rather than as the gap it is.
+    const graded_name = gradedName(name);
+    const classes = table.value_classes.get(graded_name) orelse &.{};
+    const graded = classes.len > 0;
+
+    var components = slashComponents(value);
+    while (components.next()) |component| {
+        if (outOfBounds(name, component)) return true;
+        if (graded and !accepts(graded_name, component)) return true;
+    }
+    return false;
+}
+
+/// The name whose measured grammar answers for this one. Only the four logical
+/// corner spellings need it: `border-radius` expands to the *physical* four, so
+/// no shorthand has ever handed the generator a `border-start-start-radius` and
+/// neither the class table nor the keyword table has heard of it. Measured
+/// (probe-css16, probe-css17): a logical corner takes and refuses exactly what
+/// the physical one does, which is what makes standing in for it honest.
+fn gradedName(name: []const u8) []const u8 {
+    const logical = std.StaticStringMap([]const u8).initComptime(.{
+        .{ "border-start-start-radius", "border-top-left-radius" },
+        .{ "border-start-end-radius", "border-top-right-radius" },
+        .{ "border-end-start-radius", "border-bottom-left-radius" },
+        .{ "border-end-end-radius", "border-bottom-right-radius" },
+    });
+    return logical.get(name) orelse name;
+}
+
+/// The value's components with the `/` among them rather than stopping at it.
+/// Every model above stops, because a `/` is a shorthand's punctuation and none
+/// of them has a use for one; a refusal test wants the opposite, since a `/` no
+/// class accepts is exactly the sort of thing Chrome throws the declaration
+/// away for -- `border-top-left-radius: 10px / 20px`, measured.
+pub fn slashComponents(value: []const u8) Components {
+    var components = Components.init(value);
+    components.slash = true;
+    return components;
+}
+
+/// Whether a shorthand `expand` declined is Chrome's refusal rather than this
+/// engine's retreat. `expand` answers null for both and the difference is the
+/// whole point: a `.layers` or `.components` model is licenced to decline a row
+/// Chrome accepts, so only the two kinds whose decline *is* a grammar failure
+/// are read as one -- a box that was handed five components, and a corner list
+/// whose slashes do not work out.
+pub fn refusesDeclined(entry: Shorthand, value: []const u8) bool {
+    switch (entry.kind) {
+        .box4, .box2, .corners => {},
+        else => return false,
+    }
+    if (cssWide(std.mem.trim(u8, value, &std.ascii.whitespace)) != null) return false;
+    return judgeable(value);
+}
+
+/// Whether this engine can say anything about the value at all. It cannot when
+/// a component is a function whose name `classify` does not know -- `calc()` is
+/// the live one, because Chrome evaluates it and this engine substitutes it, so
+/// neither the class nor the sign of what it holds is visible from here. Nor
+/// when the value carries a comma: a comma-separated list is a grammar nothing
+/// in this file models, and splitting it on whitespace would judge `Arial,` as
+/// a malformed identifier.
+fn judgeable(value: []const u8) bool {
+    if (std.mem.indexOfScalar(u8, value, ',') != null) return false;
+    // A comment. Chrome takes it out and keeps the declaration -- `margin: 10px
+    // /* c */ 20px` is `10px 20px` -- and nothing here removes one, so the
+    // components would come back as punctuation no class accepts.
+    if (std.mem.indexOf(u8, value, "/*") != null) return false;
+    var components = slashComponents(value);
+    while (components.next()) |component| {
+        if (component.len == 0 or component[component.len - 1] != ')') continue;
+        const open = std.mem.indexOfScalar(u8, component, '(') orelse continue;
+        if (!hasClass(functionClass(component[0..open]))) return false;
+    }
+    return components.exhausted();
+}
+
+/// Whether the component is outside the range the property takes them in.
+fn outOfBounds(property: []const u8, component: []const u8) bool {
+    const classes = classify(component);
+    if (classes.percent and chrome_bounds.no_percent.has(property)) return true;
+    if (!classes.length and !classes.percent and !classes.number and
+        !classes.angle and !classes.time) return false;
+    if (!negative(component)) return false;
+    return chrome_bounds.no_negative.has(property);
+}
+
+/// A leading minus is not a negative number. `padding: -0px` is accepted
+/// everywhere `0px` is and reads back with the sign dropped, measured -- and so
+/// a property name that happens to start with one (`-webkit-fill-available`) is
+/// not a number at all, which `numberEnd` answering 0 already says.
+fn negative(component: []const u8) bool {
+    if (component.len == 0 or component[0] != '-') return false;
+    return !isZero(component[0..numberEnd(component)]);
+}
+
+fn hasClass(classes: Classes) bool {
+    return classes.length or classes.percent or classes.number or classes.angle or
+        classes.time or classes.url or classes.string or classes.identifier or
+        classes.colour or classes.function or classes.gradient or classes.image;
+}
+
 const Classes = packed struct {
     length: bool = false,
     percent: bool = false,
@@ -818,7 +946,19 @@ fn numberEnd(component: []const u8) usize {
         i += 1;
         while (i < component.len and std.ascii.isDigit(component[i])) i += 1;
     }
-    return if (i == start) 0 else i;
+    if (i == start) return 0;
+    // An exponent. Chrome takes one and prints the result -- `margin: 1E1px` is
+    // `10px` -- and without this the `E1px` reads as a unit with a digit in it,
+    // so the component classifies as nothing and a refusal test would throw the
+    // declaration away.
+    if (i < component.len and (component[i] == 'e' or component[i] == 'E')) {
+        var exp = i + 1;
+        if (exp < component.len and (component[exp] == '+' or component[exp] == '-')) exp += 1;
+        const digits = exp;
+        while (exp < component.len and std.ascii.isDigit(component[exp])) exp += 1;
+        if (exp > digits) i = exp;
+    }
+    return i;
 }
 
 fn isZero(component: []const u8) bool {

@@ -380,6 +380,12 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
     // is kept whole.
     if (shorthand.lookup(normalized)) |entry| {
         if (try shorthand.expand(frame.local_arena, entry, value)) |expansion| {
+            // Measured: refusing is not a partial write. `border-radius: 10px
+            // 20px 30px 40px 50px` leaves no corner holding anything, so every
+            // longhand has to be acceptable before the first one is stored.
+            for (expansion.names, expansion.values) |name, longhand| {
+                if (shorthand.refusesLonghand(name, longhand)) return false;
+            }
             var changed = false;
             for (expansion.names, expansion.values) |name, longhand| {
                 const canonical = try normalizePropertyValue(frame.local_arena, name, longhand);
@@ -387,6 +393,11 @@ fn storeProperty(self: *CSSStyleDeclaration, property_name: []const u8, value: [
             }
             return changed;
         }
+        if (shorthand.refusesDeclined(entry, value)) return false;
+    } else if (shorthand.refusesLonghand(normalized, value) or
+        tooManyComponents(normalized, value))
+    {
+        return false;
     }
 
     // Normalize the value for canonical serialization
@@ -1982,6 +1993,22 @@ fn twoValueRule(name: []const u8) ?TwoValueRule {
         .{ "border-end-end-radius", .radius },
     });
     return rules.get(name);
+}
+
+/// A longhand with a two-value rule holds those two and no more. Measured: a
+/// corner radius handed three components is thrown away, and so is one handed a
+/// `/` -- the slash belongs to `border-radius`. Only these names are counted,
+/// because they are the ones whose arity was measured; a longhand without a
+/// rule here is left alone rather than assumed to hold one component.
+fn tooManyComponents(name: []const u8, value: []const u8) bool {
+    if (twoValueRule(name) == null) return false;
+    // A comma is a layer list -- `background-size: 10px auto, 20px` is two
+    // layers of two, not four components -- and the rule runs per layer.
+    if (std.mem.indexOfScalar(u8, value, ',') != null) return false;
+    var components = shorthand.slashComponents(value);
+    var count: usize = 0;
+    while (components.next()) |_| count += 1;
+    return count > 2;
 }
 
 fn isLengthProperty(name: []const u8) bool {
