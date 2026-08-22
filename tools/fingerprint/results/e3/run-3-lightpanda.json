@@ -1,0 +1,458 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "startedAt": "2026-08-22T05:41:40.899Z",
+  "egress": {
+    "fl": "465f246",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787377301.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.787+30446c09d",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9226/"
+  },
+  "stations": [
+    {
+      "name": "cf-scrapingcourse",
+      "vendor": "cloudflare",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "guards": "challenge",
+      "settleMs": 40000,
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5jt0c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 403,
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef8cc6ad1fcf2f",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef8cc6ad1fcf2f",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://www.scrapingcourse.com/2c051761-956d-49c5-be12-825d1602db01",
+          "type": "Script"
+        },
+        {
+          "ev": "fail",
+          "text": "Abort"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/656623783:1787374814:EoDGr5oNELtgYOJt1K2WxkHA4jRiWg-D5sp2ZeX_o0I/a2ef8cc6ad1fcf2f/wUlt0HLSG1clce_rGxbeDJEcLC7fGkYCupxUZngwrrw-1787377301-1.2.1.1-sMArB2lYFq3QaRWoT51xCbv6dK6LkB81edsavf_bqorZZ3LF5kWiLnCDEZRMTM5J",
+          "type": "XHR",
+          "postLen": 2306,
+          "post": "woPJvbfIkrW+D0rpDvv5zWnFCn2glF5b6SrZlU7uDBAnC7ghtxdn7jwWNhy1lbQtxyo0SJIHT1IXl-qH0-0IO4Nl6lG3iWSUwyBo49A5JfmcaA+DwbSVUjJWNvFkkZofz1vXyNjm9ifB6FrfFvOtBklJCQzC$ADYO486AoBhMYEi$b8pUAg9vSr3rxDbS74LFOe-nODXTQicktl-yHnCbbtv5Go8pX5QptIYG+2$-oYEpXHl7y6UqHLH-e5H1n7pgOy$WzDzx8aovlLHgQlmBls0vG+20oWJlhdYo$9kO0p4"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/656623783:1787374814:EoDGr5oNELtgYOJt1K2WxkHA4jRiWg-D5sp2ZeX_o0I/a2ef8cc6ad1fcf2f/wUlt0HLSG1clce_rGxbeDJEcLC7fGkYCupxUZngwrrw-1787377301-1.2.1.1-sMArB2lYFq3QaRWoT51xCbv6dK6LkB81edsavf_bqorZZ3LF5kWiLnCDEZRMTM5J",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://www.scrapingcourse.com/c48cf1eb-bacc-4529-afb0-316a121b3df6",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5jt0c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "blob:https://www.scrapingcourse.com/c48cf1eb-bacc-4529-afb0-316a121b3df6",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5jt0c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/bb522f06-9209-4d5a-a8b6-900b7f0b80ee",
+          "type": "Script"
+        },
+        {
+          "ev": "fail",
+          "text": "Abort"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef8cc8fdc6ce70/4wfSxfk.aTNWHhnu7cJXAGxe92eByfhWqM0IayTZN3o-1787377301-1.2.1.1-0OR0H87FFetjjHrwqaWeLwcB3sL0h1byiU0462nAyl99oTQu0n0ZeDAO4e2TJco.",
+          "type": "XHR",
+          "postLen": 4652,
+          "post": "GIFNg04kDMWWUK1JermqWmbaC01i5ehrggc+A94oZhLfXUK38jrbOmpx$wQhbkPmEgKn6WE8WInKnsV6NL+IQVIqIe6q+b5jwAJp17IyY6sOVB-1QRdRs49G3-JhU9Rd0UNoYrwp9bC1oH-MZdMCNBY-Po2LJSL9-As8HMs+1Tk4BFmxNOgqWgdHNHWV6pugkyaVPfr5ocqXDEF4H0GfItpn6jDuMKE4pMGn8acgXtKIB4O5oQ85Ufs60zdkC$EBY3AUxxJpXiAD-eh1kYlWP46tMUjL-JrKwzRMBlqguGeR"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef8cc8fdc6ce70/4wfSxfk.aTNWHhnu7cJXAGxe92eByfhWqM0IayTZN3o-1787377301-1.2.1.1-0OR0H87FFetjjHrwqaWeLwcB3sL0h1byiU0462nAyl99oTQu0n0ZeDAO4e2TJco.",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/e8d98c70-6aeb-4d40-ba36-dedec0fba69e",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "blob:https://challenges.cloudflare.com/e8d98c70-6aeb-4d40-ba36-dedec0fba69e",
+          "type": "Script"
+        },
+        {
+          "ev": "console.debug",
+          "text": "[object Object]"
+        },
+        {
+          "ev": "console.log",
+          "text": "[object Object]"
+        },
+        {
+          "ev": "console.log",
+          "text": "[object Object]"
+        },
+        {
+          "ev": "console.log",
+          "text": "function () { [native code] }"
+        },
+        {
+          "ev": "console.log",
+          "text": "function () { [native code] }"
+        },
+        {
+          "ev": "console.log",
+          "text": "[object Object]"
+        },
+        {
+          "ev": "console.log",
+          "text": "[object Object]"
+        },
+        {
+          "ev": "console.debug",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.debug",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.dir",
+          "text": ""
+        },
+        {
+          "ev": "console.dir",
+          "text": ""
+        },
+        {
+          "ev": "console.dirxml",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.dirxml",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.error",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.error",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.info",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.info",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.log",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.log",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.trace",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.trace",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.warning",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "console.warning",
+          "text": "%c%d font-size:0;color:transparent [object Object]"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/e8d98c70-6aeb-4d40-ba36-dedec0fba69e",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/pat/a2ef8cc8fdc6ce70/1787377302213/383211481bc9d7c2444176fb679c042506da46e6d9b4660eefbbc791baddeed9/hl9EakDp_vQVp9ugCaZ1oEYa4O1_QagO4eyz4lqc7is-1787377302-1.3.1.1-HImalDADdnokYA70xiZBCjaidb3wJ3S3bR9.r6a2ez9xDCJAG8QvTodeifS9n1wRJ7juaRpScmAA61zV3Jwae45Wmqocn.du4pD8ptzQxeys.rEcDvHegsr2XGvTqliesB9lPI9x3RnFuCPOopA0fO6BZ2whh2Y3Eot.w3c0xDaKgEvghBSBxG73QqpZTe75pJM2XFX64O0gcy3WYGo5hE1GSZ_nA3.DI4lP2zNeysYypKQg5NRc.DGRsO10VARv71Sd49TATjjmnGGj4_IVSsHWXpqqkwmJX8ykpHhRSoxegbLola4shyMw1_POVuLmmLNR5ZveuKiLmgUE3k08H3ASvyKHQkwxSlZIBKhFNbepYVfjj_UP0wYKp_JimVctrDWgHVGHggkdxyLyQcLYqNv8OYeco8WQWxo.X3TteH7Ha17T9uYLBtfskvoT9AeTgLN.bOXprU4huKCI3fH4eFkBU5OkqHziK5BOG.424hwuxuNRdB2AV5Hk_dV11jlPgELw.U7EKYuFQ3rgIcES7EjZIeHMIipE_l122Vs77TgfjSuyc6NNevKX70pLPT4dh4dvcK3yKXyNz8YbJhtfPjXmSkYbLTM57VdfEshGJ8ORzoRGPxIE_xmdsLrhlZnhBtCHqY0Zd9zHWY_rWnfNKBB5DFHqCu5cRWs3.IioGrISrK4Qqa711d2pS6HJ.wQmvO45piAg4VPZS8vni1xTVTNDQcgQ5kNdNmtF8RrNnNpy8DLgiOZ7p4wnxNf8UhnGrz7h5ewC5a7vZWt3rG4786vNDRRYQlDL7Qg_YwSga7zW2vPLTotJ_fkZDLiXgNnD",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://brunhild.challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/i/a2ef8cc8fdc6ce70/4wfSxfk.aTNWHhnu7cJXAGxe92eByfhWqM0IayTZN3o-1787377301-1.2.1.1-0OR0H87FFetjjHrwqaWeLwcB3sL0h1byiU0462nAyl99oTQu0n0ZeDAO4e2TJco.",
+          "type": "Fetch"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "blob:https://challenges.cloudflare.com/e8d98c70-6aeb-4d40-ba36-dedec0fba69e",
+          "type": "Script"
+        },
+        {
+          "ev": "fail",
+          "text": "CouldntResolveHost"
+        },
+        {
+          "ev": "res",
+          "status": 401,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/pat/a2ef8cc8fdc6ce70/1787377302213/383211481bc9d7c2444176fb679c042506da46e6d9b4660eefbbc791baddeed9/hl9EakDp_vQVp9ugCaZ1oEYa4O1_QagO4eyz4lqc7is-1787377302-1.3.1.1-HImalDADdnokYA70xiZBCjaidb3wJ3S3bR9.r6a2ez9xDCJAG8QvTodeifS9n1wRJ7juaRpScmAA61zV3Jwae45Wmqocn.du4pD8ptzQxeys.rEcDvHegsr2XGvTqliesB9lPI9x3RnFuCPOopA0fO6BZ2whh2Y3Eot.w3c0xDaKgEvghBSBxG73QqpZTe75pJM2XFX64O0gcy3WYGo5hE1GSZ_nA3.DI4lP2zNeysYypKQg5NRc.DGRsO10VARv71Sd49TATjjmnGGj4_IVSsHWXpqqkwmJX8ykpHhRSoxegbLola4shyMw1_POVuLmmLNR5ZveuKiLmgUE3k08H3ASvyKHQkwxSlZIBKhFNbepYVfjj_UP0wYKp_JimVctrDWgHVGHggkdxyLyQcLYqNv8OYeco8WQWxo.X3TteH7Ha17T9uYLBtfskvoT9AeTgLN.bOXprU4huKCI3fH4eFkBU5OkqHziK5BOG.424hwuxuNRdB2AV5Hk_dV11jlPgELw.U7EKYuFQ3rgIcES7EjZIeHMIipE_l122Vs77TgfjSuyc6NNevKX70pLPT4dh4dvcK3yKXyNz8YbJhtfPjXmSkYbLTM57VdfEshGJ8ORzoRGPxIE_xmdsLrhlZnhBtCHqY0Zd9zHWY_rWnfNKBB5DFHqCu5cRWs3.IioGrISrK4Qqa711d2pS6HJ.wQmvO45piAg4VPZS8vni1xTVTNDQcgQ5kNdNmtF8RrNnNpy8DLgiOZ7p4wnxNf8UhnGrz7h5ewC5a7vZWt3rG4786vNDRRYQlDL7Qg_YwSga7zW2vPLTotJ_fkZDLiXgNnD",
+          "type": "Fetch"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2ef8cc8fdc6ce70/1787377302227/Ng3uKPsFc.u.sQu2Sdapi8yA5.vcPZEFlkeBhD8DBbo-1787377302-1.3.1.1-teoNWrZyNkk9euC7Dus1hEPA1WMZswNYICF.8Tz9RTrOPd55T.Rmz6y.hIc_xkzOkTWsFUZ4ado9rICO.KZUCCANyvxHoQ.t.d1fFYRi4THmW.b0CAy5smYa.Ys3EZcmLosXe2rsrgWr6sFX2jUg4cAplqvp5nByuk6bP3lr5DZNqElVuMmfnD.LOYlI41VdMFXjp3olCKO37lX7n7rKCs1TI0aoAKZMJXVD0uV.biFQJ_.8CktKx4d2AhLO1DB.Pkzj_surGPgITmkVxvBcVeG.Z1cgPD95G3la4v8PsCvnKqHuG3U.MSWIIwgiwBg4_F4h05KVzag.z8JyHcaJAMO5Vxbb.O.WX8OxQ4Twb4cfynb4VT5H5QGX75FNXj6xYUGJGe9lS0EJstKDv3EmmhBBGllHH8R6YHrfP7ssj1paYT84gjp2u0WFIFFcHTKxytacmh2qgz6IAIa.Lsc9JGE7IOYqi.d_qG7ukQKn9ikVnueTNqPyoLAPcx4qVw8dKt_.icyCsgJrQ0Sty_Wwvy0wnJpcB0RtHbsXPHtHcFb32HT3AkfhKNrjd2lwAXgeM0YABMSYQkoypxxx60rbJ3ffK2W..DGs8jmLbyyXa.uH18etkBi98uHu0NvvmGIWNzg0tk2IjdSQZpA9lcoSuw60Aou.9bjG3p8NRpgGlgFKVizQsu0UnkeS6pGK.E4TS1.9_zuqljsWiPf4loFY2fRJsJoYjjYMZaBwbVL6Pt0",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2ef8cc8fdc6ce70/1787377302227/Ng3uKPsFc.u.sQu2Sdapi8yA5.vcPZEFlkeBhD8DBbo-1787377302-1.3.1.1-teoNWrZyNkk9euC7Dus1hEPA1WMZswNYICF.8Tz9RTrOPd55T.Rmz6y.hIc_xkzOkTWsFUZ4ado9rICO.KZUCCANyvxHoQ.t.d1fFYRi4THmW.b0CAy5smYa.Ys3EZcmLosXe2rsrgWr6sFX2jUg4cAplqvp5nByuk6bP3lr5DZNqElVuMmfnD.LOYlI41VdMFXjp3olCKO37lX7n7rKCs1TI0aoAKZMJXVD0uV.biFQJ_.8CktKx4d2AhLO1DB.Pkzj_surGPgITmkVxvBcVeG.Z1cgPD95G3la4v8PsCvnKqHuG3U.MSWIIwgiwBg4_F4h05KVzag.z8JyHcaJAMO5Vxbb.O.WX8OxQ4Twb4cfynb4VT5H5QGX75FNXj6xYUGJGe9lS0EJstKDv3EmmhBBGllHH8R6YHrfP7ssj1paYT84gjp2u0WFIFFcHTKxytacmh2qgz6IAIa.Lsc9JGE7IOYqi.d_qG7ukQKn9ikVnueTNqPyoLAPcx4qVw8dKt_.icyCsgJrQ0Sty_Wwvy0wnJpcB0RtHbsXPHtHcFb32HT3AkfhKNrjd2lwAXgeM0YABMSYQkoypxxx60rbJ3ffK2W..DGs8jmLbyyXa.uH18etkBi98uHu0NvvmGIWNzg0tk2IjdSQZpA9lcoSuw60Aou.9bjG3p8NRpgGlgFKVizQsu0UnkeS6pGK.E4TS1.9_zuqljsWiPf4loFY2fRJsJoYjjYMZaBwbVL6Pt0",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef8cc8fdc6ce70/4wfSxfk.aTNWHhnu7cJXAGxe92eByfhWqM0IayTZN3o-1787377301-1.2.1.1-0OR0H87FFetjjHrwqaWeLwcB3sL0h1byiU0462nAyl99oTQu0n0ZeDAO4e2TJco.",
+          "type": "XHR",
+          "postLen": -1
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef8cc8fdc6ce70/4wfSxfk.aTNWHhnu7cJXAGxe92eByfhWqM0IayTZN3o-1787377301-1.2.1.1-0OR0H87FFetjjHrwqaWeLwcB3sL0h1byiU0462nAyl99oTQu0n0ZeDAO4e2TJco.",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/ac6dc98e-0bf5-4a15-8a1e-f4a871574665",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "blob:https://challenges.cloudflare.com/ac6dc98e-0bf5-4a15-8a1e-f4a871574665",
+          "type": "Script"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5jt0c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "nodes": 47,
+      "textLength": 270,
+      "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2ef8cc6ad1fcf2f",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 40550
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "  arg(1): %c%d (string)",
+    "  arg(2): font-size:0;color:transparent (string)",
+    "  arg(3): whrg0: PInT0",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+1521ms]",
+    "      0 = ",
+    "  arg(1): %c%d (string)",
+    "  arg(2): font-size:0;color:transparent (string)",
+    "  arg(3): whrg0: PInT0",
+    "\u001b[0;32mINFO\u001b[0m  js : console.table . . . . . . . . . . . . . . . . . . . \u001b[0m[+1521ms]",
+    "      data = %c%d (string)",
+    "      columns = font-size:0;color:transparent (string)",
+    "\u001b[0;32mINFO\u001b[0m  js : console.table . . . . . . . . . . . . . . . . . . . \u001b[0m[+1521ms]",
+    "      data = %c%d (string)",
+    "      columns = font-size:0;color:transparent (string)",
+    "\u001b[0;33mWARN\u001b[0m  js : console.warn . . . . . . . . . . . . . . . . . . .  \u001b[0m[+1521ms]",
+    "      0 = ",
+    "  arg(1): %c%d (string)",
+    "  arg(2): font-size:0;color:transparent (string)",
+    "  arg(3): whrg0: PInT0",
+    "\u001b[0;33mWARN\u001b[0m  js : console.warn . . . . . . . . . . . . . . . . . . .  \u001b[0m[+1521ms]",
+    "      0 = ",
+    "  arg(1): %c%d (string)",
+    "  arg(2): font-size:0;color:transparent (string)",
+    "  arg(3): whrg0: PInT0",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+1536ms]",
+    "      url = blob:https://challenges.cloudflare.com/e8d98c70-6aeb-4d40-ba36-dedec0fba69e",
+    "      len = 291",
+    "\u001b[0;32mINFO\u001b[0m  http : request error . . . . . . . . . . . . . . . . . . \u001b[0m[+1540ms]",
+    "      source = fetch",
+    "      url = https://brunhild.challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/i/a2ef8cc8fdc6ce70/4wfSxfk.aTNWHhnu7cJXAGxe92eByfhWqM0IayTZN3o-1787377301-1.2.1.1-0OR0H87FFetjjHrwqaWeLwcB3sL0h1byiU0462nAyl99oTQu0n0ZeDAO4e2TJco.",
+    "      status = 0",
+    "      err = CouldntResolveHost",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+1584ms]",
+    "      source = fetch",
+    "      url = https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/pat/a2ef8cc8fdc6ce70/1787377302213/383211481bc9d7c2444176fb679c042506da46e6d9b4660eefbbc791baddeed9/hl9EakDp_vQVp9ugCaZ1oEYa4O1_QagO4eyz4lqc7is-1787377302-1.3.1.1-HImalDADdnokYA70xiZBCjaidb3wJ3S3bR9.r6a2ez9xDCJAG8QvTodeifS9n1wRJ7juaRpScmAA61zV3Jwae45Wmqocn.du4pD8ptzQxeys.rEcDvHegsr2XGvTqliesB9lPI9x3RnFuCPOopA0fO6BZ2whh2Y3Eot.w3c0xDaKgEvghBSBxG73QqpZTe75pJM2XFX64O0gcy3WYGo5hE1GSZ_nA3.DI4lP2zNeysYypKQg5NRc.DGRsO10VARv71Sd49TATjjmnGGj4_IVSsHWXpqqkwmJX8ykpHhRSoxegbLola4shyMw1_POVuLmmLNR5ZveuKiLmgUE3k08H3ASvyKHQkwxSlZIBKhFNbepYVfjj_UP0wYKp_JimVctrDWgHVGHggkdxyLyQcLYqNv8OYeco8WQWxo.X3TteH7Ha17T9uYLBtfskvoT9AeTgLN.bOXprU4huKCI3fH4eFkBU5OkqHziK5BOG.424hwuxuNRdB2AV5Hk_dV11jlPgELw.U7EKYuFQ3rgIcES7EjZIeHMIipE_l122Vs77TgfjSuyc6NNevKX70pLPT4dh4dvcK3yKXyNz8YbJhtfPjXmSkYbLTM57VdfEshGJ8ORzoRGPxIE_xmdsLrhlZnhBtCHqY0Zd9zHWY_rWnfNKBB5DFHqCu5cRWs3.IioGrISrK4Qqa711d2pS6HJ.wQmvO45piAg4VPZS8vni1xTVTNDQcgQ5kNdNmtF8RrNnNpy8DLgiOZ7p4wnxNf8UhnGrz7h5ewC5a7vZWt3rG4786vNDRRYQlDL7Qg_YwSga7zW2vPLTotJ_fkZDLiXgNnD",
+    "      status = 401",
+    "      len = 1",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+1755ms]",
+    "      url = about:srcdoc",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+1755ms]",
+    "      src = https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/5jt0c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+1763ms]",
+    "      url = about:blank",
+    "      method = GET",
+    "      reason = initialFrameNavigation",
+    "      body = false",
+    "      type = frame",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+2253ms]",
+    "      source = xhr",
+    "      url = https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef8cc8fdc6ce70/4wfSxfk.aTNWHhnu7cJXAGxe92eByfhWqM0IayTZN3o-1787377301-1.2.1.1-0OR0H87FFetjjHrwqaWeLwcB3sL0h1byiU0462nAyl99oTQu0n0ZeDAO4e2TJco.",
+    "      status = 200",
+    "      len = 127720",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+2266ms]",
+    "      url = blob:https://challenges.cloudflare.com/ac6dc98e-0bf5-4a15-8a1e-f4a871574665",
+    "      len = 291"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

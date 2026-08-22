@@ -1,0 +1,290 @@
+{
+  "engine": "chrome",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "startedAt": "2026-08-22T05:25:09.646Z",
+  "egress": {
+    "fl": "1232f59",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787376309.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9336/devtools/browser/3202bab8-5a08-4fb2-8718-4bddd6c60799"
+  },
+  "stations": [
+    {
+      "name": "cf-scrapingcourse",
+      "vendor": "cloudflare",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "guards": "challenge",
+      "settleMs": 40000,
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zu18k/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 403,
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef7494f97535d6",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef7494f97535d6",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://www.scrapingcourse.com/40b9f24d-a472-4996-8e44-d1db688795c4",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/656623783:1787374814:EoDGr5oNELtgYOJt1K2WxkHA4jRiWg-D5sp2ZeX_o0I/a2ef7494f97535d6/J375QyeLRVkTD1TGMaxNsZqhta35XaH4GGssacNBTrI-1787376310-1.2.1.1-LqgP6jE40igBJLvXiM.KZHixjTogyhnaXSjH_pUZv3HbVnO2xh0F9bKZYZMdwJUF",
+          "type": "XHR",
+          "postLen": 2338,
+          "post": "1qisV0gpa$goDLkteIr62aqXnoiBJcdL1PGDhOOxOivAgkB+XkBHsyt3BE$lW+IEVG0S5U6WnYaJp3sEPcxlTyOk6Djy4kfeTpTNg3kndMD5TsbUGkh-RFBXhtSu-gXcJnSndy9J6n4MG74P8fIz$HEnYqqCXffSHw4ojrS3PsEx2TQfJrgy6wu6ST2hbs3TqHPo0aI2pk9unmWAuGyyb6ggdMXOlTpsFkUTc0wJGJ2tlwO2-NqDJSQq7kQZBl7B0+F4dmQJVo2PUJIBzUiMQLbjEALrFV2CWr5t7SLkvHe6"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/656623783:1787374814:EoDGr5oNELtgYOJt1K2WxkHA4jRiWg-D5sp2ZeX_o0I/a2ef7494f97535d6/J375QyeLRVkTD1TGMaxNsZqhta35XaH4GGssacNBTrI-1787376310-1.2.1.1-LqgP6jE40igBJLvXiM.KZHixjTogyhnaXSjH_pUZv3HbVnO2xh0F9bKZYZMdwJUF",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://www.scrapingcourse.com/f43cb53a-0e99-4d34-a76b-f12274b318ee",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zu18k/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zu18k/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/7a6f9d0d-74c5-4efe-a013-36ce1b89f38e",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Other"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef74987a8f1b51/9NALDXHuvVgpeMtU5EZHmRqkt0c4CJfQcF7kkfrLdnQ-1787376311-1.2.1.1-kw8axoIEwcjjmFHNHaTTqEZBzrZPVNVqgj8ZjjOoX_ioU5ZQbEBHVlLOABdpLTAe",
+          "type": "XHR",
+          "postLen": 4802,
+          "post": "hU0n$WjU8ZqZoLlGYygM8wp0RMzu5cJOj9Upk2sfoJSYM$rGIURZJJB+bgRpPtIsjS1z2dMsdZV+w1zPMVgnmjnyYTPSAWzAemU3I12cGCwznKg$OGM2ixtrNKbRRj4q$eMx$MwrO3Dy471hqeowCmei5+a$g3kwnT-lMCBa6s3LCPMtLT7XH1DeP-q5cNmPBHWW44O+q+Jq8M+PsREUqKPcZeI0N1h+ZMdkouwTqmTdKoRBQxZV--Ok9-Hl9yMy0J-asf7juxzRsdPWpYxzUcYMjZiDOhc5reAKiG1jbsVx"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef74987a8f1b51/9NALDXHuvVgpeMtU5EZHmRqkt0c4CJfQcF7kkfrLdnQ-1787376311-1.2.1.1-kw8axoIEwcjjmFHNHaTTqEZBzrZPVNVqgj8ZjjOoX_ioU5ZQbEBHVlLOABdpLTAe",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/8204451d-d5de-41e0-ba2e-714499cbee70",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2ef74987a8f1b51/1787376312084/ktlQDfVheVsYJQqtm75KNJyttgrjyLb4wLlqwe3LcpY-1787376312-1.3.1.1-hoYn19E2dtPKQRe.zhJroy2PyNyXtlue0NgDY6C1lu9YRjfayo0FEwrl9HK2_Kq9hps1ZAfGIa4Co7k9SeRvvytwWD_NEY6VRnEUO_ZB4JrI.PPgBYX02rtK_RYM9uMW842Hii4cTCDfPKnPsPHYq.gb_fDlNuiVAMI6ZIg9lVbtyhB97wsaTIc0mSRBNelZKA_x5iMPdEHJYWa81bR.zaFkDnqaSyuf9o7QDh6Fzhkom6os1.dfTN80N5krjhg3N2a0j6vxIn6QxmM_j_.Ur_9rHJj70W0EmJQ0TiKnGdWivoH9JnaxE5NoZFZs_HEUQHYuxNTb21cbIfpd_kxZWkD213OwcIuo5mDEM4qKFXftH4CS29AtUXhouYzLm2k7VTCraqPkMoEiwuwDM4HwSnnNty_JJ68mO6ID4XVMNwNOvZeP8xTLVMHfMfXGtMLy0nxalBwvlHjTu0M5MTg9BVHIyOrxL9d97XjziQ9emhySbf0HtbqcRQZ3LwAet8zvM4MboSuZ27W3bs7aLrOfqpInwDXDKuJlZH3_0d8R5Ad9QjDsOkK53hxIWPjz7YrPwwYj.4PJjpas4X8H9pR3vVvXMZc_w1LJKWWfquRBdFbZB_SmIk1XON1RgjMPiTXMp5XyrjA_sbYC6_a3yTp6ks7WRPR_yAv3wyI7ZFZUIWyEQTpyfZq7w7RwzEC9u4he.l6BM.B_QgCEXb2tTtpgfsnpcT_8d9wof.B9hfSurJw",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2ef74987a8f1b51/1787376312084/ktlQDfVheVsYJQqtm75KNJyttgrjyLb4wLlqwe3LcpY-1787376312-1.3.1.1-hoYn19E2dtPKQRe.zhJroy2PyNyXtlue0NgDY6C1lu9YRjfayo0FEwrl9HK2_Kq9hps1ZAfGIa4Co7k9SeRvvytwWD_NEY6VRnEUO_ZB4JrI.PPgBYX02rtK_RYM9uMW842Hii4cTCDfPKnPsPHYq.gb_fDlNuiVAMI6ZIg9lVbtyhB97wsaTIc0mSRBNelZKA_x5iMPdEHJYWa81bR.zaFkDnqaSyuf9o7QDh6Fzhkom6os1.dfTN80N5krjhg3N2a0j6vxIn6QxmM_j_.Ur_9rHJj70W0EmJQ0TiKnGdWivoH9JnaxE5NoZFZs_HEUQHYuxNTb21cbIfpd_kxZWkD213OwcIuo5mDEM4qKFXftH4CS29AtUXhouYzLm2k7VTCraqPkMoEiwuwDM4HwSnnNty_JJ68mO6ID4XVMNwNOvZeP8xTLVMHfMfXGtMLy0nxalBwvlHjTu0M5MTg9BVHIyOrxL9d97XjziQ9emhySbf0HtbqcRQZ3LwAet8zvM4MboSuZ27W3bs7aLrOfqpInwDXDKuJlZH3_0d8R5Ad9QjDsOkK53hxIWPjz7YrPwwYj.4PJjpas4X8H9pR3vVvXMZc_w1LJKWWfquRBdFbZB_SmIk1XON1RgjMPiTXMp5XyrjA_sbYC6_a3yTp6ks7WRPR_yAv3wyI7ZFZUIWyEQTpyfZq7w7RwzEC9u4he.l6BM.B_QgCEXb2tTtpgfsnpcT_8d9wof.B9hfSurJw",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/8204451d-d5de-41e0-ba2e-714499cbee70",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/8204451d-d5de-41e0-ba2e-714499cbee70",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef74987a8f1b51/9NALDXHuvVgpeMtU5EZHmRqkt0c4CJfQcF7kkfrLdnQ-1787376311-1.2.1.1-kw8axoIEwcjjmFHNHaTTqEZBzrZPVNVqgj8ZjjOoX_ioU5ZQbEBHVlLOABdpLTAe",
+          "type": "XHR",
+          "postLen": -1
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef74987a8f1b51/9NALDXHuvVgpeMtU5EZHmRqkt0c4CJfQcF7kkfrLdnQ-1787376311-1.2.1.1-kw8axoIEwcjjmFHNHaTTqEZBzrZPVNVqgj8ZjjOoX_ioU5ZQbEBHVlLOABdpLTAe",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/73294ec1-db38-41f4-88d5-2a8da9e1b02d",
+          "type": "Script"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "nodes": 47,
+      "textLength": 270,
+      "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2ef7494f97535d6",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 41556
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:9336/devtools/browser/3202bab8-5a08-4fb2-8718-4bddd6c60799",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[2072:11192563:0821/222510.332768:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[2072:11192563:0821/222510.333244:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[2079:11192668:0821/222510.921652:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2079:11192668:0821/222510.921818:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2079:11192668:0821/222510.921822:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2079:11192668:0821/222510.921828:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222510.921832:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222510.921834:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222510.922254:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222510.922261:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222510.922264:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017561:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017571:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017574:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017579:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017582:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017584:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017588:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017591:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2079:11192668:0821/222512.017593:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2072:11192606:0821/222513.656790:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[2072:11192606:0821/222543.417102:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT"
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

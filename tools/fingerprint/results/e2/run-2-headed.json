@@ -1,0 +1,325 @@
+{
+  "engine": "chrome",
+  "headed": true,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "startedAt": "2026-08-22T05:26:34.610Z",
+  "egress": {
+    "fl": "464f221",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787376394.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9336/devtools/browser/fcdb3f62-a953-474b-9622-1aaac7ac59af"
+  },
+  "stations": [
+    {
+      "name": "cf-scrapingcourse",
+      "vendor": "cloudflare",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "guards": "challenge",
+      "settleMs": 40000,
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/ym5nk/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "wire": [
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 403,
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef76a7bf5ee9e7",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef76a7bf5ee9e7",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://www.scrapingcourse.com/ff9c21b1-7ffb-4392-b1f4-ad57256c5862",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/656623783:1787374814:EoDGr5oNELtgYOJt1K2WxkHA4jRiWg-D5sp2ZeX_o0I/a2ef76a7bf5ee9e7/dCACrwkZBIGpCrCzVcLXdHm9RODmKEhdLhyTjg_SCxA-1787376395-1.2.1.1-asEpHjokRzlpACeE6jP1yN75oF4eqDWQrU4jaZn.kXSNT.264o0yY4JmN3KMKWgC",
+          "type": "XHR",
+          "postLen": 2316,
+          "post": "LLw6GJZ9Xg49TD0gqhnImrqxwu3f9jIYttdFVERbRbFnxxNDeH1auW3xqpEmn3lXcla-j0tIF1ZPywCESkmXiGeUe2RN8b0UYbAtg+xHcWsXsRwUuUtjUGs9Sok2cLrLPGVo1OqgxnZevBfHNULcPjvUpcm8szfwyy0E6RscT33Zrc8kDxm01nlccgRf15+fbOAByoBTEsQrzSuuPVmyLcU+n40ZVNcueuw3TA-9-nryndh6FfJvWpIubReSA5l7fysZdPeYxHyxTPSoXYmgQGN41wEuuX7r8PxD1vZ8f4FP"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Image"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/656623783:1787374814:EoDGr5oNELtgYOJt1K2WxkHA4jRiWg-D5sp2ZeX_o0I/a2ef76a7bf5ee9e7/dCACrwkZBIGpCrCzVcLXdHm9RODmKEhdLhyTjg_SCxA-1787376395-1.2.1.1-asEpHjokRzlpACeE6jP1yN75oF4eqDWQrU4jaZn.kXSNT.264o0yY4JmN3KMKWgC",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Other"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://www.scrapingcourse.com/favicon.ico",
+          "type": "Other"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://www.scrapingcourse.com/497da8d6-ff39-493f-9c4f-19185cabb87c",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/ym5nk/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+          "type": "Document"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/ym5nk/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+          "type": "Document"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/0e365dce-74a5-4a3a-b827-1e8483130f6b",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef76ab69ee981a/_zjIziViJ5Eqejn1A_PGKxD.QSv93.u_h4JZFB9Rwpk-1787376396-1.2.1.1-HLFtfr9wKEFnfsmiP_caZj6jLOAhq43Ngvl.eTvQ7PZfwa_orF38jKz4LcsZbcsU",
+          "type": "XHR",
+          "postLen": 4738,
+          "post": "y33reExpxH7cHW$qViD7i6ZEBKy39CgnEi11PF1KtdPbO3hpMEIF6n2W1Rt-xCnwKiL-tM4ZxxTkD22LEOQfmPgy2-Fn-Jjq85OYR-3Y-pDucgKDX9dxCW98dbE03SFSeqgbSERQzJ2jg7AosW6Fl+KKJrO9s7rVxcL3H2ulHQkL2oKa+XO1jRMroHUIXg1ZEH3fkjEGwXW2wPxgqJ$O9F5hno5Z1TpwkIm$ZL8AXMKLx33LPq1+GsxZ6D9mTs0nHEKqiLeN2HVbW2Y$4+6Scnyt6AjgDeyb5tHRUzgo$$Sy"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef76ab69ee981a/_zjIziViJ5Eqejn1A_PGKxD.QSv93.u_h4JZFB9Rwpk-1787376396-1.2.1.1-HLFtfr9wKEFnfsmiP_caZj6jLOAhq43Ngvl.eTvQ7PZfwa_orF38jKz4LcsZbcsU",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/c261e729-97a8-47ac-a074-b5c130ef6e36",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/c261e729-97a8-47ac-a074-b5c130ef6e36",
+          "type": "Script"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2ef76ab69ee981a/1787376396956/13Z3xNc.Zf4djwJAI1XBjmbGUWghhz69kPilC6duPiE-1787376396-1.3.1.1-vPuQztd2fLg_0RpjjgVTmKc2AfuUUKSsUr6MDz6ir_PR0HxgwZQFkNoSy0_os3Rb5UrvxAFC5yORbvZxXkeNnXRK.WdIzDAr1ItaPYWxsaT3KTWdTuQRIiJT72EfS2a9TwNE6B7tv94GnPkkFs0tjbLu0DRJREFJ4VRZhXdru05PsMhwUDOUJKQpvPNgLOhgJVCHRO17v85VrTV5MWMNrIptQq5Q23lurUy7ILCVTCo47eJ4tEFCRc4WfzAY3fSAfARkqpn0.vWStg9MHoh_FzkVKprjL4lkSUREct5Axl_NppycIXjsXn2.zRHHBMkiYEfuh6VKo6yQUKAOjInhiyM9BALY236UZnvuu32I1u2iCOr5ZBdJpRdIFPfA9U9NQoWKGrg6cZUg5hk.FvFarcH5yM7JWwX17to2.2qJtADasunEp1E6YMdgGvhW09vEej_o1Xcpj2lsfah7AtWHfiHxe4cYV89lQBSpUntu4W5W5BKiTEmef3ok_qlMsi6PD1AkPr5n9zfMg_Pe8ek9ibINHq.6D3HFdFs.BIGLBK2QAbcng89.C3Z5hVsQIdT8VdWvJ2w9iyz6oU4K5xYotuqjioOeBUt1gNox42KiBesyU7k82pOZBNttKUU9zaAJzNb74GIbIkwSijnLBbRTwNYprr9Pqq7pFT_hVHn4J.vlsSbtFubfcSFjXtBh2XQlveUOTW3kFimTLFHuy0KeYG0ebvSjs2meCAQ6_sSaA1s",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/c261e729-97a8-47ac-a074-b5c130ef6e36",
+          "type": "Script"
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2ef76ab69ee981a/1787376396956/13Z3xNc.Zf4djwJAI1XBjmbGUWghhz69kPilC6duPiE-1787376396-1.3.1.1-vPuQztd2fLg_0RpjjgVTmKc2AfuUUKSsUr6MDz6ir_PR0HxgwZQFkNoSy0_os3Rb5UrvxAFC5yORbvZxXkeNnXRK.WdIzDAr1ItaPYWxsaT3KTWdTuQRIiJT72EfS2a9TwNE6B7tv94GnPkkFs0tjbLu0DRJREFJ4VRZhXdru05PsMhwUDOUJKQpvPNgLOhgJVCHRO17v85VrTV5MWMNrIptQq5Q23lurUy7ILCVTCo47eJ4tEFCRc4WfzAY3fSAfARkqpn0.vWStg9MHoh_FzkVKprjL4lkSUREct5Axl_NppycIXjsXn2.zRHHBMkiYEfuh6VKo6yQUKAOjInhiyM9BALY236UZnvuu32I1u2iCOr5ZBdJpRdIFPfA9U9NQoWKGrg6cZUg5hk.FvFarcH5yM7JWwX17to2.2qJtADasunEp1E6YMdgGvhW09vEej_o1Xcpj2lsfah7AtWHfiHxe4cYV89lQBSpUntu4W5W5BKiTEmef3ok_qlMsi6PD1AkPr5n9zfMg_Pe8ek9ibINHq.6D3HFdFs.BIGLBK2QAbcng89.C3Z5hVsQIdT8VdWvJ2w9iyz6oU4K5xYotuqjioOeBUt1gNox42KiBesyU7k82pOZBNttKUU9zaAJzNb74GIbIkwSijnLBbRTwNYprr9Pqq7pFT_hVHn4J.vlsSbtFubfcSFjXtBh2XQlveUOTW3kFimTLFHuy0KeYG0ebvSjs2meCAQ6_sSaA1s",
+          "type": "Image"
+        },
+        {
+          "ev": "req",
+          "method": "POST",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef76ab69ee981a/_zjIziViJ5Eqejn1A_PGKxD.QSv93.u_h4JZFB9Rwpk-1787376396-1.2.1.1-HLFtfr9wKEFnfsmiP_caZj6jLOAhq43Ngvl.eTvQ7PZfwa_orF38jKz4LcsZbcsU",
+          "type": "XHR",
+          "postLen": -1
+        },
+        {
+          "ev": "res",
+          "status": 200,
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/3026653783:1787374815:wzVx1S8GJdAqt7j6HNqDzW9WbM2YhmsfvuLJPzrnOuQ/a2ef76ab69ee981a/_zjIziViJ5Eqejn1A_PGKxD.QSv93.u_h4JZFB9Rwpk-1787376396-1.2.1.1-HLFtfr9wKEFnfsmiP_caZj6jLOAhq43Ngvl.eTvQ7PZfwa_orF38jKz4LcsZbcsU",
+          "type": "XHR"
+        },
+        {
+          "ev": "req",
+          "method": "GET",
+          "url": "blob:https://challenges.cloudflare.com/ab2714d5-87df-460b-8893-86ba6bbe18e1",
+          "type": "Script"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "nodes": 47,
+      "textLength": 270,
+      "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2ef76a7bf5ee9e7",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 41428
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "[2270:11197580:0821/222636.896858:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2270:11197580:0821/222636.896861:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[2270:11197580:0821/222636.896867:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2270:11197580:0821/222636.896871:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2270:11197580:0821/222636.896873:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[2270:11197580:0821/222636.896877:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2270:11197580:0821/222636.896881:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2270:11197580:0821/222636.896883:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[2262:11197515:0821/222639.516865:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[2262:11197515:0821/222639.517250:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[2262:11197515:0821/222639.517579:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[2345:11199431:0821/222653.923343:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake-all --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[2345:11199431:0821/222653.923703:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 115287, parent pid: 2262",
+    "[2345:11199431:0821/222653.924966:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2345:11199431:0821/222653.924977:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2345:11199431:0821/222653.925028:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[2347:11199436:0821/222653.930896:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[2347:11199436:0821/222653.931256:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 115287, parent pid: 1",
+    "[2347:11199436:0821/222653.932444:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2347:11199436:0821/222653.932455:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2347:11199436:0821/222653.932505:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[2345:11199431:0821/222653.932811:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[2345:11199431:0821/222653.933256:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[2345:11199431:0821/222653.933312:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[2345:11199431:0821/222653.933368:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[2345:11199431:0821/222653.933378:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[2345:11199431:0821/222653.933415:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[2345:11199431:0821/222653.933423:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[2345:11199431:0821/222653.933435:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[2345:11199444:0821/222653.933626:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[2345:11199444:0821/222653.933700:VERBOSE1:chrome/updater/app/app_wakeall.cc:64] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/150.0.7863.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` process invalid: Undefined error: 0 (0)",
+    "[2345:11199444:0821/222653.933712:VERBOSE1:chrome/updater/app/app_wakeall.cc:58] Launching `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake`",
+    "[2349:11199449:0821/222653.938859:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[2349:11199449:0821/222653.939212:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 115287, parent pid: 2345",
+    "[2349:11199449:0821/222653.940388:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2349:11199449:0821/222653.940398:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2349:11199449:0821/222653.940441:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[2351:11199453:0821/222653.945742:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2",
+    "[2351:11199453:0821/222653.946057:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 115287, parent pid: 1",
+    "[2351:11199453:0821/222653.947170:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2351:11199453:0821/222653.947180:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 89194917888B (83.069GiB) / 994662584320B (926.352GiB)",
+    "[2351:11199453:0821/222653.947231:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log",
+    "[2349:11199449:0821/222653.947517:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.",
+    "[2349:11199449:0821/222653.947958:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports",
+    "[2349:11199449:0821/222653.948014:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports",
+    "[2349:11199449:0821/222653.948072:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)",
+    "[2349:11199449:0821/222653.948083:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)",
+    "[2349:11199449:0821/222653.948118:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)",
+    "[2349:11199449:0821/222653.948128:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)",
+    "[2349:11199449:0821/222653.948138:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.",
+    "[2349:11199449:0821/222653.948260:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run",
+    "[2262:11197515:0821/222702.077170:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "[2349:11199449:0821/222711.053570:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[2349:11199449:0821/222711.053976:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[2349:11199449:0821/222711.054008:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake) returned 0.",
+    "[2345:11199444:0821/222711.264720:VERBOSE1:chrome/updater/app/app_wakeall.cc:68] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` exited 0",
+    "[2345:11199431:0821/222711.264870:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0",
+    "[2345:11199431:0821/222711.265283:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log",
+    "[2345:11199431:0821/222711.265315:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake-all) returned 0."
+  ],
+  "summary": {
+    "stations": 1,
+    "pass": 0
+  }
+}

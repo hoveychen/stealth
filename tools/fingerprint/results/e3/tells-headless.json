@@ -1,0 +1,184 @@
+{
+ "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+ "uaHeadlessWord": true,
+ "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+ "webdriver": false,
+ "uaData": {
+  "mobile": false,
+  "platform": "macOS",
+  "brands": "Not=A?Brand/99,Google Chrome/151,Chromium/151"
+ },
+ "uaDataHighEntropy": {
+  "architecture": "arm",
+  "bitness": "64",
+  "brands": [
+   {
+    "brand": "Not=A?Brand",
+    "version": "99"
+   },
+   {
+    "brand": "Google Chrome",
+    "version": "151"
+   },
+   {
+    "brand": "Chromium",
+    "version": "151"
+   }
+  ],
+  "formFactors": [
+   "Desktop"
+  ],
+  "fullVersionList": [
+   {
+    "brand": "Not=A?Brand",
+    "version": "99.0.0.0"
+   },
+   {
+    "brand": "Google Chrome",
+    "version": "151.0.7922.172"
+   },
+   {
+    "brand": "Chromium",
+    "version": "151.0.7922.172"
+   }
+  ],
+  "mobile": false,
+  "model": "",
+  "platform": "macOS",
+  "platformVersion": "26.3.1",
+  "uaFullVersion": "151.0.7922.172",
+  "wow64": false
+ },
+ "screen": {
+  "w": 800,
+  "h": 600,
+  "aw": 800,
+  "ah": 600,
+  "al": 0,
+  "at": 0,
+  "depth": 24,
+  "pixelDepth": 24,
+  "orientation": "landscape-primary",
+  "isExtended": false
+ },
+ "window": {
+  "inner": [
+   1920,
+   993
+  ],
+  "outer": [
+   1920,
+   1080
+  ],
+  "screenX": 22,
+  "screenY": 22,
+  "dpr": 1
+ },
+ "visibility": {
+  "state": "visible",
+  "hidden": false,
+  "focus": true
+ },
+ "media": {
+  "hover": true,
+  "anyHover": true,
+  "pointerFine": true,
+  "anyPointerFine": true,
+  "pointerNone": false,
+  "dark": true,
+  "light": false,
+  "reducedMotion": false,
+  "forcedColors": false,
+  "contrastMore": false,
+  "transparency": false,
+  "dynamicRangeHigh": false,
+  "monochrome": false,
+  "updateFast": true,
+  "scriptingEnabled": true
+ },
+ "maxTouchPoints": 0,
+ "webgl": {
+  "vendor": "WebKit",
+  "renderer": "WebKit WebGL",
+  "unmaskedVendor": "Google Inc. (Apple)",
+  "unmaskedRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)",
+  "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+  "shading": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+  "maxTexture": 16384,
+  "extensions": 36
+ },
+ "gpuAdapter": {
+  "vendor": "apple",
+  "architecture": "metal-3",
+  "device": "",
+  "description": ""
+ },
+ "canvas2d": {
+  "len": 6054,
+  "hash": 1736594897
+ },
+ "hardware": {
+  "cores": 10,
+  "memory": 16,
+  "platform": "MacIntel",
+  "languages": "en-US,en",
+  "pdfViewerEnabled": true,
+  "plugins": 5,
+  "mimeTypes": 2,
+  "cookieEnabled": true,
+  "doNotTrack": null
+ },
+ "mediaDevices": {
+  "count": 3,
+  "kinds": "audioinput,videoinput,audiooutput"
+ },
+ "notificationPermission": "default",
+ "permissions": {
+  "notifications": "prompt",
+  "geolocation": "prompt",
+  "camera": "prompt",
+  "microphone": "prompt",
+  "midi": "prompt",
+  "clipboard-read": "prompt"
+ },
+ "battery": {
+  "charging": true,
+  "level": 1,
+  "chargingTime": 0,
+  "dischargingTime": null
+ },
+ "connection": {
+  "type": "4g",
+  "rtt": 100,
+  "downlink": 1.5,
+  "saveData": false
+ },
+ "voices": {
+  "count": 199,
+  "first": "Samantha|en-US,Albert|en-US,Alice|it-IT"
+ },
+ "codecs": {
+  "h264": "probably",
+  "hevc": "probably",
+  "aac": "probably",
+  "webm": "probably",
+  "eme": true
+ },
+ "widevine": "available",
+ "fonts": "Arial,Helvetica Neue,Times New Roman,Courier New,Menlo,Apple Color Emoji,SF Pro Text,Segoe UI,Roboto,Noto Sans CJK SC",
+ "storage": {
+  "quotaGB": 10.7,
+  "usage": 0
+ },
+ "timing": {
+  "tz": "America/Los_Angeles",
+  "offset": 420,
+  "perfMemory": 0
+ },
+ "chromeObject": {
+  "keys": "app,csi,loadTimes",
+  "runtime": "undefined",
+  "loadTimes": "function"
+ },
+ "globalCount": 1237
+}

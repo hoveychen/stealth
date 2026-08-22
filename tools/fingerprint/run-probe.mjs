@@ -1,6 +1,7 @@
 // Run a probe file (an async IIFE that returns a plain object) on one engine and
 // print the result as JSON.
-// usage: node tools/fingerprint/run-probe.mjs <chrome|lightpanda> <probe.js> [url] [--headed]
+// usage: node tools/fingerprint/run-probe.mjs <chrome|lightpanda> <probe.js> [url]
+//                                             [--headed] [--window-size 1920,1080]
 //
 // The WebCodecs codec classes are [SecureContext], so about:blank is not enough
 // for them -- pass an https url to measure those.
@@ -33,7 +34,23 @@ const { Cdp, newPage, sleep } = await import(path.join(HERE, 'cdp.mjs'));
 const engine = process.argv[2];
 const probePath = process.argv[3];
 const headed = process.argv.includes('--headed');
-const url = process.argv.slice(4).find((a) => !a.startsWith('--'));
+// Pin the window for a headed-vs-headless comparison. Without it the two arms
+// differ in a flag neither run chose: `--headless=new` defaults to 800x600 and a
+// headed window does not, so `screen`/`window` read as a headlessness tell when
+// they are only a launch default. antibot-sweep.mjs pins 1920,1080 on both arms,
+// and a probe meant to explain that sweep has to pin the same thing.
+const windowSize = (() => {
+  const i = process.argv.indexOf('--window-size');
+  return i < 0 ? null : process.argv[i + 1];
+})();
+const url = (() => {
+  const rest = process.argv.slice(4);
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--window-size') { i++; continue; }   // skip the flag's value
+    if (!rest[i].startsWith('--')) return rest[i];
+  }
+  return undefined;
+})();
 // PORT overrides, because the default is not always free -- see the abort below.
 const PORT = Number(process.env.PORT) || Number(process.env.PROBE_PORT) ||
     (engine === 'chrome' ? 9361 : 9301);
@@ -67,6 +84,7 @@ let proc, prof;
 if (engine === 'chrome') {
   prof = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-probe-'));
   const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${prof}`, '--no-first-run', '--no-default-browser-check'];
+  if (windowSize) args.push(`--window-size=${windowSize}`);
   if (!headed) args.push('--headless=new');
   proc = spawn(CHROME, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {

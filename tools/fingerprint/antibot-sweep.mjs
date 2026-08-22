@@ -39,7 +39,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
-    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080] [--only cf-]');
+    console.error('usage: antibot-sweep.mjs <lightpanda|chrome> [--out results/x.json] [--proxy socks5h://host:port] [--headed] [--window-size 1920,1080] [--only cf-] [--chrome-arg SWITCH]... [--trace [--attach-frames|--same-process]]');
     process.exit(2);
 }
 const arg = (name, fallback) => {
@@ -70,6 +70,32 @@ const fresh = process.argv.includes('--fresh');
 // diagnosis. Off by default because it is per-station noise nobody wants in a
 // fifteen-station snapshot.
 const trace = process.argv.includes('--trace');
+// Put Chrome's cross-origin iframes back in the page's renderer, so their
+// requests reach the page session this sweep attaches to. Without it a
+// challenge that does its real work inside a `challenges.cloudflare.com` iframe
+// reports only the iframe's *document* request here: everything the widget
+// fetches afterwards is an OOPIF's traffic on a session nobody attached to, and
+// the trace reads as "Chrome never asked for this". That is not a small
+// difference -- it made four Cloudflare endpoints look lightpanda-only, on an
+// engine that has one process and therefore cannot hide them.
+// Only meaningful with --trace, and only for chrome; it does change the
+// browser's process model, so a verdict taken with it wants a verdict without
+// it beside it.
+const sameProcess = process.argv.includes('--same-process');
+// The other way to see an out-of-process iframe's traffic, and the one to
+// prefer: attach to the iframe's own target instead of taking site isolation
+// away. --same-process answers the visibility question but changes the verdict
+// while doing it -- headed Chrome clears this Cloudflare challenge 5/5 without
+// it and 0/3 with it -- so it cannot be used to observe a run that passes.
+const attachFrames = process.argv.includes('--attach-frames');
+// Extra Chrome switches, repeatable, so a single launch flag can be isolated
+// against the same station without editing this file. The reason it exists:
+// `--headless=new` differs from a headed Chrome in four readings and one of
+// them is the user agent saying `HeadlessChrome`, so
+// `--chrome-arg --user-agent=<the headed string>` is the one-variable
+// experiment that says whether the guard is reading that or something else.
+const chromeArgs = process.argv.reduce((acc, a, i) => (
+    a === '--chrome-arg' && process.argv[i + 1] ? [...acc, process.argv[i + 1]] : acc), []);
 const PORT = Number(arg('--port', engine === 'chrome' ? 9336 : 9226));
 const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const ENDPOINT = process.env.CDP_ENDPOINT ?? null;
@@ -108,8 +134,12 @@ async function launch() {
             '--no-first-run',
             '--no-default-browser-check',
             `--window-size=${windowSize}`,
+            ...(sameProcess
+                ? ['--disable-features=IsolateOrigins,site-per-process', '--disable-site-isolation-trials']
+                : []),
             ...(headed ? [] : ['--headless=new']),
             ...(proxy ? [`--proxy-server=${proxy}`] : []),
+            ...chromeArgs,
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
     } else {
         proc = spawn(process.env.LP_BIN ?? path.join(repo, 'zig-out/bin/lightpanda'), [
@@ -153,25 +183,63 @@ async function teardown() {
 // station is kept in order rather than only the last.
 let docs = [];
 let wire = [];
+// Filled by --attach-frames: the sessions of Chrome's out-of-process iframes.
+const frameSessions = new Set();
+let pageSession = null;
+// The connection, hoisted so a target that attaches mid-run can have its own
+// domains switched on from the event handler.
+let liveCdp = null;
 const onEvent = (msg) => {
     const p = msg.params ?? {};
+    // A target attached under --attach-frames is silent until its own domains
+    // are on; the whole point of attaching is the traffic it carries.
+    if (msg.method === 'Target.attachedToTarget' && attachFrames && p.sessionId) {
+        frameSessions.add(p.sessionId);
+        liveCdp?.send('Network.enable', { maxPostDataSize: 65536 }, p.sessionId).catch(() => { });
+        liveCdp?.send('Runtime.enable', undefined, p.sessionId).catch(() => { });
+        // Nested iframes are targets of the target, not of the page.
+        liveCdp?.send('Target.setAutoAttach',
+            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, p.sessionId).catch(() => { });
+        return;
+    }
+    const fromFrame = msg.sessionId !== undefined && msg.sessionId !== pageSession;
+    // Which session an event arrived on is a reading in itself: it says the
+    // request belongs to the challenge's own iframe rather than to the page.
+    const push = (e) => wire.push(fromFrame ? { ...e, frame: true } : e);
     if (trace) {
         if (msg.method === 'Network.requestWillBeSent') {
-            wire.push({ ev: 'req', method: p.request?.method, url: p.request?.url, type: p.type });
+            // The body of the `fo/` POST is the whole client-side half of a
+            // Cloudflare challenge: the program that comes back is chosen by
+            // what was posted. Taken off the CDP event rather than by wrapping
+            // XHR in the page, because a guard that is deciding whether this is
+            // a browser is exactly the wrong audience for a patched prototype.
+            const body = p.request?.postData;
+            push({
+                ev: 'req', method: p.request?.method, url: p.request?.url, type: p.type,
+                ...(body === undefined
+                    ? (p.request?.hasPostData ? { postLen: -1 } : {})
+                    : { postLen: body.length, post: body.slice(0, 300) }),
+            });
         } else if (msg.method === 'Network.responseReceived') {
-            wire.push({ ev: 'res', status: p.response?.status, url: p.response?.url, type: p.type });
+            push({ ev: 'res', status: p.response?.status, url: p.response?.url, type: p.type });
         } else if (msg.method === 'Network.loadingFailed') {
-            wire.push({ ev: 'fail', text: p.errorText, url: p.request?.url });
+            push({ ev: 'fail', text: p.errorText, url: p.request?.url });
         } else if (msg.method === 'Runtime.consoleAPICalled') {
-            wire.push({
+            push({
                 ev: `console.${p.type}`,
                 text: (p.args ?? []).map((a) => a.value ?? a.description ?? a.type).join(' ').slice(0, 300),
             });
         } else if (msg.method === 'Runtime.exceptionThrown') {
-            wire.push({ ev: 'exception', text: (p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text ?? '').slice(0, 300) });
+            push({ ev: 'exception', text: (p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text ?? '').slice(0, 300) });
         }
     }
     if (msg.method !== 'Network.responseReceived') return;
+    // The verdict reads the *page's* document chain. An attached iframe reports
+    // its own document too, and letting those in would move `last` to whatever
+    // the challenge widget last loaded -- so a run with --attach-frames would
+    // score differently from the same run without it, for no reason but the
+    // instrument.
+    if (fromFrame) return;
     if (String(p.type ?? '').toLowerCase() !== 'document') return;
     docs.push({ url: p.response?.url, status: p.response?.status, mime: p.response?.mimeType });
 };
@@ -265,6 +333,7 @@ try {
         snapshot.version ??= version;
 
         const cdp = await Cdp.connect(ENDPOINT ?? `http://127.0.0.1:${PORT}`);
+        liveCdp = cdp;
         cdp.on(onEvent);
         let sessionId;
         if (engine === 'chrome') {
@@ -276,7 +345,17 @@ try {
             ({ sessionId } = await newPage(cdp));
             await cdp.send('Runtime.enable', {}, sessionId);
         }
-        await cdp.send('Network.enable', {}, sessionId);
+        // maxPostDataSize is what makes `request.postData` arrive on
+        // requestWillBeSent at all; without it every POST reports only
+        // hasPostData and the body has to be asked for after the fact, by which
+        // time a challenge's request is long gone.
+        await cdp.send('Network.enable', trace ? { maxPostDataSize: 65536 } : {}, sessionId);
+        pageSession = sessionId;
+        if (attachFrames) {
+            await cdp.send('Target.setAutoAttach',
+                { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId)
+                .catch(() => { /* lightpanda has one process and no OOPIFs */ });
+        }
         const [w, h] = windowSize.split(',').map(Number);
         await cdp.send('Emulation.setDeviceMetricsOverride', {
             width: w, height: h, deviceScaleFactor: 1, mobile: false,

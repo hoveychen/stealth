@@ -6955,3 +6955,130 @@ script: Chrome and lightpanda both report five requests, same URLs, same types
 Two gaps stay open and are *not* about synthetic schemes: lightpanda emits no
 `Network.dataReceived` for **any** request (so byte counts read as 0 across the
 board), and it types a favicon `Image` where Chrome says `Other`.
+
+## The headless tell is one word in the user agent (2026-08-21)
+
+The section above put the oracle at headed Chrome, because `--headless=new`
+fails the scrapingcourse managed challenge exactly the way lightpanda does. That
+reading holds; the *reason* for it turns out to be a single string, and knowing
+which string changes what the rest of this work is for.
+
+**The rates first**, five interleaved trials per arm — `run-i-headed`,
+`run-i-headless`, `run-i-lightpanda`, then trial i+1, so any drift in how the
+edge treats this address over the sitting lands on all three columns rather than
+on whichever ran last (`antibot-sweep --only cf-scrapingcourse --settle 40000
+--trace`, tallied by `e1-tally.mjs`, `results/e1/`):
+
+| arm | pass |
+|---|---|
+| headed Chrome 151 | **5/5** |
+| Chrome 151 `--headless=new` | 0/5 |
+| lightpanda `dev.787+30446c09d` | 0/5 |
+
+No randomness to speak of: fifteen runs, fifteen verdicts, no arm ever crossed.
+
+**Then the one-variable isolation** (`results/e4/`, three interleaved trials per
+arm, both controls in the same round-robin):
+
+| arm | pass |
+|---|---|
+| headed | 3/3 |
+| headless | 0/3 |
+| headless + `--user-agent=<the exact string headed reports>` | **3/3** |
+
+So the whole headed/headless gap at this station is the token
+`HeadlessChrome/151.0.0.0` where a headed Chrome writes `Chrome/151.0.0.0`.
+Change that and nothing else and the same binary clears the interstitial.
+
+`probe-headless-tells.js` says why the list of suspects is so short. Same build,
+same flags, `--window-size 1920,1080` pinned on both arms so the launch default
+does not masquerade as a tell — the *complete* difference is four readings:
+
+1. `navigator.userAgent` / `appVersion` carry `HeadlessChrome`.
+2. `screen` is 800×600 with `availLeft/Top` 0 and `isExtended:false`, against
+   1920×1080 / 1713 / 30 / true. `--window-size` does not move this; the screen
+   is virtual.
+3. `document.hasFocus()` is true headless, false headed — a headed window that
+   launched in the background is genuinely unfocused.
+4. `window.screenX/screenY` and the outer/inner sizes.
+
+Everything else matches byte for byte, and that is the surprise: same
+`ANGLE (Apple, ANGLE Metal Renderer: Apple M4)`, same WebGPU adapter
+(`apple`/`metal-3`), same 2D canvas hash, same 199 speech voices, same font
+list, same five plugins, same permissions, same battery, `navigator.webdriver`
+false on both. `--headless=new` on macOS is a real browser on the real GPU. It
+is not detected because it renders differently; it is detected because it says
+so.
+
+**Two consequences.**
+
+*The oracle can be headless again, with `--chrome-arg --user-agent=…`.* That is
+worth having: the headed arm pops a window every 45 seconds and cannot be run
+unattended, and a headless arm that clears the challenge 3/3 can.
+
+*lightpanda's failure is not headless Chrome's failure.* This fork already sends
+a complete Chrome UA with no headless token (`Config.zig`, `user_agent_base`),
+so the one thing that stops `--headless=new` is a thing lightpanda does not do —
+and it still fails 0/8. Whatever the guard reads in lightpanda's telemetry, the
+headed/headless split says nothing about it. The two failures had looked like
+one problem, and they are two.
+
+### The `pat/` and `brunhild` requests are not lightpanda's
+
+An earlier sitting recorded two requests lightpanda makes and Chrome does not:
+`Fetch 401 {cf}/cdn-cgi/challenge-platform/h/b/pat/…` and
+`Fetch CouldntResolveHost https://brunhild.challenges.cloudflare.com/…/h/b/i/…`.
+Both readings were an artifact of the instrument.
+
+The challenge does its real work inside a `challenges.cloudflare.com` iframe,
+which Chrome runs **out of process**. A CDP client attached to the page session
+sees that iframe's *document* request and nothing the iframe fetches afterwards
+— while lightpanda, having one process, cannot hide any of it. So four endpoints
+read as lightpanda-only on an engine that was merely the only one being watched.
+
+`antibot-sweep --attach-frames` attaches to the iframe's own target
+(`Target.setAutoAttach`, flattened, recursive) and tags those events `frame:true`.
+With it, per three interleaved trials (`results/e3/`):
+
+| path | headed | headed +attach | headless +attach | lightpanda |
+|---|---|---|---|---|
+| `{cf}/…/h/b/fo/` | 0/3 | **3/3** | 3/3 | 3/3 |
+| `{cf}/…/h/b/ci/` | 0/3 | **3/3** | 3/3 | 3/3 |
+| `{cf}/…/h/b/pat/` | 0/3 | **3/3** | 3/3 | 3/3 |
+| `brunhild.…/h/b/i/` | 0/3 | **3/3** | 3/3 | 3/3 |
+
+Every engine asks for all four, including the headed Chrome that passes. There
+is nothing there to fix.
+
+`brunhild.challenges.cloudflare.com` resolves to AAAA records only, and this
+machine has no global IPv6 address — `curl` cannot resolve it either, nor
+`ipv6.google.com`. lightpanda uses libcurl without `CURLOPT_IPRESOLVE`, so its
+`CouldntResolveHost` is the host's answer, not the engine's.
+
+**`--attach-frames`, not `--same-process`.** Disabling site isolation also makes
+the iframe visible, and it costs the verdict: headed Chrome goes 5/5 → **0/3**
+with `--disable-features=IsolateOrigins,site-per-process` (`results/e2/`).
+`--attach-frames` does not — headed 3/3 with it and 3/3 without, side by side in
+the same round. An instrument that changes the reading cannot take the reading.
+
+### What a pass looks like on the wire, and why the payload will not say more
+
+With frames attached, the `fo/` POST sequence separates pass from fail cleanly,
+and it is the only thing that does — the request *sets* are identical:
+
+| arm | parent `fo/` #1 | widget `fo/` | widget `fo/` #2 | parent `fo/` #2 | outcome |
+|---|---|---|---|---|---|
+| headed | 2306–2316 | 4706–4716 | >64 KB | **8748–8844** | pass |
+| headless | 2327–2338 | 4791–4812 | >64 KB | — | stuck |
+| lightpanda | 2306 | 4652–4663 | >64 KB | — | stuck |
+
+A passing client makes a second parent-realm POST carrying the solved challenge;
+a failing one never gets told to. Note lightpanda's first POST is 2306, the same
+as the passing arm's, while headless Chrome's is 2327–2338 — size is not the
+discriminator either.
+
+The bodies are ciphertext in a custom alphabet (`…oHIJq1LLVY5IR-0ghveZjOk8…`,
+`$ + -` as symbols), so there is no content to diff: the wire says *where* the
+verdict lands, never *what* was judged. Localising further has to come from the
+property side, which is what `probe-headless-tells.js` does for Chrome and what
+the collectors do for this engine.
