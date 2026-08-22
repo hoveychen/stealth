@@ -375,7 +375,9 @@
   // Test that extracting a cached property getter and calling it with wrong `this`
   // doesn't crash (V8 internal field out of bounds). V8's Signature validation
   // should throw "Illegal invocation" for wrong receiver types.
-  const documentGetter = Object.getOwnPropertyDescriptor(Window.prototype, 'document').get;
+  // On the global, not on Window.prototype: [Global] moves the attribute onto
+  // the global object, which is where Chrome's descriptor lives too.
+  const documentGetter = Object.getOwnPropertyDescriptor(window, 'document').get;
 
   // Verify we get an error with wrong this values
   let errorCount = 0;
@@ -471,4 +473,89 @@
   testing.expectEqual(true, navigator === window.navigator);
   testing.expectEqual(true, typeof navigator.userAgent === 'string');
   testing.expectEqual(true, navigator.userAgent.length > 0);
+</script>
+
+<script id=global_member_home>
+  // The other half of [Global]: a member that becomes an own property of the
+  // global must *leave* the interface prototype object. Web IDL keeps only the
+  // constants there, so the whole of Window.prototype is three names, and the
+  // global's [[Prototype]] is Window.prototype itself -- no extra link.
+  //
+  // Measured on headless Chrome 151 (expr-window-proto-shape):
+  //   Object.getPrototypeOf(window) === Window.prototype  -> true
+  //   Object.getOwnPropertyNames(Window.prototype)        -> PERSISTENT, TEMPORARY, constructor
+  //   Window.prototype.hasOwnProperty('postMessage')      -> false
+  //   window.constructor === Window                       -> true
+  const hop2 = Object.prototype.hasOwnProperty;
+
+  testing.expectEqual(true, Object.getPrototypeOf(window) === Window.prototype);
+  testing.expectEqual(true, window.constructor === Window);
+  testing.expectEqual('PERSISTENT,TEMPORARY,constructor',
+    Object.getOwnPropertyNames(Window.prototype).sort().join(','));
+
+  // Attributes and operations live on the global, not above it.
+  for (const member of ['postMessage', 'document', 'location', 'navigator', 'alert', 'atob']) {
+    testing.expectEqual(true, hop2.call(window, member), { desc: member + ' is own on the global' });
+    testing.expectEqual(false, hop2.call(Window.prototype, member), { desc: member + ' is not on Window.prototype' });
+  }
+
+  // The brand stays where Web IDL puts it: on the interface prototype object,
+  // which is why `window` owns no symbol of its own.
+  testing.expectEqual('', Object.getOwnPropertySymbols(window).map(String).join(','));
+  testing.expectEqual('Symbol(Symbol.toStringTag)',
+    Object.getOwnPropertySymbols(Window.prototype).map(String).join(','));
+  testing.expectEqual('[object Window]', Object.prototype.toString.call(window));
+
+  // The constants Web IDL leaves behind, with the descriptor Chrome reports.
+  for (const [name, value] of [['TEMPORARY', 0], ['PERSISTENT', 1]]) {
+    const d = Object.getOwnPropertyDescriptor(Window.prototype, name);
+    testing.expectEqual(value, d.value, { desc: name + ' value' });
+    testing.expectEqual(false, d.writable, { desc: name + ' writable' });
+    testing.expectEqual(true, d.enumerable, { desc: name + ' enumerable' });
+    testing.expectEqual(false, d.configurable, { desc: name + ' configurable' });
+  }
+</script>
+
+<script id=named_properties_object>
+  // Above Window.prototype sits the nameless object Web IDL calls the named
+  // properties object -- the one that answers window.someElementId in the
+  // spec's telling. It is not EventTarget.prototype, and a script walking the
+  // chain counts four links from `window`, not three.
+  //
+  // Measured on headless Chrome 151 (expr-window-properties-object):
+  //   own names             []
+  //   own symbols           [Symbol(Symbol.toStringTag)] -> 'WindowProperties'
+  //   constructor           absent
+  //   its own prototype     EventTarget.prototype
+  const named_properties = Object.getPrototypeOf(Window.prototype);
+
+  testing.expectEqual(false, named_properties === EventTarget.prototype);
+  testing.expectEqual('', Object.getOwnPropertyNames(named_properties).join(','));
+  testing.expectEqual('Symbol(Symbol.toStringTag)',
+    Object.getOwnPropertySymbols(named_properties).map(String).join(','));
+  testing.expectEqual('[object WindowProperties]',
+    Object.prototype.toString.call(named_properties));
+  const brand = Object.getOwnPropertyDescriptor(named_properties, Symbol.toStringTag);
+  testing.expectEqual(false, brand.writable);
+  testing.expectEqual(false, brand.enumerable);
+  testing.expectEqual(true, brand.configurable);
+  testing.expectEqual(true, Object.getPrototypeOf(named_properties) === EventTarget.prototype);
+
+  let links = 0;
+  for (let o = Object.getPrototypeOf(window); o; o = Object.getPrototypeOf(o)) links++;
+  testing.expectEqual(4, links);
+
+  // Nothing names it: the interface objects skip the link, and EventTarget's
+  // methods still reach the global through it.
+  testing.expectEqual(true, Object.getPrototypeOf(Window) === EventTarget);
+  testing.expectEqual(true, window instanceof EventTarget);
+  testing.expectEqual(true, window instanceof Window);
+  {
+    let hits = 0;
+    const onx = () => hits++;
+    window.addEventListener('lp-named-properties', onx);
+    window.dispatchEvent(new Event('lp-named-properties'));
+    window.removeEventListener('lp-named-properties', onx);
+    testing.expectEqual(1, hits);
+  }
 </script>

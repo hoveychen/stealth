@@ -131,11 +131,14 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(false, w.secure);
       testing.expectEqual('', w.gated.join(' '));
       testing.expectEqual(6, w.ungated.length);
-      // 230 own names on a secure owner, less the 8 gated ones this engine has
-      // in the worker realm plus the three it exposes that Chrome's worker does
-      // not have at all (CookieStore, CookieChangeEvent, cookieStore) and that
-      // are [SecureContext] in the window realm.
-      testing.expectEqual(219, w.count);
+      // 207 own names on a secure owner (worker/secure_context.html), less the
+      // 8 gated ones this engine has in the worker realm plus the two it
+      // exposes that Chrome's worker does not have at all (CookieStore,
+      // CookieChangeEvent) and that are [SecureContext] in the window realm.
+      // It was 219 while WorkerGlobalScope's members were also mirrored onto
+      // the global: 22 fewer here against 23 on a secure owner, because the
+      // 23rd was the own copy of cookieStore, which this origin never had.
+      testing.expectEqual(197, w.count);
     });
   }
 </script>

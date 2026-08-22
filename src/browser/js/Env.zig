@@ -394,18 +394,25 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
         };
 
         // Snapshot creation deletes V8's built-in `console` from the global so
-        // ours takes over, but the delete also takes out the copy the [Global]
-        // flattening pass had mirrored there, leaving `console` reachable only
-        // through the prototype. Chrome has it as an own, non-enumerable data
-        // property of `window` (measured on a headed Chrome 150:
-        // Object.getOwnPropertyDescriptor(window, 'console') is a value
-        // descriptor, and Window.prototype has no `console` at all), and
-        // Object.getOwnPropertyNames(window) is a surface fingerprinters read
-        // directly. Resolving it here goes through the prototype accessor, so
-        // the value is the same Console object as before.
+        // ours takes over, and it deletes the [Global] copy with it. Chrome has
+        // it as an own, non-enumerable data property of `window` (measured on a
+        // headed Chrome 150: Object.getOwnPropertyDescriptor(window, 'console')
+        // is a value descriptor, and Window.prototype has no `console` at all),
+        // and Object.getOwnPropertyNames(window) is a surface fingerprinters
+        // read directly -- so the property is put back here, per context.
+        //
+        // The window realm's Console comes from the Window itself: [Global]
+        // leaves nothing on Window.prototype to resolve through. A worker's
+        // `console` belongs to WorkerGlobalScope, which is an *inherited*
+        // interface there rather than the [Global] one, so its accessor is
+        // still on WorkerGlobalScope.prototype and a plain get finds it.
         const global_object = context.globalObject(&ls.local);
-        if (global_object.get("console")) |console_value| {
-            _ = global_object.defineOwnProperty("console", console_value, v8.DontEnum);
+        const console_value = if (comptime is_frame)
+            ls.local.zigValueToJs(global.window.getConsole(), .{})
+        else
+            global_object.get("console");
+        if (console_value) |value| {
+            _ = global_object.defineOwnProperty("console", value, v8.DontEnum);
         } else |err| {
             log.err(.js, "console own property", .{ .err = err });
         }
@@ -791,10 +798,19 @@ test "Env: Worker context " {
     try testing.expectEqual(true, (try ls.local.exec("self.constructor.name === 'DedicatedWorkerGlobalScope'", null)).isTrue());
     try testing.expectEqual(true, (try ls.local.exec("self === globalThis", null)).isTrue());
 
-    // postMessage/close/onmessage live on DedicatedWorkerGlobalScope.prototype
-    // (per spec), not on WorkerGlobalScope.prototype.
-    try testing.expectEqual(true, (try ls.local.exec("DedicatedWorkerGlobalScope.prototype.hasOwnProperty('postMessage')", null)).isTrue());
+    // postMessage/close/onmessage belong to DedicatedWorkerGlobalScope, which
+    // is the [Global] interface here -- so they are own properties of the
+    // global object and are on neither interface prototype object. Measured on
+    // headless Chrome 151 in a blob worker (expr-worker-global-shape):
+    // getOwnPropertyNames(DedicatedWorkerGlobalScope.prototype) is
+    // PERSISTENT / TEMPORARY / constructor, and `self` owns postMessage.
+    try testing.expectEqual(true, (try ls.local.exec("Object.prototype.hasOwnProperty.call(self, 'postMessage')", null)).isTrue());
+    try testing.expectEqual(true, (try ls.local.exec("!DedicatedWorkerGlobalScope.prototype.hasOwnProperty('postMessage')", null)).isTrue());
     try testing.expectEqual(true, (try ls.local.exec("!WorkerGlobalScope.prototype.hasOwnProperty('postMessage')", null)).isTrue());
+    // ...while an inherited interface's members stay on its prototype object,
+    // which is why `self` does not own fetch there or here.
+    try testing.expectEqual(true, (try ls.local.exec("WorkerGlobalScope.prototype.hasOwnProperty('fetch')", null)).isTrue());
+    try testing.expectEqual(true, (try ls.local.exec("!Object.prototype.hasOwnProperty.call(self, 'fetch')", null)).isTrue());
 
     // AnimationFrameProvider mixin is exposed on the dedicated worker global.
     try testing.expectEqual(true, (try ls.local.exec("typeof self.requestAnimationFrame === 'function'", null)).isTrue());

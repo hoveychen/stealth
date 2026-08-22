@@ -28,6 +28,10 @@ const reflect = @import("../reflect.zig");
 // for this one case, we just hardcode it.
 const HtmlElement = @import("../webapi/element/Html.zig");
 
+// The page realm's [Global] interface. Named here because its prototype chain
+// is the one Web IDL gives an extra link (the named properties object).
+const Window = @import("../webapi/Window.zig");
+
 const v8 = js.v8;
 const log = lp.log;
 const JsApis = bridge.JsApis;
@@ -202,9 +206,37 @@ fn build() !Snapshot {
 
         // Set up prototype chains BEFORE attaching properties
         inline for (JsApis, 0..) |JsApi, i| {
+            // Window's chain has one more link in it; spliced in below.
+            if (comptime JsApi == Window.JsApi) {
+                continue;
+            }
             if (comptime protoIndexLookup(JsApi)) |proto_index| {
                 v8.v8__FunctionTemplate__Inherit(templates[i], templates[proto_index]);
             }
+        }
+
+        // Web IDL's *named properties object*: an interface with a named
+        // property getter that is also [Global] -- Window, and only Window --
+        // gets a nameless object between its interface prototype object and the
+        // next one up. Measured on headless Chrome 151
+        // (expr-window-properties-object): Object.getPrototypeOf(
+        // Window.prototype) is an object with no own names, no `constructor`,
+        // one own symbol (@@toStringTag = 'WindowProperties'), and its own
+        // prototype is EventTarget.prototype. So `window`'s chain is four links
+        // deep even though Window.prototype carries three names, and a script
+        // that walks the chain counts them.
+        const window_properties = v8.v8__FunctionTemplate__New__DEFAULT(isolate);
+        {
+            const window_index = comptime bridge.JsApiLookup.getId(Window.JsApi);
+            const event_target_index = comptime protoIndexLookup(Window.JsApi).?;
+
+            const tag = "WindowProperties";
+            const brand = v8.v8__String__NewFromUtf8(isolate, tag.ptr, v8.kNormal, tag.len);
+            const prototype = v8.v8__FunctionTemplate__PrototypeTemplate(window_properties);
+            v8.v8__Template__Set(@ptrCast(prototype), v8.v8__Symbol__GetToStringTag(isolate), brand, v8.ReadOnly + v8.DontEnum);
+
+            v8.v8__FunctionTemplate__Inherit(window_properties, templates[event_target_index]);
+            v8.v8__FunctionTemplate__Inherit(templates[window_index], window_properties);
         }
 
         // Add ALL templates to snapshot (done once, in any context)
@@ -236,20 +268,19 @@ fn build() !Snapshot {
         }
 
         {
-            const Window = @import("../webapi/Window.zig");
-            const index = try createSnapshotContext(.window, &PageJsApis, Window.JsApi, isolate, snapshot_creator.?, &templates);
+            const index = try createSnapshotContext(.window, &PageJsApis, Window.JsApi, isolate, snapshot_creator.?, &templates, window_properties);
             std.debug.assert(index == 0);
         }
 
         {
             const DedicatedWorkerGlobalScope = @import("../webapi/DedicatedWorkerGlobalScope.zig");
-            const index = try createSnapshotContext(.worker, &DedicatedWorkerJsApis, DedicatedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates);
+            const index = try createSnapshotContext(.worker, &DedicatedWorkerJsApis, DedicatedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates, null);
             std.debug.assert(index == 1);
         }
 
         {
             const SharedWorkerGlobalScope = @import("../webapi/SharedWorkerGlobalScope.zig");
-            const index = try createSnapshotContext(.worker, &SharedWorkerJsApis, SharedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates);
+            const index = try createSnapshotContext(.worker, &SharedWorkerJsApis, SharedWorkerGlobalScope.JsApi, isolate, snapshot_creator.?, &templates, null);
             std.debug.assert(index == 2);
         }
     }
@@ -271,18 +302,24 @@ fn createSnapshotContext(
     isolate: *v8.Isolate,
     snapshot_creator: *v8.SnapshotCreator,
     templates: []*const v8.FunctionTemplate,
+    // The realm's named properties object, if its [Global] interface has one.
+    named_properties: ?*const v8.FunctionTemplate,
 ) !usize {
-    // Create a global template that inherits from the GlobalScopeApi (Window or WorkerGlobalScope)
+    // The global object IS an instance of the global scope interface -- not of
+    // some extra template that inherits from it. Upstream created a nameless
+    // FunctionTemplate here and had it Inherit() the Window template, which put
+    // an extra link in the chain: `window -> <that>.prototype ->
+    // Window.prototype`. Measured on headless Chrome 151,
+    // `Object.getPrototypeOf(window) === Window.prototype` is true, so the
+    // extra link answered false -- one === away, on a name every detector
+    // already has in hand.
     const global_scope_index = comptime bridge.JsApiLookup.getId(GlobalScopeApi);
-    const js_global = v8.v8__FunctionTemplate__New__DEFAULT(isolate);
-    const class_name = v8.v8__String__NewFromUtf8(isolate, GlobalScopeApi.Meta.name.ptr, v8.kNormal, @intCast(GlobalScopeApi.Meta.name.len));
-    v8.v8__FunctionTemplate__SetClassName(js_global, class_name);
-    v8.v8__FunctionTemplate__Inherit(js_global, templates[global_scope_index]);
-
-    const global_template = v8.v8__FunctionTemplate__InstanceTemplate(js_global).?;
+    const global_template = v8.v8__FunctionTemplate__InstanceTemplate(templates[global_scope_index]).?;
     v8.v8__ObjectTemplate__SetInternalFieldCount(global_template, comptime countInternalFields(GlobalScopeApi));
 
-    // Set up named/indexed handlers for Window's global object (for named element access like window.myDiv)
+    // Named element access (window.myDiv). The interface's own `index` handler
+    // is already on this template, installed by attachClass; only the named one
+    // is specific to being the global.
     if (comptime std.mem.eql(u8, GlobalScopeApi.Meta.name, "Window")) {
         v8.v8__ObjectTemplate__SetNamedHandler(global_template, &.{
             .getter = bridge.unknownWindowPropertyCallback,
@@ -295,46 +332,27 @@ fn createSnapshotContext(
             .data = null,
             .flags = v8.kOnlyInterceptStrings | v8.kNonMasking,
         });
-        v8.v8__ObjectTemplate__SetIndexedHandler(global_template, &.{
-            .getter = @import("../webapi/Window.zig").JsApi.index.getter,
-            .setter = null,
-            .query = null,
-            .deleter = null,
-            .enumerator = null,
-            .definer = null,
-            .descriptor = null,
-            .data = null,
-            .flags = 0,
-        });
     }
 
-    // Re-run attachClass, but specifically targetting the global (Window or WGS)
-    // templates, so that all of these getters/functions which are already defined
-    // on their prototype will now be defined directly on the object.
-    inline for (comptime globalScopeChain(GlobalScopeApi)) |ScopeApi| {
-        // ScopeApi is going to be Window, EventTarget
-        // Or WorkerGlobalState, EventTarget
-        comptime {
-            //
-            if (hasGatedMember(ScopeApi)) {
-                @compileError("[Global] scope interface " ++ @typeName(ScopeApi) ++ " has [Exposed]-gated members. This is not supported");
-            }
-        }
-        // ...but not EventTarget's. Measured on Chrome 151:
-        // Object.getOwnPropertyNames(window) carries document / location /
-        // alert and every other Window member, and does NOT carry
-        // addEventListener, removeEventListener or dispatchEvent -- those stay
-        // on EventTarget.prototype, which the global still inherits through
-        // Window.prototype. Three own properties a real window does not have
-        // is three properties a detector can read for free.
-        if (comptime std.mem.eql(u8, ScopeApi.Meta.name, "EventTarget") == false) {
-            const scope_index = comptime bridge.JsApiLookup.getId(ScopeApi);
-            // So we're attaching the Window/WorkerGlobalScope members (which
-            // were already attached to its prototype), directly on the
-            // global_template.
-            attachClass(ScopeApi, true, isolate, templates[scope_index], global_template);
+    // Now attach the [Global] interface's members directly on the global
+    // object, which is where Web IDL says they live. The regular pass skipped
+    // them (see attachClass), so this is their only home -- an attribute or
+    // operation is own on the global and absent from the interface prototype
+    // object, which keeps only the constants and `constructor`.
+    //
+    // Only this one interface, not the chain above it: [Global] is a per-
+    // interface annotation. Measured on headless Chrome 151 in a worker
+    // (expr-worker-global-shape), `onmessage` and `postMessage` -- Dedicated-
+    // WorkerGlobalScope's own members -- are own on `self`, while `fetch` and
+    // `isSecureContext` answer from WorkerGlobalScope.prototype and
+    // `addEventListener` from EventTarget.prototype. Walking the chain here
+    // gave the worker global 29 own properties a real one does not have.
+    comptime {
+        if (hasGatedMember(GlobalScopeApi)) {
+            @compileError("[Global] scope interface " ++ @typeName(GlobalScopeApi) ++ " has [Exposed]-gated members. This is not supported");
         }
     }
+    attachClass(GlobalScopeApi, true, isolate, templates[global_scope_index], global_template);
 
     const context = v8.v8__Context__New(isolate, global_template, null);
     v8.v8__Context__Enter(context);
@@ -349,6 +367,20 @@ fn createSnapshotContext(
     // type with members tagged [Exposed=Window]/[Exposed=Worker], prune the
     // ones that don't match this realm from the per-context Func.prototype.
     const prototype_key = v8.v8__String__NewFromUtf8(isolate, "prototype", v8.kNormal, 9);
+
+    // The named properties object is not an interface, so nothing names it and
+    // it has no `constructor` back-reference -- measured: Chrome reports no own
+    // names on it at all. V8 gives every template's prototype object one, so it
+    // goes here.
+    if (named_properties) |np| {
+        const func: *const v8.Object = @ptrCast(v8.v8__FunctionTemplate__GetFunction(np, context));
+        if (v8.v8__Object__Get(func, context, prototype_key)) |proto_handle| {
+            const proto_obj: *const v8.Object = @ptrCast(proto_handle);
+            const constructor_key = v8.v8__String__NewFromUtf8(isolate, "constructor", v8.kNormal, 11);
+            var maybe_deleted: v8.MaybeBool = undefined;
+            v8.v8__Object__Delete(proto_obj, context, constructor_key, &maybe_deleted);
+        }
+    }
 
     inline for (ContextApis) |JsApi| {
         @setEvalBranchQuota(10_000);
@@ -469,7 +501,12 @@ fn createSnapshotContext(
     }
 
     {
-        // Delete built-in console so we can inject our own
+        // Delete built-in console so we can inject our own. V8's own console
+        // object wins the slot over the template's accessor -- measured: with
+        // this delete removed, `Object.getOwnPropertyNames(console)` came back
+        // as V8's list (`context`, `createTask`, no `memory`) and carried V8's
+        // '[object console]' brand, so the brand alone does not tell them
+        // apart. Env.zig installs the page's Console over the hole this leaves.
         const console_key = v8.v8__String__NewFromUtf8(isolate, "console", v8.kNormal, 7);
         var maybe_deleted: v8.MaybeBool = undefined;
         v8.v8__Object__Delete(global_obj, context, console_key, &maybe_deleted);
@@ -932,6 +969,15 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     const own_properties = @hasDecl(JsApi.Meta, "own_properties") and JsApi.Meta.own_properties;
     const member_template = if (own_properties) instance else prototype;
 
+    // Web IDL [Global]: this interface's attributes and operations are own
+    // properties of the global object, so they do not go on the interface
+    // prototype object at all. createSnapshotContext puts them on the global
+    // (attachClass with flatten = true); the regular pass here leaves the
+    // prototype with its constants, its brand and `constructor` -- the three
+    // names headless Chrome 151 reports for Object.getOwnPropertyNames(
+    // Window.prototype): PERSISTENT, TEMPORARY, constructor.
+    const is_global = @hasDecl(JsApi.Meta, "global") and JsApi.Meta.global;
+
     // Web IDL brands the interface *prototype* object, never the instances; a
     // namespace object (which has no prototype of its own) carries the brand
     // directly. Measured on a headed Chrome 150:
@@ -968,6 +1014,14 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
             switch (definition) {
                 bridge.Accessor, bridge.Function => if (value.static) continue,
                 else => continue,
+            }
+        } else if (comptime is_global) {
+            // ...and those same members are the ones the interface prototype
+            // object does not get. A static member is not part of the
+            // flattening, so it still belongs on the interface object.
+            switch (definition) {
+                bridge.Accessor, bridge.Function => if (value.static == false) continue,
+                else => {},
             }
         }
 
@@ -1109,7 +1163,11 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
     // (`Object.getOwnPropertySymbols(document.createElement('div'))` is empty),
     // and it would sort the brand after @@iterator instead of before it.
     if (comptime lp.IS_DEBUG) {
-        if (!has_named_index_getter) {
+        // A [Global] interface's instance template is the context's global
+        // object, and that one already gets a named handler in
+        // createSnapshotContext; installing a second one on the same template
+        // would replace it, taking named element access with it.
+        if (!has_named_index_getter and !is_global) {
             var configuration: v8.NamedPropertyHandlerConfiguration = .{
                 .getter = bridge.unknownObjectPropertyCallback(JsApi),
                 .setter = null,
@@ -1123,21 +1181,6 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
             };
             v8.v8__ObjectTemplate__SetNamedHandler(instance, &configuration);
         }
-    }
-}
-
-// The chain of interface types reachable from a [Global] interface via WebIDL
-// inheritance, e.g. Window -> [Window.JsApi, EventTarget.JsApi].
-fn globalScopeChain(comptime GlobalScopeApi: type) []const type {
-    comptime {
-        var chain: []const type = &[_]type{};
-        var JsApi = GlobalScopeApi;
-        while (true) {
-            chain = chain ++ &[_]type{JsApi};
-            const proto_index = protoIndexLookup(JsApi) orelse break;
-            JsApi = JsApis[proto_index];
-        }
-        return chain;
     }
 }
 

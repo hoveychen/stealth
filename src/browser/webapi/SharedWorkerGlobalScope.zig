@@ -403,6 +403,12 @@ pub const JsApi = struct {
 
     pub const Meta = struct {
         pub const name = "SharedWorkerGlobalScope";
+        // Web IDL [Global]: this interface's attributes and operations are own
+        // properties of the global object rather than properties of the
+        // interface prototype object. The annotation is per-interface -- the
+        // inherited ones (WorkerGlobalScope, EventTarget) keep theirs where
+        // they are.
+        pub const global = true;
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
     };
