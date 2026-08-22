@@ -155,20 +155,41 @@ pub fn getCookieEnabled(_: *const Navigator) bool {
     return true;
 }
 
-// Fixed rather than read off the host. Reporting the real core count and RAM
-// would look more like a specific real Chrome, but it makes the same build
-// fingerprint differently on every machine; a fixed pair is stable across a
-// fleet at the cost of being shared by it. 8 cores is an unremarkable desktop
-// in a way 4 no longer is.
+// Read off the host. These were a fixed 8 and 8 on the argument that one pair
+// is stable across a fleet where the host's would vary -- but stable across a
+// fleet is the same thing as shared by it, and a value every instance reports
+// is a cluster signature rather than an unremarkable desktop. The other half of
+// the cost is per-machine: measured on this host through a real http origin
+// (secure context, so deviceMemory is exposed), headless Chrome 151 answers
+// hardwareConcurrency 10 against `sysctl hw.logicalcpu` 10, and deviceMemory 16
+// on 24 GiB -- so the fixed pair also contradicted the Chrome a guard here
+// would accept, on two readings a page takes in one expression.
 //
-// deviceMemory is already coarse by design: Chrome rounds it to a power of two,
-// so 8 is a value a real Chrome reports rather than an invented one.
+// Not cached: both are one syscall, a page asks for them a handful of times,
+// and a cache here would be a mutable global read from every worker thread.
 pub fn getHardwareConcurrency(_: *const Navigator) u32 {
-    return 8;
+    // Chrome reports the logical core count. If the host will not say, the old
+    // fixed answer is still a better one than zero.
+    const count = std.Thread.getCpuCount() catch return 8;
+    return @intCast(count);
 }
 
 pub fn getDeviceMemory(_: *const Navigator) f64 {
-    return 8.0;
+    const bytes = std.process.totalSystemMemory() catch return 8.0;
+    const gib = bytes / (1024 * 1024 * 1024);
+    if (gib == 0) {
+        // The API's floor; a host with under a gibibyte is not a desktop.
+        return 0.25;
+    }
+    // Chrome quantises down to a power of two -- 24 GiB reads as 16, which is
+    // the one host this was fitted to, so the exponent is floored rather than
+    // rounded. Note Chrome 151 does *not* cap the answer at 8 the way the
+    // Device Memory API's original upper bound did.
+    var quantised: f64 = 1;
+    while (quantised * 2 <= @as(f64, @floatFromInt(gib))) {
+        quantised *= 2;
+    }
+    return quantised;
 }
 
 pub fn getMaxTouchPoints(_: *const Navigator) u32 {
@@ -821,4 +842,25 @@ test "Navigator: parseLanguages drops q-weights and keeps header order" {
     // Degenerate values shouldn't produce empty tags.
     try testing.expectEqual(@as(usize, 0), (try parseLanguages(a, "")).len);
     try testing.expectEqual(@as(usize, 0), (try parseLanguages(a, " , ")).len);
+}
+
+test "Navigator: the persona's core count and memory come from the host" {
+    // A fleet that all reports the same pair is a cluster signature, and on any
+    // given machine it also contradicts the Chrome a guard would accept there.
+    // Measured on this host through a real http origin (secure context, so
+    // deviceMemory is present): headless Chrome 151 answers
+    // hardwareConcurrency 10 against `sysctl hw.logicalcpu` 10, and
+    // deviceMemory 16 on 24 GiB of RAM.
+    const cpus = std.Thread.getCpuCount() catch return error.SkipZigTest;
+    try testing.expectEqual(@as(u32, @intCast(cpus)), getHardwareConcurrency(undefined));
+
+    const bytes = std.process.totalSystemMemory() catch return error.SkipZigTest;
+    const gib = bytes / (1024 * 1024 * 1024);
+    // Chrome quantises down to a power of two: 24 GiB reads as 16. Fitted to
+    // the one host measured, so the exponent is floored rather than rounded.
+    var expected: f64 = 1;
+    while (expected * 2 <= @as(f64, @floatFromInt(gib))) {
+        expected *= 2;
+    }
+    try testing.expectEqual(expected, getDeviceMemory(undefined));
 }

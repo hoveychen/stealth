@@ -7817,6 +7817,73 @@ with a P3 display reports `p3: true` in a *headed* Chrome, and this reading came
 from a headless one. The passing reference is headless, so matching it is not
 the wrong call — it just is not a reading about headed Chrome.
 
+## The persona is the host's now, and `window` is not a `Window` (2026-08-22)
+
+Two of E1's eight surviving ❌ rows were `navigator.hardwareConcurrency` (8
+against both references' 10) and `navigator.deviceMemory` (8 against 16). Both
+were deliberate: a fixed pair is stable across a fleet where the host's would
+vary. The other reading of "stable across a fleet" is "shared by it" — a value
+every instance reports is a cluster signature — and E1 priced the second half:
+on this host the fixed pair also contradicted the Chrome a guard here accepts.
+
+Re-measured independently before changing anything, and the origin matters.
+`run-expr.mjs` puts both engines on `about:blank`, where Chrome answers
+`navigator.deviceMemory === undefined`: the Device Memory API is
+secure-context-gated and `about:blank` is not one. Served the same probe from
+`http://127.0.0.1` — a secure context — both engines report it:
+
+| | headless Chrome 151 | lightpanda dev.820 | host |
+|---|---|---|---|
+| `navigator.hardwareConcurrency` | 10 | 8 | `hw.logicalcpu` = 10 |
+| `navigator.deviceMemory` | **16** | 8 | `hw.memsize` = 24 GiB |
+| `isSecureContext` | true | true | — |
+
+So Chrome quantises memory *down* to a power of two (24 → 16) and does **not**
+cap it at 8, which is what the old comment assumed. Both come off the host now
+(`Navigator.zig`), and a Zig test asserts them against `std.Thread.getCpuCount`
+and `std.process.totalSystemMemory` — the only place that can, since a literal
+in a JS test would only hold on one machine.
+
+**It is not the door.** Three interleaved trials at `cf-scrapingcourse` against
+a control on the pre-change binary, same address, same sitting: both arms answer
+the interstitial. Kept anyway, for the same reason the frame-URL fix was: it
+closes two readings a page takes in one expression, and a tell that is not this
+door is still a tell.
+
+### `Object.getPrototypeOf(window) === Window.prototype` is false here
+
+The same probe asked about the global's shape, and this is the louder finding:
+
+| | Chrome 151 | lightpanda |
+|---|---|---|
+| `Object.getPrototypeOf(window) === Window.prototype` | **true** | **false** |
+| `Object.getOwnPropertyNames(Window.prototype)` | `TEMPORARY`, `PERSISTENT`, `constructor` | **239 names** |
+| `Window.prototype.hasOwnProperty('postMessage')` | false | true |
+| `Object.getOwnPropertyNames(window).length` | 1237 | 1203 |
+| `Object.getOwnPropertySymbols(window)` | `[]` | `[]` |
+
+The count was already noted in passing; the prototype identity was not, and it
+is a one-expression identification that no browser fails. The cause is in
+`Snapshot.zig`: the context's global comes from a **separate** `FunctionTemplate`
+that `Inherit`s the Window template, so the chain is
+`window → <anonymous>.prototype → Window.prototype → EventTarget.prototype`
+where Chrome's is `window → Window.prototype → EventTarget.prototype`. One extra
+hop, and `getPrototypeOf` reads it.
+
+The 239 names are the same defect from the other side. The `[Global]` flattening
+already attaches Window's members to the global template as own properties —
+which is why `window` has 1203 of them — but the regular pass has *also* put
+them on `Window.prototype`, so they exist twice. Chrome's three survivors say
+exactly which rule to apply: `TEMPORARY` and `PERSISTENT` are **constants**, and
+Web IDL leaves constants on the interface prototype object while `[Global]`
+moves attributes and operations to the instance. So the fix is one rule in two
+places — use the Window template itself as the context's global, and in the
+`[Global]` case route attributes and operations to the instance template while
+constants stay on the prototype.
+
+(One smaller thing the same reading turned up: Chrome's `EventTarget.prototype`
+carries a fourth operation, `when`, which this engine does not have.)
+
 ### `cf-chatgpt` looked like a regression and is the station moving
 
 The 2026-08-22 sweep reads `cf-chatgpt` as 41 nodes of `Application Error!`
