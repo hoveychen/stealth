@@ -51,47 +51,50 @@ fn handlerProperty(comptime T: type, comptime which: handler_property.Handler) t
     return handler_property.accessors(T, which);
 }
 
+/// The joint session history, shared by every frame in the session. The
+/// Navigation objects in front of it are per-frame -- Chrome's window.navigation
+/// is per-window, and a child that shares its parent's object also shares the
+/// parent's realm, which is how a child's navigate() ends up moving the parent.
+pub const State = struct {
+    _current_navigation_kind: ?NavigationKind = null,
+
+    _index: usize = 0,
+    // Need to be stable pointers, because Events can reference entries.
+    _entries: std.ArrayList(*NavigationHistoryEntry) = .empty,
+    _next_entry_id: usize = 0,
+    _activation: ?NavigationActivation = null,
+};
+
 _proto: *EventTarget,
 
-_current_navigation_kind: ?NavigationKind = null,
-
-_index: usize = 0,
-// Need to be stable pointers, because Events can reference entries.
-_entries: std.ArrayList(*NavigationHistoryEntry) = .empty,
-_next_entry_id: usize = 0,
-_activation: ?NavigationActivation = null,
+_state: *State,
 
 pub fn asEventTarget(self: *Navigation) *EventTarget {
     return self._proto;
 }
 
-// The `currententrychange` and `dispose` handlers live in the event manager's
-// handler store, which the frame's arena owns, so tearing the frame down needs
-// nothing from here.
-pub fn onRemoveFrame(_: *Navigation) void {}
-
 pub fn getActivation(self: *const Navigation) ?NavigationActivation {
-    return self._activation;
+    return self._state._activation;
 }
 
 pub fn getCanGoBack(self: *const Navigation) bool {
-    return self._index > 0;
+    return self._state._index > 0;
 }
 
 pub fn getCanGoForward(self: *const Navigation) bool {
-    return self._entries.items.len > self._index + 1;
+    return self._state._entries.items.len > self._state._index + 1;
 }
 
 pub fn getCurrentEntryOrNull(self: *Navigation) ?*NavigationHistoryEntry {
-    if (self._entries.items.len > self._index) {
-        return self._entries.items[self._index];
+    if (self._state._entries.items.len > self._state._index) {
+        return self._state._entries.items[self._state._index];
     } else return null;
 }
 
 pub fn getCurrentEntry(self: *Navigation) *NavigationHistoryEntry {
     // This should never fail. An entry should always be created before
     // we run the scripts on the frame we are loading.
-    const len = self._entries.items.len;
+    const len = self._state._entries.items.len;
     lp.assert(len > 0, "Navigation.getCurrentEntry", .{ .len = len });
 
     return self.getCurrentEntryOrNull().?;
@@ -112,14 +115,14 @@ pub fn back(self: *Navigation, frame: *Frame) !NavigationReturn {
         return error.InvalidStateError;
     }
 
-    const new_index = self._index - 1;
-    const next_entry = self._entries.items[new_index];
+    const new_index = self._state._index - 1;
+    const next_entry = self._state._entries.items[new_index];
 
     return self.navigateInner(next_entry._url, .{ .traverse = new_index }, frame);
 }
 
 pub fn entries(self: *const Navigation) []*NavigationHistoryEntry {
-    return self._entries.items;
+    return self._state._entries.items;
 }
 
 pub fn forward(self: *Navigation, frame: *Frame) !NavigationReturn {
@@ -127,8 +130,8 @@ pub fn forward(self: *Navigation, frame: *Frame) !NavigationReturn {
         return error.InvalidStateError;
     }
 
-    const new_index = self._index + 1;
-    const next_entry = self._entries.items[new_index];
+    const new_index = self._state._index + 1;
+    const next_entry = self._state._entries.items[new_index];
 
     return self.navigateInner(next_entry._url, .{ .traverse = new_index }, frame);
 }
@@ -148,7 +151,7 @@ pub fn updateEntries(
             _ = try self.pushEntry(url, .{ .source = .navigation, .value = state }, frame, should_dispatch);
         },
         .traverse => |index| {
-            self._index = index;
+            self._state._index = index;
         },
         .reload => {},
     }
@@ -161,8 +164,8 @@ pub fn updateEntries(
 pub fn commitNavigation(self: *Navigation, frame: *Frame) !void {
     const url = frame.url;
 
-    var kind: NavigationKind = self._current_navigation_kind orelse .{ .push = null };
-    defer self._current_navigation_kind = null;
+    var kind: NavigationKind = self._state._current_navigation_kind orelse .{ .push = null };
+    defer self._state._current_navigation_kind = null;
 
     const from_entry = self.getCurrentEntryOrNull();
     if (from_entry == null) {
@@ -171,7 +174,7 @@ pub fn commitNavigation(self: *Navigation, frame: *Frame) !void {
 
     try self.updateEntries(url, kind, frame, false);
 
-    self._activation = NavigationActivation{
+    self._state._activation = NavigationActivation{
         ._from = from_entry,
         ._entry = self.getCurrentEntry(),
         ._type = kind.toNavigationType(),
@@ -191,14 +194,14 @@ pub fn pushEntry(
     const url = try arena.dupeZ(u8, _url);
 
     // truncates our history here.
-    const retained_index = self._index + 1;
+    const retained_index = self._state._index + 1;
     var disposed: []*NavigationHistoryEntry = &.{};
-    if (self._entries.items.len > retained_index) {
+    if (self._state._entries.items.len > retained_index) {
         disposed = try frame.call_arena.dupe(
             *NavigationHistoryEntry,
-            self._entries.items[retained_index..],
+            self._state._entries.items[retained_index..],
         );
-        self._entries.shrinkRetainingCapacity(retained_index);
+        self._state._entries.shrinkRetainingCapacity(retained_index);
     }
 
     // Per spec, dispose fires last: after the entry list is updated and
@@ -211,10 +214,10 @@ pub fn pushEntry(
         };
     };
 
-    const index = self._entries.items.len;
+    const index = self._state._entries.items.len;
 
-    const id = self._next_entry_id;
-    self._next_entry_id += 1;
+    const id = self._state._next_entry_id;
+    self._state._next_entry_id += 1;
 
     const id_str = try std.fmt.allocPrint(arena.allocator(), "{d}", .{id});
 
@@ -230,9 +233,9 @@ pub fn pushEntry(
     });
 
     // we don't always have a current entry...
-    const previous = if (self._entries.items.len > 0) self.getCurrentEntry() else null;
-    try self._entries.append(arena.allocator(), entry);
-    self._index = index;
+    const previous = if (self._state._entries.items.len > 0) self.getCurrentEntry() else null;
+    try self._state._entries.append(arena.allocator(), entry);
+    self._state._index = index;
 
     if (previous != null and should_dispatch) {
         if (frame.hasDirectListeners(self.asEventTarget(), "currententrychange", null)) {
@@ -260,8 +263,8 @@ pub fn replaceEntry(
 
     const previous = self.getCurrentEntry();
 
-    const id = self._next_entry_id;
-    self._next_entry_id += 1;
+    const id = self._state._next_entry_id;
+    self._state._next_entry_id += 1;
     const id_str = try std.fmt.allocPrint(arena.allocator(), "{d}", .{id});
 
     const entry = try Factory.chainedWithAllocator(arena.allocator(), .{
@@ -275,8 +278,8 @@ pub fn replaceEntry(
         },
     });
 
-    const old_entry = self._entries.items[self._index];
-    self._entries.items[self._index] = entry;
+    const old_entry = self._state._entries.items[self._state._index];
+    self._state._entries.items[self._state._index] = entry;
 
     // Per spec, dispose fires last, after currententrychange. old_entry is
     // already out of _entries, so fire even if the dispatch below fails.
@@ -365,7 +368,7 @@ pub fn navigateInner(
             }
         },
         .traverse => |index| {
-            self._index = index;
+            self._state._index = index;
 
             if (is_same_document) {
                 frame.url = new_url;
@@ -451,7 +454,7 @@ pub fn traverseTo(self: *Navigation, key: []const u8, _opts: ?TraverseToOptions,
         log.warn(.not_implemented, "Navigation.traverseTo", .{ .has_options = true });
     }
 
-    for (self._entries.items, 0..) |entry, i| {
+    for (self._state._entries.items, 0..) |entry, i| {
         if (std.mem.eql(u8, key, entry._key)) {
             return try self.navigateInner(entry._url, .{ .traverse = i }, frame);
         }
@@ -518,9 +521,9 @@ test "Navigation: about:blank commits entry" {
     defer testing.test_session.closeAllPages();
 
     // The test_session is shared; prior tests leak entries into it via
-    // session.navigation. Reset it so we exercise a fresh session-style state.
-    testing.test_session.navigation._entries.clearRetainingCapacity();
-    testing.test_session.navigation._index = 0;
+    // session.navigation_state. Reset it so we exercise a fresh session-style state.
+    testing.test_session.navigation_state._entries.clearRetainingCapacity();
+    testing.test_session.navigation_state._index = 0;
 
     try frame.navigate("about:blank", .{});
     try testing.waitForFrame();
@@ -544,8 +547,8 @@ test "Navigation: reload on empty stack seeds an entry" {
     const frame = try testing.createFrame();
     defer testing.test_session.closeAllPages();
 
-    testing.test_session.navigation._entries.clearRetainingCapacity();
-    testing.test_session.navigation._index = 0;
+    testing.test_session.navigation_state._entries.clearRetainingCapacity();
+    testing.test_session.navigation_state._index = 0;
 
     // Mirrors CDP Page.reload arriving on a fresh session: doReload reads
     // frame.url (default "about:blank") and routes through the synchronous
