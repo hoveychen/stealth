@@ -41,6 +41,7 @@ fn dispatchConsoleMessage(values: []js.Value, console_type: Notification.Console
         .type = console_type,
         .values = values,
         .timestamp = ts,
+        .js_context = exec.js,
     });
 
     notification.dispatch(.runtime_console_message, &.{
@@ -48,6 +49,7 @@ fn dispatchConsoleMessage(values: []js.Value, console_type: Notification.Console
         .type = console_type,
         .values = values,
         .timestamp = ts,
+        .js_context = exec.js,
     });
 }
 

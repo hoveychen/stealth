@@ -348,6 +348,13 @@ pub const ConsoleMessageType = enum {
 
 pub const ConsoleMessage = struct {
     timestamp: u64,
+    // The realm that called console. `Runtime.consoleAPICalled` carries the
+    // executionContextId of the context that logged -- that is how a CDP client
+    // attributes a log line to a frame without trusting the page to tag itself
+    // -- and the arguments' RemoteObjects belong to that same realm. Without
+    // this the handler had nothing to go on but the main frame, so every realm
+    // reported the main frame's id.
+    js_context: *js.Context,
     source: enum {
         xml,
         javascript,

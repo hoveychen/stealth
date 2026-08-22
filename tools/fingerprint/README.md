@@ -8056,3 +8056,85 @@ The challenge outcome did **not** move: both runs end on `Just a moment...` with
 the same ~5.4 KB interstitial body, while Chrome on the same address flips to the
 real page (`Antibot Challenge - ScrapingCourse.com`, 2.9 KB). One more tell
 removed, still not the door.
+
+## Every realm answers with its own execution context (2026-08-22)
+
+A CDP client tells realms apart by `executionContextId`. Every
+`Runtime.consoleAPICalled` carries the id of the context that called `console`,
+and `Runtime.executionContextCreated` announces each context with an `auxData`
+naming its frame. That pair is how a host attributes a log line to a frame
+without trusting the page to tag itself — and it is the reason the instruments
+in this directory tag realms page-side at all.
+
+This engine reported the main frame's id for **every** realm.
+
+`realm-context-ids.mjs` is the oracle: one document, two same-origin iframes,
+each realm logging its own name. Chrome 151 against this engine, before and
+after:
+
+| | Chrome 151 | pre-fix | fixed |
+|---|---|---|---|
+| `top` | ctx 2 | ctx 2 | ctx 2 |
+| `kid-a` | ctx 3 | ctx 2 | ctx 3 |
+| `kid-b` | ctx 4 | ctx 2 | ctx 4 |
+| `distinctContextIds` | 3 | **1** | 3 |
+
+The `executionContextCreated` events were **already right** and were not
+touched: four contexts (the initial `about:blank` plus one per realm), distinct
+ids, correct `auxData.frameId`. Measured before assuming otherwise — the
+contexts existed and were announced all along, and only the attribution on the
+console event was wrong. Nothing here "implements" the event.
+
+The cause was in the notification, not the id. `Notification.ConsoleMessage`
+did not say which frame logged, so `runtime.zig:consoleMessage` reached for
+`bc.mainFrame()` and asked the inspector for *that* context. The fix carries
+the calling `js.Context` on the notification — `Console.zig:dispatchConsoleMessage`
+already holds the `*js.Execution` — and the handler opens its scope on that.
+
+That reach had a **second** consequence, easy to miss because the id is the
+visible one: the argument `RemoteObject`s were minted in the main frame's scope
+too. A `js.Value` already carries its own realm's `Local`, so the old code was
+handing `getRemoteObject` a scope from a different context than the values came
+from. One field fixes both.
+
+`Console.messageAdded` needs no change — it carries no context id at all.
+
+### What the census looks like now
+
+`vm-trace.mjs --postmessage` groups records by realm, and its key holds all
+three tags: the page-side frame depth, a page-side random id, and the host-side
+ctx. Pointed at a parent and one same-origin child that both post (`--url`,
+so nothing is patched), the same binary before and against Chrome:
+
+| realm | Chrome | pre-fix | fixed |
+|---|---|---|---|
+| `depth 0` parent | ctx 2 | ctx 2 | ctx 2 |
+| `depth 1` child | ctx 3 | **ctx 2** | ctx 3 |
+
+Chrome and the fixed binary print that census line for line identically. `ctx`
+now separates the two realms and agrees with `depth` one for one; before, `ctx`
+was a constant and `depth` was doing all the work.
+
+Worth noting for anyone reading a determinized trace: `rid` came back as the
+same `1ibbkg` in **both** realms in all three runs, exactly as the comment at
+the tag predicted — `--determinize` hands every realm the same fixed PRNG, so
+they draw the same first number. Under `--determinize` the page-side `rid` is
+not a discriminator at all, which leaves `ctx` as the only realm identity that
+does not come from the page.
+
+The page-side tags stay. They are what makes the agreement checkable, and
+`depth` says something `ctx` does not: where in the tree the realm sits.
+
+### The challenge did not move
+
+Live, on the same address, minutes apart:
+
+| | lightpanda (fixed) | Chrome (`--headless=new`, headed UA) |
+|---|---|---|
+| title | `Just a moment...` | `Antibot Challenge - ScrapingCourse.com` |
+| body | 5365 bytes | 2901 bytes |
+| text | "Performing security verification" | "You bypassed the Antibot challenge! :D" |
+
+Chrome's pass goes through a `?__cf_chl_tk=…` navigation on the interstitial and
+then lands on the real page; this engine never gets that far. One more tell
+removed, still not the door.
