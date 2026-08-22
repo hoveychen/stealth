@@ -519,9 +519,15 @@ pub fn baselineHeaders(self: *const Client) [7]Transfer.RequestHeader {
         // moved to follow Host) and drops it entirely on HTTP/2, which is also
         // what Chrome does.
         .{ .name = "Connection", .value = "keep-alive", .source = .cdp },
-        .{ .name = "Sec-Ch-Ua", .value = headers.sec_ch_ua, .source = .cdp },
-        .{ .name = "Sec-Ch-Ua-Mobile", .value = Config.HttpHeaders.sec_ch_ua_mobile, .source = .cdp },
-        .{ .name = "Sec-Ch-Ua-Platform", .value = self.platformHeader(), .source = .cdp },
+        // Lowercase, and only these three. Chromium Title-Cases every other
+        // field name it writes and spells the client hints in lowercase --
+        // measured, the `localHeaders` step of
+        // tools/fingerprint/results/px-hdr-chrome-ua.json. Visible on HTTP/1.1
+        // only: HPACK requires lowercase names, so curl lowercases the whole
+        // set on the way into h2 and the casing there is not ours to pick.
+        .{ .name = "sec-ch-ua", .value = headers.sec_ch_ua, .source = .cdp },
+        .{ .name = "sec-ch-ua-mobile", .value = Config.HttpHeaders.sec_ch_ua_mobile, .source = .cdp },
+        .{ .name = "sec-ch-ua-platform", .value = self.platformHeader(), .source = .cdp },
         .{ .name = "User-Agent", .value = self.getUserAgent() },
         // Sent from here rather than left to curl's CURLOPT_ACCEPT_ENCODING,
         // which writes it second -- one position after Host -- where Chrome has
@@ -3034,10 +3040,15 @@ pub const Transfer = struct {
     //
     // Anything not named here (author headers, CDP extras, Content-*) follows
     // in insertion order.
+    //
+    // These are lookup keys, matched case-insensitively below -- the casing
+    // that reaches the wire is the one baselineHeaders and seedFetchMetadata
+    // spell. Written here the same way anyway, so each field name has one
+    // spelling in this file.
     const chrome_navigation_order = [_][]const u8{
-        "Sec-Ch-Ua",
-        "Sec-Ch-Ua-Mobile",
-        "Sec-Ch-Ua-Platform",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
         "Upgrade-Insecure-Requests",
         "User-Agent",
         "Accept",
@@ -3053,10 +3064,10 @@ pub const Transfer = struct {
     };
 
     const chrome_subresource_order = [_][]const u8{
-        "Sec-Ch-Ua-Platform",
+        "sec-ch-ua-platform",
         "User-Agent",
-        "Sec-Ch-Ua",
-        "Sec-Ch-Ua-Mobile",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
         "Accept",
         "Sec-Fetch-Site",
         "Sec-Fetch-Mode",
