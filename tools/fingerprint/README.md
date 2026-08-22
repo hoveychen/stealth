@@ -7607,12 +7607,10 @@ Cloudflare footer links) — answers with the *widget's* URL:
 
 One realm contradicting itself, `location.origin` against `window.origin`, is a
 one-expression identification, and any page script that reports the URL it is
-running on — Turnstile's `api.js` among them — reports the wrong one. It does
-**not** reproduce in a fixture yet: a cross-origin child navigated three times by
-its parent, the same created by script rather than markup, and the same
-navigating *itself* across a hostname change all leave the top realm's URL
-correct in both engines. What the live page has and those do not is nested
-`blob:` and `about:srcdoc` frames, which is where the next attempt should look.
+running on — Turnstile's `api.js` among them — reports the wrong one. It did not
+reproduce in a fixture at first, and the guess recorded here — that the nested
+`blob:` and `about:srcdoc` frames were the missing ingredient — was wrong. It is
+the history API, and it is fixed: see *A frame's URL is its own* below.
 
 **`window.parent.parent` throws from a cross-origin child.** Walking up the
 frame tree — `while (w !== w.parent) w = w.parent` — reports depth 1 in Chrome
@@ -7629,3 +7627,78 @@ be caught. (A second Math.random detail fell out of that: under `--determinize`
 the tag is identical in every realm, because both realms then draw the same first
 number from the same fixed PRNG. That is the instrument's own doing, not the
 engine's.)
+
+## A frame's URL is its own (2026-08-22)
+
+The deviation the section above parked — the top realm answering with the
+widget iframe's URL — reproduces in fifteen lines and has nothing to do with
+nested `blob:` or `about:srcdoc` frames. `frame-url-history.mjs` bisects it over
+fifteen frame shapes, one per run; the header lists all fifteen. Six nesting
+shapes are clean in both engines. What leaks is **two frames both using the
+history API**, and it does not need cross-origin:
+
+* **T9** — the top calls `history.replaceState` once, then a **same-origin**
+  child calls it too. The top's `location.href`, `location.origin`,
+  `document.URL` and `document.baseURI` all become the child's path and query
+  resolved against the *top's* origin, exactly the shape of
+  `URL.resolve(topFrame.url, <the string the child passed>)`. The child's own
+  URL does not move. `window.origin` and `document.domain` stay correct, which
+  is the self-contradiction the live page shows.
+* **T8** — the same with the order reversed, and the mirror image: the *child*
+  lands on the top's path.
+* **T1 / T6 / T7** — only one side touches the history API: clean. The wrapper
+  binds to the first realm that reaches it, so a lone user is always its own.
+
+**The cause is object identity, not URL parsing.** `window.history` returned
+`&session.history` and `window.navigation` returned `session.navigation`: one
+object each for the whole session. One object gets one JS wrapper, the wrapper
+belongs to the realm that first reached it, and the `frame: *Frame` the bridge
+injects into `History.replaceState` and `Navigation.navigate` comes from *that
+realm*, not from the caller. So a child's `replaceState` ran against whichever
+frame had touched `history` first. Read from inside a same-origin child,
+`history === parent.history` and `navigation === parent.navigation` were both
+**true** here and are both **false** in Chrome 151 (`location === parent.location`
+is correctly false in both).
+
+Both objects are per-frame now — `Frame._history` and `Frame._navigation`, over
+the one entry list the session still owns (`Navigation.State`). They sit on
+`Frame` rather than on `Window` for a reason worth knowing before adding a field
+to `Window`: **the JS identity map is keyed by raw pointer**
+(`Context.addIdentity(ptr: usize)`), so an inline sub-object that Zig's layout
+happens to place at offset 0 of `Window` shares the `Window`'s address, and
+therefore its wrapper. Putting the two fields on `Window` moved `_launch_queue`
+to offset 0 and made `window.launchQueue` answer `[object Window]` — caught by
+`window/launch_queue.html`, not by anything in this plan.
+
+The regression test is `src/browser/tests/frames/frame_own_url.html`. All
+fifteen probe shapes read clean after the fix, and T9 reports
+`sameHistory=false sameNavigation=false` the way Chrome does.
+
+**T8's verdict in the header table was wrong in both directions**, and the fix
+is what exposed it. T8 is the shape where the top moves *itself* second, so it
+ends on `host.html?top_second=1` — but `expectedTop` only listed the shapes
+ending on the CF token URL, so T8 was compared against the URL it started on.
+That called a correct engine a leak, and called the broken one clean: the
+pre-fix engine routed the top's own `replaceState` to the child, which parked
+the top on exactly the URL the predicate wanted. The comparison is a per-shape
+allow-list plus an end-state check now, so a top that is supposed to move has to
+actually arrive. Headed Chrome 151 on T8 reports `host.html?top_second=1` for
+the top and `kid.html?child_first=1` for the child; the fixed engine matches it
+field for field.
+
+**On the live page the contradiction is gone, and the verdict is not.**
+`realm-url-fields.mjs` reads the whole URL surface of every realm on a live
+page, which is what makes a realm contradicting itself visible in one report.
+Four runs with the fix, and one control on the pre-fix binary minutes later
+from the same address:
+
+| top realm, `window === top` | pre-fix (control) | fixed, 4 runs of 4 |
+|---|---|---|
+| `location.href` / `document.URL` / `document.baseURI` | `https://challenges.cloudflare.com/cdn-cgi/challenge-platform/…` | `https://www.scrapingcourse.com/antibot-challenge` |
+| `location.origin` | `https://challenges.cloudflare.com` | `https://www.scrapingcourse.com` |
+| `window.origin` | `https://www.scrapingcourse.com` | `https://www.scrapingcourse.com` |
+
+`location.origin` and `window.origin` now agree, and the one-expression
+identification is closed. The challenge outcome did **not** move: all five runs
+end on `Just a moment...` with the same 5.4 KB interstitial body. This was one
+tell, not the door.

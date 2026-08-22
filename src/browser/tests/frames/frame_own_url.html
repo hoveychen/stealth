@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+A frame's URL is its own. A same-origin child calling history.replaceState
+moves the child and leaves the parent where it was.
+
+It did not: window.history handed every frame in the session the same History
+object, so the shared wrapper stayed bound to whichever realm reached it first
+-- the parent's -- and the child's call resolved against the parent's frame.
+The parent's location.href, document.URL and baseURI all became the child's
+path on the parent's origin, while the child's own URL never moved. Chrome 151
+keeps them apart, which is why `history === parent.history` is false there even
+same-origin; window.navigation is per-window for the same reason.
+-->
+
+<script id="child_replace_state_leaves_parent_url_alone" type=module>
+{
+  const state = await testing.async();
+  const originalUrl = location.href;
+
+  // The parent goes first, so its realm is the one that wraps window.history.
+  history.replaceState(null, '', '/topmark.html?top=1');
+
+  const child = await new Promise((resolve) => {
+    window.addEventListener('message', (e) => resolve(e.data), { once: true });
+    const iframe = document.createElement('iframe');
+    iframe.src = testing.BASE_URL + 'frames/support/history_replace_child.html';
+    document.documentElement.appendChild(iframe);
+  });
+
+  const top = {
+    href: location.href,
+    origin: location.origin,
+    pathname: location.pathname,
+    windowOrigin: window.origin,
+    documentURL: document.URL,
+    baseURI: document.baseURI,
+  };
+
+  // Put the page back where it started so the rest of the suite is unaffected.
+  history.replaceState(null, '', originalUrl);
+  state.resolve();
+
+  await state.done(() => {
+    const expected = testing.ORIGIN + '/topmark.html?top=1';
+    testing.expectEqual(expected, top.href);
+    testing.expectEqual('/topmark.html', top.pathname);
+    testing.expectEqual(expected, top.documentURL);
+    testing.expectEqual(expected, top.baseURI);
+    testing.expectEqual(testing.ORIGIN, top.origin);
+    testing.expectEqual(testing.ORIGIN, top.windowOrigin);
+
+    const expectedChild = testing.ORIGIN + '/childmark.html?kid=1';
+    testing.expectEqual(expectedChild, child.childHref);
+    testing.expectEqual(expectedChild, child.childDocumentURL);
+    testing.expectEqual(testing.ORIGIN, child.childOrigin);
+
+    testing.expectFalse(child.sameHistory);
+    testing.expectFalse(child.sameNavigation);
+  });
+}
+</script>

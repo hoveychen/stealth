@@ -607,12 +607,17 @@ pub fn setLocation(self: *Window, url: [:0]const u8, frame: *Frame) !void {
     return frame.scheduleNavigation(url, .{ .reason = .script, .kind = .{ .push = null } }, .{ .script = self._frame });
 }
 
-pub fn getHistory(_: *Window, frame: *Frame) *History {
-    return &frame._session.history;
+// History and Navigation are per-window in Chrome, and the objects behind
+// these two live on the frame rather than on the session. One object shared by
+// the whole session is also wrapped in one realm, and every frame's call to it
+// then resolves against that realm's frame -- which is how a child's
+// replaceState used to move its parent's URL.
+pub fn getHistory(self: *Window) *History {
+    return &self._frame._history;
 }
 
-pub fn getNavigation(_: *Window, frame: *Frame) *Navigation {
-    return frame._session.navigation;
+pub fn getNavigation(self: *Window) *Navigation {
+    return self._frame._navigation;
 }
 
 pub fn setNavigation(self: *Window, value: js.Value) void {

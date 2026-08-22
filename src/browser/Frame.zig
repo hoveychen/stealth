@@ -45,6 +45,7 @@ const Element = @import("webapi/Element.zig");
 const HtmlElement = @import("webapi/element/Html.zig");
 const ElementInternals = @import("webapi/element/ElementInternals.zig");
 const Window = @import("webapi/Window.zig");
+const History = @import("webapi/History.zig");
 const Location = @import("webapi/Location.zig");
 const Document = @import("webapi/Document.zig");
 const ShadowRoot = @import("webapi/ShadowRoot.zig");
@@ -64,6 +65,7 @@ const SubmitEvent = @import("webapi/event/SubmitEvent.zig");
 const HashChangeEvent = @import("webapi/event/HashChangeEvent.zig");
 const popover = @import("webapi/element/popover.zig");
 const slotting = @import("webapi/element/slotting.zig");
+const Navigation = @import("webapi/navigation/Navigation.zig");
 const NavigationKind = @import("webapi/navigation/root.zig").NavigationKind;
 
 const PointList = @import("webapi/svg/PointList.zig");
@@ -336,6 +338,15 @@ local_arena: Allocator,
 
 parent: ?*Frame,
 window: *Window,
+
+// window.history and window.navigation, one object each per frame. Chrome's
+// are per-window; a session-wide object is wrapped in a single realm, so every
+// frame's call to it resolves against that realm's frame. They live here
+// rather than on Window because Window's field offsets decide which of its
+// inline sub-objects lands at offset 0, and an offset-0 sub-object shares the
+// Window's address -- and so its entry in the JS identity map.
+_history: History = .{},
+_navigation: *Navigation,
 document: *Document,
 iframe: ?*IFrame = null,
 
@@ -420,6 +431,11 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._frame_id = frame_id,
         ._page = page,
         ._session = session,
+        // Only the entry list behind it belongs to the session.
+        ._navigation = try factory.eventTarget(Navigation{
+            ._proto = undefined,
+            ._state = &session.navigation_state,
+        }),
         ._loader_id = session.nextLoaderId(),
         ._factory = factory,
         ._pending_loads = 1, // always 1 for the ScriptManager
@@ -983,8 +999,8 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
         });
 
         if (self.parent == null) {
-            session.navigation._current_navigation_kind = opts.kind;
-            try session.navigation.commitNavigation(self);
+            session.navigation_state._current_navigation_kind = opts.kind;
+            try self._navigation.commitNavigation(self);
         }
 
         self.documentIsComplete();
@@ -1090,7 +1106,7 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
     // Record telemetry for navigation
     self.recordNavigateTelemetry(std.ascii.startsWithIgnoreCase(self.url, "https://"));
 
-    session.navigation._current_navigation_kind = opts.kind;
+    session.navigation_state._current_navigation_kind = opts.kind;
 
     transfer.submit() catch |err| {
         log.err(.frame, "navigate request", .{ .url = self.url, .err = err, .type = self._type });
@@ -1117,7 +1133,7 @@ fn recordNavigateTelemetry(self: *Frame, tls: bool) void {
 // a JavaScript callback, a CDP command, etc...It's rarely safe to do immediately
 // as the caller almost certainly doesn't expect the frame to go away during the
 // call. So, we schedule the navigation for the next tick.
-pub fn scheduleNavigation(self: *Frame, request_url: []const u8, opts: NavigateOpts, nt: Navigation) !void {
+pub fn scheduleNavigation(self: *Frame, request_url: []const u8, opts: NavigateOpts, nt: NavigationInitiator) !void {
     if (self.canScheduleNavigation(std.meta.activeTag(nt)) == false) {
         return;
     }
@@ -1129,7 +1145,7 @@ pub fn scheduleNavigation(self: *Frame, request_url: []const u8, opts: NavigateO
 // Don't name the first parameter "self", because the target of this navigation
 // might change inside the function. So the code should be explicit about the
 // frame that it's acting on.
-fn scheduleNavigationWithArena(originator: *Frame, arena: *lp.Arena, request_url: []const u8, opts: NavigateOpts, nt: Navigation) !void {
+fn scheduleNavigationWithArena(originator: *Frame, arena: *lp.Arena, request_url: []const u8, opts: NavigateOpts, nt: NavigationInitiator) !void {
     const resolved_url, const is_about_something = blk: {
         if (URL.isCompleteHTTPUrl(request_url)) {
             break :blk .{ try arena.dupeZ(u8, request_url), false };
@@ -1205,7 +1221,7 @@ fn scheduleNavigationWithArena(originator: *Frame, arena: *lp.Arena, request_url
         target.window._location = location;
 
         if (target.parent == null) {
-            try session.navigation.updateEntries(target.url, opts.kind, target, true);
+            try target._navigation.updateEntries(target.url, opts.kind, target, true);
         }
 
         try target.queueHashChange(old_url, target.url);
@@ -1893,7 +1909,7 @@ fn frameDoneCallback(ctx: *anyopaque) !void {
     }
 
     //We need to handle different navigation types differently.
-    try self._session.navigation.commitNavigation(self);
+    try self._navigation.commitNavigation(self);
 
     if (self._pending_content_type) |content_type| {
         self.document._content_type = content_type;
@@ -3919,7 +3935,7 @@ const NavigationType = enum {
     iframe,
 };
 
-const Navigation = union(NavigationType) {
+const NavigationInitiator = union(NavigationType) {
     form: *Frame,
     script: ?*Frame,
     anchor: *Frame,
