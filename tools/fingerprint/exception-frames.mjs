@@ -35,9 +35,22 @@
 // around the column and prints it, resolving the body from (in order) the
 // Debugger's own copy, `Network.getResponseBody`, then a plain refetch.
 //
+// A frame's line:column is relative to different things in the two engines,
+// measured rather than assumed (`--col-base` overrides the choice):
+//
+//   Chrome      relative to the *document*
+//   this engine relative to the enclosing inline <script> body
+//
+// A three-line comment before `<script>` and a throw on the script's third line
+// reads 7:12 in Chrome and 4:12 here. Getting this wrong does not fail loudly --
+// it prints 500 characters of plausible-looking source from the wrong offset,
+// which is how the first reading of the widget document landed inside a string
+// literal and read as "the column is nonsense".
+//
 // usage: node tools/fingerprint/exception-frames.mjs <lightpanda|chrome> <url>
 //          [--settle 30000] [--context 240] [--frames 6]
-//          [--out results/x.json] [--sources dir]
+//          [--out results/x.json] [--sources dir] [--engine-log path]
+//          [--col-base auto|doc|script] [--missing-props]
 //          [--headed] [--log-level debug]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
@@ -66,6 +79,9 @@ if ((engine !== 'lightpanda' && engine !== 'chrome') || !url || url.startsWith('
 const SETTLE = Number(arg('--settle', '30000'));
 const CONTEXT = Number(arg('--context', '240'));
 const MAX_FRAMES = Number(arg('--frames', '6'));
+const COL_BASE = arg('--col-base', 'auto') === 'auto'
+    ? (engine === 'lightpanda' ? 'script' : 'doc')
+    : arg('--col-base', 'auto');
 const PORT = engine === 'chrome' ? 9236 : 9237;
 const LIGHTPANDA = process.env.LP_BIN || path.join(REPO, 'zig-out/bin/lightpanda');
 const CHROME = process.env.CHROME ||
@@ -126,6 +142,9 @@ const BOOTSTRAP = String.raw`
         message: String((e && e.message) || ''),
         frames: frames.get(e) || null,
         realm: (function () { try { return location.href; } catch (x) { return null; } })(),
+        // Only under --missing-props. The last entry is the read that most
+        // likely produced the undefined this throw then dereferenced.
+        missing: (globalThis.__EXC_MISSING || []).slice(),
       };
       recs.push(rec);
       // Also out through the console: a record on a window that later
@@ -188,6 +207,108 @@ const BOOTSTRAP = String.raw`
   });
 })();
 `;
+
+// `--missing-props`. An obfuscator turns `o.foo()` into `o[f(721)]()`, so a
+// "reading 'call'" throw on a minified bundle names neither the object nor the
+// method: the failing shape is `az = aY[at]` coming back undefined and then
+// `az.call(aY, aZ)` on it, and the source says only that `at` is entry 721 of a
+// string table.
+//
+// So the tripwire goes where the miss becomes visible: a proxy whose `get` trap
+// fires when the lookup walked the whole chain and found nothing.
+//
+// It cannot go at the very end. `Object.prototype` is an immutable-prototype
+// exotic object -- `Object.setPrototypeOf(Object.prototype, x)` throws
+// "Immutable prototype object 'Object.prototype' cannot have their prototype
+// set" in both engines, checked, not assumed. The next best place is the ring
+// immediately below it: every interface prototype whose parent *is*
+// `Object.prototype` gets that parent replaced by one shared proxy over it. A
+// miss on any host object then walks its whole chain
+// (HTMLDivElement -> ... -> EventTarget -> proxy) and fires exactly once, and
+// real inherited properties still resolve because the trap forwards.
+//
+// Not covered: plain `{}`, whose prototype *is* `Object.prototype` with nothing
+// in between. A missing key on the bundle's own bookkeeping object is its bug
+// rather than ours, so that is the right thing to miss.
+//
+// Invasive enough to stay behind a flag -- `getPrototypeOf(EventTarget.prototype)`
+// stops being `Object.prototype`, which an anti-tamper check could notice.
+// Whether it perturbed the run is checkable rather than assumed: if the same
+// throw still lands with the tripwire in, the tripwire did not cause it.
+const TRIPWIRE = String.raw`
+(function () {
+  if (globalThis.__EXC_MISSING) return;
+  var missing = globalThis.__EXC_MISSING = [];
+  var depth = 0;
+  var stacked = {};
+  var OP = Object.prototype;
+  var trap = new Proxy(OP, {
+    get: function (t, k, receiver) {
+      // The description below reads properties itself, which would re-enter
+      // the trap for each of those that is also missing.
+      if (!depth && typeof k === 'string' && !(k in t)) {
+        depth++;
+        try {
+          var on = OP.toString.call(receiver);
+          try {
+            var c = receiver.constructor;
+            if (c && c.name && on === '[object Object]') on = on + ' ' + c.name;
+          } catch (e) { }
+          var entry = k + ' on ' + on;
+          // "which property" is only half of what the plan asks; the other half
+          // is where the read came from. Array index misses are the bundle's own
+          // bookkeeping and there are hundreds, so only named misses pay for a
+          // stack, and only the first time each is seen.
+          if (!/^-?[0-9]+$/.test(k) && !stacked[entry]) {
+            stacked[entry] = 1;
+            try { entry += '  @ ' + String(new Error('missing').stack).split('\n').slice(1, 5).join(' | '); } catch (e) { }
+          }
+          missing.push(entry);
+          if (missing.length > 60) missing.shift();
+        } catch (e) { } finally { depth--; }
+      }
+      return Reflect.get(t, k, receiver);
+    },
+  });
+
+  // Collect first, install second: installing as we walk makes the walk's own
+  // reads trip the wire it just set.
+  var skip = __SKIP__;
+  var targets = [];
+  var skipped = [];
+  var names = Object.getOwnPropertyNames(globalThis);
+  for (var i = 0; i < names.length; i++) {
+    var C;
+    try { C = globalThis[names[i]]; } catch (e) { continue; }
+    if (typeof C !== 'function') continue;
+    var P;
+    try { P = C.prototype; } catch (e) { continue; }
+    if (!P || typeof P !== 'object') continue;
+    try { if (Object.getPrototypeOf(P) !== OP) continue; } catch (e) { continue; }
+    if (skip.indexOf(names[i]) >= 0) { skipped.push(names[i]); continue; }
+    targets.push(P);
+  }
+  var wrapped = 0;
+  for (var j = 0; j < targets.length; j++) {
+    try { Object.setPrototypeOf(targets[j], trap); wrapped++; } catch (e) { }
+  }
+  globalThis.__EXC_TRIPWIRE = { wrapped: wrapped, candidates: targets.length, skipped: skipped };
+})();
+`;
+
+// Prototypes the tripwire must not touch, because installing it there changes
+// what the page *reads* rather than only observing it.
+//
+// CSSStyleDeclaration is the measured case. Its CSS properties are not plain
+// accessors on the prototype: swapping the prototype above it turns every one of
+// them undefined -- `display`, `transform`, all six Turnstile reads -- in BOTH
+// engines, checked side by side (probe-tripwire-vs-cssstyle.js). That is not a
+// divergence, it is just how the named-property handler resolves in each. On the
+// real interstitial it moved the failure: api.js died earlier and differently,
+// in `Ma(a.transform)` -> "reading 'length'", and the widget document was never
+// built, so the throw being hunted never happened. A tripwire that changes the
+// answer is not a measurement.
+const TRIPWIRE_SKIP_DEFAULT = 'CSSStyleDeclaration';
 
 const state = {
     engine,
@@ -367,8 +488,13 @@ try {
         state.debugger.error = String(err.message ?? err);
     }
 
-    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: BOOTSTRAP }, sessionId)
-        .catch((err) => { state.bootstrapError = String(err.message ?? err); });
+    state.tripwire = has('--missing-props');
+    state.tripwireSkip = arg('--tripwire-skip', TRIPWIRE_SKIP_DEFAULT).split(',').filter(Boolean);
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: BOOTSTRAP + (state.tripwire
+            ? TRIPWIRE.replace('__SKIP__', JSON.stringify(state.tripwireSkip))
+            : ''),
+    }, sessionId).catch((err) => { state.bootstrapError = String(err.message ?? err); });
 
     await cdp.send('Page.navigate', { url }, sessionId);
     await sleep(SETTLE);
@@ -447,18 +573,79 @@ async function context(cdp, sessionId, { url, line, col, scriptId }) {
     if (source === null) return { via: null, context: null };
     sourceCache.set(url, source);
 
+    const placed = place(source, line, col);
+    if (placed === null) return { via, context: null, note: 'position is outside the source' };
     const lines = source.split('\n');
-    const text = lines[line - 1];
-    if (text === undefined) return { via, context: null, note: `source has ${lines.length} lines` };
-    const from = Math.max(0, col - 1 - CONTEXT);
-    const to = Math.min(text.length, col - 1 + CONTEXT);
+    const text = lines[placed.line - 1];
+    const c = placed.col;
+    const from = Math.max(0, c - 1 - CONTEXT);
+    const to = Math.min(text.length, c - 1 + CONTEXT);
     return {
         via,
+        base: placed.base,
+        docLine: placed.line,
+        docCol: c,
         lineLength: text.length,
-        before: text.slice(from, col - 1),
-        at: text.slice(col - 1, Math.min(text.length, col - 1 + 60)),
-        after: text.slice(Math.min(text.length, col - 1 + 60), to),
+        before: text.slice(from, c - 1),
+        at: text.slice(c - 1, Math.min(text.length, c - 1 + 60)),
+        after: text.slice(Math.min(text.length, c - 1 + 60), to),
     };
+}
+
+// Map a frame's (line, col) onto a position in the resource text. Under the
+// document base that is the identity; under the script base the numbers are
+// relative to an inline <script> body, so they need that body's own start added
+// back. With more than one inline script the right one is whichever candidate
+// lands inside its own body, which is unambiguous in practice and reported
+// either way via `base`.
+function place(source, line, col) {
+    const inBounds = (l, c) => {
+        const lines = source.split('\n');
+        return lines[l - 1] !== undefined && c - 1 <= lines[l - 1].length;
+    };
+    if (COL_BASE !== 'script') {
+        return inBounds(line, col) ? { line, col, base: 'doc' } : null;
+    }
+    for (const body of inlineScripts(source)) {
+        // Script line 1 continues the document line the tag sits on, so only
+        // that first line carries a column offset.
+        const l = body.line + line - 1;
+        const c = line === 1 ? body.col + col - 1 : col;
+        if (!inBounds(l, c)) continue;
+        const offset = offsetOf(source, l, c);
+        if (offset >= body.start && offset <= body.end) {
+            return { line: l, col: c, base: `script@${body.start}` };
+        }
+    }
+    // No inline script contains it: an external script, where the two bases
+    // agree.
+    return inBounds(line, col) ? { line, col, base: 'doc (no inline script)' } : null;
+}
+
+function inlineScripts(source) {
+    const out = [];
+    const re = /<script\b[^>]*>/gi;
+    let m;
+    while ((m = re.exec(source)) !== null) {
+        const start = m.index + m[0].length;
+        const close = source.toLowerCase().indexOf('</script', start);
+        const head = source.slice(0, start);
+        const nl = head.lastIndexOf('\n');
+        out.push({
+            start,
+            end: close < 0 ? source.length : close,
+            line: head.split('\n').length,
+            col: start - nl,
+        });
+    }
+    return out;
+}
+
+function offsetOf(source, line, col) {
+    const lines = source.split('\n');
+    let n = 0;
+    for (let i = 0; i < line - 1; i++) n += lines[i].length + 1;
+    return n + col - 1;
 }
 
 state.console = state.console.slice(-60);
@@ -466,9 +653,20 @@ state.wire = state.wire.slice(-80);
 state.engineLog = engineLog.join('').split('\n').filter(Boolean).slice(-40);
 if (exit) state.engineExit = exit;
 
+const engineLogPath = arg('--engine-log', null);
+if (engineLogPath) {
+    // The whole log, not the tail kept in the JSON: the engine's own complaints
+    // ("worker fetch error ... err = Abort") sit next to the throw in time, and
+    // a 40-line tail keeps only the last of four retries.
+    const p = path.resolve(REPO, engineLogPath.startsWith('tools/') ? engineLogPath : path.join('tools/fingerprint', engineLogPath));
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, engineLog.join(''));
+    console.log(`wrote ${path.relative(REPO, p)}`);
+}
+
 const sourcesDir = arg('--sources', null);
 if (sourcesDir) {
-    const dir = path.resolve(REPO, sourcesDir);
+    const dir = path.resolve(REPO, sourcesDir.startsWith('tools/') ? sourcesDir : path.join('tools/fingerprint', sourcesDir));
     await fs.mkdir(dir, { recursive: true });
     for (const [u, s] of sourceCache) {
         const name = u.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '_').slice(-120);
@@ -500,6 +698,10 @@ for (const r of state.records) {
         console.log(`    at ${f.fn ?? '(anon)'} ${f.file ?? '(no url)'}:${f.line}:${f.col}`);
     }
     if (!r.frames) console.log('    (no structured frames -- prepareStackTrace never fired)');
+    if (r.missing?.length) {
+        console.log(`    last reads that found nothing (newest last):`);
+        for (const m of r.missing) console.log(`      ${m}`);
+    }
 }
 for (const p of state.pauses) {
     console.log(`\n=== pause (${p.reason}) ${p.description ?? ''}`);
@@ -513,7 +715,7 @@ for (const f of state.frames ?? []) {
         console.log(`\n>>> ${f.url}:${f.line}:${f.col} -- no source (${f.note ?? 'unresolved'})`);
         continue;
     }
-    console.log(`\n>>> ${f.url}:${f.line}:${f.col}  (line is ${f.lineLength} chars, via ${f.via})`);
+    console.log(`\n>>> ${f.url}:${f.line}:${f.col} -> ${f.docLine}:${f.docCol} (base ${f.base}, line is ${f.lineLength} chars, via ${f.via})`);
     console.log(`${f.before}\n[[[${f.at}]]]\n${f.after}`);
 }
 process.exit(0);

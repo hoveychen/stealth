@@ -6376,3 +6376,129 @@ A `ScrollTimeline`'s null `currentTime` is *not* a gap — Chrome answers null
 whenever the source cannot scroll, which is every source here. `FrozenArray`
 members hand back ordinary arrays, which is the engine-wide gap `window.viewport`'s
 `segments` inherits.
+
+## The failing frame, read instead of inferred — and it is not in api.js (2026-08-21)
+
+Everything above about "reading 'call'" reasons about **`api.js`**: which of its 13
+bare `X.call(` sites has an undefined `X`, and which missing member `X` came from.
+The reasoning was careful and the conclusion was wrong, because the premise was.
+`tools/fingerprint/exception-frames.mjs` reads the frame off the throw rather than
+inferring it, and the throw is in a different file in a different realm.
+
+### Reading a throw the page catches
+
+Turnstile catches this one and logs a string, so it never reaches
+`Runtime.exceptionThrown` and no CDP client sees a position. Two mechanisms,
+because the engines do not offer the same one:
+
+* `Debugger.setPauseOnExceptions('all')` stops on caught throws and its pause
+  carries a `scopeChain` — the only thing that names what a variable was *bound*
+  to. **Chrome only.** This engine implements no Debugger domain at all: there is
+  no `src/cdp/domains/debugger.zig`, and the only `Debugger` string under
+  `src/cdp/` is `Target.setAutoAttach`'s `waitForDebuggerOnStart`. The tool asks
+  anyway and reports `unsupported` rather than skipping, so a run says which
+  mechanism produced its frames.
+* `Error.prepareStackTrace`, which **both** engines implement in full, hands back
+  structured frames. It only fires when something reads `.stack`, so the injected
+  bootstrap forces that read from every path a catcher can report through:
+  `Error.prototype.toString` (where `'' + e` goes — this is the one that fires on
+  the real page), the console methods, `onerror`, `unhandledrejection`, and the
+  rejection handlers of `then`/`catch`.
+
+### The premise was wrong: the throw is in the widget document
+
+Four widget attempts in one run, every one identical:
+
+```
+TypeError: Cannot read properties of undefined (reading 'call')
+  realm  https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/
+         f/av0/rch/<id>/0x4AAA…/light/fbE/new/normal?lang=auto
+  at fv                       …/new/normal:1:189313
+  at fl.<computed> [as run]   …/new/normal:1:14894
+```
+
+Not `api.js` — the **widget document**, the cross-origin iframe. Two things fall
+out immediately:
+
+* **The widget document's script does execute.** The previous session recorded
+  "the document is fetched 200 but never makes a request from inside, so probably
+  its script never runs" as the likeliest root cause. It runs. It is the thing
+  that throws.
+* **That document contains zero literal `.call(`.** Counting `.call(` sites in
+  `api.js` was never going to find this: the obfuscator writes every property
+  access computed, `og[UB(ar.oj)](…)` with the string decoded at runtime.
+
+### The opcode, decoded
+
+`fv` is one arm of a bytecode interpreter, and the failing arm is its
+"call a method by name" opcode:
+
+```js
+oq = x[…],                                  // receiver, out of a register table
+og = (oq === undefined) ? oy : oq[oy],      // oy: property name, built char by char
+…
+x[…] = (oq === undefined) ? og(C)           // no receiver: plain call
+                          : og.call(oq, C); // receiver: method call  <- throws
+```
+
+So the shape is not "one of 13 `X.call(` sites". It is a single generic opcode that
+runs thousands of times and fails once, on one lookup that came back undefined.
+
+### Which lookup: `window["bGgjP8"]`
+
+`Object.prototype` cannot host a tripwire — it is an immutable-prototype exotic
+object and `setPrototypeOf` on it throws in both engines. The next place down
+works: replace the prototype of every interface prototype whose parent *is*
+`Object.prototype` with one shared proxy over it, and a read that found nothing
+anywhere fires its `get` trap exactly once (`--missing-props`). Across three runs
+and twelve widget documents, the newest missing read before each throw is the
+same, and it is the **only** non-array one:
+
+```
+bGgjP8 on [object Window]
+  @ at fl.fv          …/new/normal:1:189160     <- 153 chars before the throw
+    at fl.<computed> [as run]  …:1:14894
+```
+
+`window["bGgjP8"]` is undefined here, and `.call` on it is the throw. Chrome on the
+same page, same run conditions: **zero exception records**.
+
+What is *not* established: whether `bGgjP8` is a genuine global Cloudflare installs
+and this engine drops, or a name mis-decoded from their string table because some
+earlier host call already answered differently. The name appears in no served
+source — not in `api.js`, not in any captured widget document — only in our own
+readings, so it is assembled at runtime and static search cannot settle it. Both
+stories predict everything observed so far. Settling it needs either a Chrome-side
+breakpoint at that column reading `oy`, or a rewritten copy of the document served
+back — and `Fetch.enable` here supports only `requestStage: Request`, so the second
+one cannot reuse the real response body.
+
+### Two things the tooling got wrong first, both kept visible
+
+**A tripwire that changes the answer is not a measurement.** The first
+`--missing-props` run on the real page reported a *different* failure —
+`Ma(a.transform)` → `reading 'length'` in `api.js` — and the widget document was
+never built. That was the tool's own doing: swapping the prototype above
+`CSSStyleDeclaration.prototype` turns every CSS property read undefined
+(`display`, `transform`, all six Turnstile reads). Isolated with
+`probe-tripwire-vs-cssstyle.js`, which reads the six names on one object before and
+after installing: all six have values before, all six are `UNDEFINED` after —
+**and Chrome does exactly the same thing**, so this is not a divergence, just an
+invasive probe. `CSSStyleDeclaration` is skipped by default now, and the control
+that matters is that the original widget-realm throw comes back unchanged with the
+tripwire in.
+
+**Inline-script line:column is relative to different things in the two engines.**
+Three comment lines before `<script>` and a throw on the script's third line:
+
+| | line:col |
+|---|---|
+| Chrome | `7:12` — relative to the document |
+| this engine | `4:12` — relative to the inline `<script>` body |
+
+This does not fail loudly. It prints 500 characters of plausible-looking source
+from the wrong offset, which is how the first reading of the widget document landed
+inside a string literal and got written off as "the column is nonsense". The tool
+converts (`--col-base`), and the divergence is worth a look on its own: a page that
+throws in an inline script and parses `e.stack` gets different numbers from us than
+from Chrome.

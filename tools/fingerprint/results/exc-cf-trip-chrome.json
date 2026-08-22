@@ -1,0 +1,639 @@
+{
+  "engine": "chrome",
+  "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+  "settleMs": 30000,
+  "debugger": {
+    "requested": true,
+    "supported": true,
+    "pauses": 4
+  },
+  "records": [],
+  "pauses": [
+    {
+      "reason": "exception",
+      "description": "TypeError: Immutable prototype object '#<Location>' cannot have their prototype set",
+      "frames": [
+        {
+          "fn": null,
+          "scriptId": "5",
+          "url": null,
+          "line": 161,
+          "col": 18
+        },
+        {
+          "fn": null,
+          "scriptId": "5",
+          "url": null,
+          "line": 164,
+          "col": 3
+        }
+      ],
+      "scopes": [
+        {
+          "type": "local",
+          "props": [
+            {
+              "name": "missing",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "depth",
+              "type": "number",
+              "value": "0"
+            },
+            {
+              "name": "OP",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "trap",
+              "type": "object",
+              "value": "Proxy(Object)"
+            },
+            {
+              "name": "skip",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "targets",
+              "type": "object",
+              "value": "Array(403)"
+            },
+            {
+              "name": "skipped",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "names",
+              "type": "object",
+              "value": "Array(1241)"
+            },
+            {
+              "name": "i",
+              "type": "number",
+              "value": "1241"
+            },
+            {
+              "name": "C",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "P",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "wrapped",
+              "type": "number",
+              "value": "153"
+            },
+            {
+              "name": "j",
+              "type": "number",
+              "value": "153"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "reason": "exception",
+      "description": "TypeError: Immutable prototype object '#<EventTarget>' cannot have their prototype set",
+      "frames": [
+        {
+          "fn": null,
+          "scriptId": "5",
+          "url": null,
+          "line": 161,
+          "col": 18
+        },
+        {
+          "fn": null,
+          "scriptId": "5",
+          "url": null,
+          "line": 164,
+          "col": 3
+        }
+      ],
+      "scopes": [
+        {
+          "type": "local",
+          "props": [
+            {
+              "name": "missing",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "depth",
+              "type": "number",
+              "value": "0"
+            },
+            {
+              "name": "OP",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "trap",
+              "type": "object",
+              "value": "Proxy(Object)"
+            },
+            {
+              "name": "skip",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "targets",
+              "type": "object",
+              "value": "Array(403)"
+            },
+            {
+              "name": "skipped",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "names",
+              "type": "object",
+              "value": "Array(1241)"
+            },
+            {
+              "name": "i",
+              "type": "number",
+              "value": "1241"
+            },
+            {
+              "name": "C",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "P",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "wrapped",
+              "type": "number",
+              "value": "186"
+            },
+            {
+              "name": "j",
+              "type": "number",
+              "value": "187"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "reason": "exception",
+      "description": "TypeError: Immutable prototype object '#<Location>' cannot have their prototype set",
+      "frames": [
+        {
+          "fn": null,
+          "scriptId": "11",
+          "url": null,
+          "line": 161,
+          "col": 18
+        },
+        {
+          "fn": null,
+          "scriptId": "11",
+          "url": null,
+          "line": 164,
+          "col": 3
+        },
+        {
+          "fn": "fE",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 2,
+          "col": 17429
+        },
+        {
+          "fn": "fL.<computed>.<computed>",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 1,
+          "col": 19932
+        },
+        {
+          "fn": "fc",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 3,
+          "col": 90646
+        },
+        {
+          "fn": "ebjhq",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 2,
+          "col": 34174
+        }
+      ],
+      "scopes": [
+        {
+          "type": "local",
+          "props": [
+            {
+              "name": "missing",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "depth",
+              "type": "number",
+              "value": "0"
+            },
+            {
+              "name": "OP",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "trap",
+              "type": "object",
+              "value": "Proxy(Object)"
+            },
+            {
+              "name": "skip",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "targets",
+              "type": "object",
+              "value": "Array(403)"
+            },
+            {
+              "name": "skipped",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "names",
+              "type": "object",
+              "value": "Array(1241)"
+            },
+            {
+              "name": "i",
+              "type": "number",
+              "value": "1241"
+            },
+            {
+              "name": "C",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "P",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "wrapped",
+              "type": "number",
+              "value": "153"
+            },
+            {
+              "name": "j",
+              "type": "number",
+              "value": "153"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "reason": "exception",
+      "description": "TypeError: Immutable prototype object '#<EventTarget>' cannot have their prototype set",
+      "frames": [
+        {
+          "fn": null,
+          "scriptId": "11",
+          "url": null,
+          "line": 161,
+          "col": 18
+        },
+        {
+          "fn": null,
+          "scriptId": "11",
+          "url": null,
+          "line": 164,
+          "col": 3
+        },
+        {
+          "fn": "fE",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 2,
+          "col": 17429
+        },
+        {
+          "fn": "fL.<computed>.<computed>",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 1,
+          "col": 19932
+        },
+        {
+          "fn": "fc",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 3,
+          "col": 90646
+        },
+        {
+          "fn": "ebjhq",
+          "scriptId": "7",
+          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+          "line": 2,
+          "col": 34174
+        }
+      ],
+      "scopes": [
+        {
+          "type": "local",
+          "props": [
+            {
+              "name": "missing",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "depth",
+              "type": "number",
+              "value": "0"
+            },
+            {
+              "name": "OP",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "trap",
+              "type": "object",
+              "value": "Proxy(Object)"
+            },
+            {
+              "name": "skip",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "targets",
+              "type": "object",
+              "value": "Array(403)"
+            },
+            {
+              "name": "skipped",
+              "type": "object",
+              "value": "Array(1)"
+            },
+            {
+              "name": "names",
+              "type": "object",
+              "value": "Array(1241)"
+            },
+            {
+              "name": "i",
+              "type": "number",
+              "value": "1241"
+            },
+            {
+              "name": "C",
+              "type": "object",
+              "value": "Array(0)"
+            },
+            {
+              "name": "P",
+              "type": "object",
+              "value": "Object"
+            },
+            {
+              "name": "wrapped",
+              "type": "number",
+              "value": "186"
+            },
+            {
+              "name": "j",
+              "type": "number",
+              "value": "187"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "console": [
+    "log.error: Failed to load resource: the server responded with a status of 403 ()"
+  ],
+  "cdpExceptions": [],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 403,
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "type": "Document"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+      "type": "Script"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://www.scrapingcourse.com/c548806a-6d5d-4e18-a323-1f2e1bfb4462",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee1bd13d322ca1/mXU29DKcpoZh",
+      "type": "XHR"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Image"
+    },
+    {
+      "ev": "req",
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Other"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/favicon.ico",
+      "type": "Other"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/3244872163:1787360408:ZK5otIvOwjIWSlPXoI4RcsjPQvWZAuA7ydHNhfR9ZXk/a2ee1bd13d322ca1/mXU29DKcpoZh",
+      "type": "XHR"
+    },
+    {
+      "ev": "req",
+      "url": "blob:https://www.scrapingcourse.com/ac23f8ce-fd31-43b8-bc29-9055879c316f",
+      "type": "Script"
+    },
+    {
+      "ev": "req",
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/i5mdw/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/i5mdw/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+      "type": "Document"
+    }
+  ],
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9236/devtools/browser/d2f6ad82-ff6d-409f-a3d7-58330223a82f"
+  },
+  "tripwire": true,
+  "tripwireSkip": [
+    "CSSStyleDeclaration"
+  ],
+  "frames": [
+    {
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+      "line": 2,
+      "col": 17429,
+      "scriptId": "7",
+      "via": "Debugger.getScriptSource",
+      "base": "doc",
+      "docLine": 2,
+      "docCol": 17429,
+      "lineLength": 61647,
+      "before": "=od,x[oB^oD]=U[U6(KP.oF)](oq,void 0)?U[U6(KP.oB)](og):og[U6(KP.ok)](oq);else if(oQ===1)oi=x[U[U6(KP.oI)](oi^U[U6(KP.oX)](U[U6(KP.oY)](oG[od++]-196,256),255),54)^oD],x[oV]=od,x[oB^oD]=U[U6(KP.or)](oq,void 0)?U[U6(KP.oM)](og,oi):og[U6(KP.ok)]",
+      "at": "(oq,oi);else if(oQ!==2){for(oy=U[U6(KP.oM)](Array,oQ),om=0;o",
+      "after": "m<oQ;oy[om]=x[U[U6(KP.h0)](oi^U[U6(KP.h1)](U[U6(KP.h2)](oG[od++],196),256)&255,54)^oD],om++);if(x[oV]=od,U[U6(KP.h3)](oq,void 0))switch(oQ){case 3:x[U[U6(KP.oV)](oB,oD)]=og(oy[0],o"
+    },
+    {
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+      "line": 1,
+      "col": 19932,
+      "scriptId": "7",
+      "via": "cache",
+      "base": "doc",
+      "docLine": 1,
+      "docCol": 19932,
+      "lineLength": 27371,
+      "before": "his);break;case 254:fw[UK(Tc.Tj)](this);break;case 82:ff[UK(Tc.hw)](this);break;case 184:fo[UK(Tc.Tu)](this);break;case 111:fh[UK(Tc.TR)](this);break;case 219:fU[UK(Tc.TF)](this);break;case 96:fx[UK(Tc.Tk)](this);break;case 32:fE[UK(Tc.TI)]",
+      "at": "(this);break;case 7:fO[UK(Tc.TX)](this);break;case 15:m[UK(T",
+      "after": "c.TY)](this);break;case 93:j[UK(Tc.Tr)](this);break;case 155:R[UK(Tc.TM)](this);break;case 54:F[UK(Tc.TS)](this);break;case 94:B[UK(Tc.TP)](this);break;case 185:q[UK(Tc.TK)](this);"
+    },
+    {
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+      "line": 3,
+      "col": 90646,
+      "scriptId": "7",
+      "via": "cache",
+      "base": "doc",
+      "docLine": 3,
+      "docCol": 90646,
+      "lineLength": 139046,
+      "before": ">=5&&(oI[oX^4]=oB,oy[U9(eD.oB)](oF,6)&&(oI[oy[U9(eD.oq)](172,oX)]=oq,oF>=7&&(oI[oy[U9(eD.oQ)](149,oX)]=oQ,oF>=8&&(oI[211.12^oX]=og)))))))),oD=oy[U9(eD.og)](Array,oR[U9(eD.U)]),oi=0;oi<oR[U9(eD.oy)];oD[oi]=oI[oR[oi]],oi++);for(U=U[U9(eD.om)]",
+      "at": "(om,ou,ok?oj[U9(eD.ou)]():oj),om=oR[U9(eD.oj)]-1;oy[U9(eD.oR",
+      "after": ")](om,0);oI[oR[om]]=oD[om],om--);return oI[oy[U9(eD.oF)](48,oX)]=or,oI[oy[U9(eD.od)](95,oX)]=oM,oI[oY]=oS,U}function wl(nz,xg,h){nz={h:1859,U:427},xg=hh,h={\"GBNdB\":function(U,x){re"
+    },
+    {
+      "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ee1bd13d322ca1",
+      "line": 2,
+      "col": 34174,
+      "scriptId": "7",
+      "via": "cache",
+      "base": "doc",
+      "docLine": 2,
+      "docCol": 34174,
+      "lineLength": 61647,
+      "before": "m,ou){return om+ou},\"UOeqV\":function(om,ou){return om-ou},\"dmqUw\":function(om,ou){return ou&om},\"Emsjm\":function(om,ou){return ou^om},\"OIkin\":function(om,ou){return ou^om},\"iXBLG\":function(om,ou){return ou===om},\"ebjhq\":function(om){return ",
+      "at": "om()},\"aqUMg\":function(om,ou){return om^ou},\"cFaBE\":function",
+      "after": "(om,ou){return om&ou},\"KiWFD\":function(om,ou){return om-ou},\"ISRnO\":function(om,ou){return om^ou},\"rPfgo\":function(om,ou){return om^ou},\"kRaja\":function(om,ou){return om^ou},\"yazRd"
+    }
+  ],
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:9236/devtools/browser/d2f6ad82-ff6d-409f-a3d7-58330223a82f",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[30924:9098078:0821/182948.762495:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[30924:9098078:0821/182948.763108:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[30933:9098197:0821/182950.168272:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168402:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168406:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168412:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168416:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168425:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168429:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168431:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.168434:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442283:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442299:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442303:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442308:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442312:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442315:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442318:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442321:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[30933:9098197:0821/182950.442323:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[30924:9098157:0821/182951.436399:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[30924:9098157:0821/182951.445459:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[30924:9098157:0821/182951.623040:ERROR:google_apis/gcm/engine/mcs_client.cc:702]   Error code: 401  Error message: Authentication Failed: wrong_secret",
+    "[30924:9098157:0821/182951.623061:ERROR:google_apis/gcm/engine/mcs_client.cc:704] Failed to log in to GCM, resetting connection.",
+    "Created TensorFlow Lite XNNPACK delegate for CPU.",
+    "[30924:9098157:0821/183014.543315:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT"
+  ],
+  "engineExit": {
+    "code": null,
+    "signal": "SIGKILL"
+  }
+}
