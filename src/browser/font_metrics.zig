@@ -49,6 +49,8 @@
 
 const std = @import("std");
 
+const chrome_value_case = @import("webapi/css/chrome_value_case.zig");
+
 /// One glyph, at a 100px font size. `left` and `right` are the ink bearings
 /// TextMetrics reports as actualBoundingBoxLeft / Right: positive `left`
 /// means the ink starts to the *left* of the pen, matching the web API's sign.
@@ -22583,15 +22585,33 @@ pub fn findInList(list: []const u8) Family {
     var it = std.mem.splitScalar(u8, list, ',');
     while (it.next()) |raw| {
         const name = std.mem.trim(u8, raw, &std.ascii.whitespace);
-        const unquoted = if (name.len >= 2 and (name[0] == '"' or name[0] == '\'') and name[name.len - 1] == name[0])
-            name[1 .. name.len - 1]
-        else
-            name;
+        const quoted = name.len >= 2 and (name[0] == '"' or name[0] == '\'') and name[name.len - 1] == name[0];
+        const unquoted = if (quoted) name[1 .. name.len - 1] else name;
+        // A generic family is a keyword, so `'monospace'` names a family
+        // instead -- one nobody has installed, which skips like any other
+        // unresolvable name. CSSStyleDeclaration.isBareFamilyName already
+        // draws this line when serialising ("the quotes are what tell a family
+        // *called* monospace from the generic one"); selection has to draw it
+        // too, and off the same keyword list, or the two disagree.
+        if (quoted and isGenericFamily(unquoted)) {
+            continue;
+        }
         if (find(unquoted)) |family| {
             return family;
         }
     }
     return fallback;
+}
+
+/// Whether a name is one of `font-family`'s generic keywords. Case-sensitive,
+/// matching the serialiser: `"MONOSPACE"` is a family name Chrome leaves alone,
+/// not the keyword written loudly.
+fn isGenericFamily(name: []const u8) bool {
+    const generics = chrome_value_case.any_identifier_keywords.get("font-family") orelse return false;
+    for (generics) |keyword| {
+        if (std.mem.eql(u8, keyword, name)) return true;
+    }
+    return false;
 }
 
 /// The glyph for a codepoint at the table's 100px basis. Outside the
@@ -22618,4 +22638,22 @@ pub fn boundingBox(family: Family, size: f64) struct { ascent: f64, descent: f64
         .ascent = family.ascents[family.ascents.len - 1] * scale,
         .descent = family.descents[family.descents.len - 1] * scale,
     };
+}
+
+test "font_metrics: a quoted generic family is an ordinary family name" {
+    // A generic family is a CSS keyword, so quoting it names a family instead
+    // -- one no system has installed, which falls back. Measured against
+    // Chrome 151 by tools/fingerprint/probes/expr-quoted-generic-family.js:
+    // `monospace` is 564 there and `'monospace'` is 620, the same width as
+    // `'NoSuchFamilyAtAll'`.
+    try std.testing.expectEqual(monospace.glyphs.ptr, findInList("monospace").glyphs.ptr);
+    try std.testing.expectEqual(fallback.glyphs.ptr, findInList("'monospace'").glyphs.ptr);
+    try std.testing.expectEqual(fallback.glyphs.ptr, findInList("\"sans-serif\"").glyphs.ptr);
+
+    // Quoting a family that *is* installed is ordinary CSS and keeps resolving.
+    try std.testing.expectEqual(monospace.glyphs.ptr, findInList("'Menlo'").glyphs.ptr);
+
+    // And a quoted generic is skipped like any other unresolvable name, so a
+    // later unquoted generic in the same list still wins.
+    try std.testing.expectEqual(sans_serif.glyphs.ptr, findInList("'monospace', sans-serif").glyphs.ptr);
 }
