@@ -30,6 +30,7 @@ const log = lp.log;
 const String = lp.String;
 const Allocator = std.mem.Allocator;
 
+const chrome_arity = @import("chrome_arity.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
@@ -1995,20 +1996,45 @@ fn twoValueRule(name: []const u8) ?TwoValueRule {
     return rules.get(name);
 }
 
-/// A longhand with a two-value rule holds those two and no more. Measured: a
-/// corner radius handed three components is thrown away, and so is one handed a
-/// `/` -- the slash belongs to `border-radius`. Only these names are counted,
-/// because they are the ones whose arity was measured; a longhand without a
-/// rule here is left alone rather than assumed to hold one component.
+/// Whether the declaration holds more than the property takes. Two counts over
+/// the same components: the two-value rule above, and `chrome_arity`, which is
+/// the wider of them -- 461 measured property names that take no second
+/// component at all, so `margin-top: 1px 2px` and `width: 1px / 2px` are both
+/// thrown away where every other test in this engine passes them (each half is
+/// a `<length>` `margin-top` takes).
+///
+/// A comma is a list and the count runs per item, which leaves the comma itself
+/// to answer for: a property measured never to take one is refused the whole
+/// value. That is what separates `transition-duration: 1s, 2s` -- kept, two
+/// items of one -- from `margin-top: 1px,2px`.
+///
+/// Nothing here counts a value it cannot see whole. A `var()` stands in for
+/// text this engine does not have, and Chrome keeps `margin-top: var(--a)
+/// var(--b)` and resolves it later. A comment is taken out before Chrome's own
+/// count -- `margin-top: 10px /* c */` reads back `10px` -- and nothing here
+/// removes one, so its components would come back as punctuation.
 fn tooManyComponents(name: []const u8, value: []const u8) bool {
-    if (twoValueRule(name) == null) return false;
-    // A comma is a layer list -- `background-size: 10px auto, 20px` is two
-    // layers of two, not four components -- and the rule runs per layer.
-    if (std.mem.indexOfScalar(u8, value, ',') != null) return false;
-    var components = shorthand.slashComponents(value);
-    var count: usize = 0;
-    while (components.next()) |_| count += 1;
-    return count > 2;
+    if (std.mem.indexOf(u8, value, "/*") != null) return false;
+    if (std.ascii.indexOfIgnoreCase(value, "var(") != null) return false;
+
+    const holds: usize = if (chrome_arity.one_component.has(name))
+        1
+    else if (twoValueRule(name) != null)
+        2
+    else
+        return false;
+
+    var items = shorthand.Layers.init(value);
+    var seen: usize = 0;
+    while (items.next()) |list_item| {
+        seen += 1;
+        if (seen > 1 and !chrome_arity.comma_lists.has(name)) return true;
+        var components = shorthand.slashComponents(list_item);
+        var count: usize = 0;
+        while (components.next()) |_| count += 1;
+        if (count > holds) return true;
+    }
+    return false;
 }
 
 fn isLengthProperty(name: []const u8) bool {

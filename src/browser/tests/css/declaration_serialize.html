@@ -1245,5 +1245,84 @@ function withStyle(text) {
     testing.expectEqual('calc(10px + 2foo)', set('width', 'calc(10px + 2foo)'));
 }
 </script>
+
+<script id="a_property_that_holds_one_component_is_handed_one">
+{
+    // Measured on headless Chrome 151 by tools/fingerprint/dump-css-arity.mjs:
+    // which properties take no two-component value at all, and which take a
+    // comma-separated list. Without them this engine keeps whatever it is
+    // handed -- `margin-top: 1px 2px` and `width: 1px,2px` are both stored,
+    // where Chrome throws the declaration away.
+    const set = (property, value) => {
+        const el = document.createElement('div');
+        el.style.setProperty(property, value);
+        return el.style.getPropertyValue(property);
+    };
+
+    // A second component where only one goes, in each of the three ways a
+    // value can carry one: whitespace, a `/`, and a comma.
+    for (const property of ['margin-top', 'padding-left', 'width',
+        'border-top-width', 'color', 'font-size', 'z-index', 'flex-basis',
+        'line-height', 'opacity']) {
+        testing.expectEqual('', set(property, '1px 2px'));
+        testing.expectEqual('', set(property, '1px / 2px'));
+        testing.expectEqual('', set(property, '1px,2px'));
+        testing.expectEqual('', set(property, '1px, 2px'));
+    }
+    testing.expectEqual('', set('color', 'red red'));
+    testing.expectEqual('', set('transition-duration', '1s 2s'));
+
+    // A comma where the property takes no list, on one that does hold two
+    // components. The count is per list item, so this is the comma alone.
+    testing.expectEqual('', set('border-top-left-radius', '1px,2px'));
+
+    // The other side, which is the one that has to hold: every property that
+    // does take a second component keeps it.
+    testing.expectEqual('1px 2px', set('border-top-left-radius', '1px 2px'));
+    testing.expectEqual('1px 2px', set('transform-origin', '1px 2px'));
+    testing.expectEqual('left top', set('background-position', 'left top'));
+    testing.expectEqual('left 10px top 20px',
+        set('background-position', 'left 10px top 20px'));
+    testing.expectEqual('1fr 1fr', set('grid-template-columns', '1fr 1fr'));
+    testing.expectEqual('16 / 9', set('aspect-ratio', '16 / 9'));
+    testing.expectEqual(false, set('counter-reset', 'a 1 b 2') === '');
+    testing.expectEqual(false, set('overflow-clip-margin', '1px content-box') === '');
+    testing.expectEqual(false, set('box-shadow', '1px 2px 3px red') === '');
+    testing.expectEqual(false, set('grid-template-areas', '"a" "b"') === '');
+
+    // And a comma list where the property takes one, including the two whose
+    // items are themselves several components long.
+    testing.expectEqual(false, set('font-family', 'a, b') === '');
+    testing.expectEqual(false, set('font-family', 'Times New Roman') === '');
+    testing.expectEqual(false, set('transition-duration', '1s, 2s') === '');
+    testing.expectEqual(false, set('transition-property', 'width, height') === '');
+    testing.expectEqual(false, set('will-change', 'width, height') === '');
+    testing.expectEqual(false, set('background-image', 'url(a), url(b)') === '');
+    testing.expectEqual(false, set('stroke-dasharray', '1 2') === '');
+
+    // The two that cost a regeneration each. Neither half of `"liga" 1` is a
+    // value `font-feature-settings` takes on its own -- an OpenType tag is
+    // four characters, so a three-letter one is refused as surely as the bare
+    // number is -- and `first` is refused by `align-items` alone. A sweep that
+    // pairs only accepted values reaches neither, calls both properties
+    // one-component, and refuses a declaration Chrome keeps.
+    testing.expectEqual(false, set('font-feature-settings', '"liga" 1') === '');
+    testing.expectEqual('baseline', set('align-items', 'first baseline'));
+    testing.expectEqual(false, set('text-indent', '10px hanging') === '');
+
+    // A comma inside a function is the function's, not the value's.
+    testing.expectEqual(false, set('color', 'rgb(1, 2, 3)') === '');
+    testing.expectEqual('calc(100% - 10px)', set('width', 'calc(100% - 10px)'));
+
+    // Two things this cannot count and so does not judge. A `var()` stands in
+    // for text nobody here has: Chrome keeps `margin-top: var(--a) var(--b)`
+    // and resolves it later. A comment is taken out before the count -- Chrome
+    // reads `margin-top: 10px /* c */` back as `10px` -- and nothing here
+    // removes one, so the components would come back as punctuation.
+    testing.expectEqual(false, set('margin-top', 'var(--a) var(--b)') === '');
+    testing.expectEqual(false, set('color', 'var(--a),var(--b)') === '');
+    testing.expectEqual(false, set('margin-top', '10px /* c */') === '');
+}
+</script>
 </body>
 </html>
