@@ -35,6 +35,7 @@ const http = @import("http.zig");
 const Network = @import("Network.zig");
 const Cache = @import("cache/Cache.zig");
 const RobotsGate = @import("RobotsGate.zig");
+const ClientHints = @import("ClientHints.zig");
 const UrlBlocklist = @import("UrlBlocklist.zig");
 
 pub const BlockPattern = UrlBlocklist.Pattern;
@@ -198,6 +199,12 @@ obey_robots: bool,
 robots: RobotsGate,
 url_blocklist: ?UrlBlocklist,
 
+// Which high-entropy client hints each origin has asked for via Accept-CH.
+// Browser-lifetime, like Chrome's: the negotiation outlives the navigation
+// that carried it, so a second visit to an origin still sends what the first
+// one was asked for.
+client_hints: ClientHints = .{},
+
 pub fn init(self: *Client, allocator: Allocator, network: *Network, cdp: ?*CDP) !void {
     var handles = try http.Handles.init(network.config);
     errdefer handles.deinit();
@@ -268,6 +275,7 @@ pub fn deinit(self: *Client) void {
     }
 
     self.clearUrlBlocklist();
+    self.client_hints.deinit(self.allocator);
     self.robots.deinit();
     self.blocking_requests.deinit(self.allocator);
     self.transfers.deinit(self.allocator);
@@ -2685,12 +2693,44 @@ pub const Transfer = struct {
             }
         }
 
+        try self.negotiateClientHints();
+
         if (opts.check_content_length) {
             if (self.getContentLength()) |cl| {
                 if (cl > self.client.max_response_size) {
                     return error.ResponseTooLarge;
                 }
             }
+        }
+    }
+
+    // Remember what this response's `Accept-CH` asks for, so later requests to
+    // the origin carry the high-entropy hints it wants.
+    //
+    // Navigations only -- an `Accept-CH` on a subresource response is ignored,
+    // which is Chrome's rule (Chromium persists hints from
+    // NavigationRequest::OnResponseStarted and from nowhere else). Both frames
+    // count: Cloudflare's Turnstile widget is an OOPIF and sends the header on
+    // its own document, and a Chrome that took that ask and a Chrome that
+    // didn't are two different clients.
+    //
+    // A response *without* the header leaves the origin's set alone rather than
+    // clearing it, also Chrome's rule -- measured, the `/revisit` navigation in
+    // tools/fingerprint/results/acceptch-chrome.json still carries all nine
+    // hints though nothing on that hop asked again.
+    fn negotiateClientHints(self: *Transfer) !void {
+        if (self.req.resource_type != .document) {
+            return;
+        }
+        for (self.res.headers) |hdr| {
+            if (std.ascii.eqlIgnoreCase(hdr.name, "accept-ch") == false) {
+                continue;
+            }
+            try self.client.client_hints.negotiate(
+                self.client.allocator,
+                self.req.url,
+                hdr.value,
+            );
         }
     }
 
@@ -3858,6 +3898,48 @@ test "HttpClient: the three client hints go on the wire lowercase" {
     for (client.baselineHeaders(), expected) |hdr, name| {
         try testing.expectString(name, hdr.name);
     }
+}
+
+test "HttpClient: a navigation's Accept-CH is remembered, a subresource's is not" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    // negotiateClientHints reads the response headers, the request's url and
+    // resource_type, and the client's hint store -- no conn, no curl.
+    var client: Client = undefined;
+    client.allocator = testing.allocator;
+    client.client_hints = .{};
+    defer client.client_hints.deinit(testing.allocator);
+
+    var transfer = testTransfer(arena);
+    transfer.client = &client;
+    transfer.req.url = "https://www.scrapingcourse.com/cloudflare-challenge";
+    transfer.res.headers = &.{
+        .{ .name = "cf-mitigated", .value = "challenge" },
+        .{ .name = "accept-ch", .value = "Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Platform" },
+    };
+
+    try transfer.negotiateClientHints();
+    const negotiated = client.client_hints.acceptedFor("https://www.scrapingcourse.com/anything");
+    try testing.expectEqual(2, negotiated.count());
+    try testing.expect(negotiated.contains(.bitness));
+    try testing.expect(negotiated.contains(.arch));
+
+    // The same header on a subresource response is ignored: Chrome persists
+    // hints from a navigation and from nowhere else, so an origin whose only
+    // ask rides on an image reaches us and Chrome alike as no ask at all.
+    var sub = testTransfer(arena);
+    sub.client = &client;
+    sub.req.url = "https://cdn.example.com/logo.png";
+    sub.req.resource_type = .image;
+    sub.res.headers = &.{
+        .{ .name = "accept-ch", .value = "Sec-CH-UA-Model" },
+    };
+
+    try sub.negotiateClientHints();
+    try testing.expectEqual(0, client.client_hints.acceptedFor("https://cdn.example.com/x").count());
 }
 
 test "HttpClient: ResourceType.image reports Chrome's CDP name" {

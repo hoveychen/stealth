@@ -811,38 +811,7 @@ fn computeSecureContext(self: *const Frame) bool {
         // the CDP about:blank target).
         return false;
     }
-    return isPotentiallyTrustworthy(self.url);
-}
-
-// "Is url potentially trustworthy" from the Secure Contexts spec, as Blink
-// implements it: the https/wss/file schemes, plus the loopback hosts -- which
-// for Blink is the whole 127.0.0.0/8 block, [::1], "localhost" and the
-// .localhost tree, not just 127.0.0.1. A blob: URL is as trustworthy as the
-// origin it was minted from. Everything else is not: data:, and http on any
-// non-loopback host (measured on Chrome 151: http://0.0.0.0 and
-// http://192.168.68.78 both answer false, http://localhost answers true).
-fn isPotentiallyTrustworthy(url: []const u8) bool {
-    if (std.mem.startsWith(u8, url, "blob:")) {
-        return isPotentiallyTrustworthy(url["blob:".len..]);
-    }
-
-    const protocol = URL.getProtocol(url);
-    if (std.mem.eql(u8, protocol, "https:")) return true;
-    if (std.mem.eql(u8, protocol, "wss:")) return true;
-    if (std.mem.eql(u8, protocol, "file:")) return true;
-
-    // Only a scheme followed by an authority has a host worth judging.
-    // URL.getHostname keys off the first "://" anywhere in the string, so
-    // without this guard `data:text/html,<a href="http://127.0.0.1/">` reads
-    // as loopback.
-    if (!std.mem.startsWith(u8, url[protocol.len..], "//")) return false;
-
-    const hostname = URL.getHostname(url);
-    if (std.mem.eql(u8, hostname, "localhost")) return true;
-    if (std.mem.eql(u8, hostname, "[::1]")) return true;
-    if (std.mem.endsWith(u8, hostname, ".localhost")) return true;
-    if (std.mem.startsWith(u8, hostname, "127.")) return true;
-    return false;
+    return URL.isPotentiallyTrustworthy(self.url);
 }
 
 pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !void {
@@ -4340,42 +4309,6 @@ test "WebApi: inject_script" {
     try testing.htmlRunner("inject_script.html", .{
         .inject_script = "window.__injected = true; window.__injectValue = 42;",
     });
-}
-
-test "Frame: isPotentiallyTrustworthy" {
-    // Each of these was read off a headed Chrome 151 as window.isSecureContext
-    // on a page served from that origin, except the ones marked otherwise.
-    for ([_][]const u8{
-        "https://example.com/",
-        "wss://example.com/socket",
-        "file:///tmp/a.html",
-        "http://localhost:8777/",
-        "http://127.0.0.1:9582/x",
-        // Blink's loopback set is the whole 127.0.0.0/8 block.
-        "http://127.5.5.5/",
-        "http://[::1]:8777/",
-        "http://app.localhost/",
-        // As trustworthy as the origin the blob was minted from.
-        "blob:https://example.com/9b2b1f1e",
-    }) |url| {
-        try testing.expectEqual(true, isPotentiallyTrustworthy(url));
-    }
-
-    for ([_][]const u8{
-        "http://example.com/",
-        "http://192.168.68.78:8777/",
-        // Reaches a loopback-bound listener, but is not a loopback host.
-        "http://0.0.0.0:9582/",
-        "data:text/html,<p>hi",
-        // URL.getHostname keys off the first "://" anywhere in the string, so a
-        // data: payload that mentions one must not read as loopback.
-        "data:text/html,<a href=\"http://127.0.0.1/\">x</a>",
-        "about:blank",
-        "about:srcdoc",
-        "blob:http://example.com/9b2b1f1e",
-    }) |url| {
-        try testing.expectEqual(false, isPotentiallyTrustworthy(url));
-    }
 }
 
 test "Page: isSameOrigin" {
