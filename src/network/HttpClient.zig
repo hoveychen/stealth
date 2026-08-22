@@ -3812,6 +3812,43 @@ test "HttpClient: the priority hint goes out last, after Accept-Language" {
     try testing.expectString("Accept-Language", sub[sub.len - 2]);
 }
 
+test "HttpClient: the three client hints go on the wire lowercase" {
+    // Over HTTP/1.1 Chromium spells exactly the three client hints in
+    // lowercase and Title-Cases every other field name -- measured, the
+    // `steps.localHeaders` step of
+    // tools/fingerprint/results/px-hdr-chrome-ua.json, where the same GET /
+    // carries `sec-ch-ua`, `sec-ch-ua-mobile` and `sec-ch-ua-platform` beside
+    // `Connection`, `User-Agent`, `Accept-Encoding` and `Accept-Language`.
+    // Only h1 can see this: HPACK lowercases every name on its way into h2, so
+    // the h2 echo is blind to it and the casing there is not ours to pick.
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+
+    // baselineHeaders reads the config's resolved header values and the CDP
+    // override fields, nothing else -- no curl handle, no event loop -- so a
+    // stub with those set is the whole dependency.
+    var network: Network = undefined;
+    network.config = &config;
+    var client: Client = undefined;
+    client.network = &network;
+    client.user_agent_override = null;
+    client.accept_language_override = null;
+    client.platform_quoted_override = null;
+
+    const expected = [_][]const u8{
+        "Connection",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "Accept-Encoding",
+        "Accept-Language",
+    };
+    for (client.baselineHeaders(), expected) |hdr, name| {
+        try testing.expectString(name, hdr.name);
+    }
+}
+
 test "HttpClient: ResourceType.image reports Chrome's CDP name" {
     try testing.expectString("Image", Request.ResourceType.image.string());
 }
