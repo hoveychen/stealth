@@ -32,10 +32,16 @@
 // writable as an ordinary test. Chrome is clean on T4, T5 and T9. In the leaking
 // runs the top's URL becomes the *child's* path and query resolved against the
 // *top's* origin -- the shape of `URL.resolve(topFrame.url, <the string the
-// child passed>)`. `window.history` is one session-wide object
-// (`Window.getHistory` returns `&frame._session.history`), which is the leading
-// suspect for how the child's call ends up acting on the top's frame; that part
-// is a hypothesis, not yet isolated.
+// child passed>)` -- and the child's own URL does not move at all.
+//
+// The same-origin shape can ask the obvious next question directly, and does:
+// from inside the child, `history === parent.history` is **true** in this engine
+// and false in Chrome, and so is `navigation === parent.navigation`
+// (`location === parent.location` is false in both, correctly). One History
+// object for the whole session is what `Window.getHistory` returns
+// (`&frame._session.history`), and the `frame: *Frame` its methods receive comes
+// from the *context* the wrapper belongs to, not from the caller -- so a child's
+// `replaceState` acts on whichever frame's realm owns that one shared wrapper.
 //
 // usage: node frame-url-history.mjs <chrome|lightpanda> --shape <S1..S6|T1..T9> [--port 9800]
 //   (each run needs three free ports: PORT, PORT+1 for the top, PORT+2 for the child)
@@ -69,7 +75,10 @@ const REPORT = (who) => `
       baseURI: function () { return document.baseURI; },
       worigin: function () { return window.origin; },
       isTop: function () { return String(window === top); },
-      kids: function () { return String(frames.length); }
+      kids: function () { return String(frames.length); },
+      sameHistory: function () { return window === top ? '-' : String(history === parent.history); },
+      sameNavigation: function () { return window === top ? '-' : String(navigation === parent.navigation); },
+      sameLocation: function () { return window === top ? '-' : String(location === parent.location); }
     };
     for (var k in p) { try { f[k] = String(p[k]()); } catch (e) { f[k] = 'threw'; } }
     f.who = '${who}';
@@ -228,7 +237,8 @@ console.log(`--- ${engine} ${SHAPE} --- top reports: ${tops.length}, wrong: ${ba
 for (const r of (bad.length ? bad : tops).slice(0, 6)) {
     console.log(`  tick=${r.tick} isTop=${r.isTop} kids=${r.kids} href=${r.href} lorigin=${r.lorigin} docURL=${r.docURL} baseURI=${r.baseURI} worigin=${r.worigin}`);
 }
-console.log(`  kid reports: ${kidRows.length}${kidRows.length ? `, last href=${kidRows[kidRows.length - 1].href}` : ''}`);
+const k = kidRows[kidRows.length - 1];
+console.log(`  kid reports: ${kidRows.length}${k ? `, last href=${k.href} sameHistory=${k.sameHistory} sameNavigation=${k.sameNavigation} sameLocation=${k.sameLocation}` : ''}`);
 for (const r of rows.filter((r) => r.who === 'err' || r.who === 'driver')) console.log(`  NOTE ${r.href}`);
 console.log(bad.length ? 'LEAK' : 'clean');
 process.exit(0);
