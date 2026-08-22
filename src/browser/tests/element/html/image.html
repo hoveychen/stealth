@@ -184,14 +184,18 @@
 </script>
 
 <script id="img-load-event" type=module>
-  // An img fires a load event when src is set.
+  // An img fires a load event when src is set. Served locally, like every
+  // other image on this page: the test server answers any path ending in an
+  // image extension with a one-pixel PNG, and the event now depends on those
+  // bytes (see `Frame.ImageRequest`), so a public URL here would make the
+  // assertion a network check.
   const state = await testing.async();
   const img = document.createElement("img");
 
   img.addEventListener("load", (e) => {
     state.resolve(e);
   });
-  img.src = "https://cdn.lightpanda.io/website/assets/images/docs/hn.png";
+  img.src = "/served/load-event.png";
 
   await state.done((e) => {
     testing.expectEqual(false, e.bubbles);
@@ -334,7 +338,7 @@
   let result = false;
   img.onload = () => result = true;
   document.body.appendChild(img);
-  img.src = "https://cdn.lightpanda.io/website/assets/images/docs/hn.png";
+  img.src = "/served/lazy-src.png";
 
   testing.onload(() => testing.expectEqual(true, result));
 }
