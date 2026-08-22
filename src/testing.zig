@@ -1209,6 +1209,18 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         return TestHTTPServer.sendFile(req, path[1..]);
     }
 
+    // A 200 whose body is not a picture. Chrome answers `error` for this --
+    // measured on Chrome 151, probe `expr-img-events.js` -- because the line it
+    // draws is decoding, not the status code. Registered ahead of the image
+    // catch-all below so the extension does not win.
+    if (std.mem.eql(u8, path, "/served/html-bytes.png")) {
+        return req.respond("<html><body>not a picture</body></html>", .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/html" },
+            },
+        });
+    }
+
     // `<img src>` is fetched for real now (see `Frame.loadImage`), so any test
     // page carrying an image reaches this handler. Nothing decodes the bytes,
     // so one placeholder answers every image path rather than each test having

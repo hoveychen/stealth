@@ -250,6 +250,29 @@
   });
 </script>
 
+<script id="img-error-on-non-image-bytes" type=module>
+  // 200 is not the line. Chrome 151 answers `error` for a response that
+  // arrives with a 2xx and an HTML body (probe `expr-img-events.js`): what
+  // decides the event is whether the bytes decode into a picture, and a status
+  // code cannot see that. Serving a page in an image's clothing is a shape the
+  // real web has -- an interstitial, a login redirect landing as 200 -- so
+  // firing `load` on it is a reading no browser gives.
+  //
+  // `/served/html-bytes.png` is the test server's fixture for exactly this:
+  // 200, `Content-Type: text/html`, HTML bytes.
+  const state = await testing.async();
+  const img = document.createElement("img");
+  const seen = [];
+  img.addEventListener("load", () => { seen.push("load"); state.resolve(seen); });
+  img.addEventListener("error", () => { seen.push("error"); state.resolve(seen); });
+  document.body.appendChild(img);
+  img.src = "/served/html-bytes.png";
+
+  await state.done(() => {
+    testing.expectEqual("error", seen.join(","));
+  });
+</script>
+
 <script id="img-no-load-without-src">
 {
   // An img without src should not fire a load event.
