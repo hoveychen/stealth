@@ -1,0 +1,349 @@
+{
+ "engine": "chrome",
+ "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+ "settleMs": 40000,
+ "wire": [
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "type": "Document",
+   "status": 403,
+   "bytes": 6198,
+   "encoded": 5420
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef0fa30a6858f1",
+   "type": "Script",
+   "status": 200,
+   "bytes": 227894,
+   "encoded": 81378
+  },
+  {
+   "url": "blob:https://www.scrapingcourse.com/72ed6491-a4d9-487c-b44b-cbc7b573c20b",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+   "type": "Script",
+   "status": 200,
+   "bytes": 84236,
+   "encoded": 27398
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "type": "Image",
+   "status": 200,
+   "bytes": 101448,
+   "encoded": 5565
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2709306606:1787367624:R572g2nB1a4GTUJCN4oJj5stCKBH_ihrYUyQ4RQSc0A/a2ef0fa30a6858f1/Z0",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 113584,
+   "encoded": 30219
+  },
+  {
+   "url": "blob:https://www.scrapingcourse.com/26ff50fe-3cb4-406b-9623-a0cb7a69046c",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/w5ry6/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+   "type": "Document",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "type": "Other",
+   "status": 200,
+   "bytes": 101448,
+   "encoded": 0
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2709306606:1787367624:R572g2nB1a4GTUJCN4oJj5stCKBH_ihrYUyQ4RQSc0A/a2ef0fa30a6858f1/Z0",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 3648,
+   "encoded": 4200
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "type": "Document",
+   "status": 200,
+   "bytes": 4207,
+   "encoded": 3173
+  },
+  {
+   "url": "https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css",
+   "type": "Stylesheet",
+   "status": 200,
+   "bytes": 160302,
+   "encoded": 25514
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js",
+   "type": "Script",
+   "status": 200,
+   "bytes": 84236,
+   "encoded": 27432
+  },
+  {
+   "url": "https://www.googletagmanager.com/gtag/js?id=G-NZGD14H87G",
+   "type": "Script",
+   "status": 200,
+   "bytes": 497127,
+   "encoded": 169871
+  },
+  {
+   "url": "https://www.scrapingcourse.com/build/assets/app-DxJb4DfE.css",
+   "type": "Stylesheet",
+   "status": 200,
+   "bytes": 16493,
+   "encoded": 4917
+  },
+  {
+   "url": "https://www.scrapingcourse.com/build/assets/app-D2jpX1vH.js",
+   "type": "Script",
+   "status": 200,
+   "bytes": 29830,
+   "encoded": 13553
+  },
+  {
+   "url": "https://www.scrapingcourse.com/assets/images/logo.svg",
+   "type": "Image",
+   "status": 200,
+   "bytes": 639,
+   "encoded": 1224
+  },
+  {
+   "url": "https://www.scrapingcourse.com/assets/images/challenge.svg",
+   "type": "Image",
+   "status": 200,
+   "bytes": 1451,
+   "encoded": 1388
+  },
+  {
+   "url": "https://code.jquery.com/jquery-3.5.1.slim.min.js",
+   "type": "Script",
+   "status": 200,
+   "bytes": 72380,
+   "encoded": 24978
+  },
+  {
+   "url": "https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js",
+   "type": "Script",
+   "status": 200,
+   "bytes": 18309,
+   "encoded": 7275
+  },
+  {
+   "url": "https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js",
+   "type": "Script",
+   "status": 200,
+   "bytes": 60044,
+   "encoded": 16005
+  },
+  {
+   "url": "https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496",
+   "type": "Script",
+   "status": 200,
+   "bytes": 31612,
+   "encoded": 11577
+  },
+  {
+   "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-NZGD14H87G&gtm=45je68j0h1v9183656648za200zd9183656648&_p=1787372178649&gcd=13l3l3l3l1l1&npa=0&dma",
+   "type": "Fetch",
+   "status": 204,
+   "bytes": 0,
+   "encoded": 563
+  },
+  {
+   "url": "https://www.scrapingcourse.com/assets/fonts/SpaceGrotesk-VariableFont_wght.ttf",
+   "type": "Font",
+   "status": 200,
+   "bytes": 134112,
+   "encoded": 64851
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/rum?",
+   "type": "XHR",
+   "status": 204,
+   "bytes": 0,
+   "encoded": 462
+  },
+  {
+   "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-NZGD14H87G&gtm=45je68j0h1v9183656648za200zd9183656648&_p=1787372178649&gcd=13l3l3l3l1l1&npa=0&dma",
+   "type": "Fetch",
+   "status": 204,
+   "bytes": 0,
+   "encoded": 57
+  }
+ ],
+ "totals": {
+  "requests": 26,
+  "dataReceived": 1749198,
+  "encoded": 527020
+ },
+ "perRealm": {
+  "https://www.scrapingcourse.com/cloudflare-challenge": {
+   "big": [],
+   "blobs": [],
+   "calls": {
+    "gtag": 0,
+    "onYouTubeIframeAPIReady": 0,
+    "$": 0,
+    "jQuery": 0,
+    "axios": 0
+   },
+   "posts": [
+    {
+     "url": "/cdn-cgi/rum?",
+     "len": 1155,
+     "head": "{\"memory\":{\"totalJSHeapSize\":9718714,\"usedJSHeapSize\":5846138,\"jsHeapSizeLimit\":4395630592},\"resources\":[],\"referrer\":\"https://www.scrapingcourse.com/cloudflare-challenge?__cf_chl_tk=QAv4JxdouqldJGv0mY7Cy6OeiRUPQkIpMc.A0bfyO8w-1787372175-1.0.1.1-XIKoAC.jWkwhpW.iG95uTQ5qzQX05rwwknUD42C7KsY\",\"eventTyp",
+     "shape": {
+      "sampled": 1155,
+      "space": 0,
+      "ws": 0,
+      "alpha": 52.1,
+      "digit": 28.7,
+      "sym": 19.2,
+      "ctl": 0
+     }
+    }
+   ]
+  }
+ },
+ "console": [],
+ "exceptions": [],
+ "bodies": [
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "err": "-32000 No resource with given identifier found"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ef0fa30a6858f1",
+   "err": "-32000 No resource with given identifier found"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+   "err": "-32000 No resource with given identifier found"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2709306606:1787367624:R572g2nB1a4GTUJCN4oJj5stCKBH_ihrYUyQ4RQSc0A/a2ef0fa30",
+   "err": "-32000 No resource with given identifier found"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "err": "-32000 No resource with given identifier found"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "err": "-32000 No resource with given identifier found"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2709306606:1787367624:R572g2nB1a4GTUJCN4oJj5stCKBH_ihrYUyQ4RQSc0A/a2ef0fa30",
+   "err": "-32000 No resource with given identifier found"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "len": 4207,
+   "head": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\n    <title>Cloudflare Challenge - ScrapingCourse.com</title>\n\n    <!-- Bootstrap CSS -->\n    <link href=\"https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css\" rel=\"stylesheet\">\n   "
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js",
+   "len": 84236,
+   "head": "\"use strict\";(function(){function wn(e,t,r,n,a,u,l){try{var d=e[u](l),f=d.value}catch(p){r(p);return}d.done?t(f):Promise.resolve(f).then(n,a)}function Tn(e){return function(){var t=this,r=arguments;return new Promise(function(n,a){var u=e.apply(t,r);function l(f){wn(u,n,a,l,d,\"next\",f)}function d(f){wn(u,n,a,l,d,\"throw\",f)}l(void 0)})}}function $(e,t,r){return t in e?Object.defineProperty(e,t,{val"
+  },
+  {
+   "url": "https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css",
+   "len": 160302,
+   "head": "/*!\n * Bootstrap v4.5.2 (https://getbootstrap.com/)\n * Copyright 2011-2020 The Bootstrap Authors\n * Copyright 2011-2020 Twitter, Inc.\n * Licensed under MIT (https://github.com/twbs/bootstrap/blob/main/LICENSE)\n */:root{--blue:#007bff;--indigo:#6610f2;--purple:#6f42c1;--pink:#e83e8c;--red:#dc3545;--orange:#fd7e14;--yellow:#ffc107;--green:#28a745;--teal:#20c997;--cyan:#17a2b8;--white:#fff;--gray:#6c"
+  },
+  {
+   "url": "https://code.jquery.com/jquery-3.5.1.slim.min.js",
+   "len": 72380,
+   "head": "/*! jQuery v3.5.1 -ajax,-ajax/jsonp,-ajax/load,-ajax/script,-ajax/var/location,-ajax/var/nonce,-ajax/var/rquery,-ajax/xhr,-manipulation/_evalUrl,-deprecated/ajax-event-alias,-effects,-effects/Tween,-effects/animatedSelector | (c) JS Foundation and other contributors | jquery.org/license */\n!function(e,t){\"use strict\";\"object\"==typeof module&&\"object\"==typeof module.exports?module.exports=e.documen"
+  },
+  {
+   "url": "https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js",
+   "len": 60044,
+   "head": "/*!\n  * Bootstrap v4.5.2 (https://getbootstrap.com/)\n  * Copyright 2011-2020 The Bootstrap Authors (https://github.com/twbs/bootstrap/graphs/contributors)\n  * Licensed under MIT (https://github.com/twbs/bootstrap/blob/main/LICENSE)\n  */\n!function(t,e){\"object\"==typeof exports&&\"undefined\"!=typeof module?e(exports,require(\"jquery\"),require(\"popper.js\")):\"function\"==typeof define&&define.amd?define("
+  },
+  {
+   "url": "https://static.cloudflareinsights.com/beacon.min.js/v4513226cdae34746b4dedf0b4dfa099e1781791509496",
+   "len": 31612,
+   "head": "(()=>{var t={173:function(t,e){!function(t){\"use strict\";class e{t;o=0;i=[];u(t){if(t.hadRecentInput)return;const e=this.i[0],n=this.i.at(-1);this.o&&e&&n&&t.startTime-n.startTime<1e3&&t.startTime-e.startTime<5e3?(this.o+=t.value,this.i.push(t)):(this.o=t.value,this.i=[t]),this.t?.(t)}}const n=()=>{const t=performance.getEntriesByType(\"navigation\")[0];if(t&&t.responseStart>0&&t.responseStart<perfo"
+  },
+  {
+   "url": "https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js",
+   "len": 18309,
+   "head": "/**\n * @popperjs/core v2.5.2 - MIT License\n */\n\n\"use strict\";!function(e,t){\"object\"==typeof exports&&\"undefined\"!=typeof module?t(exports):\"function\"==typeof define&&define.amd?define([\"exports\"],t):t((e=e||self).Popper={})}(this,(function(e){function t(e){return{width:(e=e.getBoundingClientRect()).width,height:e.height,top:e.top,right:e.right,bottom:e.bottom,left:e.left,x:e.left,y:e.top}}functio"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/assets/images/logo.svg",
+   "len": 639,
+   "head": "<svg width=\"14\" height=\"20\" viewBox=\"0 0 14 20\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<path d=\"M1.09991 13H12.8999M3.99994 1H9.99994M8.99993 1V8.342C10.0517 8.71343 10.9791 9.37069 11.678 10.24C12.3769 11.1093 12.8197 12.1562 12.9566 13.2632C13.0935 14.3702 12.9191 15.4934 12.453 16.5068C11.9869 17.5202 11.2475 18.3835 10.3179 19H3.68293C2.75274 18.3838 2.01282 17.5204 1.54627 16.5068C1."
+  },
+  {
+   "url": "https://www.scrapingcourse.com/build/assets/app-D2jpX1vH.js",
+   "len": 29830,
+   "head": "function me(e,t){return function(){return e.apply(t,arguments)}}const{toString:je}=Object.prototype,{getPrototypeOf:Z}=Object,H=(e=>t=>{const n=je.call(t);return e[n]||(e[n]=n.slice(8,-1).toLowerCase())})(Object.create(null)),A=e=>(e=e.toLowerCase(),t=>H(t)===e),q=e=>t=>typeof t===e,{isArray:C}=Array,_=q(\"undefined\");function He(e){return e!==null&&!_(e)&&e.constructor!==null&&!_(e.constructor)&&R"
+  },
+  {
+   "url": "https://www.googletagmanager.com/gtag/js?id=G-NZGD14H87G",
+   "len": 497127,
+   "head": "\n// Copyright 2012 Google Inc. All rights reserved.\n \n(function(){\n\nvar data = {\n\"resource\": {\n  \"version\":\"1\",\n  \n  \"macros\":[{\"function\":\"__e\"},{\"function\":\"__c\",\"vtp_value\":\"\"},{\"function\":\"__c\",\"vtp_value\":0}],\n  \"tags\":[{\"function\":\"__ogt_1p_data_v2\",\"priority\":13,\"vtp_isAutoEnabled\":true,\"vtp_autoCollectExclusionSelectors\":[\"list\",[\"map\",\"exclusionSelector\",\"\"]],\"vtp_isEnabled\":true,\"vtp_cit"
+  },
+  {
+   "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-NZGD14H87G&gtm=45je68j0h1v9183656648za200zd9183656648&_p=1787372178649&gcd=13l3l3l3l1l1",
+   "len": 0,
+   "head": ""
+  },
+  {
+   "url": "https://www.scrapingcourse.com/assets/images/challenge.svg",
+   "len": 1451,
+   "head": "<svg width=\"28\" height=\"18\" viewBox=\"0 0 28 18\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n<path d=\"M1.50006 9H2.75006M6.50006 4H4.00006C3.66854 4 3.3506 4.1317 3.11618 4.36612C2.88176 4.60054 2.75006 4.91848 2.75006 5.25V12.75C2.75006 13.0815 2.88176 13.3995 3.11618 13.6339C3.3506 13.8683 3.66854 14 4.00006 14H6.50006M10.2501 9H17.7501M21.5001 4H24.0001C24.3316 4 24.6495 4.1317 24.8839 4.366"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/build/assets/app-DxJb4DfE.css",
+   "len": 16493,
+   "head": "*,:before,:after{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}:before,:after{--tw-content: \"\"}html,:host{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;-o-tab-size:4;tab-size:4;font-family:Inter var,ui-sans-serif,system-ui,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\",Segoe UI Symbol,\"Noto Color Emoji\";font-feature-settings:normal;font-variation-set"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/assets/fonts/SpaceGrotesk-VariableFont_wght.ttf",
+   "len": 134112,
+   "head": "\u0000\u0001\u0000\u0000\u0000\u0014\u0001\u0000\u0000\u0004\u0000@GDEFÎeO7\u0000\u0000\u0002ô\u0000\u0000\u0002YGPOS÷1\u0000\u0000Ýü\u0000\u0000ðGSUBJ\u001f\u0007k\u0000\u0000\u001e,\u0000\u0000\u000eÒHVARËg±(\u0000\u0000\t¬\u0000\u0000\u0004bOS/23¡_Ì\u0000\u0000\u0002\u0000\u0000\u0000`STATìlÚ\u0000\u0000\u0002<\u0000\u0000\u0000Xavar<00\u0001\u0000\u0000\u0001\\\u0000\u0000\u0000\u001ecmapO1O\u0000\u0000\u0015¤\u0000\u0000\bfvar\u0007i\u0000\u0000\u0001ø\u0000\u0000\u0000Dgasp\u0000\u0000\u0000\u0010\u0000\u0000\u0001T\u0000\u0000\u0000\bglyfñ\\Ä*\u0000\u0001mì\u0000\u0000ôgvarýÕ½b\u0000\u0000^°\u0000\u0000Lhead\u001aÒô\u0006\u0000\u0000\u0001À\u0000\u0000\u00006hhea\b]\u0004ñ\u0000\u0000\u0001\u0000\u0000\u0000$hmtxËÂÔ\u0000\u0000-\u0000\u0000\u0000\u000f locaD£\u001d\u0017\u0000\u0000\u000e\u0010\u0000\u0000\u0007maxp\u0003Ù\u0000Ä\u0000\u0000\u0001|\u0000\u0000\u0000 nameoo£\u0000\u0000\u0005P\u0000\u0000\u0004\\postÃ\u001e÷\u0000\u0000< \u0000\u0000\"preph\u0006\u0000\u0000\u0001L\u0000\u0000\u0000\u0007¸\u0001ÿ°\u0004\u0000\u0000\u0001\u0000\u0001ÿÿ\u0000\u000f\u0000\u0001\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0005À\u0000À\u0000\u0000\u0000\u0000\u0000\u0010\u0000\u0012 \u0000)@\u0000@\u0000\u0000\u0000\u0000\u0001\u0000\u0000\u0003È\u0000\\\u0000\b\u0000d\u0000\u0005\u0000\u0001\u0000\u0000\u0000\u0000"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/rum?",
+   "len": 0,
+   "head": ""
+  },
+  {
+   "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-NZGD14H87G&gtm=45je68j0h1v9183656648za200zd9183656648&_p=1787372178649&gcd=13l3l3l3l1l1",
+   "len": 0,
+   "head": ""
+  }
+ ],
+ "version": {
+  "Browser": "Chrome/151.0.7922.172",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "V8-Version": "15.1.206.21",
+  "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9242/devtools/browser/e57de21f-8420-4940-bf94-1ceca4309333"
+ },
+ "final": {
+  "href": "https://www.scrapingcourse.com/cloudflare-challenge",
+  "title": "Cloudflare Challenge - ScrapingCourse.com",
+  "status": "Scraping\nCourse\nCloudflare Challenge\nYou bypassed the Cloudflare challenge! :D",
+  "cookie": "XSRF-TOKEN,_ga,_ga_NZGD14H87G,AWSALB,AWSALBCORS",
+  "clearance": false
+ },
+ "engineLog": "52GiB)\n[24102:10613157:0821/211634.180381:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log\n[24104:10613166:0821/211634.187163:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2\n[24104:10613166:0821/211634.187753:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 111067, parent pid: 1\n[24104:10613166:0821/211634.189222:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 81623236608B (76.018GiB) / 994662584320B (926.352GiB)\n[24104:10613166:0821/211634.189233:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 81623236608B (76.018GiB) / 994662584320B (926.352GiB)\n[24104:10613166:0821/211634.189294:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log\n[24102:10613157:0821/211634.189662:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.\n[24102:10613157:0821/211634.190182:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports\n[24102:10613157:0821/211634.190245:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports\n[24102:10613157:0821/211634.190306:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)\n[24102:10613157:0821/211634.190317:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)\n[24102:10613157:0821/211634.190356:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)\n[24102:10613157:0821/211634.190364:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)\n[24102:10613157:0821/211634.190374:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.\n[24102:10613157:0821/211634.190518:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run\n[23701:10609938:0821/211647.811087:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT\n[24102:10613157:0821/211651.311715:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0\n[24102:10613157:0821/211651.312429:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log\n[24102:10613157:0821/211651.312468:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake) returned 0.\n[24098:10613149:0821/211651.494117:VERBOSE1:chrome/updater/app/app_wakeall.cc:68] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` exited 0\n[24098:10613133:0821/211651.494392:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0\n[24098:10613133:0821/211651.494780:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log\n[24098:10613133:0821/211651.494810:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake-all) returned 0.\n"
+}

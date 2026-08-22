@@ -6770,22 +6770,108 @@ document. Calling `runProgram()` unarmed fails inside `atob` in both engines
 (`--kick` does exactly that, and the two error strings differ only in wording).
 Live, no request to `challenges.cloudflare.com` follows the widget document in
 any of the seven captured `exc-cf-*.json` wire logs — those keep the last 80
-events, which is the window the throw happens in — so the program looks derived
-rather than fetched, and reconstructing it offline means reimplementing the embed
-handshake.
+events, which is the window the throw happens in — so the program *looked*
+derived rather than fetched. It is not: see "The program is fetched, and the
+size gap was the `eval` hole" below, which measures it coming off the wire.
 
 **One more live divergence, measured but not attributed.** Same page, one run
 each, the two engines get very different programs and do very different amounts
-of work in the widget realm:
+of work in the widget realm. That reading was taken before the `eval` fix
+landed; the columns on the right are the same `--reach` run repeated after it
+(`vmt-after-{lp,cr}.json`, one run each, so treat single-digit moves as noise):
 
-| | lightpanda | Chrome |
+| | lightpanda, before | Chrome, before | lightpanda, after | Chrome, after |
+|---|---|---|---|---|
+| `runProgram` first argument | 6 944 chars | 634 784 chars | 6 944 chars | 617 404 chars |
+| `runProgram` calls | 1 | 2 | 3 | 2 |
+| `UXeS6` (createScript) calls | 1 | 51 | 59 | 54 |
+| `xBEPx7` calls | 6 | 86 | 91 | 83 |
+| `ykmX3` calls | 11 | 57 | 79 | 56 |
+| `window.bGgjP8` | undefined | function | function | function |
+
+So the gap was two things, not one.
+
+*The work the widget does* was downstream of the `eval` hole, and closing it
+closes them: `UXeS6` goes 1 → 59 against Chrome's 51–54, `xBEPx7` 6 → 91,
+`ykmX3` 11 → 79. The VM was not running before because the first thing it
+reaches for, `bGgjP8`, was the global that `eval` dropped. `--reach` now records
+`bGgjP8: UXeS6 -> typeof window.bGgjP8 = function` where it recorded `undefined`,
+and the name is in the realm's globals in both engines.
+
+*The program it is handed* looked like a second, earlier divergence: 6 944 chars
+here against ~620 000 in Chrome. **It is not a second divergence — that row is
+an artifact.** See the next section.
+
+**The `reading 'call'` throw is gone.** `exception-frames.mjs` on the same URL,
+same engine, same 30s settle: `exc-cf-scrapingcourse-lp.json` (before) carries 11
+occurrences of `Cannot read properties of undefined (reading 'call')`,
+`exc-after-lp.json` (after) carries none, and no `[Cloudflare Turnstile]
+Unhandled error` line either. One run each — it says the throw those four
+sessions chased is fixed, not that the challenge now issues a clearance.
+
+### The program is fetched, and the size gap was the `eval` hole
+
+The "6 944 vs ~620 000" row above is the one number in this file that was never
+reproduced, and chasing it was scheduled as its own plan. It does not survive
+contact with a correctly built binary, and the program is not derived at all.
+
+**The program comes off the wire.** `runProgram(program, window)`'s first
+argument is exactly the base64-decode of the body of
+`POST /cdn-cgi/challenge-platform/h/b/fo/<…>`. Twelve measurements — two
+engines, three call sites (parent realm, widget realm, widget's second round),
+four runs — and the arithmetic never misses:
+
+| where | `fo/` response | ×3/4 | `runProgram` arg | delta |
+|---|---|---|---|---|
+| chrome, parent | 113 576 | 85 182 | 85 180 | −2 |
+| chrome, widget | 823 232 | 617 424 | 617 424 | 0 |
+| chrome, widget #2 | 127 724 | 95 793 | 95 792 | −1 |
+| lightpanda, parent | 113 592 | 85 194 | 85 192 | −2 |
+| lightpanda, widget | 822 924 | 617 193 | 617 192 | −1 |
+| lightpanda, widget #2 | 127 724 | 95 793 | 95 792 | −1 |
+
+A delta of 0…−2 is base64 padding. So the program's size is decided by
+Cloudflare's server, in reply to the telemetry the client POSTs — nothing in the
+engine derives it, and there is no local assembly step in `api.js` to find.
+The POST bodies match too (parent 2 316 vs 2 338; widget 4 663 vs 4 791; widget
+second round 87 426 vs 89 634 — all within 3%). `program-origin.mjs`
+is the instrument.
+
+**Why the old number was wrong.** `vmt-after-lp.json` records
+`Lightpanda-Version: 1.0.0-dev.771+92f8e231f`. `92f8e231f` is the *inert C++
+shim*; the commit that registers the callback is `a9f910dd0`, made four minutes
+later. That binary was built before the fix it was supposed to be measuring.
+Rebuilt at `a9f910dd0`, lightpanda's widget program lands at 617 192 / 634 664 /
+634 668 / 634 736 across runs against Chrome's 617 412 / 617 424 / 634 656 —
+the same distribution, not an 89× gap.
+
+**Attribution, isolated to one line.** Same tree at `a9f910dd0`, with only
+`installCodeGenerationCallback` neutered:
+
+| | callback on | callback off |
 |---|---|---|
-| `runProgram` first argument | 6 944 chars | 634 784 chars |
-| `runProgram` calls | 1 | 2 |
-| `UXeS6` (createScript) calls | 1 | 51 |
-| `xBEPx7` calls | 6 | 83 |
-| `ykmX3` calls | 11 | 56 |
+| requests | 12 | 31 |
+| widget realms | 1 | 4 (retry loop) |
+| widget `runProgram` | 617 k–635 k | **never called** |
+| widget `fo/` POSTs | 2 | 0 |
 
-Whether that gap is downstream of the `eval` hole or a second, earlier
-divergence is open. It is the next thing to settle, and settling it is cheap now:
-the same `--reach` run with the `eval` unwrapping in place answers it directly.
+The "off" column reproduces the pre-fix `main` binary exactly. The widget never
+reaches `runProgram` without the unwrap, so it never posts telemetry, so no
+program is ever sent to it. One cause, not two.
+
+**The wire logs never showed lightpanda's blob scripts, and never will.**
+Chrome reports six `Script blob:…` requests on this page and lightpanda reports
+zero — which reads as "lightpanda does not load them" and is not what it means.
+`Transfer.submit` (`src/network/HttpClient.zig:2284`) hands `blob:` and `data:`
+URLs to `Synthetic.buffer` and returns *before* `pipeline(.start)`, and
+`pipeline(.start)` is the only site that sets `_notify_cdp = true` or dispatches
+`http_request_start`. Synthetic transfers are therefore invisible to every CDP
+Network consumer by construction, while the script itself loads and runs fine
+(`probe-injected-function-declaration.js` reports `blobUrlScript: function/own`).
+
+**The oracle is headed Chrome, not `--headless=new`.** Same URL, same 40s
+settle: headed Chrome ends on *"You bypassed the Cloudflare challenge! :D"*.
+Headless Chrome does not — it is still on `Just a moment…` with no
+`cf_clearance`, exactly like lightpanda. Comparing outcomes against headless
+Chrome will therefore score a pass that the reference itself does not achieve.
+Per-API comparisons against headless are still fine; verdicts are not.

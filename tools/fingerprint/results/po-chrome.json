@@ -1,0 +1,455 @@
+{
+ "engine": "chrome",
+ "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+ "settleMs": 30000,
+ "wire": [
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "type": "Document",
+   "status": 403,
+   "bytes": 6262,
+   "encoded": 5478
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2eeebcd0ec938c7",
+   "type": "Script",
+   "status": 200,
+   "bytes": 229493,
+   "encoded": 82615
+  },
+  {
+   "url": "blob:https://www.scrapingcourse.com/c2054997-0844-49bd-9598-cf3110aec4be",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+   "type": "Script",
+   "status": 200,
+   "bytes": 84236,
+   "encoded": 27468
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "type": "Image",
+   "status": 200,
+   "bytes": 101448,
+   "encoded": 5588
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2709306606:1787367624:R572g2nB1a4GTUJCN4oJj5stCKBH_ihrYUyQ4RQSc0A/a2eeebcd0ec938c7/Ad",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 113576,
+   "encoded": 30230
+  },
+  {
+   "url": "blob:https://www.scrapingcourse.com/660007f3-5fbb-4e9d-9d26-1557cca5b693",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zai2m/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+   "type": "Document",
+   "status": 200,
+   "bytes": 273131,
+   "encoded": 105719
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/5c00a598-5a06-428f-985a-5fe7c2faae71",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "type": "Other",
+   "status": 200,
+   "bytes": 101448,
+   "encoded": 0
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/1533124765:1787367626:-fRNbofpfbbxahEqawEtIkr7CzNKy8U9IoUHdsBQuF4/a2eeebcff9adf95f",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 823232,
+   "encoded": 422093
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/c311771d-1baf-45a7-b941-9b516623e3a6",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/c311771d-1baf-45a7-b941-9b516623e3a6",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2eeebcff9adf95f/1787370709426/J6_iPhiFGCw3_wdf9CQj8yxEVA1Yg3LDuekpa_KOWm8-1787370",
+   "type": "Image",
+   "status": 200,
+   "bytes": 954,
+   "encoded": 1077
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/c311771d-1baf-45a7-b941-9b516623e3a6",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/1533124765:1787367626:-fRNbofpfbbxahEqawEtIkr7CzNKy8U9IoUHdsBQuF4/a2eeebcff9adf95f",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 127724,
+   "encoded": 47385
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/a058ad37-84db-4c12-83f7-429e5aba14ab",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0
+  }
+ ],
+ "totals": {
+  "requests": 17,
+  "dataReceived": 1861504,
+  "encoded": 727653
+ },
+ "perRealm": {
+  "https://www.scrapingcourse.com/cloudflare-challenge": {
+   "big": [
+    {
+     "where": "global UXeS6#1 arg0",
+     "len": 1337359,
+     "hits": 102,
+     "head": "                                                                                                                                                                ",
+     "mid": "                                                                                ",
+     "tail": "                                                    0, /.*honk.*/, 1787370709298",
+     "shape": {
+      "sampled": 36145,
+      "space": 100,
+      "ws": 0,
+      "alpha": 0,
+      "digit": 0,
+      "sym": 0,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhr:/cdn-cgi/challenge-platform/h/b/fo/2709306606:1787367624:R572g2nB1a4GTUJCN4oJj5stCKBH_ihrY",
+     "len": 113576,
+     "hits": 1,
+     "head": "t8GclcaEi4i5nIuKvo2OkpCPrcHL0c/W2ZmRvtTL19jQ3uLnqbKrv8e2r8PJ467LzPftsbXo9dbw8frs4eD+9wUBA+fB+8r04wDe8NoFEfTyENHpGQT49Q0RHf3+GwIPG/fZExkdKRYLJzALJfEvEyUpNSMX+Aoz",
+     "mid": "nczHx6HQy8ul1M/PqdjT063c19ex4NvbteTf37no4+O97OfnwfDr68X07+/J+PPzzfz399EB+/vVBQAA",
+     "tail": "gYWTZHZqZ3tynYmVap2PXqRikmKYYotlep6OaXqrnIKfi4eFcZCWkr6TkrOKwYyVgbeDnanCmLW3kg==",
+     "shape": {
+      "sampled": 113576,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81.5,
+      "digit": 15.7,
+      "sym": 2.8,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global runProgram#1 arg0",
+     "len": 85180,
+     "hits": 1,
+     "head": "ktNFv395eG53f44742Obkpmsu4+Wlbmmdqtx9A9LSA9LQj4PPzo25gsSllteYWtlxstX1j8aOjHYBkvYVr3JxbVRhkvVVqWcnJ+chkvbVqySl8tWhkvcV7GoxqSfV4ZL2la6usCUXK6KiZdRZy7PvN9o/yqXY2pr",
+     "mid": "rKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKysrKys",
+     "tail": "R/IMCmSV3OI3FXo0JbftZLehuEVIEXNxcnBte3x5d3h1Y2FiX2BrbGcNIF1OTOzNLlBxBJ5j5NYqFbc=",
+     "shape": {
+      "sampled": 85180,
+      "space": 0,
+      "ws": 0,
+      "alpha": 94.6,
+      "digit": 4.4,
+      "sym": 1,
+      "ctl": 0
+     }
+    }
+   ],
+   "blobs": [
+    {
+     "parts": 1,
+     "total": 13,
+     "type": "text/javascript"
+    },
+    {
+     "parts": 3,
+     "total": 291,
+     "type": "text/javascript"
+    }
+   ],
+   "calls": {
+    "UlwL3": 1,
+    "UXeS6": 51,
+    "WfQnx8": 1,
+    "oNxb8": 1,
+    "gsnqe5": 1,
+    "mUMum6": 0,
+    "gUsZ0": 0,
+    "ECAU8": 0,
+    "xBEPx7": 4,
+    "ykmX3": 7,
+    "PoSLZ4": 2,
+    "BppE3": 0,
+    "rCUjg1": 0,
+    "wdclO4": 0,
+    "MoAhr7": 0,
+    "GLLj2": 0,
+    "SRPD9": 0,
+    "runProgram": 1,
+    "pwuPn1": 0,
+    "bGgjP8": 0,
+    "GtJT5": 1
+   }
+  },
+  "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zai2m/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto": {
+   "big": [
+    {
+     "where": "global UXeS6#1 arg0",
+     "len": 1337359,
+     "hits": 50,
+     "head": "                                                                                                                                                                ",
+     "mid": "                                                                                ",
+     "tail": "                                                    0, /.*honk.*/, 1787370709870",
+     "shape": {
+      "sampled": 36145,
+      "space": 100,
+      "ws": 0,
+      "alpha": 0,
+      "digit": 0,
+      "sym": 0,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhr:/cdn-cgi/challenge-platform/h/b/fo/1533124765:1787367626:-fRNbofpfbbxahEqawEtIkr7CzNKy8U9I",
+     "len": 823232,
+     "hits": 1,
+     "head": "eXSfv5/Dfcd7oImGg46Kv7ujv8zPk9eU2dPD2dey35awm9XXrrO4xcWi4qXG2d/w2urJv+LM1MfM9bS67bvn7/W+ugHh2tLw+cUIAPf2A+fa4/ATzuz28NDMBe0f3ufuDBMS7gDz9AIJHvjmKeXmKv0w7g8BKizq",
+     "mid": "U2YcQh9FaUVDaGUrTEtARDwwLHZFTHFENWp7gFpRbU9cfod+VWlqVXWMemmRX5J/cFNgi41nkVmPe1Bz",
+     "tail": "o4mUo46I0KKb0bSiiNWjj5DKtLiqzsq/r7viuLDV2sC12aW4pbzxsK+vzK/Ez+C3t/jV+8b42PHi5PwG",
+     "shape": {
+      "sampled": 22250,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81.8,
+      "digit": 15.6,
+      "sym": 2.6,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global runProgram#1 arg0",
+     "len": 617424,
+     "hits": 1,
+     "head": "1+UtSv/x+O73/94hcJeqs6y5yravsMy/H2klBFJVU1p2RdiybqODfOVHLt27i6ahm50uUMDai4ulcalPBJVw2OXQ0+bJz9AGcigCSFFRXlF3t00rEv4SDlm+uFA2GxkWHxYfJBsQa2NkJxjZSm/GOtIYbJOqs7Kt",
+     "mid": "hz/T0UxSPtp5USGJA4/xFLpB2fvzSIdEQrzpFYYCbxeSzGyeU7CmnGp7lW+MuZacc466hMDAxHN2lpeZ",
+     "tail": "nJmat7BVcRt+dv0sJGFmR7AO92yJBwYF+wD//hQTEhcWFQwLCgkPDg2D0Fz865Q3GQa76vRwArQiYZqy",
+     "shape": {
+      "sampled": 16688,
+      "space": 0,
+      "ws": 0,
+      "alpha": 82.2,
+      "digit": 15.3,
+      "sym": 2.5,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhr:/cdn-cgi/challenge-platform/h/b/fo/1533124765:1787367626:-fRNbofpfbbxahEqawEtIkr7CzNKy8U9I",
+     "len": 127724,
+     "hits": 1,
+     "head": "eXSfv5/Dfcd7oImGg46Kv7ujv8zPk9eU2dPD2dey35awm9XXrde8xsa33trOqNC9qsW8puft1Krr8PfT6vS88fi57QG/7wTbAQPZ9QPoy+gQ6PDKBQwPFwrq5ekH1d7sFQL5IuAh+eQi8g0tAPb8IBEnHwkh9CMO",
+     "mid": "aAUW2ahFVxnohZdaKMXXmmkGF9qpRlga6YaYWynG2JtqBxjbqkdZG+qHmVwqx9mcawgZ3KtIWhzriJpd",
+     "tail": "DvwnKB7+MRAKEgE3NAX5OhE0H/kXIiD7MRofAB4FIk4aPykiLjINRjBNTlEQRCtaNy1NPE5BWEZSHiw=",
+     "shape": {
+      "sampled": 127724,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81.5,
+      "digit": 15.6,
+      "sym": 2.9,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global runProgram#2 arg0",
+     "len": 95792,
+     "hits": 1,
+     "head": "1+UtSv/x+O73/94hcJeqs6y5yravsMy/H2klAjNWVFlgZ3ZF2LB+kpV+kouPfo6jp0cu3buLpqGbnS5QwOV/hnpwiICFb08ElXOv4sK5qAZyKAFhXmdMd7dNLO4JHg2+uFArBA3vERZea2NkJxjZSm/GOtIYbJOq",
+     "mid": "zc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3N",
+     "tail": "hrm8u5YVcExgubFC918eoYGppeEvTMTBwsC7vLnX2NXU0dLP0M3OzEiRJUX2jSooq/bHvRGfTeWmZe0=",
+     "shape": {
+      "sampled": 95792,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81,
+      "digit": 17.7,
+      "sym": 1.3,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global UlwL3#13 arg0",
+     "len": 2173,
+     "hits": 1,
+     "head": "<style>#JyFwt6,#bwsM4,#qdGh2,#KhYG1{position:absolute}#bwsM4,#qdGh2,#KhYG1{margin-left:15.9099rem}#QyWuG8{border:2.715px solid green;padding:3.98px;margin-left:",
+     "mid": "t:20.8px}#fSQAW7{border:2px solid #00008b;-webkit-transform:perspective(12890px)",
+     "tail": "ue=49 max=100></progress></div><div id=KhYG1><button type=button></button></div>",
+     "shape": {
+      "sampled": 2173,
+      "space": 2.6,
+      "ws": 0,
+      "alpha": 58.4,
+      "digit": 19.6,
+      "sym": 19.5,
+      "ctl": 0
+     }
+    }
+   ],
+   "blobs": [
+    {
+     "parts": 1,
+     "total": 13,
+     "type": "text/javascript"
+    },
+    {
+     "parts": 3,
+     "total": 291,
+     "type": "text/javascript"
+    },
+    {
+     "parts": 3,
+     "total": 291,
+     "type": "text/javascript"
+    }
+   ],
+   "calls": {
+    "UlwL3": 14,
+    "UXeS6": 55,
+    "WfQnx8": 4,
+    "ECAU8": 0,
+    "xBEPx7": 83,
+    "ykmX3": 56,
+    "PoSLZ4": 41,
+    "BppE3": 0,
+    "rCUjg1": 0,
+    "wdclO4": 0,
+    "MoAhr7": 0,
+    "GLLj2": 0,
+    "SRPD9": 0,
+    "mUMum6": 6,
+    "gUsZ0": 1,
+    "gsnqe5": 1,
+    "pwuPn1": 0,
+    "runProgram": 2,
+    "cwwX3": 1,
+    "bGgjP8": 0,
+    "GtJT5": 2
+   }
+  }
+ },
+ "console": [
+  "startGroupCollapsed: ",
+  "debug: Error",
+  "log: /.*.*=.*/",
+  "log: /.*.*=.*/",
+  "log: function () { [native code] }",
+  "log: function () { [native code] }",
+  "log: a",
+  "log: a",
+  "count: \u0000: 1",
+  "count: \u0000: 1",
+  "debug: %c%d font-size:0;color:transparent NaN",
+  "debug: %c%d font-size:0;color:transparent NaN",
+  "dir:  Error",
+  "dir:  Error",
+  "dirxml: %c%d font-size:0;color:transparent Error",
+  "dirxml: %c%d font-size:0;color:transparent Error",
+  "error: %c%d font-size:0;color:transparent NaN",
+  "error: %c%d font-size:0;color:transparent NaN",
+  "info: %c%d font-size:0;color:transparent NaN",
+  "info: %c%d font-size:0;color:transparent NaN",
+  "log: %c%d font-size:0;color:transparent NaN",
+  "log: %c%d font-size:0;color:transparent NaN",
+  "table: %c%d font-size:0;color:transparent Error",
+  "table: %c%d font-size:0;color:transparent Error",
+  "trace: %c%d font-size:0;color:transparent NaN",
+  "trace: %c%d font-size:0;color:transparent NaN",
+  "warning: %c%d font-size:0;color:transparent NaN",
+  "warning: %c%d font-size:0;color:transparent NaN",
+  "endGroup: console.groupEnd"
+ ],
+ "exceptions": [],
+ "bodies": [
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "len": 6262,
+   "head": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta http-equiv=\"content-security-policy\" content=\"default-src &#39;none&#39;; script-src &#39"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2eeebcd0ec938c7",
+   "len": 229493,
+   "head": "window._cf_chl_opt.FRGD3=true;window._cf_chl_opt.qDREr1=false;window._cf_chl_opt.DEnd6=[];window._cf_chl_opt.BaSzz0=\"challenges.cloudflare.com\";window._cf_chl_opt.hJYUp7={\"Rahvf8\":{\"ACZr0\":\"https%3A%2F%2Fdevelopers.cloudflare.com%2Ffundamentals%2Fget-started%2Fconcepts%2Fcloudflare-challenges%2F%23browser-support\",\"TzEsj4\":\"%2Fcdn-cgi%2Fchallenge-platform%2Fhelp\",\"kaMjx1\":\"https%3A%2F%2Funbotnet.m"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+   "len": 84236,
+   "head": "\"use strict\";(function(){function wn(e,t,r,n,a,u,l){try{var d=e[u](l),f=d.value}catch(p){r(p);return}d.done?t(f):Promise.resolve(f).then(n,a)}function Tn(e){return function(){var t=this,r=arguments;return new Promise(function(n,a){var u=e.apply(t,r);function l(f){wn(u,n,a,l,d,\"next\",f)}function d(f){wn(u,n,a,l,d,\"throw\",f)}l(void 0)})}}function $(e,t,r){return t in e?Object.defineProperty(e,t,{val"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2709306606:1787367624:R572g2nB1a4GTUJCN4oJj5stCKBH_ihrYUyQ4RQSc0A/a2eeebcd0",
+   "len": 113576,
+   "head": "t8GclcaEi4i5nIuKvo2OkpCPrcHL0c/W2ZmRvtTL19jQ3uLnqbKrv8e2r8PJ467LzPftsbXo9dbw8frs4eD+9wUBA+fB+8r04wDe8NoFEfTyENHpGQT49Q0RHf3+GwIPG/fZExkdKRYLJzALJfEvEyUpNSMX+AozPTcaLh/9JRj+OjAGRkUWKS0hDSNCND8uN1cWMFcwHFMUX1hAQhxbXkY0IGFUX01gSSE9LmYpJm9oSzFTZFdpVFQ6d1theWRuVGB+aVdkYGllQVpskXNTZWRfbnOXcn12h3aIan9bkaR0h5qee2p5pJarj3GCqbGmj62RqJimua+rvKCTsLi3o7eSxYbLhMquormCi53HnaCew9bT2dam05vUmJic1ta0r6TT4KPD1rzlqOXD"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/zai2m/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang",
+   "len": 273131,
+   "head": "<!DOCTYPE HTML><html lang=\"en-US\"><head><meta http-equiv=\"x-ua-compatible\" content=\"IE=Edge,chrome=1\"><meta http-equiv=\"content-security-policy\" content=\"default-src &#39;none&#39;; script-src &#39;nonce-Jjy7rikLtIUMMcDoT4o1nn&#39; &#39;unsafe-eval&#39;; script-src-attr &#39;none&#39;; worker-src blob:; style-src &#39;unsafe-inline&#39;; img-src &#39;self&#39;; connect-src &#39;self&#39; https://h"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "len": 101448,
+   "head": "\u0000\u0000\u0001\u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000Ú\u0006\u0000\u0000f\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000(\b\u0001\u0000@\u0007\u0000\u0000@@\u0000\u0000\u0001\u0000 \u0000(B\u0000\u0000h\u000f\u0001\u000000\u0000\u0000\u0001\u0000 \u0000¨%\u0000\u0000Q\u0001\u0000  \u0000\u0000\u0001\u0000 \u0000¨\u0010\u0000\u00008w\u0001\u0000\u0010\u0010\u0000\u0000\u0001\u0000 \u0000h\u0004\u0000\u0000à\u0001\u0000PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\b\u0006\u0000\u0000\u0000\\r¨f\u0000\u0000\u0006¡IDATxÚíÝ±«Ýg\u001dÇñOlcH­HÀBW4\u0014\u001bZ\u0010\bº¸¤s\u0006§\"nþ\u0001®ÚÕÿÁÁÕl..©-\u0014j\u0010R(\u0015{HÑ+\u001a¤w1©ÃÍâö=pÎùåü>¯\u0017ÜíËï<÷9é»çÀÃs\u0013\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000`¯Î-½ú~W³^ìÂNsï$ùéÒ]g^ÀJ½äÆpöhéÅ.ìxY\u0001Ø²O,½\u0000`9\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000¹\u0013p7ÞÙ`ö\u0007;xý7ÜÛò3/'¹¾µþj"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "len": 101448,
+   "head": "\u0000\u0000\u0001\u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000Ú\u0006\u0000\u0000f\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000(\b\u0001\u0000@\u0007\u0000\u0000@@\u0000\u0000\u0001\u0000 \u0000(B\u0000\u0000h\u000f\u0001\u000000\u0000\u0000\u0001\u0000 \u0000¨%\u0000\u0000Q\u0001\u0000  \u0000\u0000\u0001\u0000 \u0000¨\u0010\u0000\u00008w\u0001\u0000\u0010\u0010\u0000\u0000\u0001\u0000 \u0000h\u0004\u0000\u0000à\u0001\u0000PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\b\u0006\u0000\u0000\u0000\\r¨f\u0000\u0000\u0006¡IDATxÚíÝ±«Ýg\u001dÇñOlcH­HÀBW4\u0014\u001bZ\u0010\bº¸¤s\u0006§\"nþ\u0001®ÚÕÿÁÁÕl..©-\u0014j\u0010R(\u0015{HÑ+\u001a¤w1©ÃÍâö=pÎùåü>¯\u0017ÜíËï<÷9é»çÀÃs\u0013\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000`¯Î-½ú~W³^ìÂNsï$ùéÒ]g^ÀJ½äÆpöhéÅ.ìxY\u0001Ø²O,½\u0000`9\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000¹\u0013p7ÞÙ`ö\u0007;xý7ÜÛò3/'¹¾µþj"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/1533124765:1787367626:-fRNbofpfbbxahEqawEtIkr7CzNKy8U9IoUHdsBQuF4/a2eeeb",
+   "len": 823232,
+   "head": "eXSfv5/Dfcd7oImGg46Kv7ujv8zPk9eU2dPD2dey35awm9XXrrO4xcWi4qXG2d/w2urJv+LM1MfM9bS67bvn7/W+ugHh2tLw+cUIAPf2A+fa4/ATzuz28NDMBe0f3ufuDBMS7gDz9AIJHvjmKeXmKv0w7g8BKizqNggE9Qw+Mh8RQiQyFxBCITIEIT8fTkEyLEcKIyxSKDlDLDJVWB0yXFw2O05hJVgbP1tDO1olSWBbYlVdNU9zSVN0dWx3XElWXXZdZGRUZEdhX4qMaWBnXo1pj21lcHZnlXiLVFhznXR3nW+egXOoYYFrgoZlna+vpaiysq+BtLCnda2Lk7q1lZehkZC4hYbGxYWsy8+iqcLRwrGe0LSkoZHNq92xv9WqvdWg4Me1o+i+zLyj"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2eeebcff9adf95f/1787370709426/J6_iPhiFGCw3_wdf9CQj8yxEVA1Yg3LDuekpa_KOW",
+   "len": 954,
+   "head": "PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0016\u0000\u0000\u0000&\b\u0000\u0000\u0000\u0000å¥4J\u0000\u0000\u0000\u0006tEXtr\u0000ÂX²H@<ç@\u0000\u0000\u0003oIDAT\u0001j\u0003ü\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/1533124765:1787367626:-fRNbofpfbbxahEqawEtIkr7CzNKy8U9IoUHdsBQuF4/a2eeeb",
+   "len": 127724,
+   "head": "eXSfv5/Dfcd7oImGg46Kv7ujv8zPk9eU2dPD2dey35awm9XXrde8xsa33trOqNC9qsW8puft1Krr8PfT6vS88fi57QG/7wTbAQPZ9QPoy+gQ6PDKBQwPFwrq5ekH1d7sFQL5IuAh+eQi8g0tAPb8IBEnHwkh9CMODRH2Dg0t+PI+EAw+Dw8CRhYkLTk2CCVDI1JFNjBLDicwViw9RzA2WVwhNmBgOj9SZSlcH0NfRz9eKU1kX2ZZYTlTNVB4Xz5we3ZNWmF6YWhoWGhLj1pdZYRSao93Z5KEZ3uEVXxue4uiYp5kpH2jfYV+pmNla3+LfYJ+k6OBarOMeK9zqpOgenutwn2mo56kx8d+h7nAm6XNoaujo7Om2Lazp7e2zLDc0s2xu8HbqNvT3Ljs"
+  }
+ ],
+ "version": {
+  "Browser": "Chrome/151.0.7922.172",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+  "V8-Version": "15.1.206.21",
+  "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9242/devtools/browser/25e03b9a-9375-4b5d-a615-915a248a1e49"
+ },
+ "engineLog": "leUpdater.app/Contents/MacOS/GoogleUpdater --wake`\n[54941:10362692:0821/205206.292279:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2\n[54941:10362692:0821/205206.292635:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 109599, parent pid: 54937\n[54941:10362692:0821/205206.293822:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 86155038720B (80.238GiB) / 994662584320B (926.352GiB)\n[54941:10362692:0821/205206.293831:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 86155038720B (80.238GiB) / 994662584320B (926.352GiB)\n[54941:10362692:0821/205206.293874:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log\n[54943:10362696:0821/205206.299370:VERBOSE1:chrome/updater/updater.cc:374] Version: 152.0.7933.0, opt, ARM_64, command line: /Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --crash-handler --database=/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/Crashpad --url=https://clients2.google.com/cr/report --annotation=prod=Update4 --annotation=ver=152.0.7933.0 --handshake-fd=6 --enable-logging --vmodule=*/components/update_client/*=2,*/chrome/enterprise_companion/*=2,*/chrome/updater/*=2\n[54943:10362696:0821/205206.299731:VERBOSE1:chrome/updater/updater.cc:377] OS version: 26.3.1, arch: arm64, System uptime (seconds): 109599, parent pid: 1\n[54943:10362696:0821/205206.300825:VERBOSE1:chrome/updater/updater.cc:382] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 86155038720B (80.238GiB) / 994662584320B (926.352GiB)\n[54943:10362696:0821/205206.300832:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 86155038720B (80.238GiB) / 994662584320B (926.352GiB)\n[54943:10362696:0821/205206.300882:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log\n[54941:10362692:0821/205206.301184:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.\n[54941:10362692:0821/205206.301608:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports\n[54941:10362692:0821/205206.301657:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports\n[54941:10362692:0821/205206.301708:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)\n[54941:10362692:0821/205206.301716:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)\n[54941:10362692:0821/205206.301750:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)\n[54941:10362692:0821/205206.301756:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)\n[54941:10362692:0821/205206.301765:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.\n[54941:10362692:0821/205206.301872:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run\n"
+}
