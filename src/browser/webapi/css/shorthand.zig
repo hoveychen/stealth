@@ -15,6 +15,7 @@ const std = @import("std");
 const table = @import("chrome_shorthands.zig");
 const chrome_bounds = @import("chrome_bounds.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
+const chrome_units = @import("chrome_units.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -832,6 +833,7 @@ fn judgeable(value: []const u8) bool {
 
 /// Whether the component is outside the range the property takes them in.
 fn outOfBounds(property: []const u8, component: []const u8) bool {
+    if (unknownUnit(component)) return true;
     const classes = classify(component);
     if (classes.percent and chrome_bounds.no_percent.has(property)) return true;
     if (classes.number and outsideNumberRange(property, component)) return true;
@@ -839,6 +841,30 @@ fn outOfBounds(property: []const u8, component: []const u8) bool {
         !classes.angle and !classes.time) return false;
     if (!negative(component)) return false;
     return chrome_bounds.no_negative.has(property);
+}
+
+/// Whether the component is a number carrying a run of letters no unit spells.
+/// `classify` reads any of them as a unit and answers `<length>`, which is the
+/// right guess for placing a component and the wrong one for judging it: there
+/// is no property `10foo` belongs to, so this is asked of every property rather
+/// than of the ones with a measured class list.
+///
+/// The lookup folds case, because `10PX` is `10px`. A spelling longer than
+/// anything in the table is answered without folding it anywhere.
+fn unknownUnit(component: []const u8) bool {
+    const digits = numberEnd(component);
+    if (digits == 0) return false;
+    const unit = component[digits..];
+    if (unit.len == 0) return false;
+    // A `%` is not a unit spelling and has its own class; anything else with a
+    // non-letter in it classified as nothing before this existed and still does.
+    for (unit) |c| {
+        if (!std.ascii.isAlphabetic(c)) return false;
+    }
+    if (unit.len > chrome_units.longest) return true;
+    var folded: [chrome_units.longest]u8 = undefined;
+    for (unit, 0..) |c, i| folded[i] = std.ascii.toLower(c);
+    return !chrome_units.units.has(folded[0..unit.len]);
 }
 
 /// Whether a bare number is one this property does not take: outside a bound

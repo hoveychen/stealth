@@ -1191,5 +1191,59 @@ function withStyle(text) {
     testing.expectEqual('0', set('grid-row-start', '0'));
 }
 </script>
+
+<script id="a_run_of_letters_that_is_not_a_unit_is_not_a_length">
+{
+    // Measured on headless Chrome 151 by tools/fingerprint/dump-css-units.mjs:
+    // 56 unit spellings, found by probing every unit the specs carry and then
+    // sweeping all 475 254 alphabetic spellings up to four letters, which
+    // turned up nothing the specs had not. `classify` reads any run of letters
+    // after a number as a unit, so without the list `10foo` is a `<length>`.
+    const set = (property, value) => {
+        const el = document.createElement('div');
+        el.style.setProperty(property, value);
+        return el.style.getPropertyValue(property);
+    };
+
+    // A spelling no unit has. The property does not matter -- there is nothing
+    // for the component to be anywhere.
+    for (const property of ['width', 'height', 'margin-top', 'padding',
+        'border-radius', 'gap', 'inset', 'font-size', 'line-height', 'rotate',
+        'transition-duration']) {
+        testing.expectEqual('', set(property, '10foo'));
+    }
+
+    // `10px2` is not one of these: a suffix with a digit in it was never a
+    // unit spelling to begin with, and `classify` already answers "no class at
+    // all" for it. That is a different gap -- the properties with no measured
+    // class list keep it -- and this table does not close it.
+
+    // One bad component is the whole declaration, in either position.
+    testing.expectEqual('', set('margin', '10px 20foo'));
+    testing.expectEqual('', set('margin', '10foo 20px'));
+
+    // And the units that do exist stay, including the ones no hand-written
+    // list would have thought to carry.
+    for (const value of ['10q', '10ric', '10cap', '10lh', '10rlh', '10vmax',
+        '10svh', '10dvmin', '10cqmax', '10ex', '10ch', '10ic']) {
+        testing.expectEqual(value, set('width', value));
+    }
+    testing.expectEqual('10grad', set('rotate', '10grad'));
+    testing.expectEqual('10ms', set('transition-duration', '10ms'));
+    testing.expectEqual('1fr', set('grid-template-columns', '1fr'));
+    testing.expectEqual('16 / 9', set('aspect-ratio', '16 / 9'));
+
+    // A unit is case-insensitive, so the fold happens before the lookup --
+    // Chrome reads `10PX` back as `10px`, and what matters here is that the
+    // declaration survives at all.
+    testing.expectEqual(false, set('width', '10PX') === '');
+    testing.expectEqual(false, set('width', '10Q') === '');
+
+    // A unit inside a value this engine cannot judge is still not judged.
+    // Chrome refuses this one; keeping it is the wrong answer that is not a
+    // refusal.
+    testing.expectEqual('calc(10px + 2foo)', set('width', 'calc(10px + 2foo)'));
+}
+</script>
 </body>
 </html>
