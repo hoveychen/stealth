@@ -1420,4 +1420,17 @@ test "cdp.Network: a data: subresource emits the same events a fetched one does"
         .type = "Script",
         .response = .{ .url = data_url, .status = 200 },
     }, .{ .session_id = "SID-SY" });
+
+    // Reporting is per-transfer, so a second resource type is worth pinning:
+    // the script path is the one that already had a reason to work.
+    const image_url = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    try ctx.expectSentEvent("Network.requestWillBeSent", .{
+        .documentURL = page_url,
+        .type = "Image",
+        .request = .{ .url = image_url },
+    }, .{ .session_id = "SID-SY" });
+    try ctx.expectSentEvent("Network.responseReceived", .{
+        .type = "Image",
+        .response = .{ .url = image_url, .status = 200 },
+    }, .{ .session_id = "SID-SY" });
 }
