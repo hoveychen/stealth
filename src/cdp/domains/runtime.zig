@@ -134,10 +134,12 @@ const ConsoleMessage = struct {
 
 pub fn consoleMessage(arena: Allocator, bc: *CDP.BrowserContext, event: *const Notification.ConsoleMessage) !void {
     const session_id = bc.session_id orelse return;
-    const frame = bc.mainFrame() orelse return error.FrameNotLoaded;
 
+    // The realm that logged, not the main frame. A client reads
+    // executionContextId to decide which frame a line came from, and the
+    // arguments' RemoteObjects have to be minted in the realm that owns them.
     var ls: js.Local.Scope = undefined;
-    frame.js.localScope(&ls);
+    event.js_context.localScope(&ls);
     defer ls.deinit();
 
     const context_id = bc.inspector_session.inspector.getContextId(&ls.local);
