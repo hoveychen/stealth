@@ -114,6 +114,14 @@ pub fn build(b: *Build) !void {
     b.default_step.dependOn(fmt_step);
 
     linkV8(b, lightpanda_module, enable_asan, enable_tsan, prebuilt_v8_path, shared_v8);
+    // The one C++ translation unit in src/: a V8 API the zig-v8 binding does
+    // not expose. It declares what it needs rather than including V8's
+    // headers, which a prebuilt-V8 build never has on disk, so it needs no
+    // include path -- see the file for the whole story.
+    lightpanda_module.addCSourceFile(.{
+        .file = b.path("src/browser/js/code_generation.cpp"),
+        .language = .cpp,
+    });
     linkCurl(b, lightpanda_module, enable_tsan);
     linkHtml5Ever(b, lightpanda_module);
     linkZenai(b, lightpanda_module);
