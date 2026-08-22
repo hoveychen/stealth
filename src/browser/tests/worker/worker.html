@@ -614,3 +614,27 @@
     });
   }
 </script>
+
+<script id="worker_base64_error_message" type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./base64-error-worker.js');
+    worker.onmessage = (event) => state.resolve(event.data);
+
+    await state.done((r) => {
+      // Same sentences as on Window, with the interface name swapped -- and
+      // 'WorkerGlobalScope' even though self is a DedicatedWorkerGlobalScope.
+      testing.expectEqual('DedicatedWorkerGlobalScope', r.self_ctor);
+      testing.expectEqual(
+        "InvalidCharacterError: Failed to execute 'atob' on 'WorkerGlobalScope': The string to be decoded is not correctly encoded.",
+        r.atob_not_encoded);
+      testing.expectEqual(
+        "InvalidCharacterError: Failed to execute 'atob' on 'WorkerGlobalScope': The string to be decoded contains characters outside of the Latin1 range.",
+        r.atob_not_latin1);
+      testing.expectEqual(
+        "InvalidCharacterError: Failed to execute 'btoa' on 'WorkerGlobalScope': The string to be encoded contains characters outside of the Latin1 range.",
+        r.btoa_not_latin1);
+      testing.expectEqual('no throw: MTIz', r.btoa_coerced);
+    });
+  }
+</script>

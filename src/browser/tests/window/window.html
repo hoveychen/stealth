@@ -107,6 +107,36 @@
   });
 </script>
 
+<script id=base64_error_message>
+  // The exception *text* is a reading too: a page gets `e.message` with plain
+  // property access. Blink names the operation and the interface it was called
+  // on, so the generic DOMException description is a tell. Measured against
+  // Chrome 151: atob has two sentences, one for "not base64" and a separate one
+  // for "not even a binary string", and they must not be collapsed into one.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  const not_encoded = "InvalidCharacterError: Failed to execute 'atob' on 'Window': The string to be decoded is not correctly encoded.";
+  testing.expectEqual(not_encoded, msg(() => atob('a')));       // len % 4 == 1
+  testing.expectEqual(not_encoded, msg(() => atob('a===')));    // misplaced padding
+  testing.expectEqual(not_encoded, msg(() => atob('!!!!')));    // outside the alphabet
+
+  // Above Latin-1 is a different sentence: the read fails before the decode.
+  // 'Ł' matters on its own -- its low byte is 'A', so an engine that truncates
+  // instead of rejecting decodes it silently.
+  const not_latin1 = "InvalidCharacterError: Failed to execute 'atob' on 'Window': The string to be decoded contains characters outside of the Latin1 range.";
+  testing.expectEqual(not_latin1, msg(() => atob('Ā')));
+  testing.expectEqual(not_latin1, msg(() => atob('aŁb')));
+
+  testing.expectEqual(
+    "InvalidCharacterError: Failed to execute 'btoa' on 'Window': The string to be encoded contains characters outside of the Latin1 range.",
+    msg(() => btoa('Ā')));
+
+  // Non-strings are coerced, not rejected (Chrome 151: btoa(123) === 'MTIz').
+  testing.expectEqual('MTIz', btoa(123));
+  testing.expectEqual('bnVsbA==', btoa(null));
+  testing.expectEqual('W29iamVjdCBPYmplY3Rd', btoa({}));
+</script>
+
 <script id=atob_binary_string>
   // atob must produce a "binary string": each output byte (0-255) becomes
   // a JS string character whose codepoint equals that byte. High-bit bytes
