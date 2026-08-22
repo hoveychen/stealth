@@ -195,3 +195,52 @@ test "cdp.runtime: consoleAPICalled type matches the console method" {
     try ctx.expectSentEvent("Runtime.consoleAPICalled", .{ .type = "error" }, .{});
     try ctx.expectSentEvent("Runtime.consoleAPICalled", .{ .type = "debug" }, .{});
 }
+
+// A host tells realms apart by executionContextId: every consoleAPICalled
+// carries the id of the context that called console, which is how a log line is
+// attributed to a frame without trusting the page to tag itself. Chrome 151 on a
+// page with two same-origin iframes answers three distinct ids -- one per realm,
+// each announced by its own Runtime.executionContextCreated naming its frame
+// (tools/fingerprint/realm-context-ids.mjs). Here every realm reports the main
+// frame's, because the ConsoleMessage notification does not carry the frame that
+// logged and the handler reaches for bc.mainFrame().
+test "cdp.runtime: consoleAPICalled names the realm that logged" {
+    testing.silenceLog(&.{.js});
+
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-CTXID", .url = "cdp/empty_iframe.html", .target_id = "FID-0000000CTX".* });
+    try ctx.processMessage(.{ .id = 60, .method = "Runtime.enable" });
+
+    const root = bc.mainFrame() orelse unreachable;
+    try testing.expectEqual(1, root.child_frames.items.len);
+    const child = root.child_frames.items[0];
+
+    for ([_]*@TypeOf(root.*){ root, child }, [_][]const u8{ "console.log('root')", "console.log('child')" }) |frame, script| {
+        var ls: js.Local.Scope = undefined;
+        frame.js.localScope(&ls);
+        defer ls.deinit();
+        _ = try ls.local.exec(script, null);
+    }
+
+    // Collect the id off every consoleAPICalled, in order.
+    var ids: std.ArrayList(i64) = .empty;
+    defer ids.deinit(std.testing.allocator);
+    var i: usize = 0;
+    while (try ctx.getSentMessage(i)) |msg| : (i += 1) {
+        const method = msg.object.get("method") orelse continue;
+        if (std.mem.eql(u8, method.string, "Runtime.consoleAPICalled") == false) continue;
+        const params = msg.object.get("params").?.object;
+        try ids.append(std.testing.allocator, params.get("executionContextId").?.integer);
+    }
+
+    try testing.expectEqual(2, ids.items.len);
+    if (ids.items[0] == ids.items[1]) {
+        std.debug.print(
+            "both realms reported executionContextId {d}; the root and the child are different realms\n",
+            .{ids.items[0]},
+        );
+        return error.RealmsShareOneContextId;
+    }
+}
