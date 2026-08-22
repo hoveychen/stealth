@@ -7304,30 +7304,77 @@ The first six are what the fix implements. The last four are untouched:
 widths are not modelled anywhere in this engine. None is a row any detector
 reads, and each would be a branch with no probe behind it.
 
-#### …but the sannysoft row is still blank, for a second reason
+#### …and the row was still blank, for a second reason
 
-Re-collecting the live site with the fix in place, the row is *still* empty
-while the rows after it in the same script (`webgl-vendor`, the canvas set) all
-report — so the page got there and past it. Its source says why:
+Re-collected with the dimensions fix alone, the row was *still* empty, while
+the rows after it in the same script (`webgl-vendor`, the canvas set) all
+reported — so the page reached that code and ran past it. Its source says why:
 
 ```js
 image.onerror = function () {
   brokenImageDimensionsElement.innerHTML = `${image.width}x${image.height}`;
 ```
 
-The cell is written from `onerror`, and **no `<img>` in this engine ever fires
-`error`**. `Image.imageAddedCallback` queues `load` the moment a src is set,
-whatever the fetch then does; `Frame.requestImage` discards the response and
-says so in a comment. `<script>` and `<link>` both report their failures
+The cell is written from `onerror`, and **no `<img>` in this engine had ever
+fired `error`**. `Image.imageAddedCallback` queued `load` the moment a src was
+set, whatever the fetch then did; `Frame.requestImage` discarded the response
+and said so in a comment. `<script>` and `<link>` both report their failures
 (`Frame.loadExternalStylesheet` fires `error` on a resolve failure, a transport
 failure, a non-2xx status and an oversized body), so the gap is images alone.
 
-That is a larger tell than the dimensions were, and a separate change: the
-stylesheet path can answer synchronously because it blocks on `syncRequest`,
+That is a larger tell than the dimensions were, and it needed its own change:
+the stylesheet path can answer synchronously because it blocks on `syncRequest`,
 while images go out through the async `makeRequest` whose callbacks drop the
 body, so reporting per-image failure means carrying the element across that
-boundary. Tracked on its own; the dimensions are correct underneath it, and
-the row will read `16x16` the moment the event arrives.
+boundary.
+
+#### Which event, per outcome
+
+`expr-img-events.js` puts every way an image request can end to Chrome 151:
+
+| `<img src>` | Chrome | lightpanda, after |
+|---|---|---|
+| 200, real PNG | `load` | `load` |
+| 200, `text/html` body | **`error`** | `load` |
+| 404 | `error` | `error` |
+| connection refused | `error` | `error` |
+| unknown scheme (`nonsense://`) | `error` | `error` |
+| invalid `data:` URL | `error` | `error` |
+| valid 1×1 GIF `data:` URL | `load` | `load` |
+| 404 then a good URL | `error`, then `load` | same |
+| `src = ''` | `error` | *nothing* |
+
+`ImageRequest` in `Frame.zig` carries the element onto the transfer and queues
+the event from the done/error callback against the recorded status — queued
+rather than dispatched inline for the reason `Script.queueHintEvent` gives, so
+page JS never runs inside the HTTP pump.
+
+Two rows still disagree, both because the line this engine can draw is the HTTP
+one and Chrome's is the decode:
+
+- **200 with bytes that are not an image.** Chrome sniffs, fails to decode and
+  fires `error`; nothing here decodes, so a 2xx is the closest available stand-in
+  for "it became a picture". Matching it needs either content-type matching —
+  which would fire `error` on the real images served as
+  `application/octet-stream` that Chrome loads fine — or a magic-byte sniff in
+  the data callback. Left alone rather than guessed at.
+- **`src = ''`.** Chrome fires `error`; `loadImage` returns early on an empty
+  src and fires nothing. Note it is *not* the same as an absent `src`, which
+  fires nothing in Chrome either, and that the empty-src image gets no
+  broken-image icon in Chrome (0×0, not 16×16) — so it is a third state, not a
+  broken image with a missing event.
+
+#### The row, finally
+
+Re-collected live with both changes in
+`results/after-broken-image-error-lightpanda.json`:
+
+```
+Broken Image Dimensions   16x16   passed
+```
+
+Diffing all 57 sannysoft rows against the run before it, that row is the only
+one that moved.
 
 ### The global surface: 36 absent, and 2 that no Chrome has
 
