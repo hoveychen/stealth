@@ -834,10 +834,30 @@ fn judgeable(value: []const u8) bool {
 fn outOfBounds(property: []const u8, component: []const u8) bool {
     const classes = classify(component);
     if (classes.percent and chrome_bounds.no_percent.has(property)) return true;
+    if (classes.number and outsideNumberRange(property, component)) return true;
     if (!classes.length and !classes.percent and !classes.number and
         !classes.angle and !classes.time) return false;
     if (!negative(component)) return false;
     return chrome_bounds.no_negative.has(property);
+}
+
+/// Whether a bare number is one this property does not take: outside a bound
+/// that was measured and bisected, a fraction where only whole numbers go, or a
+/// bare number at all where the property wants a unit on one. That last test
+/// belongs here rather than with the value classes because a unitless zero is a
+/// `<length>` as much as it is a number, so the classes wave it through --
+/// `rotate: 0` and `overflow-clip-margin: 0` are refused where `0deg` and `0px`
+/// are kept, measured.
+///
+/// A number this cannot read is not a number this refuses. The bounds are a
+/// licence to throw a declaration away and nothing here is allowed to guess.
+fn outsideNumberRange(property: []const u8, component: []const u8) bool {
+    if (chrome_bounds.needs_unit.has(property)) return true;
+    const range = chrome_bounds.number_range.get(property) orelse return false;
+    const value = std.fmt.parseFloat(f64, component) catch return false;
+    if (range.min) |min| if (value < min) return true;
+    if (range.max) |max| if (value > max) return true;
+    return range.integer and @floor(value) != value;
 }
 
 /// A leading minus is not a negative number. `padding: -0px` is accepted

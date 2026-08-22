@@ -1116,5 +1116,80 @@ function withStyle(text) {
         set('border-radius', 'calc(10px + 5px)').style.getPropertyValue('border-radius'));
 }
 </script>
+
+<script id="a_number_outside_the_range_chrome_takes_is_not_stored">
+{
+    // Measured on headless Chrome 151 by tools/fingerprint/dump-css-bounds.mjs,
+    // which bisects both ends of what each property takes. The sign of a number
+    // is not the whole of its range: `font-weight` refuses 0 and 1001 while
+    // taking everything between, and `z-index` takes -1000000 and refuses 1.5.
+    const set = (property, value) => {
+        const el = document.createElement('div');
+        el.style.setProperty(property, value);
+        return el.style.getPropertyValue(property);
+    };
+
+    // Both ends, and a fraction inside them, on the one property that has both.
+    testing.expectEqual('1', set('font-weight', '1'));
+    testing.expectEqual('399.5', set('font-weight', '399.5'));
+    testing.expectEqual('1000', set('font-weight', '1000'));
+    testing.expectEqual('', set('font-weight', '0'));
+    testing.expectEqual('', set('font-weight', '-0'));
+    testing.expectEqual('', set('font-weight', '1001'));
+    testing.expectEqual('', set('font-weight', '-400'));
+
+    // A whole-number rule is a third bit, independent of either bound:
+    // `z-index` and `order` have no bound in either direction and still refuse
+    // a fraction.
+    testing.expectEqual('-1', set('z-index', '-1'));
+    testing.expectEqual('auto', set('z-index', 'auto'));
+    testing.expectEqual('', set('z-index', '1.5'));
+    testing.expectEqual('-1', set('order', '-1'));
+    testing.expectEqual('', set('order', '1.5'));
+
+    // A positive whole number: the lower bound rules out zero, of either sign,
+    // and the whole-number rule rules out the fraction above it.
+    for (const property of ['column-count', 'widows', 'orphans']) {
+        testing.expectEqual('1', set(property, '1'));
+        testing.expectEqual('', set(property, '0'));
+        testing.expectEqual('', set(property, '-0'));
+        testing.expectEqual('', set(property, '2.5'));
+    }
+
+    // A bound is not a sign rule and does not imply one: these take zero and
+    // fractions and refuse only what is below.
+    testing.expectEqual('0', set('animation-iteration-count', '0'));
+    testing.expectEqual('infinite', set('animation-iteration-count', 'infinite'));
+    testing.expectEqual('', set('animation-iteration-count', '-1'));
+    testing.expectEqual('2.5', set('tab-size', '2.5'));
+    testing.expectEqual('10', set('line-height', '10'));
+    testing.expectEqual('16 / 9', set('aspect-ratio', '16 / 9'));
+    testing.expectEqual('', set('aspect-ratio', '16 / -9'));
+
+    // A property that takes a numeric class and no bare number at all, `0`
+    // included -- where a unitless zero would otherwise walk in as the length
+    // it is everywhere else.
+    testing.expectEqual('90deg', set('rotate', '90deg'));
+    testing.expectEqual('none', set('rotate', 'none'));
+    testing.expectEqual('', set('rotate', '90'));
+    testing.expectEqual('', set('rotate', '0'));
+    testing.expectEqual('0px', set('overflow-clip-margin', '0px'));
+    testing.expectEqual('', set('overflow-clip-margin', '0'));
+    testing.expectEqual('0s', set('transition-duration', '0s'));
+    testing.expectEqual('', set('transition-duration', '1'));
+
+    // `opacity` is why absence from the table has to mean something: it takes
+    // -1 and it takes 2, and clamps them long after the declaration is stored.
+    testing.expectEqual('-1', set('opacity', '-1'));
+    testing.expectEqual('2', set('opacity', '2'));
+
+    // And an acceptance that is not one interval is not written down at all.
+    // Chrome refuses `grid-row-start: 0` in the middle of an otherwise
+    // unbounded integer range; a `min`/`max` pair cannot say that, so the
+    // engine keeps it -- the wrong answer that is not a refusal.
+    testing.expectEqual('-1', set('grid-row-start', '-1'));
+    testing.expectEqual('0', set('grid-row-start', '0'));
+}
+</script>
 </body>
 </html>
