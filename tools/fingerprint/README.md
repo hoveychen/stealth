@@ -6406,16 +6406,16 @@ it is a louder tell than not having it (`CloseWatcher` needs close requests,
 full lists are in
 `results/probes/probe-globals.{chrome,chrome-headless,lightpanda}.json`.
 
-**And the prototype chain still differs**, which G19 measured and G17 owns:
-`Object.getPrototypeOf(window) === Window.prototype` is `true` in Chrome and
+**The prototype chain differed too**, which G19 measured and G17 owned:
+`Object.getPrototypeOf(window) === Window.prototype` was `true` in Chrome and
 `false` here. Chrome's chain is `Window(1237 own) <- Window.prototype(3) <-
-EventTarget(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours was
-`Window(1167) <- Window(1) <- Window(239) <- EventTarget(4) <-
+WindowProperties(0) <- EventTarget.prototype(5) <- Object.prototype(12)`; ours
+was `Window(1167) <- Window(1) <- Window(239) <- EventTarget(4) <-
 Object.prototype(12)`, and the extra intermediate is where the three duplicated
-`EventTarget` members came from. The duplicates are gone (the flattening skips
-that level now, so the global reads `addEventListener` through the chain, as
-Chrome's does) and the head of the chain is 1203; the extra level itself is
-still there, so this is still a difference a detector can walk.
+`EventTarget` members came from. All of it is closed now — see
+[`Object.getPrototypeOf(window) === Window.prototype` is false
+here](#objectgetprototypeofwindow--windowprototype-is-false-here) for the fix and
+the after-readings.
 
 ## The 234 globals that were not behind the secure-context gate (2026-08-20)
 
@@ -6453,7 +6453,16 @@ nowhere: −5 on both frame totals (none of the five is `[SecureContext]`, so th
 gated count does not move) and −3 in both worker totals, the three of the five a
 worker can reach. The suite pins every one of these:
 `frames/secure_context_gate.html` asserts **1203** secure / **968** insecure and
-**219** for a worker with an insecure owner.
+**197** for a worker with an insecure owner.
+
+The two worker-realm rows moved once more, after this table was written: 230 →
+**207** on a secure owner and 219 → **197** on an insecure one, when the
+`[Global]` flattening stopped mirroring `WorkerGlobalScope`'s 24 members onto a
+global that does not own them in Chrome either (`console` is the one that stays,
+and Chrome has it own too). The frame rows do not move — `Window` *is* the
+`[Global]` interface in that realm, so its members were already own there. The
+secure row loses one more than the insecure one because the 24th, `cookieStore`,
+is `[SecureContext]` and the insecure worker never had an own copy of it.
 
 252 names in Chrome. 235 of them are names this engine has, and before the gate
 it leaked all of them on any origin: `GPU` and the whole WebGPU family, the WebXR family, USB /
@@ -7884,6 +7893,84 @@ constants stay on the prototype.
 
 (One smaller thing the same reading turned up: Chrome's `EventTarget.prototype`
 carries a fourth operation, `when`, which this engine does not have.)
+
+**Fixed, and the rule was one level narrower than the fix first looked.** Both
+readings are Chrome's now (`expr-window-proto-shape`, headless Chrome 151 against
+this build):
+
+| | Chrome 151 | before | after |
+|---|---|---|---|
+| `Object.getPrototypeOf(window) === Window.prototype` | true | **false** | true |
+| `window.constructor === Window` | true | **false** | true |
+| `Object.getOwnPropertyNames(Window.prototype)` | `PERSISTENT`, `TEMPORARY`, `constructor` | **239 names** | `PERSISTENT`, `TEMPORARY`, `constructor` |
+| `Window.prototype.hasOwnProperty('postMessage')` | false | **true** | false |
+| `Object.getOwnPropertyNames(window).length` | 1237 | 1203 | 1203 |
+| links from `window` to `Object.prototype` | 4 | 4 | 4 |
+
+`window.constructor` was the second `===`, and it came free: the nameless
+template the global used to be an instance of was `SetClassName`'d "Window", so
+`window.constructor` was *a* function named Window that was not `Window`.
+
+**The worker realm is what kept the fix honest.** `[Global]` reads like a
+property of the whole inheritance chain, and this engine's flattening treated it
+that way — walking `Window -> EventTarget`, or `DedicatedWorkerGlobalScope ->
+WorkerGlobalScope -> EventTarget`, and mirroring every level but the last. It is
+per-interface. Measured in a blob worker on the same Chrome
+(`expr-worker-global-shape`):
+
+| | Chrome 151 | before | after |
+|---|---|---|---|
+| `Object.getOwnPropertyNames(DedicatedWorkerGlobalScope.prototype)` | `PERSISTENT`, `TEMPORARY`, `constructor` | held `postMessage` (the old `Env.zig` test asserted it) | `constructor` |
+| owner of `postMessage` | `self` | `self` | `self` |
+| owner of `fetch` | `WorkerGlobalScope.prototype` | **`self`** | `WorkerGlobalScope.prototype` |
+| owner of `isSecureContext` | `WorkerGlobalScope.prototype` | **`self`** | `WorkerGlobalScope.prototype` |
+| owner of `addEventListener` | `EventTarget.prototype` | `EventTarget.prototype` | `EventTarget.prototype` |
+
+`Window` happens to be both the `[Global]` interface *and* the only
+member-bearing one in its chain, so nothing in the window realm distinguishes the
+two readings of the annotation — the worker realm does, and it says the narrow
+one. Chrome still has the two deprecated quota constants on a worker global's
+prototype and this engine does not declare them there, which is why the row above
+reads `constructor` alone.
+
+**`console` needed its own path.** V8 owns that name on every fresh global and
+wins the slot over the template's accessor, so snapshot creation deletes it —
+which used to be survivable because the same accessor sat on `Window.prototype`
+one hop up, and is not once the members leave the prototype. Removing the delete
+instead is the wrong repair, and the cheap check says so: with it gone,
+`Object.getOwnPropertyNames(console)` came back as V8's own list (`context`,
+`createTask`, no `memory`) under the same `[object console]` brand the real one
+carries — the brand alone does not tell them apart. `Env.zig` now resolves the
+window realm's `Console` from the `Window` itself and defines it as the own,
+non-enumerable data property Chrome reports.
+
+**And Web IDL wants a nameless object above `Window.prototype`.** An interface
+that is `[Global]` *and* has a named property getter gets a **named properties
+object** — the one that answers `window.someElementId` in the spec's telling. It
+is why Chrome's chain is four links, not three, and it is readable
+(`expr-window-properties-object`):
+
+| | Chrome 151 | after |
+|---|---|---|
+| `Object.getPrototypeOf(Window.prototype) === EventTarget.prototype` | false | false |
+| own names on it | `[]` | `[]` |
+| own symbols | `[@@toStringTag]` → `WindowProperties` | same |
+| `constructor` | absent | absent |
+| `Object.prototype.toString.call(it)` | `[object WindowProperties]` | same |
+| `Object.getPrototypeOf(Window) === EventTarget` | true | true |
+
+Taking the misplaced hop out had left three links, so one goes back where Chrome
+has it: a template of its own carrying the brand and nothing else, spliced
+between `Window` and `EventTarget`. The interface objects skip it (nothing names
+it), `window instanceof EventTarget` still holds, and `addEventListener` still
+reaches the global through it.
+
+**It is not the door.** `antibot-sweep` reads **10/15** on this build, the same
+10 and the same five failures (`cf-scrapingcourse`, `cf-nopecha`,
+`cf-zeroclover`, `dd-g2`, `x-zillow`) as the pre-change binary, with the three
+Cloudflare managed challenges still answering 47 nodes of "Just a moment...".
+Kept anyway, for the reason the persona constants and the frame-URL fix were
+kept: four `===`-shaped identifications a page makes in one expression, closed.
 
 ### `cf-chatgpt` looked like a regression and is the station moving
 

@@ -4,12 +4,12 @@
   "endpoint": null,
   "proxy": null,
   "windowSize": "1920,1080",
-  "startedAt": "2026-08-21T19:19:48.236Z",
+  "startedAt": "2026-08-22T20:15:24.407Z",
   "egress": {
-    "fl": "466f180",
+    "fl": "1231f71",
     "h": "www.cloudflare.com",
     "ip": "108.211.179.124",
-    "ts": "1787339988.000",
+    "ts": "1787429724.000",
     "visit_scheme": "https",
     "uag": "node",
     "colo": "SJC",
@@ -27,7 +27,7 @@
     "Browser": "Lightpanda/1.0",
     "Protocol-Version": "1.3",
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
-    "Lightpanda-Version": "1.0.0-dev.736+7bc9e90db",
+    "Lightpanda-Version": "1.0.0-dev.830+cd14e6e4b",
     "webSocketDebuggerUrl": "ws://127.0.0.1:9226/"
   },
   "stations": [
@@ -44,343 +44,9 @@
           "mime": "text/html"
         },
         {
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/bb68c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/2l8ge/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
           "status": 200,
           "mime": "text/html"
-        },
-        {
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "status": 403,
-          "mime": "text/html"
-        },
-        {
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/yz0ky/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "status": 200,
-          "mime": "text/html"
-        },
-        {
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "status": 403,
-          "mime": "text/html"
-        },
-        {
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4xgxt/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "status": 200,
-          "mime": "text/html"
-        }
-      ],
-      "wire": [
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "type": "Document"
-        },
-        {
-          "ev": "res",
-          "status": 403,
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "type": "Document"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ebfdd2fe88720c",
-          "type": "Script"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ebfdd2fe88720c",
-          "type": "Script"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
-          "type": "Script"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
-          "type": "Script"
-        },
-        {
-          "ev": "req",
-          "method": "POST",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdd2fe88720c/UEiLK_al3jcqeUp6aXFQ_H6e0fT_8VDztmKLDGQnjz0-1787339988-1.2.1.1-zyv4DHiEZwX818ECUmlpggW7arqfk8upsmY.pBOy55qtOAeY9Z56IjIwbeuDjuHc",
-          "type": "XHR"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdd2fe88720c/UEiLK_al3jcqeUp6aXFQ_H6e0fT_8VDztmKLDGQnjz0-1787339988-1.2.1.1-zyv4DHiEZwX818ECUmlpggW7arqfk8upsmY.pBOy55qtOAeY9Z56IjIwbeuDjuHc",
-          "type": "XHR"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/bb68c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "type": "Document"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/bb68c/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "type": "Document"
-        },
-        {
-          "ev": "console.error",
-          "text": "[Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call') , with debug info: vaFmhjY39p7YlatfakaCQBQBVz32bUMmOjL5ImQb4ww=$l41BfGMSluvqdqlZTOtz0g==>09LyO4Gaiq1c/sJrli6RRA==$koPGqjBRJBGVueHt5XFBxA=="
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "req",
-          "method": "POST",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdd2fe88720c/UEiLK_al3jcqeUp6aXFQ_H6e0fT_8VDztmKLDGQnjz0-1787339988-1.2.1.1-zyv4DHiEZwX818ECUmlpggW7arqfk8upsmY.pBOy55qtOAeY9Z56IjIwbeuDjuHc",
-          "type": "XHR"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdd2fe88720c/UEiLK_al3jcqeUp6aXFQ_H6e0fT_8VDztmKLDGQnjz0-1787339988-1.2.1.1-zyv4DHiEZwX818ECUmlpggW7arqfk8upsmY.pBOy55qtOAeY9Z56IjIwbeuDjuHc",
-          "type": "XHR"
-        },
-        {
-          "ev": "console.warning",
-          "text": "[Cloudflare Turnstile] Cannot find Widget cf-chl-widget-bb68c, consider using turnstile.remove() to clean up a widget."
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "type": "Document"
-        },
-        {
-          "ev": "res",
-          "status": 403,
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "type": "Document"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ebfdfbdfa6720c",
-          "type": "Script"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ebfdfbdfa6720c",
-          "type": "Script"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
-          "type": "Script"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
-          "type": "Script"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "req",
-          "method": "POST",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdfbdfa6720c/SFxEw4erLBifcQeGzku8Ccf2sJEF7wAdUT2j5Q3ZtVg-1787339995-1.2.1.1-zz4noPVITBJFKXb2TxBR7aYbnTTdKMVm9XVlJyMBUl9hfsXLPQRBOYX9ZXKgGPNY",
-          "type": "XHR"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdfbdfa6720c/SFxEw4erLBifcQeGzku8Ccf2sJEF7wAdUT2j5Q3ZtVg-1787339995-1.2.1.1-zz4noPVITBJFKXb2TxBR7aYbnTTdKMVm9XVlJyMBUl9hfsXLPQRBOYX9ZXKgGPNY",
-          "type": "XHR"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/yz0ky/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "type": "Document"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/yz0ky/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "type": "Document"
-        },
-        {
-          "ev": "console.error",
-          "text": "[Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call') , with debug info: vaFmhjY39p7YlatfakaCQBQBVz32bUMmOjL5ImQb4ww=$l41BfGMSluvqdqlZTOtz0g==>09LyO4Gaiq1c/sJrli6RRA==$koPGqjBRJBGVueHt5XFBxA=="
-        },
-        {
-          "ev": "req",
-          "method": "POST",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdfbdfa6720c/SFxEw4erLBifcQeGzku8Ccf2sJEF7wAdUT2j5Q3ZtVg-1787339995-1.2.1.1-zz4noPVITBJFKXb2TxBR7aYbnTTdKMVm9XVlJyMBUl9hfsXLPQRBOYX9ZXKgGPNY",
-          "type": "XHR"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfdfbdfa6720c/SFxEw4erLBifcQeGzku8Ccf2sJEF7wAdUT2j5Q3ZtVg-1787339995-1.2.1.1-zz4noPVITBJFKXb2TxBR7aYbnTTdKMVm9XVlJyMBUl9hfsXLPQRBOYX9ZXKgGPNY",
-          "type": "XHR"
-        },
-        {
-          "ev": "console.warning",
-          "text": "[Cloudflare Turnstile] Cannot find Widget cf-chl-widget-yz0ky, consider using turnstile.remove() to clean up a widget."
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "type": "Document"
-        },
-        {
-          "ev": "res",
-          "status": 403,
-          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
-          "type": "Document"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ebfe30e92c720c",
-          "type": "Script"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ebfe30e92c720c",
-          "type": "Script"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
-          "type": "Script"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
-          "type": "Script"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "req",
-          "method": "POST",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfe30e92c720c/uKe14O8WdczSlATGGyc5cTRxtCzgA1m5ueUho5LJrms-1787340003-1.2.1.1-c_HfaAWjfi9DxlK9PbjwNmcvlk1zOuxHYczzCIy9zjP.FoSZyoqWhonc7iMTUAW5",
-          "type": "XHR"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/favicon.ico",
-          "type": "Image"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfe30e92c720c/uKe14O8WdczSlATGGyc5cTRxtCzgA1m5ueUho5LJrms-1787340003-1.2.1.1-c_HfaAWjfi9DxlK9PbjwNmcvlk1zOuxHYczzCIy9zjP.FoSZyoqWhonc7iMTUAW5",
-          "type": "XHR"
-        },
-        {
-          "ev": "req",
-          "method": "GET",
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4xgxt/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "type": "Document"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4xgxt/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-          "type": "Document"
-        },
-        {
-          "ev": "console.error",
-          "text": "[Cloudflare Turnstile] Unhandled error: TypeError: Cannot read properties of undefined (reading 'call') , with debug info: vaFmhjY39p7YlatfakaCQBQBVz32bUMmOjL5ImQb4ww=$l41BfGMSluvqdqlZTOtz0g==>09LyO4Gaiq1c/sJrli6RRA==$koPGqjBRJBGVueHt5XFBxA=="
-        },
-        {
-          "ev": "req",
-          "method": "POST",
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfe30e92c720c/uKe14O8WdczSlATGGyc5cTRxtCzgA1m5ueUho5LJrms-1787340003-1.2.1.1-c_HfaAWjfi9DxlK9PbjwNmcvlk1zOuxHYczzCIy9zjP.FoSZyoqWhonc7iMTUAW5",
-          "type": "XHR"
-        },
-        {
-          "ev": "res",
-          "status": 200,
-          "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfe30e92c720c/uKe14O8WdczSlATGGyc5cTRxtCzgA1m5ueUho5LJrms-1787340003-1.2.1.1-c_HfaAWjfi9DxlK9PbjwNmcvlk1zOuxHYczzCIy9zjP.FoSZyoqWhonc7iMTUAW5",
-          "type": "XHR"
-        },
-        {
-          "ev": "console.warning",
-          "text": "[Cloudflare Turnstile] Cannot find Widget cf-chl-widget-4xgxt, consider using turnstile.remove() to clean up a widget."
         }
       ],
       "verdict": "cf-challenge",
@@ -389,7 +55,7 @@
       "jsDetect": true,
       "title": "Just a moment...",
       "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
-      "nodes": 43,
+      "nodes": 47,
       "textLength": 270,
       "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
       "marks": {
@@ -399,7 +65,7 @@
         "justAMoment": true,
         "blocked": false,
         "turnstileWidget": true,
-        "rayId": "a2ebfe30e92c720c",
+        "rayId": "a2f48ca408ba6ad3",
         "captchaDelivery": false,
         "blockText": false,
         "pressAndHold": false,
@@ -410,74 +76,742 @@
         "accessDenied": false,
         "reference": false
       },
-      "ms": 26699
+      "ms": 25349
+    },
+    {
+      "name": "cf-nopecha",
+      "vendor": "cloudflare",
+      "url": "https://nopecha.com/demo/cloudflare",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://nopecha.com/demo/cloudflare",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/03104/0x4AAAAAAAAjq6WYeRDKmebM/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://nopecha.com/demo/cloudflare",
+      "nodes": 47,
+      "textLength": 259,
+      "snippet": "nopecha.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a2f48d",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2f48d426efffa66",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25334
+    },
+    {
+      "name": "cf-zeroclover",
+      "vendor": "cloudflare",
+      "url": "https://turnstile.zeroclover.io/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://turnstile.zeroclover.io/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4g6sx/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://turnstile.zeroclover.io/",
+      "nodes": 47,
+      "textLength": 271,
+      "snippet": "turnstile.zeroclover.io Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ra",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2f48de0df49a249",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25341
+    },
+    {
+      "name": "cf-chatgpt",
+      "vendor": "cloudflare",
+      "url": "https://chatgpt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://chatgpt.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Application Error!",
+      "landedOn": "https://chatgpt.com/",
+      "nodes": 41,
+      "textLength": 869,
+      "snippet": "Application Error TypeError at ine.addTiming (https://chatgpt.com/cdn/assets/4813494d-ooe5tlmm6fei1flm.js:3:1698) at ine.addFirstTiming (https://chatgpt.com/cdn/assets/4813494d-ooe5tlmm6fei1flm.js:3:1",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 28086
+    },
+    {
+      "name": "cf-claude",
+      "vendor": "cloudflare",
+      "url": "https://claude.ai/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://claude.ai/login",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Sign in - Claude",
+      "landedOn": "https://claude.ai/login",
+      "nodes": 1068,
+      "textLength": 2996,
+      "snippet": "Question what’s next Your thinking partner for big ambitions Continue with Google OR Continue with email Continue with SSO By continuing, you acknowledge Anthropic’s Privacy Policy (opens in a new tab",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 27121
+    },
+    {
+      "name": "cf-indeed",
+      "vendor": "cloudflare",
+      "url": "https://www.indeed.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.indeed.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://sgtm.indeed.com/_/service_worker/68d0/sw_iframe.html?origin=https%3A%2F%2Fwww.indeed.com&1p=1",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Job Search | Indeed",
+      "landedOn": "https://www.indeed.com/",
+      "nodes": 1211,
+      "textLength": 631,
+      "snippet": "Skip to main content Home Company reviews Find salaries Sign in 🇺🇸 En Employers / Post Job Start of main content Keyword : all jobs &nbsp; Edit location input box label Search Your next job starts h",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 28167
+    },
+    {
+      "name": "cf-nowsecure",
+      "vendor": "cloudflare",
+      "url": "https://nowsecure.nl/",
+      "guards": "none",
+      "settleMs": 10000,
+      "documents": [
+        {
+          "url": "https://nowsecure.nl/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/vbrq1/3x00000000000000000000FF/auto/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/ne2k7/3x00000000000000000000FF/auto/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "nowsecure.nl",
+      "landedOn": "https://nowsecure.nl/",
+      "nodes": 53,
+      "textLength": 43,
+      "snippet": "NOWSECURE BY NODRIVER NOWSECURE BY NODRIVER",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 11499
+    },
+    {
+      "name": "cf-discord",
+      "vendor": "cloudflare",
+      "url": "https://discord.com/",
+      "guards": "none",
+      "settleMs": 12000,
+      "documents": [
+        {
+          "url": "https://discord.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Discord - Group Chat That’s All Fun & Games",
+      "landedOn": "https://discord.com/",
+      "nodes": 1531,
+      "textLength": 3325,
+      "snippet": "Skip to main content Download1 of 9 Nitro2 of 9 Discover 3 of 9 Resources Server Directory1 of 2Trending Games2 of 2 Safety 4 of 9 Resources Family Center 1 of 10Safety Library 2 of 10Safety News 3 of",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 15742
+    },
+    {
+      "name": "cf-pixiv",
+      "vendor": "cloudflare",
+      "url": "https://www.pixiv.net/",
+      "guards": "none",
+      "settleMs": 12000,
+      "documents": [
+        {
+          "url": "https://www.pixiv.net/en/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://imp.pixiv.net/premium_lp?g=anchor&i=index_footer&p=&d=pc",
+          "status": 200,
+          "mime": "text/plain"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Online community for artist [pixiv]",
+      "landedOn": "https://www.pixiv.net/en/",
+      "nodes": 311,
+      "textLength": 374,
+      "snippet": "pixiv has updated the Privacy Policy as of May 28, 2024.Revision history OK Isolation PALMEMEさんの作品 VISIONS2026掲載クリエイター 无题 吠柴冬さんの作品 VISIONS2026掲載クリエイター Log in with your pixiv account Create an account ",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 14542
+    },
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://api.vector.co/pixel/phoenix/sync-container?duid=0cda9d36aca2--01m0nj0jfqqw14b063fan39k8y&ds=did-006l&euns=1&s=&version=v3.17.0&cd=.datadome.co&pv=b924d732-7fae-45b4-b807-3cb8fc00940f",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "DataDome | Bot Management & Agent Trust Platform",
+      "landedOn": "https://datadome.co/",
+      "nodes": 2044,
+      "textLength": 6039,
+      "snippet": "DataDome named a Leader in The Forrester Wave™: Bot and Agent Trust Management Software, Q2 2026 Get the report Skip to main content Skip to navigation Skip to footer Trust every Trust every Trust eve",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 31994
+    },
+    {
+      "name": "dd-g2",
+      "vendor": "datadome",
+      "url": "https://www.g2.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.g2.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/interstitial/?initialCid=AHrlqAAAAAMAM42LogOxEZsAbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=FSWCFjw~AUJ1ISE~13bNgZMkla5mZ_bVERWmh3eJijFjJrowe8PYzKYzd4BMwTti~4ab7eUDWWSrr7VVU06ERBzOcsBCG6pE5wEzMewhavI0FKAC7QXCwniUBG83d3G8&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=d449fa29d120d92ca0262954cfc6f8d2710840330c51ec7a1cf7710331c94f8662eed438756f6b8e1e3ffbf05131e8e7&b=1639491&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAM42LogOxEZsAbNOzfA==&cid=zsunRLaL8CfbhAQUQ8k0xcWwMMSshmpjWjTHmh51B953SzRwuHyyWuGlZbOEP4toO8EyUyu6CVL9fM7NV3g2mAq7cOkgfrMkUlohVXMj0yP4RWX6IMfsp9rztyyFEA2k&referer=https%3A%2F%2Fwww.g2.com%2F&hash=229542D5C186C7F5A5BB092FBDD92B&t=bv&s=48621&e=b4a5e619cb61ed3ffa1ba87bf03a7a22ddcda266e7d5526bf507915d77dbd0f866b13b40187e80b7b301a7ef1793743f&ir=503004%2C503005%2C503007%2C503011%2C72&dm=dc_ir&b=1639491",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "g2.com",
+      "landedOn": "https://www.g2.com/",
+      "nodes": 11,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 26216
+    },
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://auth.leboncoin.fr/api/authorizer/v2/authorize?client_id=lbc-front-web&redirect_uri=https%3A%2F%2Fwww.leboncoin.fr%2Foauth2callback&response_type=code&state=58754200-57a2-423b-841f-5924d35ada51&prompt=none&force_redirect=true&scope=*+offline",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAdEEJf1WuhUMAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=xpoYGz2fRzrbuiCOaKqO4LBZJnaz48PwL1px4AkFaAFC8RdBeupGQ9NVhH7M_KxSIHdAkZpGxvhkTi5Yhs7wChYwPDuYpgNbCKVxNCbxn4CA5yWgkNJ7WFkK1R0C4gQz&t=bv&referer=https%3A%2F%2Fauth.leboncoin.fr%2Fapi%2Fauthorizer%2Fv2%2Fauthorize%3Fclient_id%3Dlbc-front-web%26redirect_uri%3Dhttps%253A%252F%252Fwww.leboncoin.fr%252Foauth2callback%26response_type%3Dcode%26state%3D58754200-57a2-423b-841f-5924d35ada51%26prompt%3Dnone%26force_redirect%3Dtrue%26scope%3D*%2Boffline&s=18203&e=baaaf0a01c38f9a6bfab6c5b522e78322930248782f967a6a074aa24f2da651f4c27df8d595cca375cd959035f750d58&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://auth.leboncoin.fr/api/authorizer/v2/authorize?client_id=lbc-front-web&redirect_uri=https%3A%2F%2Fwww.leboncoin.fr%2Foauth2callback&response_type=code&state=27afdbda-6722-486a-ace5-41fde5bcd000&prompt=none&force_redirect=true&scope=*+offline",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAdEEJf1WuhUMAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=bYC6~B99DXTS3Y~ylB_yd7X0GFOBdwAHq_fbKBDoFiRcjw7r~UERy8sdVSTcUi9bEPGDxzrJoP95DCiVru3jktAhqJeqVHUwRrjkjxk1OaKjDtQsuzhKZOOkllMPbev5&t=fe&referer=https%3A%2F%2Fauth.leboncoin.fr%2Fapi%2Fauthorizer%2Fv2%2Fauthorize%3Fclient_id%3Dlbc-front-web%26redirect_uri%3Dhttps%253A%252F%252Fwww.leboncoin.fr%252Foauth2callback%26response_type%3Dcode%26state%3D27afdbda-6722-486a-ace5-41fde5bcd000%26prompt%3Dnone%26force_redirect%3Dtrue%26scope%3D*%2Boffline&s=18203&e=4cb319baee362d368d3c215ca13cce2d57a78dc5d5eb799e74fd6d349d7b3c0c75bd6eef92409db1a7f29840ed4eb0f1&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAdEEJf1WuhUMAbNOzfA==&cid=v~sRY~apkmXv6ZsmECHzd5JCMvfzMR1pNr5XpOk0B4N_qDqkY4ZpORpSp8wC1QkXrmq61IZKRTOmSM1k~sg3srWkwqWH1sj3uJ8RbDMHsOkr~r9ySP4dS4WVM0bQwCgI&referer=https%3A%2F%2Fapi.leboncoin.fr%2Fapi%2Fdelivery-configurator-api%2Fv1%2Fconfigs&hash=05B30BD9055986BD2EE8F5A199D973&t=fe&s=285&e=9f3f47b8809488e59d8f3c235e4876e761339d2a3f583c718ac0c9ed7e4153b7a4d4a6d11c355fe5d7354ae402e7fab3&b=32395&dm=jd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin, site de petites annonces gratuites",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 1488,
+      "textLength": 5826,
+      "snippet": "aller au contenu aller au pied de page Renforcer les contrastes Déposer une annonce Mes recherches Favoris Messages Se connecter Immobilier Véhicules Matériel pro Emploi Mode Maison & Jardin Famille É",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 29542
+    },
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/us/en/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "The official Hermes online store | Hermès USA",
+      "landedOn": "https://www.hermes.com/us/en/",
+      "nodes": 2042,
+      "textLength": 3013,
+      "snippet": "COOKIES HERMES.COM We use Cookies and similar technologies, including pixel tags, to enhance the website experience, analyze performance and traffic on our website and assist with our marketing effort",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 29749
+    },
+    {
+      "name": "x-sony",
+      "vendor": "akamai",
+      "url": "https://www.sony.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.sony.com/en/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://sonygs.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.sony.com",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Home - Sony Group Portal",
+      "landedOn": "https://www.sony.com/en/",
+      "nodes": 1536,
+      "textLength": 6910,
+      "snippet": "Businesses & Products open About Sony Group open Technology open Sustainability open Design open Employees / Careers open Investor Relations open Contact Us Open search form It's About to Be a Brand N",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 30224
+    },
+    {
+      "name": "x-zillow",
+      "vendor": "perimeterx",
+      "url": "https://www.zillow.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.zillow.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://crcldu.com/bd/sync.html?v=1787430000000#1787430074321|1",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "px-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Access to this page has been denied",
+      "landedOn": "https://www.zillow.com/",
+      "nodes": 21,
+      "textLength": 106,
+      "snippet": "Press & Hold to confirm you are a human (and not a bot). Reference ID 058b904f-9e67-11f1-9c46-c1da68b84447",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": true,
+        "refId": true,
+        "captchaDom": true,
+        "appId": true,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25631
     }
   ],
-  "fresh": true,
+  "fresh": false,
   "engineLog": [
-    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+15.242s]",
-    "      src = https://www.scrapingcourse.com/cloudflare-challenge",
-    "      kind = javascript",
-    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+15.276s]",
-    "      src = https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2ebfe30e92c720c",
-    "      kind = javascript",
-    "\u001b[0;31mERROR browser : worker fetch error . . . . . . . . . . . . . . \u001b[0m[+15.297s]",
-    "      url = blob:https://www.scrapingcourse.com/3e7d4f7d-d545-4e7a-bdc1-4abe9c560a1f",
-    "      err = Abort",
-    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+15.316s]",
-    "      url = about:blank",
     "      method = GET",
-    "      reason = initialFrameNavigation",
+    "      reason = script",
     "      body = false",
     "      type = frame",
-    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+15.334s]",
-    "      src = https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
-    "      kind = javascript",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+15.488s]",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+350.267s]",
+    "      url = blob:https://www.zillow.com/79372d82-f1fc-45f6-ad20-93e6bb84fb48",
+    "      len = 4997",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+350.407s]",
+    "      url = blob:https://www.zillow.com/a3c4c18f-4fb7-454f-b9d6-5bda8cdba43c",
+    "      len = 5001",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+350.526s]",
+    "      url = blob:https://www.zillow.com/6e9f0bab-2e8d-473d-ad79-8dd21691dd9d",
+    "      len = 5002",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+350.643s]",
+    "      url = blob:https://www.zillow.com/7a32a440-d017-4a35-b6e6-2a594eb91116",
+    "      len = 5002",
+    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+350.759s]",
+    "      url = blob:https://www.zillow.com/884fb4d0-07d9-46bf-89f4-591e75ace278",
+    "      len = 5002",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+350.876s]",
     "      source = xhr",
-    "      url = https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfe30e92c720c/uKe14O8WdczSlATGGyc5cTRxtCzgA1m5ueUho5LJrms-1787340003-1.2.1.1-c_HfaAWjfi9DxlK9PbjwNmcvlk1zOuxHYczzCIy9zjP.FoSZyoqWhonc7iMTUAW5",
+    "      url = https://ift.px-cloud.net/ns?c=058b904f-9e67-11f1-9c46-c1da68b84447",
     "      status = 200",
-    "      len = 113580",
-    "\u001b[0;32mINFO\u001b[0m  frame : navigate . . . . . . . . . . . . . . . . . . . . \u001b[0m[+15.511s]",
-    "      url = https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4xgxt/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
-    "      method = GET",
-    "      reason = initialFrameNavigation",
-    "      body = false",
-    "      type = frame",
-    "\u001b[0;32mINFO\u001b[0m  browser : worker fetch done . . . . . . . . . . . . . .  \u001b[0m[+15.519s]",
-    "      url = blob:https://www.scrapingcourse.com/c94f51ba-a5de-4c5d-9466-fc08dc4bc473",
-    "      len = 291",
-    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+15.561s]",
-    "      src = https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4xgxt/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+    "      len = 512",
+    "\u001b[0;31mERROR browser : worker fetch error . . . . . . . . . . . . . . \u001b[0m[+350.88s]",
+    "      url = chrome://juggler/content",
+    "      err = UnsupportedProtocol",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+350.977s]",
+    "      src = https://crcldu.com/bd/sync.html?v=1787430000000#1787430074321|1",
     "      kind = javascript",
-    "\u001b[0;31mERROR browser : worker fetch error . . . . . . . . . . . . . . \u001b[0m[+15.605s]",
-    "      url = blob:https://challenges.cloudflare.com/718c3277-2d74-4ca1-b279-56c01508f862",
-    "      err = Abort",
-    "\u001b[0;33mWARN\u001b[0m  js : console.error . . . . . . . . . . . . . . . . . . . \u001b[0m[+15.609s]",
-    "      0 = ",
-    "  arg(1): [Cloudflare Turnstile] Unhandled error: (string)",
-    "  arg(2): TypeError: Cannot read properties of undefined (reading 'call') (string)",
-    "  arg(3): , with debug info: (string)",
-    "  arg(4): vaFmhjY39p7YlatfakaCQBQBVz32bUMmOjL5ImQb4ww=$l41BfGMSluvqdqlZTOtz0g==>09LyO4Gaiq1c/sJrli6RRA==$koPGqjBRJBGVueHt5XFBxA== (string)",
-    " stack: ",
-    "        <https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4xgxt/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto>",
-    "        <anonymous>:1",
-    "\u001b[0;33mWARN\u001b[0m  js : window.reportError . . . . . . . . . . . . . . . .  \u001b[0m[+15.613s]",
-    "      message = TypeError: Cannot read properties of undefined (reading 'call')",
-    "      filename = ",
-    "      line_number = 0",
-    "      column_number = 0",
-    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+19.675s]",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+350.977s]",
+    "      src = https://crcldu.com/bd/sync.html?v=1787430000000#1787430074321|1",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+351.042s]",
     "      source = xhr",
-    "      url = https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/2523752411:1787338824:x69e0XMpj0vUS_SZhP0vqcwudsHEfSqMXBOEK1Rsh4A/a2ebfe30e92c720c/uKe14O8WdczSlATGGyc5cTRxtCzgA1m5ueUho5LJrms-1787340003-1.2.1.1-c_HfaAWjfi9DxlK9PbjwNmcvlk1zOuxHYczzCIy9zjP.FoSZyoqWhonc7iMTUAW5",
+    "      url = https://collector-pxhyx10rg3.px-cloud.net/assets/js/bundle",
     "      status = 200",
-    "      len = 3256",
-    "\u001b[0;33mWARN\u001b[0m  js : console.warn . . . . . . . . . . . . . . . . . . .  \u001b[0m[+20.015s]",
+    "      len = 1280",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+351.062s]",
+    "      source = xhr",
+    "      url = https://collector-pxhyx10rg3.px-client.net/b/g?payload=aUkQRhAIEH5cVlNWdVVhamdrDxAeEFYQCEkQdEUHWHZkdFpoSGsPEAhUU15BVx4QVGVweHtIVWJhWmsPEAgQYmoDAwUGBxAeEHtnY2RgAFFHd3oCDxAIEEJKWlEQHhB2anAHfGwJVV^FRVWQ8QCFiRTXkFXHhB4SgZ%3EDpmemV[4A3RhCg8QCEkQYpmGoDAAUBChAIBNKwQBHhBiagMABQELEAgCHhB9iagMDNGABsQYCEAgCHhBiagMABQYDEAgfA08eEHtKXWp1ZWRFdG3[EGDxAIEFpGRkJBCB0dRUVFH7Eh7bXl5dRRxRXV8dEE9Pbw==&appId=PXHYx10rg3&tag=NAlADXJlXXwwBw==&uuid=058b904f-9e67-11f1-9c46-c1da68b84447&ft=408&seq=1&en=NTA&bi=MVQFHWRqQzx3CWQ4KAE4PjB0FlogWEs1PUMXUAsdSBI/ckIgdRVFKV8GdmYwcw9EMmdOIxlVR35YVAQCdzBUZC5ABjR3VTcwJnMTRS9BT2w9EEAyC0ZBRTR5QnZsDw0=&cs=b0880fefda74130f852e18b3f905a873d3303131c91d19e5e0247ad3550c2ca3&pc=3142268220728927&sid=05e6cd8c-9e67-11f1-80f2-85bb10cf9130%F3%A0%84%B1%F3%A0%84%B7%F3%A0%84%B8%F3%A0%84%B7%F3%A0%84%B4%F3%A0%84%B3%F3%A0%84%B0%F3%A0%84%B0%F3%A0%84%B7%F3%A0%84%B4%F3%A0%84%B3%F3%A0%84%B2%F3%A0%84%B1&vid=05e6c839-9e67-11f1-80f2-a04116d12216&ci=05e99410-9e67-11f1-99df-0be46b647d39&cts=05e6d07e-9e67-11f1-80f2-85bb10cf9130&hid=FCikdohmwqgN86YnBevyO0xXgiWU0Qw-b22jLWi5JLU=:3HhT-i/DVuMNGWqWNGph3HP-kXbmtgzZ40pJnFoogrIF2em6s3qsrzrvjdQdni7RSNGrBpJogwoGOsu3A6R5ERponE9v3f3IYpM4llnZ81B46gIqfb5pTlHrBimDISnaH3fRzs3e1sLfzIs7J5rB2LOB2eP1/r-4uM7PElK/O7UXJhNvRIW/yYjVJfUaXEN-",
+    "      status = 200",
+    "      len = 799",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+351.188s]",
+    "      src = https://crcldu.com/bd/auditor.js?v=1787430000000",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  js : console.context.groupEnd . . . . . . . . . . . . .  \u001b[0m[+351.275s]",
     "      0 = ",
-    "  arg(1): [Cloudflare Turnstile] Cannot find Widget cf-chl-widget-4xgxt, consider using turnstile.remove() to clean up a widget. (string)"
+    "  arg(1): %c (string)",
+    "  arg(2): ",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+351.372s]",
+    "      source = xhr",
+    "      url = https://fst-ec.perimeterx.net/?id=05e6c839-9e67-11f1-80f2-a04116d12216",
+    "      status = 200",
+    "      len = 1404",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+351.379s]",
+    "      source = xhr",
+    "      url = https://dvp.px-cloud.net/v",
+    "      status = 200",
+    "      len = 1380"
   ],
   "summary": {
-    "stations": 1,
-    "pass": 0
+    "stations": 15,
+    "pass": 10
   }
 }
