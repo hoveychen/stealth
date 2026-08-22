@@ -1,0 +1,426 @@
+{
+  "engine": "chrome-headless",
+  "url": "https://tls.peet.ws/api/all",
+  "repeats": 4,
+  "varying": [
+    {
+      "field": "ja3",
+      "distinct": 4
+    },
+    {
+      "field": "ja3_hash",
+      "distinct": 4
+    },
+    {
+      "field": "ciphers",
+      "distinct": 3
+    },
+    {
+      "field": "extensions",
+      "distinct": 4
+    },
+    {
+      "field": "supported_groups",
+      "distinct": 3
+    },
+    {
+      "field": "supported_versions",
+      "distinct": 4
+    }
+  ],
+  "samples": [
+    {
+      "http_version": "h2",
+      "ja3": "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,35-0-45-43-18-65037-27-10-23-65281-5-13-16-11-17613-51-41,4588-29-23-24,0",
+      "ja3_hash": "52e975a48c011885c2bd09471fd84b6c",
+      "ja4": "t13d1517h2_8daaf6152771_a87ad97598a9",
+      "ja4_r": "t13d1517h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,0029,002b,002d,0033,44cd,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+      "peetprint": "GREASE-772-771|2-1.1|GREASE-4588-29-23-24|2308-2309-2310-1027-2052-1025-1283-2053-1281-2054-1537|1|2|GREASE-4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53|0-10-11-13-16-17613-18-23-27-35-41-43-45-5-51-65037-65281-GREASE-GREASE",
+      "peetprint_hash": "35fc5e864929e3b01e9ba9eb41bc1360",
+      "tls_version_negotiated": "772",
+      "ciphers": [
+        "TLS_GREASE (0x2A2A)",
+        "TLS_AES_128_GCM_SHA256",
+        "TLS_AES_256_GCM_SHA384",
+        "TLS_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+        "TLS_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_RSA_WITH_AES_256_CBC_SHA"
+      ],
+      "extensions": [
+        "TLS_GREASE (0x5a5a)",
+        "session_ticket (35)",
+        "server_name (0)",
+        "psk_key_exchange_modes (45)",
+        "supported_versions (43)",
+        "signed_certificate_timestamp (18)",
+        "extensionEncryptedClientHello (boringssl) (65037)",
+        "compress_certificate (27)",
+        "supported_groups (10)",
+        "extended_master_secret (23)",
+        "extensionRenegotiationInfo (boringssl) (65281)",
+        "status_request (5)",
+        "signature_algorithms (13)",
+        "application_layer_protocol_negotiation (16)",
+        "ec_point_formats (11)",
+        "application_settings (17613)",
+        "key_share (51)",
+        "TLS_GREASE (0x6a6a)",
+        "pre_shared_key (41)"
+      ],
+      "supported_groups": [
+        "TLS_GREASE (0x6a6a)",
+        "X25519MLKEM768 (4588)",
+        "X25519 (29)",
+        "P-256 (23)",
+        "P-384 (24)"
+      ],
+      "signature_algorithms": [
+        "0x904",
+        "0x905",
+        "0x906",
+        "ecdsa_secp256r1_sha256",
+        "rsa_pss_rsae_sha256",
+        "rsa_pkcs1_sha256",
+        "ecdsa_secp384r1_sha384",
+        "rsa_pss_rsae_sha384",
+        "rsa_pkcs1_sha384",
+        "rsa_pss_rsae_sha512",
+        "rsa_pkcs1_sha512"
+      ],
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "supported_versions": [
+        "TLS_GREASE (0xfafa)",
+        "TLS 1.3",
+        "TLS 1.2"
+      ],
+      "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+      "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+      "h2_settings": [
+        "HEADER_TABLE_SIZE = 65536",
+        "ENABLE_PUSH = 0",
+        "INITIAL_WINDOW_SIZE = 6291456",
+        "MAX_HEADER_LIST_SIZE = 262144"
+      ],
+      "h2_window_update": 15663105,
+      "h2_pseudo_header_order": [
+        "method",
+        "authority",
+        "scheme",
+        "path"
+      ],
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+    },
+    {
+      "http_version": "h2",
+      "ja3": "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,51-65037-27-17613-0-11-43-16-18-5-65281-45-13-10-23-35-41,4588-29-23-24,0",
+      "ja3_hash": "e21a9dc7b84e9a0831074a5f2617ee1b",
+      "ja4": "t13d1517h2_8daaf6152771_a87ad97598a9",
+      "ja4_r": "t13d1517h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,0029,002b,002d,0033,44cd,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+      "peetprint": "GREASE-772-771|2-1.1|GREASE-4588-29-23-24|2308-2309-2310-1027-2052-1025-1283-2053-1281-2054-1537|1|2|GREASE-4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53|0-10-11-13-16-17613-18-23-27-35-41-43-45-5-51-65037-65281-GREASE-GREASE",
+      "peetprint_hash": "35fc5e864929e3b01e9ba9eb41bc1360",
+      "tls_version_negotiated": "772",
+      "ciphers": [
+        "TLS_GREASE (0x2A2A)",
+        "TLS_AES_128_GCM_SHA256",
+        "TLS_AES_256_GCM_SHA384",
+        "TLS_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+        "TLS_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_RSA_WITH_AES_256_CBC_SHA"
+      ],
+      "extensions": [
+        "TLS_GREASE (0x1a1a)",
+        "key_share (51)",
+        "extensionEncryptedClientHello (boringssl) (65037)",
+        "compress_certificate (27)",
+        "application_settings (17613)",
+        "server_name (0)",
+        "ec_point_formats (11)",
+        "supported_versions (43)",
+        "application_layer_protocol_negotiation (16)",
+        "signed_certificate_timestamp (18)",
+        "status_request (5)",
+        "extensionRenegotiationInfo (boringssl) (65281)",
+        "psk_key_exchange_modes (45)",
+        "signature_algorithms (13)",
+        "supported_groups (10)",
+        "extended_master_secret (23)",
+        "session_ticket (35)",
+        "TLS_GREASE (0x7a7a)",
+        "pre_shared_key (41)"
+      ],
+      "supported_groups": [
+        "TLS_GREASE (0xaaaa)",
+        "X25519MLKEM768 (4588)",
+        "X25519 (29)",
+        "P-256 (23)",
+        "P-384 (24)"
+      ],
+      "signature_algorithms": [
+        "0x904",
+        "0x905",
+        "0x906",
+        "ecdsa_secp256r1_sha256",
+        "rsa_pss_rsae_sha256",
+        "rsa_pkcs1_sha256",
+        "ecdsa_secp384r1_sha384",
+        "rsa_pss_rsae_sha384",
+        "rsa_pkcs1_sha384",
+        "rsa_pss_rsae_sha512",
+        "rsa_pkcs1_sha512"
+      ],
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "supported_versions": [
+        "TLS_GREASE (0x2a2a)",
+        "TLS 1.3",
+        "TLS 1.2"
+      ],
+      "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+      "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+      "h2_settings": [
+        "HEADER_TABLE_SIZE = 65536",
+        "ENABLE_PUSH = 0",
+        "INITIAL_WINDOW_SIZE = 6291456",
+        "MAX_HEADER_LIST_SIZE = 262144"
+      ],
+      "h2_window_update": 15663105,
+      "h2_pseudo_header_order": [
+        "method",
+        "authority",
+        "scheme",
+        "path"
+      ],
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+    },
+    {
+      "http_version": "h2",
+      "ja3": "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,16-23-17613-43-11-0-65281-18-27-51-45-35-65037-13-10-5-41,4588-29-23-24,0",
+      "ja3_hash": "b97c760ec31f5bf5a5430a1b1e5ebcf9",
+      "ja4": "t13d1517h2_8daaf6152771_a87ad97598a9",
+      "ja4_r": "t13d1517h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,0029,002b,002d,0033,44cd,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+      "peetprint": "GREASE-772-771|2-1.1|GREASE-4588-29-23-24|2308-2309-2310-1027-2052-1025-1283-2053-1281-2054-1537|1|2|GREASE-4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53|0-10-11-13-16-17613-18-23-27-35-41-43-45-5-51-65037-65281-GREASE-GREASE",
+      "peetprint_hash": "35fc5e864929e3b01e9ba9eb41bc1360",
+      "tls_version_negotiated": "772",
+      "ciphers": [
+        "TLS_GREASE (0xDADA)",
+        "TLS_AES_128_GCM_SHA256",
+        "TLS_AES_256_GCM_SHA384",
+        "TLS_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+        "TLS_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_RSA_WITH_AES_256_CBC_SHA"
+      ],
+      "extensions": [
+        "TLS_GREASE (0x9a9a)",
+        "application_layer_protocol_negotiation (16)",
+        "extended_master_secret (23)",
+        "application_settings (17613)",
+        "supported_versions (43)",
+        "ec_point_formats (11)",
+        "server_name (0)",
+        "extensionRenegotiationInfo (boringssl) (65281)",
+        "signed_certificate_timestamp (18)",
+        "compress_certificate (27)",
+        "key_share (51)",
+        "psk_key_exchange_modes (45)",
+        "session_ticket (35)",
+        "extensionEncryptedClientHello (boringssl) (65037)",
+        "signature_algorithms (13)",
+        "supported_groups (10)",
+        "status_request (5)",
+        "TLS_GREASE (0x7a7a)",
+        "pre_shared_key (41)"
+      ],
+      "supported_groups": [
+        "TLS_GREASE (0x9a9a)",
+        "X25519MLKEM768 (4588)",
+        "X25519 (29)",
+        "P-256 (23)",
+        "P-384 (24)"
+      ],
+      "signature_algorithms": [
+        "0x904",
+        "0x905",
+        "0x906",
+        "ecdsa_secp256r1_sha256",
+        "rsa_pss_rsae_sha256",
+        "rsa_pkcs1_sha256",
+        "ecdsa_secp384r1_sha384",
+        "rsa_pss_rsae_sha384",
+        "rsa_pkcs1_sha384",
+        "rsa_pss_rsae_sha512",
+        "rsa_pkcs1_sha512"
+      ],
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "supported_versions": [
+        "TLS_GREASE (0x3a3a)",
+        "TLS 1.3",
+        "TLS 1.2"
+      ],
+      "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+      "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+      "h2_settings": [
+        "HEADER_TABLE_SIZE = 65536",
+        "ENABLE_PUSH = 0",
+        "INITIAL_WINDOW_SIZE = 6291456",
+        "MAX_HEADER_LIST_SIZE = 262144"
+      ],
+      "h2_window_update": 15663105,
+      "h2_pseudo_header_order": [
+        "method",
+        "authority",
+        "scheme",
+        "path"
+      ],
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+    },
+    {
+      "http_version": "h2",
+      "ja3": "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,65037-65281-43-18-13-23-16-0-35-17613-5-10-45-51-11-27-41,4588-29-23-24,0",
+      "ja3_hash": "325fbaf64b184d32861d5ca09e03d31f",
+      "ja4": "t13d1517h2_8daaf6152771_a87ad97598a9",
+      "ja4_r": "t13d1517h2_002f,0035,009c,009d,1301,1302,1303,c013,c014,c02b,c02c,c02f,c030,cca8,cca9_0005,000a,000b,000d,0012,0017,001b,0023,0029,002b,002d,0033,44cd,fe0d,ff01_0904,0905,0906,0403,0804,0401,0503,0805,0501,0806,0601",
+      "peetprint": "GREASE-772-771|2-1.1|GREASE-4588-29-23-24|2308-2309-2310-1027-2052-1025-1283-2053-1281-2054-1537|1|2|GREASE-4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53|0-10-11-13-16-17613-18-23-27-35-41-43-45-5-51-65037-65281-GREASE-GREASE",
+      "peetprint_hash": "35fc5e864929e3b01e9ba9eb41bc1360",
+      "tls_version_negotiated": "772",
+      "ciphers": [
+        "TLS_GREASE (0xBABA)",
+        "TLS_AES_128_GCM_SHA256",
+        "TLS_AES_256_GCM_SHA384",
+        "TLS_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA",
+        "TLS_RSA_WITH_AES_128_GCM_SHA256",
+        "TLS_RSA_WITH_AES_256_GCM_SHA384",
+        "TLS_RSA_WITH_AES_128_CBC_SHA",
+        "TLS_RSA_WITH_AES_256_CBC_SHA"
+      ],
+      "extensions": [
+        "TLS_GREASE (0xcaca)",
+        "extensionEncryptedClientHello (boringssl) (65037)",
+        "extensionRenegotiationInfo (boringssl) (65281)",
+        "supported_versions (43)",
+        "signed_certificate_timestamp (18)",
+        "signature_algorithms (13)",
+        "extended_master_secret (23)",
+        "application_layer_protocol_negotiation (16)",
+        "server_name (0)",
+        "session_ticket (35)",
+        "application_settings (17613)",
+        "status_request (5)",
+        "supported_groups (10)",
+        "psk_key_exchange_modes (45)",
+        "key_share (51)",
+        "ec_point_formats (11)",
+        "compress_certificate (27)",
+        "TLS_GREASE (0x9a9a)",
+        "pre_shared_key (41)"
+      ],
+      "supported_groups": [
+        "TLS_GREASE (0xaaaa)",
+        "X25519MLKEM768 (4588)",
+        "X25519 (29)",
+        "P-256 (23)",
+        "P-384 (24)"
+      ],
+      "signature_algorithms": [
+        "0x904",
+        "0x905",
+        "0x906",
+        "ecdsa_secp256r1_sha256",
+        "rsa_pss_rsae_sha256",
+        "rsa_pkcs1_sha256",
+        "ecdsa_secp384r1_sha384",
+        "rsa_pss_rsae_sha384",
+        "rsa_pkcs1_sha384",
+        "rsa_pss_rsae_sha512",
+        "rsa_pkcs1_sha512"
+      ],
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "supported_versions": [
+        "TLS_GREASE (0xbaba)",
+        "TLS 1.3",
+        "TLS 1.2"
+      ],
+      "akamai_fingerprint": "1:65536;2:0;4:6291456;6:262144|15663105|0|m,a,s,p",
+      "akamai_fingerprint_hash": "52d84b11737d980aef856699f885ca86",
+      "h2_settings": [
+        "HEADER_TABLE_SIZE = 65536",
+        "ENABLE_PUSH = 0",
+        "INITIAL_WINDOW_SIZE = 6291456",
+        "MAX_HEADER_LIST_SIZE = 262144"
+      ],
+      "h2_window_update": 15663105,
+      "h2_pseudo_header_order": [
+        "method",
+        "authority",
+        "scheme",
+        "path"
+      ],
+      "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+    }
+  ],
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9334/devtools/browser/02ca1046-2cd5-4e9a-8341-8ce544914cc4"
+  },
+  "log": [
+    "DevTools listening on ws://127.0.0.1:9334/devtools/browser/02ca1046-2cd5-4e9a-8341-8ce544914cc4",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[75636:15045344:0822/141844.016062:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[75636:15045344:0822/141844.016544:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[75636:15045398:0822/141846.548161:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[75636:15045398:0822/141846.548757:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[75636:15045398:0822/141846.548838:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR"
+  ]
+}

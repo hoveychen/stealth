@@ -8238,5 +8238,79 @@ the arm that passes differs from the arm that does not (plain `--headless=new`,
 which gets the same `px-challenge`) **only in the user agent header** -- so at
 this station the guard is reading the request, and one header in it was enough
 to move the answer. The request side is where the diff continues: byte-exact
-header set and order, whether `sec-ch-ua` is present at all (the `--user-agent=`
-override blanks Chrome's client hints, noted above), JA4, HTTP/2 settings.
+header set and order, JA4, HTTP/2 settings.
+
+### The request side, all four axes (P2, 2026-08-22)
+
+Three arms, one sitting, against the harness's own echo servers: the arm that
+fails x-zillow (plain `--headless=new`), the arm that passes it
+(`--headless=new` plus `--user-agent=<the headed string>`), and this engine.
+
+**Over HTTP/1.1 the two Chrome arms are byte-identical but for one token.**
+`collect-chrome.mjs` twice and `collect-lightpanda.mjs` once against
+`header-echo.mjs` (`results/px-hdr-chrome-plain.json`,
+`px-hdr-chrome-ua.json`, `px-hdr-lightpanda.json`): across all nine request
+paths the failing and passing arms agree on header set, header order and every
+value except `User-Agent`, where one says `HeadlessChrome/151.0.0.0` and the
+other `Chrome/151.0.0.0`. Nothing else moves — same 14 fields in the same order,
+same `Accept`, same `Sec-Fetch-*`, same `Accept-Encoding: gzip, deflate, br,
+zstd`, same `Accept-Language`.
+
+That corrects a paraphrase this file used to carry. `--user-agent=` does **not**
+blank the `sec-ch-ua` *request headers*: both arms send
+`sec-ch-ua: "Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"`,
+`sec-ch-ua-mobile: ?0` and `sec-ch-ua-platform: "macOS"`, identically. What the
+override empties is the JS-side *high-entropy* hints, which is a different
+surface and is still recorded correctly above. So at this station the guard is
+reading the UA string, not a hint/UA disagreement — headless Chrome's low-entropy
+hints already claim `"Google Chrome"`, and the UA token was the only tell.
+
+**JA4 and the HTTP/2 preface are already aligned.** Re-measured in one sitting
+rather than trusted from older snapshots (`results/px-tls-chrome.json`,
+`px-tls-lightpanda.json`, `collect-tls.mjs`, 4 and 6 repeats):
+
+| | Chrome | lightpanda |
+|---|---|---|
+| `ja4` | `t13d1517h2_8daaf6152771_a87ad97598a9` | identical |
+| `ja4_r` | cipher, extension and sigalg lists | identical, field for field |
+| `akamai_fingerprint` | `1:65536;2:0;4:6291456;6:262144\|15663105\|0\|m,a,s,p` | identical |
+| h2 pseudo-header order | `method, authority, scheme, path` | identical |
+| stability | 4/4 samples | 6/6 samples |
+
+Both axes are closed: there is no transport difference left to find here.
+
+**What is left is one header, and only h2 can see it.** The h1 echo cannot
+answer the question x-zillow poses, because x-zillow is h2 and HPACK lowercases
+every field name on the way in — the `Sec-Ch-Ua` casing tell recorded above
+vanishes there. A local `http2.createSecureServer` echo that keeps
+`rawHeaders` (so wire order survives) settles it. Chrome sends RFC 9218
+extensible-priority hints on **16 of 16** requests; this engine sends them on
+**0 of 16**. Every other field — set, wire order, value — matches:
+
+| `sec-fetch-dest` | Chrome `priority` | lightpanda |
+|---|---|---|
+| `document` (navigation and `/nav`) | `u=0, i` | absent |
+| `iframe` | `u=0, i` | absent |
+| `style` | `u=0` | absent |
+| `script` | `u=1` | absent |
+| `image` | `u=1, i`, re-sent as `i` | absent |
+| `empty` (`fetch`, `xhr`) | `u=1, i` | absent |
+
+The per-destination values are not guesses: `u=0` for the render-blocking
+destinations, `u=1` for the rest, `i` (incremental) everywhere except style and
+script. Images carry `u=1, i` first and a bare `i` on a later request for the
+same URL, which is Chrome re-prioritising as the image becomes relevant, so that
+row is a range rather than a constant.
+
+The `priority` header on the *document* request is therefore the last structural
+difference on the one request whose answer x-zillow has already decided. Whether
+it is *the* discriminator is untested — the ladder for that is a fetch of the
+station with the header added and nothing else changed.
+
+Two changes fall out of this, and only two. **Send the `priority` header**, per
+destination, on h2 and h3 and not on h1 — the vendored curl already carries the
+mirror-image of that gate, dropping `Connection` on h2 because Chrome does, so
+the place to hang it is known. And **lowercase the three client-hint field
+names**, which closes the h1 tell recorded above and costs three string
+literals. Everything else on the request side is measured identical, so there is
+nothing else here to change.
