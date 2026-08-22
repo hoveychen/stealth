@@ -24,8 +24,12 @@
   testing.expectEqual('en', navigator.languages[1]);
   testing.expectEqual(true, navigator.onLine);
   testing.expectEqual(true, navigator.cookieEnabled);
+  // Read off the host now, so the literal that used to be here would only hold
+  // on a machine with that core count. What still holds everywhere: a positive
+  // integer, which is what a page can actually check. The exact value is
+  // asserted against the host in Navigator.zig's own test.
   testing.expectEqual(true, navigator.hardwareConcurrency > 0);
-  testing.expectEqual(8, navigator.hardwareConcurrency);
+  testing.expectEqual(true, Number.isInteger(navigator.hardwareConcurrency));
   testing.expectEqual(0, navigator.maxTouchPoints);
   // Fixed strings in every Chromium build; upstream left vendor empty, which
   // contradicts a Chrome user-agent sitting right next to it.
@@ -164,7 +168,13 @@
 </script>
 
 <script id=deviceMemory>
-  testing.expectEqual(8, navigator.deviceMemory);
+  // Quantised off the host's RAM, so the assertion is the quantisation rather
+  // than a literal: a power of two, and never zero. Chrome 151 answers 16 on a
+  // 24 GiB host, which is where the "floor, do not cap at 8" rule comes from
+  // (Navigator.zig).
+  const dm = navigator.deviceMemory;
+  testing.expectEqual(true, dm > 0);
+  testing.expectEqual(true, Number.isInteger(Math.log2(dm)) || dm < 1);
 </script>
 
 <script id=userAgentData>

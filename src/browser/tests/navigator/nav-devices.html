@@ -70,7 +70,8 @@
 
     await state.done(() => {
       // The desktop this claims to be has a radio, same as the reference
-      // Chrome — the same persona that fixes hardwareConcurrency at 8.
+      // Chrome — the same persona that now takes hardwareConcurrency and
+      // deviceMemory off the host.
       testing.expectEqual(true, available);
       // Chrome refuses the chooser outside a user gesture, and nothing here
       // ever has one.
