@@ -46,6 +46,7 @@ pub const ContentTypeEnum = enum {
     image_gif,
     image_png,
     image_webp,
+    image_svg_xml,
     application_json,
     unknown,
     other,
@@ -64,6 +65,9 @@ pub const ContentType = union(ContentTypeEnum) {
     image_gif: void,
     image_png: void,
     image_webp: void,
+    // The one image type that has to be declared: it has no signature, so
+    // nothing can sniff it. See `isImageSignature`.
+    image_svg_xml: void,
     application_json: void,
     unknown: void,
     // A valid but unrecognized type/subtype. Keeping it would require some
@@ -85,6 +89,7 @@ pub fn contentTypeString(mime: *const Mime) []const u8 {
         .image_png => "image/png",
         .image_gif => "image/gif",
         .image_webp => "image/webp",
+        .image_svg_xml => "image/svg+xml",
         .application_json => "application/json",
         else => "",
     };
@@ -408,13 +413,75 @@ pub fn sniff(body: []const u8) ?Mime {
     return null;
 }
 
+/// How many leading bytes `isImageSignature` can look at. The longest pattern
+/// is WebP's "RIFF????WEBPVP".
+pub const IMAGE_SIGNATURE_LEN = 14;
+
+/// Whether `prefix` -- the first bytes of a response body -- opens with an
+/// image format's signature.
+///
+/// This is what decides whether an `<img>` fires `load` or `error`, and the
+/// header plays no part in it. Measured on Chrome 151 (probe
+/// `tools/fingerprint/img-sniff.mjs`): PNG bytes load when the
+/// response declares `image/png`, `application/octet-stream`, `text/html`, or
+/// no Content-Type at all -- and even when it answers 404 or 500. HTML bytes
+/// error under every one of those, `image/png` included.
+///
+/// The raster patterns are the image rows of the mimesniff table
+/// (https://mimesniff.spec.whatwg.org/#matching-an-image-type-pattern); AVIF
+/// postdates that table and comes from Chromium's own sniffer
+/// (`net/base/mime_sniffer.cc`), which reads the ISO-BMFF brand.
+///
+/// SVG is deliberately absent. It is XML, so it has no signature to match, and
+/// mimesniff excludes it from image sniffing for exactly that reason. Chrome
+/// follows: the same probe reads `error` for SVG bytes served as `text/plain`,
+/// as `application/octet-stream`, and with no Content-Type -- and `load` only
+/// under `image/svg+xml`. So SVG is the one image type the caller has to take
+/// from the declared type instead (`ContentType.image_svg_xml`).
+pub fn isImageSignature(prefix: []const u8) bool {
+    if (std.mem.startsWith(u8, prefix, &.{ 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A })) {
+        return true;
+    }
+    if (std.mem.startsWith(u8, prefix, &.{ 0xFF, 0xD8, 0xFF })) {
+        return true; // JPEG
+    }
+    if (std.mem.startsWith(u8, prefix, "GIF87a") or std.mem.startsWith(u8, prefix, "GIF89a")) {
+        return true;
+    }
+    if (std.mem.startsWith(u8, prefix, "BM")) {
+        return true; // BMP
+    }
+    // A Windows icon (01 00) or cursor (02 00) resource.
+    if (std.mem.startsWith(u8, prefix, &.{ 0x00, 0x00, 0x01, 0x00 }) or
+        std.mem.startsWith(u8, prefix, &.{ 0x00, 0x00, 0x02, 0x00 }))
+    {
+        return true;
+    }
+    if (prefix.len >= 14 and std.mem.eql(u8, prefix[0..4], "RIFF") and
+        std.mem.eql(u8, prefix[8..14], "WEBPVP"))
+    {
+        return true; // the four bytes between are the chunk size
+    }
+    // ISO-BMFF: a size, the "ftyp" box type, then the brand.
+    if (prefix.len >= 12 and std.mem.eql(u8, prefix[4..8], "ftyp")) {
+        const brand = prefix[8..12];
+        // avis is an AVIF image sequence; both render in an <img>.
+        if (std.mem.eql(u8, brand, "avif") or std.mem.eql(u8, brand, "avis")) {
+            return true;
+        }
+    }
+    return false;
+}
+
 pub fn isHTML(self: *const Mime) bool {
     return self.content_type == .text_html;
 }
 
 pub fn isXML(self: *const Mime) bool {
     return switch (self.content_type) {
-        .text_xml, .other_xml => true,
+        // image_svg_xml used to land in other_xml, and still counts: SVG is
+        // XML, which is what XMLHttpRequest.responseXML keys off.
+        .text_xml, .other_xml, .image_svg_xml => true,
         else => false,
     };
 }
@@ -449,6 +516,9 @@ fn parseContentType(value: []const u8) !struct { ContentType, usize } {
         @"image/png",
         @"image/gif",
         @"image/webp",
+        // Ahead of the generic "+xml" tail below, which would otherwise
+        // classify it as other_xml and lose the one bit that matters.
+        @"image/svg+xml",
 
         @"application/json",
         @"application/xml",
@@ -466,6 +536,7 @@ fn parseContentType(value: []const u8) !struct { ContentType, usize } {
             .@"image/png" => .{ .image_png = {} },
             .@"image/gif" => .{ .image_gif = {} },
             .@"image/webp" => .{ .image_webp = {} },
+            .@"image/svg+xml" => .{ .image_svg_xml = {} },
             .@"application/json" => .{ .application_json = {} },
         };
         return .{ ct, attribute_start };
@@ -1083,6 +1154,33 @@ test "Mime: sniff" {
         try testing.expectEqual(.text_plain, std.meta.activeTag(mime.content_type));
         try testing.expectEqual("UTF-16LE", mime.charsetString());
     }
+}
+
+test "Mime: isImageSignature" {
+    try testing.expectEqual(true, Mime.isImageSignature(&.{ 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00 }));
+    try testing.expectEqual(true, Mime.isImageSignature(&.{ 0xFF, 0xD8, 0xFF, 0xE0 }));
+    try testing.expectEqual(true, Mime.isImageSignature("GIF87a..."));
+    try testing.expectEqual(true, Mime.isImageSignature("GIF89a..."));
+    try testing.expectEqual(true, Mime.isImageSignature("BM......"));
+    try testing.expectEqual(true, Mime.isImageSignature(&.{ 0x00, 0x00, 0x01, 0x00, 0x01 }));
+    try testing.expectEqual(true, Mime.isImageSignature(&.{ 0x00, 0x00, 0x02, 0x00, 0x01 }));
+    try testing.expectEqual(true, Mime.isImageSignature("RIFF\x24\x00\x00\x00WEBPVP8 "));
+    try testing.expectEqual(true, Mime.isImageSignature("\x00\x00\x00\x18ftypavif...."));
+    try testing.expectEqual(true, Mime.isImageSignature("\x00\x00\x00\x18ftypavis...."));
+
+    // Truncated to fewer bytes than the pattern needs. Chrome errors on these
+    // too -- it cannot decode a header it never received -- so falling short of
+    // the signature lands on the same answer for a different reason.
+    try testing.expectEqual(false, Mime.isImageSignature(""));
+    try testing.expectEqual(false, Mime.isImageSignature(&.{ 0x89, 'P', 'N', 'G' }));
+    try testing.expectEqual(false, Mime.isImageSignature("RIFF\x24\x00\x00\x00WEBP"));
+    try testing.expectEqual(false, Mime.isImageSignature("\x00\x00\x00\x18ftyp"));
+
+    // A page in an image's clothing, and a container we do not render.
+    try testing.expectEqual(false, Mime.isImageSignature("<html><body>hi</body></html>"));
+    try testing.expectEqual(false, Mime.isImageSignature("\x00\x00\x00\x18ftypmp42...."));
+    // SVG has no signature: it is answered from the declared type instead.
+    try testing.expectEqual(false, Mime.isImageSignature("<svg xmlns=\"http://www.w3.org/2000/svg\">"));
 }
 
 const Expectation = struct {
