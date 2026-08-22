@@ -74,6 +74,19 @@ pub fn getNaturalHeight(_: *const Image) u32 {
     return 0;
 }
 
+/// What `width` and `height` answer when no attribute declared one. They
+/// report the rendered box rather than the attribute, and a broken <img> is
+/// rendered as the broken-image icon -- 16, where an element with no box at
+/// all reads 0. Measured on Chrome 151 (probe `expr-broken-image.js`), which
+/// also answers 16 for `width="invalid"` and `width="-5"`: an attribute that
+/// declares nothing usable leaves the box to speak, same as an absent one.
+fn brokenImageIcon(el: *Element) u32 {
+    if (!el.hasBrokenImageBox()) {
+        return 0;
+    }
+    return @intFromFloat(Element.broken_image_icon_size);
+}
+
 pub fn getComplete(_: *const Image) bool {
     // Per spec, complete is true when: no src/srcset, src is empty,
     // image is fully available, or image is broken (with no pending request).
@@ -116,8 +129,8 @@ pub const JsApi = struct {
     pub const src = bridge.accessor(Image.getSrc, Image.setSrc, .{ .ce_reactions = true });
     pub const currentSrc = bridge.accessor(Image.getSrc, null, .{});
     pub const alt = reflect.string("alt");
-    pub const width = reflect.unsignedLong("width", .{});
-    pub const height = reflect.unsignedLong("height", .{});
+    pub const width = reflect.unsignedLong("width", .{ .undeclared = brokenImageIcon });
+    pub const height = reflect.unsignedLong("height", .{ .undeclared = brokenImageIcon });
     pub const crossOrigin = reflect.enumerated("crossorigin", &.{ "anonymous", "use-credentials" }, .{ .missing = null, .nullable = true, .invalid = "anonymous" });
     pub const loading = bridge.accessor(Image.getLoading, Image.setLoading, .{ .ce_reactions = true });
     const reflect = Element.Reflect(Image);

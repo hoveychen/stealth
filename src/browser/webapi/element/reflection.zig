@@ -37,6 +37,10 @@ pub const UnsignedLongOpts = struct {
     fallback: bool = false,
     // clamped to the range [min, max]
     clamp: ?struct { min: u32, max: u32 } = null,
+    // answers the getter wherever `default` would, i.e. whenever the attribute
+    // has nothing usable to say. <img> uses it: `width` and `height` report
+    // the rendered box, and a broken image's box is one no attribute declared.
+    undeclared: ?*const fn (*Element) u32 = null,
 };
 
 pub const EnumOpts = struct {
@@ -184,17 +188,22 @@ pub fn Reflect(comptime T: type) type {
             const min: i64 = if (opts.clamp) |c| c.min else if (opts.positive) 1 else 0;
             const max: i64 = if (opts.clamp) |c| c.max else max_long;
             const R = struct {
+                fn undeclared(el: *Element) u32 {
+                    const answer = opts.undeclared orelse return opts.default;
+                    return answer(el);
+                }
                 fn get(self: *const T) u32 {
-                    const value = element(self).getAttributeSafe(.wrap(attr)) orelse return opts.default;
-                    const parsed = parseInteger(value) orelse return opts.default;
+                    const el = element(self);
+                    const value = el.getAttributeSafe(.wrap(attr)) orelse return undeclared(el);
+                    const parsed = parseInteger(value) orelse return undeclared(el);
                     if (parsed < 0) {
-                        return opts.default;
+                        return undeclared(el);
                     }
                     if (opts.clamp != null) {
                         return @intCast(std.math.clamp(parsed, min, max));
                     }
                     if (parsed < min or parsed > max) {
-                        return opts.default;
+                        return undeclared(el);
                     }
                     return @intCast(parsed);
                 }
