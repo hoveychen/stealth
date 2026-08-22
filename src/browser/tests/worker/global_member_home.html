@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+[Global] is a per-interface annotation, not a per-chain one: only the interface
+that carries it moves its members onto the global object. Measured on headless
+Chrome 151 with a blob worker (expr-worker-global-shape):
+
+  Object.getPrototypeOf(self) === DedicatedWorkerGlobalScope.prototype -> true
+  Object.getOwnPropertyNames(DedicatedWorkerGlobalScope.prototype)     -> PERSISTENT, TEMPORARY, constructor
+  onmessage / postMessage      -> own on self          (DedicatedWorkerGlobalScope is [Global])
+  fetch / isSecureContext      -> WorkerGlobalScope.prototype  (inherited, so it stays put)
+  addEventListener             -> EventTarget.prototype
+
+The window realm is the same rule with a shorter chain, and this engine builds
+both realms from one code path, so the worker side is what keeps a Window fix
+from over-reaching one level up.
+-->
+
+<script id=member_home type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./global-member-home-worker.js');
+    worker.onmessage = (e) => state.resolve(e.data);
+    setTimeout(() => worker.postMessage(0), 100);
+
+    await state.done((data) => {
+      testing.expectEqual(true, data.proto_is_own_interface_prototype);
+      testing.expectEqual('DedicatedWorkerGlobalScope,WorkerGlobalScope,EventTarget,Object',
+        data.chain.join(','));
+
+      // The [Global] interface's own members move onto the global...
+      testing.expectEqual('self', data.holder_onmessage);
+      testing.expectEqual('self', data.holder_postMessage);
+      // ...and the inherited interfaces keep theirs. Chrome's worker global
+      // owns no copy of fetch or isSecureContext.
+      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_fetch);
+      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_isSecureContext);
+      testing.expectEqual('EventTarget.prototype', data.holder_addEventListener);
+
+      // `console` is the exception, and it is not the flattening putting it
+      // there: V8 owns the name on every fresh global, snapshot creation
+      // deletes it, and Env.zig defines this engine's Console over the hole as
+      // an own data property -- which is the shape Chrome reports for it.
+      testing.expectEqual('self', data.holder_console);
+
+      // Chrome also carries the two deprecated quota constants here; this
+      // engine does not declare them on a worker global, so `constructor` is
+      // all that is left once the members move off.
+      testing.expectEqual('constructor', data.dwgs_prototype_own.join(','));
+    });
+  }
+</script>

@@ -31,16 +31,11 @@ the worker global surface follows (336 own names vs 243). This test page is on
       testing.expectEqual(true, data.on_prototype.configurable);
 
       // Chrome's worker global owns no copy -- `self` there answers through the
-      // prototype. This engine's [Global] flattening mirrors every non-static
-      // WorkerGlobalScope accessor onto the global, so it owns one, as it does
-      // for 35 other members (atob, fetch, setTimeout, location, self, ... --
-      // measured). EventTarget's three methods are the exception: the
-      // flattening skips that level in both realms now, so the worker global no
-      // longer owns addEventListener / removeEventListener / dispatchEvent
-      // either, which is Chrome's shape. That leaves this one shape difference,
-      // and the assertion records which side of it we are on rather than
-      // asserting Chrome's answer and failing.
-      testing.expectEqual(true, data.on_self !== null);
+      // prototype -- and neither does this one now: [Global] is a per-interface
+      // annotation, and WorkerGlobalScope is the interface a dedicated worker
+      // *inherits*, not the one that carries [Global]. See
+      // worker/global_member_home.html for the whole shape.
+      testing.expectEqual(null, data.on_self);
 
       // A secure owner, so nothing is gated away. 230 after EventTarget came
       // off the flattening, 231 since ReportBody went on, 233 with Origin and
@@ -50,10 +45,15 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // iterator stopped being named, which are the three of that group of five
       // reachable from a worker (WebGLRenderingContext.zig and ReadableStream.zig
       // are both in worker_common_apis; the SVG and cross-origin-window ones are
-      // window-only).
+      // window-only). Then 23 fewer, once WorkerGlobalScope's 24 members
+      // stopped being mirrored onto the global they do not belong to -- Chrome's
+      // worker owns none of them either. `console` is the one that stays: it is
+      // an own data property of every global, put there per context by Env.zig,
+      // the way Chrome has it. The remaining gap to Chrome's 243 is interface
+      // objects this engine does not have, not member copies.
       testing.expectEqual(8, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(230, data.count);
+      testing.expectEqual(207, data.count);
     });
   }
 </script>
