@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<!--
+Loaded by frames/frame_own_url.html. The parent has already called
+history.replaceState once by the time this runs, so this child's call is the
+second one in the session -- the ordering that used to make the child's URL
+land on the parent.
+-->
+<script>
+  history.replaceState(null, '', '/childmark.html?kid=1');
+  parent.postMessage({
+    childHref: location.href,
+    childOrigin: location.origin,
+    childDocumentURL: document.URL,
+    sameHistory: history === parent.history,
+    sameNavigation: navigation === parent.navigation,
+  }, '*');
+</script>
