@@ -55,6 +55,9 @@ pub const EnumOpts = struct {
 pub fn Reflect(comptime T: type) type {
     return struct {
         const bridge = js.Bridge(T);
+        // The name a refusal built here has to use. Blink names the interface
+        // that *declares* the attribute, and T is that interface.
+        const interfaceName = T.JsApi.Meta.name;
 
         pub fn string(comptime attr: []const u8) js.bridge.Accessor {
             const R = struct {
@@ -169,14 +172,31 @@ pub fn Reflect(comptime T: type) type {
         }
 
         // unsigned, but -1 is used to signal no limit
-        pub fn limitedLong(comptime attr: []const u8) js.bridge.Accessor {
+        // `idl` is the attribute's IDL spelling, which the content attribute
+        // name does not give: maxlength reflects maxLength. It is only here so
+        // the refusal below can name the property Blink names.
+        pub fn limitedLong(comptime attr: []const u8, comptime idl: []const u8) js.bridge.Accessor {
             const R = struct {
                 fn get(self: *const T) i32 {
                     return getLimitedLong(element(self), .wrap(attr));
                 }
                 fn set(self: *T, value: i32, frame: *Frame) !void {
                     if (value < 0) {
-                        return error.IndexSizeError;
+                        // Blink's refusal for a "limited to only non-negative
+                        // numbers" reflected attribute, quoting the value back.
+                        // The interface named is the one that declares the
+                        // attribute, which is why this reads it off T rather
+                        // than writing HTMLElement: maxLength is declared
+                        // separately on HTMLInputElement and
+                        // HTMLTextAreaElement and each names itself (measured
+                        // on Chrome 151, both interfaces, maxLength and
+                        // minLength).
+                        return frame.js.fail(error.IndexSizeError, try std.fmt.allocPrint(
+                            frame.call_arena,
+                            "Failed to set the '" ++ idl ++ "' property on '" ++ interfaceName ++
+                                "': The value provided ({d}) is not positive or 0.",
+                            .{value},
+                        ));
                     }
                     try setInteger(element(self), attr, value, frame);
                 }
@@ -209,7 +229,17 @@ pub fn Reflect(comptime T: type) type {
                 }
                 fn set(self: *T, value: u32, frame: *Frame) !void {
                     if (opts.positive and !opts.fallback and value == 0) {
-                        return error.IndexSizeError;
+                        // Only zero is refused, and the sentence says so rather
+                        // than quoting the value: `input.size = -1` does not
+                        // reach here at all (WebIDL wraps it to 4294967295 and
+                        // Chrome accepts it), while `input.size = 'x'` converts
+                        // to 0 and gets this. The IDL spelling and the content
+                        // attribute name agree for every attribute that reaches
+                        // this, so there is no second name to pass in.
+                        // Measured on Chrome 151.
+                        return frame.js.fail(error.IndexSizeError, "Failed to set the '" ++ attr ++
+                            "' property on '" ++ interfaceName ++
+                            "': The value provided is 0, which is an invalid size.");
                     }
                     // clamping is a getter rule; setting is a plain unsigned long
                     const set_min: i64 = if (opts.positive) 1 else 0;

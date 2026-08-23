@@ -19,3 +19,16 @@
   // testing.expectEqual(null, document.getElementById('p1'));
   // testing.expectEqual(true, document.body.outerHTML.replaceAll(/\n/g, '').startsWith('<body><script id="outerHTML">'));
 </script>
+
+<script id=outer_html_setter_refusal>
+  {
+    // outerHTML on the document element has no parent it may replace, and Blink
+    // says so through the setter lead-in rather than the DOMException's stock
+    // text ("The object can not be modified"). Measured on Chrome 151.
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+    testing.expectEqual(
+      "NoModificationAllowedError: Failed to set the 'outerHTML' property on 'Element': This element's parent is a Document, which may not be modified.",
+      msg(() => { document.documentElement.outerHTML = 'x'; }));
+  }
+</script>

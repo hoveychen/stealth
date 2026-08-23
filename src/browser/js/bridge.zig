@@ -302,9 +302,17 @@ pub const Accessor = struct {
         }
 
         if (@typeInfo(@TypeOf(setter)) != .null) {
+            // The two halves share an Opts, and only this one refuses a value,
+            // so only this one carries the lead-in that names the property.
+            const setter_opts = blk: {
+                var o = opts;
+                o.is_setter = true;
+                break :blk o;
+            };
+
             accessor.setter = struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
-                    Caller.Function.call(T, handle.?, setter, opts);
+                    Caller.Function.call(T, handle.?, setter, setter_opts);
                 }
             }.wrap;
         }

@@ -383,3 +383,19 @@
     testing.expectEqual(null, walker.lastChild());
   }
 </script>
+
+<script id=tree_walker_current_node_refusal>
+  {
+    // The setter's brand check has its own sentence, and it is *not* the one an
+    // operation uses: an argument that fails to convert reads "parameter 1 is not
+    // of type 'Node'.", while the same failure on an attribute reads "Failed to
+    // convert value to 'Node'." with no position at all -- an attribute has only
+    // one incoming value, so there is nothing to number. Measured on Chrome 151.
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    const refused = "TypeError: Failed to set the 'currentNode' property on 'TreeWalker': Failed to convert value to 'Node'.";
+
+    testing.expectEqual(refused, msg(() => { document.createTreeWalker(document.body).currentNode = 1; }));
+    testing.expectEqual(refused, msg(() => { document.createTreeWalker(document.body).currentNode = {}; }));
+    testing.expectEqual(refused, msg(() => { document.createTreeWalker(document.body).currentNode = 'x'; }));
+  }
+</script>

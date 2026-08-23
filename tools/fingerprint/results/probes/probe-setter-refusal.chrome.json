@@ -1,0 +1,278 @@
+{
+ "url.href = 'nope'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'href' property on 'URL': Invalid URL"
+ },
+ "url.href = ''": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'href' property on 'URL': Invalid URL"
+ },
+ "url.protocol = 'no pe'": {
+  "throws": false,
+  "after": "http:"
+ },
+ "url.port = 'nope'": {
+  "throws": false
+ },
+ "url.host = ''": {
+  "throws": false
+ },
+ "location.protocol = 'nope'": {
+  "throws": false
+ },
+ "location.port = 'nope'": {
+  "throws": false
+ },
+ "document.body = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'body' property on 'Document': Failed to convert value to 'HTMLElement'."
+ },
+ "document.body = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'body' property on 'Document': Failed to convert value to 'HTMLElement'."
+ },
+ "document.body = {}": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'body' property on 'Document': Failed to convert value to 'HTMLElement'."
+ },
+ "document.body = document.createTextNode('x')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'body' property on 'Document': Failed to convert value to 'HTMLElement'."
+ },
+ "table.tHead = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'tHead' property on 'HTMLTableElement': Failed to convert value to 'HTMLTableSectionElement'."
+ },
+ "table.tFoot = {}": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'tFoot' property on 'HTMLTableElement': Failed to convert value to 'HTMLTableSectionElement'."
+ },
+ "table.caption = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'caption' property on 'HTMLTableElement': Failed to convert value to 'HTMLTableCaptionElement'."
+ },
+ "video.srcObject = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'srcObject' property on 'HTMLMediaElement': The provided value is not of type '(MediaSourceHandle or MediaStream)'."
+ },
+ "audio.srcObject = {}": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'srcObject' property on 'HTMLMediaElement': The provided value is not of type '(MediaSourceHandle or MediaStream)'."
+ },
+ "treeWalker.currentNode = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'currentNode' property on 'TreeWalker': Failed to convert value to 'Node'."
+ },
+ "treeWalker.currentNode = {}": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'currentNode' property on 'TreeWalker': Failed to convert value to 'Node'."
+ },
+ "document.adoptedStyleSheets = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'adoptedStyleSheets' property on 'Document': The provided value cannot be converted to a sequence."
+ },
+ "input.valueAsDate = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'valueAsDate' property on 'HTMLInputElement': Failed to convert value to 'object'."
+ },
+ "input.valueAsDate = {} (type=date)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'valueAsDate' property on 'HTMLInputElement': The provided value is not a Date."
+ },
+ "document.body = document.createElement('div')": {
+  "throws": true,
+  "name": "HierarchyRequestError",
+  "message": "Failed to set the 'body' property on 'Document': The new body element is of type 'DIV'. It must be either a 'BODY' or 'FRAMESET' element."
+ },
+ "table.tHead = document.createElement('div')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'tHead' property on 'HTMLTableElement': Failed to convert value to 'HTMLTableSectionElement'."
+ },
+ "table.caption = document.createElement('div')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'caption' property on 'HTMLTableElement': Failed to convert value to 'HTMLTableCaptionElement'."
+ },
+ "input.size = 0": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Failed to set the 'size' property on 'HTMLInputElement': The value provided is 0, which is an invalid size."
+ },
+ "textarea.cols = 0": {
+  "throws": false
+ },
+ "textarea.rows = 0": {
+  "throws": false
+ },
+ "input.maxLength = -1": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Failed to set the 'maxLength' property on 'HTMLInputElement': The value provided (-1) is not positive or 0."
+ },
+ "textarea.maxLength = -1": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Failed to set the 'maxLength' property on 'HTMLTextAreaElement': The value provided (-1) is not positive or 0."
+ },
+ "select.length = -1": {
+  "throws": false
+ },
+ "audio.volume = 5": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Failed to set the 'volume' property on 'HTMLMediaElement': The volume provided (5) is outside the range [0, 1]."
+ },
+ "audio.volume = -1": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Failed to set the 'volume' property on 'HTMLMediaElement': The volume provided (-1) is outside the range [0, 1]."
+ },
+ "input.selectionStart = 1 (type=number)": {
+  "throws": true,
+  "name": "InvalidStateError",
+  "message": "Failed to set the 'selectionStart' property on 'HTMLInputElement': The input element's type ('number') does not support selection."
+ },
+ "input.valueAsNumber = 1 (type=text)": {
+  "throws": true,
+  "name": "InvalidStateError",
+  "message": "Failed to set the 'valueAsNumber' property on 'HTMLInputElement': This input element does not support Number values."
+ },
+ "input.valueAsDate = new Date() (type=text)": {
+  "throws": true,
+  "name": "InvalidStateError",
+  "message": "Failed to set the 'valueAsDate' property on 'HTMLInputElement': This input element does not support Date values."
+ },
+ "document.domain = 'evil.test'": {
+  "throws": true,
+  "name": "SecurityError",
+  "message": "Failed to set the 'domain' property on 'Document': 'evil.test' is not a suffix of '127.0.0.1'."
+ },
+ "video.currentTime = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'currentTime' property on 'HTMLMediaElement': The provided double value is non-finite."
+ },
+ "video.currentTime = NaN": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'currentTime' property on 'HTMLMediaElement': The provided double value is non-finite."
+ },
+ "video.currentTime = Infinity": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'currentTime' property on 'HTMLMediaElement': The provided double value is non-finite."
+ },
+ "audio.playbackRate = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to set the 'playbackRate' property on 'HTMLMediaElement': The provided double value is non-finite."
+ },
+ "input.valueAsNumber = 'x' (type=number)": {
+  "throws": false
+ },
+ "el.scrollTop = 'x'": {
+  "throws": false,
+  "after": "0"
+ },
+ "canvas.width = 'x'": {
+  "throws": false,
+  "after": "0"
+ },
+ "img.width = -1": {
+  "throws": false,
+  "after": "0"
+ },
+ "xhr.responseType = 'nope'": {
+  "throws": false,
+  "after": ""
+ },
+ "history.scrollRestoration = 'nope'": {
+  "throws": false,
+  "after": "auto"
+ },
+ "img.loading = 'nope'": {
+  "throws": false,
+  "after": "auto"
+ },
+ "img.crossOrigin = 'nope'": {
+  "throws": false,
+  "after": "anonymous"
+ },
+ "input.type = 'nope'": {
+  "throws": false,
+  "after": "text"
+ },
+ "el.onclick = 1": {
+  "throws": false,
+  "after": "null"
+ },
+ "xhr.onload = 'x'": {
+  "throws": false,
+  "after": "null"
+ },
+ "'use strict' navigator.userAgent = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Cannot set property userAgent of #<Navigator> which has only a getter"
+ },
+ "'use strict' document.URL = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Cannot set property URL of #<Document> which has only a getter"
+ },
+ "'use strict' el.tagName = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Cannot set property tagName of #<Element> which has only a getter"
+ },
+ "'use strict' window.origin = 'x'": {
+  "throws": false
+ },
+ "sloppy navigator.userAgent = 'x'": {
+  "throws": false,
+  "after": "Mozilla/"
+ },
+ "URL href setter .call(document)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Illegal invocation"
+ },
+ "URL href setter .call({})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Illegal invocation"
+ },
+ "Document body setter .call({})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Illegal invocation"
+ },
+ "documentElement.outerHTML = 'x'": {
+  "throws": true,
+  "name": "NoModificationAllowedError",
+  "message": "Failed to set the 'outerHTML' property on 'Element': This element's parent is a Document, which may not be modified."
+ },
+ "descriptors": {
+  "URL.href set.name": "set href",
+  "URL.href set.length": 1,
+  "Document.body set.name": "set body",
+  "Document.body set.length": 1
+ }
+}

@@ -189,7 +189,7 @@ fn _constructor(self: *Caller, comptime T: type, func: anytype, info: FunctionCa
     const F = @TypeOf(func);
     const local = &self.local;
     const offset: comptime_int = if (opts.new_target) 1 else 0;
-    var args = try getArgs(T, true, F, offset, local, info);
+    var args = try getArgs(T, true, false, F, offset, local, info);
     if (comptime opts.new_target) {
         const new_target_handle = v8.v8__FunctionCallbackInfo__NewTarget(info.handle).?;
         @field(args, "0") = js.Function{ .local = local, .handle = @ptrCast(new_target_handle) };
@@ -728,13 +728,33 @@ fn isIdlSequence(comptime T: type) bool {
     }
 }
 
+// Blink's third lead-in, the one an attribute uses: "Failed to set the 'href'
+// property on 'URL': ". The property is named the way the interface spells it,
+// not the way the accessor function does -- `href`, never `set href` -- and it
+// comes from the setter template's data, which Snapshot fills in. An accessor
+// that carries none (console.memory is the only anonymous one) has no sentence
+// to write, so this answers null and its caller keeps whatever it had.
+//
+// This is for the one refusal a setter cannot write for itself: the value
+// failed to convert, so the bridge refused before the Zig function ever ran and
+// there is no site to hold the sentence. A setter that refuses from inside its
+// own steps writes its whole sentence there, which is what every hand-written
+// "Failed to set the ..." in webapi/ is doing -- see dictionary.SetterReader.
+fn setterPrefix(comptime T: type, local: *const Local, info: FunctionCallbackInfo) ?[]const u8 {
+    const property = info.operationName(local) orelse return null;
+    const fmt = comptime "Failed to set the '{s}' property on '" ++ interfaceName(T) ++ "': ";
+    return std.fmt.allocPrint(local.call_arena, fmt, .{property}) catch null;
+}
+
 // Blink's sentence for an argument it could not convert. The prefix is the same
 // one the arity sentence uses -- the interface, and for an operation its name --
 // and the detail says which parameter and what it wanted. Both halves are
 // comptime except the operation's name, which only the template's data knows.
+
 fn conversionFailure(
     comptime T: type,
     comptime is_constructor: bool,
+    comptime is_setter: bool,
     comptime detail: []const u8,
     local: *const Local,
     info: FunctionCallbackInfo,
@@ -743,9 +763,15 @@ fn conversionFailure(
         return local.ctx.fail(error.TypeError, comptime "Failed to construct '" ++
             interfaceName(T) ++ "': " ++ detail);
     }
-    // No name means this is not an operation's template -- an accessor's
-    // carries no data -- so we cannot write the prefix. Keep the old generic
-    // refusal rather than half a sentence.
+    if (comptime is_setter) {
+        const prefix = setterPrefix(T, local, info) orelse return error.InvalidArgument;
+        const message = std.mem.concat(local.call_arena, u8, &.{ prefix, detail }) catch
+            return error.OutOfMemory;
+        return local.ctx.fail(error.TypeError, message);
+    }
+    // No name means this is not an operation's template -- an accessor's getter
+    // half carries no data -- so we cannot write the prefix. Keep the old
+    // generic refusal rather than half a sentence.
     const operation = info.operationName(local) orelse return error.InvalidArgument;
     const fmt = comptime "Failed to execute '{s}' on '" ++ interfaceName(T) ++ "': " ++ detail;
     const message = std.fmt.allocPrint(local.call_arena, fmt, .{operation}) catch return error.OutOfMemory;
@@ -1053,6 +1079,11 @@ pub const Function = struct {
         // window.webkitURL both come back with enumerable: false (measured on a
         // headed Chrome 150).
         enumerable: bool = true,
+        // Accessors only, and only the setter half: it changes which of Blink's
+        // three lead-ins a refusal carries. An operation reads "Failed to
+        // execute 'x' on 'Y'", an attribute "Failed to set the 'x' property on
+        // 'Y'". Set by bridge.Accessor.init, never by a member.
+        is_setter: bool = false,
         // Accessors only. Blink names every WebIDL attribute's accessor pair
         // "get X"/"set X" (measured: Navigator.prototype.userAgent, Document
         // .prototype.title, performance.memory), but console.memory is V8's own
@@ -1161,12 +1192,12 @@ pub const Function = struct {
 
         var args: ParameterTypes(F) = undefined;
         if (comptime opts.static) {
-            args = try getArgs(T, false, F, 0, local, info);
+            args = try getArgs(T, false, opts.is_setter, F, 0, local, info);
         } else if (comptime opts.embedded_receiver) {
-            args = try getArgs(T, false, F, 1, local, info);
+            args = try getArgs(T, false, opts.is_setter, F, 1, local, info);
             @field(args, "0") = @ptrCast(@alignCast(info.getData() orelse unreachable));
         } else {
-            args = try getArgs(T, false, F, 1, local, info);
+            args = try getArgs(T, false, opts.is_setter, F, 1, local, info);
             @field(args, "0") = try TaggedOpaque.fromJS(*T, info.getThis());
         }
         const res = @call(.auto, func, args);
@@ -1284,7 +1315,7 @@ pub const Function = struct {
 // Finally, if the JS function is called with _more_ parameters and
 // the last parameter in Zig is an array, we'll try to slurp the additional
 // parameters into the array.
-fn getArgs(comptime T: type, comptime is_constructor: bool, comptime F: type, comptime offset: usize, local: *const Local, info: FunctionCallbackInfo) !ParameterTypes(F) {
+fn getArgs(comptime T: type, comptime is_constructor: bool, comptime is_setter: bool, comptime F: type, comptime offset: usize, local: *const Local, info: FunctionCallbackInfo) !ParameterTypes(F) {
     var args: ParameterTypes(F) = undefined;
 
     const params = @typeInfo(F).@"fn".params[offset..];
@@ -1400,6 +1431,7 @@ fn getArgs(comptime T: type, comptime is_constructor: bool, comptime F: type, co
                     return conversionFailure(
                         T,
                         is_constructor,
+                        is_setter,
                         "The provided value cannot be converted to a sequence.",
                         local,
                         info,
@@ -1414,6 +1446,7 @@ fn getArgs(comptime T: type, comptime is_constructor: bool, comptime F: type, co
                         return conversionFailure(
                             T,
                             is_constructor,
+                            is_setter,
                             "The provided value is not of type '" ++ dict_name ++ "'.",
                             local,
                             info,
@@ -1421,10 +1454,20 @@ fn getArgs(comptime T: type, comptime is_constructor: bool, comptime F: type, co
                     }
                 }
                 if (comptime idlTypeName(param.type.?)) |type_name| {
+                    // An attribute takes one value, so Blink's sentence for it
+                    // counts nothing and is not the one an operation's
+                    // parameter gets: `treeWalker.currentNode = 1` reads
+                    // "Failed to convert value to 'Node'." where the same
+                    // failure on an argument reads "parameter 1 is not of type
+                    // 'Node'." (measured on Chrome 151).
                     return conversionFailure(
                         T,
                         is_constructor,
-                        comptime std.fmt.comptimePrint("parameter {d} is not of type '{s}'.", .{ i + 1, type_name }),
+                        is_setter,
+                        if (is_setter)
+                            "Failed to convert value to '" ++ type_name ++ "'."
+                        else
+                            comptime std.fmt.comptimePrint("parameter {d} is not of type '{s}'.", .{ i + 1, type_name }),
                         local,
                         info,
                     );

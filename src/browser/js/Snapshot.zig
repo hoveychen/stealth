@@ -1259,6 +1259,13 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
     const setter_callback = if (value.setter) |setter| blk: {
         const cb = v8.v8__FunctionTemplate__New__Config(isolate, &.{
             .callback = setter,
+            // The attribute's name, handed to the callback as its data, the
+            // same way an operation's template carries its own: a setter that
+            // refuses a value names the property it refused it for ("Failed to
+            // set the 'href' property on 'URL'") and has no other way to reach
+            // the name. See Caller.setterPrefix. The getter half needs none --
+            // it converts nothing and so refuses nothing.
+            .data = @ptrCast(js_name),
             .signature = getter_signature,
             .length = if (value.anonymous) 0 else 1,
         }).?;
@@ -1270,10 +1277,19 @@ fn attachAccessorProperty(comptime name: [:0]const u8, value: bridge.Accessor, i
         break :blk cb;
     } else null;
 
+    // No ReadOnly bit for a getter-only accessor. WebIDL says a read-only
+    // attribute *is* an accessor whose setter is absent, and the bit on top of
+    // that is not the same thing: it decides which of V8's two refusals a
+    // strict-mode write gets. With it, `navigator.userAgent = 'x'` reads
+    // "Cannot assign to read only property 'userAgent' of object
+    // '#<Navigator>'" -- V8's sentence for a non-writable *data* property, and
+    // naming the receiver. Without it V8 walks into the accessor pair, finds no
+    // setter, and says what Chrome says: "Cannot set property userAgent of
+    // #<Navigator> which has only a getter", naming the holder. The two
+    // descriptors are byte-identical either way (measured on both engines), so
+    // the throw is the only place this shows -- which is exactly the kind of
+    // difference a detector reads and a value-comparing test cannot.
     var attribute: v8.PropertyAttribute = 0;
-    if (value.setter == null) {
-        attribute |= v8.ReadOnly;
-    }
     if (value.deletable == false) {
         attribute |= v8.DontDelete;
     }

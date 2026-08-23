@@ -255,9 +255,26 @@ pub fn setDomain(self: *Document, value: []const u8) !void {
 
     // Validate against the current effective domain. Once relaxed,
     // document.domain can only broaden further.
+    //
+    // Blink writes two different details behind the same lead-in and both quote
+    // the value back. The empty string gets its own sentence rather than falling
+    // through to the suffix one, and a public suffix ('com') gets the suffix
+    // sentence like any other non-match -- there is no separate
+    // top-level-domain wording. Measured on Chrome 151 from a 127.0.0.1 page.
+    const prefix = "Failed to set the 'domain' property on 'Document': ";
     const base = self.getDomain(doc_frame);
+    if (value.len == 0) {
+        return doc_frame.js.fail(error.SecurityError, prefix ++ "'' is an empty domain.");
+    }
     if (isRelaxableTo(base, requested) == false) {
-        return error.SecurityError;
+        // call_arena, not the local one: handleError reads the message after
+        // this frame is gone, and local_arena is reset before it gets there --
+        // which showed up as a SecurityError carrying a run of blanks.
+        return doc_frame.js.fail(error.SecurityError, try std.fmt.allocPrint(
+            doc_frame.call_arena,
+            prefix ++ "'{s}' is not a suffix of '{s}'.",
+            .{ value, base },
+        ));
     }
 
     // When the domain is explicitly set, it only matches other explicitly set

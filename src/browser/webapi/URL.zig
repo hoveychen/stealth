@@ -305,7 +305,14 @@ pub fn setHref(self: *URL, value: []const u8, exec: *const Execution) !void {
     // must not free self._url before we know we have a replacement, or any
     // later access would be a use-after-free).
     var err: i32 = 0;
-    const url = U.url_parse(value.ptr, value.len, &err) orelse return error.TypeError;
+    // The same detail the constructor gives an unparseable input, behind the
+    // lead-in an attribute gets instead of "Failed to construct". Without a
+    // message this threw `TypeError: ` with an empty string, which no browser
+    // does and which needs no wording table to spot.
+    const url = U.url_parse(value.ptr, value.len, &err) orelse return exec.js.fail(
+        error.TypeError,
+        "Failed to set the 'href' property on 'URL': Invalid URL",
+    );
 
     U.url_free(self._url);
     self._url = url;

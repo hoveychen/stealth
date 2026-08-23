@@ -318,3 +318,45 @@
   });
 }
 </script>
+
+<script id=read_only_attribute_strict_refusal>
+  {
+    // A read-only WebIDL attribute is an accessor with no setter, and in strict
+    // mode V8 -- not Blink -- writes the refusal. Which of V8's two sentences it
+    // picks is decided by how the property was installed, and the difference is
+    // invisible to getOwnPropertyDescriptor: an accessor pair whose setter is
+    // absent reads "which has only a getter", while one that additionally carries
+    // the ReadOnly attribute bit reads "Cannot assign to read only property",
+    // V8's sentence for a non-writable *data* property. Both descriptors come
+    // back identical, so this throw is the only place the difference shows.
+    //
+    // The object V8 names is the holder -- the prototype the accessor lives on --
+    // not the receiver, so writing document.URL names Document and not
+    // HTMLDocument. Measured on Chrome 151.
+    // Each write carries its own 'use strict': a directive is only a directive
+    // at the top of a script or a function body, and this script's body is a
+    // block so that its `const`s do not collide with the ones above.
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+    testing.expectEqual(
+      'TypeError: Cannot set property userAgent of #<Navigator> which has only a getter',
+      msg(() => { 'use strict'; navigator.userAgent = 'x'; }));
+    testing.expectEqual(
+      'TypeError: Cannot set property URL of #<Document> which has only a getter',
+      msg(() => { 'use strict'; document.URL = 'x'; }));
+    testing.expectEqual(
+      'TypeError: Cannot set property tagName of #<Element> which has only a getter',
+      msg(() => { 'use strict'; document.documentElement.tagName = 'x'; }));
+    // Node.prototype, one prototype further up, names itself and not Element.
+    testing.expectEqual(
+      'TypeError: Cannot set property nodeType of #<Node> which has only a getter',
+      msg(() => { 'use strict'; document.nodeType = 1; }));
+
+    // The bit is invisible from here, which is why the throw above is the test.
+    const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');
+    testing.expectEqual('configurable,enumerable,get,set', Object.keys(desc).sort().join(','));
+    testing.expectEqual(undefined, desc.set);
+    testing.expectEqual(true, desc.configurable);
+    testing.expectEqual(true, desc.enumerable);
+  }
+</script>
