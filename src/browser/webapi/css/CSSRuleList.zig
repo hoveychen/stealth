@@ -74,3 +74,8 @@ pub const JsApi = struct {
     pub const @"[]" = bridge.indexed(CSSRuleList.item, null, .{ .null_as_undefined = true });
     pub const symbol_iterator = bridge.iterator(CSSRuleList.values, .{});
 };
+
+const testing = @import("../../../testing.zig");
+test "WebApi: indexed own names" {
+    try testing.htmlRunner("css/indexed_own_names.html", .{});
+}
