@@ -50,7 +50,7 @@ const MAX_RECORDS = Number(arg('--max-records', '9000'));
 // the fortieth did not. A per-key ceiling keeps one hot accessor from spending
 // the whole budget on itself.
 const PER_KEY = Number(arg('--per-key', '60'));
-const VALUE_CAP = Number(arg('--value-cap', '400'));
+const VALUE_CAP = Number(arg('--value-cap', '4000'));
 const headedUa = has('--headed-ua');
 
 const MARK = '@@FORD@@';
@@ -197,6 +197,43 @@ const RECORDER = `(function () {
   wrapMethod(G.Intl && G.Intl.DateTimeFormat && G.Intl.DateTimeFormat.prototype,
              'resolvedOptions', 'Intl.DateTimeFormat.resolvedOptions()');
   wrapMethod(G.Math, 'random', 'Math.random()');
+
+  // Enumeration, which the accessor wrappers cannot see. A collector that asks
+  // for a whole name list gets one string per call and none of it passes a
+  // getter, so a surplus made of names -- an engine with globals the reference
+  // does not have -- is invisible above and visible here. The brand of the
+  // argument goes in the key, so getOwnPropertyNames of window is its own row.
+  function wrapEnumerator(owner, key, label) {
+    if (!owner) return;
+    var original;
+    try { original = owner[key]; } catch (e) { return; }
+    if (typeof original !== 'function') return;
+    try {
+      owner[key] = disguise(function (target) {
+        var v = original.apply(this === undefined ? globalThis : this, arguments);
+        try {
+          var brand = 'other';
+          try { brand = Object.prototype.toString.call(target); } catch (e) { /* exotic */ }
+          record(label + brand, v);
+        } catch (e) { /* keep going */ }
+        return v;
+      }, original);
+    } catch (e) { /* non-writable */ }
+  }
+
+  wrapEnumerator(Object, 'getOwnPropertyNames', 'Object.getOwnPropertyNames');
+  wrapEnumerator(Object, 'getOwnPropertySymbols', 'Object.getOwnPropertySymbols');
+  wrapEnumerator(Object, 'keys', 'Object.keys');
+  wrapEnumerator(Object, 'values', 'Object.values');
+  wrapEnumerator(Object, 'entries', 'Object.entries');
+  wrapEnumerator(Object, 'getOwnPropertyDescriptors', 'Object.getOwnPropertyDescriptors');
+  wrapEnumerator(Object, 'getPrototypeOf', 'Object.getPrototypeOf');
+  wrapEnumerator(G.Reflect, 'ownKeys', 'Reflect.ownKeys');
+
+  // What a function says about itself. A page that reads the source text of a
+  // built-in is checking for a wrapper, and a page that reads its own is
+  // hashing it.
+  wrapMethod(proto('Function'), 'toString', 'Function.toString()');
 
   // The cut line. Only reads that happened before the first send can be in the
   // body it carried, so the report needs to know where it was.

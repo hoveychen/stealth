@@ -10655,3 +10655,83 @@ None of these can be attributed to a byte count from here: the payload is
 encrypted and there is no field boundary to attribute against. They are the set
 of things the widget was told and was told wrong, and the round-1 length is the
 instrument that says whether closing them moves it. That is P3.
+
+## Five of the six are closed, and the payload did not move (P3, 2026-08-23)
+
+Every difference P2 found is fixed and re-measured, and none of them was the
+150 bytes.
+
+| what | before | after |
+|---|---|---|
+| `performance.timeOrigin` | `244508796.7`, boot-relative | `1787495569894.4`, epoch ms |
+| `timeOrigin + now() - Date.now()` | `-1 787 250 459 740` | **1**, Chrome's answer exactly |
+| `window.window` / `window.top` descriptor | `configurable: true` | `false`, like `location` and `document` |
+| `<style>.innerText` | `""` | its CSS |
+| `display:none` div's `innerText` | `"one\n\ntwo"` | `"onetwo"` |
+| `JSON.stringify(el.classList)` | `{}` | `{"0":"one","1":"two"}` |
+| cross-origin child's `frameElement` | the `<iframe>` | `null` |
+
+The last one is the only one that needs a frame boundary to show, and it is
+also the only one with a plausible story about *volume*: a widget that can
+reach the element embedding it can read the embedder's attributes. It reads
+`null` now, the way Chrome's does.
+
+Three runs afterwards, `dev.979+9cd217ce7`, with an oracle control in the same
+sitting (`results/r1len-after-*.json`):
+
+| arm | page `fo/` #1 | widget `fo/` #1 |
+|---|---|---|
+| here a | 2 306 | 4 855 |
+| here b | 2 316 | 4 866 |
+| here c | 2 306 | 4 876 |
+| oracle | 2 306 | **4 716** |
+
+That is the same distribution as before the change, wobble and all. **The
+surplus is not made of the values the widget reads.**
+
+### What the tracer can now see, and what it cannot
+
+Rerun with the fixes in and an enumeration pass added — `Object.keys`,
+`getOwnPropertyNames`, `getOwnPropertySymbols`, `values`, `entries`,
+`getOwnPropertyDescriptors`, `getPrototypeOf`, `Reflect.ownKeys` and
+`Function.prototype.toString`, each keyed by the brand of its argument
+(`results/r1enum-{lp,oracle}-1.json`) — five keys differ across the arms and
+four of them are a clock or a `Math.random()`. `window.window`, `window.top`,
+`innerText` and `classList` have all dropped out of the diff, which is the
+station confirming the fixes from the other side.
+
+The enumeration pass is a clean negative and it rules out the biggest
+outstanding suspect. In the widget realm, before the round-1 POST, this engine
+makes **three** enumeration calls: `Function.prototype.toString` twice (both
+`function eval() { [native code] }`) and one `Object.keys` returning
+`["window"]`. Nothing walks `window`. So the ~112 plaintext bytes are not a
+list of globals, which was the obvious candidate given this engine carries 237
+own names on `window` that Chrome does not.
+
+Stack strings are ruled out too, off the station:
+`probes/expr-error-stack-shape.js` reads byte-identical on both engines for a
+bare `Error`, one with a message, a nested call, and a native `TypeError` —
+same length, same line count, same wording, same `Error.stackTraceLimit`.
+
+Two named leads survive, neither of which explains the volume on its own:
+
+- **`window.parent` from the widget.** Chrome's cross-origin WindowProxy makes
+  `JSON.stringify` of it throw, so the tracer records `[object Object]`; ours
+  returns `{}`, meaning the stringify walked it. Something on the must-deny
+  list — `toJSON` at least — is reachable through the inbound proxy here.
+- **`performance.timing.secureConnectionStart`** is `0` here on an https load
+  and a real stamp in Chrome. That one makes Chrome's payload *longer*, not
+  ours, so it is a parity bug rather than a candidate for the surplus.
+
+### Where the next attempt should look
+
+The page-level round 1 is 2 306 bytes on both arms, exactly, run after run —
+assembled by the same Cloudflare code family, in the page realm, and it agrees.
+The widget's is 150 longer here. Whatever the surplus is, it is specific to the
+*widget* realm, and it is not a property value, not an enumeration and not a
+stack. What is left that the widget has and the page does not: the DOM it builds
+for itself (an iframe with its own shadow tree and styles) and reads back, and
+the challenge parameters it is handed over `postMessage`. Both are readable with
+the instruments already in this directory — `fo-plaintext.mjs` records the
+trampoline conversation, and the widget's own subtree can be serialised from the
+document realm the recorder is already installed in.
