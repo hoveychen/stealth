@@ -113,21 +113,23 @@
 </script>
 
 <script id=invalid_label>
-  // Test invalid encoding label
-  try {
-    new TextDecoder('invalid-encoding');
-    testing.fail();
-  } catch (e) {
-    testing.expectEqual(true, e.toString().includes('RangeError'));
-  }
+  // Blink echoes the label back verbatim -- not trimmed, not lowercased, and
+  // the empty string included (measured on Chrome 151 over ten labels,
+  // probes/probe-encoding-label.js). This used to be a RangeError with an empty
+  // message, which no browser has.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const invalid = (label) =>
+    `RangeError: Failed to construct 'TextDecoder': The encoding label provided ('${label}') is invalid.`;
 
-  // Test 'replacement' encoding is rejected
-  try {
-    new TextDecoder('replacement');
-    testing.fail();
-  } catch (e) {
-    testing.expectEqual(true, e.toString().includes('RangeError'));
-  }
+  testing.expectEqual(invalid('invalid-encoding'), msg(() => new TextDecoder('invalid-encoding')));
+  testing.expectEqual(invalid('Invalid-Encoding'), msg(() => new TextDecoder('Invalid-Encoding')));
+  testing.expectEqual(invalid('  Invalid-Encoding  '), msg(() => new TextDecoder('  Invalid-Encoding  ')));
+  testing.expectEqual(invalid(''), msg(() => new TextDecoder('')));
+
+  // 'replacement' is a label the encoding registry knows, and a decoder still
+  // refuses it -- with the same sentence (measured).
+  testing.expectEqual(invalid('replacement'), msg(() => new TextDecoder('replacement')));
+  testing.expectEqual(invalid('REPLACEMENT'), msg(() => new TextDecoder('REPLACEMENT')));
 </script>
 
 <script id=label_variations>

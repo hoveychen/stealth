@@ -35,13 +35,13 @@ probe-s6-elements.chrome.json).
 <script id=surface_element_shapes>
   {
     // All three are HTMLElement subclasses. The pieces asserted by hand rather
-    // than through expectInterfaceObject are the constructor refusals: in
-    // Chrome `new X()` is "Failed to construct 'X': Illegal constructor" and a
-    // bare call names the subclass, while this engine answers a bare TypeError
-    // and names HTMLElement. That difference is engine-wide for *every* HTML
-    // element interface -- HTMLPictureElement answers exactly the same
-    // (measured) -- so it is not these three interfaces' to fix and not pinned
-    // here.
+    // than through expectInterfaceObject are the constructor refusals, because
+    // an element interface refuses differently from the GPU* family
+    // expectInterfaceObject was written for: `new X()` is "Failed to construct
+    // 'X': Illegal constructor" but the bare call points at the `new` operator
+    // rather than repeating "Illegal constructor". Both are engine-wide for
+    // every HTML element interface and swept over in
+    // custom_elements/built_in.html, so only the shape is pinned here.
     for (const name of ['HTMLSelectedContentElement', 'HTMLGeolocationElement',
       'HTMLUserMediaElement']) {
       const ctor = window[name];

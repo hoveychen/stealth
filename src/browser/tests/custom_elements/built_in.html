@@ -88,16 +88,63 @@
     testing.expectEqual(true, btn.custom);
 }
 
-// Directly constructing a built-in interface is unsupported and must throw a
-// TypeError (not silently succeed).
+// Directly constructing a built-in interface is unsupported, and Chrome names
+// the interface when it refuses: `new HTMLDivElement()` is "Failed to construct
+// 'HTMLDivElement': Illegal constructor" and the bare call points at the
+// operator. Measured on Chrome 151 over every constructor on the window
+// (probes/probe-ctor-sweep.js); Chrome has no empty constructor message at all.
+// Both forms used to leak here, because one shared callback serves the whole
+// family: `new` threw a TypeError with an empty message, and the bare call
+// named HTMLElement whatever subclass was called.
 {
-    let threw = false;
-    try {
-        new HTMLDivElement();
-    } catch (e) {
-        threw = e instanceof TypeError;
+    const useNew = (n) => `TypeError: Failed to construct '${n}': Please use the 'new' ` +
+        'operator, this DOM object constructor cannot be called as a function.';
+    const raised = (fn) => {
+        try {
+            fn();
+        } catch (e) {
+            return `${e.name}: ${e.message}`;
+        }
+        return null;
+    };
+
+    // Chrome answers the plain call with a bare "Illegal constructor" for these
+    // two: neither is a valid custom element base, so neither carries Blink's
+    // [HTMLConstructor] and neither has a constructor callback to reach
+    // (measured, same probe).
+    const noHtmlConstructor = ['HTMLMediaElement', 'HTMLUnknownElement'];
+    // Left out rather than asserted: Chrome has a distinct interface object per
+    // legacy factory function (window.Audio is not window.HTMLAudioElement),
+    // where this engine has one object under both names. So `new
+    // HTMLAudioElement()` builds an element here and is refused in Chrome --
+    // a missing interface, not a message this change can word differently.
+    const legacyFactoryAlias = ['HTMLAudioElement', 'HTMLImageElement', 'HTMLOptionElement'];
+
+    const names = Object.getOwnPropertyNames(window)
+        .filter((n) => n.startsWith('HTML') && typeof window[n] === 'function')
+        .filter((n) => window[n] !== HTMLElement &&
+            HTMLElement.prototype.isPrototypeOf(window[n].prototype))
+        .filter((n) => !legacyFactoryAlias.includes(n));
+    // The sweep only means something if it really walked the family.
+    testing.expectTrue(names.length > 60);
+    testing.expectTrue(names.includes('HTMLDivElement'));
+    testing.expectTrue(names.includes('HTMLUnknownElement'));
+
+    for (const name of names) {
+        const ctor = window[name];
+        testing.expectEqual(`TypeError: Failed to construct '${name}': Illegal constructor`,
+            raised(() => new ctor()), { label: name });
+        testing.expectEqual(
+            noHtmlConstructor.includes(name) ? 'TypeError: Illegal constructor' : useNew(name),
+            raised(() => ctor()), { label: name });
     }
-    testing.expectEqual(true, threw);
+
+    // HTMLElement itself has its own constructor (a custom element reaches it
+    // through super()), and its refusal used to be an Error rather than a
+    // TypeError with no interface named.
+    testing.expectEqual("TypeError: Failed to construct 'HTMLElement': Illegal constructor",
+        raised(() => new HTMLElement()));
+    testing.expectEqual(useNew('HTMLElement'), raised(() => HTMLElement()));
 }
 
 {
