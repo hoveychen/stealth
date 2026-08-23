@@ -9496,3 +9496,35 @@ the url was being eaten as its value) and did not wait, so `fetch` serialized an
 empty `#out` after 14 ms and the driver decoded the marker text out of the
 script source. It passes `--dump html` and a guarded `--wait-script` now, and
 `WAIT_MS` (default 30 s) sets the ceiling.
+
+#### And on the station (2026-08-23)
+
+Both arms rerun in one sitting (`results/p4b-oracle.json` clears,
+`results/p4b-lp.json` gets `Just a moment...`). Every realm on our arm now
+answers `opfs: true`, matching the oracle realm for realm — the third and last
+row of the E3 table. And the probe is not just permitted, it is asked and
+answered: the widget posted the `~function(){navigator.storage.getDirectory()…}`
+source into its blob worker on both arms and got a number back, `0.455` on the
+oracle and `1.245` here. Both are multiples of their realm's clamp (91 and 249
+steps of 5 μs), which is the isolation bit and the clock clamp from the two
+previous plans showing up in a third place.
+
+The challenge still refuses (`cf-chl-gen`). All three rows of the E3 table are
+closed now and none of them was the deciding property.
+
+What the same sitting shows still differing, as leads rather than findings —
+none of these was chased:
+
+- The oracle arm records two `fetch` calls from the widget's realms; our arm
+  records none.
+- `subtle.digest` is called 66 times on our arm against the oracle's 15, and its
+  data argument arrives as a plain object here (`{"0":48,"1":124,…}`) where the
+  oracle passes an ArrayBuffer view. The offline `typedarray` probe in
+  `probes/expr-trampoline.js` says both engines agree on `ArrayBuffer.isView`,
+  so whatever produces the object is upstream of the call, not the argument
+  conversion.
+- The largest thing the oracle hands to `JSON.stringify` is a 30 902-character
+  CSS property enumeration (`{"0":"accent-color","1":"align-content",…}`) and the
+  string it then encodes is 15 361 characters. Ours encodes 1 999. That is an
+  order-of-magnitude difference in how much the widget managed to collect, and
+  it is the biggest single gap left in this table.
