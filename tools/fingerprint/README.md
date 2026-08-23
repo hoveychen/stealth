@@ -9424,3 +9424,21 @@ other two rows and they have their own plans.
 The challenge itself still refuses (`cf-chl-gen`, same as before), so this was
 not the deciding property. It was a real one-property disagreement on the page
 that is looking, and it is gone.
+
+### And the clock row, with one digit left over (2026-08-23)
+
+`performance.now()`'s clamp follows the same isolation bit now. Rerun on the
+station (`results/p3-clock-lp.json`), the widget's clock probe answers
+`0.0049999999999954525` where the previous run answered
+`0.09999999999990905` — the fine clamp instead of the coarse one, which is the
+row this plan was for.
+
+It is not bit-identical to the oracle's `0.004999995231628418`. Both are 5 μs;
+the difference is in how the number was arrived at, not in what was measured,
+and where Chrome's representation artifact comes from is not known here. A
+fingerprinter comparing the exact double would still see two engines. Worth its
+own plan if anything turns out to read it that closely; the clamp *step* is what
+the timing-attack surface is, and that now agrees.
+
+The challenge still refuses (`cf-chl-gen`). Two of the three rows from the E3
+table are closed; OPFS is the third.
