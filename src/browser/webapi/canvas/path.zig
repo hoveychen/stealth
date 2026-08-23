@@ -247,17 +247,31 @@ pub const Path = struct {
         if (!finite2(start_angle, end_angle)) return;
         if (rx < 0 or ry < 0) return;
 
-        // The spec's sweep: clockwise runs forward to the end angle, and a full
-        // turn is used rather than nothing when the two angles coincide the
-        // wrong way round.
+        // The sweep, normalised the way Chrome 151 normalises it (measured —
+        // see the `arc counterclockwise` block in the 2D context's tests for
+        // the ten readings this reproduces).
+        //
+        // A sweep that runs against the requested direction wraps by whole
+        // turns until it agrees with it, and a sweep of exactly one turn
+        // against the direction becomes a whole turn rather than nothing —
+        // which is what `arc(…, 0, 2 * Math.PI, true)` is, and what the
+        // Turnstile widget draws every one of its circles with. A sweep past a
+        // full turn *with* the direction clamps to one turn; against it, it
+        // wraps. Only two angles that are exactly equal draw nothing.
         var sweep = end_angle - start_angle;
         const tau = std.math.tau;
         if (counterclockwise) {
-            if (sweep > 0) sweep = @max(-tau, sweep - tau);
-            if (sweep < -tau) sweep = -tau;
+            if (sweep > 0) {
+                sweep = @rem(sweep, tau) - tau;
+            } else if (sweep < -tau) {
+                sweep = -tau;
+            }
         } else {
-            if (sweep < 0) sweep = @min(tau, sweep + tau);
-            if (sweep > tau) sweep = tau;
+            if (sweep < 0) {
+                sweep = @rem(sweep, tau) + tau;
+            } else if (sweep > tau) {
+                sweep = tau;
+            }
         }
 
         const cos_r = @cos(rotation);
@@ -418,4 +432,26 @@ test "path: a full circle closes on its own start" {
     try testing.expect(points.len > 16);
     try testing.expectApproxEqAbs(points[0].x, points[points.len - 1].x, 1e-9);
     try testing.expectApproxEqAbs(points[0].y, points[points.len - 1].y, 1e-9);
+}
+
+test "path: a counterclockwise turn of exactly tau is a whole circle" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    // Measured against Chrome 151: arc(0, 2pi, true) fills the same disc as
+    // arc(0, 2pi), rather than the nothing a naive `sweep - tau` gives.
+    var ccw: Path = .{};
+    try ccw.arc(alloc, 0, 0, 1, 0, std.math.tau, true, Transform.identity);
+    var cw: Path = .{};
+    try cw.arc(alloc, 0, 0, 1, 0, std.math.tau, false, Transform.identity);
+    try testing.expectEqual(cw.subpaths.items[0].points.items.len, ccw.subpaths.items[0].points.items.len);
+
+    // And a turn and a half against the direction wraps rather than clamping:
+    // 3pi counterclockwise is half a turn, not a whole one.
+    var three: Path = .{};
+    try three.arc(alloc, 0, 0, 1, 0, 3 * std.math.pi, true, Transform.identity);
+    var half: Path = .{};
+    try half.arc(alloc, 0, 0, 1, 0, -std.math.pi, true, Transform.identity);
+    try testing.expectEqual(half.subpaths.items[0].points.items.len, three.subpaths.items[0].points.items.len);
 }

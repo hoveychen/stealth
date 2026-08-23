@@ -203,3 +203,24 @@
     Object.prototype.toString.call(document.createElement('canvas').getContext('experimental-webgl')));
 }
 </script>
+
+<script id="OffscreenCanvas#resize resets the context">
+{
+  // The same reset the canvas element does — and the path the Turnstile
+  // widget actually takes, since it reuses one OffscreenCanvas at half a
+  // dozen sizes and relies on the resize to clear the transform between them.
+  const canvas = new OffscreenCanvas(8, 8);
+  const ctx = canvas.getContext('2d');
+
+  ctx.scale(2, 2);
+  ctx.fillStyle = '#ff0000';
+  ctx.save();
+  canvas.width = 8;
+
+  testing.expectEqual(1, ctx.getTransform().a);
+  testing.expectEqual('#000000', ctx.fillStyle);
+  ctx.scale(5, 5);
+  ctx.restore();
+  testing.expectEqual(5, ctx.getTransform().a);
+}
+</script>

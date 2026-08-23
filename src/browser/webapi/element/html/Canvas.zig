@@ -76,13 +76,15 @@ pub fn setHeight(self: *Canvas, value: u32, frame: *Frame) !void {
     self.resetSurface();
 }
 
-/// Assigning to `width` or `height` clears the bitmap even when the value is
-/// unchanged. Going through the attribute instead (`setAttribute("width", …)`)
-/// is caught later, when the raster notices the dimensions moved.
+/// Assigning to `width` or `height` resets the whole context even when the
+/// value is unchanged — transform, paint, path and the save() stack, not just
+/// the bitmap (measured against Chrome 151). Going through the attribute
+/// instead (`setAttribute("width", …)`) is caught later, when the raster
+/// notices the dimensions moved.
 fn resetSurface(self: *Canvas) void {
     const cached = self._cached orelse return;
     switch (cached) {
-        .@"2d" => |context| context._surface.reset(),
+        .@"2d" => |context| context.reset(),
         .webgl, .webgl2, .webgpu, .bitmaprenderer => {},
     }
 }

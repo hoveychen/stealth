@@ -71,11 +71,14 @@ pub fn setHeight(self: *OffscreenCanvas, value: u32) void {
     self.resetSurface();
 }
 
-/// Resizing clears the bitmap, even when the value does not change.
+/// Resizing resets the whole context — transform, paint, path and the save()
+/// stack, not just the bitmap — even when the value does not change. This is
+/// the reset the Turnstile widget relies on: it reuses one canvas at half a
+/// dozen sizes and never clears the transform itself.
 fn resetSurface(self: *OffscreenCanvas) void {
     const cached = self._cached orelse return;
     switch (cached) {
-        .@"2d" => |context| context._surface.reset(),
+        .@"2d" => |context| context.reset(),
         // Nothing is rasterised behind a WebGL or WebGPU context, so there is
         // no bitmap to clear; the drawing-buffer size is read live off this
         // canvas.

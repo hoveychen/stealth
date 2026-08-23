@@ -767,3 +767,92 @@
   testing.expectEqual(1, ctx.getTransform().a);
 }
 </script>
+
+<script id="CanvasRenderingContext2D#resize resets the context">
+{
+  // Assigning to width or height resets the whole context, not just the
+  // bitmap: transform, paint, path and the save() stack all go. Measured
+  // against Chrome 151, including that assigning the value it already has
+  // still counts as an assignment.
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 8;
+  const ctx = canvas.getContext('2d');
+
+  ctx.scale(2, 2);
+  ctx.fillStyle = '#ff0000';
+  ctx.lineWidth = 7;
+  ctx.font = '30px monospace';
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(4, 4);
+  ctx.save();
+
+  canvas.width = 8;
+
+  testing.expectEqual(1, ctx.getTransform().a);
+  testing.expectEqual('#000000', ctx.fillStyle);
+  testing.expectEqual(1, ctx.lineWidth);
+  testing.expectEqual('10px sans-serif', ctx.font);
+  testing.expectEqual(1, ctx.globalAlpha);
+
+  // The path went with it, so stroking now lands no ink at all.
+  ctx.strokeStyle = '#00ff00';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  const data = ctx.getImageData(0, 0, 8, 8).data;
+  let ink = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) ink++;
+  testing.expectEqual(0, ink);
+
+  // And so did the save() stack: this restore has nothing to pop.
+  ctx.scale(5, 5);
+  ctx.restore();
+  testing.expectEqual(5, ctx.getTransform().a);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#arc counterclockwise">
+{
+  // How a counterclockwise sweep normalises, measured against Chrome 151 on a
+  // 64x64 canvas with r=25 (ink pixels in brackets):
+  //
+  //   arc(0, 2pi)          2032   arc(0, 2pi, true)          2032   a full turn
+  //   arc(0, 2pi + pi/2)   2032   arc(0, 2pi + pi/2, true)   1843
+  //   arc(0, -pi)          1012   arc(0, -pi, true)          1012
+  //   arc(0, -3pi)         1012   arc(0, 3pi, true)          1012
+  //   arc(0, pi/2)          206   arc(0, pi/2, true)         1843
+  //
+  // So a counterclockwise turn of exactly 2pi is a whole circle rather than
+  // nothing, and anything past one turn wraps rather than clamping. This is
+  // the call the Turnstile widget makes: every one of its arcs passes true.
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  ctx.fillStyle = '#ff0000';
+  ctx.beginPath();
+  ctx.arc(8, 8, 5, 0, Math.PI * 2, true);
+  ctx.fill();
+  testing.expectEqual([255, 0, 0, 255], at(8, 8));
+
+  // A counterclockwise quarter is the long way round, so it covers the left
+  // of the disc that the clockwise quarter does not.
+  ctx.reset();
+  ctx.fillStyle = '#ff0000';
+  ctx.beginPath();
+  ctx.arc(8, 8, 5, 0, Math.PI / 2, true);
+  ctx.fill();
+  testing.expectEqual([255, 0, 0, 255], at(5, 8));
+
+  ctx.reset();
+  ctx.fillStyle = '#ff0000';
+  ctx.beginPath();
+  ctx.arc(8, 8, 5, 0, Math.PI / 2, false);
+  ctx.fill();
+  testing.expectEqual([0, 0, 0, 0], at(5, 8));
+}
+</script>
