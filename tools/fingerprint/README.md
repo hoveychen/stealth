@@ -8838,9 +8838,11 @@ Arms: `results/xhr-post-{hints,nohints}-lightpanda.json` against
 
 `cf-scrapingcourse` still ends on `Just a moment...`, and its three POSTs are
 still answered with `cf-chl-gen` — a fresh challenge
-(`results/cfsc-fo-lp-xhrpost.json`). That is the expected outcome while the
-headless Chrome oracle fails the same station the same way (previous chapter):
-the gate there is not the POST's header shape. The 15-station sweep reads
+(`results/cfsc-fo-lp-xhrpost.json`). The next chapter shows why that was never
+going to change here: the oracle is accepted at round 3 and this engine is
+declined at round 3, and a real Chrome with one wrong field is declined there
+too — the gate is inside that payload, not in the header block around it. The
+15-station sweep reads
 11/15 (`results/xhr-post-sweep-after.json`), matching the best recent run and
 regressing nothing — the four failures are the same three Cloudflare
 challenges and `dd-g2`.
