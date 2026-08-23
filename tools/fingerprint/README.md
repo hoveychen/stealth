@@ -8466,3 +8466,82 @@ absent was recorded as the blocker on comparing these bodies. It is not.
 response body into the frame arena (`CDP.zig:onHttpResponseData`) — so response
 sizes and bodies were readable all along. The gap is real; it was not on this
 critical path.
+
+## The names went out, and the door did not open (2026-08-22)
+
+The previous section made a falsifiable prediction: send Cloudflare the six
+high-entropy hint names it asks for, and the station answers. The engine now
+does — `Accept-CH` is parsed per origin, the six go out on every request to an
+origin that asked, and `Critical-CH` throws the response away and re-sends the
+navigation at once. Measured against the same `accept-ch-echo.mjs` harness
+Chrome was measured with, all fourteen hits agree with Chrome on which hints go
+out and in what position, and every navigation and GET subresource matches
+Chrome's **full** header order byte for byte.
+
+`cf-scrapingcourse` still serves the interstitial. So does `cf-nopecha` and
+`cf-zeroclover`. The prediction is falsified, cleanly: the request face was a
+real divergence and it was not the gate. What gates the station is the thing E2
+found on the other side — the widget's round-2 solve being declined — and no
+amount of header fidelity reaches it.
+
+Three things are worth keeping out of the run anyway.
+
+### The restarted navigation has a header order of its own
+
+Chrome does not spell a `Critical-CH` restart like a fresh navigation carrying
+the same nine hints. On the restart, `Upgrade-Insecure-Requests`, `User-Agent`
+and `Accept` move **ahead of the whole hint block**; on a fresh nine-hint
+navigation the hints lead and those three follow. Two tables, not one, and the
+restart is the shape Cloudflare's challenge actually provokes.
+
+The subresource case splits the same way and less obviously: with hints, Chrome
+moves `User-Agent` from **second to ninth**. Slotting the six names into the
+existing subresource table would have been wrong on every subresource of a
+negotiated origin.
+
+### A partial answer is worse than no answer
+
+Cloudflare asks for the nine UA hints. DataDome asks for six of those plus
+`Sec-CH-Device-Memory` — all four of its stations, off the 403 — and a real
+Chrome answers all seven (`results/acceptch-dd-chrome.json`). The first cut of
+this work answered six and dropped the seventh, which is a hint set no browser
+produces, on every DataDome request from their challenge onwards. That is a
+louder signal than the three hints an engine that ignores `Accept-CH` sends,
+because three at least reads as a client without client hints.
+
+So an ask naming anything the engine cannot answer is now declined **whole**.
+Tokens that need nothing don't count against it — the three unconditional
+low-entropy hints, and the pre-standard `UA-*` spellings Chrome answers with
+silence — which is why Cloudflare's list, half of which is those, is still
+satisfied in full. Verified: against DataDome's ask the new binary is
+byte-identical to the pre-change one across all ten hits, header order
+included.
+
+Asked for the union of every hint Chrome supports, Chrome answers **all 27** —
+`sec-ch-device-memory`, `dpr`, `viewport-width`/`-height`, `rtt`/`downlink`/
+`ect`, `sec-ch-prefers-*`, `sec-ch-ua-wow64: ?0`, `sec-ch-ua-form-factors:
+"Desktop"`, and both the `Sec-CH-`-prefixed and bare spellings of each
+(`results/acceptch-all-chrome.json`). Six of 27 is the coverage this engine
+has. That is the size of the remaining surface, and the reason the
+all-or-nothing rule is the safe default rather than a temporary one.
+
+### The DataDome column cannot be read right now
+
+Four sweeps of the four DataDome stations, alternating binaries over about an
+hour: control 3/4, new 0/4, control 0/4, new 0/4, control 1/4, new 0/4. The
+control binary alone spans 3/4 to 0/4, so the column is flapping on the site's
+side — the same trap that produced a phantom regression once before. The
+engine-side answer comes from the wire, not the column: none of DataDome's
+asset origins (`js.datadome.co`, `api-js.datadome.co`, `dd.leboncoin.fr`,
+`ct.captcha-delivery.com`) send `Accept-CH` at all, and the four document
+origins ask for something we decline, so the new binary sends zero
+high-entropy hints anywhere in that flow.
+
+### Still not byte-exact: the XHR `POST`
+
+One diff survives on both engines' `POST` subresources, and it predates this
+work — confirmed by running the harness against the pre-change binary. Chrome
+sends `Content-Length` third, `content-type` right after `User-Agent`, and an
+`Origin`; this engine sends no `Origin` at all and leaves `content-type` and
+`Content-Length` to the trailing pass, after `Accept-Language`. Cloudflare's
+challenge flow is mostly `POST`s, so this is worth its own task.

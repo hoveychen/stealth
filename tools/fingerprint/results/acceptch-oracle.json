@@ -336,7 +336,7 @@
   },
   {
    "n": 5,
-   "method": "GET",
+   "method": "probeGET",
    "target": "/favicon.ico",
    "headers": [
     [

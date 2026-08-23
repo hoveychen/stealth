@@ -35,6 +35,7 @@ const http = @import("http.zig");
 const Network = @import("Network.zig");
 const Cache = @import("cache/Cache.zig");
 const RobotsGate = @import("RobotsGate.zig");
+const ClientHints = @import("ClientHints.zig");
 const UrlBlocklist = @import("UrlBlocklist.zig");
 
 pub const BlockPattern = UrlBlocklist.Pattern;
@@ -198,6 +199,12 @@ obey_robots: bool,
 robots: RobotsGate,
 url_blocklist: ?UrlBlocklist,
 
+// Which high-entropy client hints each origin has asked for via Accept-CH.
+// Browser-lifetime, like Chrome's: the negotiation outlives the navigation
+// that carried it, so a second visit to an origin still sends what the first
+// one was asked for.
+client_hints: ClientHints = .{},
+
 pub fn init(self: *Client, allocator: Allocator, network: *Network, cdp: ?*CDP) !void {
     var handles = try http.Handles.init(network.config);
     errdefer handles.deinit();
@@ -268,6 +275,7 @@ pub fn deinit(self: *Client) void {
     }
 
     self.clearUrlBlocklist();
+    self.client_hints.deinit(self.allocator);
     self.robots.deinit();
     self.blocking_requests.deinit(self.allocator);
     self.transfers.deinit(self.allocator);
@@ -549,6 +557,27 @@ pub fn baselineHeaders(self: *const Client) [7]Transfer.RequestHeader {
 // override arrives bare, so it is quoted here rather than at set time.
 fn platformHeader(self: *const Client) []const u8 {
     return self.platform_quoted_override orelse self.httpHeaders().sec_ch_ua_platform;
+}
+
+// The wire value of a high-entropy hint, for an origin that asked. Four of the
+// six are fixed by the claimed platform and two follow the brand list, and each
+// is the same value navigator.userAgentData.getHighEntropyValues answers -- the
+// header and the JS call have to describe one machine.
+//
+// Emulation.setUserAgentOverride can carry a userAgentMetadata with its own
+// architecture/model/platformVersion; this engine reads only the platform out
+// of it (Client.platform_quoted_override), so a driver that overrides the rest
+// is not honoured here either. Consistent, if incomplete.
+fn clientHintValue(self: *const Client, hint: ClientHints.Hint) []const u8 {
+    const H = Config.HttpHeaders;
+    return switch (hint) {
+        .arch => H.sec_ch_ua_arch,
+        .bitness => H.sec_ch_ua_bitness,
+        .model => H.sec_ch_ua_model,
+        .platform_version => H.sec_ch_ua_platform_version,
+        .full_version => self.httpHeaders().sec_ch_ua_full_version,
+        .full_version_list => self.httpHeaders().sec_ch_ua_full_version_list,
+    };
 }
 
 pub fn abort(self: *Client) void {
@@ -1730,6 +1759,34 @@ fn processOneMessage(self: *Client, msg: http.Handles.MultiMessage, transfer: *T
 
     try transfer.materializeResponse(msg.conn, .{});
 
+    // Critical-CH: the origin has just told us this response was computed for a
+    // client it now knows we aren't. Throw it away and re-send the navigation
+    // with the hints attached, on the same conn, the way a redirect hop is
+    // re-sent. Capped at one restart by _critical_hints_restarted.
+    //
+    // Nothing has been delivered yet -- the response events are buffered below,
+    // and CDP's are dispatched from deliver() -- so the discarded response
+    // leaves no trace with the consumer. Chrome shows the restart as a second
+    // request in devtools; we don't, which is a devtools difference and not a
+    // wire one.
+    if (transfer.shouldRestartForCriticalHints()) {
+        transfer._critical_hints_restarted = true;
+        try transfer.seedClientHints();
+
+        try self.handles.remove(msg.conn);
+        // Conn temporarily out of the multi while it is reconfigured;
+        // _detached_conn lets processMessages release it if a step throws.
+        transfer._detached_conn = msg.conn;
+
+        transfer.reset();
+        try transfer.configureConn(msg.conn);
+        try self.handles.add(msg.conn);
+        transfer._detached_conn = null;
+
+        _ = try self.handles.perform();
+        return false;
+    }
+
     // Latency is only meaningful for responses that hit the network (cache
     // and synthetic responses never reach processOneMessage).
     if (!transfer.req.internal) {
@@ -2168,6 +2225,16 @@ pub const Transfer = struct {
     // Response came from the http cache; drives the served-from-cache
     // notification at delivery.
     _from_cache: bool = false,
+
+    // This request carries at least one negotiated high-entropy client hint,
+    // which changes where a subresource puts User-Agent. Set by
+    // seedClientHints, read by emitHeaders.
+    _high_entropy_hints: bool = false,
+
+    // This navigation has already been thrown away and re-sent once for a
+    // Critical-CH. Caps it at one: an origin that keeps asking for a hint we
+    // don't answer would otherwise loop the navigation forever.
+    _critical_hints_restarted: bool = false,
 
     // What the cache wants from this transfer's response.
     _cache_intent: CacheIntent = .none,
@@ -2685,12 +2752,44 @@ pub const Transfer = struct {
             }
         }
 
+        try self.negotiateClientHints();
+
         if (opts.check_content_length) {
             if (self.getContentLength()) |cl| {
                 if (cl > self.client.max_response_size) {
                     return error.ResponseTooLarge;
                 }
             }
+        }
+    }
+
+    // Remember what this response's `Accept-CH` asks for, so later requests to
+    // the origin carry the high-entropy hints it wants.
+    //
+    // Navigations only -- an `Accept-CH` on a subresource response is ignored,
+    // which is Chrome's rule (Chromium persists hints from
+    // NavigationRequest::OnResponseStarted and from nowhere else). Both frames
+    // count: Cloudflare's Turnstile widget is an OOPIF and sends the header on
+    // its own document, and a Chrome that took that ask and a Chrome that
+    // didn't are two different clients.
+    //
+    // A response *without* the header leaves the origin's set alone rather than
+    // clearing it, also Chrome's rule -- measured, the `/revisit` navigation in
+    // tools/fingerprint/results/acceptch-chrome.json still carries all nine
+    // hints though nothing on that hop asked again.
+    fn negotiateClientHints(self: *Transfer) !void {
+        if (self.req.resource_type != .document) {
+            return;
+        }
+        for (self.res.headers) |hdr| {
+            if (std.ascii.eqlIgnoreCase(hdr.name, "accept-ch") == false) {
+                continue;
+            }
+            try self.client.client_hints.negotiate(
+                self.client.allocator,
+                self.req.url,
+                hdr.value,
+            );
         }
     }
 
@@ -3045,10 +3144,21 @@ pub const Transfer = struct {
     // that reaches the wire is the one baselineHeaders and seedFetchMetadata
     // spell. Written here the same way anyway, so each field name has one
     // spelling in this file.
+    // The six negotiated hints are interleaved with the three baseline ones
+    // rather than appended -- measured, the nine-hint navigations in
+    // tools/fingerprint/results/acceptch-chrome.json. A name nothing set simply
+    // doesn't match, so the three-hint case this table described before comes
+    // out of it byte-identical.
     const chrome_navigation_order = [_][]const u8{
         "sec-ch-ua",
         "sec-ch-ua-mobile",
+        "sec-ch-ua-full-version",
+        "sec-ch-ua-arch",
         "sec-ch-ua-platform",
+        "sec-ch-ua-platform-version",
+        "sec-ch-ua-model",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-full-version-list",
         "Upgrade-Insecure-Requests",
         "User-Agent",
         "Accept",
@@ -3078,6 +3188,65 @@ pub const Transfer = struct {
         "priority",
     };
 
+    // A navigation re-sent for a Critical-CH, which Chrome does not spell like
+    // a fresh navigation carrying the same nine hints: Upgrade-Insecure-
+    // Requests, User-Agent and Accept move ahead of the whole hint block.
+    // Measured, the second `GET /critical-ch` in
+    // tools/fingerprint/results/acceptch-chrome.json -- and it is the shape
+    // that matters most here, because a Critical-CH restart is exactly what
+    // Cloudflare's challenge provokes.
+    const chrome_restarted_navigation_order = [_][]const u8{
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+        "Accept",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-full-version",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-platform",
+        "sec-ch-ua-platform-version",
+        "sec-ch-ua-model",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-full-version-list",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-User",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "priority",
+    };
+
+    // A subresource carrying the negotiated hints, which is NOT the table above
+    // with six names slotted in: Chrome moves User-Agent from second to ninth,
+    // so the two cases cannot share a table the way the navigation ones can.
+    // Measured, the nine-hint subresources (fetch, XHR and favicon, all in
+    // agreement) in tools/fingerprint/results/acceptch-chrome.json. That
+    // capture is of an origin that asked for all nine; an origin asking for a
+    // subset gets this sequence with the missing names skipped, which is a
+    // guess at Chrome's ordering there and not a measurement of it.
+    const chrome_subresource_hinted_order = [_][]const u8{
+        "sec-ch-ua-full-version-list",
+        "sec-ch-ua-platform",
+        "sec-ch-ua",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-model",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-full-version",
+        "User-Agent",
+        "sec-ch-ua-platform-version",
+        "Accept",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "priority",
+    };
+
     // Materializes req_headers onto the connection in Chrome's order.
     //
     // One emission stays out of our hands: curl writes `Host` first, which is
@@ -3087,7 +3256,12 @@ pub const Transfer = struct {
     // a connection header is a protocol error.
     fn emitHeaders(self: *Transfer, conn: *http.Connection, arena: Allocator) !void {
         const order: []const []const u8 = if (self.req.resource_type == .document)
-            &chrome_navigation_order
+            if (self._critical_hints_restarted)
+                &chrome_restarted_navigation_order
+            else
+                &chrome_navigation_order
+        else if (self._high_entropy_hints)
+            &chrome_subresource_hinted_order
         else
             &chrome_subresource_order;
 
@@ -3120,6 +3294,8 @@ pub const Transfer = struct {
             try self.addHeader(hdr.name, hdr.value, .{ .source = hdr.source });
         }
 
+        try self.seedClientHints();
+
         // --http-header extras; setHeader so a same-name header (e.g.
         // Accept-Language) overrides the baseline instead of duplicating.
         for (self.client.network.config.httpHeaders()) |hdr| {
@@ -3127,6 +3303,77 @@ pub const Transfer = struct {
         }
 
         try self.seedFetchMetadata();
+    }
+
+    // The high-entropy hints this request's origin asked for via Accept-CH,
+    // and only those. They are not in baselineHeaders because unsolicited they
+    // are a tell of their own -- see the note there. Once an origin has asked,
+    // Chrome puts them on every request to it, navigation and subresource
+    // alike, which is what makes the difference visible on every hop rather
+    // than only on the document.
+    //
+    // Forbidden header names, so they enter at `.cdp`, the same rank the three
+    // baseline hints use: page script cannot rewrite one, a driver still can.
+    //
+    // Read against the request's own URL. A cross-origin redirect therefore
+    // keeps the hints the first hop's origin asked for, where Chrome would
+    // re-resolve per hop; the seeding happens once, when the transfer is built.
+    // setHeader rather than addHeader, unlike the baseline seeding beside it:
+    // the Critical-CH restart re-runs this on a request that may already carry
+    // some of the hints, and a duplicated field name is its own tell.
+    fn seedClientHints(self: *Transfer) !void {
+        var it = self.client.client_hints.acceptedFor(self.req.url).iterator();
+        while (it.next()) |hint| {
+            try self.setHeader(hint.header(), self.client.clientHintValue(hint), .{ .source = .cdp });
+            self._high_entropy_hints = true;
+        }
+    }
+
+    // Does this response say it is only valid with hints the request didn't
+    // carry? `Critical-CH` is the stronger half of the negotiation: `Accept-CH`
+    // alone means "next time", `Critical-CH` means "that answer was for someone
+    // else, ask me again". Chrome obeys it by discarding the response and
+    // re-sending the same navigation at once -- measured, the two
+    // `GET /critical-ch` hits in tools/fingerprint/results/acceptch-chrome.json
+    // where the first carries three hints and the second nine.
+    //
+    // Call after the response's Accept-CH has been recorded: what the origin
+    // will accept is half the question, and the other half is what this request
+    // already sent.
+    fn shouldRestartForCriticalHints(self: *const Transfer) bool {
+        if (self.req.resource_type != .document) {
+            return false;
+        }
+        if (self._critical_hints_restarted) {
+            return false;
+        }
+
+        var accepted = self.client.client_hints.acceptedFor(self.req.url);
+        if (accepted.count() == 0) {
+            // Either nothing was accepted or the origin isn't one we remember
+            // hints for. Restarting would re-send a byte-identical request.
+            return false;
+        }
+
+        for (self.res.headers) |hdr| {
+            if (std.ascii.eqlIgnoreCase(hdr.name, "critical-ch") == false) {
+                continue;
+            }
+            // A hint is worth a restart only if the origin accepts it (so we
+            // would send it next time) *and* this request went without it.
+            // A Critical-CH we can't fully answer buys nothing by restarting:
+            // the Accept-CH beside it was declined for the same reason, so the
+            // second request would be the first one again.
+            var wanted = ClientHints.parse(hdr.value) orelse continue;
+            wanted.setIntersection(accepted);
+            var it = wanted.iterator();
+            while (it.next()) |hint| {
+                if (self.findRequestHeader(hint.header()) == null) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // The destination's `Accept` plus the Sec-Fetch-* set, which real Chrome
@@ -3823,6 +4070,56 @@ test "HttpClient: the priority hint goes out last, after Accept-Language" {
     try testing.expectString("Accept-Language", sub[sub.len - 2]);
 }
 
+test "HttpClient: the negotiated hints sit where Chrome puts them" {
+    // Both sequences are read straight off
+    // tools/fingerprint/results/acceptch-chrome.json, where a headless Chrome
+    // 151 met an origin asking for all nine. Position is fingerprint, and it is
+    // not insertion order, so the tables are the thing worth pinning.
+    try testing.expectEqualSlices([]const u8, &.{
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-full-version",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-platform",
+        "sec-ch-ua-platform-version",
+        "sec-ch-ua-model",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-full-version-list",
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+    }, Transfer.chrome_navigation_order[0..11]);
+
+    // The one that surprises: with hints, User-Agent falls from second to
+    // ninth. Dropping the six names into the unhinted table would have put it
+    // back at second and been wrong on every subresource.
+    try testing.expectEqualSlices([]const u8, &.{
+        "sec-ch-ua-full-version-list",
+        "sec-ch-ua-platform",
+        "sec-ch-ua",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-model",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-full-version",
+        "User-Agent",
+        "sec-ch-ua-platform-version",
+        "Accept",
+    }, Transfer.chrome_subresource_hinted_order[0..11]);
+
+    // Which table a subresource uses is decided by whether it carries any.
+    try testing.expectString("sec-ch-ua-platform", Transfer.chrome_subresource_order[0]);
+    try testing.expectString("User-Agent", Transfer.chrome_subresource_order[1]);
+
+    // And a navigation re-sent for a Critical-CH is a third shape again: the
+    // hints follow Accept instead of leading.
+    try testing.expectEqualSlices([]const u8, &.{
+        "Upgrade-Insecure-Requests",
+        "User-Agent",
+        "Accept",
+        "sec-ch-ua",
+    }, Transfer.chrome_restarted_navigation_order[0..4]);
+}
+
 test "HttpClient: the three client hints go on the wire lowercase" {
     // Over HTTP/1.1 Chromium spells exactly the three client hints in
     // lowercase and Title-Cases every other field name -- measured, the
@@ -3858,6 +4155,251 @@ test "HttpClient: the three client hints go on the wire lowercase" {
     for (client.baselineHeaders(), expected) |hdr, name| {
         try testing.expectString(name, hdr.name);
     }
+}
+
+// A Client with just enough set for the header-seeding paths: they read the
+// config's resolved header values, the CDP override fields and the hint store,
+// and touch no curl handle and no event loop.
+fn testHeaderClient(network: *Network, config: *Config) Client {
+    network.config = config;
+    var client: Client = undefined;
+    client.network = network;
+    client.allocator = testing.allocator;
+    client.user_agent_override = null;
+    client.accept_language_override = null;
+    client.platform_quoted_override = null;
+    client.client_hints = .{};
+    return client;
+}
+
+test "HttpClient: only an origin that asked gets the six high-entropy hints" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+    var network: Network = undefined;
+    var client = testHeaderClient(&network, &config);
+    defer client.client_hints.deinit(testing.allocator);
+
+    // Before the origin asks, it gets the low-entropy three and nothing more.
+    var quiet = testTransfer(arena);
+    quiet.client = &client;
+    quiet.req.url = "https://www.scrapingcourse.com/cloudflare-challenge";
+    try quiet.seedHeaders();
+    for (comptime std.enums.values(ClientHints.Hint)) |hint| {
+        try testing.expectEqual(null, quiet.findRequestHeader(hint.header()));
+    }
+    try testing.expectString(
+        "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        seededValue(&quiet, "sec-ch-ua"),
+    );
+
+    try client.client_hints.negotiate(
+        testing.allocator,
+        "https://www.scrapingcourse.com/cloudflare-challenge",
+        "Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Full-Version, Sec-CH-UA-Mobile, " ++
+            "Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, Sec-CH-UA-Full-Version-List, " ++
+            "Sec-CH-UA-Platform, Sec-CH-UA",
+    );
+
+    var loud = testTransfer(arena);
+    loud.client = &client;
+    loud.req.url = "https://www.scrapingcourse.com/cloudflare-challenge";
+    try loud.seedHeaders();
+
+    // The values are the ones navigator.userAgentData.getHighEntropyValues
+    // answers, quoted as the header spells them: a page that reads both must
+    // not find two different machines.
+    try testing.expectString("\"arm\"", seededValue(&loud, "sec-ch-ua-arch"));
+    try testing.expectString("\"64\"", seededValue(&loud, "sec-ch-ua-bitness"));
+    try testing.expectString("\"\"", seededValue(&loud, "sec-ch-ua-model"));
+    try testing.expectString("\"26.3.1\"", seededValue(&loud, "sec-ch-ua-platform-version"));
+    try testing.expectString("\"151.0.7922.137\"", seededValue(&loud, "sec-ch-ua-full-version"));
+    try testing.expectString(
+        "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\"",
+        seededValue(&loud, "sec-ch-ua-full-version-list"),
+    );
+
+    // A different origin is still a stranger, even mid-page.
+    var other = testTransfer(arena);
+    other.client = &client;
+    other.req.url = "https://www.google-analytics.com/g/collect";
+    other.req.resource_type = .fetch;
+    try other.seedHeaders();
+    for (comptime std.enums.values(ClientHints.Hint)) |hint| {
+        try testing.expectEqual(null, other.findRequestHeader(hint.header()));
+    }
+}
+
+test "HttpClient: a page cannot forge a high-entropy hint" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+    var network: Network = undefined;
+    var client = testHeaderClient(&network, &config);
+    defer client.client_hints.deinit(testing.allocator);
+
+    try client.client_hints.negotiate(testing.allocator, "https://example.com/", "Sec-CH-UA-Arch");
+
+    var transfer = testTransfer(arena);
+    transfer.client = &client;
+    transfer.req.url = "https://example.com/";
+    try transfer.seedHeaders();
+
+    // Sec-* is a forbidden header name, so these enter at .cdp like the three
+    // baseline hints: script cannot rewrite one, a driver still can.
+    try transfer.setHeader("sec-ch-ua-arch", "\"x86\"", .{ .source = .author });
+    try testing.expectString("\"arm\"", seededValue(&transfer, "sec-ch-ua-arch"));
+    try transfer.setHeader("sec-ch-ua-arch", "\"x86\"", .{ .source = .cdp });
+    try testing.expectString("\"x86\"", seededValue(&transfer, "sec-ch-ua-arch"));
+}
+
+test "HttpClient: Critical-CH asks for the navigation to be restarted, once" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+    var network: Network = undefined;
+    var client = testHeaderClient(&network, &config);
+    defer client.client_hints.deinit(testing.allocator);
+
+    const critical = "Sec-CH-UA-Arch, Sec-CH-UA-Bitness, Sec-CH-UA-Platform";
+    var transfer = testTransfer(arena);
+    transfer.client = &client;
+    transfer.req.url = "https://example.com/";
+    try transfer.seedHeaders();
+    transfer.res.headers = &.{
+        .{ .name = "accept-ch", .value = critical },
+        .{ .name = "critical-ch", .value = critical },
+    };
+
+    // The response arrived without two hints it declares itself to depend on,
+    // so it is not the response this client should be reading.
+    try transfer.negotiateClientHints();
+    try testing.expect(transfer.shouldRestartForCriticalHints());
+
+    // Once restarted the request carries them, so the second response's
+    // identical Critical-CH asks for nothing new -- which is what keeps a
+    // stubborn origin from looping the navigation forever.
+    try transfer.seedClientHints();
+    try testing.expectEqual(false, transfer.shouldRestartForCriticalHints());
+}
+
+test "HttpClient: Critical-CH restarts nothing it shouldn't" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+    var network: Network = undefined;
+    var client = testHeaderClient(&network, &config);
+    defer client.client_hints.deinit(testing.allocator);
+
+    // A Critical-CH naming only hints that already went out.
+    var sent = testTransfer(arena);
+    sent.client = &client;
+    sent.req.url = "https://example.com/";
+    try sent.seedHeaders();
+    sent.res.headers = &.{
+        .{ .name = "accept-ch", .value = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform" },
+        .{ .name = "critical-ch", .value = "Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform" },
+    };
+    try sent.negotiateClientHints();
+    try testing.expectEqual(false, sent.shouldRestartForCriticalHints());
+
+    // Critical-CH without an Accept-CH beside it: nothing was accepted, so
+    // there is nothing to attach and a restart would fetch the same request.
+    var lonely = testTransfer(arena);
+    lonely.client = &client;
+    lonely.req.url = "https://lonely.example.com/";
+    try lonely.seedHeaders();
+    lonely.res.headers = &.{
+        .{ .name = "critical-ch", .value = "Sec-CH-UA-Arch" },
+    };
+    try lonely.negotiateClientHints();
+    try testing.expectEqual(false, lonely.shouldRestartForCriticalHints());
+
+    // A subresource is never restarted, however loudly it asks.
+    var sub = testTransfer(arena);
+    sub.client = &client;
+    sub.req.url = "https://example.com/logo.png";
+    sub.req.resource_type = .image;
+    try sub.seedHeaders();
+    sub.res.headers = &.{
+        .{ .name = "accept-ch", .value = "Sec-CH-UA-Arch" },
+        .{ .name = "critical-ch", .value = "Sec-CH-UA-Arch" },
+    };
+    try sub.negotiateClientHints();
+    try testing.expectEqual(false, sub.shouldRestartForCriticalHints());
+
+    // And a navigation that already spent its one restart stops asking, even
+    // though the hints it needs are still missing.
+    var spent = testTransfer(arena);
+    spent.client = &client;
+    spent.req.url = "https://spent.example.com/";
+    try spent.seedHeaders();
+    spent.res.headers = &.{
+        .{ .name = "accept-ch", .value = "Sec-CH-UA-Arch" },
+        .{ .name = "critical-ch", .value = "Sec-CH-UA-Arch" },
+    };
+    try spent.negotiateClientHints();
+    try testing.expect(spent.shouldRestartForCriticalHints());
+    spent._critical_hints_restarted = true;
+    try testing.expectEqual(false, spent.shouldRestartForCriticalHints());
+}
+
+test "HttpClient: a navigation's Accept-CH is remembered, a subresource's is not" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+    const arena = try pool.acquire(.small, "test");
+    defer arena.release();
+
+    // negotiateClientHints reads the response headers, the request's url and
+    // resource_type, and the client's hint store -- no conn, no curl.
+    var client: Client = undefined;
+    client.allocator = testing.allocator;
+    client.client_hints = .{};
+    defer client.client_hints.deinit(testing.allocator);
+
+    var transfer = testTransfer(arena);
+    transfer.client = &client;
+    transfer.req.url = "https://www.scrapingcourse.com/cloudflare-challenge";
+    transfer.res.headers = &.{
+        .{ .name = "cf-mitigated", .value = "challenge" },
+        .{ .name = "accept-ch", .value = "Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Platform" },
+    };
+
+    try transfer.negotiateClientHints();
+    const negotiated = client.client_hints.acceptedFor("https://www.scrapingcourse.com/anything");
+    try testing.expectEqual(2, negotiated.count());
+    try testing.expect(negotiated.contains(.bitness));
+    try testing.expect(negotiated.contains(.arch));
+
+    // The same header on a subresource response is ignored: Chrome persists
+    // hints from a navigation and from nowhere else, so an origin whose only
+    // ask rides on an image reaches us and Chrome alike as no ask at all.
+    var sub = testTransfer(arena);
+    sub.client = &client;
+    sub.req.url = "https://cdn.example.com/logo.png";
+    sub.req.resource_type = .image;
+    sub.res.headers = &.{
+        .{ .name = "accept-ch", .value = "Sec-CH-UA-Model" },
+    };
+
+    try sub.negotiateClientHints();
+    try testing.expectEqual(0, client.client_hints.acceptedFor("https://cdn.example.com/x").count());
 }
 
 test "HttpClient: ResourceType.image reports Chrome's CDP name" {
