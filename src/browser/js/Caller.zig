@@ -631,6 +631,12 @@ fn missingArgument(comptime T: type, local: *const Local, info: FunctionCallback
     return local.ctx.fail(error.TypeError, message);
 }
 
+// The two halves of a WebIDL callback interface as this bridge models it: the
+// callable form and the object-with-a-handler form.
+fn isCallbackInterfaceMember(comptime T: type) bool {
+    return T == js.Function or T == js.Function.Global or T == js.Object or T == js.Object.Global;
+}
+
 // The name Blink puts in "parameter N is not of type '<name>'." Only the types
 // whose name Blink can be shown to write are answered; everything else returns
 // null and keeps the generic refusal, because a confidently wrong type name
@@ -657,9 +663,13 @@ fn idlTypeName(comptime T: type) ?[]const u8 {
             if (T == js.Function or T == js.Function.Global) {
                 return "Function";
             }
-            if (T == js.Object or T == js.Object.Global) {
-                return "Object";
-            }
+            // A bare js.Object is deliberately not 'Object'. It is what a
+            // parameter whose IDL type this bridge does not model looks like,
+            // and the two measured ones are named after the interface they
+            // wanted: Animation's effect is 'AnimationEffect' and
+            // getRandomValues' array is 'ArrayBufferView' (Chrome 151). Only
+            // inside a callback interface (below) does Blink itself say
+            // 'Object'.
         },
         .@"union" => |u| {
             // A WebIDL callback interface -- EventListener, NodeFilter -- takes
@@ -668,10 +678,9 @@ fn idlTypeName(comptime T: type) ?[]const u8 {
             // even though a function is what it usually receives (measured on
             // Chrome 151 for addEventListener and createNodeIterator). Any
             // other union is a real IDL union, whose name is its whole
-            // spelling, and nothing here knows it.
+            // spelling, and nothing here derives that.
             inline for (u.fields) |field| {
-                const name = idlTypeName(field.type) orelse return null;
-                if (!std.mem.eql(u8, name, "Function") and !std.mem.eql(u8, name, "Object")) {
+                if (!isCallbackInterfaceMember(field.type)) {
                     return null;
                 }
             }
