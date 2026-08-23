@@ -247,7 +247,6 @@ pub const ResponseHeaderDone = struct {
 
 pub const RequestDone = struct {
     transfer: *Transfer,
-    content_length: usize,
 };
 
 pub const RequestFail = struct {

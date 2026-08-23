@@ -897,6 +897,51 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         });
     }
 
+    if (std.mem.eql(u8, path, "/chunked.js")) {
+        // A script body framed with `Transfer-Encoding: chunked` instead of a
+        // Content-Length, which is the h1 shape of what an h2 origin does to
+        // every response it streams. Nothing here can be answered by reading
+        // the Content-Length header, because there isn't one -- so this is the
+        // route that tells a byte count taken off the header apart from one
+        // taken off the socket.
+        const body = "window.__chunked_ran = true;";
+        var send_buffer: [512]u8 = undefined;
+        var res = try req.respondStreaming(&send_buffer, .{
+            .respond_options = .{
+                .extra_headers = &.{
+                    .{ .name = "Content-Type", .value = "application/javascript" },
+                    .{ .name = "Cache-Control", .value = "no-store" },
+                },
+            },
+        });
+        try res.writer.writeAll(body);
+        try res.writer.flush();
+        return res.end();
+    }
+
+    if (std.mem.eql(u8, path, "/gzip.js")) {
+        // `window.__gzip_ran = true;` deflated with gzip -9. Embedded rather
+        // than compressed here for the same reason /zstd is: Zig's std ships
+        // the decompressor, not the compressor. 25 source bytes land as 45 on
+        // the wire, so the encoded and decoded sizes cannot be confused, and
+        // the gzip header makes the encoded one the larger of the two -- a
+        // reading that has to come off the socket, since neither number is the
+        // one a naive `body.len` would produce.
+        const gzip_body = [_]u8{
+            0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x13, 0x2b, 0xcf,
+            0xcc, 0x4b, 0xc9, 0x2f, 0xd7, 0x8b, 0x8f, 0x4f, 0xaf, 0xca, 0x2c, 0x88,
+            0x2f, 0x4a, 0xcc, 0x53, 0xb0, 0x55, 0x28, 0x29, 0x2a, 0x4d, 0xb5, 0x06,
+            0x00, 0xad, 0xf2, 0x02, 0x28, 0x19, 0x00, 0x00, 0x00,
+        };
+        return req.respond(&gzip_body, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "application/javascript" },
+                .{ .name = "Content-Encoding", .value = "gzip" },
+                .{ .name = "Cache-Control", .value = "no-store" },
+            },
+        });
+    }
+
     if (std.mem.startsWith(u8, path, "/serve-count/") and std.mem.endsWith(u8, path, ".js")) {
         // Serves `window.__serve_count_<name> = N;` where N counts how many
         // times this URL has been served. Lets a fixture assert a preloaded

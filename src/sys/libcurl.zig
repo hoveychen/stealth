@@ -251,6 +251,13 @@ pub const CurlInfo = enum(c.CURLINFO) {
     // Content-Length: `curl --compressed -w %{size_download}` answered 26 616
     // for a body that landed as 84 236 bytes.
     size_download_t = c.CURLINFO_SIZE_DOWNLOAD_T,
+    // Bytes of response head read off the socket: the status line, every
+    // header, and the blank line that ends them. This is what CDP calls the
+    // `encodedDataLength` of a response at the moment its headers are in.
+    // curl accumulates it across a redirect chain it follows itself; this
+    // engine follows redirects by hand (`setFollowLocation(false)`), so one
+    // transfer is one response and the reading is per-response.
+    header_size = c.CURLINFO_HEADER_SIZE,
     // The connection walk, each measured from the start of the transfer.
     // Together they are eight of Resource Timing's nine milestones; the ninth,
     // firstInterimResponseStart, would need a 1xx this engine never reads.
@@ -688,6 +695,7 @@ pub fn curl_easy_getinfo(easy: *Curl, comptime info: CurlInfo, out: anytype) Err
         .http_version,
         .redirect_count,
         .num_connects,
+        .header_size,
         => blk: {
             const p: *c_long = out;
             break :blk c.curl_easy_getinfo(easy, inf, p);

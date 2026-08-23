@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>encoded data length</title>
+    <!-- Two scripts framed differently on the wire, because the byte count CDP
+         reports has to come off the socket rather than off a header.
+
+         /chunked.js has no Content-Length at all -- it is framed with
+         Transfer-Encoding: chunked, the h1 shape of what an h2 origin does to
+         every response it streams. Reading Content-Length there yields zero,
+         which is what this engine used to report for it. -->
+    <script src="/chunked.js"></script>
+    <!-- /gzip.js does carry a Content-Length, but its body is compressed: 25
+         source bytes arrive as 45, so the number CDP reports can be told apart
+         from the length of the text the script itself sees. -->
+    <script src="/gzip.js"></script>
+</head>
+
+<body>
+</body>
+
+</html>
