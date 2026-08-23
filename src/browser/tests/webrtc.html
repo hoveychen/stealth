@@ -663,3 +663,19 @@
   testing.expectError('TypeError', () => new RTCTrackEvent('track', {}));
 }
 </script>
+
+<script id=rtcIceCandidate_dictionary_refusal>
+  // A string is as much "not a dictionary" as a number is: both get the same
+  // sentence, naming RTCIceCandidateInit (measured on Chrome 151).
+  {
+    for (const bad of ['nope', 1]) {
+      let err = null;
+      try { new RTCIceCandidate(bad); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(
+        "TypeError: Failed to construct 'RTCIceCandidate': The provided value is not of type 'RTCIceCandidateInit'.",
+        err,
+        { label: String(bad) },
+      );
+    }
+  }
+</script>

@@ -181,3 +181,14 @@
   });
 }
 </script>
+
+<script id=performanceObserver_callback_brand>
+  // Same sentence every observer constructor writes for a non-callable
+  // callback (measured on Chrome 151).
+  let err = null;
+  try { new PerformanceObserver(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to construct 'PerformanceObserver': parameter 1 is not of type 'Function'.",
+    err,
+  );
+</script>

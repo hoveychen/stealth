@@ -470,3 +470,18 @@
     testing.expectEqual(null, iterator.nextNode());
   }
 </script>
+
+<script id=createNodeIterator_filter_brand>
+  // NodeFilter is a callback interface like EventListener, so a third argument
+  // that is neither a function nor an object is refused as 'Object', with the
+  // parameter's position (measured on Chrome 151). The second argument is an
+  // IDL `unsigned long` and takes the 1 quietly, so the refusal is the third.
+  let err = null;
+  try {
+    document.createNodeIterator(document.getElementById('root'), 1, 1);
+  } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to execute 'createNodeIterator' on 'Document': parameter 3 is not of type 'Object'.",
+    err,
+  );
+</script>

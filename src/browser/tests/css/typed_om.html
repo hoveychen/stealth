@@ -1380,3 +1380,20 @@ function attach(el) {
     testing.expectEqual('CSSKeywordValue|block', brand(el.computedStyleMap().get('display')));
 }
 </script>
+
+<script id=typed_om_sequence_refusal>
+{
+  // Both of these take an IDL sequence, and a value that cannot be iterated
+  // gets the sentence that names neither a position nor a type (measured on
+  // Chrome 151). They used to answer the generic "invalid argument".
+  for (const [name, ctor] of [['CSSTransformValue', CSSTransformValue], ['CSSUnparsedValue', CSSUnparsedValue]]) {
+    let err = null;
+    try { new ctor(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      `TypeError: Failed to construct '${name}': The provided value cannot be converted to a sequence.`,
+      err,
+      { label: name },
+    );
+  }
+}
+</script>

@@ -472,3 +472,28 @@
     testing.expectEqual(true, request.bodyUsed);
   });
 </script>
+
+<script id=request_enum_member_refusal>
+{
+  // An enum member of a dictionary gets a nested sentence: the constructor's
+  // prefix, then the member and the dictionary it was read from, then the value
+  // and the enum type -- and the enum type alone comes without quotes
+  // (measured on Chrome 151). All four used to answer "invalid argument".
+  const cases = [
+    ['cache', 'RequestCache'],
+    ['credentials', 'RequestCredentials'],
+    ['redirect', 'RequestRedirect'],
+    ['priority', 'FetchPriority'],
+  ];
+  for (const [member, enum_type] of cases) {
+    let err = null;
+    try { new Request('/x', { [member]: 'nope' }); } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      `TypeError: Failed to construct 'Request': Failed to read the '${member}' property from 'RequestInit': ` +
+        `The provided value 'nope' is not a valid enum value of type ${enum_type}.`,
+      err,
+      { label: member },
+    );
+  }
+}
+</script>

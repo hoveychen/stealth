@@ -277,3 +277,29 @@
     testing.expectEqual("honied", sliceMidText);
   });
 </script>
+
+<script id=blob_sequence_refusal>
+  // A sequence parameter that cannot be iterated gets its own sentence, and it
+  // is the one detail sentence that carries neither a type name nor a
+  // parameter position (measured on Chrome 151).
+  let err = null;
+  try { new Blob(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to construct 'Blob': The provided value cannot be converted to a sequence.",
+    err,
+  );
+</script>
+
+<script id=blob_dictionary_refusal>
+  // A dictionary parameter handed a non-object is refused by the dictionary's
+  // WebIDL name -- BlobPropertyBag, not the Zig type behind it -- and the
+  // sentence carries no parameter position (measured on Chrome 151).
+  {
+    let err = null;
+    try { new Blob([], 1); } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to construct 'Blob': The provided value is not of type 'BlobPropertyBag'.",
+      err,
+    );
+  }
+</script>

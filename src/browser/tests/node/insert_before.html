@@ -68,3 +68,15 @@
   testing.expectEqual(detached, moving.parentNode);
   testing.expectEqual(detached, parentSeenAtDisconnect);
 </script>
+
+<script id=insertBefore_parameter_brand>
+  // Same sentence as appendChild's: the operation is named, the interface that
+  // declares it is 'Node', and the parameter's position comes with the type it
+  // wanted (measured on Chrome 151).
+  let err = null;
+  try { $('#d1').insertBefore(1, null); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to execute 'insertBefore' on 'Node': parameter 1 is not of type 'Node'.",
+    err,
+  );
+</script>

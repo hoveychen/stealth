@@ -15,3 +15,15 @@
   testing.expectEqual(null, $('#p1'));
   testing.expectEqual(null, p1.parentNode);
 </script>
+
+<script id=removeChild_parameter_brand>
+  // Refusing a non-Node names the parameter rather than answering the generic
+  // "invalid argument" (measured on Chrome 151). Note this is the brand check,
+  // which runs before the NotFoundError the test above measures.
+  let err = null;
+  try { $('#d1').removeChild(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to execute 'removeChild' on 'Node': parameter 1 is not of type 'Node'.",
+    err,
+  );
+</script>

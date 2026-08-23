@@ -105,3 +105,16 @@
     testing.expectEqual('[object DOMQuad]', Object.prototype.toString.call(new DOMQuad()));
   }
 </script>
+
+<script id=domQuad_dictionary_refusal>
+  // The four corners are DOMPointInit dictionaries, and that -- not DOMQuadInit
+  // -- is the name the refusal carries (measured on Chrome 151).
+  {
+    let err = null;
+    try { new DOMQuad(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to construct 'DOMQuad': The provided value is not of type 'DOMPointInit'.",
+      err,
+    );
+  }
+</script>

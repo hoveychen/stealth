@@ -1135,3 +1135,17 @@
     }
   }
 </script>
+
+<script id=addEventListenerParameterBrand>
+  // EventListener is a callback interface, so the type Blink names for a
+  // parameter that is neither a function nor an object is 'Object' -- not
+  // 'EventListener', and not 'Function' (measured on Chrome 151). The prefix
+  // names EventTarget, the interface that declares the operation, rather than
+  // the element the call went through.
+  let err = null;
+  try { $('#parent').addEventListener('x', 1); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to execute 'addEventListener' on 'EventTarget': parameter 2 is not of type 'Object'.",
+    err,
+  );
+</script>

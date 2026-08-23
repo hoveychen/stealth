@@ -724,8 +724,13 @@ pub fn jsValueToZig(self: *const Local, comptime T: type, js_val: js.Value) !T {
             return @as(*T, @ptrCast(slice_value.ptr)).*;
         },
         .@"struct" => {
+            // Distinct from the errors a member's own conversion returns: this
+            // one means the value was never the right shape to begin with, and
+            // Blink says so by naming the type ("The provided value is not of
+            // type 'BlobPropertyBag'."), where a member that failed gets a
+            // sentence naming the member instead.
             return try (self.jsValueToStruct(T, js_val)) orelse {
-                return error.InvalidArgument;
+                return error.NotOfType;
             };
         },
         .@"union" => |u| {
@@ -759,7 +764,7 @@ pub fn jsValueToZig(self: *const Local, comptime T: type, js_val: js.Value) !T {
             }
 
             // We didn't find a perfect match.
-            const closest = compatible_index orelse coerce_index orelse return error.InvalidArgument;
+            const closest = compatible_index orelse coerce_index orelse return error.NotOfType;
             inline for (u.fields, 0..) |field, i| {
                 if (i == closest) {
                     return @unionInit(T, field.name, try self.jsValueToZig(field.type, js_val));

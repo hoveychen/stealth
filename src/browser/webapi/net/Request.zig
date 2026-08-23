@@ -63,9 +63,12 @@ pub const InitOpts = struct {
     method: ?[]const u8 = null,
     headers: ?Headers.InitOpts = null,
     body: ?BodyInit = null,
-    cache: Cache = .default,
-    credentials: Credentials = .@"same-origin",
-    redirect: Redirect = .follow,
+    // Read as strings rather than as the typed enums: an out-of-range value has
+    // to name the member, the dictionary and the enum type, and the bridge's
+    // enum conversion knows none of the three.
+    cache: ?[]const u8 = null,
+    credentials: ?[]const u8 = null,
+    redirect: ?[]const u8 = null,
     signal: ?*AbortSignal = null,
     priority: ?[]const u8 = null,
     duplex: ?[]const u8 = null,
@@ -112,6 +115,29 @@ const ctor_prefix = "Failed to construct 'Request': ";
 // Reached from both body branches, streaming and not.
 const no_body_for_method = "Request with GET/HEAD method cannot have body.";
 
+/// Reads one of RequestInit's enum members. Blink nests the wording -- the
+/// member and the dictionary it was read from, then the value and the enum type,
+/// which is the one name here that comes without quotes (measured on Chrome
+/// 151). `duplex` writes the same sentence inline, being the only member with no
+/// enum behind it.
+fn enumMember(
+    comptime E: type,
+    comptime member: []const u8,
+    comptime idl_name: []const u8,
+    value_: ?[]const u8,
+    exec: *const Execution,
+    prefix: ?[]const u8,
+) !?E {
+    const value = value_ orelse return null;
+    return std.meta.stringToEnum(E, value) orelse fail(
+        exec,
+        prefix,
+        "Failed to read the '" ++ member ++ "' property from 'RequestInit': " ++
+            "The provided value '{s}' is not a valid enum value of type " ++ idl_name ++ ".",
+        .{value},
+    );
+}
+
 fn fail(exec: *const Execution, prefix: ?[]const u8, comptime fmt: []const u8, args: anytype) anyerror {
     const p = prefix orelse return error.TypeError;
     const detail = std.fmt.allocPrint(exec.local_arena, fmt, args) catch return error.TypeError;
@@ -142,11 +168,12 @@ fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefi
     };
 
     const opts = opts_ orelse InitOpts{};
-    if (opts.priority) |p| {
-        if (std.meta.stringToEnum(Priority, p) == null) {
-            return error.InvalidArgument;
-        }
-    }
+    const cache = try enumMember(Cache, "cache", "RequestCache", opts.cache, exec, prefix) orelse .default;
+    const credentials = try enumMember(Credentials, "credentials", "RequestCredentials", opts.credentials, exec, prefix) orelse .@"same-origin";
+    const redirect = try enumMember(Redirect, "redirect", "RequestRedirect", opts.redirect, exec, prefix) orelse .follow;
+    // Validated and then dropped: the value has no effect here, but an
+    // out-of-range one is refused the same way Chrome refuses it.
+    _ = try enumMember(Priority, "priority", "FetchPriority", opts.priority, exec, prefix);
 
     const method = if (opts.method) |m|
         try parseMethod(m, exec)
@@ -218,9 +245,9 @@ fn initWithContext(input: Input, opts_: ?InitOpts, exec: *const Execution, prefi
         ._arena = arena,
         ._method = method,
         ._headers = headers,
-        ._cache = opts.cache,
-        ._credentials = opts.credentials,
-        ._redirect = opts.redirect,
+        ._cache = cache,
+        ._credentials = credentials,
+        ._redirect = redirect,
         ._body = body,
         ._body_stream = body_stream,
         ._signal = signal,

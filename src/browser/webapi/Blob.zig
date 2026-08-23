@@ -69,6 +69,10 @@ pub fn urlBelongsToOrigin(url: []const u8, origin_: ?[]const u8) bool {
 }
 
 const InitOptions = struct {
+    // WebIDL calls it BlobPropertyBag, and that is the name the refusal has to
+    // carry; nothing derives it from the Zig one.
+    pub const js_idl_name = "BlobPropertyBag";
+
     /// MIME type.
     type: []const u8 = "",
     /// How to handle line endings (CR and LF).

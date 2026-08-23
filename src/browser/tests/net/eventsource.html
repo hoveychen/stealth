@@ -165,3 +165,16 @@
   });
 }
 </script>
+
+<script id=eventSource_dictionary_refusal>
+  // The second argument is an EventSourceInit dictionary; a number is refused
+  // by that name (measured on Chrome 151).
+  {
+    let err = null;
+    try { new EventSource('/x', 1); } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to construct 'EventSource': The provided value is not of type 'EventSourceInit'.",
+      err,
+    );
+  }
+</script>

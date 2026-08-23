@@ -928,3 +928,15 @@
   testing.expectEqual('back-to-string', fd.get('fromBlob'));
 }
 </script>
+
+<script id=formData_parameter_brand>
+  // The constructor's prefix names the interface being constructed, and the
+  // detail names the parameter and the interface it wanted -- HTMLFormElement,
+  // not the Zig type behind it (measured on Chrome 151).
+  let err = null;
+  try { new FormData(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to construct 'FormData': parameter 1 is not of type 'HTMLFormElement'.",
+    err,
+  );
+</script>

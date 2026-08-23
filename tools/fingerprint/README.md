@@ -939,11 +939,14 @@ error for calling without `new`). The forty-seventh is `Option` — see below.
   before converting them, the same as a constructor's — see "Every operation
   counts its own arguments now" below. The hand-rolled counters still work and
   were left alone.
-- **A typed dictionary argument says "invalid argument" too.** `new DOMQuad(5)`
+- ~~**A typed dictionary argument says "invalid argument" too.** `new DOMQuad(5)`
   should say "The provided value is not of type 'DOMPointInit'.". The
   hand-rolled reader in `webapi/dictionary.zig` produces Chrome's three messages
   and is what the classes that were measured against them use; the bridge's own
-  typed dictionaries still do not.
+  typed dictionaries still do not.~~ Fixed 2026-08-22: a typed dictionary
+  declares its `js_idl_name` and the bridge writes the sentence — see "The other
+  half of the sentence" below. The hand-rolled reader still owns the
+  member-level messages.
 - **`CSS` is missing most of its numeric factories.** Chrome's
   `Object.getOwnPropertyNames(CSS)` is sixty-odd names (`Hz`, `Q`, `cap`, `ch`,
   `cm`, every `cq*`/`dv*`/`lv*`/`sv*` unit, `registerProperty`,
@@ -9324,3 +9327,85 @@ Everything else in the table matches. The three divergences are
 `crossOriginIsolated`/`SharedArrayBuffer`, the clock clamp that follows from
 it, and OPFS.
 
+
+### The other half of the sentence: which argument, and what it wanted
+
+Counting an operation's arguments left the *conversion* refusals untouched, and
+those were the larger half — 32 of `probe-invalid-argument.js`'s 55 cases still
+answered `TypeError: invalid argument`. Blink's wording is two independent
+halves, and only the prefix was in place. The detail comes in four shapes, and
+which one you get depends on how the conversion failed, not on where the call
+came from:
+
+| failure | detail |
+|---|---|
+| interface or callback parameter, wrong brand | `parameter <N> is not of type '<Type>'.` |
+| dictionary or union, wrong shape | `The provided value is not of type '<Name>'.` |
+| sequence, not iterable | `The provided value cannot be converted to a sequence.` |
+| dictionary member, enum out of range | `Failed to read the '<member>' property from '<Dict>': The provided value '<v>' is not a valid enum value of type <Enum>.` |
+
+**Only the first carries a position.** A dictionary is named, not counted, and
+the sequence refusal names nothing at all. Getting that backwards — adding
+`parameter 1` everywhere — would be its own tell.
+
+`Caller.getArgs` already knew the position: the loop over parameters is an
+`inline for`, so the index is comptime and `parameter <N>` is `i + 1`. What it
+lacked was a type name, and where one is derivable it now derives it: an
+interface pointer names its `JsApi`, a `js.Function` is `'Function'`. The
+callback-interface case is the one worth recording — `EventListener` and
+`NodeFilter` are modelled here as a union of a function and an object, and Blink
+names **neither** of them: `el.addEventListener('x', 1)` and
+`document.createNodeIterator(el, 1, 1)` both say `'Object'`. Not the interface,
+not `'Function'`.
+
+**A bare `js.Object` parameter is deliberately not `'Object'`.** It is what a
+parameter whose IDL type this bridge does not model looks like, and the two the
+probe covers are both named after the interface they wanted — `new Animation(1)`
+is `'AnimationEffect'`, `crypto.getRandomValues(1)` is `'ArrayBufferView'`. They
+keep the generic refusal rather than a confident wrong name.
+
+Dictionaries and unions cannot be derived at all — `Blob.InitOptions` is a
+`BlobPropertyBag`, `DOMQuad`'s corners are `DOMPointInit`, and an IDL union's
+name is its whole spelling (`new Headers(1)` wants
+`'(record<ByteString, ByteString> or sequence<sequence<ByteString>>)'`). Each
+type declares its own `js_idl_name`. That sentence had to be told apart from the
+one a bad *member* gets, so the conversion layer now distinguishes them: a value
+that was never the right shape answers `NotOfType`, while a member's own
+conversion returns whatever it returns. Naming the dictionary when it was a
+member that failed would point at the wrong thing.
+
+The nested enum sentence went the other way — by hand, in the modules. The
+bridge's enum conversion knows neither the member's name, nor the dictionary's,
+nor the enum type's, and the sentence needs all three, so `RequestInit`'s
+`cache`, `credentials` and `redirect` stopped being typed enums and became
+strings the constructor reads itself. `duplex` already worked that way and
+already wrote the sentence; the four with an enum behind them now share one
+helper. `attachShadow`'s `mode` is the same sentence with the execute prefix.
+
+Two refusals came from the bridge reading a sequence as something else.
+`CSSTransformValue` was bound with a slice parameter, which makes a non-array
+first argument look like the start of a variadic list, so the message came from
+converting that one element instead of from the parameter as a whole; it takes
+the raw value now. `CSSUnparsedValue` only had to check before converting.
+
+Result on `probe-invalid-argument.js` (55 cases): **13 identical to Chrome
+before, 42 after**, and the count answering `invalid argument` went **39 → 32 →
+3**. What is left, and none of it is wording:
+
+- **7 cases Chrome refuses and we do not.** `new CSSStyleSheet(1)`,
+  `new DocumentTimeline(1)`, `new TaskController(1)`,
+  `new Request(u, {mode:'nope'})` (there is no `mode` member here at all),
+  `new Response('x', {status:99})`, `crypto.getRandomValues([])`,
+  `el.animate(1)`.
+- **1 we refuse and Chrome does not**: `new URLSearchParams(1)`.
+- **2 whose IDL type the bridge does not model**, described above:
+  `new Animation(1)` and `crypto.getRandomValues(1)`.
+- **2 self-invented messages**: `new CSSRotate(1)` says "Must pass an angle to
+  CSSRotate" where Chrome says `parameter 1 is not of type 'CSSNumericValue'.`,
+  and `el.insertAdjacentHTML('nope', 'x')` says "The string did not match the
+  expected pattern" where Chrome lists all four legal values.
+- **1 setter**: `url.href = 'nope'` is still an empty message. The prefix
+  pipeline does not reach accessors — `Snapshot` sets no data on getter/setter
+  templates — so no setter can name itself yet.
+
+Readings: `results/probes/probe-invalid-argument.{chrome,lightpanda}.json`.

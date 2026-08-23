@@ -54,6 +54,8 @@ _tracked: std.AutoHashMapUnmanaged(*Element, void) = .{},
 const zero_rect: DOMRect.Data = .{};
 
 pub const ObserverInit = struct {
+    pub const js_idl_name = "IntersectionObserverInit";
+
     root: ?*Node = null,
     rootMargin: ?[]const u8 = null,
     threshold: Threshold = .{ .scalar = 0.0 },
