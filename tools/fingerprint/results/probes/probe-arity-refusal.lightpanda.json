@@ -1,0 +1,194 @@
+{
+ "el.append()": {
+  "throws": false
+ },
+ "el.prepend()": {
+  "throws": false
+ },
+ "el.replaceChildren()": {
+  "throws": false
+ },
+ "el.after()": {
+  "throws": false
+ },
+ "el.before()": {
+  "throws": false
+ },
+ "el.replaceWith()": {
+  "throws": false
+ },
+ "text.after()": {
+  "throws": false
+ },
+ "text.before()": {
+  "throws": false
+ },
+ "text.replaceWith()": {
+  "throws": false
+ },
+ "frag.append()": {
+  "throws": false
+ },
+ "frag.prepend()": {
+  "throws": false
+ },
+ "frag.replaceChildren()": {
+  "throws": false
+ },
+ "doc.append()": {
+  "throws": false
+ },
+ "doc.prepend()": {
+  "throws": false
+ },
+ "doc.replaceChildren()": {
+  "throws": false
+ },
+ "doc.write()": {
+  "throws": false
+ },
+ "doc.writeln()": {
+  "throws": false
+ },
+ "el.classList.add()": {
+  "throws": false
+ },
+ "el.classList.remove()": {
+  "throws": false
+ },
+ "document.all.item()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "clearTimeout()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "clearInterval()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "window.scroll()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "window.scrollTo()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "window.scrollBy()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "selection.containsNode(node)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "selection.modify()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "writer.write()": {
+  "throws": false
+ },
+ "transformController.enqueue()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "document.createElement()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.setAttribute('x')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.matches()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.closest()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "document.querySelector()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "history.pushState()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "localStorage.setItem('k')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.getAttribute()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.removeAttribute()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "document.createTextNode()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.querySelectorAll()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "document.getElementsByClassName()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new URL()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to construct 'URL': 1 argument required, but only 0 present."
+ },
+ "node.contains()": {
+  "throws": false
+ },
+ "document.getElementById()": {
+  "throws": false
+ },
+ "node.isSameNode()": {
+  "throws": false
+ },
+ "el.hasAttributeNS()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "document.createElementNS()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "history.pushState(1)": {
+  "throws": false
+ }
+}
