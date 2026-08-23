@@ -9324,3 +9324,18 @@ Everything else in the table matches. The three divergences are
 `crossOriginIsolated`/`SharedArrayBuffer`, the clock clamp that follows from
 it, and OPFS.
 
+
+### One of those three is closed (2026-08-23)
+
+`crossOriginIsolated` is read off the headers now, and `SharedArrayBuffer`
+follows it. Both arms rerun in one sitting (`results/p4-oracle.json`,
+`results/p4-lp.json`): every realm of the challenge on our arm — the
+interstitial, its `about:blank` and `about:srcdoc` children, and the widget
+document at `challenges.cloudflare.com` — now answers `coi: true` and
+`sab: "function"`, matching the oracle realm for realm. `opfs` is still `false`
+against the oracle's `true`, and the clock clamp is still 100 μs; those are the
+other two rows and they have their own plans.
+
+The challenge itself still refuses (`cf-chl-gen`, same as before), so this was
+not the deciding property. It was a real one-property disagreement on the page
+that is looking, and it is gone.
