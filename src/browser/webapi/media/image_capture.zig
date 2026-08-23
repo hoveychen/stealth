@@ -283,6 +283,10 @@ pub const ImageCapture = struct {
         return local.resolvePromise(try exec._factory.create(ImageBitmap{
             ._width = canvas.width,
             ._height = canvas.height,
+            // Sized but blank: the track records its canvas' dimensions and
+            // nothing else (`CanvasSource` in streams.zig), so there is no
+            // buffer here to snapshot the way createImageBitmap() does.
+            ._surface = .{ .arena = exec.arena },
         }));
     }
 
