@@ -762,6 +762,11 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
     const is_font_family = std.mem.eql(u8, property_name, "font-family") or
         std.mem.eql(u8, property_name, "font");
 
+    // Measured: `stroke-dasharray` is a list whatever separates it, and Chrome
+    // answers every separator as `, ` -- `32 32` comes back `32, 32`. No other
+    // property in the measurement turns a space into a comma.
+    const is_dasharray = std.mem.eql(u8, property_name, "stroke-dasharray");
+
     var buf = std.Io.Writer.Allocating.init(arena);
     errdefer buf.deinit();
     var changed = false;
@@ -769,6 +774,39 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
     while (i < value.len) {
         const c = value[i];
         const before_i = i;
+        const before_len = buf.written().len;
+
+        // Chrome re-serialises a value's punctuation rather than echoing it:
+        // whatever the author wrote, every comma comes back `, ` and every
+        // slash ` / `. Measured across font-family, transition, will-change,
+        // grid-area, grid-row, aspect-ratio, font and border-radius; a custom
+        // property never reaches here, and its punctuation stays as written.
+        if (std.ascii.isWhitespace(c)) {
+            var end = i;
+            while (end < value.len and std.ascii.isWhitespace(value[end])) end += 1;
+            // A run in front of a comma or a slash belongs to that token's own
+            // spacing, and a run at the end is not part of the value at all.
+            if (end < value.len and value[end] != ',' and value[end] != '/') {
+                if (buf.written().len != 0) {
+                    try buf.writer.writeAll(if (is_dasharray) ", " else " ");
+                }
+            }
+            changed = changed or !std.mem.eql(u8, buf.written()[before_len..], value[i..end]);
+            i = end;
+            continue;
+        }
+
+        if (c == ',' or c == '/') {
+            if (c == ',') {
+                try buf.writer.writeAll(", ");
+            } else {
+                try buf.writer.writeAll(if (buf.written().len == 0) "/ " else " / ");
+            }
+            i += 1;
+            while (i < value.len and std.ascii.isWhitespace(value[i])) i += 1;
+            changed = changed or !std.mem.eql(u8, buf.written()[before_len..], value[before_i..i]);
+            continue;
+        }
 
         // A string is content rather than syntax: `content: "MiXeD"` keeps its
         // case, quotes and escapes. A font family is the exception -- there the
@@ -2935,6 +2973,10 @@ test "WebApi: CSSStyleDeclaration computed per-tag values" {
 
 test "WebApi: CSSStyleDeclaration serialize" {
     try testing.htmlRunner("css/declaration_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration value list serialize" {
+    try testing.htmlRunner("css/value_list_serialize.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration custom properties" {
