@@ -219,3 +219,16 @@
     testing.expectEqual(false, threw);
   }
 </script>
+
+<script id=fragment_missing_argument>
+  {
+    // The interface named is the one that declares the operation, and
+    // getElementById is declared twice -- once on Document, once on
+    // DocumentFragment (Chrome 151 says 'DocumentFragment' here). We reported
+    // length 0 and answered null.
+    testing.expectEqual(1, DocumentFragment.prototype.getElementById.length);
+    testing.expectError(
+      "TypeError: Failed to execute 'getElementById' on 'DocumentFragment': 1 argument required, but only 0 present.",
+      () => document.createDocumentFragment().getElementById());
+  }
+</script>

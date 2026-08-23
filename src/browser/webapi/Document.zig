@@ -2302,7 +2302,7 @@ pub const JsApi = struct {
     pub const createComment = bridge.function(Document.createComment, .{});
     pub const createDocumentFragment = bridge.function(Document.createDocumentFragment, .{});
     pub const createElement = bridge.function(Document.createElement, .{});
-    pub const createElementNS = bridge.function(Document.createElementNS, .{});
+    pub const createElementNS = bridge.function(Document.createElementNS, .{ .arity = 2 });
     pub const createEvent = bridge.function(Document.createEvent, .{});
     pub const createExpression = bridge.function(Document.createExpression, .{});
     pub const createNSResolver = bridge.function(Document.createNSResolver, .{});
@@ -2313,13 +2313,13 @@ pub const JsApi = struct {
     pub const createTreeWalker = bridge.function(Document.createTreeWalker, .{});
     pub const elementFromPoint = bridge.function(Document.elementFromPoint, .{});
     pub const elementsFromPoint = bridge.function(Document.elementsFromPoint, .{});
-    pub const evaluate = bridge.function(Document.evaluate, .{});
+    pub const evaluate = bridge.function(Document.evaluate, .{ .arity = 2 });
     pub const execCommand = bridge.function(Document.execCommand, .{});
     pub const exitFullscreen = bridge.function(Document.exitFullscreen, .{});
     pub const exitPictureInPicture = bridge.function(Document.exitPictureInPicture, .{});
     pub const exitPointerLock = bridge.function(Document.exitPointerLock, .{});
     pub const getAnimations = bridge.function(Document.getAnimations, .{});
-    pub const getElementById = bridge.function(_getElementById, .{});
+    pub const getElementById = bridge.function(_getElementById, .{ .arity = 1 });
     fn _getElementById(self: *Document, value_: ?js.Value, frame: *Frame) !?*Element {
         const value = value_ orelse return null;
         if (value.isNull()) {
@@ -2333,7 +2333,7 @@ pub const JsApi = struct {
     pub const getElementsByClassName = bridge.function(Document.getElementsByClassName, .{});
     pub const getElementsByName = bridge.function(Document.getElementsByName, .{});
     pub const getElementsByTagName = bridge.function(Document.getElementsByTagName, .{});
-    pub const getElementsByTagNameNS = bridge.function(Document.getElementsByTagNameNS, .{});
+    pub const getElementsByTagNameNS = bridge.function(Document.getElementsByTagNameNS, .{ .arity = 2 });
     pub const getSelection = bridge.function(Document.getSelection, .{});
     pub const hasFocus = bridge.function(Document.hasFocus, .{});
     pub const hasStorageAccess = bridge.function(Document.hasStorageAccess, .{});

@@ -235,3 +235,28 @@
     testing.expectEqual(0, d1.childNodes.length);
   }
 </script>
+
+<script id=node_missing_argument>
+  {
+    // Five of Node's operations take a required argument that this engine
+    // modelled as optional, so `length` read 0 and the call went through:
+    // `div.contains()` answered false, `div.lookupNamespaceURI()` answered the
+    // XHTML namespace. Chrome 151 counts first and refuses, naming Node as the
+    // interface that declares them.
+    const cases = [
+      ['contains', 1],
+      ['isDefaultNamespace', 1],
+      ['isSameNode', 1],
+      ['lookupNamespaceURI', 1],
+      ['lookupPrefix', 1],
+    ];
+
+    const el = document.createElement('div');
+    for (const [name, n] of cases) {
+      testing.expectEqual(n, Node.prototype[name].length, { desc: name + '.length' });
+      testing.expectError(
+        `TypeError: Failed to execute '${name}' on 'Node': ${n} argument required, but only 0 present.`,
+        () => el[name]());
+    }
+  }
+</script>

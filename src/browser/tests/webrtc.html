@@ -679,3 +679,68 @@
     }
   }
 </script>
+
+<script id=rtc_missing_argument>
+  {
+    // Seven of RTCPeerConnection's operations under-report `length`. Every one
+    // of them stands in for a peer this engine does not have, so the body
+    // fails with InvalidStateError -- but Chrome 151 never reaches the body:
+    // it counts the arguments first and refuses. addStream/removeStream did not
+    // even do that much; they returned undefined.
+    const cases = [
+      'addStream', 'addTrack', 'addTransceiver', 'createDTMFSender',
+      'removeStream', 'removeTrack',
+    ];
+    const pc = new RTCPeerConnection();
+    for (const name of cases) {
+      testing.expectEqual(1, RTCPeerConnection.prototype[name].length, { desc: name + '.length' });
+      testing.expectError(
+        `TypeError: Failed to execute '${name}' on 'RTCPeerConnection': 1 argument required, but only 0 present.`,
+        () => pc[name]());
+    }
+
+    // The alias shares the binding, so it shares the count -- but the sentence
+    // names the interface the binding was declared on, not the alias.
+    for (const name of cases) {
+      testing.expectEqual(1, webkitRTCPeerConnection.prototype[name].length, { desc: 'webkit ' + name });
+    }
+  }
+</script>
+
+<script id=rtc_missing_argument_rejects type=module>
+{
+  // setRemoteDescription returns a promise, and a promise-returning operation
+  // does not throw its refusal -- it rejects with it. `.length` is 1 in Chrome
+  // 151 all the same, so the count and the refusal come apart here: reading
+  // only the throw would have said this member was fine.
+  const state = await testing.async();
+  const settle = (p) => p.then(() => 'resolved', (e) => `rejected:${e.name}:${e.message}`);
+  const pc = new RTCPeerConnection();
+  const noArg = await settle(pc.setRemoteDescription());
+  state.resolve();
+  await state.done(() => {
+    testing.expectEqual(1, RTCPeerConnection.prototype.setRemoteDescription.length);
+    testing.expectEqual(
+      "rejected:TypeError:Failed to execute 'setRemoteDescription' on 'RTCPeerConnection': 1 argument required, but only 0 present.",
+      noArg);
+  });
+}
+</script>
+
+<script id=rtp_missing_argument_length>
+  {
+    // Four more on the RTP interfaces. Only `length` is asserted: an
+    // RTCRtpSender and an RTCRtpTransceiver are unreachable here -- getSenders()
+    // and getTransceivers() answer empty and addTransceiver() refuses -- and a
+    // borrowed receiver does not get there either, because V8 checks the
+    // receiver's signature before the callback runs at all, in both engines
+    // (`Node.prototype.contains.call({})` is "Illegal invocation" in Chrome 151
+    // too). The count is what a detector can read without an instance.
+    for (const name of ['replaceTrack', 'setParameters']) {
+      testing.expectEqual(1, RTCRtpSender.prototype[name].length, { desc: name + '.length' });
+    }
+    for (const name of ['setCodecPreferences', 'setHeaderExtensionsToNegotiate']) {
+      testing.expectEqual(1, RTCRtpTransceiver.prototype[name].length, { desc: name + '.length' });
+    }
+  }
+</script>

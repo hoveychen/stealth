@@ -8919,8 +8919,10 @@ Result, `probe-arity-refusal.js` (48 cases, both engines): **27 differences
 before, 5 after.** All five are the opposite problem — 92 members whose `length`
 is *below* Chrome's, so the check stays silent where Chrome speaks
 (`div.contains()`, `document.getElementById()`, `div.isSameNode()`,
-`el.hasAttributeNS()`, `document.createElementNS()`; 48 of the 92 are WebGL and
-12 are RTC). That is its own change, not this one. On
+`el.hasAttributeNS()`, `document.createElementNS()`; 50 of the 92 are WebGL and
+18 are RTC — recounted from the same reading when that change was made; this
+paragraph first said 48 and 12). That is its own change, closed in "The other
+direction" below, not this one. On
 `probe-invalid-argument.js` the count still answering `invalid argument` went
 **39 → 32**, the remaining 32 being the per-parameter conversion sentences.
 
@@ -9768,3 +9770,100 @@ Two tests had pinned the old answer and were updated to Chrome's:
 `element/styles.html` expected `""` for an undeclared `letter-spacing`, and
 `css/typed_om.html` expected `undefined` from `computedStyleMap().get('align-items')`
 with a comment naming this exact gap as the reason.
+
+## The other direction: the ninety-two operations that were counting too few (2026-08-23)
+
+The arity pass above closed the over-reported side — 30 members whose `length`
+was *larger* than Chrome's, which would have made this engine refuse calls
+Chrome accepts — and left the mirror image open: **92 members whose `length` was
+smaller**, where Chrome refuses and this engine answers. That side is the one a
+detector can use, because it does not need to guess a wording. It calls
+`div.contains()` and reads whether anything came back.
+
+Ninety-two is what `probe-operation-arity.js` counts; eighty-five distinct
+bindings, because `webkitRTCPeerConnection` is an alias and its seven show up
+twice. `probe-arity-gaps.js` reads the consequence rather than the symptom:
+every one of the eighty-five called with no arguments, plus eighteen called
+short by one, on both engines.
+
+### One cause, and it is not a mistake
+
+All ninety-two are the same shape. `getArity` walks the Zig parameters and
+**stops at the first optional one**, so a signature like
+
+```zig
+pub fn getElementsByTagNameNS(self: *Element, namespace: ?[]const u8, local_name: []const u8, frame: *Frame)
+```
+
+counts zero, even though `local_name` after it is required. The `?` is doing two
+jobs that WebIDL keeps apart: *nullable* (`DOMString? namespace` — `null` is a
+legal value that means "no namespace") and *optional* (the argument may be
+omitted). Chrome reports 2 here and refuses a one-argument call.
+
+That distinction decides the fix. Removing the `?` would make the count right
+and the behaviour wrong: `div.contains(null)`, `gl.isBuffer(null)` and
+`sender.replaceTrack(null)` are all legal calls that must keep answering. So the
+count is *declared*, with the `.arity` override the bridge already had for
+variadics, and the signature keeps its nullability. `bridge.Function.init` feeds
+`.arity` to both the reported `length` and the `required_args` check, so the two
+cannot drift apart.
+
+Where the ninety-two sit, and what each was doing instead of refusing:
+
+| interface | n | before |
+|---|---|---|
+| WebGL2 33, WebGL 17 | 50 | half threw `invalid argument`; half read the missing object as null, so `gl.isBuffer()` said `false` and `gl.getShaderSource()` said `""` |
+| RTCPeerConnection ×2 aliases | 14 | `InvalidStateError` from a body Chrome never reaches — except `addStream`/`removeStream`, which returned `undefined` |
+| Element | 10 | the NS five threw `invalid argument`; `animate()` returned an Animation, and the pointer-capture three returned quietly |
+| Node | 5 | `contains()` → `false`, `lookupNamespaceURI()` → the XHTML namespace |
+| Document | 4 | `getElementById()` → `null`; `evaluate('x')` → an XPathResult |
+| RTCRtpSender 2, RTCRtpTransceiver 2 | 4 | unreachable in this engine; `length` only |
+| Selection 2, DOMImplementation, DataTransferItem, DocumentFragment | 5 | all returned rather than refused |
+
+Three of them were already refusing and refusing *wrongly*, which is worse than
+silence because the sentence carries a number: `document.evaluate()` asked for
+one argument where Chrome asks for two, and `impl.createDocumentType()` asked
+for one where Chrome asks for three. A refusal with the wrong count is as
+readable as no refusal.
+
+### Two shapes that a zero-argument throw test would have missed
+
+**A promise-returning operation does not throw its refusal, it rejects with it.**
+`pc.setRemoteDescription()` has `length === 1` in Chrome and returns a rejected
+promise; nothing is thrown. The bridge already routed a promise-returning
+operation's error to a rejection, so declaring the arity moved it from an
+`InvalidStateError` rejection to the `TypeError` one — but a test written as
+`expectError` would have called this member fine and moved on.
+
+**The count is checked after the receiver, not before.** The refusal fires
+inside `Caller.Function._call`, which is upstream of every conversion — but V8
+checks the function template's signature before the callback runs at all, so a
+borrowed receiver never gets there. `Node.prototype.contains.call({})` is
+`TypeError: Illegal invocation` in Chrome 151 **and** here, both before and
+after this change. That is why the four RTP members assert `length` only: an
+`RTCRtpSender` and an `RTCRtpTransceiver` are unreachable in this engine
+(`getSenders()` answers empty, `addTransceiver()` refuses), and borrowing a
+receiver does not reach the operation.
+
+### Reading
+
+`probe-operation-arity.js` (3714 members in Chrome, 3486 here, 3470 shared):
+**92 smaller before, 0 after.** The over-reported side stays at 0, so this did
+not trade one direction for the other.
+
+`probe-arity-refusal.js` (48 cases): **5 differences before, 0 after** — the
+five were `node.contains()`, `node.isSameNode()`, `document.getElementById()`,
+`document.createElementNS()` and `el.hasAttributeNS()`, named in the section
+above as the leftovers of the first pass.
+
+`probe-arity-gaps.js` (188 readings): **0 identical before, 184 after.** The
+four that remain are not arity at all — they are the RTP receivers this engine
+cannot produce, so the probe cannot reach the operation to hear it refuse.
+Their `length` is among the 184.
+
+`probe-invalid-argument.js` is unchanged at 12 differences, which is the point:
+those are per-parameter conversion sentences, a different half of the wording.
+
+Readings: `results/probes/probe-arity-gaps.{chrome,lightpanda}.json`,
+`probe-operation-arity.{chrome,lightpanda}.json`,
+`probe-arity-refusal.{chrome,lightpanda}.json`.

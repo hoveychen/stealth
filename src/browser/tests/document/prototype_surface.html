@@ -535,3 +535,31 @@
     testing.expectEqual(false, threw);
   }
 </script>
+
+<script id=document_missing_argument>
+  {
+    // `document.getElementById()` answered null and `document.createElementNS()`
+    // said "invalid argument"; Chrome 151 refuses both by name. The three here
+    // are Document's own, so the interface in the sentence is Document -- the
+    // same operation on a fragment names DocumentFragment instead.
+    const cases = [
+      ['createElementNS', 2],
+      ['getElementById', 1],
+      ['getElementsByTagNameNS', 2],
+    ];
+    for (const [name, n] of cases) {
+      testing.expectEqual(n, Document.prototype[name].length, { desc: name + '.length' });
+      testing.expectError(
+        `TypeError: Failed to execute '${name}' on 'Document': ${n} argument${n === 1 ? '' : 's'} required, but only 0 present.`,
+        () => document[name]());
+    }
+
+    // Short by one.
+    testing.expectError(
+      "TypeError: Failed to execute 'createElementNS' on 'Document': 2 arguments required, but only 1 present.",
+      () => document.createElementNS('x'));
+    testing.expectError(
+      "TypeError: Failed to execute 'getElementsByTagNameNS' on 'Document': 2 arguments required, but only 1 present.",
+      () => document.getElementsByTagNameNS('x'));
+  }
+</script>

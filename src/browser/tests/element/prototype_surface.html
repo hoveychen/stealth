@@ -473,3 +473,60 @@
     testing.expectEqual(false, threw);
   }
 </script>
+
+<script id=element_missing_argument>
+  {
+    // Ten of Element's operations under-report `length`, and every one of them
+    // is a required argument this engine wrote as optional. The two families
+    // read differently from the outside: the NS pair already threw, but with
+    // the generic "invalid argument" nothing says, while the pointer-capture
+    // three returned quietly -- `div.setPointerCapture()` did nothing and
+    // `div.animate()` handed back an Animation. Chrome 151 counts before it
+    // converts, so all ten refuse with the same sentence.
+    const cases = [
+      ['animate', 1],
+      ['getAttributeNS', 2],
+      ['getAttributeNodeNS', 2],
+      ['getElementsByTagNameNS', 2],
+      ['hasAttributeNS', 2],
+      ['hasPointerCapture', 1],
+      ['releasePointerCapture', 1],
+      ['removeAttributeNS', 2],
+      ['setAttributeNS', 3],
+      ['setPointerCapture', 1],
+    ];
+
+    const el = document.createElement('div');
+    for (const [name, n] of cases) {
+      testing.expectEqual(n, Element.prototype[name].length, { desc: name + '.length' });
+      testing.expectError(
+        `TypeError: Failed to execute '${name}' on 'Element': ${n} argument${n === 1 ? '' : 's'} required, but only 0 present.`,
+        () => el[name]());
+    }
+  }
+</script>
+
+<script id=element_missing_argument_short_by_one>
+  {
+    // Short by one rather than empty: the count Chrome reports is the count it
+    // received, so "but only 1 present." is a separate sentence from "only 0",
+    // and setAttributeNS wants three, which makes "only 2" reachable too. The
+    // two-argument call is the one this engine let through entirely --
+    // `el.setAttributeNS('x', 'y')` set an attribute.
+    const el = document.createElement('div');
+    const cases = [
+      ['getAttributeNS', 2, ['x']],
+      ['getAttributeNodeNS', 2, ['x']],
+      ['getElementsByTagNameNS', 2, ['x']],
+      ['hasAttributeNS', 2, ['x']],
+      ['removeAttributeNS', 2, ['x']],
+      ['setAttributeNS', 3, ['x']],
+      ['setAttributeNS', 3, ['x', 'y']],
+    ];
+    for (const [name, n, args] of cases) {
+      testing.expectError(
+        `TypeError: Failed to execute '${name}' on 'Element': ${n} arguments required, but only ${args.length} present.`,
+        () => el[name](...args));
+    }
+  }
+</script>

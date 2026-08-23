@@ -99,5 +99,5 @@ pub const JsApi = struct {
     pub const kind = bridge.accessor(DataTransferItem.getKind, null, .{});
     pub const @"type" = bridge.accessor(DataTransferItem.getType, null, .{});
     pub const getAsFile = bridge.function(DataTransferItem.getAsFile, .{});
-    pub const getAsString = bridge.function(DataTransferItem.getAsString, .{});
+    pub const getAsString = bridge.function(DataTransferItem.getAsString, .{ .arity = 1 });
 };

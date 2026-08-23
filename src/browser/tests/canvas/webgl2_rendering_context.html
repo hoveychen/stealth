@@ -246,3 +246,49 @@
   testing.expectEqual(5, gl.vertexAttribIPointer.length);
 }
 </script>
+
+<script id=WebGL2RenderingContext#missing_argument>
+{
+  // The same optional-parameter cause as on WebGLRenderingContext, over
+  // thirty-three members here -- the two contexts are bound separately, so
+  // each carries its own count and its own sentence, and the interface named is
+  // the one whose prototype was reached. Three of these want three arguments,
+  // which WebGL1 has none of.
+  const gl = document.createElement("canvas").getContext("webgl2");
+  const cases = [
+    ['clientWaitSync', 3], ['getActiveAttrib', 2], ['getActiveUniform', 2],
+    ['getActiveUniformBlockName', 2], ['getActiveUniformBlockParameter', 3],
+    ['getActiveUniforms', 3], ['getAttachedShaders', 1], ['getAttribLocation', 2],
+    ['getFragDataLocation', 2], ['getProgramInfoLog', 1], ['getProgramParameter', 2],
+    ['getQueryParameter', 2], ['getSamplerParameter', 2], ['getShaderInfoLog', 1],
+    ['getShaderParameter', 2], ['getShaderSource', 1], ['getSyncParameter', 2],
+    ['getTransformFeedbackVarying', 2], ['getUniform', 2], ['getUniformBlockIndex', 2],
+    ['getUniformIndices', 2], ['getUniformLocation', 2], ['isBuffer', 1],
+    ['isFramebuffer', 1], ['isProgram', 1], ['isQuery', 1], ['isRenderbuffer', 1],
+    ['isSampler', 1], ['isShader', 1], ['isSync', 1], ['isTexture', 1],
+    ['isTransformFeedback', 1], ['isVertexArray', 1],
+  ];
+  for (const [name, n] of cases) {
+    testing.expectEqual(n, WebGL2RenderingContext.prototype[name].length, { desc: name + '.length' });
+    testing.expectError(
+      `TypeError: Failed to execute '${name}' on 'WebGL2RenderingContext': ${n} argument${n === 1 ? '' : 's'} required, but only 0 present.`,
+      () => gl[name]());
+  }
+
+  // Short by one and short by two, on the two that want three. The second
+  // argument is whatever that member's signature wants; it is never converted,
+  // because the count is refused first.
+  const short = [
+    ['clientWaitSync', [null], [null, 0]],
+    ['getActiveUniforms', [null], [null, []]],
+  ];
+  for (const [name, one, two] of short) {
+    testing.expectError(
+      `TypeError: Failed to execute '${name}' on 'WebGL2RenderingContext': 3 arguments required, but only 1 present.`,
+      () => gl[name](...one));
+    testing.expectError(
+      `TypeError: Failed to execute '${name}' on 'WebGL2RenderingContext': 3 arguments required, but only 2 present.`,
+      () => gl[name](...two));
+  }
+}
+</script>
