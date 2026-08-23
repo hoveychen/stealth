@@ -438,7 +438,7 @@ fn writeInner(self: *IDBObjectStore, request: *IDBRequest, kind: WriteKind, valu
         },
     };
 
-    const serialized = try value.serialize();
+    const serialized = try value.serialize(null);
     defer serialized.deinit();
 
     // Record + index rows are atomic: a unique-index violation rolls the record

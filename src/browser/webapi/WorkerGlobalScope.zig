@@ -415,7 +415,7 @@ pub fn atob(_: *const WorkerGlobalScope, input: base64.BinInput, exec: *JS.Execu
 }
 
 pub fn structuredClone(_: *const WorkerGlobalScope, value: JS.Value) !JS.Value {
-    return value.structuredClone();
+    return value.structuredClone("Failed to execute 'structuredClone' on 'WorkerGlobalScope': ");
 }
 
 pub fn unhandledPromiseRejection(self: *WorkerGlobalScope, no_handler: bool, rejection: JS.PromiseRejection) !void {

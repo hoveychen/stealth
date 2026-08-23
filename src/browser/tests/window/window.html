@@ -242,6 +242,22 @@
   testing.expectEqual(screen, window.screen);
 </script>
 
+<script id=structured_clone_error_message>
+{
+  // The DataCloneError carries the same `Failed to execute '<op>' on
+  // '<Interface>': ` prefix as the rest, and V8's own detail after it already
+  // matched. A host object Blink cannot clone is named by its interface rather
+  // than described generically. Measured against Chrome 151.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const pre = "DataCloneError: Failed to execute 'structuredClone' on 'Window': ";
+
+  testing.expectEqual(pre + '() => { } could not be cloned.', msg(() => structuredClone(() => { })));
+  testing.expectEqual(pre + 'Symbol(s) could not be cloned.', msg(() => structuredClone(Symbol('s'))));
+  testing.expectEqual(pre + 'HTMLDivElement object could not be cloned.',
+    msg(() => structuredClone(document.createElement('div'))));
+}
+</script>
+
 <script id=structuredClone>
   // Basic types
   testing.expectEqual(42, structuredClone(42));

@@ -53,7 +53,12 @@
         'getRandomValues(Float32Array)': () => crypto.getRandomValues(new Float32Array(1)),
         'getRandomValues(65537 bytes)': () => crypto.getRandomValues(new Uint8Array(65537)),
         'getRandomValues(Uint16 65536)': () => crypto.getRandomValues(new Uint16Array(65536)),
-        'getRandomValues(BigInt64Array)': () => crypto.getRandomValues(new BigInt64Array(1)),
+        // The bytes are random, so read back the identity of the view instead:
+        // an integer type is filled in place and handed back, not rejected.
+        'getRandomValues(BigInt64Array)': () => {
+            const v = new BigInt64Array(1);
+            return crypto.getRandomValues(v) === v;
+        },
         'getRandomValues(DataView)': () => crypto.getRandomValues(new DataView(new ArrayBuffer(8))),
 
         // structuredClone: the value is stringified into the sentence.

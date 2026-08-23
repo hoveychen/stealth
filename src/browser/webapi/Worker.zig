@@ -343,7 +343,7 @@ pub fn receiveMessage(self: *Worker, data: js.Value) !void {
         defer ls.deinit();
 
         // clones from where it currently is (the Worker context) to our Page's context
-        const cloned = data.structuredCloneTo(&ls.local) catch |err| break :blk err;
+        const cloned = data.structuredCloneTo(&ls.local, null) catch |err| break :blk err;
         break :blk cloned.persist();
     };
 

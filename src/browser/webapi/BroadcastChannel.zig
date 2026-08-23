@@ -85,7 +85,7 @@ pub fn postMessage(self: *BroadcastChannel, message: js.Value, exec: *Execution)
         try_catch.init(&ls.local);
         defer try_catch.deinit();
 
-        const cloned = message.structuredCloneTo(&ls.local) catch {
+        const cloned = message.structuredCloneTo(&ls.local, null) catch {
             return error.DataClone;
         };
         break :blk try cloned.persist();
@@ -219,7 +219,7 @@ const PostMessageCallback = struct {
                 // raise a DataCloneError. The resulting temp is owned by the
                 // MessageEvent, which releases it on teardown — so each receiver
                 // frees only its own handle.
-                const cloned = snapshot.structuredCloneTo(&ls.local) catch |err| {
+                const cloned = snapshot.structuredCloneTo(&ls.local, null) catch |err| {
                     log.err(.dom, "BroadcastChannel.postMessage", .{ .err = err });
                     continue;
                 };

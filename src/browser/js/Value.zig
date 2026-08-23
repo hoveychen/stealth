@@ -339,14 +339,18 @@ pub fn jsonStringify(self: Value, jws: anytype) !void {
 // Clones host objects listed in cloneable_types; throws a DataCloneError for
 // any other. Does not support transferables which require additional delegate
 // callbacks.
-pub fn structuredClone(self: Value) !Value {
-    return self.structuredCloneTo(self.local);
+/// `clone_error_prefix` is Blink's `Failed to execute '<op>' on '<Interface>': `
+/// for whoever asked -- the detail after it comes from V8 and already matches.
+/// `null` keeps the bare sentence for the paths whose wording has not been read
+/// out of Chrome (postMessage, BroadcastChannel), rather than inventing one.
+pub fn structuredClone(self: Value, clone_error_prefix: ?[]const u8) !Value {
+    return self.structuredCloneTo(self.local, clone_error_prefix);
 }
 
 // Clone a value to a different context (within the same isolate).
 // Used for cross-context messaging (e.g., Worker <-> Page).
-pub fn structuredCloneTo(self: Value, target: *const js.Local) !Value {
-    const serialized = try self.serialize();
+pub fn structuredCloneTo(self: Value, target: *const js.Local, clone_error_prefix: ?[]const u8) !Value {
+    const serialized = try self.serialize(clone_error_prefix);
     defer serialized.deinit();
     return deserialize(target, serialized.bytes());
 }
@@ -368,10 +372,11 @@ pub const Serialized = struct {
 
 // Serialize `self` into a V8-owned buffer. The caller must call deinit on the
 // result. Raises a JS exception (DataCloneError) for unserializable values.
-pub fn serialize(self: Value) !Serialized {
+pub fn serialize(self: Value, clone_error_prefix: ?[]const u8) !Serialized {
     var delegate_ctx = CloneDelegate.SerializeContext{
         .local = self.local,
         .serializer = undefined,
+        .clone_error_prefix = clone_error_prefix,
     };
     const serializer = v8.v8__ValueSerializer__New(self.local.isolate.handle, &.{
         .data = &delegate_ctx,
@@ -498,6 +503,7 @@ const CloneDelegate = struct {
     const SerializeContext = struct {
         local: *const js.Local,
         serializer: *v8.ValueSerializer,
+        clone_error_prefix: ?[]const u8 = null,
     };
 
     const DeserializeContext = struct {
@@ -534,11 +540,35 @@ const CloneDelegate = struct {
                     return result;
                 }
             }
+
+            // Blink names the interface rather than falling back to the generic
+            // description: `HTMLDivElement object could not be cloned.`
+            // Measured on Chrome 151.
+            throwDataCloneException(ctx.local, prefixed(ctx, std.fmt.allocPrint(
+                ctx.local.ctx.arena.allocator(),
+                "{s} object could not be cloned.",
+                .{host_object_names[prototype_chain[0].index]},
+            ) catch null));
+            return .{ .has_value = true, .value = false };
         }
 
         throwDataCloneException(ctx.local, null);
         return .{ .has_value = true, .value = false };
     }
+
+    // Indexed exactly as TaggedOpaque's prototype chain is: JsApiLookup's enum
+    // is built from bridge.JsApis in order, so position i is that type's id.
+    const host_object_names = blk: {
+        @setEvalBranchQuota(bridge.JsApis.len * 16);
+        var names: [bridge.JsApis.len][]const u8 = undefined;
+        for (bridge.JsApis, 0..) |JsApi, i| {
+            names[i] = if (@hasDecl(JsApi, "Meta") and @hasDecl(JsApi.Meta, "name"))
+                JsApi.Meta.name
+            else
+                "Object";
+        }
+        break :blk names;
+    };
 
     fn writeCloneable(
         ctx: *SerializeContext,
@@ -601,7 +631,7 @@ const CloneDelegate = struct {
             // the exception can outlive this call; dupe onto the context arena
             break :blk str.toSliceWithAlloc(local.ctx.arena.allocator()) catch null;
         };
-        throwDataCloneException(local, msg);
+        throwDataCloneException(local, prefixed(ctx, msg));
     }
 
     // Called when V8 encounters a SharedArrayBuffer. We don't support sharing
@@ -610,8 +640,20 @@ const CloneDelegate = struct {
     // throwing prevents the fatal FromJust call.
     fn getSharedArrayBufferId(data: ?*anyopaque, _: ?*v8.Isolate, _: ?*const v8.SharedArrayBuffer, _: ?*u32) callconv(.c) bool {
         const ctx: *SerializeContext = @ptrCast(@alignCast(data.?));
-        throwDataCloneException(ctx.local, "SharedArrayBuffer cannot be cloned");
+        throwDataCloneException(ctx.local, prefixed(ctx, "SharedArrayBuffer cannot be cloned"));
         return false;
+    }
+
+    // The exception can outlive this call, so the joined string goes on the
+    // context arena alongside the message V8 handed us.
+    fn prefixed(ctx: *SerializeContext, message: ?[]const u8) ?[]const u8 {
+        const prefix = ctx.clone_error_prefix orelse return message;
+        const detail = message orelse return null;
+        return std.fmt.allocPrint(
+            ctx.local.ctx.arena.allocator(),
+            "{s}{s}",
+            .{ prefix, detail },
+        ) catch message;
     }
 
     fn throwDataCloneException(local: *const js.Local, message: ?[]const u8) void {
