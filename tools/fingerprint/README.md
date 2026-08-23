@@ -10072,3 +10072,61 @@ nine-argument form. It is a no-op here, so the two readbacks that only read what
 canvas at full size instead.
 
 → `cfsc-canvas-pixel-readback` P2 (drawing), P3 (the branches that never run).
+
+## What a path rasteriser is worth, and the two bugs only the live trace found (2026-08-23)
+
+`raster.zig` covered `fillRect`, `clearRect` and `strokeRect`, and neither of
+the widget's two big readbacks contains one of those three. So the geometry
+went in: `path.zig` holds the current transformation matrix and a path
+flattened under it as it is built, and `raster.zig` fills that path by sampling
+a 4x4 grid per pixel against its edge list under either winding rule, and
+strokes it by filling the quad each segment sweeps plus a disc at every join.
+Both context types share it through `context_draw.zig` rather than carrying two
+copies of the same code.
+
+| readback | before | after | arm that clears |
+|---|---|---|---|
+| 9216, 48×48 | 9216 zero | 8536 zero | 1211 zero |
+| 8624, 49×44 | 8624 zero | **1720 zero** | 1725 zero |
+| 7680, 80×24 | 7488 zero | 0 zero | (reads 1×1 there) |
+| 1024, 16×16 | 1022 zero | 138 zero | 90 zero |
+
+The 49×44 lands within five zero bytes of the reference. It is still not
+byte-identical — `multiply` compositing is not implemented and our coverage
+edges are not Chrome's — but the shape is the right shape. The 48×48 is only
+part-way because its ink is six radial gradients and two runs of text, and
+neither gradients nor glyphs exist here yet.
+
+Two bugs turned up that no offline test would have produced, and both were
+settled by measuring Chrome rather than reasoning about the spec.
+
+**A resize resets the context, not just the bitmap.** The widget reuses one
+`OffscreenCanvas` at half a dozen sizes and never clears the transform itself —
+it relies on the resize between them. Assigning to `width` cleared the bitmap
+here and nothing else, so the `scale(0.384)` from the 48×48 readback was still
+in force for the next canvas and then multiplied by that one's own `scale(0.4)`;
+everything after the first readback came out shrunk into a corner. Chrome, for
+an assignment of the value the canvas already has:
+
+    transform → identity   fillStyle → #000000   lineWidth → 1
+    font → 10px sans-serif   globalAlpha → 1   path → empty   save() stack → empty
+
+**A counterclockwise turn of exactly `2π` is a whole circle.** Every arc the
+widget draws passes `counterclockwise = true`, and every one is a full turn:
+`arc(x, y, r, 0, 2 * Math.PI, true)`. Subtracting a turn from a sweep of
+exactly a turn gives zero, so all three composited circles and the even-odd
+ring drew nothing at all — which is why the 8624 readback did not move on the
+first pass even though the path rasteriser was in. Ten readings on a 64×64
+canvas at r=25, ink pixels:
+
+| call | clockwise | counterclockwise |
+|---|---|---|
+| `arc(0, 2π)` | 2032 | 2032 |
+| `arc(0, 2π + π/2)` | 2032 | 1843 |
+| `arc(0, −π)` | 1012 | 1012 |
+| `arc(0, ∓3π)` | 1012 | 1012 |
+| `arc(0, π/2)` | 206 | 1843 |
+
+A sweep against the requested direction wraps by whole turns rather than
+clamping; a sweep of exactly one turn against it becomes a whole turn rather
+than nothing; only two exactly equal angles draw nothing.
