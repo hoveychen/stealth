@@ -164,3 +164,8 @@ pub const JsApi = struct {
     pub const @"[str]" = bridge.namedIndexed(HTMLFormControlsCollection.namedItem, null, null, null, null, .{ .null_as_undefined = true });
     pub const namedItem = bridge.function(HTMLFormControlsCollection.namedItem, .{});
 };
+
+const testing = @import("../../../testing.zig");
+test "WebApi: indexed own names" {
+    try testing.htmlRunner("collections/indexed_own_names.html", .{});
+}
