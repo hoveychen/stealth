@@ -1205,6 +1205,16 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
             const delay_ms = std.fmt.parseInt(u64, path[digits_start..end], 10) catch 0;
             lp.io.sleep(.fromMilliseconds(@intCast(delay_ms)), .awake) catch {};
         }
+        // Cross-origin isolation is negotiated in response headers, so a test
+        // file cannot declare its own. Any test whose name starts with
+        // `cross_origin_isolated` is served with the pair that grants it --
+        // which is the pair the Cloudflare interstitial is served with.
+        if (std.mem.indexOf(u8, path, "cross_origin_isolated") != null) {
+            return TestHTTPServer.sendFileWithHeaders(req, path[1..], &.{
+                .{ .name = "cross-origin-opener-policy", .value = "same-origin" },
+                .{ .name = "cross-origin-embedder-policy", .value = "require-corp" },
+            });
+        }
         // strip off leading / so that it's relative to CWD
         return TestHTTPServer.sendFile(req, path[1..]);
     }

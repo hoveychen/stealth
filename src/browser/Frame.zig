@@ -307,6 +307,23 @@ origin: ?[]const u8 = null,
 // data: URL inherits nothing -- it is simply not potentially trustworthy.
 secure_context: bool = false,
 
+// COOP + COEP cross-origin isolation, as negotiated by the response that
+// committed this document. `window.crossOriginIsolated` reads it, and so does
+// the clock clamp, because Chrome hands an isolated realm a twenty-times finer
+// `performance.now()`.
+//
+// Not an exotic pairing to support: the Cloudflare managed-challenge
+// interstitial is served with both, so every realm of a challenge -- the
+// interstitial, its about:blank and about:srcdoc children, and the Turnstile
+// widget document -- is isolated on a reference Chrome 151, while the ordinary
+// page that replaces it once the challenge clears is not (measured,
+// `tools/fingerprint/results/fopt-e3-oracle.json`).
+//
+// Like `secure_context`, the answer lives on the frame rather than being
+// derived from the URL: the about: documents inherit their creator's, and an
+// embedded document is isolated only if every ancestor is.
+cross_origin_isolated: bool = false,
+
 // The base url specifies the base URL used to resolve the relative urls.
 // It is set by a <base> tag.
 // If null the url must be used.
@@ -782,6 +799,70 @@ pub fn commitSecureContext(self: *Frame) void {
     }
 }
 
+// Settles `cross_origin_isolated` for the document just committed. The two
+// header values are what the response carried, empty when it carried none --
+// which is every synthetic (about:/blob:) navigation, where the answer is
+// inherited rather than negotiated.
+//
+// Chrome's rule, and the one here: a top-level document is isolated when it
+// carries `Cross-Origin-Opener-Policy: same-origin` *and* a
+// `Cross-Origin-Embedder-Policy` that isolates. An embedded document does not
+// get its own opener policy -- it has no browsing-context group to sever --
+// so it is isolated when its top-level is and it carries the embedder policy
+// itself.
+//
+// The answer also decides whether the context's global carries
+// SharedArrayBuffer, which is gated on isolation in a real browser. Unlike the
+// [SecureContext] gate, that one goes both ways -- see
+// Context.hideSharedArrayBuffer.
+pub fn commitCrossOriginIsolated(self: *Frame, coep: []const u8, coop: []const u8) void {
+    self.cross_origin_isolated = self.computeCrossOriginIsolated(coep, coop);
+    if (self.cross_origin_isolated) {
+        self.js.showSharedArrayBuffer();
+    } else {
+        self.js.hideSharedArrayBuffer();
+    }
+}
+
+fn computeCrossOriginIsolated(self: *const Frame, coep: []const u8, coop: []const u8) bool {
+    // `credentialless` isolates as `require-corp` does; anything else, including
+    // `unsafe-none` and an absent header, does not. Only the first token counts:
+    // the header may carry a report-to parameter after a semicolon.
+    const coep_isolates = blk: {
+        const token = std.mem.trim(u8, firstToken(coep), " \t");
+        break :blk std.ascii.eqlIgnoreCase(token, "require-corp") or
+            std.ascii.eqlIgnoreCase(token, "credentialless");
+    };
+
+    if (self.parent) |parent| {
+        // An about:blank or about:srcdoc child carries no headers of its own
+        // and takes its creator's answer, exactly as it does for
+        // secure_context.
+        if (std.mem.eql(u8, self.url, "about:blank") or std.mem.eql(u8, self.url, "about:srcdoc")) {
+            return parent.cross_origin_isolated;
+        }
+        return parent.cross_origin_isolated and coep_isolates;
+    }
+
+    if (std.mem.eql(u8, self.url, "about:blank") or std.mem.eql(u8, self.url, "about:srcdoc")) {
+        if (self.window._opener) |opener| {
+            return opener._frame.cross_origin_isolated;
+        }
+        return false;
+    }
+
+    const coop_isolates = std.ascii.eqlIgnoreCase(
+        std.mem.trim(u8, firstToken(coop), " \t"),
+        "same-origin",
+    );
+    return coop_isolates and coep_isolates;
+}
+
+fn firstToken(value: []const u8) []const u8 {
+    const end = std.mem.indexOfScalar(u8, value, ';') orelse value.len;
+    return value[0..end];
+}
+
 fn computeSecureContext(self: *const Frame) bool {
     // An embedded document is only a secure context if every ancestor is one
     // too, whatever its own URL says. Measured on a headed Chrome 151: an
@@ -888,6 +969,8 @@ pub fn navigate(self: *Frame, request_url: [:0]const u8, opts: NavigateOpts) !vo
             self.origin = null;
         }
         self.commitSecureContext();
+        // No response, so no headers: the about:/blob: documents inherit.
+        self.commitCrossOriginIsolated("", "");
         try self.js.setOrigin(self.origin);
 
         // Assume we parsed the document.
@@ -1550,6 +1633,8 @@ fn frameHeaderDoneCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.
     }
 
     self._http_status = transfer.responseStatus();
+    var coep: []const u8 = "";
+    var coop: []const u8 = "";
     var it = transfer.responseHeaderIterator();
     while (it.next()) |hdr| {
         try self._http_headers.append(self.arena, .{
@@ -1560,8 +1645,15 @@ fn frameHeaderDoneCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.
             if (referrer.parseHeader(hdr.value)) |rp| {
                 self.referrer_policy = rp;
             }
+        } else if (std.ascii.eqlIgnoreCase(hdr.name, "cross-origin-embedder-policy")) {
+            coep = hdr.value;
+        } else if (std.ascii.eqlIgnoreCase(hdr.name, "cross-origin-opener-policy")) {
+            coop = hdr.value;
         }
     }
+    // After the loop rather than inside it: the answer needs both headers, and
+    // they arrive in whichever order the server sent them.
+    self.commitCrossOriginIsolated(coep, coop);
 
     if (self._navigated_options) |no| {
         // _navigated_options will be null in special short-circuit cases, like

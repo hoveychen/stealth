@@ -452,11 +452,12 @@ pub fn getIsSecureContext(self: *const Window) bool {
     return self._frame.secure_context;
 }
 
-// COOP+COEP cross-origin isolation, which nothing here negotiates, so the
-// SharedArrayBuffer/high-resolution-timer gate stays shut. False on the
-// reference Chrome for an ordinary page too (measured).
-pub fn getCrossOriginIsolated(_: *const Window) bool {
-    return false;
+// COOP+COEP cross-origin isolation, as negotiated by the response that
+// committed this document -- see Frame.commitCrossOriginIsolated. False on the
+// reference Chrome for an ordinary page (measured), and true on a Cloudflare
+// challenge interstitial, which is served with both headers.
+pub fn getCrossOriginIsolated(self: *const Window) bool {
+    return self._frame.cross_origin_isolated;
 }
 
 // True on the reference Chrome 150 (measured) -- Blink defaults a page with no
