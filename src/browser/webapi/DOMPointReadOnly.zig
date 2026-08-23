@@ -59,6 +59,8 @@ pub const Type = union(enum) {
 };
 
 pub const DOMPointInit = struct {
+    pub const js_idl_name = "DOMPointInit";
+
     x: f64 = 0,
     y: f64 = 0,
     z: f64 = 0,

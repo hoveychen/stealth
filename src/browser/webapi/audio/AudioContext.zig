@@ -103,6 +103,8 @@ pub fn init(options: ?Options, exec: *Execution) !*AudioContext {
 }
 
 pub const Options = struct {
+    pub const js_idl_name = "AudioContextOptions";
+
     latencyHint: ?js.Value = null,
     sampleRate: ?f64 = null,
     sinkId: ?lp.String = null,

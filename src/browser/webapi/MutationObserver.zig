@@ -64,6 +64,8 @@ const ResolvedOptions = struct {
 };
 
 pub const ObserveOptions = struct {
+    pub const js_idl_name = "MutationObserverInit";
+
     attributes: ?bool = null,
     attributeOldValue: ?bool = null,
     childList: bool = false,

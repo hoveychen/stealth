@@ -85,6 +85,8 @@ pub const ReadyState = enum(u8) {
 };
 
 const Opts = struct {
+    pub const js_idl_name = "EventSourceInit";
+
     withCredentials: bool = false,
 };
 

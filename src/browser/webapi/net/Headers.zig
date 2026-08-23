@@ -14,6 +14,10 @@ const Headers = @This();
 _list: KeyValueList,
 
 pub const InitOpts = union(enum) {
+    // An IDL union is named by its whole spelling, parentheses and all -- there
+    // is no short name for it (measured on Chrome 151).
+    pub const js_idl_name = "(record<ByteString, ByteString> or sequence<sequence<ByteString>>)";
+
     obj: *Headers,
     strings: []const [2][]const u8,
     js_obj: js.Object,

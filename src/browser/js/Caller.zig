@@ -682,6 +682,22 @@ fn idlTypeName(comptime T: type) ?[]const u8 {
     return null;
 }
 
+// The IDL name a dictionary or a union goes by in "The provided value is not of
+// type '<name>'." Neither is derivable: Blob.InitOptions is a BlobPropertyBag,
+// DOMQuad's corners are DOMPointInit, and a union's name is its whole spelling.
+// So the type says its own, and one that has not said it keeps the generic
+// refusal.
+fn idlDictionaryName(comptime T: type) ?[]const u8 {
+    switch (@typeInfo(T)) {
+        .optional => |o| return idlDictionaryName(o.child),
+        .@"struct", .@"union" => if (@hasDecl(T, "js_idl_name")) {
+            return T.js_idl_name;
+        },
+        else => {},
+    }
+    return null;
+}
+
 // An IDL sequence parameter arrives here as a slice. A slice of a numeric
 // scalar is ambiguous -- jsValueToZig takes a typed array there too, so the
 // parameter may be a BufferSource, which Blink refuses by type name rather than
@@ -783,6 +799,10 @@ fn handleError(comptime T: type, comptime F: type, local: *const Local, err: any
 
         break :blk switch (err) {
             error.InvalidArgument => isolate.createTypeError("invalid argument"),
+            // Reaches here only from a path that could not name the type it
+            // wanted (a setter, or a type that never declared its IDL name);
+            // getArgs turns the ones it can name into a sentence first.
+            error.NotOfType => isolate.createTypeError("invalid argument"),
             error.TypeError => isolate.createTypeError(pending_message),
             error.RangeError => isolate.createRangeError(pending_message),
             error.OutOfMemory => isolate.createError("out of memory"),
@@ -1375,6 +1395,21 @@ fn getArgs(comptime T: type, comptime is_constructor: bool, comptime F: type, co
                         local,
                         info,
                     );
+                }
+                // A dictionary is named, not counted -- the sentence carries no
+                // position. Only the shape mismatch claims it: a member that
+                // failed to convert gets its own sentence, and answering "not
+                // of type 'X'" for that would name the wrong thing.
+                if (err == error.NotOfType) {
+                    if (comptime idlDictionaryName(param.type.?)) |dict_name| {
+                        return conversionFailure(
+                            T,
+                            is_constructor,
+                            "The provided value is not of type '" ++ dict_name ++ "'.",
+                            local,
+                            info,
+                        );
+                    }
                 }
                 if (comptime idlTypeName(param.type.?)) |type_name| {
                     return conversionFailure(

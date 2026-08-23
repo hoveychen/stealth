@@ -56,6 +56,8 @@ _related_address: ?[]const u8 = null,
 _related_port: ?u32 = null,
 
 pub const Init = struct {
+    pub const js_idl_name = "RTCIceCandidateInit";
+
     candidate: ?lp.String.Global = null,
     sdpMid: ?lp.String.Global = null,
     sdpMLineIndex: ?u32 = null,
