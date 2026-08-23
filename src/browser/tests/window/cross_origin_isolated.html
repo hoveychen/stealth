@@ -52,3 +52,27 @@
   const sab = new SharedArrayBuffer(8);
   testing.expectEqual(8, sab.byteLength);
 </script>
+
+<script id="now_resolution_is_the_isolated_clamp">
+  // Chrome clamps performance.now() to 100us, and to 5us in a cross-origin
+  // isolated realm. The oracle arm of the challenge reads 0.004999995 off the
+  // interstitial while an ordinary page reads 0.1 -- so the clamp is a second
+  // reading of the same isolation bit, and a page that answers
+  // `crossOriginIsolated: true` with a 100us clock disagrees with itself.
+  //
+  // Same shape as `performance.html #nowResolution`, which asserts the coarse
+  // clamp on an ordinary page. Loose bound in the same way: every advance is a
+  // whole clamp step, so the smallest positive one is the step, and anything
+  // under 0.05 is the fine clamp rather than the coarse one.
+  {
+    const t = [];
+    for (let i = 0; i < 3000; i++) t.push(performance.now());
+    const deltas = [];
+    for (let i = 1; i < t.length; i++) {
+      const d = t[i] - t[i - 1];
+      if (d > 0) deltas.push(d);
+    }
+    testing.expectEqual(true, deltas.length > 0);
+    testing.expectEqual(true, Math.min(...deltas) < 0.05);
+  }
+</script>

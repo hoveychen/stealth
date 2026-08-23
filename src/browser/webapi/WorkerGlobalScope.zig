@@ -171,7 +171,13 @@ pub fn init(
             ._event_manager = .init(arena),
             ._script_manager = undefined,
             ._location = .{ ._url = url },
-            ._performance = .init(),
+            // A worker inherits its owner's cross-origin isolation, so it
+            // inherits the clock clamp that follows from it. Settled once at
+            // birth: a worker outlives no navigation of the frame that made it.
+            ._performance = .init(if (frame.cross_origin_isolated)
+                Performance.clock_resolution_isolated_micros
+            else
+                Performance.clock_resolution_micros),
             ._http_owner = undefined,
         },
         leaf_value,
