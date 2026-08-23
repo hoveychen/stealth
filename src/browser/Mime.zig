@@ -76,6 +76,49 @@ pub const ContentType = union(ContentTypeEnum) {
     other_xml: void, // i.e. application/xml or */*+xml
 };
 
+/// The WHATWG list of JavaScript MIME types
+/// (https://mimesniff.spec.whatwg.org/#javascript-mime-type), against an
+/// already-lowercased essence.
+///
+/// A resource entry's `contentType` reports every one of them as
+/// `text/javascript` rather than as sent: Chrome 151 answered `text/javascript`
+/// for both `application/javascript; charset=UTF-8` and
+/// `application/x-javascript` (measured,
+/// tools/fingerprint/resource-timing-response-fields.mjs), which is why the
+/// real site's api.js -- served as `application/javascript` -- files as
+/// `text/javascript` there.
+///
+/// `parse` below keeps its own three-name list on purpose: it answers a
+/// different question (which ContentType bucket the engine should treat the
+/// body as), and widening what counts as a script there would change what runs,
+/// not just what an entry says it was.
+pub fn isJavaScriptType(lower_essence: []const u8) bool {
+    const known = [_][]const u8{
+        "application/ecmascript",
+        "application/javascript",
+        "application/x-ecmascript",
+        "application/x-javascript",
+        "text/ecmascript",
+        "text/javascript",
+        "text/javascript1.0",
+        "text/javascript1.1",
+        "text/javascript1.2",
+        "text/javascript1.3",
+        "text/javascript1.4",
+        "text/javascript1.5",
+        "text/jscript",
+        "text/livescript",
+        "text/x-ecmascript",
+        "text/x-javascript",
+    };
+    for (known) |name| {
+        if (std.mem.eql(u8, lower_essence, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 pub fn contentTypeString(mime: *const Mime) []const u8 {
     return switch (mime.content_type) {
         .text_xml => "text/xml",

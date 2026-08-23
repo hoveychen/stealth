@@ -10899,6 +10899,87 @@ milestones, and an `encodedBodySize` that is the *decoded* size — api.js arriv
 brotli-compressed and this reports what it decompressed to, which says the
 response was not compressed at all. That is the next plan, not this one.
 
+### The response fields, filled
+
+That plan ran. The entry is 34 keys now, the same count as the oracle's, and
+the six named rows above are five closed and one reclassified. Recapture:
+`results/r1join-lp-response-fields-2.json`.
+
+| field | oracle | here | |
+|---|---|---|---|
+| `navigationId` | `9894` | `8784` | a per-navigation number, shared by the buffer |
+| `contentType` | `text/javascript` | `text/javascript` | |
+| `contentEncoding` | `br` | `br` | |
+| nine milestones | real | real | seven filled, two zero, same two as Chrome |
+| `encodedBodySize` | 27 124 | 27 073 | the compressed body, not the decoded one |
+| `nextHopProtocol` | `h3` | `h2` | open |
+| `serverTiming` | one `cfExtPri` | `[]` | open, and the same cause |
+
+The last two are one thing, not two. Cloudflare sends **no** `Server-Timing`
+header on the HTTP/2 path — verified by requesting the same api.js URL with
+curl over h2, which returns `content-type`, `content-encoding` and nothing
+else. `cfExtPri` is Cloudflare's extensible-priorities signal, and the oracle
+sees it because the oracle negotiated QUIC. So the residue is not "two missing
+fields", it is "this engine does not speak HTTP/3", and closing it is that
+plan rather than this one.
+
+Worth writing down separately: Chrome *does* parse `Server-Timing` into the
+entry — a response carrying `cfExtPri;dur=0, db;dur=53;desc="lookup"` files two
+PerformanceServerTiming entries with the names, durations and descriptions
+parsed out (measured). Nothing here parses it, so any site that sends the
+header reads an empty array where a browser reads entries. No station in the
+sweep sends one, which is why it is a note rather than a task.
+
+#### What is measured about the cross-origin rules
+
+`resource-timing-response-fields.mjs` serves the same script four ways off a
+second origin. Chrome 151 gates these fields behind two independent doors:
+
+| gate | fields it opens |
+|---|---|
+| same-origin, **or** `Timing-Allow-Origin` matches | the nine milestones, `encodedBodySize`, `decodedBodySize`, `transferSize` |
+| same-origin, **or** the response was fetched in CORS mode and allows it | `contentType`, `contentEncoding`, `responseStatus` |
+
+A cross-origin response with neither reads as all zeros and empty strings.
+
+This engine opens both doors unconditionally, which is a deliberate choice and
+not an oversight. The api.js this plan exists to match carries no
+`Timing-Allow-Origin` at all (verified with curl) and the oracle still reports
+every milestone for it — so it must have been fetched in CORS mode, and a gate
+keyed on TAO alone would zero the exact reading being chased. Modelling the
+second door needs the request's CORS mode threaded through four fetch paths;
+until that exists, the honest failure is to over-report rather than to break
+the match. A detector that loads a cross-origin resource with neither header
+and reads a non-zero `encodedBodySize` separates this engine from Chrome, and
+that is the shape of the next move here if one is ever seen doing it.
+
+Same-origin, there is nothing left to separate them: every response-derived
+field of every row — plain, gzip, brotli, a parameterised `text/CSS`, a 404
+favicon — reads identically on both engines, including the seven non-zero
+milestones and the two Chrome leaves at zero over plain HTTP.
+
+#### The sweep, and what a moving station looks like
+
+`results/antibot-2026-08-23-response-fields.json` reads 8/15 against the 11/15
+of `results/r1-fixes-sweep-after.json`. The eleven Cloudflare and `x-` stations
+are verdict-for-verdict identical; all three of the differences are DataDome
+sites flipping from `pass` to `datadome-challenge`.
+
+That is not this change. The binary the 11/15 was measured on is still on disk
+(`dev.990+10ed7882c`, this branch's merge base), so the control is exact: run
+`--only dd-` on it, then on this build, minutes apart from the same address.
+The merge base scored **0/4**; this build scored **1/4**
+(`results/dd-control-base.json`, `results/dd-control-mine.json`). DataDome had
+moved under both. A sweep number is only a regression signal when the station
+holds still, and the way to find out whether it did is to re-run the old binary
+rather than to reason about the new one.
+
+One other thing the sweep taught, worth knowing before reading one: a run whose
+rows all say `CRASHED exit 1` is usually not a crash in the engine. It is the
+CDP port still held by a previous run — the `engineLog` in the output file says
+`address already in use` in plain text, and every station in that run is
+meaningless. Check that field before believing a bad sweep.
+
 The sweep says nothing moved that should not have:
 `results/antibot-2026-08-23-perf-resource-timing.json` against
 `results/r1-fixes-sweep-after.json` is verdict-for-verdict identical across all

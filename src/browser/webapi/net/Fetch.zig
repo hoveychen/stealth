@@ -53,6 +53,14 @@ _perf_fetch_start: f64 = 0,
 // alive. A libcurl literal, so it needs no arena.
 _perf_next_hop_protocol: []const u8 = "",
 
+// What the body weighed on the wire. `_buf` holds the decoded bytes, so the
+// two differ for every compressed response; read per chunk because the
+// transfer is released before the entry is filed.
+_perf_encoded_body_size: u64 = 0,
+
+// contentType / contentEncoding for the entry, copied off the headers.
+_perf_labels: HttpClient.ResponseLabels = .{},
+
 pub const Input = Request.Input;
 pub const InitOpts = Request.InitOpts;
 
@@ -161,6 +169,7 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     }
 
     self._perf_next_hop_protocol = transfer.nextHopProtocol();
+    self._perf_labels = transfer.responseLabels();
 
     const arena = self._response._arena;
     if (transfer.getContentLength()) |cl| {
@@ -230,6 +239,7 @@ fn httpDataCallback(transfer: *Transfer, data: []const u8) !void {
         }
     }
 
+    self._perf_encoded_body_size = transfer.encodedBodySize();
     try self._buf.appendSlice(self._response._arena.allocator(), data);
 }
 
@@ -255,10 +265,12 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
         .{
             .initiator_type = "fetch",
             .next_hop_protocol = self._perf_next_hop_protocol,
+            .content_type = self._perf_labels.contentType(),
+            .content_encoding = self._perf_labels.contentEncoding(),
             .fetch_start = self._perf_fetch_start,
             .response_end = exec.performance().now(),
             .response_status = response._status,
-            .encoded_body_size = loaded_len,
+            .encoded_body_size = if (self._perf_encoded_body_size > 0) self._perf_encoded_body_size else loaded_len,
             .decoded_body_size = loaded_len,
         },
         exec,

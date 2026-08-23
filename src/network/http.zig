@@ -26,6 +26,7 @@ const crypto = @import("../sys/libcrypto.zig");
 
 const IpFilter = @import("IpFilter.zig");
 const tls_client_hello = @import("tls_client_hello.zig");
+const Mime = @import("../browser/mime.zig");
 
 const log = @import("lightpanda").log;
 
@@ -218,6 +219,9 @@ pub const AuthChallenge = struct {
 pub const ResponseHead = struct {
     // Matches Mime.parse's 255-byte cap
     pub const MAX_CONTENT_TYPE_LEN = 255;
+    // Long enough for every encoding chain a server can plausibly send;
+    // Chrome's own four fit in nine characters.
+    pub const MAX_CONTENT_ENCODING_LEN = 48;
 
     status: u16,
     url: [*c]const u8,
@@ -227,12 +231,90 @@ pub const ResponseHead = struct {
     next_hop_protocol: []const u8 = "",
     _content_type_len: usize = 0,
     _content_type: [MAX_CONTENT_TYPE_LEN]u8 = undefined,
+    // Kept for the resource entry's `contentEncoding`. curl undoes the encoding
+    // before anything here sees the body, so the header is the only record that
+    // the response was encoded at all.
+    _content_encoding_len: usize = 0,
+    _content_encoding: [MAX_CONTENT_ENCODING_LEN]u8 = undefined,
 
     pub fn contentType(self: *ResponseHead) ?[]u8 {
         if (self._content_type_len == 0) {
             return null;
         }
         return self._content_type[0..self._content_type_len];
+    }
+
+    pub fn contentEncoding(self: *ResponseHead) ?[]u8 {
+        if (self._content_encoding_len == 0) {
+            return null;
+        }
+        return self._content_encoding[0..self._content_encoding_len];
+    }
+};
+
+/// The pair of response labels a `resource` PerformanceEntry quotes back:
+/// `contentType` and `contentEncoding`. Held inline rather than by reference,
+/// because every consumer files its entry after the transfer that owns the
+/// headers has been released.
+///
+/// Chrome answers the MIME *essence* for the first — parameters dropped and the
+/// rest lowercased, so a sheet served as `text/CSS; charset=UTF-8` files as
+/// `text/css` — and the Content-Encoding header verbatim for the second, empty
+/// when the response carried none. Both measured on Chrome 151 by
+/// tools/fingerprint/resource-timing-response-fields.mjs.
+/// How far into a transfer each stage of the connection finished, in
+/// microseconds, as libcurl measured it. Resource Timing wants nine milestones
+/// on the document's clock; these five plus the fetch's start time produce
+/// eight of them, and the ninth (firstInterimResponseStart) needs a 1xx
+/// response this engine never reads.
+///
+/// A reused connection answers zero for the first three, which is what a
+/// browser reports too: nothing was looked up and nothing was opened.
+pub const ResponseTimes = struct {
+    name_lookup: u64 = 0,
+    connect: u64 = 0,
+    app_connect: u64 = 0,
+    pre_transfer: u64 = 0,
+    start_transfer: u64 = 0,
+};
+
+pub const ResponseLabels = struct {
+    pub const MAX_CONTENT_TYPE_LEN = 96;
+    pub const MAX_CONTENT_ENCODING_LEN = 48;
+
+    _type_len: u8 = 0,
+    _type: [MAX_CONTENT_TYPE_LEN]u8 = undefined,
+    _encoding_len: u8 = 0,
+    _encoding: [MAX_CONTENT_ENCODING_LEN]u8 = undefined,
+
+    pub fn contentType(self: *const ResponseLabels) []const u8 {
+        return self._type[0..self._type_len];
+    }
+
+    pub fn contentEncoding(self: *const ResponseLabels) []const u8 {
+        return self._encoding[0..self._encoding_len];
+    }
+
+    pub fn setContentType(self: *ResponseLabels, raw: []const u8) void {
+        const essence = Mime.ContentTypeIterator.init(raw).essence;
+        const len = @min(essence.len, MAX_CONTENT_TYPE_LEN);
+        _ = std.ascii.lowerString(self._type[0..len], essence[0..len]);
+        self._type_len = @intCast(len);
+
+        // Every JavaScript MIME type reports as `text/javascript`, whichever of
+        // the sixteen the server actually sent. See Mime.isJavaScriptType.
+        if (Mime.isJavaScriptType(self.contentType())) {
+            const canonical = "text/javascript";
+            @memcpy(self._type[0..canonical.len], canonical);
+            self._type_len = canonical.len;
+        }
+    }
+
+    pub fn setContentEncoding(self: *ResponseLabels, raw: []const u8) void {
+        const trimmed = std.mem.trim(u8, raw, " \t");
+        const len = @min(trimmed.len, MAX_CONTENT_ENCODING_LEN);
+        @memcpy(self._encoding[0..len], trimmed[0..len]);
+        self._encoding_len = @intCast(len);
     }
 };
 
@@ -619,6 +701,38 @@ pub const Connection = struct {
         var opened: c_long = undefined;
         try libcurl.curl_easy_getinfo(self._easy, .num_connects, &opened);
         return opened == 0;
+    }
+
+    /// Body bytes read off the socket so far, before any content-encoding was
+    /// undone -- Resource Timing's `encodedBodySize`. Read while the connection
+    /// is alive; curl keeps counting, so the last reading before completion is
+    /// the whole body.
+    pub fn getEncodedBodySize(self: *const Connection) !u64 {
+        var size: i64 = undefined;
+        try libcurl.curl_easy_getinfo(self._easy, .size_download_t, &size);
+        if (size < 0) {
+            return 0;
+        }
+        return @intCast(size);
+    }
+
+    /// The connection walk so far. Read once the response headers are in,
+    /// where every one of these is already final -- they all describe work
+    /// that had to finish before a byte of response could arrive.
+    pub fn getResponseTimes(self: *const Connection) ResponseTimes {
+        return .{
+            .name_lookup = self.getTimerMicros(.namelookup_time_t),
+            .connect = self.getTimerMicros(.connect_time_t),
+            .app_connect = self.getTimerMicros(.appconnect_time_t),
+            .pre_transfer = self.getTimerMicros(.pretransfer_time_t),
+            .start_transfer = self.getTimerMicros(.starttransfer_time_t),
+        };
+    }
+
+    fn getTimerMicros(self: *const Connection, comptime info: libcurl.CurlInfo) u64 {
+        var micros: i64 = 0;
+        libcurl.curl_easy_getinfo(self._easy, info, &micros) catch return 0;
+        return if (micros < 0) 0 else @intCast(micros);
     }
 
     // Total transfer time (name lookup to completion) in microseconds.

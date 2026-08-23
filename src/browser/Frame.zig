@@ -50,6 +50,7 @@ const Location = @import("webapi/Location.zig");
 const Document = @import("webapi/Document.zig");
 const ShadowRoot = @import("webapi/ShadowRoot.zig");
 const Performance = @import("webapi/Performance.zig");
+const timing = @import("webapi/performance/timing.zig");
 const Screen = @import("webapi/Screen.zig");
 const VisualViewport = @import("webapi/VisualViewport.zig");
 const NetworkInformation = @import("webapi/NetworkInformation.zig");
@@ -1840,19 +1841,19 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
     if (self._parse_state == .pre) {
         // Navigation Timing's contentType is the MIME essence, not the raw
         // header: Chrome answered "text/html" for a `text/html; charset=utf-8`
-        // response (win20-chrome.json).
-        var essence: []const u8 = "";
-        if (transfer.contentType()) |ct| {
-            const end = std.mem.indexOfScalar(u8, ct, ';') orelse ct.len;
-            essence = try std.ascii.allocLowerString(self.arena, std.mem.trim(u8, ct[0..end], " \t"));
-        }
+        // response (win20-chrome.json). `responseLabels` does that reduction,
+        // and carries the content-encoding alongside it -- the document is as
+        // often compressed as any subresource.
+        const labels = transfer.responseLabels();
         perf.navigationResponseStarted(
             transfer.responseStatus() orelse 0,
-            essence,
+            try self.arena.dupe(u8, labels.contentType()),
+            try self.arena.dupe(u8, labels.contentEncoding()),
             transfer.nextHopProtocol(),
+            transfer.responseTimes(),
         );
     }
-    perf.navigationBodyChunk(data.len);
+    perf.navigationBodyChunk(data.len, transfer.encodedBodySize());
 
     if (self._parse_state == .pre) {
         // we lazily do this, because we might need the first chunk of data
@@ -2514,16 +2515,20 @@ pub fn performance(self: *Frame) *Performance {
 // or the image as well as the entry.
 pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
     const perf = self.performance();
-    _ = perf.resourceLoaded(r.url, .{
+    var t: timing.Timing = .{
         .initiator_type = r.initiator,
         .next_hop_protocol = r.next_hop_protocol,
+        .content_type = r.labels.contentType(),
+        .content_encoding = r.labels.contentEncoding(),
         .render_blocking_status = if (r.render_blocking) "blocking" else "non-blocking",
         .fetch_start = r.fetch_start,
         .response_end = perf.now(),
         .response_status = r.status,
-        .encoded_body_size = r.body_len,
+        .encoded_body_size = if (r.encoded_body_len > 0) r.encoded_body_len else r.body_len,
         .decoded_body_size = r.body_len,
-    }, &self.js.execution) catch |err| {
+    };
+    t.setConnectionMilestones(r.times);
+    _ = perf.resourceLoaded(r.url, t, &self.js.execution) catch |err| {
         log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
     };
 }
@@ -2533,11 +2538,24 @@ pub const ResourceTimingRecord = struct {
     initiator: []const u8,
     fetch_start: f64,
     status: u16,
+
+    // What the body decoded to; `decodedBodySize`.
     body_len: usize,
+
+    // What the body weighed on the wire; `encodedBodySize`. Zero means nobody
+    // measured it, and the decoded length stands in -- a response that was not
+    // compressed has the same number for both.
+    encoded_body_len: u64 = 0,
 
     // The protocol the response arrived over, as libcurl reports it
     // ("http/1.1", "h2", "h3"). Empty only when no connection was made.
     next_hop_protocol: []const u8 = "",
+
+    // contentType / contentEncoding, as the response declared them.
+    labels: HttpClient.ResponseLabels = .{},
+
+    // The connection walk behind the response, for the entry's milestones.
+    times: HttpClient.ResponseTimes = .{},
 
     // Whether the load held up rendering. A stylesheet does; an image does
     // not. Chrome reports it per entry, and reporting every load as
@@ -2732,7 +2750,10 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .fetch_start = fetch_start,
         .status = response.status,
         .body_len = response.body.items.len,
+        .encoded_body_len = response.encoded_body_size,
         .next_hop_protocol = response.next_hop_protocol,
+        .labels = response.labels,
+        .times = response.times,
         // A stylesheet holds up rendering until its rules are in, which is
         // why this fetch is the synchronous one to begin with.
         .render_blocking = true,
@@ -2857,9 +2878,19 @@ const ImageRequest = struct {
     // it outlives the connection it was read from.
     next_hop_protocol: []const u8 = "",
 
+    // contentType / contentEncoding, copied off the headers in headerCallback.
+    labels: HttpClient.ResponseLabels = .{},
+
+    // The connection walk, same reason.
+    times: HttpClient.ResponseTimes = .{},
+
     // How many bytes arrived, which `prefix` cannot say: it stops at the
     // signature length on purpose.
     bytes: usize = 0,
+
+    // The same body as it came off the wire, before any content-encoding was
+    // undone. Read per chunk because doneCallback has no transfer to ask.
+    encoded_bytes: u64 = 0,
 
     // The head of the body, kept until it has all arrived. Nothing here
     // decodes, so a signature is as close to "it became a picture" as this
@@ -2884,6 +2915,8 @@ const ImageRequest = struct {
         // because the resource entry reports it verbatim.
         self.status = transfer.responseStatus() orelse 0;
         self.next_hop_protocol = transfer.nextHopProtocol();
+        self.labels = transfer.responseLabels();
+        self.times = transfer.responseTimes();
 
         if (transfer.contentType()) |ct| {
             const mime = Mime.parse(ct) catch null;
@@ -2905,6 +2938,7 @@ const ImageRequest = struct {
     fn dataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
         self.bytes += data.len;
+        self.encoded_bytes = transfer.encodedBodySize();
         const room = self.prefix.len - self.prefix_len;
         if (room == 0) {
             return;
@@ -2926,7 +2960,10 @@ const ImageRequest = struct {
             .fetch_start = self.fetch_start,
             .status = self.status,
             .body_len = self.bytes,
+            .encoded_body_len = self.encoded_bytes,
             .next_hop_protocol = self.next_hop_protocol,
+            .labels = self.labels,
+            .times = self.times,
         });
         self.report(if (self.arrived()) .load else .@"error");
     }

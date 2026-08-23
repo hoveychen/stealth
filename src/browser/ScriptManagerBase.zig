@@ -630,6 +630,19 @@ pub const Script = struct {
     // it outlives the connection it was read from.
     perf_next_hop_protocol: []const u8 = "",
 
+    // What the body weighed on the wire. `source` holds the decoded bytes, so
+    // for a compressed script the two sizes differ and only this one describes
+    // what the server sent. Read in dataCallback because the count is not
+    // final until the body is, and doneCallback has no transfer to ask.
+    perf_encoded_body_size: u64 = 0,
+
+    // The entry's contentType / contentEncoding, copied off the response
+    // headers while the transfer still exists.
+    perf_labels: HttpClient.ResponseLabels = .{},
+
+    // The connection walk behind the response, for the entry's milestones.
+    perf_times: HttpClient.ResponseTimes = .{},
+
     // The entry's stored timing, once filed. Kept so the prescan's guess can
     // be corrected: it starts a fetch before the parser reaches the <script>,
     // so whether that script blocks the parser is not knowable when the
@@ -729,6 +742,8 @@ pub const Script = struct {
 
         self.status = transfer.responseStatus().?;
         self.perf_next_hop_protocol = transfer.nextHopProtocol();
+        self.perf_labels = transfer.responseLabels();
+        self.perf_times = transfer.responseTimes();
         if (transfer.responseStatus() != 200) {
             log.info(.http, "script header", .{
                 .req = transfer,
@@ -799,6 +814,7 @@ pub const Script = struct {
 
     pub fn dataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
         const self: *Script = @ptrCast(@alignCast(transfer.req.ctx));
+        self.perf_encoded_body_size = transfer.encodedBodySize();
         self._dataCallback(transfer, data) catch |err| {
             log.err(.http, "SM.dataCallback", .{ .err = err, .transfer = transfer, .len = data.len });
             return err;
@@ -832,16 +848,20 @@ pub const Script = struct {
         const exec = &self.manager.owner.jsContext().execution;
         const perf = exec.performance();
         const len = self.source.content().len;
-        self.perf_timing = perf.resourceLoaded(self.url, .{
+        var t: timing.Timing = .{
             .initiator_type = initiator,
             .next_hop_protocol = self.perf_next_hop_protocol,
+            .content_type = self.perf_labels.contentType(),
+            .content_encoding = self.perf_labels.contentEncoding(),
             .render_blocking_status = if (render_blocking) "blocking" else "non-blocking",
             .fetch_start = self.perf_fetch_start,
             .response_end = perf.now(),
             .response_status = self.status,
-            .encoded_body_size = len,
+            .encoded_body_size = if (self.perf_encoded_body_size > 0) self.perf_encoded_body_size else len,
             .decoded_body_size = len,
-        }, exec) catch |err| {
+        };
+        t.setConnectionMilestones(self.perf_times);
+        self.perf_timing = perf.resourceLoaded(self.url, t, exec) catch |err| {
             log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });
             return;
         };

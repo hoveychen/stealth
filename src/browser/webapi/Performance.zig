@@ -24,6 +24,7 @@ const js = @import("../js/js.zig");
 const EventCounts = @import("EventCounts.zig");
 const PerformanceObserver = @import("PerformanceObserver.zig");
 const timing = @import("performance/timing.zig");
+const http = @import("../../network/http.zig");
 
 const Execution = js.Execution;
 const Allocator = std.mem.Allocator;
@@ -63,6 +64,10 @@ _delivering: bool = false,
 // exactly one of these, so a page that reports none is a tell on its own.
 _nav: timing.Timing = .{},
 _nav_name: []const u8 = "",
+
+// Shared by every entry this navigation files. Drawn once at navigationStarted
+// rather than per entry: see newNavigationId.
+_navigation_id: u32 = 0,
 _nav_entry: ?*timing.NavigationTiming = null,
 _nav_phase: NavPhase = .none,
 _paint_entries: bool = false,
@@ -242,10 +247,24 @@ pub fn toJSON(self: *Performance) Json {
 // the JS objects are built lazily in ensureImplicitEntries so none of this needs
 // an Execution.
 
+/// Chrome tags every performance entry with the navigation it belongs to, and
+/// the tag is a small random number rather than a counter: twenty navigations
+/// across two tabs of one Chrome 151 answered twenty unrelated values, none
+/// outside [1, 10000] and none in sequence with the last (measured; the
+/// station's own reading of api.js carries 9894). A counter would leak how many
+/// documents this browser has loaded, which is why Chrome does not use one.
+fn newNavigationId() u32 {
+    var bytes: [4]u8 = undefined;
+    lp.io.random(&bytes);
+    return std.mem.readInt(u32, &bytes, .little) % 10_000 + 1;
+}
+
 pub fn navigationStarted(self: *Performance, url: []const u8, navigation_type: []const u8) void {
     const at = self.now();
     self._nav_name = url;
+    self._navigation_id = newNavigationId();
     self._nav = .{
+        .navigation_id = self._navigation_id,
         .navigation_type = navigation_type,
         .fetch_start = at,
         .domain_lookup_start = at,
@@ -261,20 +280,32 @@ pub fn navigationResponseStarted(
     self: *Performance,
     status: u16,
     content_type: []const u8,
+    content_encoding: []const u8,
     next_hop_protocol: []const u8,
+    times: http.ResponseTimes,
 ) void {
     const at = self.now();
+    // The document's own connection walk, same as any subresource's. What
+    // navigationStarted stamped were placeholders: it had nothing to measure
+    // yet, and leaving them said the document resolved and connected in the
+    // same instant the navigation began.
+    self._nav.setConnectionMilestones(times);
     self._nav.response_start = at;
     self._nav.final_response_headers_start = at;
     self._nav.response_status = status;
     self._nav.content_type = content_type;
+    self._nav.content_encoding = content_encoding;
     self._nav.next_hop_protocol = next_hop_protocol;
     self._nav_phase = .response;
 }
 
-pub fn navigationBodyChunk(self: *Performance, len: usize) void {
-    self._nav.encoded_body_size += len;
+/// `len` is what the chunk decoded to; `encoded_total` is what the whole body
+/// has weighed on the wire so far. They are the same number only for a document
+/// the server did not compress, and a document that says so while carrying a
+/// Content-Encoding header contradicts its own headers.
+pub fn navigationBodyChunk(self: *Performance, len: usize, encoded_total: u64) void {
     self._nav.decoded_body_size += len;
+    self._nav.encoded_body_size = encoded_total;
 }
 
 pub fn navigationResponseEnded(self: *Performance) void {
@@ -343,6 +374,18 @@ pub fn resourceLoaded(
     // to outlive this call rather than ride along on the stack.
     const stored = try exec.arena.create(timing.Timing);
     stored.* = t;
+    // Stamped here rather than by each recorder: one navigation is one id, and
+    // a recorder that forgot would let a reader tell its loads from the rest.
+    stored.navigation_id = self._navigation_id;
+
+    // The two response labels are the only fields whose bytes belong to
+    // whoever performed the fetch -- an inline buffer on a Script, an
+    // ImageRequest or a SyncResponse, all of which are released well before
+    // the buffer is read back. Everything else in `t` is a number or a
+    // literal. Copied here rather than at each of the five call sites, so a
+    // new recorder cannot forget to.
+    stored.content_type = try exec.arena.dupe(u8, t.content_type);
+    stored.content_encoding = try exec.arena.dupe(u8, t.content_encoding);
 
     const entry = try exec._factory.chained(.{
         Entry{
