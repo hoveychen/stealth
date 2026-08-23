@@ -603,9 +603,6 @@ fn countExternalReferences() comptime_int {
     // +1 for the illegal constructor callback shared by various types
     count += 1;
 
-    // +1 for the upgrade constructor shared by built-in element interfaces
-    count += 1;
-
     // +1 for the noop function shared by various types
     count += 1;
 
@@ -615,7 +612,12 @@ fn countExternalReferences() comptime_int {
     const wpt_extensions_enabled = lp.build_config.wpt_extensions;
 
     inline for (JsApis) |JsApi| {
+        // Same precedence generateConstructor uses: an explicit constructor
+        // wins, otherwise a built-in element interface gets its own generated
+        // upgrade constructor, otherwise the shared illegal one (counted above).
         if (@hasDecl(JsApi, "constructor")) {
+            count += 1;
+        } else if (inheritsFromHtmlElement(JsApi)) {
             count += 1;
         }
 
@@ -681,9 +683,6 @@ fn collectExternalReferences() [countExternalReferences()]isize {
     references[idx] = @bitCast(@intFromPtr(&illegalConstructorCallback));
     idx += 1;
 
-    references[idx] = @bitCast(@intFromPtr(HtmlElement.JsApi.upgrade_constructor.func));
-    idx += 1;
-
     references[idx] = @bitCast(@intFromPtr(&bridge.Function.noopFunction));
     idx += 1;
 
@@ -695,6 +694,9 @@ fn collectExternalReferences() [countExternalReferences()]isize {
     inline for (JsApis) |JsApi| {
         if (@hasDecl(JsApi, "constructor")) {
             references[idx] = @bitCast(@intFromPtr(JsApi.constructor.func));
+            idx += 1;
+        } else if (comptime inheritsFromHtmlElement(JsApi)) {
+            references[idx] = @bitCast(@intFromPtr(upgradeConstructor(JsApi).func));
             idx += 1;
         }
 
@@ -919,7 +921,8 @@ pub fn generateConstructor(comptime JsApi: type, isolate: *v8.Isolate) *const v8
             break :blk .{ JsApi.constructor.func, JsApi.constructor.arity };
         }
         if (inheritsFromHtmlElement(JsApi)) {
-            break :blk .{ HtmlElement.JsApi.upgrade_constructor.func, @as(c_int, HtmlElement.JsApi.upgrade_constructor.arity) };
+            const upgrade = upgradeConstructor(JsApi);
+            break :blk .{ upgrade.func, upgrade.arity };
         }
         break :blk .{ &illegalConstructorCallback, @as(c_int, 0) };
     };
@@ -946,10 +949,32 @@ pub fn generateConstructor(comptime JsApi: type, isolate: *v8.Isolate) *const v8
 // hard-coded special case for HtmlElement which can be extended but not
 // instantiated.
 fn inheritsFromHtmlElement(comptime JsApi: type) bool {
-    if (JsApi.bridge.type == HtmlElement) {
+    const T = JsApi.bridge.type;
+    if (T == HtmlElement) {
+        return false;
+    }
+    // Two element interfaces are not valid custom element bases, so Blink gives
+    // them no [HTMLConstructor] and therefore no constructor callback to reach:
+    // `HTMLUnknownElement()` is a bare "Illegal constructor" where every other
+    // element interface points at the `new` operator, and `new
+    // HTMLUnknownElement()` still names the interface (both measured on Chrome
+    // 151, probes/probe-ctor-sweep.js). Falling through to
+    // illegalConstructorCallback is what produces exactly that pair.
+    if (T == HtmlElement.Media or T == HtmlElement.Unknown) {
         return false;
     }
     return bridge.inheritsOrIs(JsApi, HtmlElement.JsApi);
+}
+
+// The shared constructor callback for the built-in element interfaces, but
+// generated per interface rather than once: the interface name in both messages
+// it can produce -- "Failed to construct 'X': Illegal constructor" for `new X()`
+// and the "use the 'new' operator" sentence for `X()` -- is comptime, read off
+// the type the callback was generated for. One shared callback made every
+// element interface claim to be HTMLElement, which is a name a page can read
+// straight off `HTMLDivElement()` (Chrome says HTMLDivElement, measured).
+fn upgradeConstructor(comptime JsApi: type) bridge.Constructor {
+    return JsApi.bridge.constructor(HtmlElement.upgradeConstruct, .{});
 }
 
 const Unforgeable = struct {

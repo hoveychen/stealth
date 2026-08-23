@@ -599,9 +599,18 @@ fn protoNode(comptime T: type, instance: *T) *@import("../webapi/Node.zig") {
 }
 
 // The name a WebIDL interface goes by in JS, for messages that carry it.
+// handleError is generic over every receiver the bridge binds, and some of those
+// are not interfaces at all (a *js.Context, an internal state struct behind a
+// promise callback), so the container check comes first: @hasDecl only accepts a
+// container. Those receivers never reach a message that names an interface.
 fn interfaceName(comptime T: type) []const u8 {
-    if (@hasDecl(T, "JsApi") and @hasDecl(T.JsApi.Meta, "name")) {
-        return T.JsApi.Meta.name;
+    switch (@typeInfo(T)) {
+        .@"struct", .@"union", .@"enum", .@"opaque" => {
+            if (@hasDecl(T, "JsApi") and @hasDecl(T.JsApi.Meta, "name")) {
+                return T.JsApi.Meta.name;
+            }
+        },
+        else => {},
     }
     return @typeName(T);
 }
@@ -642,6 +651,17 @@ fn handleError(comptime T: type, comptime F: type, local: *const Local, err: any
 
     const err_local = errorLocal(T, local, info);
 
+    // Refusing `new X()` is a TypeError that names the interface, and the
+    // interface Chrome names is the one whose constructor ran rather than
+    // new.target: a class extending HTMLDivElement that was never registered
+    // reads "Failed to construct 'HTMLDivElement': Illegal constructor"
+    // (measured on Chrome 151). This used to answer an Error carrying "Illegal
+    // Constructor" -- the wrong error type, naming nothing. Only the `new` form
+    // reaches here; `X()` is answered by `constructor` above, before the Zig
+    // function runs at all.
+    const illegal_constructor_message = comptime "Failed to construct '" ++
+        interfaceName(T) ++ "': Illegal constructor";
+
     const js_err: *const v8.Value = blk: {
         // Error constructors use the isolate's current context: enter the
         // receiver's realm so the exception gets its prototypes.
@@ -654,7 +674,7 @@ fn handleError(comptime T: type, comptime F: type, local: *const Local, err: any
             error.TypeError => isolate.createTypeError(pending_message),
             error.RangeError => isolate.createRangeError(pending_message),
             error.OutOfMemory => isolate.createError("out of memory"),
-            error.IllegalConstructor => isolate.createError("Illegal Constructor"),
+            error.IllegalConstructor => isolate.createTypeError(illegal_constructor_message),
             error.TryCatchRethrow, error.JsException => unreachable, // early exited a few lines up
             else => domExceptionToJs(&err_local, err, pending_message) orelse isolate.createError(@errorName(err)),
         };

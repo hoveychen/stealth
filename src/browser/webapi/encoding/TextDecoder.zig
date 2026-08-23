@@ -22,6 +22,8 @@ const lp = @import("lightpanda");
 const js = @import("../../js/js.zig");
 const Page = @import("../../Page.zig");
 
+const Execution = js.Execution;
+
 const html5ever = @import("../../parser/html5ever.zig");
 
 const TextDecoder = @This();
@@ -41,23 +43,37 @@ const InitOpts = struct {
     ignoreBOM: bool = false,
 };
 
-pub fn init(label_: ?[]const u8, opts_: ?InitOpts, page: *Page) !*TextDecoder {
+/// Blink echoes the label back into the RangeError exactly as the page wrote it
+/// -- not trimmed, not lowercased, the empty string included -- and words it the
+/// same for TextDecoderStream with only the interface name changed (measured on
+/// Chrome 151 over ten labels, probes/probe-encoding-label.js). Both refusals
+/// used to carry an empty message, which no browser has.
+pub fn invalidLabel(exec: *const Execution, comptime interface: []const u8, label: []const u8) anyerror {
+    const message = std.fmt.allocPrint(
+        exec.local_arena,
+        "Failed to construct '" ++ interface ++ "': The encoding label provided ('{s}') is invalid.",
+        .{label},
+    ) catch return error.RangeError;
+    return exec.js.fail(error.RangeError, message);
+}
+
+pub fn init(label_: ?[]const u8, opts_: ?InitOpts, exec: *const Execution) !*TextDecoder {
     const label = label_ orelse "utf-8";
 
     const info = html5ever.encoding_for_label(label.ptr, label.len);
     if (!info.isValid()) {
-        return error.RangeError;
+        return invalidLabel(exec, "TextDecoder", label);
     }
 
     // Check for "replacement" encoding - it's not usable for decoding per spec
     const enc_name = info.name();
     if (std.mem.eql(u8, enc_name, "replacement")) {
-        return error.RangeError;
+        return invalidLabel(exec, "TextDecoder", label);
     }
 
     // Only ever holds the decoder itself and the lazily-lowercased encoding
     // name; decode output comes from the caller's call_arena.
-    const arena = try page.getArena(.tiny, "TextDecoder");
+    const arena = try exec.page.getArena(.tiny, "TextDecoder");
     errdefer arena.release();
 
     const opts = opts_ orelse InitOpts{};

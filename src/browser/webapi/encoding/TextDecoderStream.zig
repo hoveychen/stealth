@@ -19,6 +19,7 @@
 const std = @import("std");
 const js = @import("../../js/js.zig");
 
+const TextDecoder = @import("TextDecoder.zig");
 const ReadableStream = @import("../streams/ReadableStream.zig");
 const WritableStream = @import("../streams/WritableStream.zig");
 const TransformStream = @import("../streams/TransformStream.zig");
@@ -44,7 +45,12 @@ const InitOpts = struct {
 
 pub fn init(label_: ?[]const u8, opts_: ?InitOpts, exec: *const Execution) !TextDecoderStream {
     if (label_) |label| {
-        _ = std.meta.stringToEnum(Label, label) orelse return error.RangeError;
+        // Refusing a label Chrome accepts is this stream's own gap -- it only
+        // decodes utf-8, where Chrome hands back a stream for windows-1252 and
+        // the rest of the registry (measured). The wording is still Blink's, so
+        // the gap does not also announce itself through the message.
+        _ = std.meta.stringToEnum(Label, label) orelse
+            return TextDecoder.invalidLabel(exec, "TextDecoderStream", label);
     }
 
     const opts = opts_ orelse InitOpts{};

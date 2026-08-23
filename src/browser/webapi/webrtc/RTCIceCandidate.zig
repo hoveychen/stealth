@@ -63,12 +63,17 @@ pub const Init = struct {
 };
 
 // Chrome rejects an init that pins the candidate to neither a mid nor an
-// m-line index: "sdpMid and sdpMLineIndex are both null" (measured, a
-// TypeError rather than a DOMException).
+// m-line index: "Failed to construct 'RTCIceCandidate': sdpMid and
+// sdpMLineIndex are both null." (measured on Chrome 151 with {}, undefined and
+// a candidate-only init -- a TypeError rather than a DOMException). The
+// sentence used to be missing entirely, leaving an empty message.
 pub fn constructor(options: ?Init, exec: *Execution) !*RTCIceCandidate {
     const i = options orelse Init{};
     if (i.sdpMid == null and i.sdpMLineIndex == null) {
-        return error.TypeError;
+        return exec.js.fail(
+            error.TypeError,
+            "Failed to construct 'RTCIceCandidate': sdpMid and sdpMLineIndex are both null.",
+        );
     }
 
     const allocator = exec._factory._arena;

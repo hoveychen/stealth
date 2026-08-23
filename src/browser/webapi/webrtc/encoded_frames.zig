@@ -30,15 +30,23 @@
 
 const js = @import("../../js/js.zig");
 
+const Execution = js.Execution;
+
 pub fn registerTypes() []const type {
     return &.{ RTCEncodedAudioFrame, RTCEncodedVideoFrame };
 }
 
 pub const RTCEncodedAudioFrame = struct {
     // Always throws: there is no frame to clone. Kept non-optional so the
-    // constructor reports length 1, the way Chrome's does.
-    pub fn init(_: js.Value) !*RTCEncodedAudioFrame {
-        return error.TypeError;
+    // constructor reports length 1, the way Chrome's does. Chrome words the
+    // refusal as a failed parameter conversion and words it the same for any
+    // argument that is not already a frame (measured on Chrome 151 with {},
+    // null and a string); the message used to be empty.
+    pub fn init(_: js.Value, exec: *const Execution) !*RTCEncodedAudioFrame {
+        return exec.js.fail(
+            error.TypeError,
+            "Failed to construct 'RTCEncodedAudioFrame': parameter 1 is not of type 'RTCEncodedAudioFrame'.",
+        );
     }
 
     pub fn getTimestamp(_: *const RTCEncodedAudioFrame) u32 {
@@ -78,8 +86,12 @@ pub const RTCEncodedAudioFrame = struct {
 };
 
 pub const RTCEncodedVideoFrame = struct {
-    pub fn init(_: js.Value) !*RTCEncodedVideoFrame {
-        return error.TypeError;
+    // Same refusal as the audio frame's, with this interface's name (measured).
+    pub fn init(_: js.Value, exec: *const Execution) !*RTCEncodedVideoFrame {
+        return exec.js.fail(
+            error.TypeError,
+            "Failed to construct 'RTCEncodedVideoFrame': parameter 1 is not of type 'RTCEncodedVideoFrame'.",
+        );
     }
 
     pub fn getType(_: *const RTCEncodedVideoFrame) []const u8 {
