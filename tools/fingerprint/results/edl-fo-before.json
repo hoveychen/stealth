@@ -1,0 +1,615 @@
+{
+ "engine": "lightpanda",
+ "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+ "settleMs": 30000,
+ "wire": [
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "type": "Document",
+   "status": 403,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2fceaf4adc17587",
+   "type": "Script",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "type": "Image",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "blob:https://www.scrapingcourse.com/8d5a546c-ae04-4e9d-b2eb-878d356b9285",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0,
+   "failed": "Abort"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+   "type": "Script",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "type": "Image",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/1413854696:1787515206:KVqDprSra-iLhIONdspoNKsV1t9JDI_7w5LOgm_-N0c/a2fceaf4adc17587/Ho",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "blob:https://www.scrapingcourse.com/a33ea9c5-04ba-4ebf-afff-6693252724cb",
+   "type": "Script",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 291
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/qn8os/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+   "type": "Document",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/d9bb193c-1fb6-4856-9d44-2d900f5f6866",
+   "type": "Script",
+   "bytes": 0,
+   "encoded": 0,
+   "failed": "Abort"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bMZ7oGqrgk5c/a2fceaf70983cc90",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/2929f918-c43e-4bbc-8728-7c054e63bc3b",
+   "type": "Script",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 291
+  },
+  {
+   "url": "https://brunhild.challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/i/a2fceaf70983cc90/3jGYnzFfHHnujdjy1BqqE2o2n0YgBKXrNaQw2jjWuKo-1787517474-1.",
+   "type": "Fetch",
+   "bytes": 0,
+   "encoded": 0,
+   "failed": "CouldntResolveHost"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/pat/a2fceaf70983cc90/1787517474648/321e325ba9c34acc547345e784200acee8855d3decde777966",
+   "type": "Fetch",
+   "status": 401,
+   "bytes": 0,
+   "encoded": 1
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2fceaf70983cc90/1787517474649/nE60bTOfPZepb_8E_0hvoROeG7rotqkNRdN_cqSDCtw-1787517",
+   "type": "Image",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 1358
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/2929f918-c43e-4bbc-8728-7c054e63bc3b",
+   "type": "Script",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 291
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/2929f918-c43e-4bbc-8728-7c054e63bc3b",
+   "type": "Script",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 291
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bMZ7oGqrgk5c/a2fceaf70983cc90",
+   "type": "XHR",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 0
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/22af79a9-4eeb-4006-ad0a-ca4cc0ecceeb",
+   "type": "Script",
+   "status": 200,
+   "bytes": 0,
+   "encoded": 291
+  }
+ ],
+ "totals": {
+  "requests": 19,
+  "dataReceived": 0,
+  "encoded": 2814
+ },
+ "perRealm": {
+  "https://www.scrapingcourse.com/cloudflare-challenge": {
+   "big": [
+    {
+     "where": "global UXeS6#1 arg0",
+     "len": 1337359,
+     "hits": 104,
+     "head": "                                                                                                                                                                ",
+     "mid": "                                                                                ",
+     "tail": "                                                    0, /.*honk.*/, 1787517474690",
+     "shape": {
+      "sampled": 36145,
+      "space": 100,
+      "ws": 0,
+      "alpha": 0,
+      "digit": 0,
+      "sym": 0,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhr:/cdn-cgi/challenge-platform/h/b/fo/1413854696:1787515206:KVqDprSra-iLhIONdspoNKsV1t9JDI_7w",
+     "len": 113580,
+     "hits": 1,
+     "head": "gGJta45ig5WAdYOXhmqHc5hsX3Bua5aDYqZ8fXWXnpd9hX15aZKOlauWkpmveJF0tY+slLJ9lJ+ymsTHxbPIxMqiiLHLj8PWyJLQ2MPbxa+3p5e6r73Aoa+12r/Yqb+27NfxuvCu7fbszMvjtLnS67nL3+zUzNfB",
+     "mid": "hglZJsZJmWcGidmnRsoZ54cKWifHSppoB4raqEfLGuiIC1soyEubaQiL26lIzBvpiQxcKclMnGoJjNyq",
+     "tail": "VV5STGAwRlgnNGhlZm4tbGpiLHNfTT95Y29LezxnXDhSgn9jbVVfUolGY4aDiV59T5CFb5JeklZRjF8=",
+     "shape": {
+      "sampled": 113580,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81.5,
+      "digit": 15.6,
+      "sym": 2.9,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global runProgram#1 arg0",
+     "len": 85184,
+     "hits": 1,
+     "head": "kLVSuHhycWdweHdOsF8HEAkW5xMMDekcHOFA0XSYnXSYn6N0pIeLi3ISeLuwtaupuL1Yr5hzk4qxbybKRA0RFSU5BGkOg7LBwazBw4rzoNLc37Og4EXdKBL5FwUAKOe+XayIiKJupgm2t1mZGx3ggb/orVG8cGdo",
+     "mid": "LCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCws",
+     "tail": "ZUBFQvBcjajpDpC4vgSF4muhatCXi7Cvrry7uri2xcPAzcnIx8bV1JyuXaHQCy5QsotHf7wkTvAt71k=",
+     "shape": {
+      "sampled": 85184,
+      "space": 0,
+      "ws": 0,
+      "alpha": 88.4,
+      "digit": 9.3,
+      "sym": 2.2,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhrPOST:/cdn-cgi/challenge-platform/h/b/fo/1413854696:1787515206:KVqDprSra-iLhIONdspoNKsV1t9JDI_7w",
+     "len": 2306,
+     "hits": 1,
+     "head": "PdZKM$u$aWexqryPzu7LwMsS9SB2DkiIpdRYjvwmLjahXU3hRzE5gKvtCocC-XxeLJjT30WVB+JgrJpcdl6KRlzmdjGnhcJUKYXwB5KHzb8yDkMEyrtwTGBiBGR8UN66j5w$GyyW9Ws1TKP$CqDlD88l2AT4CiPb",
+     "mid": "ptDSNH8+C1eaAZrxvYHnuTs40Os$i$GENm55T5m6A4nl+ddtVnfRX-RL7K1RTswm+aIlBH3ZOG1yIgT4",
+     "tail": "JPJ8ukOkjNSI7nIZLNRSMU620-Icw+W1W72cWdx0vJRdmIOhEIGx+E4iRR0a-SbV$yyT9u+HTGZmYz9G",
+     "shape": {
+      "sampled": 2306,
+      "space": 0,
+      "ws": 0,
+      "alpha": 80.3,
+      "digit": 14.7,
+      "sym": 5,
+      "ctl": 0
+     }
+    }
+   ],
+   "blobs": [
+    {
+     "parts": 1,
+     "total": 13,
+     "type": "text/javascript"
+    },
+    {
+     "parts": 3,
+     "total": 291,
+     "type": "text/javascript"
+    }
+   ],
+   "calls": {
+    "UlwL3": 1,
+    "UXeS6": 52,
+    "WfQnx8": 1,
+    "oNxb8": 0,
+    "gsnqe5": 1,
+    "ECAU8": 0,
+    "xBEPx7": 4,
+    "ykmX3": 7,
+    "PoSLZ4": 2,
+    "BppE3": 0,
+    "rCUjg1": 0,
+    "wdclO4": 0,
+    "MoAhr7": 0,
+    "GLLj2": 0,
+    "SRPD9": 0,
+    "runProgram": 1,
+    "mUMum6": 0,
+    "gUsZ0": 0,
+    "pwuPn1": 0,
+    "bGgjP8": 0,
+    "GtJT5": 1
+   },
+   "posts": [
+    {
+     "url": "/cdn-cgi/challenge-platform/h/b/fo/1413854696:1787515206:KVqDprSra-iLhIONdspoNKsV1t9JDI_7w5LOgm_-N0c/a2fceaf4a",
+     "len": 2306,
+     "head": "PdZKM$u$aWexqryPzu7LwMsS9SB2DkiIpdRYjvwmLjahXU3hRzE5gKvtCocC-XxeLJjT30WVB+JgrJpcdl6KRlzmdjGnhcJUKYXwB5KHzb8yDkMEyrtwTGBiBGR8UN66j5w$GyyW9Ws1TKP$CqDlD88l2AT4CiPbM7$sgruOYrB-USmaoT62l0gHjyiMhJTu4JE9LbPHM9UM$JX-gAHRqPLOhida2+TAEFaFX8IY0NorxZovpU2O6kbC5NzNq$7NCFZhhkpt0dUmpuk+pIm2KRiX64vZiVFRDnzdw7N9xoTD",
+     "shape": {
+      "sampled": 2306,
+      "space": 0,
+      "ws": 0,
+      "alpha": 80.3,
+      "digit": 14.7,
+      "sym": 5,
+      "ctl": 0
+     }
+    }
+   ]
+  },
+  "about:blank": {
+   "big": [],
+   "blobs": [],
+   "calls": {},
+   "posts": []
+  },
+  "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/qn8os/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto": {
+   "big": [
+    {
+     "where": "global UXeS6#1 arg0",
+     "len": 1337359,
+     "hits": 52,
+     "head": "                                                                                                                                                                ",
+     "mid": "                                                                                ",
+     "tail": "                                                    0, /.*honk.*/, 1787517475056",
+     "shape": {
+      "sampled": 36145,
+      "space": 100,
+      "ws": 0,
+      "alpha": 0,
+      "digit": 0,
+      "sym": 0,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhr:/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bM",
+     "len": 823392,
+     "hits": 1,
+     "head": "vbaVwr+Cwra/moe8xIycjaevyLGe1K6krcfQsqiouZXJqqy816TXuujTtNjmyM2ryb/lxNDl8MGw7MfnxvvOzLK39fYCvOP81Qn0w9ToAg4M3OHJ8goCCPf3Cg38++7qDA7f4xEeIyEf+yj5KSD3MPoiEwYCKAQv",
+     "mid": "VWx5dF5xl2WnnaV8mqSlemigbrGhk6d1loS6l7iyeY+seqnBrKCPrrHDiJyonI2ZxJ2+kZulo9eSrcLb",
+     "tail": "NxEyOTIgQjUeFhgEIlAwCSNTRk8oVxNUIiM0KCdNPx5hNSBXRGUwZTc/RjxOK2ZMK2ZrP1VFMmZxeUBB",
+     "shape": {
+      "sampled": 22254,
+      "space": 0,
+      "ws": 0,
+      "alpha": 82,
+      "digit": 15.3,
+      "sym": 2.7,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global runProgram#1 arg0",
+     "len": 617544,
+     "hits": 1,
+     "head": "vnLxt6uhpJ6jq8G7PWoWCxQFNgoPEDT/bBCRl8jLycCfsTX5RGlJUisC1lFeCwIF+/llv0VnFxc1ATlwtDH/WmdiXWhjYWIDde69equroKvGukByCiYKFkFpQ77ve32Sd5J3hHuIeiopXYxyKjH5KlVPv+Z+g4Z5",
+     "mid": "/EQK4Fk8ynuKhqqE2i6xgXk8XEzVvo5Jf3axbUCact8KVI9DnFf8AJGz4Nbzvc7g69OziKh8YThT96t4",
+     "tail": "I7ni2ANAD9P1AMNnMFnynGgmeRseMDE0MzY1JyksKy4tAAQDBgX6xK5kWwAuFMSHY5oT2lpCXG3fpw==",
+     "shape": {
+      "sampled": 16691,
+      "space": 0,
+      "ws": 0,
+      "alpha": 82.8,
+      "digit": 14.9,
+      "sym": 2.4,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhr:/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bM",
+     "len": 127720,
+     "hits": 1,
+     "head": "vbaVwr+Cwra/moe8xIycjaevyLGe1K6krcfQsqiouZXJqqy82NHbu+jioLnpzqDuxcnHz9LC8dPWx8fu2cvX9unZ1eHg4sHa0Pfpyb7r7MXp8Orm4QQQ1uXhGfjO1+jW9A8i7A7xJgP6GADj6ifrGScDJ+w0Ly4A",
+     "mid": "Z4VllmuJaZpvjW2ec5FxoneVdaZ7mXmqf519roOhgbKHpYW2i6mJuo+tjb6TsZHCl7WVxpu5mcqfvZ3O",
+     "tail": "GvIs/gkbLSUJ/TMvJwg5DTcRPSfzGPcWGSH7MDcxAQkFNRVHTyo4HTM9TSMWFTBVVyU0UFcWHD1PGQ==",
+     "shape": {
+      "sampled": 127720,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81.4,
+      "digit": 15.7,
+      "sym": 2.9,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global runProgram#2 arg0",
+     "len": 95788,
+     "hits": 1,
+     "head": "vnLxt6uhpJ6jq8G7PWoWCxQFNgoPEDT/bBCRmenMyr/GvZ+xNQNUWFtUWGFlVGRpbQLWUV4LAgX7+WW/RXQLFgr8FAwV+3C0MfxBbExTKgN17r6boJm2xrpAcTYRBhVpQ77upImnlZK6eiopXYxyKjH5KlVPv+Z+",
+     "mid": "yMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjI",
+     "tail": "e2lgYWuRSlCrCDd7zRjbT8iAyKTevmPDxsjJzMvOzc/R1NPW1djc294cBszTaEZcrG97QuvCQlr05Uf/",
+     "shape": {
+      "sampled": 95788,
+      "space": 0,
+      "ws": 0,
+      "alpha": 88.7,
+      "digit": 9.9,
+      "sym": 1.5,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhrPOST:/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bM",
+     "len": 88098,
+     "hits": 1,
+     "head": "wQnF-F7K9S-CJli5ucQajFg4x+zZqeGbBc8ShE-tZ9oFV$lSvKFHnTpYAo21l2ZBjxZOJwHSlcGCnP7clNTIm+XMde-H75Rkag$FIJIw5R7tsOiM7zD$edaEYZhQlD5ZJjSoJzSOPB$A8ncBDs4aKOSfxxmFgBqB",
+     "mid": "L5iZ4yk9qkxV-KSzoN4GNKim605V$ZN8ZoLqg-bGHjgrBfIwJkQta0sr1o6K0p2V4RY+dGk4l1DVgCJc",
+     "tail": "dd+2Od8BT5SBhQ+A7me9myvEGQFQH6sc5Lj4sR6nfzx9ZlEEtLeteyflROtJIhM$0dVmfnhq+8qHBbyd",
+     "shape": {
+      "sampled": 88098,
+      "space": 0,
+      "ws": 0,
+      "alpha": 79.8,
+      "digit": 15.5,
+      "sym": 4.7,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "xhrPOST:/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bM",
+     "len": 4908,
+     "hits": 1,
+     "head": "wQnF-F7K9S-CJli5ucQajFg4x+zZqeGbBc8ShE-tZ9oFV$lSvKFHnTpYAo21l2ZBjxZOJwHSlcGCnP7clNTIm+XMde-H75Rkag$FIJIw5R7tsOiM7zD$edaEYZhQlD5ZJjSoJzSOPB$A8ncBDs4aKOSfxxmFgBqB",
+     "mid": "-sMiYMxMVEB5FY29KytdAETco94vgrJwhyLT+b3TDskYIQ3yV4y99F1RwDP7JbcqpoyydRqgJSaSlJxg",
+     "tail": "g+ZI3nT7fcDB457bNJ9FDbNhNS2LQYjve+HAeHdBwE7MVfY$+scxrx7GA+1lIKdqJD$7T-9YYwlPSKbP",
+     "shape": {
+      "sampled": 4908,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81.1,
+      "digit": 14.3,
+      "sym": 4.7,
+      "ctl": 0
+     }
+    },
+    {
+     "where": "global UlwL3#2 arg0",
+     "len": 2173,
+     "hits": 1,
+     "head": "<style>#JyFwt6,#bwsM4,#qdGh2,#KhYG1{position:absolute}#bwsM4,#qdGh2,#KhYG1{margin-left:15.9099rem}#QyWuG8{border:2.715px solid green;padding:3.98px;margin-left:",
+     "mid": "t:20.8px}#fSQAW7{border:2px solid #00008b;-webkit-transform:perspective(12890px)",
+     "tail": "ue=49 max=100></progress></div><div id=KhYG1><button type=button></button></div>",
+     "shape": {
+      "sampled": 2173,
+      "space": 2.6,
+      "ws": 0,
+      "alpha": 58.4,
+      "digit": 19.6,
+      "sym": 19.5,
+      "ctl": 0
+     }
+    }
+   ],
+   "blobs": [
+    {
+     "parts": 1,
+     "total": 13,
+     "type": "text/javascript"
+    },
+    {
+     "parts": 3,
+     "total": 291,
+     "type": "text/javascript"
+    },
+    {
+     "parts": 3,
+     "total": 291,
+     "type": "text/javascript"
+    }
+   ],
+   "calls": {
+    "UlwL3": 14,
+    "UXeS6": 57,
+    "WfQnx8": 4,
+    "pwuPn1": 0,
+    "gsnqe5": 1,
+    "mUMum6": 6,
+    "gUsZ0": 1,
+    "ECAU8": 0,
+    "xBEPx7": 82,
+    "ykmX3": 56,
+    "PoSLZ4": 41,
+    "BppE3": 0,
+    "rCUjg1": 0,
+    "wdclO4": 0,
+    "MoAhr7": 0,
+    "GLLj2": 0,
+    "SRPD9": 0,
+    "runProgram": 2,
+    "cwwX3": 1,
+    "bGgjP8": 0,
+    "GtJT5": 1
+   },
+   "posts": [
+    {
+     "url": "/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bMZ7oGqrgk5c/a2fceaf70",
+     "len": 4908,
+     "head": "wQnF-F7K9S-CJli5ucQajFg4x+zZqeGbBc8ShE-tZ9oFV$lSvKFHnTpYAo21l2ZBjxZOJwHSlcGCnP7clNTIm+XMde-H75Rkag$FIJIw5R7tsOiM7zD$edaEYZhQlD5ZJjSoJzSOPB$A8ncBDs4aKOSfxxmFgBqBsvvvdwdW7oqLdnkXaanXZgxTz$k4$3t21ayG82o2ZM4lVvr4WWkbw$MxO-V0Boay+$oj9Wod5afxlLMisWkuLc7tBWCKgXWI2PRxitiBkPOsJGFPj72QdJjegMbogk-PE6nbz$WGwki0",
+     "shape": {
+      "sampled": 4908,
+      "space": 0,
+      "ws": 0,
+      "alpha": 81.1,
+      "digit": 14.3,
+      "sym": 4.7,
+      "ctl": 0
+     }
+    },
+    {
+     "url": "/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bMZ7oGqrgk5c/a2fceaf70",
+     "len": 88098,
+     "head": "wQnF-F7K9S-CJli5ucQajFg4x+zZqeGbBc8ShE-tZ9oFV$lSvKFHnTpYAo21l2ZBjxZOJwHSlcGCnP7clNTIm+XMde-H75Rkag$FIJIw5R7tsOiM7zD$edaEYZhQlD5ZJjSoJzSOPB$A8ncBDs4aKOSfxxmFgBqBsvvvdwdW7oqjvWxWXMKMjwqDzv-ZlDee-d9+stSMzQD3YxVscNFxT-bWjz+L5-I3yCbB+2MKQGuXH5sYqAzMLCDVWcOMQkMd4rqDRtmVeSyKizJ3WLR0BwhWmeAXP9QgGvFbfwt+mewl",
+     "shape": {
+      "sampled": 88098,
+      "space": 0,
+      "ws": 0,
+      "alpha": 79.8,
+      "digit": 15.5,
+      "sym": 4.7,
+      "ctl": 0
+     }
+    }
+   ]
+  },
+  "about:srcdoc": {
+   "big": [],
+   "blobs": [],
+   "calls": {},
+   "posts": []
+  }
+ },
+ "console": [
+  "debug: [object Object]",
+  "log: [object Object]",
+  "log: [object Object]",
+  "log: function () { [native code] }",
+  "log: function () { [native code] }",
+  "log: [object Object]",
+  "log: [object Object]",
+  "debug: %c%d font-size:0;color:transparent [object Object]",
+  "debug: %c%d font-size:0;color:transparent [object Object]",
+  "dir: ",
+  "dir: ",
+  "dirxml: %c%d font-size:0;color:transparent [object Object]",
+  "dirxml: %c%d font-size:0;color:transparent [object Object]",
+  "error: %c%d font-size:0;color:transparent [object Object]",
+  "error: %c%d font-size:0;color:transparent [object Object]",
+  "info: %c%d font-size:0;color:transparent [object Object]",
+  "info: %c%d font-size:0;color:transparent [object Object]",
+  "log: %c%d font-size:0;color:transparent [object Object]",
+  "log: %c%d font-size:0;color:transparent [object Object]",
+  "trace: %c%d font-size:0;color:transparent [object Object]",
+  "trace: %c%d font-size:0;color:transparent [object Object]",
+  "warning: %c%d font-size:0;color:transparent [object Object]",
+  "warning: %c%d font-size:0;color:transparent [object Object]"
+ ],
+ "exceptions": [],
+ "bodies": [
+  {
+   "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "len": 6219,
+   "head": "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title><meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"><meta http-equiv=\"X-UA-Compatible\" content=\"IE=Edge\"><meta name=\"robots\" content=\"noindex,nofollow\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta http-equiv=\"content-security-policy\" content=\"default-src &#39;none&#39;; script-src &#39"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1?ray=a2fceaf4adc17587",
+   "len": 226607,
+   "head": "window._cf_chl_opt.FRGD3=true;window._cf_chl_opt.qDREr1=false;window._cf_chl_opt.DEnd6=[];window._cf_chl_opt.BaSzz0=\"challenges.cloudflare.com\";window._cf_chl_opt.hJYUp7={\"Rahvf8\":{\"FkbdG0\":\"https%3A%2F%2Fwww.cloudflare.com%2Fprivacypolicy%2F\",\"kaMjx1\":\"https%3A%2F%2Funbotnet.me\",\"TzEsj4\":\"%2Fcdn-cgi%2Fchallenge-platform%2Fhelp\",\"ACZr0\":\"https%3A%2F%2Fdevelopers.cloudflare.com%2Ffundamentals%2Fget"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/turnstile/v0/b/e694063b5082/api.js?onload=oNxb8&render=explicit",
+   "len": 84236,
+   "head": "\"use strict\";(function(){function wn(e,t,r,n,a,u,l){try{var d=e[u](l),f=d.value}catch(p){r(p);return}d.done?t(f):Promise.resolve(f).then(n,a)}function Tn(e){return function(){var t=this,r=arguments;return new Promise(function(n,a){var u=e.apply(t,r);function l(f){wn(u,n,a,l,d,\"next\",f)}function d(f){wn(u,n,a,l,d,\"throw\",f)}l(void 0)})}}function $(e,t,r){return t in e?Object.defineProperty(e,t,{val"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/1413854696:1787515206:KVqDprSra-iLhIONdspoNKsV1t9JDI_7w5LOgm_-N0c/a2fceaf4a",
+   "len": 113580,
+   "head": "gGJta45ig5WAdYOXhmqHc5hsX3Bua5aDYqZ8fXWXnpd9hX15aZKOlauWkpmveJF0tY+slLJ9lJ+ymsTHxbPIxMqiiLHLj8PWyJLQ2MPbxa+3p5e6r73Aoa+12r/Yqb+27NfxuvCu7fbszMvjtLnS67nL3+zUzNfB0wbk0dzh+L/t9xHhA+XlEg4GDdIW0xH+7B/aEBEN2hwgBfboFfkYJBoPAico7DAuJgj16+z0CSkzGS4T/jQSEhUYGzImPxwIASdGUxMrNFMzGDhbEVFMNygsO0BaVVI9Lzwyakg5R2I3UUdhaWFxLS9IOGI2ck90cTZye1BlWWN2c4Z3gj5MflmAZlpbU4eSk5Z2i2RWeG6HmnqhmqWGdF+oaZihgYBlb4WKe61vg3+XoZNx"
+  },
+  {
+   "url": "blob:https://www.scrapingcourse.com/a33ea9c5-04ba-4ebf-afff-6693252724cb",
+   "len": 291,
+   "head": "var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',{createScript:function(s){return s;}})}catch(e){self.postMessage({type:'tt-policy-error',msg:e.message})}onmessage=function(e){e.isTrusted&&''===e.origin&&null===e.source&&eval(_p?_p.createScript(e.data):e.data)}"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/qn8os/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lan",
+   "len": 275209,
+   "head": "<!DOCTYPE HTML><html lang=\"en-US\"><head><meta http-equiv=\"x-ua-compatible\" content=\"IE=Edge,chrome=1\"><meta http-equiv=\"content-security-policy\" content=\"default-src &#39;none&#39;; script-src &#39;nonce-HSQQTtReHYGHUmhXZxe5PY&#39; &#39;unsafe-eval&#39;; script-src-attr &#39;none&#39;; worker-src blob:; style-src &#39;unsafe-inline&#39;; img-src &#39;self&#39;; connect-src &#39;self&#39; https://h"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "len": 101448,
+   "head": "\u0000\u0000\u0001\u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000Ú\u0006\u0000\u0000f\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000(\b\u0001\u0000@\u0007\u0000\u0000@@\u0000\u0000\u0001\u0000 \u0000(B\u0000\u0000h\u000f\u0001\u000000\u0000\u0000\u0001\u0000 \u0000¨%\u0000\u0000Q\u0001\u0000  \u0000\u0000\u0001\u0000 \u0000¨\u0010\u0000\u00008w\u0001\u0000\u0010\u0010\u0000\u0000\u0001\u0000 \u0000h\u0004\u0000\u0000à\u0001\u0000PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\b\u0006\u0000\u0000\u0000\\r¨f\u0000\u0000\u0006¡IDATxÚíÝ±«Ýg\u001dÇñOlcH­HÀBW4\u0014\u001bZ\u0010\bº¸¤s\u0006§\"nþ\u0001®ÚÕÿÁÁÕl..©-\u0014j\u0010R(\u0015{HÑ+\u001a¤w1©ÃÍâö=pÎùåü>¯\u0017ÜíËï<÷9é»çÀÃs\u0013\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000`¯Î-½ú~W³^ìÂNsï$ùéÒ]g^ÀJ½äÆpöhéÅ.ìxY\u0001Ø²O,½\u0000`9\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000¹\u0013p7ÞÙ`ö\u0007;xý7ÜÛò3/'¹¾µþj"
+  },
+  {
+   "url": "https://www.scrapingcourse.com/favicon.ico",
+   "len": 101448,
+   "head": "\u0000\u0000\u0001\u0000\u0006\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000Ú\u0006\u0000\u0000f\u0000\u0000\u0000\u0000\u0000\u0001\u0000 \u0000(\b\u0001\u0000@\u0007\u0000\u0000@@\u0000\u0000\u0001\u0000 \u0000(B\u0000\u0000h\u000f\u0001\u000000\u0000\u0000\u0001\u0000 \u0000¨%\u0000\u0000Q\u0001\u0000  \u0000\u0000\u0001\u0000 \u0000¨\u0010\u0000\u00008w\u0001\u0000\u0010\u0010\u0000\u0000\u0001\u0000 \u0000h\u0004\u0000\u0000à\u0001\u0000PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0001\u0000\u0000\u0000\u0001\u0000\b\u0006\u0000\u0000\u0000\\r¨f\u0000\u0000\u0006¡IDATxÚíÝ±«Ýg\u001dÇñOlcH­HÀBW4\u0014\u001bZ\u0010\bº¸¤s\u0006§\"nþ\u0001®ÚÕÿÁÁÕl..©-\u0014j\u0010R(\u0015{HÑ+\u001a¤w1©ÃÍâö=pÎùåü>¯\u0017ÜíËï<÷9é»çÀÃs\u0013\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000`¯Î-½ú~W³^ìÂNsï$ùéÒ]g^ÀJ½äÆpöhéÅ.ìxY\u0001Ø²O,½\u0000`9\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000\t\u0000\u0014\u0013\u0000(&\u0000PL\u0000 \u0000@1\u0001b\u0002\u0000Å\u0004\u0000¹\u0013p7ÞÙ`ö\u0007;xý7ÜÛò3/'¹¾µþj"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bMZ7oGqrgk5c/a2fcea",
+   "len": 823392,
+   "head": "vbaVwr+Cwra/moe8xIycjaevyLGe1K6krcfQsqiouZXJqqy816TXuujTtNjmyM2ryb/lxNDl8MGw7MfnxvvOzLK39fYCvOP81Qn0w9ToAg4M3OHJ8goCCPf3Cg38++7qDA7f4xEeIyEf+yj5KSD3MPoiEwYCKAQvEff4OSn39xos/RT9NBVDGDU6QUMsLk5QI0MiECdJNC9WDDwOSxlAHE0yOV1SITE6aWQ9KChoPmY/ck5qYFFTNTRRdnV6XVg4Xjp6bWRTP3RpWohEY0B3joiIe1JhTU9vbpFRZ1R6aGhbgqRbXGZ8oGmqnqJ3mHyRcaOOsYiHi5W0uqW8s3Zxk3mYkJSysZqyssmeqa3KoMSvj67DpLXLitXUtcvQ27LSwZu5sNfgneSn2KWm"
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/2929f918-c43e-4bbc-8728-7c054e63bc3b",
+   "len": 291,
+   "head": "var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',{createScript:function(s){return s;}})}catch(e){self.postMessage({type:'tt-policy-error',msg:e.message})}onmessage=function(e){e.isTrusted&&''===e.origin&&null===e.source&&eval(_p?_p.createScript(e.data):e.data)}"
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/2929f918-c43e-4bbc-8728-7c054e63bc3b",
+   "len": 291,
+   "head": "var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',{createScript:function(s){return s;}})}catch(e){self.postMessage({type:'tt-policy-error',msg:e.message})}onmessage=function(e){e.isTrusted&&''===e.origin&&null===e.source&&eval(_p?_p.createScript(e.data):e.data)}"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/pat/a2fceaf70983cc90/1787517474648/321e325ba9c34acc547345e784200acee8855d3d",
+   "len": 1,
+   "head": "J"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/ci/a2fceaf70983cc90/1787517474649/nE60bTOfPZepb_8E_0hvoROeG7rotqkNRdN_cqSDC",
+   "len": 1358,
+   "head": "PNG\r\n\u001a\n\u0000\u0000\u0000\rIHDR\u0000\u0000\u0000\u0011\u0000\u0000\u0000G\b\u0000\u0000\u0000\u0000ÄÑóÌ\u0000\u0000\u0000\u0006tEXtr\u00003À9ÒEKD\u0010\u0000\u0000\u0005\u0003IDAT\u0001þ\u0004\u0001û\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000"
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/2929f918-c43e-4bbc-8728-7c054e63bc3b",
+   "len": 291,
+   "head": "var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',{createScript:function(s){return s;}})}catch(e){self.postMessage({type:'tt-policy-error',msg:e.message})}onmessage=function(e){e.isTrusted&&''===e.origin&&null===e.source&&eval(_p?_p.createScript(e.data):e.data)}"
+  },
+  {
+   "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bMZ7oGqrgk5c/a2fcea",
+   "len": 127720,
+   "head": "vbaVwr+Cwra/moe8xIycjaevyLGe1K6krcfQsqiouZXJqqy82NHbu+jioLnpzqDuxcnHz9LC8dPWx8fu2cvX9unZ1eHg4sHa0Pfpyb7r7MXp8Orm4QQQ1uXhGfjO1+jW9A8i7A7xJgP6GADj6ifrGScDJ+w0Ly4AIxUbFQYtHDcZAAFAPBY7PTwrHQk5PkVHMDJSVCdHJhQrTTgzWhBAEk8dRCBRNj1hViU1Pm1oQSwsbEJqQ3ZSbmRULTR9Wlh5fndcPGI+fnFoV0N4fURrTk2Le39iTmtzdHZaVZJddnl5bm6hln2Cg2BjhmZ/jJ2Br4+obYqMdrKruZl2jr+RsaB9wKCAoraIgMXKyZnJrMCMxrS9zKyjw8XDmJncsK2+oN681cWhz8LqnKno"
+  },
+  {
+   "url": "blob:https://challenges.cloudflare.com/22af79a9-4eeb-4006-ad0a-ca4cc0ecceeb",
+   "len": 291,
+   "head": "var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',{createScript:function(s){return s;}})}catch(e){self.postMessage({type:'tt-policy-error',msg:e.message})}onmessage=function(e){e.isTrusted&&''===e.origin&&null===e.source&&eval(_p?_p.createScript(e.data):e.data)}"
+  }
+ ],
+ "version": {
+  "Browser": "Lightpanda/1.0",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "Lightpanda-Version": "1.0.0-dev.1004+d993018b2",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9243/"
+ },
+ "final": {
+  "href": "https://www.scrapingcourse.com/cloudflare-challenge",
+  "title": "Just a moment...",
+  "status": "www.scrapingcourse.com\nPerforming security verification\n\nThis website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot.\n\nR",
+  "cookie": "AWSALB,AWSALBCORS",
+  "clearance": false
+ },
+ "engineLog": "head\":\"                                                                                                                                                                \",\"mid\":\"                                                                     ... (truncated) (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+29.964s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:blank\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+29.965s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:blank\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+29.965s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:srcdoc\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+29.965s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:blank\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+30.367s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/qn8os/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto\",\"big\":[{\"where\":\"xhrPOST:/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bM\",\"len\":4908,\"hits\":1,\"head\":\"wQnF-F7K9S-CJli5ucQajFg4x+zZqeGbBc8ShE-tZ9oFV$lSvKFHnTpYAo21l2ZBjxZOJwHSlcGCnP7clNTIm+XMde-H75Rkag$FIJIw5R7tsOiM7zD$edaEYZhQlD5ZJjSoJzSOPB$A8ncBDs4aKOSfxxmFgBqB\",\"mid\":\"-sMiYMxMVEB5FY29KytdAETco94vgrJwhyLT+b3TDskYIQ3yV4y99F1RwDP7JbcqpoyydRqgJSaSlJxg\",\"tail\":\"g+ZI3nT7fcDB457bNJ9FDbNhNS2LQYjve+HAeHdBwE7MVfY$+scxrx7GA+1lIKdqJD$7T-9YYwlPSKbP\",\"shape\":{\"sampled\":4908,\"space\":0,\"ws\":0,\"alpha\":81.1,\"digit\":14.3,\"sym\":4.7,\"ctl\":0}},{\"where\":\"global runProgram#1 arg0\",\"len\":617544,\"hits\":1,\"head\":\"vnLxt6uhpJ6jq8G7PWoWCxQFNgoPEDT/bBCRl8jLycCfsTX5RGlJUisC1lFeCwIF+/llv0VnFxc1ATlwtDH/WmdiXWhjYWIDde69equroKvGukByCiYKFkFpQ77ve32Sd5J3hHuIeiopXYxyKjH5KlVPv+Z+g4Z5\",\"mid\":\"/EQK4Fk8ynuKhqqE2i6xgXk8XEzVvo5Jf3axbUCact8KVI9DnFf8AJGz4Nbzvc7g69OziKh8YThT96t4\",\"tail\":\"I7ni2ANAD9P1AMNnMFnynGgmeRseMDE0MzY1JyksKy4tAAQDBgX6xK5kWwAuFMSHY5oT2lpCXG3fpw==\",\"shape\":{\"sampled\":16691,\"space\":0,\"ws\":0,\"alpha\":82.8,\"digit\":14.9,\"sym\":2.4,\"ctl\":0}},{\"where\":\"xhr:/cdn-cgi/challenge-platform/h/b/fo/2529124746:1787515212:rNNGM2lhwondJdL_-4fix293pqbxL66bM\",\"len\":823392,\"hits\":1,\"head\":\"vbaVwr+Cwra/moe8xIycjaevyLGe1K6krcfQsqiouZXJqqy816TXuujTtNjmyM2ryb/lxNDl8MGw7MfnxvvOzLK39fYCvOP81Qn0w9ToAg4M3OHJ8goCCPf3Cg38++7qDA7f4xEeIyEf+yj5KSD3MPoiEwYCKAQv\",\"mid\":\"VWx5dF5xl2WnnaV8mqSlemigbrGhk6d1loS6l7iyeY+seqnBrKCPrrHDiJyonI2ZxJ2+kZulo9eSrcLb\",\"tail\":\"NxEyOTIgQjUeFhgEIlAwCSNTRk8oVxNUIiM0KCdNPx5hNSBXRGUwZTc/RjxOK2ZMK2ZrP1VFMmZxeUBB\",\"shape\":{\"sampled\":22254,\"space\":0,\"ws\":0,\"alpha\":82,\"digit\":15.3,\"sym\":2.7,\"ctl\":0}},{\"where\":\"global UXeS6#1 arg0\",\"len\":1337359,\"hits\":52,\"head\":\"                                                                                                                                               ... (truncated) (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+30.368s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:blank\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+30.368s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:blank\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+30.368s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:blank\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+30.77s]\n      0 = \n  arg(1): @@PO@@{\"realm\":\"about:blank\",\"big\":[],\"blobs\":[],\"calls\":{},\"posts\":[]}@@END@@ (string)\n\n"
+}

@@ -11109,3 +11109,123 @@ belongs, and no shader the widget compiles reaches it.
 Unchanged from before this plan, which is the expected shape: this closed one
 of the five, and the remaining four are `cfsc-imagebitmap-pixels`, the gradient
 and glyph work behind the 48×48, and the float16 `getImageData` options.
+
+## The trace said every streamed response weighed nothing (2026-08-23)
+
+`Network.loadingFinished` carries an `encodedDataLength`, and so does the
+response object `Network.responseReceived` carries. This engine answered the
+`Content-Length` header in both places. A response that never sends that header
+— a chunked h1 reply, anything an h2 origin streams — was therefore announced
+as zero bytes long, while the same transfer's Resource Timing entry reported its
+real weight. The comment at the second site said as much and left it.
+
+That is not a cosmetic gap: the `fo/` response on a Cloudflare challenge **is**
+the VM program the client then runs, and its size is the one number that says
+how much work the challenge asked for. `antibot-sweep --trace` records it off
+`loadingFinished` precisely so it can be read without patching a prototype in
+front of a guard that is deciding whether this is a browser. Every one of those
+readings was zero.
+
+### What Chrome puts in the two fields
+
+`cdp-encoded-data-length.mjs` writes each response byte-for-byte over a raw
+socket, so the header bytes and the body bytes are separately known and the two
+CDP numbers can be checked against them rather than guessed at. Chrome 151,
+headless, over CDP:
+
+| response | header bytes | body bytes | `responseReceived` | `loadingFinished` |
+|---|---|---|---|---|
+| plain, `Content-Length` | 129 | 7 046 | 129 | 7 175 |
+| gzip | 152 | 105 | 152 | 257 |
+| brotli | 149 | 65 | 149 | 214 |
+| chunked, no `Content-Length` | 135 | 7 059 | 135 | 7 194 |
+| chunked + gzip | 159 | 116 | 159 | 275 |
+| 204, empty | 103 | 0 | 103 | — |
+
+So `responseReceived` reports the response head alone — which is all that has
+arrived when it fires — and `loadingFinished` reports the head plus the body as
+it sat on the wire, before any content-encoding was undone. The chunked rows
+count the chunk framing: 7 059 is a 7 046-byte body plus its chunk headers.
+
+A redirect settles the last question. curl accumulates its header-byte counter
+across a chain it follows itself, so the reading would be wrong if this engine
+let it: it does not, `setFollowLocation(false)`, one transfer per response.
+Chrome puts the 302's own 124 bytes on `redirectResponse.encodedDataLength` and
+counts only the final hop at `loadingFinished`, and the row matches.
+
+### What this engine answers now
+
+Two curl readings that were already there for the taking: `CURLINFO_HEADER_SIZE`
+for the head, and the `CURLINFO_SIZE_DOWNLOAD_T` that `perf-resource-timing`
+added for the encoded body. Same probe, same server, both engines:
+
+| response | Chrome `responseReceived` / `loadingFinished` | here |
+|---|---|---|
+| navigation document | 105 / 438 | 105 / 438 |
+| plain | 129 / 7 175 | 129 / 7 175 |
+| gzip | 152 / 257 | 152 / 257 |
+| brotli | 149 / 214 | 149 / 214 |
+| 404 favicon | 45 / 54 | 45 / 54 |
+| after a redirect | 129 / 7 175 | 129 / 7 175 |
+| chunked | 135 / 7 194 | 135 / **7 181** |
+| chunked + gzip | 159 / 275 | 159 / **264** |
+
+Identical everywhere but the chunked rows, which read 13 and 11 bytes low —
+exactly the chunk framing, which curl strips before anything here can count it.
+Nothing this engine can reach counts those bytes, and no origin worth
+disguising against speaks h1 chunked anyway.
+
+### The `fo/` responses, on the real station
+
+`program-origin.mjs` measures both ends of the same load at once: the CDP byte
+count off the wire, and the string the page hands to `runProgram`. Same station,
+same page, old binary then new:
+
+| `fo/` response | before | after | Chrome |
+|---|---|---|---|
+| parent realm | 0 | 33 576 | 33 346 |
+| widget realm | 0 | 419 957 | — |
+| widget, round 2 | 0 | 47 493 | — |
+| whole page, all requests | 2 814 (19 req) | 739 618 (19 req) | 153 867 (9 req) |
+
+Chrome's column records only the parent realm's `fo/`: the widget is an
+out-of-process iframe, and `program-origin.mjs` attaches to the page target
+only, which is also why its request count is half. So the cross-engine
+comparison is the one row both arms have: 33 346 against 33 576, 0.7 % apart,
+for a body the page measured at 113 584 characters against 113 576. The `fo/` responses are compressed, so the CDP number
+is the *wire* weight and the page-side length is the decompressed text — the two
+are related by the content-encoding, not by a constant, which is precisely why
+the wire number could not be inferred from the page before.
+
+The arithmetic that ties them together still holds, and now both halves of it
+can be read off one run:
+
+| where | `fo/` body | ×3/4 | `runProgram` arg | delta |
+|---|---|---|---|---|
+| here, parent | 113 576 | 85 182 | 85 180 | −2 |
+| here, widget | 823 120 | 617 340 | 617 340 | 0 |
+| here, widget #2 | 127 724 | 95 793 | 95 792 | −1 |
+| chrome, parent | 113 584 | 85 188 | 85 188 | 0 |
+
+Deltas of 0…−2 are base64 padding, which reproduces the twelve-measurement table
+further up this file exactly.
+
+And the instrument the plan named, `antibot-sweep --trace` against
+`cf-scrapingcourse`, before and after:
+
+    before   0 0 0 0 0 291 0 0 0 291 291 1 291 768 0 291
+    after    6003 83028 27513 32348 291 104540 5880 5893 419554 291 291 291 2794 6155 48131 291
+
+Twelve of sixteen `done` events used to report nothing, including all three
+`fo/` replies. The station's verdict is unchanged — `cf-challenge`, doc
+`403->200`, "Just a moment…" — which is the expected shape: this fixes what the
+instrument could see, not what the challenge decides.
+
+### What is still missing from the Network domain
+
+`Network.dataReceived` is not emitted at all. Chrome sends one per body chunk,
+carrying the decoded length in `dataLength` and the wire length in
+`encodedDataLength`, and a client that sums them arrives at the same total
+`loadingFinished` reports. Nothing here needs it — the totals are right without
+it — but a trace consumer that watches a transfer progress rather than complete
+sees nothing until it ends. Recorded as a gap, not scheduled as work.
