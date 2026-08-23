@@ -1,10 +1,22 @@
-// What measureText answers for the ten strings the Turnstile widget measures.
+// What measureText answers for ten emoji at 16px sans-serif.
 //
-// The widget sets `16px sans-serif` on an offscreen 2D context and measures ten
-// emoji in a row. This engine answers the same width for nine of them and zero
-// for both bounding-box extents, so the ten calls are ten differences -- ten of
-// the twenty-two the two arms disagree on at all
-// (results/ibt2-{oracle,lp}.json).
+// CORRECTION. This probe was written believing the ten strings were what the
+// Turnstile widget measures. They are not: the widget hands measureText the
+// UTF-8 *bytes* of each emoji as Latin-1 code points, so it never asks about an
+// emoji at all. See probes/expr-turnstile-mojibake-metrics.js, which measures
+// the strings the widget really passes, and the correction note it carries.
+//
+// What this probe measures is still real, and the engine is still built to
+// match it -- an emoji is 20 at 16px, not one em -- but it is no longer
+// evidence about the challenge page. Two claims that were recorded here and in
+// TASKS.md on the strength of it were wrong, and both are withdrawn:
+//
+//   * that a headless Chrome answers ten *different* widths for these ten
+//     emoji. It does not; headed and headless agree on 20. The ten different
+//     widths in results/ibt2-{oracle,lp}.json are headed Chrome measuring the
+//     mojibake, and the mojibake probe reproduces them exactly.
+//   * that the ten calls are ten of the twenty-two values the two arms
+//     disagree on. The calls are, the emoji are not.
 //
 // Run headed. Which family `sans-serif` resolves to, and which font supplies a
 // glyph the family has none for, are answered by the platform's font stack, and
