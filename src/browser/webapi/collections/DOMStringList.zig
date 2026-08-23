@@ -131,5 +131,17 @@ pub const JsApi = struct {
     pub const values = bridge.function(DOMStringList.values, .{});
     pub const entries = bridge.function(DOMStringList.entries, .{});
     pub const symbol_iterator = bridge.iterator(DOMStringList.values, .{});
-    pub const @"[]" = bridge.indexed(DOMStringList.item, null, .{ .null_as_undefined = true });
+    pub const @"[]" = bridge.indexed(DOMStringList.item, getIndexes, .{ .null_as_undefined = true });
+
+    /// The indices are own properties, as in RadioNodeList -- see the note
+    /// there. Chrome stringifies a two-name list as
+    /// `{"0":"alpha","1":"beta"}`.
+    fn getIndexes(self: *DOMStringList, exec: *const js.Execution) !js.Array {
+        const len = self.length();
+        var arr = exec.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
 };

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  `window` is itself an indexed collection: `window[0]` is the first child
+  frame. Chrome makes those indices own *enumerable* properties, read-only and
+  configurable, and the same reading applies here -- with the extra wrinkle
+  that window carries every global name too, so the indices have to appear
+  without disturbing the named ones. Measured on Chrome 151 (the windowFrames
+  block of probes/expr-indexed-own-names.js).
+
+  Not pinned here, both measured and recorded in the fingerprint README:
+  `window.fa` (access to a frame by its name) answers undefined in this engine
+  -- window has no named-property handler at all -- and `window.length` does
+  not fall when the iframe element is removed.
+-->
+
+<script id="window_frame_indices_are_own">
+{
+    const indices = (o) =>
+        Object.getOwnPropertyNames(o).filter((k) => /^\d+$/.test(k)).join(' ');
+
+    const a = document.createElement('iframe');
+    const b = document.createElement('iframe');
+    a.name = 'fa';
+    b.name = 'fb';
+    document.body.appendChild(a);
+    document.body.appendChild(b);
+
+    testing.expectEqual(2, window.length);
+    testing.expectEqual('0 1', indices(window));
+    // Unlike a collection's named entries, a frame index is enumerable, so it
+    // shows up in Object.keys and in for-in.
+    testing.expectEqual('0 1', Object.keys(window).filter((k) => /^\d+$/.test(k)).join(' '));
+    testing.expectTrue(window[0] === window.frames[0]);
+    testing.expectTrue(0 in window);
+
+    const d = Object.getOwnPropertyDescriptor(window, 0);
+    testing.expectEqual(true, d.enumerable);
+    testing.expectEqual(true, d.configurable);
+    testing.expectEqual(false, d.writable);
+    testing.expectEqual(undefined, d.get);
+}
+</script>
+
+<script id="window_frame_indices_are_read_only">
+{
+    // Read-only, so a sloppy assignment is ignored and a strict one throws.
+    window[0] = 5;
+    testing.expectEqual('object', typeof window[0]);
+
+    let threw = null;
+    try {
+        (function () { 'use strict'; window[0] = 5; })();
+    } catch (e) {
+        threw = e.constructor.name;
+    }
+    testing.expectEqual('TypeError', threw);
+
+    // And it cannot be deleted: delete answers false and the index stays.
+    testing.expectEqual(false, delete window[0]);
+    testing.expectEqual('object', typeof window[0]);
+}
+</script>
+
+<script id="window_frame_indices_leave_names_alone">
+{
+    // The interplay the indices must not break: an expando next to them, a
+    // real global, and an out-of-range index that is still an ordinary
+    // property.
+    window.zzTop = 1;
+    testing.expectTrue(Object.getOwnPropertyNames(window).includes('zzTop'));
+    testing.expectEqual(1, window.zzTop);
+    testing.expectTrue(delete window.zzTop);
+
+    testing.expectEqual('function', typeof window.setTimeout);
+    testing.expectTrue(window.self === window);
+
+    // An out-of-range index is not an ordinary property after all: per Web IDL
+    // `window`'s [[DefineOwnProperty]] refuses every array index, so the
+    // assignment is dropped and the read stays undefined (measured on Chrome
+    // 151). Deleting one still answers true, because there is nothing there.
+    window[99] = 'past the end';
+    testing.expectEqual(undefined, window[99]);
+    testing.expectTrue(delete window[99]);
+}
+</script>
+
+</body>
+</html>

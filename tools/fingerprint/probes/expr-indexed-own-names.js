@@ -65,5 +65,51 @@
     body.appendChild(s);
     return s.sheet.cssRules;
   })());
+  read('keyframesRule', (() => {
+    const s = document.createElement('style');
+    s.textContent = '@keyframes k { from { opacity: 0 } to { opacity: 1 } }';
+    body.appendChild(s);
+    return s.sheet.cssRules[0];
+  })());
+  read('radioNodeList', (() => {
+    const f = document.createElement('form');
+    f.innerHTML = '<input type=radio name=r value=a><input type=radio name=r value=b>';
+    body.appendChild(f);
+    return f.elements.r;
+  })());
+  read('formControls', (() => {
+    const f = document.createElement('form');
+    f.innerHTML = '<input name=a><select name=b></select>';
+    body.appendChild(f);
+    return f.elements;
+  })());
+  read('documentAll', document.all);
+  // The first `styleSheets` read above happens before any <style> is in the
+  // document, so it is the empty case; this is the same list with entries.
+  read('styleSheetsFilled', document.styleSheets);
+
+  // `window`'s own names are thousands long, so only the numeric ones -- the
+  // frame indices -- are reported. Chrome makes those own properties too, and
+  // the named access (`window.fa`) is a separate mechanism that must survive.
+  out.windowFrames = (() => {
+    const a = document.createElement('iframe');
+    const b = document.createElement('iframe');
+    a.name = 'fa';
+    b.name = 'fb';
+    body.appendChild(a);
+    body.appendChild(b);
+    return {
+      own: Object.getOwnPropertyNames(window).filter((k) => /^\d+$/.test(k)).join(' '),
+      keys: Object.keys(window).filter((k) => /^\d+$/.test(k)).join(' '),
+      length: window.length,
+      zeroIsWindow: typeof window[0] === 'object',
+      named: typeof window.fa === 'object',
+      inOperator: 0 in window,
+      descriptor: (() => {
+        const d = Object.getOwnPropertyDescriptor(window, 0);
+        return d ? { enumerable: d.enumerable, configurable: d.configurable, writable: d.writable, kind: d.get ? 'accessor' : 'data' } : null;
+      })(),
+    };
+  })();
   return JSON.stringify(out);
 })()

@@ -1189,8 +1189,20 @@ pub const CSSKeyframesRule = struct {
         pub const deleteRule = bridge.function(CSSKeyframesRule.deleteRule, .{});
         pub const findRule = bridge.function(CSSKeyframesRule.findRule, .{});
         pub const length = bridge.accessor(CSSKeyframesRule.getLength, null, .{});
-        pub const @"[]" = bridge.indexed(CSSKeyframesRule.item, null, .{ .null_as_undefined = true });
+        pub const @"[]" = bridge.indexed(CSSKeyframesRule.item, getIndexes, .{ .null_as_undefined = true });
         pub const symbol_iterator = bridge.iterator(CSSKeyframesRule.values, .{});
+
+        /// The indices are own properties, as in CSSRuleList -- see the note
+        /// there. A `@keyframes` rule is itself the indexed thing: `rule[0]` is
+        /// its first keyframe.
+        fn getIndexes(self: *CSSKeyframesRule, exec: *const js.Execution) !js.Array {
+            const len = self.getLength();
+            var arr = exec.js.local.?.newArray(len);
+            for (0..len) |i| {
+                _ = try arr.set(@intCast(i), i, .{});
+            }
+            return arr;
+        }
     };
 };
 

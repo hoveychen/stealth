@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  The DOM half of "an indexed property getter makes the indices own
+  properties" -- the CSS half is css/indexed_own_names.html and the first one
+  fixed was element/class_list.html. Every reading below is Chrome 151's, from
+  probes/expr-indexed-own-names.js.
+
+  The four collections with a *named* getter (form.elements, select.options,
+  document.all) also make their supported names own properties in Chrome, and
+  that half is still missing here -- only HTMLCollection carries the
+  getNames/describeByName machinery for it. So the assertions filter the own
+  list down to the indices; the named half is recorded in the fingerprint
+  README, not pinned here as passing.
+-->
+
+<script id="helpers">
+  window.indicesOf = (value) =>
+    Object.getOwnPropertyNames(value).filter((k) => /^\d+$/.test(k)).join(' ');
+  testing.expectEqual('function', typeof window.indicesOf);
+</script>
+
+<script id="radio_node_list_indices_are_own">
+{
+    const f = document.createElement('form');
+    f.innerHTML = '<input type=radio name=r value=a><input type=radio name=r value=b>';
+    document.body.appendChild(f);
+
+    const radios = f.elements.r;
+    testing.expectEqual(2, radios.length);
+    testing.expectEqual('0 1', Object.getOwnPropertyNames(radios).join(' '));
+    testing.expectEqual('0 1', Object.keys(radios).join(' '));
+    testing.expectEqual('0,1', Object.keys(JSON.parse(JSON.stringify(radios))).join(','));
+}
+</script>
+
+<script id="form_controls_collection_indices_are_own">
+{
+    const f = document.createElement('form');
+    f.innerHTML = '<input name=a><select name=b></select>';
+    document.body.appendChild(f);
+
+    const els = f.elements;
+    testing.expectEqual(2, els.length);
+    testing.expectEqual('0 1', indicesOf(els));
+    testing.expectEqual('0 1', Object.keys(els).filter((k) => /^\d+$/.test(k)).join(' '));
+}
+</script>
+
+<script id="options_collection_indices_are_own">
+{
+    const s = document.createElement('select');
+    s.innerHTML = '<option>a</option><option>b</option>';
+    document.body.appendChild(s);
+
+    testing.expectEqual(2, s.options.length);
+    testing.expectEqual('0 1', indicesOf(s.options));
+    testing.expectEqual('0 1', Object.keys(s.options).filter((k) => /^\d+$/.test(k)).join(' '));
+
+    const empty = document.createElement('select');
+    document.body.appendChild(empty);
+    testing.expectEqual('', indicesOf(empty.options));
+}
+</script>
+
+<script id="all_collection_indices_are_own">
+{
+    // document.all is every element in the document, so the count is whatever
+    // this page holds -- the assertion is that the indices are all there and
+    // stop at length.
+    const all = document.all;
+    const expected = [];
+    for (let i = 0; i < all.length; i++) expected.push(String(i));
+    testing.expectTrue(all.length > 3);
+    testing.expectEqual(expected.join(' '), indicesOf(all));
+}
+</script>
+
+<script id="dom_string_list_indices_are_own" type="module">
+{
+    const state = await testing.async();
+    const request = indexedDB.open('indexed-own-names-db', 1);
+    request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        db.createObjectStore('alpha');
+        db.createObjectStore('beta');
+    };
+    request.onsuccess = (e) => {
+        const names = e.target.result.objectStoreNames;
+        state.resolve({
+            length: names.length,
+            own: Object.getOwnPropertyNames(names).join(' '),
+            keys: Object.keys(names).join(' '),
+            json: JSON.stringify(names),
+        });
+    };
+    request.onerror = () => state.resolve({ error: 'open failed' });
+
+    await state.done((got) => {
+        testing.expectEqual(2, got.length);
+        testing.expectEqual('0 1', got.own);
+        testing.expectEqual('0 1', got.keys);
+        testing.expectEqual('{"0":"alpha","1":"beta"}', got.json);
+    });
+}
+</script>
+
+</body>
+</html>

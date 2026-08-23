@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  An indexed property getter makes the indices *own* properties. Without an
+  enumerator behind it they stay reachable and invisible: `sheet.cssRules[0]`
+  answers, `Object.getOwnPropertyNames(sheet.cssRules)` is empty and
+  `JSON.stringify` of the list reads `{}`. `classList` was fixed first because
+  the Turnstile widget stringifies it; these four are the CSS half of the same
+  hole, measured against Chrome 151 in probes/expr-indexed-own-names.js.
+-->
+
+<script id="stylesheet_list_indices_are_own">
+{
+    for (const css of ['.a{color:red}', '.b{color:blue}', '.c{color:lime}']) {
+        const s = document.createElement('style');
+        s.textContent = css;
+        document.body.appendChild(s);
+    }
+
+    const sheets = document.styleSheets;
+    testing.expectEqual(3, sheets.length);
+    testing.expectEqual('0 1 2', Object.getOwnPropertyNames(sheets).join(' '));
+    testing.expectEqual('0 1 2', Object.keys(sheets).join(' '));
+    // Chrome: {"0":{},"1":{},"2":{}} -- a CSSStyleSheet has no own enumerable
+    // properties of its own, so each entry stringifies to {}.
+    testing.expectEqual('0,1,2', Object.keys(JSON.parse(JSON.stringify(sheets))).join(','));
+}
+</script>
+
+<script id="css_rule_list_indices_are_own">
+{
+    const s = document.createElement('style');
+    s.textContent = '.a{color:red}.b{color:blue}';
+    document.body.appendChild(s);
+
+    const rules = s.sheet.cssRules;
+    testing.expectEqual(2, rules.length);
+    testing.expectEqual('0 1', Object.getOwnPropertyNames(rules).join(' '));
+    testing.expectEqual('0 1', Object.keys(rules).join(' '));
+    testing.expectEqual('0,1', Object.keys(JSON.parse(JSON.stringify(rules))).join(','));
+
+    // An empty list has no indices, and the enumerator must not invent any.
+    const empty = document.createElement('style');
+    empty.textContent = '';
+    document.body.appendChild(empty);
+    testing.expectEqual(0, empty.sheet.cssRules.length);
+    testing.expectEqual('', Object.getOwnPropertyNames(empty.sheet.cssRules).join(' '));
+}
+</script>
+
+<script id="media_list_indices_are_own">
+{
+    const s = document.createElement('style');
+    s.textContent = '@media screen, print { .a { color: red } }';
+    document.body.appendChild(s);
+
+    const media = s.sheet.cssRules[0].media;
+    testing.expectEqual(2, media.length);
+    testing.expectEqual('0 1', Object.getOwnPropertyNames(media).join(' '));
+    testing.expectEqual('0 1', Object.keys(media).join(' '));
+    // The entries are strings here, so the whole reading is one comparison.
+    testing.expectEqual('{"0":"screen","1":"print"}', JSON.stringify(media));
+}
+</script>
+
+<script id="keyframes_rule_indices_are_own">
+{
+    const s = document.createElement('style');
+    s.textContent = '@keyframes k { from { opacity: 0 } to { opacity: 1 } }';
+    document.body.appendChild(s);
+
+    const kf = s.sheet.cssRules[0];
+    testing.expectEqual(2, kf.length);
+    testing.expectEqual('0 1', Object.getOwnPropertyNames(kf).join(' '));
+    testing.expectEqual('0 1', Object.keys(kf).join(' '));
+    testing.expectEqual('0,1', Object.keys(JSON.parse(JSON.stringify(kf))).join(','));
+}
+</script>
+
+</body>
+</html>

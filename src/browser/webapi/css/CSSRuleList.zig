@@ -71,6 +71,24 @@ pub const JsApi = struct {
 
     pub const length = bridge.accessor(CSSRuleList.length, null, .{});
     pub const item = bridge.function(CSSRuleList.item, .{});
-    pub const @"[]" = bridge.indexed(CSSRuleList.item, null, .{ .null_as_undefined = true });
+    pub const @"[]" = bridge.indexed(CSSRuleList.item, getIndexes, .{ .null_as_undefined = true });
     pub const symbol_iterator = bridge.iterator(CSSRuleList.values, .{});
+
+    /// Web IDL: an indexed property getter makes the indices own properties, so
+    /// `Object.getOwnPropertyNames(sheet.cssRules)` is `["0","1"]`. Without an
+    /// enumerator they are reachable and invisible, which a page reads by
+    /// stringifying the list (probes/expr-indexed-own-names.js).
+    fn getIndexes(self: *CSSRuleList, exec: *const js.Execution) !js.Array {
+        const len = self.length();
+        var arr = exec.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
 };
+
+const testing = @import("../../../testing.zig");
+test "WebApi: indexed own names" {
+    try testing.htmlRunner("css/indexed_own_names.html", .{});
+}

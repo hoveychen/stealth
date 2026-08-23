@@ -117,7 +117,18 @@ pub const JsApi = struct {
     pub const length = bridge.accessor(HTMLOptionsCollection.length, null, .{});
 
     // Indexed access
-    pub const @"[int]" = bridge.indexed(HTMLOptionsCollection.getAtIndex, null, .{ .null_as_undefined = true });
+    pub const @"[int]" = bridge.indexed(HTMLOptionsCollection.getAtIndex, getIndexes, .{ .null_as_undefined = true });
+
+    /// The indices are own properties, as in RadioNodeList -- see the note
+    /// there.
+    fn getIndexes(self: *HTMLOptionsCollection, frame: *Frame) !js.Array {
+        const len = self.length(frame);
+        var arr = frame.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
     pub const @"[str]" = bridge.namedIndexed(HTMLOptionsCollection.getByName, null, null, null, null, .{ .null_as_undefined = true });
 
     pub const selectedIndex = bridge.accessor(HTMLOptionsCollection.getSelectedIndex, HTMLOptionsCollection.setSelectedIndex, .{});

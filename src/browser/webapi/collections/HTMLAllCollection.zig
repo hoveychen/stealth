@@ -124,7 +124,20 @@ pub const JsApi = struct {
     };
 
     pub const length = bridge.accessor(HTMLAllCollection.length, null, .{});
-    pub const @"[int]" = bridge.indexed(HTMLAllCollection.getAtIndex, null, .{ .null_as_undefined = true });
+    pub const @"[int]" = bridge.indexed(HTMLAllCollection.getAtIndex, getIndexes, .{ .null_as_undefined = true });
+
+    /// The indices are own properties, as in RadioNodeList -- see the note
+    /// there. `document.all` is `[LegacyUnenumerableNamedProperties]` like
+    /// HTMLCollection, so its ids belong in the own list but not in
+    /// `Object.keys`; that half is not wired up here yet.
+    fn getIndexes(self: *HTMLAllCollection, frame: *Frame) !js.Array {
+        const len = self.length(frame);
+        var arr = frame.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
     pub const @"[str]" = bridge.namedIndexed(HTMLAllCollection.getByName, null, null, null, null, .{ .null_as_undefined = true });
 
     pub const item = bridge.function(_item, .{});

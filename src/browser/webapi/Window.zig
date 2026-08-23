@@ -1683,7 +1683,49 @@ pub const JsApi = struct {
     pub const frameElement = bridge.accessor(Window.getFrameElement, null, .{});
 
     pub const frames = bridge.accessor(Window.getWindow, Window.setFrames, .{});
-    pub const index = bridge.indexed(Window.getFrame, null, .{ .null_as_undefined = true });
+    pub const index = bridge.indexedFull(Window.getFrame, setAtIndex, deleteAtIndex, queryAtIndex, defineAtIndex, getIndexes, .{ .null_as_undefined = true });
+
+    /// Web IDL: the frame indices are own properties of `window`. Unlike a
+    /// collection's *named* entries they are enumerable, so they show up in
+    /// `Object.keys(window)` too -- one line of a fingerprint that could not be
+    /// read here before (probes/expr-indexed-own-names.js, windowFrames).
+    fn getIndexes(w: *Window, exec: *const js.Execution) !js.Array {
+        const len = w.getFramesLength();
+        var arr = exec.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
+
+    // Supported indexed properties are enumerable, configurable, read-only.
+    fn queryAtIndex(w: *Window, idx: u32) !u32 {
+        if (idx < w.getFramesLength()) {
+            return js.v8.ReadOnly;
+        }
+        return error.NotHandled;
+    }
+
+    // `window`'s [[DefineOwnProperty]] refuses *every* array index, in range or
+    // not, so `window[99] = x` is dropped rather than becoming an expando
+    // (measured on Chrome 151; the read stays undefined afterwards).
+    fn setAtIndex(_: *Window, _: u32, _: js.Value) bool {
+        return false;
+    }
+
+    fn defineAtIndex(_: *Window, _: u32) bool {
+        return false;
+    }
+
+    // A frame index cannot be deleted -- delete answers false, which is a
+    // TypeError in strict mode. An index past the end is nothing to begin
+    // with, so it follows the ordinary path and answers true.
+    fn deleteAtIndex(w: *Window, idx: u32) !bool {
+        if (idx < w.getFramesLength()) {
+            return false;
+        }
+        return error.NotHandled;
+    }
     pub const length = bridge.accessor(Window.getFramesLength, Window.setLength, .{});
     pub const scrollX = bridge.accessor(Window.getScrollX, Window.setScrollX, .{});
     pub const scrollY = bridge.accessor(Window.getScrollY, Window.setScrollY, .{});
