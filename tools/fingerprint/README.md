@@ -10583,3 +10583,75 @@ the thing to localise, and P2/P3 are re-aimed at it: not "find the
 variable-length field" — both arms have one and it is the same size — but "find
 the ~112 bytes this engine puts in the round-1 telemetry that the reference does
 not."
+
+## What the widget reads before round 1, and where it is told something else (P2, 2026-08-23)
+
+The round-1 body is one ciphertext and `fo-plaintext.mjs` already showed the
+plaintext never passes a funnel — no WebCrypto, no `btoa`, nothing over two
+bytes through `JSON.stringify` in the widget realm before the POST goes out. So
+the last place the payload is readable in the clear is one property getter at a
+time, which is what `fo-reads.mjs` records: every configurable accessor on the
+standard prototypes forwards to its original and writes down what it answered,
+disguised the same way the funnel wrappers are, cut at the realm's first
+`XMLHttpRequest.send`.
+
+The honesty check is the same one and it passes: **the oracle cleared with the
+tracer installed, twice** — "You bypassed the Cloudflare challenge! :D" in both
+`results/r1reads-oracle-{1,2}.json`.
+
+| run | widget realm reads | before first send | round-1 POST | cleared |
+|---|---|---|---|---|
+| oracle 1 | 797 | 124 | 4 727 | yes |
+| oracle 2 | 797 | 124 | 4 716 | yes |
+| here 1 | 889 | 171 | 4 887 | no |
+| here 2 | 889 | 171 | 4 887 | no |
+
+Two things to read off that table before the diff. The reads are *stable* per
+arm — identical counts across runs on both — and the widget makes essentially
+the same ones on each: 47 of our 51-read surplus is `window.window`, which
+Chrome refuses to let the tracer wrap at all (see below), so it is reads the
+instrument cannot see rather than reads Chrome does not make. And our round-1
+POST was 4 887 both times with the tracer in, against 4 866–4 876 without it:
+the recorder costs about 20 bytes of its own, which is inside the wobble and
+does not move the ~150-byte gap.
+
+`fo-reads-diff.mjs` puts two runs side by side, either two arms or two runs of
+one arm. Same arm, twice, only three keys move — `Date.now()`, `Math.random()`
+and `performance.now()` — which is the 8-byte wobble P1 measured and nothing
+else. Across arms, six keys differ for a reason that is not a clock.
+
+### The six, re-measured off the station
+
+`probes/expr-r1-reads.js` asks both engines directly, so none of these rests on
+a reading taken through a challenge:
+
+| read | Chrome | here |
+|---|---|---|
+| `performance.timeOrigin` | `1787494938199.7` — epoch ms | `244508796.7` — boot-relative |
+| `timeOrigin + now() - Date.now()` | **1 ms** | **-1 787 250 459 740** |
+| `<style>.innerText` | its text | `""` |
+| `JSON.stringify(el.classList)` | `{"0":"main-wrapper","1":".tOHY4"}` | `{}` |
+| `Object.getOwnPropertyNames(el.classList)` | `0 1` | *(empty)* |
+| `window.window` descriptor | `configurable: false` | `configurable: true` |
+| `window.top` descriptor | `configurable: false` | `configurable: true` |
+| `window.frameElement`, cross-origin child | `null` | the `<iframe>` element |
+
+`self`, `parent`, `frameElement` and `location` already carry Chrome's exact
+descriptor shape; `window` and `top` are the two that do not, and the tracer
+found them by being *able* to replace them here and not there. The
+`display: none` fallback for `innerText` is already right — a hidden `<div>`
+answers with its text on both — so the `<style>` case is its own bug and not
+that one.
+
+`frameElement` is the odd one out: its descriptor matches, its value does not,
+and only on the station, because it needs a cross-origin embedder to differ at
+all. A widget that can reach the `<iframe>` element embedding it can read the
+embedder's attributes; Chrome hands it `null`. This engine already denies
+`document`, `navigator` and the rest of the must-deny list on an outbound
+cross-origin `contentWindow` (`results/probes/probe-cross-origin-surface.*`) —
+the inbound direction is what was never closed.
+
+None of these can be attributed to a byte count from here: the payload is
+encrypted and there is no field boundary to attribute against. They are the set
+of things the widget was told and was told wrong, and the round-1 length is the
+instrument that says whether closing them moves it. That is P3.
