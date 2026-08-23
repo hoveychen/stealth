@@ -1765,6 +1765,13 @@ fn textLayout(self: *Element, frame: *Frame) ?struct { width: f64, height: f64 }
 /// reads exactly this pair.
 pub const broken_image_icon_size = 16.0;
 
+/// The `body { margin: 8px }` every UA stylesheet carries, which is why a
+/// document's <body> box is 16px narrower and shorter than its viewport --
+/// Chrome reports 284x134 for the body of a 300x150 iframe. The same 8px is in
+/// css/chrome_per_tag_values.zig as the value getComputedStyle reports; this is
+/// the one place layout has to subtract it.
+const body_ua_margin = 8.0;
+
 /// Is this element laid out as the broken-image icon?
 ///
 /// Nothing here decodes -- the bytes are fetched and dropped (see
@@ -1810,13 +1817,42 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
     if (dims.width == 5.0 or dims.height == 5.0) {
         const tag = self.getTag();
 
-        // Root containers get large default size to contain descendant positions.
-        // With calculateDocumentPosition using linear depth scaling (100px per level),
-        // even very deep trees (100 levels) stay within 10,000px.
-        // 100M pixels is plausible for very long documents.
+        // A document's root containers fill its viewport, and its viewport is
+        // the iframe element's box when it has one. What used to be here were
+        // two constants for every document at any depth -- 1920 wide and
+        // 100_000_000 tall, so that calculateDocumentPosition's 100px-per-level
+        // stacking always had room -- and both went straight out through
+        // getComputedStyle. 100000000px is not a number any browser reports, so
+        // reading it off a <body> identified this engine on its own.
+        //
+        // Measured on Chrome 151 (probe frames/iframe_root_box.html): the
+        // <html> of a 300x150 iframe reports 300x150 and its <body> 284x134 --
+        // the viewport less the body's own 8px UA margins -- while a 0x0 iframe
+        // reports 0px throughout. That 0x0 case is the one the Cloudflare
+        // widget reads: it dumps a computed style over the <body> of a 0x0
+        // about:blank iframe.
+        //
+        // A body filling the viewport is the *quirks* rendering, and an
+        // about:blank document is in quirks mode (`document.compatMode` reads
+        // BackCompat, measured). A standards-mode Chrome sizes a body to its
+        // content instead -- 0px for an empty one -- which this faux layout has
+        // no way to compute for the top-level document. The viewport is the
+        // wrong half of a real browser's two answers there, but it is one of
+        // them, which the sentinel never was.
         if (tag == .html or tag == .body) {
-            if (dims.width == 5.0) dims.width = 1920.0;
-            if (dims.height == 5.0) dims.height = 100_000_000.0;
+            const owner = self.ownerFrame(frame);
+            const box: Dimensions = if (owner.iframe) |iframe|
+                iframe.asElement().getElementDimensions(frame)
+            else blk: {
+                const viewport = owner._page.getViewport();
+                break :blk .{
+                    .width = @floatFromInt(viewport.width),
+                    .height = @floatFromInt(viewport.height),
+                };
+            };
+            const inset: f64 = if (tag == .body) 2 * body_ua_margin else 0;
+            if (dims.width == 5.0) dims.width = @max(0, box.width - inset);
+            if (dims.height == 5.0) dims.height = @max(0, box.height - inset);
         } else if (tag == .img or tag == .iframe) {
             if (self.getAttributeSafe(comptime .wrap("width"))) |w| {
                 if (std.fmt.parseFloat(f64, w)) |parsed| {
@@ -1839,6 +1875,16 @@ pub fn getElementDimensions(self: *Element, frame: *Frame) Dimensions {
             if (self.hasBrokenImageBox()) {
                 if (dims.width == 5.0) dims.width = broken_image_icon_size;
                 if (dims.height == 5.0) dims.height = broken_image_icon_size;
+            }
+
+            // An <iframe> that declares no size is 300x150, which is the UA
+            // stylesheet's rule and not a placeholder. It matters more than it
+            // looks: the branch above hands a child document this box, so the
+            // generic 5x5 fallback would make every undeclared iframe's <body>
+            // report 0px once the margins came off.
+            if (tag == .iframe) {
+                if (dims.width == 5.0) dims.width = 300.0;
+                if (dims.height == 5.0) dims.height = 150.0;
             }
         }
     }

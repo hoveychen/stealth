@@ -599,6 +599,10 @@ pub const AudioBufferSourceNode = struct {
     _loop_start: f64 = 0,
     _loop_end: f64 = 0,
 
+    // What start() was handed beyond `when`; see start() below.
+    _start_offset: f64 = 0,
+    _start_duration: ?f64 = null,
+
     pub fn constructor(context: ?js.Value, options: ?js.Value, exec: *Execution) !*AudioBufferSourceNode {
         const ctx = try idl.context("AudioBufferSourceNode", 1, &.{ context, options }, exec);
         const dict = try idl.options("AudioBufferSourceNode", "AudioBufferSourceOptions", options, exec);
@@ -703,7 +707,11 @@ pub const AudioBufferSourceNode = struct {
     }
 
     // Its own start(), taking offset and duration on top of `when`, but with
-    // the same length of 0 and the same validation as the base one.
+    // the same length of 0 and the same validation as the base one. Both extra
+    // arguments are kept rather than dropped: they decide which frames of the
+    // buffer reach the destination, which is what buffer_render.zig computes.
+    // `duration` is optional in a way `offset` is not -- omitting it plays to
+    // the end of the buffer, which no number stands for.
     pub fn start(
         self: *AudioBufferSourceNode,
         when: ?f64,
@@ -711,9 +719,9 @@ pub const AudioBufferSourceNode = struct {
         duration: ?f64,
         exec: *const Execution,
     ) !void {
-        _ = offset;
-        _ = duration;
-        return self._proto.begin(when, exec);
+        try self._proto.begin(when, exec);
+        self._start_offset = offset orelse 0;
+        self._start_duration = duration;
     }
 
     pub const JsApi = struct {

@@ -112,6 +112,27 @@ pub fn register(self: *BaseAudioContext, node: *AudioNode, exec: *const Executio
     try self._nodes.append(exec.arena, node);
 }
 
+/// The single node with an edge into `target`, or null when nothing feeds it or
+/// more than one thing does. A node connected to the same target twice still
+/// counts once, because a repeated connect() is a no-op in Chrome.
+///
+/// Both render paths ask this and nothing else about the shape of the graph:
+/// what a destination renders depends on what reaches it, not on what else the
+/// context happens to hold.
+pub fn soleSource(self: *BaseAudioContext, target: *AudioNode) ?*AudioNode {
+    var found: ?*AudioNode = null;
+    for (self._nodes.items) |node| {
+        if (node == target) continue;
+        for (node._outputs.items) |output| {
+            if (output != target) continue;
+            if (found != null and found != node) return null;
+            found = node;
+            break;
+        }
+    }
+    return found;
+}
+
 pub fn getSampleRate(self: *const BaseAudioContext) f64 {
     return self._sample_rate;
 }

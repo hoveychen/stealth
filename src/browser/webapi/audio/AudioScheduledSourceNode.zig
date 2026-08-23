@@ -42,10 +42,12 @@ _proto: *AudioNode,
 _started: bool = false,
 _stopped: bool = false,
 
-// The time start() was handed. Nothing is scheduled with it — but the canonical
-// audio render (canonical_render.zig) was recorded from a source started at 0,
-// and one started later is a different render.
+// The times start() and stop() were handed. Nothing is scheduled with them —
+// but the canonical audio render (canonical_render.zig) was recorded from a
+// source started at 0, and one started later is a different render, while
+// buffer_render.zig computes its passthrough between the two.
 _start_when: f64 = 0,
+_stop_when: f64 = 0,
 
 const nodes = @import("nodes.zig");
 const handler_property = @import("../handler_property.zig");
@@ -93,8 +95,10 @@ pub fn stop(self: *AudioScheduledSourceNode, when: ?f64, exec: *const Execution)
         "Failed to execute 'stop' on 'AudioScheduledSourceNode': cannot call stop without calling start first.",
         exec,
     );
-    try validate("stop", when orelse 0, exec);
+    const at = when orelse 0;
+    try validate("stop", at, exec);
     self._stopped = true;
+    self._stop_when = at;
 }
 
 fn validate(comptime which: []const u8, when: f64, exec: *const Execution) !void {

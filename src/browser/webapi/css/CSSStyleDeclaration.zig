@@ -33,6 +33,7 @@ const Allocator = std.mem.Allocator;
 const chrome_arity = @import("chrome_arity.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
 const chrome_initial_values = @import("chrome_initial_values.zig");
+const chrome_per_tag_values = @import("chrome_per_tag_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
@@ -2242,6 +2243,21 @@ fn isLengthProperty(name: []const u8) bool {
 }
 
 fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surface: Surface) []const u8 {
+    // The UA stylesheet first, because it is what a browser cascades ahead of
+    // the property's initial value and it is per-tag where the flat table is
+    // not: <body> takes `margin: 8px`, <pre> a monospace 13px font, <hr> a grey
+    // inset border, and the flat table would answer a div's value for all of
+    // them. An element whose tag the UA sheet says nothing about is not a div
+    // either -- a div carries UA rules of its own -- so a miss falls to the
+    // recorded unknown-tag row rather than straight through.
+    if (self._element) |element| {
+        const rows = chrome_per_tag_values.per_tag.get(element.getTagNameLower()) orelse
+            chrome_per_tag_values.unknown_tag;
+        if (rows.get(name.str())) |value| {
+            return value;
+        }
+    }
+
     switch (name.len) {
         5 => {
             if (name.eql(comptime .wrap("color"))) {
@@ -2911,6 +2927,10 @@ test "WebApi: CSSStyleDeclaration surface" {
 
 test "WebApi: CSSStyleDeclaration computed initial values" {
     try testing.htmlRunner("css/computed_initial_values.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration computed per-tag values" {
+    try testing.htmlRunner("css/computed_per_tag_values.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration serialize" {

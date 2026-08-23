@@ -10185,3 +10185,225 @@ than only its dimensions; and one bare `getImageData` that follows the second of
 those.
 
 → `cfsc-webgl-shader-readback`, `cfsc-imagebitmap-pixels`.
+#### The 26 values, closed and checked against the oracle's own bytes (2026-08-23)
+
+`cfsc-computed-style-per-tag`. All 26 are gone, and the check is stronger than
+the sitting that would have measured it: the widget's whole computed-style
+payload now comes back **byte-identical** to the 30 902 characters recorded in
+`results/p5-oracle.json`.
+
+The three shapes turned out to be two causes.
+
+**The UA stylesheet is per tag and the table was not.**
+`chrome_initial_values.zig` holds one value per longhand, measured off a bare
+`<div>`, so every element answered a div's answer. That is the `margin*`
+spellings (a `<body>` takes `8px`, a div `0px`) and `unicode-bidi` (a div takes
+`isolate`, everything inline `normal`). `dump-css-initial-values.mjs` now walks
+every HTML tag through the same two differently-sized hosts the two divs go
+through and writes `chrome_per_tag_values.zig`: 1 147 values over 125 tags.
+Three things the measurement decided rather than a list did:
+
+- The fallback for a tag with no rules is **not** the div. A div is itself
+  styled by the UA sheet, so an element the sheet says nothing about answers
+  `unicode-bidi: normal` where a div answers `isolate`. A tag that measured
+  identical to the div still gets a key with an empty row, so a miss can only
+  mean "not an HTML tag" and reaches `unknown_tag`.
+- `html`, `body` and `head` are read out of two about:blank iframes rather than
+  from `createElement`. A synthetic `<html>` does carry the sheet's rules, but
+  not `view-transition-name: root`, which only a document's real root gets.
+- `display` is deliberately never stored. `resolvedDisplay` blockifies a flex or
+  grid parent's children and honours a cascaded `display: none`; a stored
+  per-tag string can express neither, and would shadow both.
+
+**`100000000px` was a root-container constant, not a table entry.**
+`getElementDimensions` sized every `<html>` and `<body>` at any depth from two
+numbers — 1920 wide and 100_000_000 tall, so `calculateDocumentPosition`'s
+100px-per-level stacking always had room — and both went out through
+`getComputedStyle`. A document's root containers fill its *viewport*, and a
+child document's viewport is the iframe element's box. Measured on Chrome 151:
+the `<html>` of a 300x150 iframe reports 300x150 and its `<body>` 284x134 — the
+viewport less the body's own 8px UA margins — while a 0x0 iframe reports `0px`
+throughout.
+
+That 0x0 case is what the widget reads, and it is how the element was
+identified at all: `width: 0px` and `transform-origin: 0px 0px` is neither a
+`display:none` iframe (`auto` and `50% 50%`) nor a default-sized one (`284px`).
+A body filling its viewport is the *quirks* rendering, and an about:blank
+document is in quirks mode — `compatMode` reads `BackCompat`, measured, and it
+reads that for an iframe's document whether or not a `srcdoc` carries a doctype.
+So the viewport is the right answer for exactly the documents these iframes
+hold. For the top-level document Chrome is in standards mode and sizes a body to
+its content, which this faux layout cannot compute; the viewport is the wrong
+half of a real browser's two answers there, but it is one of them, which the
+sentinel never was.
+
+`probes/computed-style-iframe-body.js` reproduces the widget's read offline and
+carries the one-liner that diffs it against the recording.
+
+| | before | after | oracle |
+| --- | --- | --- | --- |
+| `getComputedStyle` dump | 30 972 chars | **30 902** | 30 902 |
+| values differing from the oracle | 26 | **0** | — |
+
+**The sitting itself measured nothing, and a control says why.**
+`results/p6-oracle.json` / `p6-lp.json`, one sitting, and the station was in a
+heavier mood than it was for p5: the oracle got `Just a moment...` again, and
+this arm stopped after 6 records with 2 realms armed where p5 reached 10. That
+reads like a regression until the control is run — `p6-lp-baseline.json` is the
+same sitting with the *pre-change* binary, and its record tally is identical,
+six records and two realms. So the shallow reach is the station, not the change,
+and this sitting says nothing about pass or fail either way. The byte comparison
+above is what stands in for it: it checks the same payload against the same
+oracle bytes without needing the station to answer at all.
+
+### The 1 000 floats: the widget's audio graph is not fingerprintjs's (2026-08-23)
+
+The other half of the E1 table was the audio vector — 15 361 characters of
+`|`-joined floats on the oracle arm, 1 999 here, because ours are 1 000 zeros.
+`canonical_render.zig` replays a recorded render only for the graph it
+recognises and falls back to silence for anything else, by design. Which of its
+predicates refused was the open question.
+
+**It can be answered without the station, up to a point.** Three sittings on
+disk (`p4b`, `p5`, `p6`) carry the same vector byte for byte, so the widget's
+render is deterministic and is a fixed target. `audio-graph-solve.mjs` searches
+real Chrome for the graph that produces it, scoring candidates inside the page
+so only a number per candidate crosses CDP, and it carries a control:
+fingerprintjs's graph against `chrome_audio_macos.bin` must score exactly zero
+or the harness is measuring something other than what was recorded.
+
+Walking the five compressor settings moved the error by less than a thousandth —
+which said the difference was not the compressor. Fitting a sinusoid to both
+renders said what it was instead:
+
+| | ours | oracle |
+| --- | --- | --- |
+| leading zeros | 265 | 265 |
+| zero crossings in 1 000 frames | 333, at the same indices | 333, at the same indices |
+| best-fit tone | 10 000.000 000 Hz | **9 998.125 Hz** |
+| phase over frames 270..910 | flat | drifts +0.171 rad, linearly |
+
+A phase that drifts linearly apart from an identical waveform is a frequency
+difference and nothing else. Correcting it cut the error 4.5×, and re-walking
+the compressor from there cut it another 26×. The search then stalled at a
+4.8e-5 residual with parameters that had stopped being plausible numbers
+(threshold −49.998, gain 1.0001), which is what a structural gap looks like from
+inside a search — and in any case `matches()` compares exact doubles, so an
+approximation buys nothing.
+
+**So watch the construction.** `audio-graph-trace.mjs` wraps every funnel a
+graph has to pass through — the context constructors, `create*`, `connect`,
+`AudioParam.value` and its ramp methods, `OscillatorNode.type`, `start`/`stop`,
+`startRendering` and `getChannelData` — in the widget's own realm, ahead of its
+own code. The installation is fo-plaintext's, now shared as `fo-harness.mjs`:
+arming a cross-origin child before its document runs, resuming worker sessions
+before asking them anything, and collecting records over the console are the
+same fight whatever the question. The report reads back as the source that
+produced it (`results/a1-oracle.json`, and the arm cleared):
+
+```
+OfflineAudioContext(1, 1000, 44100)
+osc.type = 'triangle'
+osc.frequency.value = 9998.123456
+comp.threshold.value = -52
+comp.knee.value = 40
+comp.ratio.value = 12
+comp.attack.value = 0.0001
+comp.release.value = 0.25
+osc -> comp -> destination
+osc.start(0)
+```
+
+Rendered in Chrome, that graph reproduces `p4b-oracle.json`'s 1 000 floats with
+a **maximum difference of zero** — a different sitting, weeks apart. So the
+identification is not a fit, it is the bytes.
+
+Three of `matches()`'s predicates refused it: `threshold` (−50), `attack` (0)
+and `frequency` (10000). The numeric solve had the frequency right to five
+figures and the compressor wrong, which is the argument for having run both.
+
+Two smaller things the same trace shows, neither chased here:
+
+- The widget builds the graph **three** times per visit — twice as above, which
+  is why the oracle's payload carries the vector twice, and once more as
+  `createBuffer(1, 1000, 44100)` → `createBufferSource()` → destination with the
+  buffer filled by the page itself. That third render is a pure passthrough with
+  no DSP in it, so unlike these two it could be computed rather than recorded.
+- `AudioBufferSourceNode.prototype.start` is its own overload in Blink rather
+  than inherited from `AudioScheduledSourceNode`, so a recorder that wraps only
+  the base class sees an oscillator start and never a buffer source's.
+
+**And it closes.** `chrome_audio.zig` now carries a `Graph` enum with a
+recording per graph per platform, and `canonical_render`'s `matches()` became
+`which()`: the structure every recorded graph shares — a started triangle
+oscillator into a compressor into a mono destination — is checked once, and the
+six numbers are then checked against each candidate in turn, so half of one
+graph and half of another is neither and still gets silence. Regenerating both
+recordings reproduced the existing fingerprintjs tail sums exactly on both
+platforms, which is the control that says the second graph did not disturb the
+first.
+
+Asked the widget's graph on a loopback page (`results/a2-lp-turnstile.json`),
+this engine now answers:
+
+| | before | after | oracle |
+| --- | --- | --- | --- |
+| the audio vector | 1 000 zeros | **265 zeros + 735 floats** | 265 zeros + 735 floats |
+| samples differing from the station's | 735 | **0** | — |
+| the string the widget then encodes | 1 999 chars | **15 361** | 15 361 |
+
+The tail sums the recordings hash to, for whoever regenerates them next: macOS
+`112.4458671315806`, Linux `112.46367831656244`.
+
+#### The same sitting, both arms, after the audio row closed (2026-08-23)
+
+`results/a3-oracle.json` / `a3-lp.json`, one sitting, and this one is worth
+trusting: the oracle cleared (`cf-chl-out`, "You bypassed the Cloudflare
+challenge! :D") while this engine got `cf-chl-gen` at round 2, so the station
+was willing and the two arms are genuinely being told apart.
+
+Payloads of 1 000 bytes or more, counted by size:
+
+| size | oracle | ours | what it is |
+| --- | --- | --- | --- |
+| 30 902 | 3 | 3 | the `getComputedStyle` dump — **closed** |
+| 15 361 | 4 | 4 | the audio vector — **closed this round** |
+| 20 696 / 20 367 | 2 / 0 | 0 / 2 | the page's `@keyframes` text, 329 characters short |
+| 13 468 ×3 / 14 007 / 4 416 / 1 792 | 1 each | 0 | *not payloads* — see below |
+| 9 216 | 1 | 2 | RGBA pixel readback |
+| 8 624 | 3 | 2 | RGBA pixel readback |
+| 4 096 / 1 168 ×2 / 1 024 / 1 009 | 1 each | 0 | never produced here |
+| round 2 POST | 4 716 | 4 866 | 150 bytes wider than the arm that clears |
+
+**Half of those rows were the same payload counted twice (2026-08-23).** Every
+`subtle.digest` in `a3-oracle.json` is handed the UTF-8 encoding of the string
+the `TextEncoder.encode` immediately before it was given, and the funnel records
+*both*, so one collection shows up under two sizes whenever the string is not
+plain ASCII. It is arithmetic, not a second surface — `Buffer.byteLength(v)` of
+each encode input reproduces the digest size exactly:
+
+| encode (chars) | digest (bytes) | which |
+| --- | --- | --- |
+| 8 624 | 13 468 | RGBA pixel readback, three times over |
+| 9 216 | 14 007 | RGBA pixel readback |
+| 4 096 | 4 416 | never produced here |
+| 1 024 | 1 792 | never produced here |
+| 15 361 | 15 361 | the audio vector — ASCII, so the two agree |
+
+So the 13 468 row was never "the biggest payload this engine never produces".
+It is the digest of the 8 624-byte pixel readback, and it appears three times
+because that readback does — which puts it inside `cfsc-canvas-pixel-readback`
+rather than in a plan of its own. Reading the records directly, the `lp` arm
+emits *no* readback digest at all in this sitting: its only encode/digest pairs
+above 1 000 bytes are 30 902 (computed style) and 20 367 (`@keyframes`).
+
+Which leaves the genuinely unclaimed list shorter than it looked: the pixel
+readbacks, the `@keyframes` shortfall, and 4 096 / 1 168 ×2 / 1 024 / 1 009.
+
+The widget's **third** OfflineAudioContext — `createBuffer(1, 1000, 44100)`
+filled by the page, through `createBufferSource()` to the destination — is now
+closed. Chrome hands that buffer straight back and this engine used to render
+1 000 zeros; `buffer_render.zig` computes the passthrough instead. Traced
+through `audio-graph-trace.mjs` on a loopback page, both engines report the
+graph record for record and the render comes back sample for sample identical
+(1 000/1 000, maximum difference zero). → `cfsc-audio-buffer-passthrough`, done.
