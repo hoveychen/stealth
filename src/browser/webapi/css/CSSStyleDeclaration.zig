@@ -285,9 +285,12 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
 }
 
 /// The shorthand `name` reads back as, or null when it is not a shorthand this
-/// engine expands or not every longhand it covers is in the declaration.
+/// engine joins or not every longhand it covers is in the declaration. Reading
+/// one back is a wider set than storing one: `border-image` joins here without
+/// being expandable, so `getPropertyValue("border-image")` answers the same
+/// text cssText writes.
 fn shorthandValue(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame) ?[]const u8 {
-    const entry = shorthand.lookup(name) orelse return null;
+    const entry = shorthand.lookupJoinable(name) orelse return null;
     const held = frame.local_arena.alloc([]const u8, entry.longhands.len) catch return null;
     for (entry.longhands, held) |longhand, *value| {
         const prop = self.findProperty(.wrap(longhand)) orelse return null;
@@ -560,7 +563,7 @@ fn writeShorthand(
     first: *bool,
     frame: *Frame,
 ) !bool {
-    const entry = shorthand.lookup(name) orelse return false;
+    const entry = shorthand.lookupJoinable(name) orelse return false;
     const held = try frame.local_arena.alloc([]const u8, entry.longhands.len);
     var important = false;
     for (entry.longhands, held, 0..) |longhand, *value, i| {
@@ -3134,6 +3137,10 @@ test "WebApi: CSSStyleDeclaration serialize" {
 
 test "WebApi: CSSStyleDeclaration value list serialize" {
     try testing.htmlRunner("css/value_list_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration border image serialize" {
+    try testing.htmlRunner("css/border_image_serialize.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration animation serialize" {

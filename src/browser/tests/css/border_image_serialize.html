@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  `border-image` was the one place this engine wrote MORE than Chrome. It was
+  measured as unmodelled, so joining its five longhands answered nothing, and
+  two things went wrong at once:
+
+    * the five longhands were written out one by one where Chrome writes
+      `border-image: none`;
+    * `border`'s fallback chain -- border-width, border-style, border-color,
+      border-image -- wrote the first three and then failed on the fourth,
+      having already put them in the output, so the caller fell back to writing
+      the longhand it started from a second time. That is the stray
+      `border-top-width: 0px` in rule 116 of the Cloudflare @keyframes payload.
+
+  Measured on Chrome over http://localhost with
+  tools/fingerprint/probes/expr-border-image-serialize.js.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+function declOf(text) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync('x{' + text + '}');
+    return sheet.cssRules[0].style.cssText;
+}
+const initial = 'border-image-source: none; border-image-slice: 100%; ' +
+    'border-image-width: 1; border-image-outset: 0; border-image-repeat: stretch';
+</script>
+
+<script id="border_image_joins_its_longhands">
+{
+    // All four components after the source at their initial values: Chrome
+    // writes the source alone.
+    testing.expectEqual('border-image: none;', declOf(initial));
+    testing.expectEqual(
+        'border-image: url("a");',
+        declOf('border-image-source:url(a);border-image-slice:100%;border-image-width:1;' +
+               'border-image-outset:0;border-image-repeat:stretch'));
+    // One component off its initial value brings all four back, slashes and
+    // all -- Chrome writes no partial form.
+    testing.expectEqual(
+        'border-image: url("a") 30 / 1 / 0 stretch;',
+        declOf('border-image-source:url(a);border-image-slice:30;border-image-width:1;' +
+               'border-image-outset:0;border-image-repeat:stretch'));
+    testing.expectEqual(
+        'border-image: none 100% / 2px / 0 stretch;',
+        declOf('border-image-source:none;border-image-slice:100%;border-image-width:2px;' +
+               'border-image-outset:0;border-image-repeat:stretch'));
+    // Fewer than all five longhands is not a shorthand and stays as longhands.
+    testing.expectEqual(
+        'border-image-source: none; border-image-slice: 50%;',
+        declOf('border-image-source:none;border-image-slice:50%'));
+}
+</script>
+
+<script id="border_falls_back_without_stray_longhands">
+{
+    // `border` cannot be written as one shorthand when the four widths
+    // disagree, so it writes the sub-shorthands instead -- all four of them,
+    // and nothing else.
+    testing.expectEqual(
+        'border-width: 0px 4px 4px 0px; border-style: solid; ' +
+        'border-color: rgb(196, 77, 14); border-image: none;',
+        declOf('border:solid rgb(196, 77, 14);border-width:0 4px 4px 0'));
+    // The exact block recorded for rule 116 of the payload.
+    testing.expectEqual(
+        'top: 0px; left: 5px; border-width: 0px 4px 4px 0px; border-style: solid; ' +
+        'border-color: rgb(196, 77, 14); border-image: none; border-radius: 0px; ' +
+        'width: 6px; height: 12px;',
+        declOf('top: 0px; left: 5px; border-width: 0px 4px 4px 0px; border-style: solid; ' +
+               'border-color: rgb(196, 77, 14); border-top-width: 0px; ' +
+               'border-image-source: none; border-image-slice: 100%; border-image-width: 1; ' +
+               'border-image-outset: 0; border-image-repeat: stretch; border-radius: 0px; ' +
+               'width: 6px; height: 12px;'));
+    // A border whose four sides agree is still written whole.
+    testing.expectEqual('border: 2px solid red;', declOf('border:2px solid red'));
+}
+</script>
+
+<script id="border_image_reads_back_as_a_property">
+{
+    // Reading the shorthand by name answers the same text cssText writes.
+    // Chrome answers `none` where this engine used to answer nothing at all.
+    const valueOf = (text) => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync('x{' + text + '}');
+        return sheet.cssRules[0].style.getPropertyValue('border-image');
+    };
+    testing.expectEqual('none', valueOf(initial));
+    testing.expectEqual(
+        'url("a") 30 / 1 / 0 stretch',
+        valueOf('border-image-source:url(a);border-image-slice:30;border-image-width:1;' +
+                'border-image-outset:0;border-image-repeat:stretch'));
+    testing.expectEqual('none', valueOf('border:solid rgb(196, 77, 14);border-width:0 4px 4px 0'));
+    // A longhand missing means there is no shorthand to read.
+    testing.expectEqual('', valueOf('border-image-source:none;border-image-slice:50%'));
+}
+</script>

@@ -16,6 +16,7 @@ const table = @import("chrome_shorthands.zig");
 const chrome_bounds = @import("chrome_bounds.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
 const chrome_units = @import("chrome_units.zig");
+const chrome_initial_values = @import("chrome_initial_values.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -33,6 +34,17 @@ pub const Expansion = struct {
 pub fn lookup(name: []const u8) ?Shorthand {
     const entry = table.shorthands.get(name) orelse return null;
     if (entry.kind == .unmodelled) return null;
+    return entry;
+}
+
+/// Like `lookup`, for the paths that only read a shorthand back rather than
+/// store one: cssText, and the covering walk that builds it. `border-image`
+/// answers here and not in `lookup`, because only half of it is modelled -- its
+/// five longhands join to text Chrome writes, while a `border-image` the author
+/// wrote is still kept whole rather than expanded.
+pub fn lookupJoinable(name: []const u8) ?Shorthand {
+    const entry = table.shorthands.get(name) orelse return null;
+    if (entry.kind == .unmodelled and !isBorderImage(entry)) return null;
     return entry;
 }
 
@@ -109,6 +121,8 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
     if (entry.kind == .layers) return layerJoin(arena, entry, values);
     if (entry.kind == .corners) return cornersJoin(arena, values);
 
+    if (isBorderImage(entry)) return borderImageJoin(arena, values);
+
     switch (entry.kind) {
         .unmodelled => return "",
         .layers, .corners => unreachable,
@@ -163,7 +177,8 @@ pub fn join(arena: Allocator, entry: Shorthand, values: []const []const u8) ![]c
 pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     var found: usize = 0;
     for (table.shorthands.keys(), table.shorthands.values()) |key, entry| {
-        if (entry.kind == .unmodelled or key[0] == '-') continue;
+        if (key[0] == '-') continue;
+        if (entry.kind == .unmodelled and !isBorderImage(entry)) continue;
         if (entry.longhands.len == 1 and std.mem.eql(u8, entry.longhands[0], key)) continue;
         for (entry.longhands) |longhand| {
             if (!std.mem.eql(u8, longhand, name)) continue;
@@ -183,6 +198,55 @@ pub fn covering(name: []const u8, buf: [][]const u8) [][]const u8 {
     }.wider);
     return out;
 }
+
+// --- the border-image grammar -------------------------------------------
+//
+// `border-image` is the one shorthand with a real grammar the generator could
+// not reproduce, so the table carries it as `.unmodelled`. Writing it back is
+// still needed, and for two reasons rather than one: it is a covering shorthand
+// of its own five longhands, and it is the last link of `border`'s fallback
+// chain -- a `border` whose four widths disagree writes border-width,
+// border-style, border-color and border-image instead of itself, and the chain
+// is all-or-nothing.
+//
+// Only the joining half is modelled here. A `border-image` the author wrote
+// directly is still kept whole, which is what this engine did before.
+
+/// Whether `entry` is the `border-image` shorthand. The table has no name to
+/// match on by the time `join` sees an entry, and its five longhands are a
+/// shape no other shorthand shares.
+fn isBorderImage(entry: Shorthand) bool {
+    return entry.kind == .unmodelled and
+        entry.longhands.len == 5 and
+        std.mem.eql(u8, entry.longhands[0], "border-image-source");
+}
+
+/// `border-image` as Chrome writes it, given its five longhands in table order.
+/// Measured with tools/fingerprint/probes/expr-border-image-serialize.js: the
+/// four components after the source are written only when at least one of them
+/// is off its initial value, and then all four are, slashes and all --
+/// `border-image-slice: 30` alone reads back `url("a") 30 / 1 / 0 stretch`.
+/// With all four initial only the source is written, whatever the author
+/// spelled: `border-image: url(a) 100%` comes back `url("a")`.
+fn borderImageJoin(arena: Allocator, values: []const []const u8) ![]const u8 {
+    for (values[1..], 1..) |held, i| {
+        const initial = chrome_initial_values.initial.get(border_image_longhands[i]) orelse return "";
+        if (!std.ascii.eqlIgnoreCase(held, initial)) {
+            return std.mem.concat(arena, u8, &.{
+                values[0], " ", values[1], " / ", values[2], " / ", values[3], " ", values[4],
+            });
+        }
+    }
+    return values[0];
+}
+
+const border_image_longhands = [_][]const u8{
+    "border-image-source",
+    "border-image-slice",
+    "border-image-width",
+    "border-image-outset",
+    "border-image-repeat",
+};
 
 // --- the corner grammar -------------------------------------------------
 
