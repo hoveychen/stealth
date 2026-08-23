@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  Two realms must not hand out the same object.
+
+  Measured on the Cloudflare widget (README, "Reading the same two files record
+  by record"): a recorder installed in ten realms wrapped `crypto.subtle.digest`
+  ten times over, because every realm's `crypto.subtle` was one object. Chrome
+  shares none of these — a same-origin iframe gets its own wrapper over the same
+  underlying state — so a patch applied in one realm reaching another is a tell
+  that needs no cleverness to read.
+-->
+
+<script id="realm_crypto_subtle_is_per_realm">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    // The realms themselves are distinct, which is the premise of the rest.
+    testing.expectTrue(w !== window);
+    testing.expectTrue(w.document !== document);
+    testing.expectTrue(w.Object !== Object);
+    testing.expectTrue(w.crypto !== crypto);
+
+    // And so is the object hanging off it.
+    testing.expectTrue(w.crypto.subtle !== crypto.subtle);
+    testing.expectTrue(w.crypto.subtle.digest !== crypto.subtle.digest);
+
+    f.remove();
+}
+</script>
+
+<script id="realm_crypto_subtle_patch_does_not_leak">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    const before = crypto.subtle.digest;
+    w.crypto.subtle.digest = function () { return 'patched'; };
+    testing.expectTrue(crypto.subtle.digest === before);
+    testing.expectEqual('patched', w.crypto.subtle.digest());
+
+    f.remove();
+}
+</script>
+
+<script id="realm_crypto_wrappers_are_stable">
+{
+    // The check above is only meaningful if a wrapper is stable within one
+    // realm: a getter minting a fresh object per read would read as "distinct"
+    // across realms for the wrong reason.
+    testing.expectTrue(crypto === crypto);
+    testing.expectTrue(crypto.subtle === crypto.subtle);
+    testing.expectTrue(crypto.subtle.digest === crypto.subtle.digest);
+}
+</script>
+
+</body>
+</html>
