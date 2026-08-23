@@ -9651,3 +9651,94 @@ none of these was chased:
   string it then encodes is 15 361 characters. Ours encodes 1 999. That is an
   order-of-magnitude difference in how much the widget managed to collect, and
   it is the biggest single gap left in this table.
+
+#### Reading the same two files record by record (2026-08-23)
+
+The three leads above were chased against `results/p4b-oracle.json` and
+`results/p4b-lp.json` — no new site visit, the sitting already on disk. Two of
+the three turned out to be worth less than they looked and one turned out to be
+four separate holes.
+
+Sizes are `a.n` on each record, not `r.n` (which does not exist).
+
+| oracle | ours | what the payload is | verdict |
+| --- | --- | --- | --- |
+| 15 361 ×2 | 1 999 ×2 | 1 000 `\|`-joined floats — an audio render | ours is 1 000 zeros |
+| 30 902 | 27 142 | a `getComputedStyle` dump | 720 of 736 values are `""` here |
+| 9 216 | 9 216 | RGBA pixel readback | all zero here, 8 005 non-zero bytes there |
+| 8 624 ×3 | 8 624 ×1 | RGBA pixel readback | all zero here, and two of the three reads never happen |
+| 1 024 | — | 16×16 of solid `d7 8a 74 ff` | never read here |
+| 4 096 | — | 32×32 RGBA | never read here |
+| 20 696 | 20 367 | the page's `@keyframes` text | 329 characters short |
+
+So "we collect an order of magnitude less" was the wrong reading. The widget
+asks us the same questions; we answer four of them with zeros.
+
+**The 15 361 string is an audio fingerprint and ours is silence.** Both arms
+send exactly 1 000 values. The oracle's first 265 are zero and the remaining 735
+run to ±0.3386. Ours are 1 000 zeros. 265 is the number `chrome_audio.zig`
+already documents as the compressor's 6 ms pre-delay at 44 100 Hz, so the
+widget's graph is fingerprintjs-shaped and the recorded render is the right kind
+of answer — but it is not *this* answer. Compared against
+`chrome_audio_macos.bin` over the same 1 000 frames the oracle diverges from the
+first non-zero sample: same 333 zero crossings (so same waveform and frequency),
+amplitude ratio around 1.044 and not constant (so not a gain node — a
+non-linearity, which points at the compressor's settings). `canonical_render`
+refuses to replay for a graph it cannot match, by design, and falls back to
+silence. Which predicate rejects it is not knowable from this file; it needs the
+widget's actual construction traced. → `cfsc-audio-graph-mismatch`.
+
+**The 30 902 object is `getComputedStyle` and the names were never the
+problem.** Both arms enumerate the same 1 211 indexed property names and the
+same 736 camelCase keys, in the same order. What differs is the values behind
+them: the oracle fills 702 of 736, we fill 16. Reproduced offline on a bare
+`<div>`, no site involved:
+
+|  | ours | Chrome |
+| --- | --- | --- |
+| indexed names | 475 | 475 |
+| camelCase keys | 738 | 738 |
+| empty values | **722** | 35 |
+| `getPropertyValue` empty, first 40 | **39** | 0 |
+| `fontSize` | `""` | `16px` |
+| `writingMode` | `""` | `horizontal-tb` |
+| `widows` | `""` | `2` |
+
+`CSSStyleDeclaration.getDefaultPropertyValue` covers sixteen properties by hand
+and returns `""` for everything else, so every longhand nobody declared reads
+empty. The two we do answer and get wrong are `width` and `height`: the site's
+element measures `0px` in Chrome and `1920px` / `100000000px` here.
+→ `cfsc-computed-style-initials`.
+
+**`subtle.digest` 66 times is the recorder counting itself, and the plain object
+is a cross-realm read.** The 66 records are 15 real calls with a fixed multiple
+of 7 records each — six of them reporting `t:"obj"` and one `t:"view"`. Both
+arms install the recorder in the same ten realms, so the multiplication is not
+extra calls: it is one `crypto.subtle` object wrapped seven times, once per
+realm, and `describe()` in six of those closures then tests `v.buffer instanceof
+ArrayBuffer` against a *different* realm's `ArrayBuffer` and falls through to the
+object branch. Confirmed offline, both arms, same probe:
+
+|  | ours | Chrome |
+| --- | --- | --- |
+| `crypto` | distinct | distinct |
+| `crypto.subtle` | **SHARED** | distinct |
+| `crypto.subtle.digest` | **SHARED** | distinct |
+| `localStorage` | **SHARED** | distinct |
+| patch in iframe reaches parent | **true** | false |
+
+`JSON`, `ArrayBuffer`, `TextEncoder`, `navigator`, `performance`, `fetch`,
+`Math` and `Promise` are all per-realm here, which is why only `digest` shows
+the multiplication. So the lead was real but pointed the wrong way: nothing
+upstream produces a plain object, and the finding is that an iframe can patch
+its parent's `crypto.subtle`. → `cfsc-realm-crypto-subtle`.
+
+**The zero pixels are a no-op and a rect-only rasteriser.**
+`WebGLRenderingContext.readPixels` is declared `.noop = true` and its body is
+`{}`, so it leaves the destination buffer untouched — which is how a 9 216-byte
+read comes back as 9 216 zeros. `canvas/raster.zig` implements `fillRect`,
+`clearRect` and `strokeRect` and nothing else, so a 2D fingerprint canvas that
+draws text or paths reads back blank too. → `cfsc-canvas-pixel-readback`.
+
+The `fetch` lead (2 there, 0 here) is the smallest of the four and stays
+unchased; it is plausibly downstream of one of the above.
