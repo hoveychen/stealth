@@ -10,24 +10,11 @@
   {
    "session": "SID-1",
    "k": "getContext",
-   "owner": "canvas",
-   "kind": "2d",
-   "attrs": null,
-   "got": "CanvasRenderingContext2D",
-   "ctx": "x0",
-   "size": [
-    1,
-    1
-   ]
-  },
-  {
-   "session": "SID-1",
-   "k": "getContext",
    "owner": "offscreen",
    "kind": "webgl",
    "attrs": null,
    "got": "WebGLRenderingContext",
-   "ctx": "x1",
+   "ctx": "x0",
    "size": [
     1,
     1
@@ -40,6 +27,21 @@
    "kind": "webgl2",
    "attrs": null,
    "got": "WebGL2RenderingContext",
+   "ctx": "x1",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
    "ctx": "x2",
    "size": [
     1,
@@ -57,21 +59,6 @@
    "got": "OffscreenCanvasRenderingContext2D",
    "ctx": "x3",
    "size": [
-    1,
-    1
-   ]
-  },
-  {
-   "session": "SID-1",
-   "k": "getContext",
-   "owner": "offscreen",
-   "kind": "2d",
-   "attrs": {
-    "o": "Object"
-   },
-   "got": "OffscreenCanvasRenderingContext2D",
-   "ctx": "x4",
-   "size": [
     16,
     16
    ]
@@ -83,10 +70,25 @@
    "kind": "webgpu",
    "attrs": null,
    "got": "GPUCanvasContext",
-   "ctx": "x5",
+   "ctx": "x4",
    "size": [
     300,
     150
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x5",
+   "size": [
+    2,
+    2
    ]
   },
   {
@@ -139,9 +141,7 @@
    "k": "getContext",
    "owner": "offscreen",
    "kind": "2d",
-   "attrs": {
-    "o": "Object"
-   },
+   "attrs": null,
    "got": "OffscreenCanvasRenderingContext2D",
    "ctx": "x9",
    "size": [
@@ -154,27 +154,27 @@
    "k": "getContext",
    "owner": "offscreen",
    "kind": "2d",
-   "attrs": null,
+   "attrs": {
+    "o": "Object"
+   },
    "got": "OffscreenCanvasRenderingContext2D",
    "ctx": "x10",
    "size": [
-    2,
-    2
+    49,
+    44
    ]
   },
   {
    "session": "SID-1",
    "k": "getContext",
-   "owner": "offscreen",
+   "owner": "canvas",
    "kind": "2d",
-   "attrs": {
-    "o": "Object"
-   },
-   "got": "OffscreenCanvasRenderingContext2D",
+   "attrs": null,
+   "got": "CanvasRenderingContext2D",
    "ctx": "x11",
    "size": [
-    49,
-    44
+    1,
+    1
    ]
   }
  ],
@@ -182,44 +182,8 @@
   {
    "session": "SID-1",
    "k": "readback",
-   "why": "2d",
-   "ctx": "x0",
-   "m": "getImageData",
-   "size": [
-    1,
-    1
-   ],
-   "args": [
-    0,
-    0,
-    1,
-    1
-   ],
-   "r": {
-    "n": 4,
-    "zeros": 4,
-    "fnv": 2323425376,
-    "head": "00000000"
-   },
-   "dropped": 0,
-   "ops": [
-    [
-     "=font",
-     "1px sans-serif"
-    ],
-    [
-     "fillText",
-     "ðºð¸",
-     0,
-     1
-    ]
-   ]
-  },
-  {
-   "session": "SID-1",
-   "k": "readback",
    "why": "off2d",
-   "ctx": "x3",
+   "ctx": "x2",
    "m": "getImageData",
    "size": [
     48,
@@ -593,7 +557,7 @@
    "session": "SID-1",
    "k": "readback",
    "why": "off2d",
-   "ctx": "x3",
+   "ctx": "x2",
    "m": "getImageData",
    "size": [
     2,
@@ -652,6 +616,46 @@
     ],
     [
      "fill"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x5",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
     ]
    ]
   },
@@ -779,47 +783,7 @@
    "session": "SID-1",
    "k": "readback",
    "why": "off2d",
-   "ctx": "x9",
-   "m": "getImageData",
-   "size": [
-    2,
-    2
-   ],
-   "args": [
-    0,
-    0,
-    1,
-    1,
-    {
-     "o": "Object"
-    }
-   ],
-   "r": {
-    "n": 4,
-    "zeros": 3,
-    "fnv": 1232983308,
-    "head": "000000ff"
-   },
-   "dropped": 0,
-   "ops": [
-    [
-     "=fillStyle",
-     "color(display-p3 1 0.25 0.5)"
-    ],
-    [
-     "fillRect",
-     0,
-     0,
-     2,
-     2
-    ]
-   ]
-  },
-  {
-   "session": "SID-1",
-   "k": "readback",
-   "why": "off2d",
-   "ctx": "x3",
+   "ctx": "x2",
    "m": "getImageData",
    "size": [
     49,
@@ -1004,23 +968,23 @@
    "session": "SID-1",
    "k": "readback",
    "why": "off2d",
-   "ctx": "x3",
+   "ctx": "x2",
    "m": "getImageData",
    "size": [
-    80,
-    24
+    1,
+    1
    ],
    "args": [
     0,
     0,
-    80,
-    24
+    1,
+    1
    ],
    "r": {
-    "n": 7680,
+    "n": 4,
     "zeros": 0,
-    "fnv": 3516945036,
-    "head": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    "fnv": 185164868,
+    "head": "ffffffff"
    },
    "dropped": 0,
    "ops": [
@@ -1054,33 +1018,18 @@
      4
     ],
     [
-     "=fillStyle",
-     "#ffffff"
-    ],
-    [
-     "fillRect",
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
      0,
      0,
      80,
-     24
-    ],
-    [
-     "=fillStyle",
-     "#000000"
-    ],
-    [
-     "=font",
-     "16px Arial"
-    ],
-    [
-     "=textBaseline",
-     "top"
-    ],
-    [
-     "fillText",
-     "Hwmqxli",
-     2,
-     4
+     24,
+     0,
+     0,
+     1,
+     1
     ]
    ]
   },
@@ -1088,7 +1037,7 @@
    "session": "SID-1",
    "k": "readback",
    "why": "off2d",
-   "ctx": "x3",
+   "ctx": "x2",
    "m": "getImageData",
    "size": [
     16,
@@ -1164,7 +1113,7 @@
    "session": "SID-1",
    "k": "readback",
    "why": "off2d",
-   "ctx": "x4",
+   "ctx": "x3",
    "m": "getImageData",
    "size": [
     16,
@@ -1192,8 +1141,28 @@
      "grayscale(1)"
     ],
     [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
+    ],
+    [
      "=filter",
      "none"
+    ],
+    [
+     "=globalCompositeOperation",
+     "difference"
+    ],
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
     ],
     [
      "=globalCompositeOperation",
@@ -1255,7 +1224,7 @@
    "session": "SID-1",
    "k": "readback",
    "why": "off2d",
-   "ctx": "x3",
+   "ctx": "x2",
    "m": "getImageData",
    "size": [
     16,
@@ -1292,7 +1261,7 @@
    "session": "SID-1",
    "k": "readback",
    "why": "off2d",
-   "ctx": "x3",
+   "ctx": "x2",
    "m": "getImageData",
    "size": [
     16,
@@ -1320,13 +1289,49 @@
      16
     ]
    ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "2d",
+   "ctx": "x11",
+   "m": "getImageData",
+   "size": [
+    1,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 4,
+    "fnv": 2323425376,
+    "head": "00000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=font",
+     "1px sans-serif"
+    ],
+    [
+     "fillText",
+     "ðºð¸",
+     0,
+     1
+    ]
+   ]
   }
  ],
  "drains": [
   {
    "session": "SID-1",
    "k": "drain",
-   "ctx": "x1",
+   "ctx": "x0",
    "size": [
     1,
     1
@@ -1664,7 +1669,7 @@
   {
    "session": "SID-1",
    "k": "drain",
-   "ctx": "x2",
+   "ctx": "x1",
    "size": [
     1,
     1
@@ -2318,6 +2323,21 @@
   {
    "session": "SID-1",
    "k": "drain",
+   "ctx": "x5",
+   "size": [
+    2,
+    2
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
    "ctx": "x6",
    "size": [
     2,
@@ -2380,13 +2400,18 @@
    "k": "drain",
    "ctx": "x10",
    "size": [
-    2,
-    2
+    49,
+    44
    ],
    "dropped": 0,
    "ops": [
     [
-     "getContextAttributes"
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
     ]
    ]
   }
@@ -2408,7 +2433,7 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2427,7 +2452,7 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2442,30 +2467,11 @@
   {
    "session": "SID-1",
    "k": "installed",
-   "href": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/9ejdh/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+   "href": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/e4kbj/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
-    "gl": 140,
-    "gl2": 228,
-    "bitmap": 1
-   },
-   "has": {
-    "canvas": "function",
-    "offscreen": "function",
-    "gl": "function",
-    "gl2": "function"
-   }
-  },
-  {
-   "session": "SID-1",
-   "k": "installed",
-   "href": "about:blank",
-   "worker": false,
-   "wrapped": {
-    "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2484,7 +2490,7 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2503,7 +2509,7 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2522,7 +2528,7 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2541,7 +2547,7 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2560,7 +2566,7 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2579,7 +2585,26 @@
    "worker": false,
    "wrapped": {
     "2d": 72,
-    "off2d": 71,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
     "gl": 140,
     "gl2": 228,
     "bitmap": 1
@@ -2622,13 +2647,13 @@
   "Browser": "Lightpanda/1.0",
   "Protocol-Version": "1.3",
   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
-  "Lightpanda-Version": "1.0.0-dev.940+e11f1ea7b",
-  "webSocketDebuggerUrl": "ws://127.0.0.1:9872/"
+  "Lightpanda-Version": "1.0.0-dev.942+c0f93c71c",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9874/"
  },
  "final": {
   "title": "Just a moment...",
   "nodes": 47,
   "text": "www.scrapingcourse.com\nPerforming security verification\n\nThis website uses a security service to protect against malicio"
  },
- "engineLog": "rnalformatParameter\",36161,32856,32937],[\"getInternalformatParameter\",36161,35907,32937],[\"getInternalformatParameter\",36161,32857,32937],[\"getInternalformatParameter\",36161,36220,32937],[\"getInternalformatParameter\",36161,36238,32937],[\"getInternalformatParameter\",36161,36975,32937],[\"getInternalformatParameter\",36161,36214,32937],[\"getInternalformatParameter\",36161,36232,32937],[\"getInternalformatParameter\",36161,36208,32937],[\"getInternalformatParameter\",36161,36226,32937],[\"getInternalformatParameter\",36161,33189,32937],[\"getInternalformatParameter\",36161,33190,32937],[\"getInternalformatParameter\",36161,36012,32937],[\"getInternalformatParameter\",36161,36168,32937],[\"getInternalformatParameter\",36161,35056,32937],[\"getInternalformatParameter\",36161,36013,32937],[\"getInternalformatParameter\",36161,32854,32937],[\"getInternalformatParameter\",36161,32855,32937],[\"getInternalformatParameter\",36161,36194,32937],[\"getParameter\",3379],[\"getParameter\",34024],[\"getParameter\",3386],[\"getSupportedExtensions\"],[\"getExtension\",\"WEBGL_compressed_texture_astc\"],[\"getExtension\",\"EXT_color_buffer_float\"],[\"getExtension\",\"EXT_color_buffer_half_float\"],[\"createFramebuffer\"],[\"bindFramebuffer\",36160,{\"o\":\"WebGLFramebuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33325,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33327,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,34842,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33326,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33328,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,34836,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,35898,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"deleteFramebuffer\",{\"o\":\"WebGLFramebuffer\"}],[\"getExtension\",\"WEBGL_lose_context\"]]}\n$time=1787473971022 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x6\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787473971022 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x7\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787473971022 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x8\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787473971022 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x9\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787473971022 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x10\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n"
+ "engineLog": "0,32937],[\"getInternalformatParameter\",36161,36238,32937],[\"getInternalformatParameter\",36161,36975,32937],[\"getInternalformatParameter\",36161,36214,32937],[\"getInternalformatParameter\",36161,36232,32937],[\"getInternalformatParameter\",36161,36208,32937],[\"getInternalformatParameter\",36161,36226,32937],[\"getInternalformatParameter\",36161,33189,32937],[\"getInternalformatParameter\",36161,33190,32937],[\"getInternalformatParameter\",36161,36012,32937],[\"getInternalformatParameter\",36161,36168,32937],[\"getInternalformatParameter\",36161,35056,32937],[\"getInternalformatParameter\",36161,36013,32937],[\"getInternalformatParameter\",36161,32854,32937],[\"getInternalformatParameter\",36161,32855,32937],[\"getInternalformatParameter\",36161,36194,32937],[\"getParameter\",3379],[\"getParameter\",34024],[\"getParameter\",3386],[\"getSupportedExtensions\"],[\"getExtension\",\"WEBGL_compressed_texture_astc\"],[\"getExtension\",\"EXT_color_buffer_float\"],[\"getExtension\",\"EXT_color_buffer_half_float\"],[\"createFramebuffer\"],[\"bindFramebuffer\",36160,{\"o\":\"WebGLFramebuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33325,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33327,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,34842,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33326,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33328,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,34836,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,35898,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"deleteFramebuffer\",{\"o\":\"WebGLFramebuffer\"}],[\"getExtension\",\"WEBGL_lose_context\"]]}\n$time=1787475946709 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x5\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787475946709 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x6\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787475946709 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x7\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787475946709 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x8\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787475946709 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x9\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787475946709 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x10\",\"size\":[49,44],\"dropped\":0,\"ops\":[[\"drawImage\",{\"o\":\"OffscreenCanvas\"},0,0]]}\n"
 }

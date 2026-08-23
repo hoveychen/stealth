@@ -10130,3 +10130,58 @@ canvas at r=25, ink pixels:
 A sweep against the requested direction wraps by whole turns rather than
 clamping; a sweep of exactly one turn against it becomes a whole turn rather
 than nothing; only two exactly equal angles draw nothing.
+
+## The five that still do not happen, and what each is waiting on (2026-08-23)
+
+The two readbacks P3 names are `1024` and `4096`. They turned out to be
+different kinds of thing.
+
+**The 1024 is WebGL, and it is stable.** It appeared in all four fresh oracle
+sessions, always as `readPixels` on a 16×16 context, always `d78a74ff` — the
+constant fragment shader quantised. Its cause is the one return value P1 found:
+`getShaderParameter(shader, COMPILE_STATUS)` answers `false` here, so the widget
+deletes its shaders and never reaches `drawArrays`. Making the readback happen
+means answering `true`, and answering `true` without executing the shader would
+put 1024 zero bytes where Chrome puts a colour — a wrong value in place of a
+missing one. The colour itself is computable without a GPU (both of the
+widget's programs are small), but that is a GLSL evaluator, and it is its own
+plan.
+
+**The 4096 did not recur.** Four fresh oracle sessions produced no 4096-byte
+readback of any kind, while producing the 1024 every time. Its recorded shape,
+from the session that did produce it: 1024 pixels — 224 opaque black, 32 of one
+colour, 768 transparent — so a 32×32 image with a block drawn in it. It is not
+part of the canvas work the widget does today; whoever meets it again has the
+shape.
+
+### drawImage was not a no-op, it was absent
+
+The op logs read as though five oracle-only readbacks depended on a `drawImage`
+that quietly did nothing here. Measuring both engines said otherwise:
+
+    chrome      drawImage(canvas)  [255,0,0,255]   drawImage(canvas,0,0,4,4,0,0,1,1)  [255,0,0,255]
+    lightpanda  threw: dctx.drawImage is not a function
+
+On `OffscreenCanvasRenderingContext2D` the member did not exist. The element
+context had it as a declared no-op; the offscreen one, a near-identical file,
+had never been given the line — the classic cost of two parallel copies. A
+`TypeError` takes the rest of the caller's function with it, which is why the
+readbacks *around* those calls vanished too, and why the 80×24 canvas was read
+at full size here where Chrome reads the 1×1 it had been downscaled into.
+
+With a real blit behind it (canvas and `OffscreenCanvas` sources, inverse-mapped
+so a rotated destination needs no separate path), the arms line up:
+
+|  | before | after |
+|---|---|---|
+| readbacks here | 13 | 13 |
+| pairing with an oracle readback by call sequence | 11 | **13** |
+| readbacks only this arm makes | 2 | **0** |
+| readbacks only the oracle makes | 7 | **5** |
+
+The five that remain: two WebGL `readPixels`, waiting on shader execution; two
+`drawImage(ImageBitmap)` reads, waiting on `ImageBitmap` carrying pixels rather
+than only its dimensions; and one bare `getImageData` that follows the second of
+those.
+
+→ `cfsc-webgl-shader-readback`, `cfsc-imagebitmap-pixels`.
