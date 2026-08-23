@@ -645,6 +645,10 @@ pub const BrowserContext = struct {
     // called after the transfer is gone. Capped at max_post_data_size.
     captured_requests: std.AutoHashMapUnmanaged(CapturedKey, []const u8),
 
+    // The largest request body we'll hand to the client, both inline in
+    // requestWillBeSent and through getRequestPostData. Set by Network.enable.
+    max_post_data_size: usize = @import("domains/network.zig").default_max_post_data_size,
+
     // When network is enabled, we'll capture the transfer.id -> body
     // This is awfully memory intensive, but our underlying http client and
     // its users (script manager and frame) correctly do not hold the body
@@ -887,7 +891,8 @@ pub const BrowserContext = struct {
         };
     }
 
-    pub fn networkEnable(self: *BrowserContext) !void {
+    pub fn networkEnable(self: *BrowserContext, max_post_data_size: usize) !void {
+        self.max_post_data_size = max_post_data_size;
         try self.notification.register(.http_request_fail, self, onHttpRequestFail);
         try self.notification.register(.http_request_start, self, onHttpRequestStart);
         try self.notification.register(.http_request_done, self, onHttpRequestDone);
@@ -1050,7 +1055,7 @@ pub const BrowserContext = struct {
             const transfer = msg.transfer;
             const key = keyFromTransfer(transfer);
             const body = transfer.req.body orelse "";
-            if (body.len == 0 or body.len > @import("domains/network.zig").max_post_data_size) {
+            if (body.len == 0 or body.len > self.max_post_data_size) {
                 _ = self.captured_requests.remove(key);
             } else {
                 const owned_body = try self.frame_arena.dupe(u8, body);

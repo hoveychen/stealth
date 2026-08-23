@@ -37,7 +37,12 @@ const CdpStorage = @import("storage.zig");
 
 const log = lp.log;
 const Allocator = std.mem.Allocator;
-pub const max_post_data_size = 64 * 1024;
+// The ceiling on how large a request body can be and still ride along in
+// requestWillBeSent, when Network.enable did not name one. Chrome's own
+// default is 0 -- omit the parameter there and you are only told a body
+// existed -- but our own instrumentation reads postData off the event
+// without asking, so a body-shaped default stays.
+pub const default_max_post_data_size = 64 * 1024;
 
 pub fn processMessage(cmd: *CDP.Command) !void {
     const action = std.meta.stringToEnum(enum {
@@ -81,7 +86,17 @@ pub fn processMessage(cmd: *CDP.Command) !void {
 
 fn enable(cmd: *CDP.Command) !void {
     const bc = cmd.browser_context orelse return error.BrowserContextNotLoaded;
-    try bc.networkEnable();
+
+    // A client that wants to read bodies larger than the default says so here,
+    // and a re-enable without the parameter puts the default back.
+    const max_post_data_size = blk: {
+        const params = (try cmd.params(struct {
+            maxPostDataSize: ?u32 = null,
+        })) orelse break :blk default_max_post_data_size;
+        break :blk params.maxPostDataSize orelse default_max_post_data_size;
+    };
+
+    try bc.networkEnable(max_post_data_size);
     return cmd.sendResult(null, .{});
 }
 
@@ -380,7 +395,7 @@ pub fn httpRequestStart(arena: Allocator, bc: *CDP.BrowserContext, msg: *const N
         .loaderId = &id.toLoaderId(req.loader_id),
         .type = req.resource_type.string(),
         .documentURL = frame.url,
-        .request = RequestWriter.init(arena, transfer),
+        .request = RequestWriter.init(arena, transfer, bc.max_post_data_size),
         .initiator = .{ .type = "other" },
         .redirectResponse = if (msg.redirect_response)
             ResponseWriter.init(arena, transfer)
@@ -436,11 +451,13 @@ pub fn httpServedFromCache(bc: *CDP.BrowserContext, msg: *const Notification.Req
 pub const RequestWriter = struct {
     arena: Allocator,
     transfer: *Transfer,
+    max_post_data_size: usize,
 
-    pub fn init(arena: Allocator, transfer: *Transfer) RequestWriter {
+    pub fn init(arena: Allocator, transfer: *Transfer, max_post_data_size: usize) RequestWriter {
         return .{
             .arena = arena,
             .transfer = transfer,
+            .max_post_data_size = max_post_data_size,
         };
     }
 
@@ -477,7 +494,7 @@ pub const RequestWriter = struct {
         }
 
         if (request.body) |body| {
-            if (body.len <= max_post_data_size) {
+            if (body.len <= self.max_post_data_size) {
                 try jws.objectField("postData");
                 try jws.write(SafeString.wrap(body));
 
@@ -1206,6 +1223,84 @@ test "cdp.Network: POST body exposed as postData" {
         .params = .{ .requestId = "REQ-4294967295" },
     });
     try ctx.expectSentError(-31998, "RequestNotFound", .{ .id = 3 });
+}
+
+test "cdp.Network: a body over maxPostDataSize is announced but not carried" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const bc = try ctx.loadBrowserContext(.{ .id = "BID-PDCAP", .session_id = "SID-PDCAP" });
+    const page = try bc.session.createPage();
+    const client = &bc.cdp.browser.http_client;
+
+    const body = "name=Zig";
+
+    // A ceiling above the default has to survive intact -- reading a 90KB
+    // challenge POST is the whole point of honouring the parameter, and the
+    // test harness's 32KB frame reader cannot carry a body that size, so this
+    // is where a clamp back down to the default would be caught.
+    try ctx.processMessage(.{
+        .id = 1,
+        .method = "Network.enable",
+        .params = .{ .maxPostDataSize = 1048576 },
+    });
+    try ctx.expectSentResult(null, .{ .id = 1 });
+    try testing.expectEqual(1048576, bc.max_post_data_size);
+
+    // Re-enabling without the parameter puts the default back.
+    try ctx.processMessage(.{ .id = 2, .method = "Network.enable" });
+    try ctx.expectSentResult(null, .{ .id = 2 });
+    try testing.expectEqual(default_max_post_data_size, bc.max_post_data_size);
+
+    try ctx.processMessage(.{
+        .id = 3,
+        .method = "Network.enable",
+        .params = .{ .maxPostDataSize = 4 },
+    });
+    try ctx.expectSentResult(null, .{ .id = 3 });
+
+    var request_id: [14]u8 = undefined;
+    _ = std.fmt.bufPrint(&request_id, "REQ-{d:0>10}", .{client.next_request_id +% 1}) catch unreachable;
+
+    try client.request(.{
+        .frame_id = page.frame_id,
+        .loader_id = 1,
+        .method = .POST,
+        .url = "http://127.0.0.1:9582/echo_body",
+        .body = body,
+        .cookie_jar = null,
+        .cookie_origin = "http://127.0.0.1:9582/",
+        .resource_type = .fetch,
+        .notification = bc.session.notification,
+        .shutdown_callback = HttpClient.noopShutdown,
+    }, null);
+
+    // hasPostData still tells the client a body exists; postData is withheld.
+    try ctx.expectSentEvent("Network.requestWillBeSent", .{
+        .request = .{
+            .method = "POST",
+            .hasPostData = true,
+        },
+    }, .{ .session_id = "SID-PDCAP" });
+
+    // expectSentEvent drops null fields from the expectation, so absence has
+    // to be asserted against the captured message itself.
+    for (ctx.received.items) |msg| {
+        const obj = msg.object;
+        const method = obj.get("method") orelse continue;
+        if (std.mem.eql(u8, method.string, "Network.requestWillBeSent") == false) continue;
+        const request = obj.get("params").?.object.get("request").?.object;
+        try testing.expectEqual(true, request.get("hasPostData").?.bool);
+        try testing.expectEqual(true, request.get("postData") == null);
+        try testing.expectEqual(true, request.get("postDataEntries") == null);
+    }
+
+    try ctx.processMessage(.{
+        .id = 4,
+        .method = "Network.getRequestPostData",
+        .params = .{ .requestId = &request_id },
+    });
+    try ctx.expectSentError(-31998, "RequestNotFound", .{ .id = 4 });
 }
 
 test "cdp.Network: redirect hop precedes Fetch pause and carries redirectResponse" {
