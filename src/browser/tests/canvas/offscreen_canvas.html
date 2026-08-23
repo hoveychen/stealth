@@ -264,3 +264,97 @@
   testing.expectEqual([0, 0, 0, 0], Array.from(actx.getImageData(0, 0, 1, 1).data));
 }
 </script>
+
+<script id="OffscreenCanvas#transferToImageBitmap">
+{
+  // Measured on Chrome with probes/expr-transfer-to-image-bitmap.js. The name
+  // is the specification: the bitmap comes away with the pixels and the canvas
+  // is left blank, which is what makes a second transfer answer transparent.
+  //
+  // Every reading goes through `ask`, which turns a throw into a string rather
+  // than letting it escape: a script that dies half way through leaves the
+  // assertions it never reached unrecorded, and the runner reads a script whose
+  // recorded assertions all passed as a pass. Nothing here may throw.
+  const ask = (fn) => {
+    try { return fn(); } catch (err) { return `${err.name}: ${err.message}`; }
+  };
+  const shot = (bmp, w, h) => ask(() => {
+    const c = new OffscreenCanvas(w, h);
+    const g = c.getContext('2d');
+    g.drawImage(bmp, 0, 0);
+    return Array.from(g.getImageData(0, 0, w, h).data);
+  });
+
+  const canvas = new OffscreenCanvas(2, 1);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 1, 1);
+  ctx.fillStyle = '#0000ff';
+  ctx.fillRect(1, 0, 1, 1);
+
+  testing.expectEqual('function', typeof canvas.transferToImageBitmap);
+  testing.expectEqual(0, canvas.transferToImageBitmap.length);
+
+  const bitmap = ask(() => canvas.transferToImageBitmap());
+  testing.expectEqual('ImageBitmap', ask(() => bitmap.constructor.name));
+  testing.expectEqual(2, ask(() => bitmap.width));
+  testing.expectEqual(1, ask(() => bitmap.height));
+  testing.expectEqual([255, 0, 0, 255, 0, 0, 255, 255], shot(bitmap, 2, 1));
+
+  // The source is blank afterwards, read either way round, and keeps its size.
+  testing.expectEqual([0, 0, 0, 0, 0, 0, 0, 0], Array.from(ctx.getImageData(0, 0, 2, 1).data));
+  testing.expectEqual(2, canvas.width);
+  testing.expectEqual(1, canvas.height);
+
+  // The context survives it: same canvas, and still drawable.
+  testing.expectTrue(ctx.canvas === canvas);
+  ctx.fillStyle = '#00ff00';
+  ctx.fillRect(0, 0, 2, 1);
+  testing.expectEqual([0, 255, 0, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+
+  // A second transfer of a canvas nothing has been drawn into since answers a
+  // transparent bitmap rather than the pixels the first one took.
+  const twice = new OffscreenCanvas(2, 1);
+  const tctx = twice.getContext('2d');
+  tctx.fillStyle = '#ff0000';
+  tctx.fillRect(0, 0, 2, 1);
+  testing.expectEqual([255, 0, 0, 255, 255, 0, 0, 255], shot(ask(() => twice.transferToImageBitmap()), 2, 1));
+  testing.expectEqual([0, 0, 0, 0, 0, 0, 0, 0], shot(ask(() => twice.transferToImageBitmap()), 2, 1));
+
+  // The bitmap is a copy, so resizing the source afterwards does not reach it.
+  const kept = new OffscreenCanvas(2, 1);
+  const kctx = kept.getContext('2d');
+  kctx.fillStyle = '#ff0000';
+  kctx.fillRect(0, 0, 2, 1);
+  const survivor = ask(() => kept.transferToImageBitmap());
+  kept.width = 4;
+  testing.expectEqual([255, 0, 0, 255, 255, 0, 0, 255], shot(survivor, 2, 1));
+
+  // And it is an ordinary ImageBitmap: closing it detaches it.
+  ask(() => survivor.close());
+  testing.expectEqual(0, ask(() => survivor.width));
+  testing.expectEqual(
+    "InvalidStateError: Failed to execute 'drawImage' on " +
+      "'OffscreenCanvasRenderingContext2D': The image source is detached",
+    shot(survivor, 2, 1),
+  );
+
+  // A canvas with no context at all has no bitmap to hand over.
+  testing.expectEqual(
+    "InvalidStateError: Failed to execute 'transferToImageBitmap' on " +
+      "'OffscreenCanvas': Cannot transfer an ImageBitmap from an " +
+      'OffscreenCanvas with no context',
+    ask(() => new OffscreenCanvas(2, 1).transferToImageBitmap()),
+  );
+
+  // A degenerate extent is refused after the context check, and under a
+  // different name -- Chrome reports the construction itself as having failed.
+  const degenerate = new OffscreenCanvas(0, 1);
+  degenerate.getContext('2d');
+  testing.expectEqual(
+    "UnknownError: Failed to execute 'transferToImageBitmap' on " +
+      "'OffscreenCanvas': ImageBitmap construction failed",
+    ask(() => degenerate.transferToImageBitmap()),
+  );
+}
+</script>

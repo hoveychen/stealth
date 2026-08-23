@@ -6,9 +6,24 @@
   "windowSize": "1920,1080",
   "chromeArgs": [],
   "userAgentOverride": null,
-  "startedAt": "2026-08-23T19:53:53.874Z",
+  "startedAt": "2026-08-23T22:07:55.532Z",
   "egress": {
-    "error": "fetch failed"
+    "fl": "1231f9",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787522875.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
   },
   "version": {
     "Browser": "Chrome/151.0.7922.172",
@@ -16,7 +31,7 @@
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
     "V8-Version": "15.1.206.21",
     "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
-    "webSocketDebuggerUrl": "ws://127.0.0.1:9336/devtools/browser/47b9aa77-c3c5-4fa1-a340-88cf2b93ca0c"
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9336/devtools/browser/21f57ad5-409c-435d-a1e6-bc5db4fcffeb"
   },
   "stations": [
     {
@@ -32,7 +47,7 @@
           "mime": "text/html"
         },
         {
-          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/whm9w/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/d8p0k/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
           "status": 200,
           "mime": "text/html"
         },
@@ -69,36 +84,38 @@
         "accessDenied": false,
         "reference": false
       },
-      "ms": 26313
+      "ms": 25512
     }
   ],
   "fresh": false,
   "engineLog": [
-    "DevTools listening on ws://127.0.0.1:9336/devtools/browser/47b9aa77-c3c5-4fa1-a340-88cf2b93ca0c",
+    "DevTools listening on ws://127.0.0.1:9336/devtools/browser/21f57ad5-409c-435d-a1e6-bc5db4fcffeb",
     "Trying to load the allocator multiple times. This is *not* supported.",
-    "[40625:21739739:0823/125409.606647:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
-    "[40625:21739739:0823/125409.607843:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
-    "[40790:21740353:0823/125411.027732:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
-    "[40790:21740353:0823/125411.030855:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
-    "[40790:21740353:0823/125411.030869:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
-    "[40790:21740353:0823/125411.039509:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125411.039534:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125411.039579:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125411.039618:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125411.039637:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125411.039645:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125412.757741:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125412.757774:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125412.757779:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125412.758230:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
-    "[40790:21740353:0823/125412.758238:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
-    "[40790:21740353:0823/125412.758241:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
-    "[40790:21740353:0823/125412.758378:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125412.758384:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
-    "[40790:21740353:0823/125412.758387:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
-    "[40625:21740230:0823/125414.257908:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
-    "[40625:21740230:0823/125414.270590:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
-    "[40625:21740230:0823/125414.270964:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[64569:23232333:0823/150756.176303:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[64569:23232333:0823/150756.176764:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[64576:23232451:0823/150756.517530:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[64576:23232451:0823/150756.517669:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[64576:23232451:0823/150756.517672:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[64576:23232451:0823/150756.523555:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150756.523561:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150756.523563:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150756.523594:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150756.523601:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150756.523604:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150757.489959:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[64576:23232451:0823/150757.489971:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[64576:23232451:0823/150757.489975:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105",
+    "[64576:23232451:0823/150757.489979:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150757.489982:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150757.489984:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150757.490170:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150757.490176:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[64576:23232451:0823/150757.490179:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105",
+    "[64575:23232407:0823/150758.763475:ERROR:gpu/command_buffer/service/shared_image/shared_image_manager.cc:370] SharedImageManager::ProduceOverlay: Trying to Produce a Overlay representation from a non-existent mailbox.",
+    "[64575:23232407:0823/150758.763687:ERROR:components/viz/service/display_embedder/skia_output_device_buffer_queue.cc:258] Invalid mailbox.",
+    "[64569:23232388:0823/150758.882223:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[64569:23232388:0823/150758.882307:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[64569:23232388:0823/150758.882367:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
     "Created TensorFlow Lite XNNPACK delegate for CPU."
   ],
   "summary": {
