@@ -72,3 +72,16 @@
     err,
   );
 </script>
+
+<script id=intersectionObserver_dictionary_refusal>
+  // The second argument names its dictionary, and unlike the callback brand
+  // sentence above it carries no parameter position (measured on Chrome 151).
+  {
+    let err = null;
+    try { new IntersectionObserver(() => {}, 1); } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to construct 'IntersectionObserver': The provided value is not of type 'IntersectionObserverInit'.",
+      err,
+    );
+  }
+</script>

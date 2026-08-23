@@ -1343,3 +1343,16 @@
   });
 }
 </script>
+
+<script id=audioContext_dictionary_refusal>
+  // The options dictionary is named by its IDL name when it is handed a
+  // non-object (measured on Chrome 151).
+  {
+    let err = null;
+    try { new AudioContext(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to construct 'AudioContext': The provided value is not of type 'AudioContextOptions'.",
+      err,
+    );
+  }
+</script>

@@ -364,3 +364,21 @@
   testing.expectEqual(1, authEntries.length);
 }
 </script>
+
+<script id=headers_union_refusal>
+  // Headers takes an IDL union, and the name in the refusal is the union's
+  // whole spelling -- parentheses, "or", and both member types written out
+  // (measured on Chrome 151). Nothing derives that from the Zig union; it is
+  // declared.
+  {
+    for (const bad of [1, 'nope']) {
+      let err = null;
+      try { new Headers(bad); } catch (e) { err = `${e.name}: ${e.message}`; }
+      testing.expectEqual(
+        "TypeError: Failed to construct 'Headers': The provided value is not of type '(record<ByteString, ByteString> or sequence<sequence<ByteString>>)'.",
+        err,
+        { label: String(bad) },
+      );
+    }
+  }
+</script>

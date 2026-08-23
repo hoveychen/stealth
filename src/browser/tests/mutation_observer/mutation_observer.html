@@ -148,3 +148,18 @@
     err,
   );
 </script>
+
+<script id=mutationObserver_dictionary_refusal>
+  // An operation's dictionary gets the execute prefix rather than the construct
+  // one, and the same detail sentence (measured on Chrome 151).
+  {
+    let err = null;
+    try {
+      new MutationObserver(() => {}).observe(document.body, 1);
+    } catch (e) { err = `${e.name}: ${e.message}`; }
+    testing.expectEqual(
+      "TypeError: Failed to execute 'observe' on 'MutationObserver': The provided value is not of type 'MutationObserverInit'.",
+      err,
+    );
+  }
+</script>
