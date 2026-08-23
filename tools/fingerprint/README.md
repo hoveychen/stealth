@@ -8545,3 +8545,51 @@ sends `Content-Length` third, `content-type` right after `User-Agent`, and an
 `Origin`; this engine sends no `Origin` at all and leaves `content-type` and
 `Content-Length` to the trailing pass, after `Accept-Language`. Cloudflare's
 challenge flow is mostly `POST`s, so this is worth its own task.
+
+## The round-2 body, and the oracle that stopped clearing (2026-08-22)
+
+E1 put the first divergence at the second `fo/` telemetry POST and could not
+read it: `Network.enable`'s `maxPostDataSize` was taken and dropped, a
+hardcoded 64KB governed both the inline `postData` and the body kept for
+`getRequestPostData`, and the round-2 body is larger than that. The trace read
+`postLen: -1` — a body exists, you may not see it. The parameter is honoured
+now, per browser context, and the column reads bytes.
+
+### The measurement
+
+| arm | round 1 | round 2 (widget) | round-2 response |
+|---|---|---|---|
+| lightpanda | 2306 | **87586** | 127720 |
+| chrome | 2338 | **89612** | 127728 |
+| chrome, again | 2338 | **89570** | 127724 |
+
+So round 2 is ~2.3% shorter on this engine than on Chrome, out of ~88KB of
+Cloudflare's own encrypted telemetry. That difference is not readable as a
+missing field — the payload is an opaque base64-ish blob, and its length is a
+function of everything the challenge program measured. What the numbers rule
+out is a *category* difference: this is not an engine sending a stub, or a
+tenth of the telemetry. Both arms post the same order of magnitude to the same
+endpoint and get a same-sized program back.
+
+### The oracle stopped clearing
+
+The headless Chrome arm no longer clears `cf-scrapingcourse` either. Two
+consecutive runs, both `clearance: false`, both ending on `Just a moment...`,
+and both handed a `cf-chl-gen` header on the round-2 reply — Cloudflare
+issuing a fresh challenge rather than a clearance form.
+
+That matters more than the byte counts. Every plan under
+`cf-scrapingcourse-oracle-diff` rests on there being an arm that passes, so
+that the difference between the two arms is the thing to fix. Right now there
+is no such arm: both engines take the same path, post the same shape, and are
+declined the same way. E1's specific claim — that the oracle posts round 2
+back to the *page-level* challenge while this engine posts it to the widget's
+own instance — does not reproduce; here both arms post round 2 to the widget
+instance (`.../fo/205804612:...`).
+
+Whether the oracle's configuration was specifically demoted, or the station
+tightened for everyone, this run cannot say. What it can say is that
+`cfsc-widget-solve-declined` has no diff to work from until an arm clears
+again, and that re-establishing a passing oracle is the prerequisite, not the
+widget's solve. Raw traces: `results/cfsc-fo-lightpanda-postfix.json`,
+`results/cfsc-fo-chrome-postfix{,2}.json`.
