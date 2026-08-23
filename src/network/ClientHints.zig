@@ -30,6 +30,11 @@
 // Chrome makes to that origin afterwards carries all nine while an engine that
 // ignores the header keeps sending three -- measured, the E2 section of
 // tools/fingerprint/results/cfsc-oracle-diff.md.
+//
+// An origin is answered in full or not at all -- see `parse`. Chrome answers
+// every hint it is asked for, so a partial answer is a shape no browser has,
+// and an origin asking for one hint we don't carry is left seeing the same
+// three it saw before this file existed.
 
 const std = @import("std");
 
@@ -63,12 +68,10 @@ pub const Hint = enum {
         };
     }
 
-    /// An `Accept-CH` token, or null for one we don't answer -- the three
-    /// low-entropy hints (already unconditional), the non-UA hints
-    /// (`Device-Memory`, `DPR`, `Sec-CH-Prefers-*`, ...) this engine has no
-    /// value for, and the pre-standard `UA-*` spellings Cloudflare still asks
-    /// for and Chrome answers with silence (measured: not one of them appears
-    /// in results/acceptch-chrome.json).
+    /// The hint an `Accept-CH` token names, or null if it names none of these
+    /// six. Null does not mean "skip it": see `parse`, which decides whether the
+    /// token is one nothing needs to be done about or one that costs the origin
+    /// its whole ask.
     fn fromToken(token: []const u8) ?Hint {
         inline for (comptime std.enums.values(Hint)) |hint| {
             if (std.ascii.eqlIgnoreCase(token, hint.header())) return hint;
@@ -109,7 +112,7 @@ pub fn negotiate(self: *ClientHints, allocator: Allocator, url: [:0]const u8, ac
         // this call.
         gop.key_ptr.* = try allocator.dupe(u8, origin);
     }
-    gop.value_ptr.* = parse(accept_ch);
+    gop.value_ptr.* = parse(accept_ch) orelse .initEmpty();
 }
 
 /// The hints `url`'s origin has asked for. Empty for an origin that never did,
@@ -126,19 +129,59 @@ pub fn acceptedFor(self: *const ClientHints, url: [:0]const u8) Set {
 }
 
 /// Parses the `Accept-CH` list syntax: comma-separated hint names, spaces
-/// optional, names case-insensitive. A name we don't answer is skipped rather
-/// than fatal -- an origin naming twenty hints and getting six is the normal
-/// case, not an error.
-pub fn parse(accept_ch: []const u8) Set {
+/// optional, names case-insensitive.
+///
+/// Null means the ask names something this engine cannot answer and Chrome can
+/// -- decline the whole thing rather than answer part of it. That rule is the
+/// difference between two failures with very different costs. Cloudflare asks
+/// for the nine UA hints, all of which are here, so we answer it exactly as
+/// Chrome does. DataDome asks for six of those plus `Sec-CH-Device-Memory`
+/// (measured, tools/fingerprint/results/acceptch-dd-chrome.json, where Chrome
+/// answers all seven); answering six would put a hint set on the wire that no
+/// browser produces, which is a louder signal than the three hints an engine
+/// that ignores `Accept-CH` sends. Declining leaves those origins seeing exactly
+/// what they saw before any of this existed.
+///
+/// It also fails safe forward: a guard that adds a hint we have never heard of
+/// drops us back to the low-entropy three instead of into a new hybrid.
+pub fn parse(accept_ch: []const u8) ?Set {
     var set: Set = .initEmpty();
     var it = std.mem.splitScalar(u8, accept_ch, ',');
     while (it.next()) |raw| {
         const token = std.mem.trim(u8, raw, " \t");
+        if (token.len == 0) {
+            continue;
+        }
         if (Hint.fromToken(token)) |hint| {
             set.insert(hint);
+            continue;
         }
+        if (isAlreadyAnswered(token)) {
+            continue;
+        }
+        return null;
     }
     return set;
+}
+
+// Tokens that need nothing from the negotiation. Either the hint goes out on
+// every request already, or Chrome ignores the ask too -- and matching Chrome's
+// silence is not a gap.
+fn isAlreadyAnswered(token: []const u8) bool {
+    // The low-entropy three, unconditional since before any of this.
+    for ([_][]const u8{ "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform" }) |name| {
+        if (std.ascii.eqlIgnoreCase(token, name)) return true;
+    }
+
+    // The pre-standard spellings, from before the hints took the Sec- prefix.
+    // Cloudflare still asks for all of them and Chrome answers not one --
+    // measured, no `ua-*` field appears in
+    // tools/fingerprint/results/acceptch-chrome.json. Matched by prefix so the
+    // whole family counts, including ones no guard has asked us for yet.
+    if (std.ascii.eqlIgnoreCase(token, "ua")) return true;
+    if (token.len > 3 and std.ascii.eqlIgnoreCase(token[0..3], "ua-")) return true;
+
+    return false;
 }
 
 // The origin serialization used as the map key, written into `buf`. Null when
@@ -159,6 +202,38 @@ const max_origin_len = 512;
 
 const testing = @import("../testing.zig");
 
+test "ClientHints: an ask naming a hint we can't answer is declined whole" {
+    // DataDome's list, verbatim off the 403 its four stations serve. Six of the
+    // seven are hints this engine has; Sec-CH-Device-Memory is not, and a real
+    // Chrome answers all seven -- measured,
+    // tools/fingerprint/results/acceptch-dd-chrome.json.
+    //
+    // So answering six is a shape no browser has, which is worse than the three
+    // an engine that ignores Accept-CH sends: that at least reads as a client
+    // without client hints. All or nothing.
+    try testing.expectEqual(null, parse("Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform," ++
+        "Sec-CH-UA-Arch,Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory"));
+
+    // Every non-UA hint Chrome answers does the same, so a guard that adds one
+    // tomorrow drops us back to the three rather than into a new hybrid.
+    try testing.expectEqual(null, parse("Sec-CH-UA-Arch, DPR"));
+    try testing.expectEqual(null, parse("Sec-CH-UA-Arch, Sec-CH-Prefers-Color-Scheme"));
+    try testing.expectEqual(null, parse("Sec-CH-UA-Arch, Sec-CH-UA-Form-Factors"));
+}
+
+test "ClientHints: an unsatisfiable ask clears what the origin asked for before" {
+    var hints: ClientHints = .{};
+    defer hints.deinit(testing.allocator);
+
+    try hints.negotiate(testing.allocator, "https://example.com/", "Sec-CH-UA-Arch");
+    try testing.expectEqual(1, hints.acceptedFor("https://example.com/").count());
+
+    // The origin now wants something we don't have. Keeping the old six would
+    // answer an ask nobody made; drop back to the low-entropy three.
+    try hints.negotiate(testing.allocator, "https://example.com/", "Sec-CH-UA-Arch, DPR");
+    try testing.expectEqual(0, hints.acceptedFor("https://example.com/").count());
+}
+
 test "ClientHints: parse takes the six high-entropy UA hints" {
     // Cloudflare's list, verbatim off the cf-mitigated=challenge response
     // (tools/fingerprint/results/cfsc-fo-oracle.json).
@@ -166,7 +241,7 @@ test "ClientHints: parse takes the six high-entropy UA hints" {
         "Sec-CH-UA-Mobile, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, " ++
         "Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform, Sec-CH-UA, " ++
         "UA-Bitness, UA-Arch, UA-Full-Version, UA-Mobile, UA-Model, " ++
-        "UA-Platform-Version, UA-Platform, UA");
+        "UA-Platform-Version, UA-Platform, UA").?;
 
     // All six, and only six: the three low-entropy hints in that list are
     // already unconditional, and Chrome answers none of the pre-standard `UA-*`
@@ -177,19 +252,27 @@ test "ClientHints: parse takes the six high-entropy UA hints" {
     }
 }
 
-test "ClientHints: parse skips hints this engine has no value for" {
-    const set = parse("Sec-CH-UA-Arch, Device-Memory, DPR, Sec-CH-Prefers-Color-Scheme, Width");
+test "ClientHints: the names Chrome ignores don't make an ask unsatisfiable" {
+    // Chrome answers not one of the pre-standard UA-* spellings, so ignoring
+    // them is the browser-shaped thing to do, not a gap in our coverage --
+    // which is exactly why Cloudflare's list, half of which is those, is
+    // satisfiable.
+    const set = parse("Sec-CH-UA-Arch, UA-Arch, UA-Platform, UA").?;
     try testing.expectEqual(1, set.count());
     try testing.expect(set.contains(.arch));
+
+    // The three low-entropy hints go out unasked, so an ask for them is
+    // already answered.
+    try testing.expectEqual(0, parse("Sec-CH-UA, Sec-CH-UA-Mobile, Sec-CH-UA-Platform").?.count());
 }
 
 test "ClientHints: parse tolerates the syntax's slack" {
     // No spaces, extra spaces, a trailing comma and an empty element.
-    const set = parse("sec-ch-ua-arch,,   SEC-CH-UA-BITNESS ,");
+    const set = parse("sec-ch-ua-arch,,   SEC-CH-UA-BITNESS ,").?;
     try testing.expectEqual(2, set.count());
     try testing.expect(set.contains(.arch));
     try testing.expect(set.contains(.bitness));
-    try testing.expectEqual(0, parse("").count());
+    try testing.expectEqual(0, parse("").?.count());
 }
 
 test "ClientHints: an origin gets what it asked for, and no other origin does" {

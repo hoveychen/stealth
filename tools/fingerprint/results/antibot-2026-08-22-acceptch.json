@@ -1,0 +1,844 @@
+{
+  "engine": "lightpanda",
+  "headed": false,
+  "endpoint": null,
+  "proxy": null,
+  "windowSize": "1920,1080",
+  "chromeArgs": [],
+  "userAgentOverride": null,
+  "startedAt": "2026-08-22T23:37:30.097Z",
+  "egress": {
+    "fl": "1231f45",
+    "h": "www.cloudflare.com",
+    "ip": "108.211.179.124",
+    "ts": "1787441850.000",
+    "visit_scheme": "https",
+    "uag": "node",
+    "colo": "SJC",
+    "sliver": "none",
+    "http": "http/2",
+    "loc": "US",
+    "tls": "TLSv1.3",
+    "sni": "plaintext",
+    "warp": "off",
+    "gateway": "off",
+    "rbi": "off",
+    "kex": "X25519MLKEM768"
+  },
+  "version": {
+    "Browser": "Lightpanda/1.0",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "Lightpanda-Version": "1.0.0-dev.858+373706bfe",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9226/"
+  },
+  "stations": [
+    {
+      "name": "cf-scrapingcourse",
+      "vendor": "cloudflare",
+      "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/3n14q/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://www.scrapingcourse.com/cloudflare-challenge",
+      "nodes": 47,
+      "textLength": 270,
+      "snippet": "www.scrapingcourse.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2f5b4aef82be8c2",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25335
+    },
+    {
+      "name": "cf-nopecha",
+      "vendor": "cloudflare",
+      "url": "https://nopecha.com/demo/cloudflare",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://nopecha.com/demo/cloudflare",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/0rj89/0x4AAAAAAAAjq6WYeRDKmebM/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://nopecha.com/demo/cloudflare",
+      "nodes": 47,
+      "textLength": 259,
+      "snippet": "nopecha.com Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ray ID: a2f5b5",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2f5b54d6ef8d011",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25353
+    },
+    {
+      "name": "cf-zeroclover",
+      "vendor": "cloudflare",
+      "url": "https://turnstile.zeroclover.io/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://turnstile.zeroclover.io/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/4e8v6/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "cf-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Just a moment...",
+      "landedOn": "https://turnstile.zeroclover.io/",
+      "nodes": 47,
+      "textLength": 271,
+      "snippet": "turnstile.zeroclover.io Performing security verification This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot. Ra",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": true,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": "a2f5b5ec1adbf96b",
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25391
+    },
+    {
+      "name": "cf-chatgpt",
+      "vendor": "cloudflare",
+      "url": "https://chatgpt.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://chatgpt.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "ChatGPT: Chat, Work, Create & Code with AI",
+      "landedOn": "https://chatgpt.com/",
+      "nodes": 510,
+      "textLength": 434,
+      "snippet": "New chat Search chats Images Plugins Deep research See plans and pricing Settings Help Get responses tailored to you Log in to get answers based on saved chats, plus create images and upload files. Lo",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25933
+    },
+    {
+      "name": "cf-claude",
+      "vendor": "cloudflare",
+      "url": "https://claude.ai/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://claude.ai/login",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Sign in - Claude",
+      "landedOn": "https://claude.ai/login",
+      "nodes": 1068,
+      "textLength": 2996,
+      "snippet": "Question what’s next Your thinking partner for big ambitions Continue with Google OR Continue with email Continue with SSO By continuing, you acknowledge Anthropic’s Privacy Policy (opens in a new tab",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 27163
+    },
+    {
+      "name": "cf-indeed",
+      "vendor": "cloudflare",
+      "url": "https://www.indeed.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.indeed.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://sgtm.indeed.com/_/service_worker/68d0/sw_iframe.html?origin=https%3A%2F%2Fwww.indeed.com&1p=1",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Job Search | Indeed",
+      "landedOn": "https://www.indeed.com/",
+      "nodes": 1206,
+      "textLength": 618,
+      "snippet": "Skip to main content Home Company reviews Find salaries Sign in 🇺🇸 En Employers / Post Job Start of main content Keyword : all jobs &nbsp; Edit location input box label Search Your next job starts h",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 28339
+    },
+    {
+      "name": "cf-nowsecure",
+      "vendor": "cloudflare",
+      "url": "https://nowsecure.nl/",
+      "guards": "none",
+      "settleMs": 10000,
+      "documents": [
+        {
+          "url": "https://nowsecure.nl/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/c7e1r/3x00000000000000000000FF/auto/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/umy83/3x00000000000000000000FF/auto/fbE/new/normal?lang=auto",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "nowsecure.nl",
+      "landedOn": "https://nowsecure.nl/",
+      "nodes": 53,
+      "textLength": 43,
+      "snippet": "NOWSECURE BY NODRIVER NOWSECURE BY NODRIVER",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": true,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 11385
+    },
+    {
+      "name": "cf-discord",
+      "vendor": "cloudflare",
+      "url": "https://discord.com/",
+      "guards": "none",
+      "settleMs": 12000,
+      "documents": [
+        {
+          "url": "https://discord.com/",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Discord - Group Chat That’s All Fun & Games",
+      "landedOn": "https://discord.com/",
+      "nodes": 1531,
+      "textLength": 3325,
+      "snippet": "Skip to main content Download1 of 9 Nitro2 of 9 Discover 3 of 9 Resources Server Directory1 of 2Trending Games2 of 2 Safety 4 of 9 Resources Family Center 1 of 10Safety Library 2 of 10Safety News 3 of",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 15875
+    },
+    {
+      "name": "cf-pixiv",
+      "vendor": "cloudflare",
+      "url": "https://www.pixiv.net/",
+      "guards": "none",
+      "settleMs": 12000,
+      "documents": [
+        {
+          "url": "https://www.pixiv.net/en/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://imp.pixiv.net/premium_lp?g=anchor&i=index_footer&p=&d=pc",
+          "status": 200,
+          "mime": "text/plain"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": true,
+      "title": "Online community for artist [pixiv]",
+      "landedOn": "https://www.pixiv.net/en/",
+      "nodes": 311,
+      "textLength": 388,
+      "snippet": "pixiv has updated the Privacy Policy as of May 28, 2024.Revision history OK skeb まるい Maruiさんの作品 VISIONS2026掲載クリエイター Forced Encounter seok98さんの作品 VISIONS2026掲載クリエイター Log in with your pixiv account Crea",
+      "marks": {
+        "chlOpt": true,
+        "platformScript": true,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 14613
+    },
+    {
+      "name": "dd-datadome",
+      "vendor": "datadome",
+      "url": "https://datadome.co/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://datadome.co/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMApn1_zsb4zywAbNOzfA%3D%3D&hash=14D062F60A4BDE8CE8647DFC720349&cid=XCUdfGLClBkYcKjZ_J6z9G~tJlrufRXMb7Gn2weom9cWHJV8ADHnpWgoidz_R1eAawFitRVtWciPwucwjnU4p~zSG82RyNkI8sCmUm6zP68HIFEjfz0ma9nItkuA96d0&t=fe&referer=https%3A%2F%2Fdatadome.co%2F&s=44330&e=60704fdf26041d63e71411a1f0c19d7260428507985ac36b241f2533d91ee86fe7265a51b0f9b4f6227df4ed53101cda&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "datadome.co",
+      "landedOn": "https://datadome.co/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 26183
+    },
+    {
+      "name": "dd-g2",
+      "vendor": "datadome",
+      "url": "https://www.g2.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.g2.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAS4JYfqPdJa4AbNOzfA%3D%3D&hash=229542D5C186C7F5A5BB092FBDD92B&cid=4bNgN7PL4XM4K8BUU2wVZ9SY91p8O~QBHm016Pav4N6hS2KJj4Yrb00sFaVFMthguhknkx5BjuSkbrVfrzd4AgKoKpeLTbWUuaDqzDDdBBJCgEiDts75VqJj_RxyQ3yX&t=fe&referer=https%3A%2F%2Fwww.g2.com%2F&s=48621&e=c82d06c92dc49fa98135d22e2cc36ce75a1d1531831372fff874c51f7753c9937156e3ef322a9e7ecb314b0a5fda5969&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "g2.com",
+      "landedOn": "https://www.g2.com/",
+      "nodes": 11,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 25748
+    },
+    {
+      "name": "dd-leboncoin",
+      "vendor": "datadome",
+      "url": "https://www.leboncoin.fr/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.leboncoin.fr/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMAZdggYnVFdjUAbNOzfA%3D%3D&hash=05B30BD9055986BD2EE8F5A199D973&cid=DlvczK5lRYels0k~Zhxgiv4TARp8Enk7DNfK4oEoEu1S0Ll6MBXe9nUcTpGMLe7d7~aeFc3MKssXxuP4y3sq9TcHgqZaUS~hx5kKvVWclbBCxbQCfVKq5hKG3QlTWL5a&t=fe&referer=https%3A%2F%2Fwww.leboncoin.fr%2F&s=2089&e=5550daddbc90d9b073c5542c71e68ff9c087c91b6dd4a08eb776dddc7eb314d8370497b9397d3c6ea6f8f17fd91b49a0&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "leboncoin.fr",
+      "landedOn": "https://www.leboncoin.fr/",
+      "nodes": 9,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 26016
+    },
+    {
+      "name": "dd-hermes",
+      "vendor": "datadome",
+      "url": "https://www.hermes.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.hermes.com/",
+          "status": 403,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://geo.captcha-delivery.com/captcha/?initialCid=AHrlqAAAAAMA1PNfHMUxjeEAbNOzfA%3D%3D&hash=2211F522B61E269B869FA6EAFFB5E1&cid=YfOjIvdEpSaFg1eXIEKhTIYRt0xVoTlkF33IiERKZ3vZDokSkqA181jRtysmWpbUVp4bSg8H3yg9gy3v9bn~mEn_4mblaoTFa6XmtjTx6iY4y_bqljNta4DyDe5DgMn5&t=fe&referer=https%3A%2F%2Fwww.hermes.com%2F&s=13461&e=73ddcb53c64f024fbb7deca98414a15ab00804e364b8fc9d733ef60e0e64f0790ae4b59867623d7471551c02f198a525&dm=cd",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "datadome-challenge",
+      "first": 403,
+      "last": 200,
+      "jsDetect": false,
+      "title": "hermes.com",
+      "landedOn": "https://www.hermes.com/",
+      "nodes": 10,
+      "textLength": 0,
+      "snippet": "",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": true,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 26892
+    },
+    {
+      "name": "x-sony",
+      "vendor": "akamai",
+      "url": "https://www.sony.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.sony.com/en/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://sonygs.demdex.net/dest5.html?d_nsid=0#https%3A%2F%2Fwww.sony.com",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Home - Sony Group Portal",
+      "landedOn": "https://www.sony.com/en/",
+      "nodes": 1536,
+      "textLength": 6910,
+      "snippet": "Businesses & Products open About Sony Group open Technology open Sustainability open Design open Employees / Careers open Investor Relations open Contact Us Open search form It's About to Be a Brand N",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": false,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 29764
+    },
+    {
+      "name": "x-zillow",
+      "vendor": "perimeterx",
+      "url": "https://www.zillow.com/",
+      "guards": "challenge",
+      "settleMs": 25000,
+      "documents": [
+        {
+          "url": "https://www.zillow.com/",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://www.googletagmanager.com/ns.html?id=GTM-K3X2CMVS",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/i?pid=efd79a2e-954c-4330-a6c2-56493f31ff29&u_scsid=9ed7edb6-60a1-40a1-9dff-868bf342b80c&u_sclid=e6f8b176-a746-41ef-b9b5-c4914d674977",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://4704202.fls.doubleclick.net/activityi;dc_pre=CNXm2oa1tZYDFX0nyQIdeowlRg;src=4704202;type=web;cat=visit;rcb=2;npa=0;auiddc=661139338.1787442189;u1=undefined;u2=undefined;u3=undefined;u4=1428089696.1787442186;u5=845910d061e542b2a3eb551abacd4e16;u6=undefined;u7=undefined;u8=undefined;u9=undefined;u10=undefined;u11=undefined;u12=undefined;u13=undefined;u14=undefined;u15=undefined;gdid=dZml0Zj;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KAAB;gtm=45fe68j1h2v9190373370z86577274za20gzb6577274zd6577274xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938465~115938469~118897920~118897930~119367802~119367810~120315470~120385422;epver=2;dc_random=1787442190_W6Yj5sI8WOUVxO_21nJimM50mvZVjKB1Qg;_dc_test=1;~oref=https%3A%2F%2Fwww.zillow.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://4704202.fls.doubleclick.net/activityi;dc_pre=CLvu3Ia1tZYDFbbZ8gcdTvQGbw;src=4704202;type=unive0;cat=zillo0;rcb=2;ord=5279309846593;npa=0;auiddc=661139338.1787442189;u3=undefined;u2=undefined;u1=undefined;u5=845910d061e542b2a3eb551abacd4e16;u4=1428089696.1787442186;u6=undefined;u7=undefined;u8=undefined;u9=undefined;u10=undefined;u11=undefined;u12=undefined;u13=undefined;u14=undefined;u15=undefined;gdid=dZml0Zj;uaa=arm;uab=64;uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CGoogle%2520Chrome%3B151.0.7922.137%7CChromium%3B151.0.7922.137;uamb=0;uam=;uap=macOS;uapv=26.3.1;uaw=0;pscdl=noapi;frm=0;_tu=KFA;gtm=45fe68j1h2v9190373370z86577274za20gzb6577274zd6577274xea;gcd=13l3l3l3l1l1;dma=0;dc_fmt=2;tag_exp=115616985~115938465~115938469~118897920~118897930~119367802~119367810~120315470~120385422;epver=2;dc_random=1787442190_-_XpDbusaj5Ir9_Qg3QfGTQihsVkiYOB6Q;_dc_test=1;~oref=https%3A%2F%2Fwww.zillow.com%2F",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cei?advertiser_id=m75r27p&cookie_sync=1&upv=3.0.0&upid=1zjhj7j&ref=https%3a%2f%2fwww.zillow.com&redirect=1",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://ct.pinterest.com/ct.html",
+          "status": 200,
+          "mime": "text/html"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/rubicon?gdpr=0",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=pubmatic",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=bidswitch",
+          "status": 200,
+          "mime": "image/gif"
+        },
+        {
+          "url": "https://tr.snapchat.com/cm/p?rand=1787101727989&pnid=140&pcid=5a6803ea-26a0-41bc-8272-13fc5a8d1c6a",
+          "status": 200,
+          "mime": "text/html"
+        }
+      ],
+      "verdict": "pass",
+      "first": 200,
+      "last": 200,
+      "jsDetect": false,
+      "title": "Zillow: Real Estate, Apartments, Mortgages & Home Values",
+      "landedOn": "https://www.zillow.com/",
+      "nodes": 1867,
+      "textLength": 6205,
+      "snippet": "Skip main navigation Buy Rent Sell Get a mortgage Find an agent Manage rentals Advertise Get help Sign in Rentals. Homes. Agents. Loans. Submit Search Trending Homes in Menlo Park, CA Viewed and saved",
+      "marks": {
+        "chlOpt": false,
+        "platformScript": false,
+        "challengeDom": false,
+        "justAMoment": false,
+        "blocked": false,
+        "turnstileWidget": false,
+        "rayId": null,
+        "captchaDelivery": false,
+        "blockText": false,
+        "pressAndHold": false,
+        "deniedTitle": false,
+        "refId": false,
+        "captchaDom": false,
+        "appId": true,
+        "accessDenied": false,
+        "reference": false
+      },
+      "ms": 28867
+    }
+  ],
+  "fresh": false,
+  "engineLog": [
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+341.194s]",
+    "      src = https://www.googleadservices.com/pagead/conversion/11463779081/?random=1787442191574&cv=9&fst=1787442191574&num=1&npa=1&label=k64SCLG50ZQcEInGrdoq&guid=ON&resp=GooglemKTybQhCsO&eid=375603261%2C466465926%2C512247838%2C658953496&u_h=1080&u_w=1920&ig=1&auid=661139338.1787442189&frm=2&url=https%3A%2F%2F4704202.fls.doubleclick.net%2Factivityi%3Bdc_pre%3DCNXm2oa1tZYDFX0nyQIdeowlRg%3Bsrc%3D4704202%3Btype%3Dweb%3Bcat%3Dvisit%3Brcb%3D2%3Bnpa%3D0%3Bauiddc%3D661139338.1787442189%3Bu1%3Dundefined%3Bu2%3Dundefined%3Bu3%3Dundefined%3Bu4%3D1428089696.1787442186%3Bu5%3D845910d061e542b2a3eb551abacd4e16%3Bu6%3Dundefined%3Bu7%3Dundefined%3Bu8%3Dundefined%3Bu9%3Dundefined%3Bu10%3Dundefined%3Bu11%3Dundefined%3Bu12%3Dundefined%3Bu13%3Dundefined%3Bu14%3Dundefined%3Bu15%3Dundefined%3Bgdid%3DdZml0Zj%3Buaa%3Darm%3Buab%3D64%3Buafvl%3DNot%25253DA%25253FBrand%253B99.0.0.0%257CGoogle%252520Chrome%253B151.0.7922.137%257CChromium%253B151.0.7922&ref=https%3A%2F%2Fwww.zillow.com%2F&top=https%3A%2F%2Fwww.zillow.com%2F&capi=1&hn=www.googleadservices.com&rfmt=3&fmt=4",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+341.238s]",
+    "      src = https://js.adsrvr.org/universal_pixel.js",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+341.238s]",
+    "      src = https://match.adsrvr.org/track/cei?advertiser_id=m75r27p&cookie_sync=1&upv=3.0.0&upid=1zjhj7j&ref=https%3a%2f%2fwww.zillow.com&redirect=1",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  browser : executing script . . . . . . . . . . . . . . . \u001b[0m[+341.239s]",
+    "      src = https://ct.pinterest.com/ct.html",
+    "      kind = javascript",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+341.467s]",
+    "      source = xhr",
+    "      url = https://browser-intake-datadoghq.com/api/v2/rum?ddsource=browser&ddtags=sdk_version%3A5.35.1%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Ahops-homepage%2Cversion%3Amaster.16022754.9e576797&dd-api-key=pub3f8551005ada03059c3150b5e1ac1af2&dd-evp-origin-version=5.35.1&dd-evp-origin=browser&dd-request-id=d6db0927-8f54-4af9-9fd4-92099f9c3d7b&batch_time=1787442191605",
+    "      status = 202",
+    "      len = 53",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+341.468s]",
+    "      source = xhr",
+    "      url = https://browser-intake-datadoghq.com/api/v2/rum?ddsource=browser&ddtags=sdk_version%3A5.35.1%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Ahops-homepage%2Cversion%3Amaster.16022754.9e576797&dd-api-key=pub3f8551005ada03059c3150b5e1ac1af2&dd-evp-origin-version=5.35.1&dd-evp-origin=browser&dd-request-id=b6ea0dfd-99f3-47c7-9364-c9a9ce4d8c87&batch_time=1787442191596",
+    "      status = 202",
+    "      len = 53",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+341.476s]",
+    "      source = xhr",
+    "      url = https://browser-intake-datadoghq.com/api/v2/rum?ddsource=browser&ddtags=sdk_version%3A5.35.1%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Ahops-homepage%2Cversion%3Amaster.16022754.9e576797&dd-api-key=pub3f8551005ada03059c3150b5e1ac1af2&dd-evp-origin-version=5.35.1&dd-evp-origin=browser&dd-request-id=25007f85-b749-44ae-b4cb-ed24cd3c08bc&batch_time=1787442191601",
+    "      status = 202",
+    "      len = 53",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+341.482s]",
+    "      source = xhr",
+    "      url = https://browser-intake-datadoghq.com/api/v2/rum?ddsource=browser&ddtags=sdk_version%3A5.35.1%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Ahops-homepage%2Cversion%3Amaster.16022754.9e576797&dd-api-key=pub3f8551005ada03059c3150b5e1ac1af2&dd-evp-origin-version=5.35.1&dd-evp-origin=browser&dd-request-id=15619961-ed37-48ed-bf14-821daa77305c&batch_time=1787442191610",
+    "      status = 202",
+    "      len = 53",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+341.591s]",
+    "      source = xhr",
+    "      url = https://insight.adsrvr.org/track/realtimeconversion",
+    "      status = 200",
+    "      len = 36",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+344.258s]",
+    "      source = xhr",
+    "      url = https://browser-intake-datadoghq.com/api/v2/rum?ddsource=browser&ddtags=sdk_version%3A5.35.1%2Capi%3Axhr%2Cenv%3Aproduction%2Cservice%3Ahops-homepage%2Cversion%3Amaster.16022754.9e576797&dd-api-key=pub3f8551005ada03059c3150b5e1ac1af2&dd-evp-origin-version=5.35.1&dd-evp-origin=browser&dd-request-id=99b7f61e-a2f3-414c-b72c-616a6d57f4ce&batch_time=1787442194600",
+    "      status = 202",
+    "      len = 53",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+346.219s]",
+    "      0 = ",
+    "  arg(1): Download the Apollo DevTools for a better development experience: %s (string)",
+    "  arg(2): https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm (string)",
+    "\u001b[0;32mINFO\u001b[0m  js : console.log . . . . . . . . . . . . . . . . . . . . \u001b[0m[+347.71s]",
+    "      0 = ",
+    "  arg(1): Download the Apollo DevTools for a better development experience: %s (string)",
+    "  arg(2): https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm (string)",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+357.104s]",
+    "      source = xhr",
+    "      url = https://collector-pxhyx10rg3.px-cloud.net/api/v2/collector",
+    "      status = 200",
+    "      len = 372",
+    "\u001b[0;32mINFO\u001b[0m  http : request complete . . . . . . . . . . . . . . . .  \u001b[0m[+359.119s]",
+    "      source = fetch",
+    "      url = https://api.consentjs.datagrail.io/save_open?user_identifier=7e84c9ce-057e-4c91-87ef-56e6d4914637.dc624882-8e8c-465b-a54f-dba61a2e537b&customer=7e84c9ce-057e-4c91-87ef-56e6d4914637&revision=631ca87e-b3e8-4d9b-9d35-e74604c6a12c&current_page=https%3A%2F%2Fwww.zillow.com%2F&policy_name=CPRA&default_policy=false&locale_code=en&layer=none&action=non_open",
+    "      status = 200",
+    "      len = 2"
+  ],
+  "summary": {
+    "stations": 15,
+    "pass": 8
+  }
+}

@@ -3361,7 +3361,10 @@ pub const Transfer = struct {
             }
             // A hint is worth a restart only if the origin accepts it (so we
             // would send it next time) *and* this request went without it.
-            var wanted = ClientHints.parse(hdr.value);
+            // A Critical-CH we can't fully answer buys nothing by restarting:
+            // the Accept-CH beside it was declined for the same reason, so the
+            // second request would be the first one again.
+            var wanted = ClientHints.parse(hdr.value) orelse continue;
             wanted.setIntersection(accepted);
             var it = wanted.iterator();
             while (it.next()) |hint| {

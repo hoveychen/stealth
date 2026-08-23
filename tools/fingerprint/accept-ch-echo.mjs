@@ -18,7 +18,7 @@
 // The raw-socket server is header-echo.mjs's, for the same reason: node:http
 // reorders headers and order is part of what is being measured.
 //
-// usage: node tools/fingerprint/accept-ch-echo.mjs <lightpanda|chrome> [--headed-ua] [--out p]
+// usage: node tools/fingerprint/accept-ch-echo.mjs <lightpanda|chrome> [--headed-ua] [--hints list] [--out p]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -55,11 +55,18 @@ const CHROME = process.env.CHROME
 // (results/cfsc-fo-oracle.json). The UA-* spellings without the Sec- prefix are
 // the pre-standard names Cloudflare still asks for; kept so the ask is the same
 // ask an engine would meet in the field.
-const HINTS = 'Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Full-Version, '
+// --hints overrides it, which is how another guard's ask gets measured: pass
+// DataDome's list to see what an engine answers *that* origin. Two lists worth
+// keeping to hand:
+//
+//   cloudflare  (the default below)
+//   datadome    Sec-CH-UA,Sec-CH-UA-Mobile,Sec-CH-UA-Platform,Sec-CH-UA-Arch,
+//               Sec-CH-UA-Full-Version-List,Sec-CH-UA-Model,Sec-CH-Device-Memory
+const HINTS = arg('--hints', 'Sec-CH-UA-Bitness, Sec-CH-UA-Arch, Sec-CH-UA-Full-Version, '
     + 'Sec-CH-UA-Mobile, Sec-CH-UA-Model, Sec-CH-UA-Platform-Version, '
     + 'Sec-CH-UA-Full-Version-List, Sec-CH-UA-Platform, Sec-CH-UA, '
     + 'UA-Bitness, UA-Arch, UA-Full-Version, UA-Mobile, UA-Model, '
-    + 'UA-Platform-Version, UA-Platform, UA';
+    + 'UA-Platform-Version, UA-Platform, UA');
 
 const PAGE = (label) => `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${label}</title></head>

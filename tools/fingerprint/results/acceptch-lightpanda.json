@@ -72,6 +72,93 @@
   {
    "n": 2,
    "method": "GET",
+   "target": "/critical-ch",
+   "headers": [
+    [
+     "Host",
+     "127.0.0.1:9586"
+    ],
+    [
+     "Connection",
+     "keep-alive"
+    ],
+    [
+     "Upgrade-Insecure-Requests",
+     "1"
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "Accept",
+     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+    ],
+    [
+     "sec-ch-ua",
+     "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
+    ],
+    [
+     "sec-ch-ua-mobile",
+     "?0"
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-platform",
+     "\"macOS\""
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
+    ],
+    [
+     "Sec-Fetch-Site",
+     "none"
+    ],
+    [
+     "Sec-Fetch-Mode",
+     "navigate"
+    ],
+    [
+     "Sec-Fetch-User",
+     "?1"
+    ],
+    [
+     "Sec-Fetch-Dest",
+     "document"
+    ],
+    [
+     "Accept-Encoding",
+     "gzip, deflate, br, zstd"
+    ],
+    [
+     "Accept-Language",
+     "en-US,en;q=0.9"
+    ]
+   ]
+  },
+  {
+   "n": 3,
+   "method": "GET",
    "target": "/sub/fetch-critical-ch",
    "headers": [
     [
@@ -83,20 +170,44 @@
      "keep-alive"
     ],
     [
-     "sec-ch-ua-platform",
-     "\"macOS\""
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
-     "User-Agent",
-     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+     "sec-ch-ua-platform",
+     "\"macOS\""
     ],
     [
      "sec-ch-ua",
      "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
     ],
     [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
      "sec-ch-ua-mobile",
      "?0"
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
     ],
     [
      "Accept",
@@ -129,7 +240,7 @@
    ]
   },
   {
-   "n": 3,
+   "n": 4,
    "method": "POST",
    "target": "/sub/xhr-critical-ch",
    "headers": [
@@ -142,20 +253,44 @@
      "keep-alive"
     ],
     [
-     "sec-ch-ua-platform",
-     "\"macOS\""
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
-     "User-Agent",
-     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+     "sec-ch-ua-platform",
+     "\"macOS\""
     ],
     [
      "sec-ch-ua",
      "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
     ],
     [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
      "sec-ch-ua-mobile",
      "?0"
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
     ],
     [
      "Accept",
@@ -196,7 +331,7 @@
    ]
   },
   {
-   "n": 4,
+   "n": 5,
    "method": "probeGET",
    "target": "/favicon.ico",
    "headers": [
@@ -209,20 +344,44 @@
      "keep-alive"
     ],
     [
-     "sec-ch-ua-platform",
-     "\"macOS\""
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
-     "User-Agent",
-     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+     "sec-ch-ua-platform",
+     "\"macOS\""
     ],
     [
      "sec-ch-ua",
      "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
     ],
     [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
      "sec-ch-ua-mobile",
      "?0"
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
     ],
     [
      "Accept",
@@ -258,7 +417,7 @@
    "mark": "/accept-ch"
   },
   {
-   "n": 6,
+   "n": 7,
    "method": "GET",
    "target": "/accept-ch",
    "headers": [
@@ -279,8 +438,32 @@
      "?0"
     ],
     [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
      "sec-ch-ua-platform",
      "\"macOS\""
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
      "Upgrade-Insecure-Requests",
@@ -321,7 +504,7 @@
    ]
   },
   {
-   "n": 7,
+   "n": 8,
    "method": "GET",
    "target": "/sub/fetch-accept-ch",
    "headers": [
@@ -334,20 +517,44 @@
      "keep-alive"
     ],
     [
-     "sec-ch-ua-platform",
-     "\"macOS\""
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
-     "User-Agent",
-     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+     "sec-ch-ua-platform",
+     "\"macOS\""
     ],
     [
      "sec-ch-ua",
      "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
     ],
     [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
      "sec-ch-ua-mobile",
      "?0"
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
     ],
     [
      "Accept",
@@ -380,7 +587,7 @@
    ]
   },
   {
-   "n": 8,
+   "n": 9,
    "method": "POST",
    "target": "/sub/xhr-accept-ch",
    "headers": [
@@ -393,20 +600,44 @@
      "keep-alive"
     ],
     [
-     "sec-ch-ua-platform",
-     "\"macOS\""
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
-     "User-Agent",
-     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+     "sec-ch-ua-platform",
+     "\"macOS\""
     ],
     [
      "sec-ch-ua",
      "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
     ],
     [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
      "sec-ch-ua-mobile",
      "?0"
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
     ],
     [
      "Accept",
@@ -447,7 +678,7 @@
    ]
   },
   {
-   "n": 9,
+   "n": 10,
    "method": "probeGET",
    "target": "/favicon.ico",
    "headers": [
@@ -460,20 +691,44 @@
      "keep-alive"
     ],
     [
-     "sec-ch-ua-platform",
-     "\"macOS\""
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
-     "User-Agent",
-     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+     "sec-ch-ua-platform",
+     "\"macOS\""
     ],
     [
      "sec-ch-ua",
      "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
     ],
     [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
      "sec-ch-ua-mobile",
      "?0"
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
     ],
     [
      "Accept",
@@ -509,7 +764,7 @@
    "mark": "/revisit"
   },
   {
-   "n": 11,
+   "n": 12,
    "method": "GET",
    "target": "/revisit",
    "headers": [
@@ -530,8 +785,32 @@
      "?0"
     ],
     [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
      "sec-ch-ua-platform",
      "\"macOS\""
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
      "Upgrade-Insecure-Requests",
@@ -572,7 +851,7 @@
    ]
   },
   {
-   "n": 12,
+   "n": 13,
    "method": "GET",
    "target": "/favicon.ico",
    "headers": [
@@ -585,20 +864,44 @@
      "keep-alive"
     ],
     [
-     "sec-ch-ua-platform",
-     "\"macOS\""
+     "sec-ch-ua-full-version-list",
+     "\"Not=A?Brand\";v=\"99.0.0.0\", \"Google Chrome\";v=\"151.0.7922.137\", \"Chromium\";v=\"151.0.7922.137\""
     ],
     [
-     "User-Agent",
-     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+     "sec-ch-ua-platform",
+     "\"macOS\""
     ],
     [
      "sec-ch-ua",
      "\"Not=A?Brand\";v=\"99\", \"Google Chrome\";v=\"151\", \"Chromium\";v=\"151\""
     ],
     [
+     "sec-ch-ua-bitness",
+     "\"64\""
+    ],
+    [
+     "sec-ch-ua-model",
+     "\"\""
+    ],
+    [
      "sec-ch-ua-mobile",
      "?0"
+    ],
+    [
+     "sec-ch-ua-arch",
+     "\"arm\""
+    ],
+    [
+     "sec-ch-ua-full-version",
+     "\"151.0.7922.137\""
+    ],
+    [
+     "User-Agent",
+     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    ],
+    [
+     "sec-ch-ua-platform-version",
+     "\"26.3.1\""
     ],
     [
      "Accept",
