@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  A style rule does not hand back the selector the author wrote. Chrome
+  re-serialises the parsed selector, which is why a minified sheet's `a,b`
+  reads back as `a, b` and `x~y` as `x ~ y`.
+
+  Every expectation here was measured on Chrome over http://localhost with
+  tools/fingerprint/probes/expr-selector-serialize.js and
+  expr-selector-serialize2.js. The Cloudflare challenge page's `@keyframes`
+  payload is 329 characters longer on Chrome than here and two thirds of that
+  is this re-serialisation, so these are fingerprint-visible, not cosmetic.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+function selectorOf(selector) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(selector + '{color:red}');
+    return sheet.cssRules[0].selectorText;
+}
+function cssTextOf(selector) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(selector + '{color:red}');
+    return sheet.cssRules[0].cssText;
+}
+</script>
+
+<script id="selector_list_separator">
+{
+    // A selector list is always written back with `, ` between its items,
+    // whatever the author put there.
+    testing.expectEqual('a, b', selectorOf('a,b'));
+    testing.expectEqual('a, b', selectorOf('a ,  b'));
+    testing.expectEqual('a, b, c', selectorOf('a,b,c'));
+    testing.expectEqual('#x, .y, z', selectorOf('#x,.y,z'));
+    testing.expectEqual('a, b', selectorOf('a,\n  b'));
+    testing.expectEqual('a, b', selectorOf('  a  ,  b  '));
+    // It reaches the rule's cssText, which is what the page reads.
+    testing.expectEqual('a, b { color: red; }', cssTextOf('a,b'));
+}
+</script>
+
+<script id="selector_combinator_spacing">
+{
+    // Combinators get exactly one space either side; a descendant combinator
+    // collapses to exactly one space.
+    testing.expectEqual('a ~ b', selectorOf('a~b'));
+    testing.expectEqual('a > b', selectorOf('a>b'));
+    testing.expectEqual('a + b', selectorOf('a+b'));
+    testing.expectEqual('a b', selectorOf('a   b'));
+    testing.expectEqual('a > b', selectorOf('a >   b'));
+    testing.expectEqual('a > b', selectorOf('a >b'));
+    testing.expectEqual('a > b', selectorOf('a\t\n>\t\nb'));
+    testing.expectEqual('* > *', selectorOf('* > *'));
+}
+</script>
+
+<script id="selector_functional_arguments">
+{
+    // The same two rules apply inside a functional pseudo-class.
+    testing.expectEqual(':not(a, b)', selectorOf(':not(a,b)'));
+    testing.expectEqual(':is(a, b)', selectorOf(':is(a,b)'));
+    testing.expectEqual(':where(a, b)', selectorOf(':where(a , b)'));
+    testing.expectEqual(':not(a ~ b)', selectorOf(':not(a~b)'));
+    testing.expectEqual('a:has(> b)', selectorOf('a:has(> b)'));
+    testing.expectEqual('a:has(+ b)', selectorOf('a:has(+b)'));
+    testing.expectEqual('a:has(> b, + c)', selectorOf('a:has(>b,+c)'));
+    // ...except that An+B is arithmetic, not a combinator, so its sign is
+    // left alone while a selector list after `of` is still spaced.
+    testing.expectEqual('a:nth-child(2n+1)', selectorOf('a:nth-child(2n+1)'));
+    testing.expectEqual(':nth-child(2 of a, b)', selectorOf(':nth-child(2 of a,b)'));
+}
+</script>
+
+<script id="selector_bytes_left_alone">
+{
+    // An attribute matcher is not a combinator and a comma inside a string is
+    // not a list separator. Class and id names keep their case, and an escape
+    // survives intact.
+    testing.expectEqual('[class~="x"]', selectorOf('[class~="x"]'));
+    testing.expectEqual('[class|="x"]', selectorOf('[class|="x"]'));
+    testing.expectEqual('[class^="x"]', selectorOf('[class^="x"]'));
+    testing.expectEqual('a[href~="b,c"]', selectorOf('a[href~="b,c"]'));
+    testing.expectEqual('a[b="c d"]', selectorOf('a[b="c d"]'));
+    testing.expectEqual('.\\31 23', selectorOf('.\\31 23'));
+    testing.expectEqual('a\\.b', selectorOf('a\\.b'));
+    testing.expectEqual('#a\\ b', selectorOf('#a\\ b'));
+    testing.expectEqual('*', selectorOf('*'));
+}
+</script>
+
+<script id="selector_case_folding">
+{
+    // A type selector, a pseudo-class name and an attribute name are all
+    // ASCII-lowercased; a class or id name is not.
+    testing.expectEqual('div', selectorOf('DIV'));
+    testing.expectEqual('div.Foo#Bar', selectorOf('DIV.Foo#Bar'));
+    testing.expectEqual('a:hover', selectorOf('A:HOVER'));
+    testing.expectEqual('[href]', selectorOf('[HREF]'));
+    testing.expectEqual('li:nth-child(2n+1)', selectorOf('LI:NTH-CHILD(2N+1)'));
+    testing.expectEqual('a:not(b, c)', selectorOf('a:NOT(B,C)'));
+}
+</script>
+
+<script id="selector_pseudo_element_spelling">
+{
+    // The four pseudo-elements that predate `::` are written back with two
+    // colons; every pseudo-element name is lowercased.
+    testing.expectEqual('a::before', selectorOf('a:before'));
+    testing.expectEqual('a::before', selectorOf('a::before'));
+    testing.expectEqual('a::before', selectorOf('a::BEFORE'));
+    testing.expectEqual('a::after', selectorOf('a:after'));
+    testing.expectEqual('a::first-line', selectorOf('a::FIRST-LINE'));
+    testing.expectEqual('a::first-letter', selectorOf('a:first-letter'));
+    testing.expectEqual('a::selection', selectorOf('a::selection'));
+    // `:hover` is a pseudo-class, so it keeps its single colon.
+    testing.expectEqual('a:hover', selectorOf('a:hover'));
+}
+</script>
+
+<script id="selector_attribute_normalisation">
+{
+    // An attribute selector's interior loses its whitespace, its value is
+    // always double-quoted, and the case-sensitivity flag is lowercased.
+    testing.expectEqual('[a="b"]', selectorOf('[a=b]'));
+    testing.expectEqual('[a="b"]', selectorOf("[a='b']"));
+    testing.expectEqual('[a="b"]', selectorOf('[ a = b ]'));
+    testing.expectEqual('[href="X"]', selectorOf('[href=X]'));
+    testing.expectEqual('[a|="b"]', selectorOf('[a|=b]'));
+    testing.expectEqual('[a=""]', selectorOf('[a=""]'));
+    testing.expectEqual('[a="b\'c"]', selectorOf('[a="b\'c"]'));
+    testing.expectEqual('[a="b c" i]', selectorOf('[a="b c" i]'));
+    testing.expectEqual('[a="b" i]', selectorOf('[a="b" I]'));
+}
+</script>
+
+<script id="selector_text_setter">
+{
+    // The setter goes through the same serialiser as the parser.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync('x{color:red}');
+    const rule = sheet.cssRules[0];
+    rule.selectorText = 'a,b';
+    testing.expectEqual('a, b', rule.selectorText);
+    rule.selectorText = 'a~b';
+    testing.expectEqual('a ~ b', rule.selectorText);
+    rule.selectorText = 'A:HOVER';
+    testing.expectEqual('a:hover', rule.selectorText);
+    rule.selectorText = 'a:before';
+    testing.expectEqual('a::before', rule.selectorText);
+}
+</script>
+
+<script id="selector_normalisation_still_matches">
+{
+    // The normalised text is what the cascade re-parses, so a rule written
+    // minified must still match after being rewritten.
+    const style = document.createElement('style');
+    style.textContent = '.sel-a>.sel-b{color:rgb(1, 2, 3)}.sel-c,.sel-d{color:rgb(4, 5, 6)}';
+    document.head.appendChild(style);
+
+    const outer = document.createElement('div');
+    outer.className = 'sel-a';
+    const inner = document.createElement('div');
+    inner.className = 'sel-b';
+    outer.appendChild(inner);
+    const c = document.createElement('div');
+    c.className = 'sel-c';
+    const d = document.createElement('div');
+    d.className = 'sel-d';
+    document.body.append(outer, c, d);
+
+    testing.expectEqual('.sel-a > .sel-b', style.sheet.cssRules[0].selectorText);
+    testing.expectEqual('.sel-c, .sel-d', style.sheet.cssRules[1].selectorText);
+    testing.expectEqual('rgb(1, 2, 3)', getComputedStyle(inner).color);
+    testing.expectEqual('rgb(4, 5, 6)', getComputedStyle(c).color);
+    testing.expectEqual('rgb(4, 5, 6)', getComputedStyle(d).color);
+}
+</script>

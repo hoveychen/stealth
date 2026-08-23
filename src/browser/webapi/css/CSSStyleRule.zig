@@ -130,3 +130,8 @@ pub const JsApi = struct {
     pub const deleteRule = bridge.function(CSSStyleRule.deleteRule, .{});
     pub const insertRule = bridge.function(CSSStyleRule.insertRule, .{});
 };
+
+const testing = @import("../../../testing.zig");
+test "WebApi: CSSStyleRule selector serialisation" {
+    try testing.htmlRunner("css/selector_serialize.html", .{});
+}
