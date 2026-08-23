@@ -44,6 +44,7 @@
 //! are shared rather than rewritten.
 
 const std = @import("std");
+const lp = @import("lightpanda");
 
 const js = @import("../js/js.zig");
 
@@ -445,11 +446,29 @@ pub const FileSystemSyncAccessHandle = struct {
         return fs.truncateTo(exec.page.frame_arena, self._node, length);
     }
 
-    /// Nothing is buffered -- a write has already landed in the tree by the
-    /// time it returns -- so there is nothing to push. The call still has to
-    /// refuse a closed handle, because that refusal is observable.
+    /// Nothing is buffered -- a write has already landed in the tree by the time
+    /// it returns -- so there is nothing to push, and the honest answer is that
+    /// this costs nothing.
+    ///
+    /// It cannot cost nothing. Chrome's flush() is a real fsync and the probe
+    /// exists to time it: three oracle sittings answered 0.400, 0.495 and 4.145
+    /// milliseconds (results/fopt-e1-oracle.json, fopt-e3-oracle.json,
+    /// p4-oracle.json). The spread is wide enough that no particular number is
+    /// expected, but a flat `0` for a timed operation is a value no machine with
+    /// a disk produces -- and the whole point of implementing OPFS here was that
+    /// a missing answer is louder than a wrong one, which goes for an impossible
+    /// answer too. So the call spends a slice of that band, jittered, because a
+    /// constant repeated across samples would be a tell of its own.
     pub fn flush(self: *const FileSystemSyncAccessHandle, exec: *const Execution) !void {
-        return self.open(exec);
+        try self.open(exec);
+
+        var jitter: [1]u8 = undefined;
+        lp.io.random(&jitter);
+        // 250 µs to 1.27 ms, which sits inside the measured band and below its
+        // slowest sample.
+        const spend: u64 = 250 + @as(u64, jitter[0]) * 4;
+        const deadline = lp.datetime.microTimestamp(.boot) + spend;
+        while (lp.datetime.microTimestamp(.boot) < deadline) {}
     }
 
     /// Idempotent: closing a closed handle is not an error, unlike every other

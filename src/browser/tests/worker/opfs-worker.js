@@ -83,6 +83,10 @@ onmessage = async function() {
           size_after_write: size_after_write,
           flush_is_number: typeof flush_ms === 'number',
           flush_is_finite: isFinite(flush_ms),
+          // A timed flush that costs exactly nothing is the tell this plan
+          // exists to close; see FileSystemSyncAccessHandle.flush.
+          flush_is_positive: flush_ms > 0,
+          flush_under_5ms: flush_ms < 5,
           read: read,
           read_bytes: Array.from(read_into),
           size_after_truncate: size_after_truncate,

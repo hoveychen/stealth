@@ -63,6 +63,10 @@ with different interfaces; this shares its in-memory Node tree and nothing else.
       testing.expectEqual(3, r.sync.size_after_write);
       testing.expectEqual(true, r.sync.flush_is_number);
       testing.expectEqual(true, r.sync.flush_is_finite);
+      // The oracle's three sittings answered 0.400, 0.495 and 4.145 ms. The
+      // number is not predictable; being neither zero nor absurd is.
+      testing.expectEqual(true, r.sync.flush_is_positive);
+      testing.expectEqual(true, r.sync.flush_under_5ms);
       testing.expectEqual(3, r.sync.read);
       testing.expectEqual(3, r.sync.read_bytes.length);
       testing.expectEqual(7, r.sync.read_bytes[0]);

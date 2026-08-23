@@ -9442,3 +9442,57 @@ the timing-attack surface is, and that now agrees.
 
 The challenge still refuses (`cf-chl-gen`). Two of the three rows from the E3
 table are closed; OPFS is the third.
+
+### And the third row: OPFS answers now (2026-08-23)
+
+`navigator.storage.getDirectory()` exists, and everything behind it works:
+`getFileHandle({create:true})`, `createSyncAccessHandle()`, and a sync access
+handle whose `write` / `read` / `getSize` / `truncate` / `flush` / `close` are
+all real and all synchronous. The tree is `filesystem.zig`'s `Node` — the same
+in-memory per-origin tree the legacy `webkitRequestFileSystem` entries walk,
+shared rather than duplicated — anchored on the Page and keyed by origin, so a
+page and the workers it starts reach the same entries the way Chrome's do.
+
+Four of the five interfaces are `Exposed=(Window,Worker)` and now go on the
+worker realm too, which takes that realm's own-name count from 207 to 212.
+`FileSystemSyncAccessHandle` is `Exposed=DedicatedWorker` and is registered for
+that realm alone.
+
+Both arms, offline, one sitting, the station's own probe list replayed by
+`probes/expr-trampoline.js` against a loopback page (`results/p3-tramp-chrome.json`,
+`results/p3-tramp-lp.json`):
+
+| asked | chrome | here |
+|---|---|---|
+| `gates.getDirectory` | `true` | `true` (was `false`) |
+| `vZBc4` — time a `createSyncAccessHandle().flush()` | `0.5999999940395355` | `1.1999999999999993` (was absent) |
+
+The number is not supposed to match. Three oracle sittings against the real
+station answered `0.4000000059604645`, `0.4949999749660492` and
+`4.144999980926514` (`results/fopt-e1-oracle.json`, `fopt-e3-oracle.json`,
+`p4-oracle.json`) — Chrome is timing a real fsync and the spread is an order of
+magnitude wide, so no particular value is expected. What *is* expected is a
+number, and not zero. The first implementation answered a flat `0`, because
+there is nothing here to sync; a timed operation that costs exactly nothing is
+not a plausible reading from any machine with a disk, so `flush()` spends a
+jittered 250 μs–1.27 ms of real time inside the measured band. Jittered rather
+than fixed: a constant repeated across samples would be its own tell.
+
+#### Two tooling notes from taking that reading
+
+`run-expr.mjs` cannot take this probe on our arm, and neither can `run-probe.mjs`:
+this engine runs no scheduled tasks while a CDP `Runtime.evaluate` with
+`awaitPromise` is outstanding, so a probe that awaits a `setTimeout` never
+resolves and the call times out at 30 s. Microtasks do resolve — a
+`Promise.resolve().then()` comes back fine — which is what makes the failure
+look like a hang rather than an error. Both tools already say so in their header
+comments; this is the confirmation, and it applies to every arm of this probe,
+not just the OPFS question. `run-page-probe.mjs` is the tool, and Chrome takes
+either.
+
+`run-page-probe.mjs` had drifted out of sync with the CLI and reported success
+while measuring nothing: it passed a bare `--dump` (which now takes a mode, so
+the url was being eaten as its value) and did not wait, so `fetch` serialized an
+empty `#out` after 14 ms and the driver decoded the marker text out of the
+script source. It passes `--dump html` and a guarded `--wait-script` now, and
+`WAIT_MS` (default 30 s) sets the ceiling.
