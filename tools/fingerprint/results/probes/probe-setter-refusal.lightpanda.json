@@ -1,0 +1,234 @@
+{
+ "url.href = 'nope'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": ""
+ },
+ "url.href = ''": {
+  "throws": true,
+  "name": "TypeError",
+  "message": ""
+ },
+ "url.protocol = 'no pe'": {
+  "throws": false,
+  "after": "http:"
+ },
+ "url.port = 'nope'": {
+  "throws": false
+ },
+ "url.host = ''": {
+  "throws": false
+ },
+ "location.protocol = 'nope'": {
+  "throws": false
+ },
+ "location.port = 'nope'": {
+  "throws": false
+ },
+ "document.body = 1": {
+  "throws": false
+ },
+ "document.body = 'x'": {
+  "throws": false
+ },
+ "document.body = {}": {
+  "throws": false
+ },
+ "document.body = document.createTextNode('x')": {
+  "throws": false
+ },
+ "table.tHead = 1": {
+  "throws": false
+ },
+ "table.tFoot = {}": {
+  "throws": false
+ },
+ "table.caption = 1": {
+  "throws": false
+ },
+ "video.srcObject = 1": {
+  "throws": false
+ },
+ "audio.srcObject = {}": {
+  "throws": false
+ },
+ "treeWalker.currentNode = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "treeWalker.currentNode = {}": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "document.adoptedStyleSheets = 1": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "input.valueAsDate = 1": {
+  "throws": false
+ },
+ "input.valueAsDate = {} (type=date)": {
+  "throws": false
+ },
+ "document.body = document.createElement('div')": {
+  "throws": false
+ },
+ "table.tHead = document.createElement('div')": {
+  "throws": false
+ },
+ "table.caption = document.createElement('div')": {
+  "throws": false
+ },
+ "input.size = 0": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Index or size is negative or greater than the allowed amount"
+ },
+ "textarea.cols = 0": {
+  "throws": false
+ },
+ "textarea.rows = 0": {
+  "throws": false
+ },
+ "input.maxLength = -1": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Index or size is negative or greater than the allowed amount"
+ },
+ "textarea.maxLength = -1": {
+  "throws": true,
+  "name": "IndexSizeError",
+  "message": "Index or size is negative or greater than the allowed amount"
+ },
+ "select.length = -1": {
+  "throws": false
+ },
+ "audio.volume = 5": {
+  "throws": false
+ },
+ "audio.volume = -1": {
+  "throws": false
+ },
+ "input.selectionStart = 1 (type=number)": {
+  "throws": true,
+  "name": "InvalidStateError",
+  "message": "The object is in an invalid state"
+ },
+ "input.valueAsNumber = 1 (type=text)": {
+  "throws": false
+ },
+ "input.valueAsDate = new Date() (type=text)": {
+  "throws": false
+ },
+ "document.domain = 'evil.test'": {
+  "throws": true,
+  "name": "SecurityError",
+  "message": "The operation is insecure"
+ },
+ "video.currentTime = 'x'": {
+  "throws": false
+ },
+ "video.currentTime = NaN": {
+  "throws": false
+ },
+ "video.currentTime = Infinity": {
+  "throws": false
+ },
+ "audio.playbackRate = 'x'": {
+  "throws": false
+ },
+ "input.valueAsNumber = 'x' (type=number)": {
+  "throws": false
+ },
+ "el.scrollTop = 'x'": {
+  "throws": false,
+  "after": "0"
+ },
+ "canvas.width = 'x'": {
+  "throws": false,
+  "after": "0"
+ },
+ "img.width = -1": {
+  "throws": false,
+  "after": "0"
+ },
+ "xhr.responseType = 'nope'": {
+  "throws": false,
+  "after": ""
+ },
+ "history.scrollRestoration = 'nope'": {
+  "throws": false,
+  "after": "auto"
+ },
+ "img.loading = 'nope'": {
+  "throws": false,
+  "after": "nope"
+ },
+ "img.crossOrigin = 'nope'": {
+  "throws": false,
+  "after": "anonymous"
+ },
+ "input.type = 'nope'": {
+  "throws": false,
+  "after": "text"
+ },
+ "el.onclick = 1": {
+  "throws": false,
+  "after": "null"
+ },
+ "xhr.onload = 'x'": {
+  "throws": false,
+  "after": "null"
+ },
+ "'use strict' navigator.userAgent = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Cannot assign to read only property 'userAgent' of object '#<Navigator>'"
+ },
+ "'use strict' document.URL = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Cannot assign to read only property 'URL' of object '#<HTMLDocument>'"
+ },
+ "'use strict' el.tagName = 'x'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Cannot assign to read only property 'tagName' of object '#<HTMLBodyElement>'"
+ },
+ "'use strict' window.origin = 'x'": {
+  "throws": false
+ },
+ "sloppy navigator.userAgent = 'x'": {
+  "throws": false,
+  "after": "Mozilla/"
+ },
+ "URL href setter .call(document)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Illegal invocation"
+ },
+ "URL href setter .call({})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Illegal invocation"
+ },
+ "Document body setter .call({})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Illegal invocation"
+ },
+ "documentElement.outerHTML = 'x'": {
+  "throws": true,
+  "name": "NoModificationAllowedError",
+  "message": "The object can not be modified"
+ },
+ "descriptors": {
+  "URL.href set.name": "set href",
+  "URL.href set.length": 1,
+  "Document.body set.name": "set body",
+  "Document.body set.length": 1
+ }
+}

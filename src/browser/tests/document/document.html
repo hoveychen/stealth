@@ -65,6 +65,14 @@
 
   document.domain = testing.HOST;
   testing.expectEqual(testing.HOST, document.domain);
+  // The whole sentence, not just the name: a refusing setter carries Blink's
+  // third lead-in ("Failed to set the '<prop>' property on '<Interface>'") in
+  // front of the DOMException's own detail, and the detail quotes both the
+  // value it refused and the host it had to match. Measured on Chrome 151 with
+  // `document.domain = 'evil.test'` on a 127.0.0.1 page.
+  testing.expectEqual(
+    `SecurityError: Failed to set the 'domain' property on 'Document': 'example.org' is not a suffix of '${testing.HOST}'.`,
+    (() => { try { document.domain = 'example.org'; return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } })());
   testing.expectError('SecurityError', () => { document.domain = 'example.org'; });
   testing.expectError('SecurityError', () => { document.domain = 'com'; });
   testing.expectError('SecurityError', () => { document.domain = ''; });
@@ -441,5 +449,15 @@
     testing.expectEqual(0, acss.length);
     acss.push(new CSSStyleSheet());
     testing.expectEqual(1, acss.length);
+  }
+
+  // A sequence-typed attribute handed something not iterable gets the same
+  // detail an operation's sequence parameter gets -- that half is shared -- but
+  // behind the setter lead-in rather than "Failed to execute". Chrome 151.
+  {
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    testing.expectEqual(
+      "TypeError: Failed to set the 'adoptedStyleSheets' property on 'Document': The provided value cannot be converted to a sequence.",
+      msg(() => { document.adoptedStyleSheets = 1; }));
   }
 </script>

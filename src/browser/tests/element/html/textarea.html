@@ -305,3 +305,17 @@
     });
   }
 </script>
+
+<script id=textarea_setter_refusal_messages>
+  {
+    // Same refusal as HTMLInputElement.maxLength, and the point of pinning both
+    // is that the prefix names the *declaring* interface: a shared sentence that
+    // said 'HTMLElement' -- or the receiver's own class -- would be wrong here.
+    // Measured on Chrome 151.
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+    testing.expectEqual(
+      "IndexSizeError: Failed to set the 'maxLength' property on 'HTMLTextAreaElement': The value provided (-1) is not positive or 0.",
+      msg(() => { document.createElement('textarea').maxLength = -1; }));
+  }
+</script>

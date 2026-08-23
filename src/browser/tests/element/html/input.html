@@ -532,3 +532,28 @@
     testing.expectEqual(false, input_checked.checked);
   }
 </script>
+
+<script id=input_setter_refusal_messages>
+  {
+    // A setter that refuses after the value converted fine throws a DOMException,
+    // and Blink puts the same "Failed to set the '<prop>' property on
+    // '<Interface>'" lead-in in front of it. The interface named is the one that
+    // *declares* the attribute, not the receiver's class -- maxLength is declared
+    // separately on HTMLInputElement and HTMLTextAreaElement, and each names
+    // itself. Measured on Chrome 151.
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    const el = () => document.createElement('input');
+
+    testing.expectEqual(
+      "IndexSizeError: Failed to set the 'size' property on 'HTMLInputElement': The value provided is 0, which is an invalid size.",
+      msg(() => { el().size = 0; }));
+
+    testing.expectEqual(
+      "IndexSizeError: Failed to set the 'maxLength' property on 'HTMLInputElement': The value provided (-1) is not positive or 0.",
+      msg(() => { el().maxLength = -1; }));
+
+    testing.expectEqual(
+      "InvalidStateError: Failed to set the 'selectionStart' property on 'HTMLInputElement': The input element's type ('number') does not support selection.",
+      msg(() => { const i = el(); i.type = 'number'; i.selectionStart = 1; }));
+  }
+</script>

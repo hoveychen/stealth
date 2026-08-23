@@ -1386,3 +1386,24 @@
   testing.expectEqual(bad_base, msg(() => new URL('nope', 'nope')));
   testing.expectEqual(bad_base, msg(() => new URL('http://[', 'nope')));
 </script>
+
+<script id=href_setter_error_message>
+  {
+    // The same empty-message reading, on the setter rather than the constructor.
+    // A refusing setter is Blink's third lead-in -- neither "Failed to construct"
+    // nor "Failed to execute", but "Failed to set the '<prop>' property on
+    // '<Interface>'" -- and the property it names is the plain attribute name,
+    // not the `set href` the accessor function goes by. Measured on Chrome 151.
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    const refused = "TypeError: Failed to set the 'href' property on 'URL': Invalid URL";
+
+    testing.expectEqual(refused, msg(() => { new URL('http://x.test/').href = 'nope'; }));
+    testing.expectEqual(refused, msg(() => { new URL('http://x.test/').href = ''; }));
+
+    // The accessor pair still advertises itself the WebIDL way; naming the
+    // property in the message does not rename the function.
+    const desc = Object.getOwnPropertyDescriptor(URL.prototype, 'href');
+    testing.expectEqual('set href', desc.set.name);
+    testing.expectEqual(1, desc.set.length);
+  }
+</script>
