@@ -10110,3 +10110,36 @@ this engine now answers:
 
 The tail sums the recordings hash to, for whoever regenerates them next: macOS
 `112.4458671315806`, Linux `112.46367831656244`.
+
+#### The same sitting, both arms, after the audio row closed (2026-08-23)
+
+`results/a3-oracle.json` / `a3-lp.json`, one sitting, and this one is worth
+trusting: the oracle cleared (`cf-chl-out`, "You bypassed the Cloudflare
+challenge! :D") while this engine got `cf-chl-gen` at round 2, so the station
+was willing and the two arms are genuinely being told apart.
+
+Payloads of 1 000 bytes or more, counted by size:
+
+| size | oracle | ours | what it is |
+| --- | --- | --- | --- |
+| 30 902 | 3 | 3 | the `getComputedStyle` dump — **closed** |
+| 15 361 | 4 | 4 | the audio vector — **closed this round** |
+| 20 696 / 20 367 | 2 / 0 | 0 / 2 | the page's `@keyframes` text, 329 characters short |
+| 13 468 | 3 | 0 | a payload this engine never produces at all |
+| 9 216 | 1 | 2 | RGBA pixel readback |
+| 8 624 | 3 | 2 | RGBA pixel readback |
+| 4 416 / 4 096 / 1 792 / 1 168 ×2 / 1 024 / 1 009 | 1 each | 0 | never produced here |
+| round 2 POST | 4 716 | 4 866 | 150 bytes wider than the arm that clears |
+
+So the two largest rows of the E1 table are now identical on both arms, and what
+is left is the pixel readbacks (`cfsc-canvas-pixel-readback`), the `@keyframes`
+shortfall, and seven payloads this engine never emits — the 13 468 one three
+times over, which is the biggest of them and has no plan yet.
+
+One more gap the audio trace turned up and which nothing covers: the widget's
+**third** OfflineAudioContext is `createBuffer(1, 1000, 44100)` filled by the
+page, through `createBufferSource()` to the destination. Chrome hands that
+buffer straight back — measured on a loopback page, all 1 000 samples identical
+— and this engine renders 1 000 zeros. Unlike the two compressor graphs this is
+a passthrough with no DSP in it, so it can be computed rather than recorded.
+→ `cfsc-audio-buffer-passthrough`.
