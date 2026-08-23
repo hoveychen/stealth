@@ -71,6 +71,11 @@ _response_xml: ?*Node.Document = null,
 _response_headers: std.ArrayList([]const u8) = .empty,
 _response_type: ResponseType = .default,
 
+// When send() handed the request to the client, on the performance clock. The
+// resource entry's startTime is measured from here, so it has to be taken
+// before the transfer rather than reconstructed after it.
+_perf_fetch_start: f64 = 0,
+
 _ready_state: ReadyState = .unsent,
 _with_credentials: bool = false,
 _timeout: u32 = 0,
@@ -297,6 +302,8 @@ pub fn send(self: *XMLHttpRequest, body_: ?BodyInit, exec_: *const Execution) !v
     if (comptime lp.IS_DEBUG) {
         log.debug(.http, "request start", .{ .method = self._method, .url = self._url, .source = "xhr" });
     }
+
+    self._perf_fetch_start = exec.performance().now();
 
     transfer.submit() catch |err| {
         // don't releaseSelfRef, submit() has taken ownership and will call
@@ -570,6 +577,22 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
     self._http_transfer = null;
 
     const exec = self._exec;
+
+    // Chrome names the entry with the URL the response finally came from, so a
+    // redirected request is filed under its destination, not its request URL.
+    const loaded_len = self._response_data.items.len;
+    try exec.performance().resourceLoaded(
+        if (self._response_url.len > 0) self._response_url else self._url,
+        .{
+            .initiator_type = "xmlhttprequest",
+            .fetch_start = self._perf_fetch_start,
+            .response_end = exec.performance().now(),
+            .response_status = self._response_status,
+            .encoded_body_size = loaded_len,
+            .decoded_body_size = loaded_len,
+        },
+        exec,
+    );
 
     try self.stateChanged(.done, exec);
 

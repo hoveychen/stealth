@@ -526,3 +526,36 @@
     });
   }
 </script>
+
+<script id=fetch_resource_timing type=module>
+  {
+    // Every subresource a browser loads leaves a PerformanceResourceTiming
+    // behind. Cloudflare's own api.js reads its own back and the page posts it
+    // to the Turnstile widget, which is how the gap turned up: the field
+    // arrived as a 1 035-byte entry on a real Chrome and `undefined` here,
+    // because the resource buffer was never filled by anything
+    // (tools/fingerprint/README.md, "the resource timing buffer never fills";
+    // probes/expr-resource-timing.js measures it off the station).
+    const state = await testing.async();
+    // A route no other block in this file fetches: the entries accumulate
+    // across every script in the document, so a shared one would not be alone.
+    const url = 'http://127.0.0.1:9582/xhr/xml';
+    // The entry is queued when the response completes, not when the promise
+    // for the headers settles, so the body has to be read before looking.
+    await (await fetch(url)).text();
+    state.resolve();
+
+    await state.done(() => {
+      const entries = performance.getEntriesByName(url, 'resource');
+      testing.expectEqual(1, entries.length);
+      testing.expectEqual('resource', entries[0].entryType);
+      testing.expectEqual('fetch', entries[0].initiatorType);
+      testing.expectEqual(true, entries[0] instanceof PerformanceResourceTiming);
+      // A subresource cannot have started before the navigation it belongs to.
+      testing.expectEqual(true, entries[0].startTime > 0);
+      testing.expectEqual(true, entries[0].duration >= 0);
+      // getEntriesByType must agree with getEntriesByName about it.
+      testing.expectEqual(true, performance.getEntriesByType('resource').includes(entries[0]));
+    });
+  }
+</script>

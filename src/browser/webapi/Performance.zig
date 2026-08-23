@@ -313,6 +313,49 @@ pub fn navigationComplete(self: *Performance) void {
     }
 }
 
+/// Records a finished subresource load as a `resource` entry.
+///
+/// Chrome leaves one of these behind for every script, stylesheet, image, XHR
+/// and fetch a document makes. This engine left none, while still advertising
+/// `resource` in `PerformanceObserver.supportedEntryTypes` — a surface that
+/// contradicts itself, which is worse than one feature missing. Cloudflare's
+/// own api.js reads its entry back and the page posts it to the Turnstile
+/// widget, where it arrived as a 1 035-byte object on a real Chrome and
+/// `undefined` here (tools/fingerprint/README.md, "the resource timing buffer
+/// never fills"; `probes/expr-resource-timing.js` measures it off the station).
+///
+/// Built eagerly, unlike the navigation entry: that one is lazy because none of
+/// its milestone callbacks have an Execution to allocate against, whereas every
+/// caller here is script-facing and has one. So the entry can exist — and reach
+/// the observers — when the load finished rather than when something first asks.
+pub fn resourceLoaded(
+    self: *Performance,
+    name: []const u8,
+    t: timing.Timing,
+    exec: *const Execution,
+) !void {
+    // ResourceTiming reads its milestones through a pointer, so the timing has
+    // to outlive this call rather than ride along on the stack.
+    const stored = try exec.arena.create(timing.Timing);
+    stored.* = t;
+
+    const entry = try exec._factory.chained(.{
+        Entry{
+            ._name = try exec.arena.dupe(u8, name),
+            ._start_time = t.fetch_start,
+            ._duration = t.response_end - t.fetch_start,
+            ._type = undefined,
+        },
+        timing.ResourceTiming{
+            ._proto = undefined,
+            ._timing = stored,
+        },
+    });
+    entry._proto._type = .{ .resource = entry };
+    try self._entries.append(exec.arena, entry._proto);
+    try self.notifyObservers(entry._proto, exec);
+}
+
 /// Builds the entries a document has without anyone asking for them — the one
 /// navigation entry, the `visible` visibility-state entry, and the paint pair
 /// — and leaves the buffer sorted by startTime, which is the order Chrome's

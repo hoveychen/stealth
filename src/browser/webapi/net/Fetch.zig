@@ -44,6 +44,11 @@ _owns_response: bool,
 _signal: ?*AbortSignal,
 _manual_redirect: bool,
 
+// When the request was handed to the client, on the performance clock. The
+// resource entry's startTime is measured from here, so it has to be taken
+// before the transfer rather than reconstructed after it.
+_perf_fetch_start: f64 = 0,
+
 pub const Input = Request.Input;
 pub const InitOpts = Request.InitOpts;
 
@@ -81,6 +86,7 @@ pub fn init(input: Input, options: ?InitOpts, exec: *const Execution) !js.Promis
         ._owns_response = true,
         ._signal = request._signal,
         ._manual_redirect = request._redirect == .manual,
+        ._perf_fetch_start = exec.performance().now(),
     };
 
     const session = exec.session;
@@ -233,6 +239,23 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
         .status = response._status,
         .len = self._buf.items.len,
     });
+
+    // Chrome names the entry with the URL the response finally came from, so a
+    // redirected request is filed under its destination, not its request URL.
+    const exec = self._exec;
+    const loaded_len = self._buf.items.len;
+    try exec.performance().resourceLoaded(
+        if (response._url.len > 0) response._url else self._url,
+        .{
+            .initiator_type = "fetch",
+            .fetch_start = self._perf_fetch_start,
+            .response_end = exec.performance().now(),
+            .response_status = response._status,
+            .encoded_body_size = loaded_len,
+            .decoded_body_size = loaded_len,
+        },
+        exec,
+    );
 
     var ls: js.Local.Scope = undefined;
     self._exec.js.localScope(&ls);
