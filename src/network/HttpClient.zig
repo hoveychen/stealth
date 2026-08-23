@@ -2980,6 +2980,13 @@ pub const Transfer = struct {
             req.body = null;
         }
 
+        // Both of these are decided by the method, the body and the target, and
+        // all three can have just changed: the length header has to follow the
+        // body it describes, and Fetch re-decides the Origin header per hop
+        // rather than once at the start.
+        try transfer.seedContentLength();
+        try transfer.seedOrigin();
+
         if (req.referrer_policy) |policy| {
             // Referer header was applied based on the original target. It
             // needs to be updated based on the redirect target. A redirect can
@@ -3173,12 +3180,26 @@ pub const Transfer = struct {
         "priority",
     };
 
+    // Three names here are not on a GET at all -- Content-Length, content-type
+    // and Origin ride along with a request that has a body or a cors taint.
+    // Chrome does not append them after the set it already sends: Content-
+    // Length goes third on the wire (Host, Connection, then it), content-type
+    // sits inside the hint block, and Origin between Accept and the Sec-Fetch
+    // triple. Measured, the same-origin `POST /sub/xhr-*` of
+    // tools/fingerprint/results/xhr-post-nohints-chrome.json.
+    //
+    // Navigations are not in the tables above: a form POST's Content-Length
+    // position was not measured, so it keeps falling to the trailing pass
+    // rather than being guessed into place.
     const chrome_subresource_order = [_][]const u8{
+        "Content-Length",
         "sec-ch-ua-platform",
         "User-Agent",
         "sec-ch-ua",
+        "content-type",
         "sec-ch-ua-mobile",
         "Accept",
+        "Origin",
         "Sec-Fetch-Site",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Dest",
@@ -3226,7 +3247,13 @@ pub const Transfer = struct {
     // capture is of an origin that asked for all nine; an origin asking for a
     // subset gets this sequence with the missing names skipped, which is a
     // guess at Chrome's ordering there and not a measurement of it.
+    // The POST names sit differently here than in the unhinted table:
+    // content-type follows User-Agent rather than sec-ch-ua, because the hint
+    // block it is embedded in is a different sequence. Read off the same-origin
+    // `POST /sub/xhr-*` of tools/fingerprint/results/acceptch-chrome.json, not
+    // carried over from the table above.
     const chrome_subresource_hinted_order = [_][]const u8{
+        "Content-Length",
         "sec-ch-ua-full-version-list",
         "sec-ch-ua-platform",
         "sec-ch-ua",
@@ -3236,8 +3263,10 @@ pub const Transfer = struct {
         "sec-ch-ua-arch",
         "sec-ch-ua-full-version",
         "User-Agent",
+        "content-type",
         "sec-ch-ua-platform-version",
         "Accept",
+        "Origin",
         "Sec-Fetch-Site",
         "Sec-Fetch-Mode",
         "Sec-Fetch-Dest",
@@ -3303,6 +3332,7 @@ pub const Transfer = struct {
         }
 
         try self.seedFetchMetadata();
+        try self.seedContentLength();
     }
 
     // The high-entropy hints this request's origin asked for via Accept-CH,
@@ -3417,15 +3447,7 @@ pub const Transfer = struct {
             .fetch, .xhr, .eventsource => "cors",
         }, .{ .source = .cdp });
 
-        // "none" is not "unknown": it specifically means the request had no
-        // initiator document (address bar, bookmark). Anything with an
-        // initiator gets an origin comparison.
-        const initiator: ?[]const u8 = if (req.resource_type == .document)
-            if (req.nav) |n| n.initiator_origin else null
-        else
-            req.cookie_origin;
-
-        try self.setHeader("Sec-Fetch-Site", if (initiator) |origin|
+        try self.setHeader("Sec-Fetch-Site", if (self.initiatorOrigin()) |origin|
             switch (fetchSite(origin, req.url)) {
                 .same_origin => "same-origin",
                 .same_site => "same-site",
@@ -3433,6 +3455,8 @@ pub const Transfer = struct {
             }
         else
             "none", .{ .source = .cdp });
+
+        try self.seedOrigin();
 
         // Only navigations carry these two, and Sec-Fetch-User only when the
         // navigation came from a user gesture rather than from script.
@@ -3464,6 +3488,96 @@ pub const Transfer = struct {
             // the way every other per-destination switch here groups it.
             .image, .fetch, .xhr, .eventsource => "u=1, i",
         }, .{ .source = .cdp });
+    }
+
+    // The origin of the document that asked for this request, as Sec-Fetch-Site
+    // and the Origin header both need it. A null return is "no initiator
+    // document at all" -- an address-bar navigation, a bookmark, an internal
+    // fetch -- which is not the same as a request whose initiator has an opaque
+    // origin, and is what Sec-Fetch-Site reports as `none`.
+    fn initiatorOrigin(self: *const Transfer) ?[]const u8 {
+        const req = &self.req;
+        if (req.resource_type == .document) {
+            return if (req.nav) |n| n.initiator_origin else null;
+        }
+        return req.cookie_origin;
+    }
+
+    // Content-Length, written by us rather than left to curl. Not because the
+    // number differs -- curl computes the same body length -- but because
+    // curl's copy comes out of its H1_HD_CONTENT slot, after every custom
+    // header, where Chrome has the field third on the wire, right behind Host
+    // and Connection. A header we own is a header emitHeaders can place; curl
+    // skips its own once ours is in the list (Curl_checkheaders in
+    // deps/curl-patched/lib/http.c).
+    //
+    // Re-run after a redirect changes the request: a 301/302/303 turns it into
+    // a GET and drops the body, and a length header left behind announces bytes
+    // that will never be sent.
+    fn seedContentLength(self: *Transfer) !void {
+        const body = self.req.body orelse {
+            self.removeHeader("Content-Length");
+            return;
+        };
+        const value = try std.fmt.allocPrint(self.arena.allocator(), "{d}", .{body.len});
+        try self.setHeader("Content-Length", value, .{ .source = .cdp });
+    }
+
+    // Fetch's "append a request `Origin` header", which is not "the origin of
+    // every request": a request gets one when its response tainting is cors --
+    // any cross-origin fetch/XHR -- or when its method is neither GET nor HEAD.
+    // So a same-origin POST carries it and the same-origin GET beside it does
+    // not. Measured on the Chrome side in
+    // tools/fingerprint/results/acceptch-chrome.json, where the same-origin
+    // `POST /sub/xhr-*` has `Origin: http://127.0.0.1:9586` and the
+    // `GET /sub/fetch-*` from the same page has none. Before this, no request
+    // this engine made carried the header at all, on a POST-shaped surface --
+    // Cloudflare's managed challenge is three of them -- which is a difference
+    // no real browser has.
+    //
+    // A forbidden header name, so it enters at `.cdp` like the Sec-Fetch-* set:
+    // page script cannot forge one, a driver's override still lands.
+    //
+    // Only the cors destinations for now. A form POST navigation carries an
+    // Origin in Chrome too, with its own referrer-policy-driven downgrade to
+    // `null`; that shape is unmeasured here, so it is left alone rather than
+    // guessed at.
+    // Re-run after a redirect for the same reason as seedContentLength: a 303
+    // that turns a same-origin POST into a GET is a request that no longer
+    // qualifies, and Fetch re-decides this per hop rather than once.
+    fn seedOrigin(self: *Transfer) !void {
+        if (try self.originHeader()) |value| {
+            try self.setHeader("Origin", value, .{ .source = .cdp });
+        } else {
+            self.removeHeader("Origin");
+        }
+    }
+
+    fn originHeader(self: *Transfer) !?[]const u8 {
+        const req = &self.req;
+        switch (req.resource_type) {
+            .fetch, .xhr, .eventsource => {},
+            .document, .stylesheet, .script, .image => return null,
+        }
+
+        // No initiator document at all (an internal or CDP-issued request) is
+        // not an opaque origin -- there is nothing to name, so nothing is sent.
+        const origin = self.initiatorOrigin() orelse return null;
+        if (origin.len == 0) return null;
+
+        const tainting_cors = fetchSite(origin, req.url) != .same_origin;
+        const safe_method = req.method == .GET or req.method == .HEAD;
+        if (!tainting_cors and safe_method) return null;
+
+        // The initiator's origin, serialized: scheme, host, non-default port,
+        // nothing else. `null` for anything without a tuple origin (a data: or
+        // about: document), which is what Chrome sends for an opaque origin.
+        //
+        // Read off cookie_origin, the initiator document's URL, so an
+        // about:blank frame that inherited its parent's origin reports `null`
+        // where Chrome would name the parent -- the same limit Sec-Fetch-Site
+        // already has, and not one this header introduces.
+        return (try URL.getOrigin(self.arena.allocator(), req.cookie_origin)) orelse "null";
     }
 
     // CDP Fetch.continueRequest: the intercepting client supplies the
@@ -4004,6 +4118,166 @@ test "HttpClient: seedFetchMetadata labels a cross-origin image" {
     try testing.expectString("", seededValue(&transfer, "Upgrade-Insecure-Requests"));
 }
 
+test "HttpClient: a POST's three extra headers sit where Chrome puts them" {
+    // The two subresource tables, whole, against a measured POST each. Chrome
+    // does not append the body-and-cors headers after the set it already sends:
+    // Content-Length goes third on the wire (Host, Connection, then it),
+    // content-type lands inside the hint block, and Origin between Accept and
+    // the Sec-Fetch triple.
+    //
+    // Unhinted, measured: the same-origin `POST /sub/xhr-*` of
+    // tools/fingerprint/results/xhr-post-nohints-chrome.json -- the same probe
+    // page served with an empty `Accept-CH`, so the origin asks for nothing.
+    try testing.expectEqualSlices([]const u8, &.{
+        "Content-Length",
+        "sec-ch-ua-platform",
+        "User-Agent",
+        "sec-ch-ua",
+        "content-type",
+        "sec-ch-ua-mobile",
+        "Accept",
+        "Origin",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "priority",
+    }, &Transfer.chrome_subresource_order);
+
+    // Hinted, measured: the same-origin `POST /sub/xhr-*` of
+    // tools/fingerprint/results/acceptch-chrome.json. content-type follows
+    // User-Agent here rather than sec-ch-ua -- the hint block is a different
+    // sequence, and the position is read off the capture, not carried over.
+    try testing.expectEqualSlices([]const u8, &.{
+        "Content-Length",
+        "sec-ch-ua-full-version-list",
+        "sec-ch-ua-platform",
+        "sec-ch-ua",
+        "sec-ch-ua-bitness",
+        "sec-ch-ua-model",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-arch",
+        "sec-ch-ua-full-version",
+        "User-Agent",
+        "content-type",
+        "sec-ch-ua-platform-version",
+        "Accept",
+        "Origin",
+        "Sec-Fetch-Site",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Dest",
+        "Referer",
+        "Accept-Encoding",
+        "Accept-Language",
+        "priority",
+    }, &Transfer.chrome_subresource_hinted_order);
+}
+
+test "HttpClient: the body's length is a header of ours, not curl's afterthought" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    var config = try Config.init(testing.allocator, "test", .{ .serve = .{} });
+    defer config.deinit(testing.allocator);
+    var network: Network = undefined;
+    var client = testHeaderClient(&network, &config);
+    defer client.client_hints.deinit(testing.allocator);
+
+    {
+        const arena = try pool.acquire(.small, "test");
+        defer arena.release();
+
+        var transfer = testTransfer(arena);
+        transfer.client = &client;
+        transfer.req.resource_type = .xhr;
+        transfer.req.method = .POST;
+        transfer.req.url = "https://example.com/api";
+        transfer.req.cookie_origin = "https://example.com/page";
+        transfer.req.body = "probe";
+        try transfer.seedHeaders();
+
+        // Byte length of the body, which is what curl would have written --
+        // the point of writing it ourselves is only where it lands.
+        try testing.expectString("5", seededValue(&transfer, "Content-Length"));
+
+        // A 301/302/303 turns the request into a GET and drops the body. The
+        // length header has to go with it: left behind, it announces five bytes
+        // that are never sent.
+        transfer.req.method = .GET;
+        transfer.req.body = null;
+        try transfer.seedContentLength();
+        try testing.expectString("", seededValue(&transfer, "Content-Length"));
+    }
+
+    {
+        const arena = try pool.acquire(.small, "test");
+        defer arena.release();
+
+        // No body, no header -- not even a zero. Chrome sends none on a GET.
+        var transfer = testTransfer(arena);
+        transfer.client = &client;
+        transfer.req.resource_type = .xhr;
+        transfer.req.url = "https://example.com/api";
+        transfer.req.cookie_origin = "https://example.com/page";
+        try transfer.seedHeaders();
+        try testing.expectString("", seededValue(&transfer, "Content-Length"));
+    }
+}
+
+test "HttpClient: an XHR POST carries the Origin header its initiator has" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    // Fetch's "append a request `Origin` header": a cors-mode request gets one
+    // when its response tainting is cors (any cross-origin fetch/XHR) *or* when
+    // its method is neither GET nor HEAD -- which is why a same-origin POST
+    // carries it and a same-origin GET does not. Measured on the Chrome side in
+    // tools/fingerprint/results/acceptch-chrome.json: the same-origin
+    // `POST /sub/xhr-*` carries `Origin: http://127.0.0.1:9586` while the
+    // same-origin `GET /sub/fetch-*` beside it carries none.
+    const cases = [_]struct {
+        Request.ResourceType,
+        Method,
+        [:0]const u8, // request url
+        [:0]const u8, // initiator document url
+        []const u8, // expected Origin ("" = absent)
+    }{
+        // The case Cloudflare's challenge is made of: a same-origin POST.
+        .{ .xhr, .POST, "https://example.com/api", "https://example.com/page", "https://example.com" },
+        .{ .fetch, .POST, "https://example.com/api", "https://example.com/page", "https://example.com" },
+        // Not GET nor HEAD is the test, not "is a POST".
+        .{ .fetch, .PUT, "https://example.com/api", "https://example.com/page", "https://example.com" },
+        // Same-origin GET/HEAD: tainting is basic, so no Origin.
+        .{ .fetch, .GET, "https://example.com/api", "https://example.com/page", "" },
+        .{ .xhr, .HEAD, "https://example.com/api", "https://example.com/page", "" },
+        // Cross-origin, so the response tainting is cors and even a GET carries
+        // the header -- that is what the receiving origin's CORS check reads.
+        .{ .fetch, .GET, "https://api.other.org/v1", "https://example.com/page", "https://example.com" },
+        // The port is part of the serialization; the path never is.
+        .{ .xhr, .POST, "http://127.0.0.1:9586/sub/x", "http://127.0.0.1:9586/critical-ch", "http://127.0.0.1:9586" },
+        // A no-cors subresource is not a cors request and has a safe method:
+        // neither branch applies.
+        .{ .script, .GET, "https://cdn.other.org/a.js", "https://example.com/page", "" },
+        .{ .image, .GET, "https://cdn.other.org/a.png", "https://example.com/page", "" },
+    };
+
+    for (cases) |case| {
+        const arena = try pool.acquire(.small, "test");
+        defer arena.release();
+
+        var transfer = testTransfer(arena);
+        transfer.req.resource_type = case[0];
+        transfer.req.method = case[1];
+        transfer.req.url = case[2];
+        transfer.req.cookie_origin = case[3];
+        try transfer.seedFetchMetadata();
+
+        try testing.expectString(case[4], seededValue(&transfer, "Origin"));
+    }
+}
+
 test "HttpClient: seedFetchMetadata sends Chrome's priority hint per destination" {
     var pool = ArenaPool.init(testing.allocator, .{});
     defer pool.deinit();
@@ -4091,7 +4365,9 @@ test "HttpClient: the negotiated hints sit where Chrome puts them" {
 
     // The one that surprises: with hints, User-Agent falls from second to
     // ninth. Dropping the six names into the unhinted table would have put it
-    // back at second and been wrong on every subresource.
+    // back at second and been wrong on every subresource. (Both subresource
+    // tables are pinned whole, with the POST names in place, by "a POST's three
+    // extra headers sit where Chrome puts them" -- this is the hint block only.)
     try testing.expectEqualSlices([]const u8, &.{
         "sec-ch-ua-full-version-list",
         "sec-ch-ua-platform",
@@ -4102,13 +4378,11 @@ test "HttpClient: the negotiated hints sit where Chrome puts them" {
         "sec-ch-ua-arch",
         "sec-ch-ua-full-version",
         "User-Agent",
-        "sec-ch-ua-platform-version",
-        "Accept",
-    }, Transfer.chrome_subresource_hinted_order[0..11]);
+    }, Transfer.chrome_subresource_hinted_order[1..10]);
 
     // Which table a subresource uses is decided by whether it carries any.
-    try testing.expectString("sec-ch-ua-platform", Transfer.chrome_subresource_order[0]);
-    try testing.expectString("User-Agent", Transfer.chrome_subresource_order[1]);
+    try testing.expectString("sec-ch-ua-platform", Transfer.chrome_subresource_order[1]);
+    try testing.expectString("User-Agent", Transfer.chrome_subresource_order[2]);
 
     // And a navigation re-sent for a Critical-CH is a third shape again: the
     // hints follow Accept instead of leading.
