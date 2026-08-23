@@ -751,7 +751,7 @@ pub const JsApi = struct {
     pub const @"type" = bridge.accessor(Selection.getType, null, .{});
 
     pub const addRange = bridge.function(Selection.addRange, .{});
-    pub const collapse = bridge.function(Selection.collapse, .{});
+    pub const collapse = bridge.function(Selection.collapse, .{ .arity = 1 });
     pub const collapseToEnd = bridge.function(Selection.collapseToEnd, .{});
     pub const collapseToStart = bridge.function(Selection.collapseToStart, .{});
     pub const containsNode = bridge.function(Selection.containsNode, .{});
@@ -765,7 +765,7 @@ pub const JsApi = struct {
     pub const removeRange = bridge.function(Selection.removeRange, .{});
     pub const selectAllChildren = bridge.function(Selection.selectAllChildren, .{});
     pub const setBaseAndExtent = bridge.function(Selection.setBaseAndExtent, .{});
-    pub const setPosition = bridge.function(Selection.collapse, .{});
+    pub const setPosition = bridge.function(Selection.collapse, .{ .arity = 1 });
     pub const toString = bridge.function(Selection.toString, .{});
 };
 

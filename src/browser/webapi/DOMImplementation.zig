@@ -151,7 +151,7 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const createDocumentType = bridge.function(DOMImplementation.createDocumentType, .{});
+    pub const createDocumentType = bridge.function(DOMImplementation.createDocumentType, .{ .arity = 3 });
     pub const createDocument = bridge.function(DOMImplementation.createDocument, .{});
     pub const createHTMLDocument = bridge.function(DOMImplementation.createHTMLDocument, .{});
     pub const hasFeature = bridge.function(DOMImplementation.hasFeature, .{});
