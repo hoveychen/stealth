@@ -3434,6 +3434,8 @@ pub const Transfer = struct {
         else
             "none", .{ .source = .cdp });
 
+        try self.seedOrigin(initiator);
+
         // Only navigations carry these two, and Sec-Fetch-User only when the
         // navigation came from a user gesture rather than from script.
         if (req.resource_type == .document) {
@@ -3464,6 +3466,53 @@ pub const Transfer = struct {
             // the way every other per-destination switch here groups it.
             .image, .fetch, .xhr, .eventsource => "u=1, i",
         }, .{ .source = .cdp });
+    }
+
+    // Fetch's "append a request `Origin` header", which is not "the origin of
+    // every request": a request gets one when its response tainting is cors --
+    // any cross-origin fetch/XHR -- or when its method is neither GET nor HEAD.
+    // So a same-origin POST carries it and the same-origin GET beside it does
+    // not. Measured on the Chrome side in
+    // tools/fingerprint/results/acceptch-chrome.json, where the same-origin
+    // `POST /sub/xhr-*` has `Origin: http://127.0.0.1:9586` and the
+    // `GET /sub/fetch-*` from the same page has none. Before this, no request
+    // this engine made carried the header at all, on a POST-shaped surface --
+    // Cloudflare's managed challenge is three of them -- which is a difference
+    // no real browser has.
+    //
+    // A forbidden header name, so it enters at `.cdp` like the Sec-Fetch-* set:
+    // page script cannot forge one, a driver's override still lands.
+    //
+    // Only the cors destinations for now. A form POST navigation carries an
+    // Origin in Chrome too, with its own referrer-policy-driven downgrade to
+    // `null`; that shape is unmeasured here, so it is left alone rather than
+    // guessed at.
+    fn seedOrigin(self: *Transfer, initiator: ?[]const u8) !void {
+        const req = &self.req;
+        switch (req.resource_type) {
+            .fetch, .xhr, .eventsource => {},
+            .document, .stylesheet, .script, .image => return,
+        }
+
+        // No initiator document at all (an internal or CDP-issued request) is
+        // not an opaque origin -- there is nothing to name, so nothing is sent.
+        const origin = initiator orelse return;
+        if (origin.len == 0) return;
+
+        const tainting_cors = fetchSite(origin, req.url) != .same_origin;
+        const safe_method = req.method == .GET or req.method == .HEAD;
+        if (!tainting_cors and safe_method) return;
+
+        // The initiator's origin, serialized: scheme, host, non-default port,
+        // nothing else. `null` for anything without a tuple origin (a data: or
+        // about: document), which is what Chrome sends for an opaque origin.
+        //
+        // Read off cookie_origin, the initiator document's URL, so an
+        // about:blank frame that inherited its parent's origin reports `null`
+        // where Chrome would name the parent -- the same limit Sec-Fetch-Site
+        // already has, and not one this header introduces.
+        const serialized = (try URL.getOrigin(self.arena.allocator(), req.cookie_origin)) orelse "null";
+        try self.setHeader("Origin", serialized, .{ .source = .cdp });
     }
 
     // CDP Fetch.continueRequest: the intercepting client supplies the
@@ -4002,6 +4051,58 @@ test "HttpClient: seedFetchMetadata labels a cross-origin image" {
     try testing.expectString("cross-site", seededValue(&transfer, "Sec-Fetch-Site"));
     try testing.expectString("", seededValue(&transfer, "Sec-Fetch-User"));
     try testing.expectString("", seededValue(&transfer, "Upgrade-Insecure-Requests"));
+}
+
+test "HttpClient: an XHR POST carries the Origin header its initiator has" {
+    var pool = ArenaPool.init(testing.allocator, .{});
+    defer pool.deinit();
+
+    // Fetch's "append a request `Origin` header": a cors-mode request gets one
+    // when its response tainting is cors (any cross-origin fetch/XHR) *or* when
+    // its method is neither GET nor HEAD -- which is why a same-origin POST
+    // carries it and a same-origin GET does not. Measured on the Chrome side in
+    // tools/fingerprint/results/acceptch-chrome.json: the same-origin
+    // `POST /sub/xhr-*` carries `Origin: http://127.0.0.1:9586` while the
+    // same-origin `GET /sub/fetch-*` beside it carries none.
+    const cases = [_]struct {
+        Request.ResourceType,
+        Method,
+        [:0]const u8, // request url
+        [:0]const u8, // initiator document url
+        []const u8, // expected Origin ("" = absent)
+    }{
+        // The case Cloudflare's challenge is made of: a same-origin POST.
+        .{ .xhr, .POST, "https://example.com/api", "https://example.com/page", "https://example.com" },
+        .{ .fetch, .POST, "https://example.com/api", "https://example.com/page", "https://example.com" },
+        // Not GET nor HEAD is the test, not "is a POST".
+        .{ .fetch, .PUT, "https://example.com/api", "https://example.com/page", "https://example.com" },
+        // Same-origin GET/HEAD: tainting is basic, so no Origin.
+        .{ .fetch, .GET, "https://example.com/api", "https://example.com/page", "" },
+        .{ .xhr, .HEAD, "https://example.com/api", "https://example.com/page", "" },
+        // Cross-origin, so the response tainting is cors and even a GET carries
+        // the header -- that is what the receiving origin's CORS check reads.
+        .{ .fetch, .GET, "https://api.other.org/v1", "https://example.com/page", "https://example.com" },
+        // The port is part of the serialization; the path never is.
+        .{ .xhr, .POST, "http://127.0.0.1:9586/sub/x", "http://127.0.0.1:9586/critical-ch", "http://127.0.0.1:9586" },
+        // A no-cors subresource is not a cors request and has a safe method:
+        // neither branch applies.
+        .{ .script, .GET, "https://cdn.other.org/a.js", "https://example.com/page", "" },
+        .{ .image, .GET, "https://cdn.other.org/a.png", "https://example.com/page", "" },
+    };
+
+    for (cases) |case| {
+        const arena = try pool.acquire(.small, "test");
+        defer arena.release();
+
+        var transfer = testTransfer(arena);
+        transfer.req.resource_type = case[0];
+        transfer.req.method = case[1];
+        transfer.req.url = case[2];
+        transfer.req.cookie_origin = case[3];
+        try transfer.seedFetchMetadata();
+
+        try testing.expectString(case[4], seededValue(&transfer, "Origin"));
+    }
 }
 
 test "HttpClient: seedFetchMetadata sends Chrome's priority hint per destination" {
