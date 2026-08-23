@@ -1,0 +1,1705 @@
+{
+ "engine": "chrome",
+ "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+ "settleMs": 90000,
+ "events": [
+  {
+   "session": "58E13C2E1F72FC8738E05CE8763C703E",
+   "k": "installed",
+   "href": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 4
+  },
+  {
+   "session": "58E13C2E1F72FC8738E05CE8763C703E",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "webgl",
+   "attrs": null,
+   "got": "WebGLRenderingContext",
+   "ctx": "y0",
+   "size": [
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 1,
+   "t": 2173
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "webgl2",
+   "attrs": null,
+   "got": "WebGL2RenderingContext",
+   "ctx": "y1",
+   "size": [
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 2,
+   "t": 2186
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y2",
+   "size": [
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 3,
+   "t": 2187
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y3",
+   "size": [
+    16,
+    16
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 4,
+   "t": 2188
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.fillText",
+   "ctx": "y2",
+   "args": [
+    "Ry",
+    13,
+    67
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.fillText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    48,
+    48
+   ],
+   "i": 5,
+   "t": 2201
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    48,
+    48
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    48,
+    48
+   ],
+   "r": {
+    "n": 9216,
+    "zeros": 1211,
+    "fnv": 1676186672,
+    "head": "ff800004ff800004ff660005ff802a06ff802008ff802008ff711c09ff711c09"
+   },
+   "i": 6,
+   "t": 2210
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    2,
+    2
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    2,
+    2
+   ],
+   "r": {
+    "n": 16,
+    "zeros": 0,
+    "fnv": 1639679896,
+    "head": "ffffffffc0c0c0fff4f4f4ff353535ff"
+   },
+   "i": 7,
+   "t": 2258
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 56.898,
+    "asc": 12.68,
+    "desc": 0.289
+   },
+   "i": 8,
+   "t": 2503
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð¤£"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 42.695,
+    "asc": 12.68,
+    "desc": 0.289
+   },
+   "i": 9,
+   "t": 2505
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð±"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 49.68,
+    "asc": 12.68,
+    "desc": 0.289
+   },
+   "i": 10,
+   "t": 2506
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 56.898,
+    "asc": 12.68,
+    "desc": 0.289
+   },
+   "i": 11,
+   "t": 2506
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð¥"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 49.797,
+    "asc": 12.68,
+    "desc": 0.289
+   },
+   "i": 12,
+   "t": 2507
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 56.898,
+    "asc": 12.68,
+    "desc": 0.289
+   },
+   "i": 13,
+   "t": 2508
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð§ "
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 38.242,
+    "asc": 12.68,
+    "desc": 3.375
+   },
+   "i": 14,
+   "t": 2508
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð¶"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 49.492,
+    "asc": 12.68,
+    "desc": 2.836
+   },
+   "i": 15,
+   "t": 2509
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "ð "
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 45.344,
+    "asc": 12.68,
+    "desc": 0.289
+   },
+   "i": 16,
+   "t": 2510
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.measureText",
+   "ctx": "y2",
+   "args": [
+    "âï¸"
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.measureText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    220,
+    40
+   ],
+   "r": {
+    "w": 66.672,
+    "asc": 11.734,
+    "desc": 3.602
+   },
+   "i": 17,
+   "t": 2593
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "colorSpace": "srgb",
+     "colorType": "unorm8",
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y4",
+   "size": [
+    2,
+    2
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 18,
+   "t": 2594
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y4",
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object",
+     "keys": {
+      "colorSpace": "srgb",
+      "pixelFormat": "rgba-unorm8"
+     }
+    }
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    2,
+    2
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 2177093497,
+    "head": "ff1b7fff"
+   },
+   "i": 19,
+   "t": 2598
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "colorSpace": "display-p3",
+     "colorType": "unorm8",
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y5",
+   "size": [
+    2,
+    2
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 20,
+   "t": 2599
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y5",
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object",
+     "keys": {
+      "colorSpace": "display-p3",
+      "pixelFormat": "rgba-unorm8"
+     }
+    }
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    2,
+    2
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1744669593,
+    "head": "ff407fff"
+   },
+   "i": 21,
+   "t": 2599
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "colorSpace": "srgb",
+     "colorType": "float16",
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y6",
+   "size": [
+    2,
+    2
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 22,
+   "t": 2599
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y6",
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object",
+     "keys": {
+      "colorSpace": "srgb",
+      "pixelFormat": "rgba-float16"
+     }
+    }
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    2,
+    2
+   ],
+   "r": {
+    "n": 8,
+    "zeros": 1,
+    "fnv": 1272842144,
+    "head": "5b3cc92ef537003c"
+   },
+   "i": 23,
+   "t": 2603
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "colorSpace": "display-p3",
+     "colorType": "float16",
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y7",
+   "size": [
+    2,
+    2
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Object.qvRAk (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/f"
+   ],
+   "i": 24,
+   "t": 2604
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y7",
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object",
+     "keys": {
+      "colorSpace": "display-p3",
+      "pixelFormat": "rgba-float16"
+     }
+    }
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    2,
+    2
+   ],
+   "r": {
+    "n": 8,
+    "zeros": 4,
+    "fnv": 1425183204,
+    "head": "003c00340038003c"
+   },
+   "i": 25,
+   "t": 2604
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": null,
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y8",
+   "size": [
+    2,
+    2
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "i": 26,
+   "t": 2604
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1725,
+    "fnv": 931458320,
+    "head": "0000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "i": 27,
+   "t": 2608
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y9",
+   "size": [
+    49,
+    44
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "i": 28,
+   "t": 2608
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.drawImage",
+   "ctx": "y9",
+   "args": [
+    {
+     "o": "OffscreenCanvas",
+     "w": 49,
+     "h": 44
+    },
+    0,
+    0
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.drawImage (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    49,
+    44
+   ],
+   "r": null,
+   "i": 29,
+   "t": 2615
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "oc.transferToImageBitmap",
+   "ctx": "y10",
+   "args": [],
+   "at": [
+    "at OffscreenCanvas.transferToImageBitmap (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "i": 30,
+   "t": 2616
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y11",
+   "size": [
+    49,
+    44
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "i": 31,
+   "t": 2616
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.drawImage",
+   "ctx": "y11",
+   "args": [
+    {
+     "o": "ImageBitmap",
+     "w": 49,
+     "h": 44
+    },
+    0,
+    0
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.drawImage (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    49,
+    44
+   ],
+   "r": null,
+   "i": 32,
+   "t": 2616
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y11",
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1725,
+    "fnv": 931458320,
+    "head": "0000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "i": 33,
+   "t": 2617
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "cib.call",
+   "id": "b34",
+   "args": [
+    {
+     "o": "OffscreenCanvas",
+     "w": 49,
+     "h": 44
+    }
+   ],
+   "at": [
+    "at createImageBitmap (<anonymous>:107:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "i": 34,
+   "t": 2617
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.fillText",
+   "ctx": "y2",
+   "args": [
+    "Hwmqxli",
+    2,
+    4
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.fillText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    80,
+    24
+   ],
+   "i": 35,
+   "t": 2636
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.drawImage",
+   "ctx": "y3",
+   "args": [
+    {
+     "o": "OffscreenCanvas",
+     "w": 80,
+     "h": 24
+    },
+    0,
+    0
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.drawImage (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    80,
+    24
+   ],
+   "r": null,
+   "i": 36,
+   "t": 2638
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.drawImage",
+   "ctx": "y3",
+   "args": [
+    {
+     "o": "OffscreenCanvas",
+     "w": 80,
+     "h": 24
+    },
+    0,
+    0
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.drawImage (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    80,
+    24
+   ],
+   "r": null,
+   "i": 37,
+   "t": 2639
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.drawImage",
+   "ctx": "y2",
+   "args": [
+    {
+     "o": "OffscreenCanvas",
+     "w": 80,
+     "h": 24
+    },
+    0,
+    0,
+    80,
+    24,
+    0,
+    0,
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.drawImage (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    1,
+    1
+   ],
+   "r": null,
+   "i": 38,
+   "t": 2640
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "i": 39,
+   "t": 2640
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "i": 40,
+   "t": 2640
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.fillText",
+   "ctx": "y2",
+   "args": [
+    "VnYi2",
+    3,
+    12
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.fillText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    16,
+    16
+   ],
+   "i": 41,
+   "t": 2641
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.fillText",
+   "ctx": "y3",
+   "args": [
+    "VnYi2",
+    3,
+    12
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.fillText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    16,
+    16
+   ],
+   "i": 42,
+   "t": 2641
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    16,
+    16
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    16,
+    16
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 90,
+    "fnv": 490316027,
+    "head": "00ff00fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06ff"
+   },
+   "i": 43,
+   "t": 2642
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y3",
+   "args": [
+    0,
+    0,
+    16,
+    16
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    16,
+    16
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 90,
+    "fnv": 3828407109,
+    "head": "f06d06ff00ff00fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06ff"
+   },
+   "i": 44,
+   "t": 2642
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    16,
+    16
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1138563636,
+    "head": "f06d06ff"
+   },
+   "i": 45,
+   "t": 2642
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y2",
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cj (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    16,
+    16
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1138563636,
+    "head": "f06d06ff"
+   },
+   "i": 46,
+   "t": 2642
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "cib.ok",
+   "id": "b34",
+   "bmp": {
+    "o": "ImageBitmap",
+    "w": 49,
+    "h": 44
+   },
+   "i": 47,
+   "t": 2662
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object",
+    "keys": {
+     "willReadFrequently": "true"
+    }
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "y12",
+   "size": [
+    49,
+    44
+   ],
+   "at": [
+    "at OffscreenCanvas.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.Cq (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "i": 48,
+   "t": 2662
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.drawImage",
+   "ctx": "y12",
+   "args": [
+    {
+     "o": "ImageBitmap",
+     "w": 49,
+     "h": 44
+    },
+    0,
+    0
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.drawImage (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at async Promise.all (index 2)"
+   ],
+   "size": [
+    49,
+    44
+   ],
+   "r": null,
+   "i": 49,
+   "t": 2663
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "off2d.getImageData",
+   "ctx": "y12",
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "at": [
+    "at OffscreenCanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at async Promise.all (index 2)"
+   ],
+   "size": [
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1725,
+    "fnv": 931458320,
+    "head": "0000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "i": 50,
+   "t": 2663
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "canvas",
+   "kind": "webgpu",
+   "attrs": null,
+   "got": "GPUCanvasContext",
+   "ctx": "y13",
+   "size": [
+    300,
+    150
+   ],
+   "at": [
+    "at HTMLCanvasElement.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at async Promise.all (index 0)"
+   ],
+   "i": 51,
+   "t": 2837
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "getContext",
+   "owner": "canvas",
+   "kind": "2d",
+   "attrs": null,
+   "got": "CanvasRenderingContext2D",
+   "ctx": "y14",
+   "size": [
+    1,
+    1
+   ],
+   "at": [
+    "at HTMLCanvasElement.getContext (<anonymous>:155:55)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "i": 52,
+   "t": 3132
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "2d.fillText",
+   "ctx": "y14",
+   "args": [
+    "ðºð¸",
+    0,
+    1
+   ],
+   "at": [
+    "at CanvasRenderingContext2D.fillText (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    1,
+    1
+   ],
+   "i": 53,
+   "t": 3133
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "2d.getImageData",
+   "ctx": "y14",
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "at": [
+    "at CanvasRenderingContext2D.getImageData (<anonymous>:176:77)",
+    "at Cu.Cb (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/",
+    "at Cu.<computed>.<computed> [as run] (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAAD",
+    "at CQ (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/nor",
+    "at Cu.CA (https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/phkav/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/"
+   ],
+   "size": [
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1937540140,
+    "head": "00000029"
+   },
+   "i": 54,
+   "t": 3136
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "k": "installed",
+   "href": "about:srcdoc",
+   "worker": false,
+   "has": {
+    "cib": "function",
+    "oc": "function",
+    "fonts": "object"
+   },
+   "i": 0,
+   "t": 0
+  }
+ ],
+ "realms": [
+  {
+   "session": "58E13C2E1F72FC8738E05CE8763C703E",
+   "why": "page",
+   "type": "page",
+   "installed": true,
+   "resumed": true
+  },
+  {
+   "session": "F5605D0479AB9E3FEE5C12EFB7078043",
+   "why": "blob:https://www.scrapingcourse.com/37a67784-1685-4c58-bc98-5e2b8d572ad5",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  },
+  {
+   "session": "4EE093EA4728EEE8BB39A5C0B64FE591",
+   "why": "",
+   "type": "iframe",
+   "installed": true,
+   "resumed": true
+  },
+  {
+   "session": "607297D1C0C9FA1A822E9857B4F493B9",
+   "why": "blob:https://challenges.cloudflare.com/6fc9b8f5-5bba-465b-b130-78d51ab119cb",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  },
+  {
+   "session": "8205954FBEC3CE1767662AB2189A29D5",
+   "why": "blob:https://challenges.cloudflare.com/6fc9b8f5-5bba-465b-b130-78d51ab119cb",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  },
+  {
+   "session": "AB58521ED223755D510E21C6EF89064E",
+   "why": "blob:https://challenges.cloudflare.com/6fc9b8f5-5bba-465b-b130-78d51ab119cb",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  },
+  {
+   "session": "7F6AB09000B657D85561D344700871C3",
+   "why": "blob:https://challenges.cloudflare.com/b14e1a18-d5f4-43d8-bddb-f0fcaa3a59d8",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  }
+ ],
+ "console": [
+  "startGroupCollapsed: ",
+  "debug: Error",
+  "log: /.*.*=.*/",
+  "log: /.*.*=.*/",
+  "log: function () { [native code] }",
+  "log: function () { [native code] }",
+  "log: a",
+  "log: a",
+  "count: \u0000: 1",
+  "count: \u0000: 1",
+  "debug: %c%d font-size:0;color:transparent NaN",
+  "debug: %c%d font-size:0;color:transparent NaN",
+  "dir:  Error",
+  "dir:  Error",
+  "dirxml: %c%d font-size:0;color:transparent Error",
+  "dirxml: %c%d font-size:0;color:transparent Error",
+  "error: %c%d font-size:0;color:transparent NaN",
+  "error: %c%d font-size:0;color:transparent NaN",
+  "info: %c%d font-size:0;color:transparent NaN",
+  "info: %c%d font-size:0;color:transparent NaN",
+  "log: %c%d font-size:0;color:transparent NaN",
+  "log: %c%d font-size:0;color:transparent NaN",
+  "table: %c%d font-size:0;color:transparent Error",
+  "table: %c%d font-size:0;color:transparent Error",
+  "trace: %c%d font-size:0;color:transparent NaN",
+  "trace: %c%d font-size:0;color:transparent NaN",
+  "warning: %c%d font-size:0;color:transparent NaN",
+  "warning: %c%d font-size:0;color:transparent NaN",
+  "endGroup: console.groupEnd"
+ ],
+ "exceptions": [],
+ "version": {
+  "Browser": "Chrome/151.0.7922.172",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+  "V8-Version": "15.1.206.21",
+  "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9940/devtools/browser/640df5ed-2d85-4ec7-a948-61983b582301"
+ },
+ "final": {
+  "title": "Just a moment...",
+  "nodes": 47,
+  "text": "www.scrapingcourse.com\nPerforming security verification\n\nThis website uses a security service to protect against malicio"
+ },
+ "engineLog": "] Available disk space in install directory (/Users/hoveychen/Library/Application Support/Google/GoogleUpdater): 95596892160B (89.032GiB) / 994662584320B (926.352GiB)\n[59419:22916652:0823/141039.536548:VERBOSE1:chrome/updater/updater.cc:386] Available disk space in temporary directory (/var/folders/3_/hh7x529n3s59vbxbrn71vv7r0000gn/T/): 95596892160B (89.032GiB) / 994662584320B (926.352GiB)\n[59419:22916652:0823/141039.536614:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS START event to the history log\n[59417:22916648:0823/141039.536996:VERBOSE1:chrome/updater/crash_reporter.cc:124] Crash handler launched and ready.\n[59417:22916648:0823/141039.537484:VERBOSE1:chrome/updater/crash_client.cc:108] Found 0 completed crash reports\n[59417:22916648:0823/141039.537536:VERBOSE1:chrome/updater/crash_client.cc:132] Found 0 pending crash reports\n[59417:22916648:0823/141039.537594:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/RLZ/Crashpad/settings.dat: No such file or directory (2)\n[59417:22916648:0823/141039.537604:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/consentOptions/Crashpad/settings.dat: No such file or directory (2)\n[59417:22916648:0823/141039.537643:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/Chrome-headless/Crashpad/settings.dat: No such file or directory (2)\n[59417:22916648:0823/141039.537649:ERROR:third_party/crashpad/crashpad/util/file/file_io_posix.cc:145] open /Users/hoveychen/Library/Application Support/Google/AndroidStudio2025.1.2/Crashpad/settings.dat: No such file or directory (2)\n[59417:22916648:0823/141039.537660:VERBOSE1:chrome/updater/updater.cc:105] Crash reporting initialized.\n[59417:22916648:0823/141039.537793:VERBOSE1:chrome/updater/ipc/update_service_internal_proxy_mojo.cc:61] Run\n[59134:22915085:0823/141049.101569:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT\n[59417:22916648:0823/141057.137937:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0\n[59417:22916648:0823/141057.140691:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log\n[59417:22916648:0823/141057.140732:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake) returned 0.\n[59413:22916643:0823/141057.166992:VERBOSE1:chrome/updater/app/app_wakeall.cc:68] `/Users/hoveychen/Library/Application Support/Google/GoogleUpdater/152.0.7933.0/GoogleUpdater.app/Contents/MacOS/GoogleUpdater --wake` exited 0\n[59413:22916631:0823/141057.168195:VERBOSE1:chrome/updater/app/app.cc:52] Shutdown: 0\n[59413:22916631:0823/141057.169091:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log\n[59413:22916631:0823/141057.169109:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--wake-all) returned 0.\n[59419:22916652:0823/141107.223636:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log\n[59419:22916652:0823/141107.223711:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--crash-handler) returned 0.\n[59415:22916635:0823/141107.253588:VERBOSE2:chrome/updater/event_history.cc:265] Emitted a UPDATER_PROCESS END event to the history log\n[59415:22916635:0823/141107.253685:VERBOSE1:chrome/updater/updater.cc:419] UpdaterMain (--crash-handler) returned 0.\n[59134:22915085:0823/141135.065129:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT\n[59821:22919193:0823/141154.031950:ERROR:base/apple/mach_port_rendezvous_mac.cc:256] bootstrap_look_up com.google.Chrome.MachPortRendezvousServer.1: Permission denied (1100)\n[59821:22919193:0823/141154.032328:ERROR:base/memory/shared_memory_switch.cc:261] No rendezvous client, terminating process (parent died?)\n"
+}
