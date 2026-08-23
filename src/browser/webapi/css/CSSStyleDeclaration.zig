@@ -699,6 +699,16 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
         }
     }
 
+    // A shadow's components come back in Chrome's order rather than the
+    // author's, whichever of the two properties carries them.
+    if (std.mem.eql(u8, property_name, "box-shadow") or
+        std.mem.eql(u8, property_name, "text-shadow"))
+    {
+        if (try writeShadow(arena, value)) |ordered| {
+            return ordered;
+        }
+    }
+
     // Canonicalize anchor-size() function: anchor name (dashed ident) comes before size keyword
     if (std.mem.indexOf(u8, value, "anchor-size(")) |idx| {
         return canonicalizeAnchorSize(arena, value, idx);
@@ -713,6 +723,107 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
     }
 
     return value;
+}
+
+/// A shadow layer as Chrome writes it: the colour first, then the lengths in
+/// the order the author gave them, then `inset`. Measured with
+/// `tools/fingerprint/probes/expr-shadow-serialize.js` over `box-shadow` and
+/// `text-shadow` -- `inset 0 0 0 rgb(34, 139, 73)` comes back
+/// `rgb(34, 139, 73) 0px 0px 0px inset`, which is seven of the rules in the
+/// Cloudflare @keyframes payload.
+///
+/// Chrome reorders but does not fill in: `1px 1px red` keeps its two lengths
+/// rather than gaining the blur and spread it was written without. The lengths
+/// are also the one slot a unitless zero can hide in, and Chrome answers it
+/// `0px` there -- `normalizePropertyValue`'s whole-value rule never reaches it,
+/// because the zero is one component of a list.
+///
+/// Answers null for anything that is not this shape, which leaves the value the
+/// bytes it arrived with: `none` and the CSS-wide keywords, a layer carrying no
+/// length at all, a second colour or a second `inset`, and a value calling a
+/// function whose text this engine does not have.
+fn writeShadow(arena: Allocator, value: []const u8) !?[]const u8 {
+    // A substitution stands in for text that arrives later, so which slot each
+    // component lands in is not knowable here.
+    if (hasVerbatimFunction(value)) {
+        return null;
+    }
+
+    // The colour slot takes a colour keyword and nothing else, so the measured
+    // spellings of one are enough to re-case it. `background-color` carries
+    // that list -- the same 160-odd names, `currentcolor` and `transparent`
+    // included -- and a name that is not on it is left alone.
+    const colours = chrome_keywords.keywords.get("background-color");
+
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+
+    var layers = shorthand.Layers.init(value);
+    var first = true;
+    while (layers.next()) |layer| {
+        var lengths: [4][]const u8 = undefined;
+        var length_count: usize = 0;
+        var colour: ?[]const u8 = null;
+        var inset = false;
+
+        var parts = shorthand.Components.init(layer);
+        while (parts.next()) |part| {
+            if (std.ascii.eqlIgnoreCase(part, "inset")) {
+                if (inset) return null;
+                inset = true;
+            } else if (isLengthToken(part)) {
+                if (length_count == lengths.len) return null;
+                // Only a zero is a bare number a length slot takes; writing
+                // `px` onto any other would invent a length Chrome refused.
+                lengths[length_count] = if (std.mem.eql(u8, part, "0")) "0px" else part;
+                length_count += 1;
+            } else {
+                if (colour != null) return null;
+                colour = keywordSpelling(colours, part, false);
+            }
+        }
+        // A `/` stops the walk, and a shadow never carries one.
+        if (parts.stopped) return null;
+        // Two lengths are the fewest a shadow has. Fewer means this is not one:
+        // `none`, `inherit`, or a value that did not parse as a shadow at all.
+        if (length_count < 2) return null;
+
+        if (!first) {
+            try buf.writer.writeAll(", ");
+        }
+        first = false;
+
+        if (colour) |name| {
+            try buf.writer.writeAll(name);
+            try buf.writer.writeByte(' ');
+        }
+        for (lengths[0..length_count], 0..) |dimension, i| {
+            if (i != 0) try buf.writer.writeByte(' ');
+            try buf.writer.writeAll(dimension);
+        }
+        if (inset) {
+            try buf.writer.writeAll(" inset");
+        }
+    }
+
+    // A value already in Chrome's order is far commoner than one out of it, so
+    // the copy is usually thrown away.
+    if (std.mem.eql(u8, buf.written(), value)) {
+        buf.deinit();
+        return null;
+    }
+    return buf.written();
+}
+
+/// Whether a shadow component is one of its lengths rather than its colour: a
+/// number, optionally signed, optionally carrying a unit. `-webkit-x` opens
+/// with the same byte as `-1px` and is not one, so the sign has to be followed
+/// by a digit or a dot.
+fn isLengthToken(part: []const u8) bool {
+    var i: usize = 0;
+    if (i < part.len and (part[i] == '-' or part[i] == '+')) i += 1;
+    if (i >= part.len) return false;
+    return std.ascii.isDigit(part[i]) or part[i] == '.';
 }
 
 /// Rewrite a value into the text Chrome answers with. Measured
@@ -2774,6 +2885,52 @@ test "normalizePropertyValue: unitless zero to 0px" {
     }
 }
 
+// Measured with tools/fingerprint/probes/expr-shadow-serialize.js: Chrome
+// writes a shadow layer as `[colour] <lengths, as written> [inset]`, however
+// the author ordered them. The lengths keep their count -- an omitted blur is
+// not filled in -- but a unitless zero among them becomes `0px`, which the
+// whole-value rule above never reaches inside a list.
+test "normalizePropertyValue: a shadow layer is colour, lengths, inset" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const cases = .{
+        // The colour moves to the front from wherever it was written.
+        .{ "box-shadow", "1px 2px red", "red 1px 2px" },
+        .{ "box-shadow", "1px 2px 3px 4px red", "red 1px 2px 3px 4px" },
+        // Already in Chrome's order: unchanged.
+        .{ "box-shadow", "red 1px 2px", "red 1px 2px" },
+        // `inset` moves to the end, from either side.
+        .{ "box-shadow", "inset 1px 2px red", "red 1px 2px inset" },
+        .{ "box-shadow", "1px 2px red inset", "red 1px 2px inset" },
+        .{ "box-shadow", "red inset 1px 2px", "red 1px 2px inset" },
+        // Keywords are lowercased, the colour folds to rgb().
+        .{ "box-shadow", "INSET 1px 2px RED", "red 1px 2px inset" },
+        .{ "box-shadow", "inset 0 0 0 #228b49", "rgb(34, 139, 73) 0px 0px 0px inset" },
+        // The exact shape the Cloudflare payload carries.
+        .{ "box-shadow", "inset 0 0 0 rgb(34, 139, 73)", "rgb(34, 139, 73) 0px 0px 0px inset" },
+        // A unitless zero in a length slot gains `px`; `0em` keeps its unit.
+        .{ "box-shadow", "0px 0em 0 0 red", "red 0px 0em 0px 0px" },
+        // Each comma layer is ordered on its own.
+        .{ "box-shadow", "1px 1px red,2px 2px blue", "red 1px 1px, blue 2px 2px" },
+        .{ "box-shadow", "inset 0 0 0 red,0 1px 2px blue", "red 0px 0px 0px inset, blue 0px 1px 2px" },
+        // A layer with no colour keeps its lengths; Chrome invents none.
+        .{ "box-shadow", "inset 1px 2px 3px 4px", "1px 2px 3px 4px inset" },
+        .{ "box-shadow", "1px 2px", "1px 2px" },
+        // `none` is a keyword, not a layer.
+        .{ "box-shadow", "none", "none" },
+        // text-shadow takes the same rule, minus `inset`.
+        .{ "text-shadow", "1px 2px 3px red", "red 1px 2px 3px" },
+        .{ "text-shadow", "0 0 red", "red 0px 0px" },
+        .{ "text-shadow", "1px 1px red,2px 2px blue", "red 1px 1px, blue 2px 2px" },
+    };
+    inline for (cases) |case| {
+        const result = try normalizePropertyValue(allocator, case[0], case[1]);
+        try testing.expectEqual(case[2], result);
+    }
+}
+
 test "normalizePropertyValue: first baseline to baseline" {
     const result = try normalizePropertyValue(testing.allocator, "align-items", "first baseline");
     try testing.expectEqual("baseline", result);
@@ -2977,6 +3134,10 @@ test "WebApi: CSSStyleDeclaration serialize" {
 
 test "WebApi: CSSStyleDeclaration value list serialize" {
     try testing.htmlRunner("css/value_list_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration shadow serialize" {
+    try testing.htmlRunner("css/shadow_serialize.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration custom properties" {

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Chrome writes a shadow layer as `[colour] <lengths> [inset]`, whatever order
+  the author put them in. It reorders but does not fill in: a shadow written
+  without a blur keeps its two lengths rather than gaining `0px 0px`.
+
+  Measured on Chrome over http://localhost with
+  tools/fingerprint/probes/expr-shadow-serialize.js (31 cases, all matching).
+  Seven of the rules the Cloudflare challenge page's `@keyframes` payload
+  differed on are `box-shadow`, in the shape `inset 0 0 0 rgb(34, 139, 73)`.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+function declOf(text) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync('x{' + text + '}');
+    return sheet.cssRules[0].style.cssText;
+}
+</script>
+
+<script id="shadow_colour_leads">
+{
+    testing.expectEqual('box-shadow: red 1px 2px;', declOf('box-shadow:1px 2px red'));
+    testing.expectEqual('box-shadow: red 1px 2px;', declOf('box-shadow:red 1px 2px'));
+    testing.expectEqual('box-shadow: red 1px 2px 3px;', declOf('box-shadow:1px 2px 3px red'));
+    testing.expectEqual('box-shadow: red 1px 2px 3px 4px;', declOf('box-shadow:1px 2px 3px 4px red'));
+    // The colour folds to rgb() on the way, as it does anywhere else.
+    testing.expectEqual('box-shadow: rgb(34, 139, 73) 1px 2px;', declOf('box-shadow:1px 2px #228b49'));
+    testing.expectEqual(
+        'box-shadow: rgba(0, 0, 0, 0.5) 0px 1px 2px;',
+        declOf('box-shadow:0 1px 2px rgba(0,0,0,.5)'));
+}
+</script>
+
+<script id="shadow_inset_trails">
+{
+    testing.expectEqual('box-shadow: red 1px 2px inset;', declOf('box-shadow:inset 1px 2px red'));
+    testing.expectEqual('box-shadow: red 1px 2px inset;', declOf('box-shadow:1px 2px red inset'));
+    testing.expectEqual('box-shadow: red 1px 2px inset;', declOf('box-shadow:red inset 1px 2px'));
+    // The keyword and the colour name are both re-cased.
+    testing.expectEqual('box-shadow: red 1px 2px inset;', declOf('box-shadow:INSET 1px 2px RED'));
+    // A layer with no colour keeps its lengths; Chrome invents none.
+    testing.expectEqual('box-shadow: 1px 2px 3px 4px inset;', declOf('box-shadow:inset 1px 2px 3px 4px'));
+    // The exact shape the Cloudflare payload carries.
+    testing.expectEqual(
+        'box-shadow: rgb(34, 139, 73) 0px 0px 0px inset;',
+        declOf('box-shadow:inset 0 0 0 rgb(34, 139, 73)'));
+}
+</script>
+
+<script id="shadow_zero_gains_px">
+{
+    // A unitless zero is only a zero in a length slot, and Chrome writes it
+    // `0px` there -- the whole-value rule cannot see one inside a list.
+    testing.expectEqual('box-shadow: red 0px 0px;', declOf('box-shadow:0 0 red'));
+    testing.expectEqual('box-shadow: red 0px 0px 0px 0px;', declOf('box-shadow:0 0 0 0 red'));
+    // A zero written with a unit keeps the unit it was written with.
+    testing.expectEqual('box-shadow: red 0px 0em 0px 0px;', declOf('box-shadow:0px 0em 0 0 red'));
+    // A negative or fractional length is reprinted, not re-slotted.
+    testing.expectEqual('box-shadow: red -1px -2px 0.5px;', declOf('box-shadow:-1px -2px 0.5px red'));
+    testing.expectEqual('box-shadow: red 1px 2.5px;', declOf('box-shadow:1.0px 2.50px red'));
+}
+</script>
+
+<script id="shadow_layers_are_ordered_apart">
+{
+    testing.expectEqual(
+        'box-shadow: red 1px 1px, blue 2px 2px;',
+        declOf('box-shadow:1px 1px red,2px 2px blue'));
+    testing.expectEqual(
+        'box-shadow: red 0px 0px 0px inset, blue 0px 1px 2px;',
+        declOf('box-shadow:inset 0 0 0 red,0 1px 2px blue'));
+    testing.expectEqual(
+        'box-shadow: rgba(0, 0, 0, 0.5) 0px 1px 2px, green 0px 0px 0px 1px inset;',
+        declOf('box-shadow:0 1px 2px rgba(0,0,0,.5),inset 0 0 0 1px green'));
+}
+</script>
+
+<script id="shadow_text_shadow_takes_the_same_rule">
+{
+    testing.expectEqual('text-shadow: red 1px 2px;', declOf('text-shadow:1px 2px red'));
+    testing.expectEqual('text-shadow: red 1px 2px 3px;', declOf('text-shadow:1px 2px 3px red'));
+    testing.expectEqual('text-shadow: red 0px 0px;', declOf('text-shadow:0 0 red'));
+    testing.expectEqual(
+        'text-shadow: red 1px 1px, blue 2px 2px;',
+        declOf('text-shadow:1px 1px red,2px 2px blue'));
+    // The -webkit- alias is stored under the unprefixed name and takes the
+    // same rule once it gets there.
+    testing.expectEqual('box-shadow: red 1px 2px;', declOf('-webkit-box-shadow:1px 2px red'));
+}
+</script>
+
+<script id="shadow_non_layers_are_left_alone">
+{
+    // `none` is a keyword rather than a layer, and carries no length to order.
+    testing.expectEqual('box-shadow: none;', declOf('box-shadow:none'));
+    testing.expectEqual('text-shadow: none;', declOf('text-shadow:none'));
+    testing.expectEqual('box-shadow: inherit;', declOf('box-shadow:inherit'));
+    // A value whose text arrives later cannot be slotted, so it stays whole.
+    testing.expectEqual('box-shadow: var(--s);', declOf('box-shadow:var(--s)'));
+    // A shadow next to another declaration does not disturb it.
+    testing.expectEqual('box-shadow: red 1px 2px; color: blue;', declOf('box-shadow:1px 2px red;color:blue'));
+}
+</script>
