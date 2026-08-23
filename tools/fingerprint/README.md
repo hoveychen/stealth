@@ -42,6 +42,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `expr-diff.mjs` | Diffs two `run-expr` readings case by case, for a probe that returns an object keyed by case name rather than the collectors' fixed property list. Handles the double JSON parse (a probe's answer is a JSON string) so each probe does not have to. |
 | `run-expr.mjs` | Evaluates one expression file against either engine and prints the result as JSON. The collectors walk a fixed property list; this answers a one-off "what does Chrome say about X", and the answer to "are we aligned" is the diff of the two outputs. |
 | `probes/` | The expression files the sections below cite by name, and what `run-expr.mjs` takes. |
+| `resource-timing-initiators.mjs` | Serves a page carrying one of every subresource kind a parser can start — script (classic/defer/async/module/import), stylesheet, `@import`ed sheet, `<link rel=preload>`, image, XHR, favicon — navigates either engine to it, and prints each `resource` entry with every field a fingerprinter reads. Answers "what should this load be filed under", which is the one question the entry's shape cannot. |
 | `run-probe.mjs` | Runs one `probe-*.js` on either engine and prints the result as JSON. Takes a url, because `about:blank` is not a secure context and this engine does not run scheduled tasks under an outstanding `awaitPromise` evaluate — a probe that awaits a timer needs a real page. |
 | `run-page-probe.mjs` | Runs a probe on this engine as a *page load* rather than through CDP, for the same timer reason. `lightpanda fetch --dump` decides the load is over somewhere between two and six seconds, so this is the short-probe path; anything with a longer wait budget belongs on `run-probe.mjs`. |
 | `webrtc-protochain.mjs` | Ground truth for every `RTC*` global: prototype chain, class-side inheritance, the window property descriptor, and the exact `TypeError` text for a few argument shapes. |
@@ -10832,3 +10833,75 @@ is how the gap turned up here at all.
 
 That is `perf-resource-timing`, and it is worth more than the 139 bytes this
 plan was chasing.
+
+## The buffer fills now, and the station reads it
+
+`perf-resource-timing` wired the producer and every load that reaches it. The
+ground truth for what a load should be filed under is
+`resource-timing-initiators.mjs`: it serves its own origin carrying one of every
+load kind — a classic `<script src>`, a `defer`, an `async`, a module and the
+module it imports, a `<link rel=stylesheet>`, a sheet that stylesheet
+`@import`s, a `<link rel=preload as=script>` with a `<script src>` that consumes
+it, an `<img>`, an XHR, and the favicon — navigates both engines to it, and
+reads the buffer back with every field a fingerprinter can see.
+
+What Chrome 151 answers, and what this engine now answers identically for every
+row but the last:
+
+| load | `initiatorType` | `renderBlockingStatus` |
+|---|---|---|
+| `<script src>` (no async/defer) | `script` | `blocking` |
+| `<script defer>` / `async` / `type=module` / static import | `script` | `non-blocking` |
+| `<link rel=preload as=script>` | `link` | `non-blocking` |
+| `<link rel=stylesheet>` | `link` | `blocking` |
+| `@import`ed sheet | `css` | `blocking` | ← **not produced here** |
+| `<img>` | `img` | `non-blocking` |
+| favicon | `other` | `non-blocking` |
+| XHR | `xmlhttprequest` | `non-blocking` |
+
+Two of those took measuring rather than guessing. The prescan starts a fetch for
+every `<script src>` it finds in the raw HTML before parsing; that head start is
+internal, and Chrome files such a load under the script, not under a `<link>`
+the page never wrote — so a preload with no hint element records `script`. And
+because the prescan sees the whole document first, a URL that both a
+`<link rel=preload>` and a `<script src>` name was already registered by the time
+the link was parsed, which made the link's own registration a no-op and cost the
+entry its `link` attribution. The link adopts the in-flight fetch now, which
+also gives it the `load` event it had been silently missing.
+
+The eleventh row is the one still missing: an `@import`ed sheet leaves no entry
+here because no `@import` is followed at all. That is a missing request, not a
+missing entry, and it belongs to CSS rather than to this.
+
+### On the station
+
+`apiJsResourceTiming` is no longer `undefined`. The page-level challenge now
+posts a 33-key, 836-byte entry for api.js, with `initiatorType: "script"` and
+`nextHopProtocol: "h2"` — the protocol plumbing reporting a real negotiated
+version off the live connection. The capture is
+`results/r1join-lp-after-resource-timing.json`; the oracle column below is
+`results/r1join-oracle-2.json`.
+
+Against the oracle's 1 065 bytes, the residue is named rather than a length:
+
+| field | oracle | here |
+|---|---|---|
+| `navigationId` | `9894` | *absent* — 33 keys against 34 |
+| `contentType` / `contentEncoding` | `text/javascript` / `br` | `""` / `""` |
+| `domainLookupStart` … `finalResponseHeadersStart` (9 milestones) | real | all `0` |
+| `serverTiming` | one `cfExtPri` entry | `[]` |
+| `encodedBodySize` | 27 124 | 84 236 |
+| `nextHopProtocol` | `h3` | `h2` |
+
+`serverTiming` is the server's own header and cannot be invented. The rest can:
+the entry carries no content type or encoding, none of the nine connection
+milestones, and an `encodedBodySize` that is the *decoded* size — api.js arrives
+brotli-compressed and this reports what it decompressed to, which says the
+response was not compressed at all. That is the next plan, not this one.
+
+The sweep says nothing moved that should not have:
+`results/antibot-2026-08-23-perf-resource-timing.json` against
+`results/r1-fixes-sweep-after.json` is verdict-for-verdict identical across all
+fifteen stations, 11/15 either way. Filling a buffer that was empty is a change
+in what every page can read about itself, so the reading that matters here is
+the absence of a regression rather than a number going up.
