@@ -358,3 +358,52 @@
   );
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#measureText emoji">
+{
+  // The ten strings the Turnstile widget measures, at the font it sets, with
+  // headed Chrome's answer for all ten -- probes/expr-emoji-text-metrics.js.
+  // The widget reads them off an OffscreenCanvas, so this is the surface that
+  // matters even though both 2D contexts share one implementation.
+  //
+  // Every reading goes through `ask` for the reason given above: a script that
+  // throws half way leaves its remaining assertions unrecorded, and the runner
+  // reads a script whose recorded assertions all passed as a pass.
+  const ask = (fn) => {
+    try { return fn(); } catch (err) { return `${err.name}: ${err.message}`; }
+  };
+
+  const ctx = new OffscreenCanvas(300, 150).getContext('2d');
+  ctx.font = '16px sans-serif';
+
+  const TEN = [
+    '\u{1F600}', '\u{1F923}', '\u{1F631}', '\u{1F44D}', '\u{1F525}',
+    '\u{1F680}', '\u{1F9E0}', '\u{1F436}', '\u{1F3E0}', '\u{2600}\u{FE0F}',
+  ];
+  for (const emoji of TEN) {
+    testing.expectEqual(
+      // The hanging baseline is 80% of the font ascent computed in single
+      // precision, which is Chrome's own rounding -- the probe rounds it to
+      // 11.2 for display, the engine answers 11.199999809265137.
+      [20, 1, 21, 17, 5, 14, 4, 0, 11.199999809265137, -4],
+      ask(() => {
+        const m = ctx.measureText(emoji);
+        return [
+          m.width, m.actualBoundingBoxLeft, m.actualBoundingBoxRight,
+          m.actualBoundingBoxAscent, m.actualBoundingBoxDescent,
+          m.fontBoundingBoxAscent, m.fontBoundingBoxDescent,
+          m.alphabeticBaseline, m.hangingBaseline, m.ideographicBaseline,
+        ];
+      }),
+    );
+  }
+
+  // The plain-text control from the same probe, which already agreed: if these
+  // move, the change was to the font metrics rather than to the emoji.
+  const round = (v) => (typeof v === 'number' ? Math.round(v * 1000) / 1000 : v);
+  testing.expectEqual(8, ask(() => ctx.measureText('x').width));
+  testing.expectEqual(13.328, round(ask(() => ctx.measureText('M').width)));
+  testing.expectEqual(60.445, round(ask(() => ctx.measureText('Hwmqxli').width)));
+  testing.expectEqual(4.445, round(ask(() => ctx.measureText(' ').width)));
+}
+</script>

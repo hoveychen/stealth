@@ -496,6 +496,60 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#measureText emoji">
+{
+  // Headed Chrome's numbers, from probes/expr-emoji-text-metrics.js. A colour
+  // emoji does not come from the named family and is not linear in the font
+  // size: at 16px it advances 20 where the em box is 16, and at 24px and up it
+  // advances the em exactly.
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = '16px sans-serif';
+
+  const m = ctx.measureText('\u{1F600}');
+  testing.expectEqual(20, m.width);
+  testing.expectEqual(1, m.actualBoundingBoxLeft);
+  testing.expectEqual(21, m.actualBoundingBoxRight);
+  testing.expectEqual(17, m.actualBoundingBoxAscent);
+  testing.expectEqual(5, m.actualBoundingBoxDescent);
+
+  // Which family was asked for makes no difference, because the glyph never
+  // comes from it. Chrome answers 20 under all four.
+  for (const family of ['sans-serif', 'serif', 'monospace', 'Arial']) {
+    ctx.font = `16px ${family}`;
+    testing.expectEqual(20, ctx.measureText('\u{1F600}').width);
+  }
+
+  // The curve, at the sizes the probe walked.
+  ctx.font = '8px sans-serif';
+  testing.expectEqual(10, ctx.measureText('\u{1F600}').width);
+  ctx.font = '13px sans-serif';
+  testing.expectEqual(16, ctx.measureText('\u{1F600}').width);
+  ctx.font = '24px sans-serif';
+  testing.expectEqual(24, ctx.measureText('\u{1F600}').width);
+  ctx.font = '48px sans-serif';
+  testing.expectEqual(48, ctx.measureText('\u{1F600}').width);
+  testing.expectEqual(44, ctx.measureText('\u{1F600}').actualBoundingBoxAscent);
+
+  // A shaped cluster is one emoji however many code points it is made of, and
+  // a selector on its own is not one at all.
+  ctx.font = '16px sans-serif';
+  testing.expectEqual(20, ctx.measureText('\u{2600}\u{FE0F}').width); // sun, colour
+  testing.expectEqual(20, ctx.measureText('\u{1F1FA}\u{1F1F8}').width); // a flag
+  testing.expectEqual(20, ctx.measureText('\u{1F468}\u{200D}\u{1F4BB}').width); // ZWJ
+  testing.expectEqual(20, ctx.measureText('\u{1F44D}\u{1F3FD}').width); // skin tone
+  testing.expectEqual(0, ctx.measureText('\u{FE0F}').width);
+
+  // Text is still text: the pen carries both kinds of advance, and 'x' is 8.
+  testing.expectEqual(8, ctx.measureText('x').width);
+  testing.expectEqual(28, ctx.measureText('x\u{1F600}').width);
+  testing.expectEqual(29, ctx.measureText('x\u{1F600}').actualBoundingBoxRight);
+
+  // A combining mark rides on the letter before it rather than being charged
+  // an advance of its own.
+  testing.expectEqual(ctx.measureText('a').width, ctx.measureText('a\u{0301}').width);
+}
+</script>
+
 <script id="TextMetrics">
 {
   const ctx = document.createElement('canvas').getContext('2d');
