@@ -1559,9 +1559,18 @@ const worker_common_apis = [_]type{
     @import("../webapi/webrtc/encoded_frames.zig"),
     @import("../webapi/webrtc/RTCDataChannel.zig"),
     @import("../webapi/webrtc/worker_transform.zig"),
+    // The File System Access handles are Exposed=(Window,Worker): a worker is
+    // where OPFS is actually usable, since createSyncAccessHandle only exists
+    // there. FileSystemSyncAccessHandle itself is Exposed=DedicatedWorker, so it
+    // is named in DedicatedWorkerJsApis alone rather than here.
+    @import("../webapi/file_system_access.zig"),
 };
 
-pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/DedicatedWorkerGlobalScope.zig")} ++ worker_common_apis));
+pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{
+    @import("../webapi/DedicatedWorkerGlobalScope.zig"),
+    // [Exposed=DedicatedWorker]: a shared worker does not carry it.
+    @import("../webapi/file_system_access.zig").FileSystemSyncAccessHandle,
+} ++ worker_common_apis));
 pub const SharedWorkerJsApis = flattenTypes(&([_]type{@import("../webapi/SharedWorkerGlobalScope.zig")} ++ worker_common_apis));
 
 // Master list of ALL JS APIs across all contexts.
@@ -1574,6 +1583,7 @@ pub const JsApis = blk: {
     const base = PageJsApis ++ flattenTypes(&.{@import("../webapi/webrtc/worker_transform.zig")}) ++ [_]type{
         // Worker-only, so it isn't in PageJsApis either.
         @import("../webapi/FileReaderSync.zig").JsApi,
+        @import("../webapi/file_system_access.zig").FileSystemSyncAccessHandle.JsApi,
         @import("../webapi/DedicatedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/SharedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/WorkerGlobalScope.zig").JsApi,

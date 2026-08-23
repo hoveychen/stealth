@@ -1,0 +1,34 @@
+{
+ "gates": {
+  "storage": "object",
+  "getDirectory": true,
+  "trustedTypes": "object"
+ },
+ "nav": {
+  "cDfY2": "MacIntel",
+  "aLKoi3": [
+   "en-US",
+   "en"
+  ],
+  "mRDZ3": 10,
+  "ibdUe0": 16,
+  "udfQI1": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+ },
+ "clock": {
+  "EZRaP0": 0.09999999403953552
+ },
+ "opfs": {
+  "vZBc4": 0.5999999940395355
+ },
+ "debugger": {
+  "hpoXC5": "uyTve9"
+ },
+ "timeout": {
+  "PpJy7": "1"
+ },
+ "typedarray": {
+  "buf": true,
+  "view": true,
+  "ctor": "ArrayBuffer"
+ }
+}

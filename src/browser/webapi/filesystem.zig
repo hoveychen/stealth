@@ -122,7 +122,7 @@ pub const Node = struct {
     contents: []const u8 = "",
     modified_ms: i64 = 0,
 
-    fn find(self: *Node, name: []const u8) ?*Node {
+    pub fn find(self: *Node, name: []const u8) ?*Node {
         for (self.children.items) |child| {
             if (std.mem.eql(u8, child.name, name)) {
                 return child;
@@ -131,7 +131,7 @@ pub const Node = struct {
         return null;
     }
 
-    fn detach(self: *Node) void {
+    pub fn detach(self: *Node) void {
         const parent = self.parent orelse return;
         for (parent.children.items, 0..) |child, i| {
             if (child == self) {
@@ -164,6 +164,58 @@ fn walk(base: *Node, path: []const u8) ?Walk {
     }
 
     return .{ .parent = current, .name = pending orelse "" };
+}
+
+/// The five tree operations, named so that the origin private file system in
+/// `file_system_access.zig` can share the tree rather than grow one of its own.
+/// It reaches these and `Node.find` / `Node.detach`; nothing else here.
+pub const NodeKind = @FieldType(Node, "kind");
+
+/// An empty tree: the root of one sandboxed filesystem.
+pub fn createRoot(allocator: Allocator) !*Node {
+    const root = try allocator.create(Node);
+    root.* = .{ .kind = .directory, .name = "", .full_path = "/", .parent = null };
+    return root;
+}
+
+/// Creates `name` under `parent` and links it in. The caller has already
+/// checked that no entry by that name is there.
+pub fn createNode(allocator: Allocator, parent: *Node, kind: NodeKind, name: []const u8) !*Node {
+    const node = try allocator.create(Node);
+    node.* = .{
+        .kind = kind,
+        .name = try allocator.dupe(u8, name),
+        .full_path = try joinPath(allocator, parent.full_path, name),
+        .parent = parent,
+    };
+    try parent.children.append(allocator, node);
+    return node;
+}
+
+/// Writes `payload` at `at`, zero-filling any gap it leaves behind the old end.
+pub fn writeAt(allocator: Allocator, node: *Node, at: usize, payload: []const u8) !void {
+    const existing = node.contents;
+    const end = at + payload.len;
+    const buffer = try allocator.alloc(u8, @max(existing.len, end));
+    @memcpy(buffer[0..existing.len], existing);
+    if (end > existing.len) {
+        @memset(buffer[existing.len..end], 0);
+    }
+    @memcpy(buffer[at..end], payload);
+    node.contents = buffer;
+}
+
+/// Shrinks or zero-extends `node` to `length`.
+pub fn truncateTo(allocator: Allocator, node: *Node, length: usize) !void {
+    const existing = node.contents;
+    if (length <= existing.len) {
+        node.contents = existing[0..length];
+        return;
+    }
+    const buffer = try allocator.alloc(u8, length);
+    @memcpy(buffer[0..existing.len], existing);
+    @memset(buffer[existing.len..], 0);
+    node.contents = buffer;
 }
 
 // ----------------------------------------------------------------------------
@@ -529,16 +581,7 @@ pub const DirectoryEntry = struct {
             return failLater(exec, failure, "NotFoundError", messages.not_found);
         }
 
-        const arena = exec._factory._arena;
-        const node = try arena.create(Node);
-        node.* = .{
-            .kind = kind,
-            .name = try arena.dupe(u8, target.name),
-            .full_path = try joinPath(arena, target.parent.full_path, target.name),
-            .parent = target.parent,
-        };
-        try target.parent.children.append(arena, node);
-
+        const node = try createNode(exec._factory._arena, target.parent, kind, target.name);
         const entry = try wrapNode(self._proto._filesystem, node, exec);
         return callLater(exec, success, entry);
     }
@@ -790,31 +833,16 @@ pub const FileWriter = struct {
 
     fn apply(self: *FileWriter, pending: Pending, exec: *Execution) !void {
         const arena = exec._factory._arena;
-        const existing = self._node.contents;
 
         switch (pending) {
             .write => |payload| {
                 const start: usize = @intCast(self._position);
-                const end = start + payload.len;
-                const buffer = try arena.alloc(u8, @max(existing.len, end));
-                @memcpy(buffer[0..existing.len], existing);
-                if (end > existing.len) {
-                    @memset(buffer[existing.len..end], 0);
-                }
-                @memcpy(buffer[start..end], payload);
-                self._node.contents = buffer;
-                self._position = end;
+                try writeAt(arena, self._node, start, payload);
+                self._position = start + payload.len;
             },
             .truncate => |size| {
                 const length: usize = @intCast(size);
-                if (length <= existing.len) {
-                    self._node.contents = existing[0..length];
-                } else {
-                    const buffer = try arena.alloc(u8, length);
-                    @memcpy(buffer[0..existing.len], existing);
-                    @memset(buffer[existing.len..], 0);
-                    self._node.contents = buffer;
-                }
+                try truncateTo(arena, self._node, length);
                 self._position = @min(self._position, length);
             },
         }
@@ -1080,8 +1108,7 @@ fn forKind(kind: Kind, exec: *Execution) !*DOMFileSystem {
     }
 
     const arena = exec._factory._arena;
-    const root = try arena.create(Node);
-    root.* = .{ .kind = .directory, .name = "", .full_path = "/", .parent = null };
+    const root = try createRoot(arena);
 
     const origin = exec.js.global.frame.origin orelse "null";
     const filesystem = try exec._factory.create(DOMFileSystem{

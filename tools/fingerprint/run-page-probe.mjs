@@ -9,6 +9,7 @@
 //
 // Env:
 //   LP_BIN   path to the lightpanda binary  (default: <repo>/zig-out/bin/lightpanda)
+//   WAIT_MS  how long to let the probe run   (default: 30000)
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -22,14 +23,17 @@ const REPO = path.resolve(HERE, '../..');
 const probePath = process.argv[2];
 const LIGHTPANDA = process.env.LP_BIN || process.env.LIGHTPANDA ||
     path.join(REPO, 'zig-out/bin/lightpanda');
+const WAIT_MS = Number(process.env.WAIT_MS) || 30000;
 const source = (await fs.readFile(probePath, 'utf8')).trim().replace(/;\s*$/, '');
 
 // The payload goes out base64'd through the DOM dump rather than through
 // console.log: the log formatter wraps and pads long strings, which corrupts
 // JSON, and base64 survives HTML serialisation untouched.
 const html = `<!DOCTYPE html><html><body><div id=out></div><script type=module>
-// A pending timer keeps the load alive: without one, \`fetch --dump\` can decide
-// the page is done before a probe's later awaits have been scheduled.
+// A pending timer keeps the load alive: without one, \`fetch\` can decide the
+// page is done before a probe's later awaits have been scheduled. --wait-script
+// below is the other half: the timer keeps the page from being declared done,
+// and the wait keeps the driver from dumping before the answer lands.
 const keepalive = setInterval(() => {}, 50);
 const result = await (${source});
 clearInterval(keepalive);
@@ -45,7 +49,18 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const port = server.address().port;
 
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'lp-page-probe-'));
-const proc = spawn(LIGHTPANDA, ['fetch', '--dump', `http://127.0.0.1:${port}/`], {
+// --dump takes a mode, and the wait is what makes this work at all: a probe
+// that asks six questions with a timeout each runs far past the 5s default,
+// and `fetch` would otherwise serialize an empty #out and report success.
+const proc = spawn(LIGHTPANDA, [
+  'fetch',
+  '--dump', 'html',
+  // Guarded: the wait runs while the document is still parsing, so #out is not
+  // there yet on the first check and an unguarded read is a fatal ScriptError.
+  '--wait-script', "!!(document.getElementById('out') || {}).textContent",
+  '--wait-ms', String(WAIT_MS),
+  `http://127.0.0.1:${port}/`,
+], {
   stdio: ['ignore', 'pipe', 'pipe'],
   cwd: dir,
 });
