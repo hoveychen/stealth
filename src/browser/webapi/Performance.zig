@@ -64,6 +64,10 @@ _delivering: bool = false,
 // exactly one of these, so a page that reports none is a tell on its own.
 _nav: timing.Timing = .{},
 _nav_name: []const u8 = "",
+
+// Shared by every entry this navigation files. Drawn once at navigationStarted
+// rather than per entry: see newNavigationId.
+_navigation_id: u32 = 0,
 _nav_entry: ?*timing.NavigationTiming = null,
 _nav_phase: NavPhase = .none,
 _paint_entries: bool = false,
@@ -243,10 +247,24 @@ pub fn toJSON(self: *Performance) Json {
 // the JS objects are built lazily in ensureImplicitEntries so none of this needs
 // an Execution.
 
+/// Chrome tags every performance entry with the navigation it belongs to, and
+/// the tag is a small random number rather than a counter: twenty navigations
+/// across two tabs of one Chrome 151 answered twenty unrelated values, none
+/// outside [1, 10000] and none in sequence with the last (measured; the
+/// station's own reading of api.js carries 9894). A counter would leak how many
+/// documents this browser has loaded, which is why Chrome does not use one.
+fn newNavigationId() u32 {
+    var bytes: [4]u8 = undefined;
+    lp.io.random(&bytes);
+    return std.mem.readInt(u32, &bytes, .little) % 10_000 + 1;
+}
+
 pub fn navigationStarted(self: *Performance, url: []const u8, navigation_type: []const u8) void {
     const at = self.now();
     self._nav_name = url;
+    self._navigation_id = newNavigationId();
     self._nav = .{
+        .navigation_id = self._navigation_id,
         .navigation_type = navigation_type,
         .fetch_start = at,
         .domain_lookup_start = at,
@@ -356,6 +374,9 @@ pub fn resourceLoaded(
     // to outlive this call rather than ride along on the stack.
     const stored = try exec.arena.create(timing.Timing);
     stored.* = t;
+    // Stamped here rather than by each recorder: one navigation is one id, and
+    // a recorder that forgot would let a reader tell its loads from the rest.
+    stored.navigation_id = self._navigation_id;
 
     // The two response labels are the only fields whose bytes belong to
     // whoever performed the fetch -- an inline buffer on a Script, an

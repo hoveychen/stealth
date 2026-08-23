@@ -201,6 +201,41 @@
     });
   </script>
 
+  <script id=entries_carry_one_navigation_id type=module>
+    const state = await testing.async();
+    // Chrome 151 stamps every entry of a navigation with the same
+    // `navigationId`, and a fresh one on the next navigation -- twenty
+    // navigations across two tabs answered twenty different four-digit numbers,
+    // all inside [1, 10000], each shared by that navigation's whole buffer
+    // (measured; the oracle's api.js entry carries 9894).
+    //
+    // The property was missing outright here, which is the difference between
+    // the oracle's 34-key entry and this engine's 33-key one.
+    await waitForResourceEntry('/served/compressed.js');
+    const resources = performance.getEntriesByType('resource');
+    const nav = performance.getEntriesByType('navigation')[0];
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(true, resources.length > 1);
+      const id = nav.navigationId;
+      testing.expectEqual('number', typeof id);
+      testing.expectEqual(true, id >= 1 && id <= 10000);
+      // One navigation, one id -- a per-entry number would let a reader count
+      // the loads by counting the ids.
+      for (const e of resources) {
+        testing.expectEqual(id, e.navigationId);
+      }
+      // Chrome's key counts and the slot navigationId sits in: straight after
+      // duration, ahead of initiatorType, on both entry types.
+      const resKeys = Object.keys(resources[0].toJSON());
+      const navKeys = Object.keys(nav.toJSON());
+      testing.expectEqual(34, resKeys.length);
+      testing.expectEqual(48, navKeys.length);
+      testing.expectEqual(4, resKeys.indexOf('navigationId'));
+      testing.expectEqual(4, navKeys.indexOf('navigationId'));
+    });
+  </script>
+
   <script id=resource_entries_are_one_buffer type=module>
     const state = await testing.async();
     await waitForResourceEntry('/src/browser/tests/performance_resource.png');
