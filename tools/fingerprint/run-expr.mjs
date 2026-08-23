@@ -4,6 +4,7 @@
 //
 //   node tools/fingerprint/run-expr.mjs chrome     tools/fingerprint/probes/expr-g4-p67.js
 //   node tools/fingerprint/run-expr.mjs lightpanda tools/fingerprint/probes/expr-g4-p67.js
+//   node tools/fingerprint/run-expr.mjs chrome     probes/expr-x.js --headed
 //
 // The collectors walk a fixed property list; this runs whatever expression you
 // hand it, which is what a one-off "what does Chrome say about X" needs. Diff
@@ -42,6 +43,14 @@ const CHROME = process.env.CHROME ||
 const LP_BIN = process.env.LP_BIN || path.join(REPO, 'zig-out/bin/lightpanda');
 const PORT = Number(process.env.PORT) || (engine === 'chrome' ? 9344 : 9345);
 
+// Headless is the default because it leaves no window behind, and for most
+// readings the two agree. Text metrics are the exception this flag was added
+// for: which fonts are installed and which one a family name resolves to is
+// answered by the platform, and a headless Chrome is not obliged to answer it
+// the same way. Pass --headed when the reading is about fonts, rasterised
+// glyphs, or anything else the window system has a say in.
+const headed = process.argv.includes('--headed');
+
 let proc;
 if (engine === 'chrome') {
     const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'run-expr-chrome-'));
@@ -50,7 +59,7 @@ if (engine === 'chrome') {
         `--user-data-dir=${profile}`,
         '--no-first-run',
         '--no-default-browser-check',
-        '--headless=new',
+        ...(headed ? ['--window-size=1920,1080'] : ['--headless=new']),
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
 } else {
     proc = spawn(LP_BIN, ['serve', '--host', '127.0.0.1', '--port', String(PORT)], {
