@@ -702,10 +702,10 @@ function attach(el) {
     // The dispatch runs over computed values too.
     testing.expectEqual('CSSKeywordValue|block', brand(el.computedStyleMap().get('display')));
     // `align-items` is one of the 154 properties Blink's Typed OM does not
-    // model, so Chrome answers a bare CSSStyleValue("normal"). We answer
-    // undefined instead, because this engine's computed view has no initial
-    // value for it -- a pre-existing getComputedStyle gap, not a Typed OM one.
-    testing.expectEqual('undefined', brand(el.computedStyleMap().get('align-items')));
+    // model, so Chrome answers a bare CSSStyleValue("normal"). We match that
+    // now: the computed view has an initial value for it since the recorded
+    // table landed (webapi/css/chrome_initial_values.zig).
+    testing.expectEqual('CSSStyleValue|normal', brand(el.computedStyleMap().get('align-items')));
     testing.expectFalse(el.computedStyleMap().has('--nope'));
 }
 </script>
