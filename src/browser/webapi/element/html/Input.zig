@@ -737,6 +737,23 @@ pub fn select(self: *Input, frame: *Frame) !void {
     try frame._event_manager.dispatch(self.asElement().asEventTarget(), event);
 }
 
+// Blink's refusal for a selection member on an input whose type has no
+// selection to speak of, quoting the type back. The property is a parameter
+// because the lead-in names it and the three setters share everything after it.
+// setSelectionRange and friends reach the same state, but they are operations
+// and their lead-in reads "Failed to execute" -- a different sentence that
+// nothing has measured yet, so they keep the stock DOMException text.
+// Measured on Chrome 151 for selectionStart, selectionEnd and
+// selectionDirection on type=number and type=checkbox.
+fn noSelectionSupport(self: *const Input, comptime property: []const u8, frame: *Frame) anyerror {
+    return frame.js.fail(error.InvalidStateError, std.fmt.allocPrint(
+        frame.call_arena,
+        "Failed to set the '" ++ property ++ "' property on 'HTMLInputElement': " ++
+            "The input element's type ('{s}') does not support selection.",
+        .{self._input_type.toString()},
+    ) catch return error.InvalidStateError);
+}
+
 fn selectionAvailable(self: *const Input) bool {
     switch (self._input_type) {
         .text, .search, .url, .tel, .password => return true,
@@ -811,7 +828,7 @@ pub fn getSelectionDirection(self: *const Input) []const u8 {
 /// throwing, the same rule `setSelectionRange` already applies to its third
 /// argument.
 pub fn setSelectionDirection(self: *Input, value: ?[]const u8, frame: *Frame) !void {
-    if (!self.selectionAvailable()) return error.InvalidStateError;
+    if (!self.selectionAvailable()) return self.noSelectionSupport("selectionDirection", frame);
     self._selection_direction = if (value) |v|
         std.meta.stringToEnum(Selection.SelectionDirection, v) orelse .none
     else
@@ -825,7 +842,7 @@ pub fn getSelectionStart(self: *const Input) !?u32 {
 }
 
 pub fn setSelectionStart(self: *Input, value: u32, frame: *Frame) !void {
-    if (!self.selectionAvailable()) return error.InvalidStateError;
+    if (!self.selectionAvailable()) return self.noSelectionSupport("selectionStart", frame);
     self._selection_start = value;
     try self.dispatchSelectionChangeEvent(frame);
 }
@@ -836,7 +853,7 @@ pub fn getSelectionEnd(self: *const Input) !?u32 {
 }
 
 pub fn setSelectionEnd(self: *Input, value: u32, frame: *Frame) !void {
-    if (!self.selectionAvailable()) return error.InvalidStateError;
+    if (!self.selectionAvailable()) return self.noSelectionSupport("selectionEnd", frame);
     self._selection_end = value;
     try self.dispatchSelectionChangeEvent(frame);
 }
@@ -1455,8 +1472,8 @@ pub const JsApi = struct {
     pub const accept = reflect.string("accept");
     pub const readOnly = reflect.boolean("readonly");
     pub const alt = reflect.string("alt");
-    pub const maxLength = reflect.limitedLong("maxlength");
-    pub const minLength = reflect.limitedLong("minlength");
+    pub const maxLength = reflect.limitedLong("maxlength", "maxLength");
+    pub const minLength = reflect.limitedLong("minlength", "minLength");
     pub const size = reflect.unsignedLong("size", .{ .default = 20, .positive = true });
     pub const src = bridge.accessor(Input.getSrc, Input.setSrc, .{ .ce_reactions = true });
     pub const form = bridge.accessor(Input.getForm, null, .{});

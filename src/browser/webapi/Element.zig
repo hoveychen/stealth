@@ -678,7 +678,12 @@ pub fn setOuterHTML(self: *Element, html: []const u8, frame: *Frame) !void {
 
     // The parent of a documentElement is the Document, which cannot be modified.
     if (parent._type == .document) {
-        return error.NoModificationAllowed;
+        // An element with no parent at all is a different case and Chrome does
+        // not throw for it (measured on Chrome 151: `document.createElement
+        // ('div').outerHTML = 'x'` is silent), which is why the early return
+        // above stays a plain return.
+        return frame.js.fail(error.NoModificationAllowed, "Failed to set the 'outerHTML' " ++
+            "property on 'Element': This element's parent is a Document, which may not be modified.");
     }
 
     frame.domChanged();

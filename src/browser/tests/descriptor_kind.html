@@ -346,7 +346,11 @@
       msg(() => { 'use strict'; document.URL = 'x'; }));
     testing.expectEqual(
       'TypeError: Cannot set property tagName of #<Element> which has only a getter',
-      msg(() => { 'use strict'; document.body.tagName = 'x'; }));
+      msg(() => { 'use strict'; document.documentElement.tagName = 'x'; }));
+    // Node.prototype, one prototype further up, names itself and not Element.
+    testing.expectEqual(
+      'TypeError: Cannot set property nodeType of #<Node> which has only a getter',
+      msg(() => { 'use strict'; document.nodeType = 1; }));
 
     // The bit is invisible from here, which is why the throw above is the test.
     const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, 'userAgent');

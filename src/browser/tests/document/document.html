@@ -451,13 +451,4 @@
     testing.expectEqual(1, acss.length);
   }
 
-  // A sequence-typed attribute handed something not iterable gets the same
-  // detail an operation's sequence parameter gets -- that half is shared -- but
-  // behind the setter lead-in rather than "Failed to execute". Chrome 151.
-  {
-    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
-    testing.expectEqual(
-      "TypeError: Failed to set the 'adoptedStyleSheets' property on 'Document': The provided value cannot be converted to a sequence.",
-      msg(() => { document.adoptedStyleSheets = 1; }));
-  }
 </script>

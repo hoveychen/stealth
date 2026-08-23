@@ -358,8 +358,8 @@ pub const JsApi = struct {
     pub const disabled = reflect.boolean("disabled");
     pub const name = reflect.string("name");
     pub const required = reflect.boolean("required");
-    pub const maxLength = reflect.limitedLong("maxlength");
-    pub const minLength = reflect.limitedLong("minlength");
+    pub const maxLength = reflect.limitedLong("maxlength", "maxLength");
+    pub const minLength = reflect.limitedLong("minlength", "minLength");
     pub const form = bridge.accessor(TextArea.getForm, null, .{});
     pub const select = bridge.function(TextArea.select, .{});
 
