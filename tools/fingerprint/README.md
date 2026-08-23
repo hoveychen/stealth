@@ -39,6 +39,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `dump-voices.mjs` | Regenerates `src/browser/webapi/speech/voices.zig` from the real Chrome's `speechSynthesis.getVoices()`. The list arrives asynchronously, so it polls until it stops growing and refuses to write an empty table. |
 | `dump-graphics.mjs` | Dumps Chrome's *whole* graphics API surface — every GLenum, every method's arity, every `getParameter` answer, every character's advance width. `probe.js` asks "what does a fingerprinting script see"; this asks "what exactly should we report". The Zig code under `src/browser/webapi/canvas/` is transcribed from its output. |
 | `diff.mjs` | Renders a candidate/reference markdown comparison. |
+| `expr-diff.mjs` | Diffs two `run-expr` readings case by case, for a probe that returns an object keyed by case name rather than the collectors' fixed property list. Handles the double JSON parse (a probe's answer is a JSON string) so each probe does not have to. |
 | `run-expr.mjs` | Evaluates one expression file against either engine and prints the result as JSON. The collectors walk a fixed property list; this answers a one-off "what does Chrome say about X", and the answer to "are we aligned" is the diff of the two outputs. |
 | `probes/` | The expression files the sections below cite by name, and what `run-expr.mjs` takes. |
 | `run-probe.mjs` | Runs one `probe-*.js` on either engine and prints the result as JSON. Takes a url, because `about:blank` is not a secure context and this engine does not run scheduled tasks under an outstanding `awaitPromise` evaluate — a probe that awaits a timer needs a real page. |
@@ -1510,11 +1511,12 @@ five are the engine-wide gaps below.
   unless the module reads the argument as `?js.Value` and throws by hand, which
   is what `recognition.zig`, `filesystem.zig`, `CustomStateSet.zig` and
   `ElementInternals.zig` do.
-- **`new HTMLDivElement()` — and every other element interface — throws a
+- ~~**`new HTMLDivElement()` — and every other element interface — throws a
   TypeError with an empty message** where Chrome says `Failed to construct
   'HTMLDivElement': Illegal constructor`. `HTMLFrameElement` and
   `HTMLMenuElement` read the same way, which is two of the seven remaining probe
-  differences.
+  differences.~~ Fixed 2026-08-22, along with the other 143 empty constructor
+  messages — see "No constructor here has an empty message any more" below.
 - **`new DOMMatrix('nope')` says "The string did not match the expected
   pattern"** where Chrome says `Failed to construct 'DOMMatrix': Failed to parse
   'nope'.`
@@ -8466,3 +8468,163 @@ absent was recorded as the blocker on comparing these bodies. It is not.
 response body into the frame arena (`CDP.zig:onHttpResponseData`) — so response
 sizes and bodies were readable all along. The gap is real; it was not on this
 critical path.
+
+## No constructor here has an empty message any more (2026-08-22)
+
+`probes/probe-ctor-sweep.js` walks every constructor reachable from `window` —
+capitalised name, has a `prototype`, minus five that would navigate or spawn —
+and calls each one three ways: `new C()`, `new C('\0nope')`, and `C()` without
+the operator. It records the error's `name`, its `message`, and whether the
+message is empty.
+
+**Chrome: 722 constructors, zero empty messages.** That makes an empty message a
+zero-false-positive reading — there is nothing to argue about, no version drift,
+no platform variance. This engine had **145** of them across 927 constructors:
+
+| the reading | count |
+|---|---|
+| `new HTMLDivElement()` and 69 other element interfaces, `new` and bad-argument forms alike | 140 |
+| `new RTCEncodedAudioFrame({})` / `new RTCEncodedVideoFrame({})` | 2 |
+| `new RTCIceCandidate()` | 1 |
+| `new TextDecoder('nope')` / `new TextDecoderStream('nope')` | 2 |
+
+All 145 are gone. `expr-diff.mjs` over the two readings went from **583/722
+identical, 139 differ** to **658/722, 64 differ**; the 64 are listed at the end
+of this section and none of them is an empty message.
+
+### One shared callback, two different tells
+
+The 140 were one root cause with two faces, and the second one is the more
+interesting: it was never an empty string, so a sweep for empties would have
+missed it.
+
+`Snapshot.generateConstructor` gave every interface inheriting from
+`HTMLElement` the *same* constructor callback — the one `upgradeConstruct`
+needs so a custom element's `super()` can reach its built-in base. So:
+
+- `new HTMLDivElement()` reached `upgradeConstruct` with nothing to upgrade and
+  answered a bare `error.TypeError`, which carries no message at all.
+- `HTMLDivElement()` was refused earlier, by the "use the `new` operator"
+  branch — but the interface name in that sentence is `comptime`, read off the
+  type the callback was generated for. One callback, one type, so all 70
+  interfaces claimed to be **`HTMLElement`**. A page reading
+  `HTMLDivElement()`'s message got told which internal helper it had reached.
+
+Generating the callback per interface fixes both at once, and the second only
+costs the snapshot's external-reference table one entry per interface (each
+generated callback is its own function pointer).
+
+`new HTMLElement()` itself was a third thing again: an `Error` — not even a
+`TypeError` — reading `Illegal Constructor`, from a `Caller.zig` mapping that
+named nothing. Chrome says `Failed to construct 'HTMLElement': Illegal
+constructor`.
+
+### Chrome splits the element interfaces two ways, and it is not arbitrary
+
+The plain call, `X()` with no `new`, does not read the same across the family:
+
+| Chrome's answer to `X()` | interfaces |
+|---|---|
+| `Failed to construct 'X': Please use the 'new' operator, this DOM object constructor cannot be called as a function.` | 73 |
+| `Illegal constructor` (bare, no name) | `HTMLMediaElement`, `HTMLUnknownElement` (and the four collections plus `HTMLDocument`) |
+
+`new X()` names the interface in *both* groups. The split follows Blink's
+`[HTMLConstructor]`: an interface that can be a custom element's base has a
+constructor callback to reach, and one that cannot has none — `HTMLMediaElement`
+is abstract and `HTMLUnknownElement` is not extensible. Routing those two to the
+shared illegal-constructor callback reproduces the pair exactly, which is why
+the fix is a two-type exclusion rather than a special case in the message.
+
+### The interface named is the one whose constructor ran
+
+`probes/probe-custom-element-refusal.js` settles what `new.target` does *not*
+decide. A class extending an element interface that was never registered:
+
+```
+class U extends HTMLElement {}    new U()  -> Failed to construct 'HTMLElement': Illegal constructor
+class V extends HTMLDivElement {} new V()  -> Failed to construct 'HTMLDivElement': Illegal constructor
+Reflect.construct(HTMLDivElement, [], Object) -> Failed to construct 'HTMLDivElement': Illegal constructor
+```
+
+So the name comes from the constructor that ran, never from the subclass that
+asked. Per-interface generation gets this for free; a runtime read of
+`new.target.name` — the tempting shortcut, and what the *other* illegal
+constructor callback does — would have got all three wrong.
+
+Two behaviours the same probe measured that this engine still does not have:
+Chrome **constructs** a registered customized built-in through `new` (`class
+Fancy extends HTMLDivElement` + `define(..., {extends:'div'})` gives a `DIV`),
+and it tolerates a second `Reflect.construct` against the same class. Both are
+refusals here; both are behaviour, not wording.
+
+### The encoding label is echoed back exactly as written
+
+`probes/probe-encoding-label.js`, ten labels against Chrome 151:
+
+```
+'invalid-encoding'      -> ('invalid-encoding')
+'Invalid-Encoding'      -> ('Invalid-Encoding')      not lowercased
+'  Invalid-Encoding  '  -> ('  Invalid-Encoding  ')  not trimmed
+''                      -> ('')                      the empty string included
+'replacement'           -> ('replacement')           a known label a decoder still refuses
+```
+
+The sentence is `Failed to construct 'TextDecoder': The encoding label provided
+('<label>') is invalid.`, and `TextDecoderStream` words it identically with only
+the interface name changed. Worth measuring rather than deriving: the spec
+*does* strip and lowercase the label before looking it up, so the normalised
+form was the likelier guess and is wrong.
+
+The same probe also caught a gap wider than a message: this engine's
+`TextDecoderStream` accepts only the three `utf-8` labels, where Chrome hands
+back a working stream for `windows-1252`, `big5`, `shift_jis`, `x-user-defined`
+and the rest of the registry. It now refuses in Blink's words, so the gap no
+longer announces itself twice.
+
+### The 64 that still differ
+
+64 *interfaces* differ; 17 of those are simply absent here, and the other 47
+differ across 54 individual call forms. None is an empty message. By family:
+
+- **`invalid argument`, 24 of the 54 forms.** `error.InvalidArgument` maps to the
+  literal string `invalid argument`, which no browser says. Chrome's wording is
+  per-parameter: `Failed to construct 'Headers': The provided value is not of
+  type '(record<ByteString, ByteString> or sequence<sequence<ByteString>>)'.`,
+  `Failed to construct 'Blob': The provided value cannot be converted to a
+  sequence.`, `Failed to construct 'RTCIceCandidate': The provided value is not
+  of type 'RTCIceCandidateInit'.` One sentence shape shared by every dictionary
+  and sequence parameter in the bridge, so it wants one change rather than
+  thirty.
+- **Legacy factory functions.** Chrome has six interface objects where this
+  engine has three: `window.Audio !== window.HTMLAudioElement`, and the same for
+  `Image`/`Option`. So `Audio()` names `Audio` there and `HTMLAudioElement`
+  here, and `new HTMLAudioElement()` builds an element here where Chrome refuses
+  it. A missing interface, not a message.
+- **We do not throw where Chrome does, 17 forms** (11 once the legacy factories
+  above are set aside): the six `CSSMath*` constructors accept a non-finite
+  double, `new CSSStyleSheet(' nope')`, `new DocumentTimeline(' nope')` and
+  `new TaskController(' nope')` accept a non-dictionary, and
+  `new HTMLDocument()` succeeds. The reverse happens twice, both
+  `CustomElementRegistry`: Chrome 151 lets a page construct one (scoped
+  registries) and this engine refuses.
+- **Absent globals, 17**: `CloseWatcher`, `Fence`, `FencedFrameConfig`,
+  `HTMLFencedFrameElement`, `DocumentPictureInPictureEvent`, `Observable`,
+  `Subscriber`, `RestrictionTarget`, `WebSocketError`, `WebSocketStream`, and
+  the six `SharedStorage*` names plus `SharedStorageWorklet`.
+- **One-off wordings, 11 forms**: `new DOMMatrix(' nope')` (and
+  `DOMMatrixReadOnly`, `WebKitCSSMatrix`) says "The string did not match the
+  expected pattern" where Chrome says `Failed to parse '\0nope'.`;
+  `new CSSRotate(' nope')` says "Must pass an angle to CSSRotate" where Chrome
+  says "parameter 1 is not of type 'CSSNumericValue'."; plus `KeyframeEffect`,
+  `MediaRecorder`, and the four legacy-factory / `HTMLDocument` plain calls.
+
+The two narrower probes read the same way after the change:
+`probe-custom-element-refusal` is 7/8 identical, the one miss being the
+customized built-in Chrome constructs and this engine refuses;
+`probe-encoding-label` is 23/26, the three misses being the two dictionary
+conversions that still say `invalid argument` and `TextDecoderStream`'s
+utf-8-only label table.
+
+Readings: `results/probes/probe-ctor-sweep.{chrome,lightpanda}.json`,
+`probe-encoding-label.{chrome,lightpanda}.json`,
+`probe-custom-element-refusal.{chrome,lightpanda}.json`.
