@@ -212,10 +212,12 @@ pub fn collapseToStart(self: *Selection, frame: *Frame) !void {
     try dispatchSelectionChangeEvent(frame);
 }
 
-pub fn containsNode(self: *const Selection, node: *Node, partial: bool) !bool {
+// `containsNode(Node node, optional boolean allowPartialContainment = false)`:
+// only the node is required, so Chrome 151 reports containsNode.length === 1.
+pub fn containsNode(self: *const Selection, node: *Node, partial_: ?bool) !bool {
     const range = self._range orelse return false;
 
-    if (partial) {
+    if (partial_ orelse false) {
         if (range.intersectsNode(node)) {
             return true;
         }
@@ -333,16 +335,19 @@ const ModifyGranularity = enum {
     }
 };
 
+// All three arguments are optional and default to "", which matches no
+// alter/direction/granularity, so a short call is a no-op rather than a refusal
+// (Chrome 151 reports modify.length === 0 and accepts a bare modify()).
 pub fn modify(
     self: *Selection,
-    alter_str: []const u8,
-    direction_str: []const u8,
-    granularity_str: []const u8,
+    alter_str: ?[]const u8,
+    direction_str: ?[]const u8,
+    granularity_str: ?[]const u8,
     frame: *Frame,
 ) !void {
-    const alter = ModifyAlter.fromString(alter_str) orelse return;
-    const direction = ModifyDirection.fromString(direction_str) orelse return;
-    const granularity = ModifyGranularity.fromString(granularity_str) orelse return;
+    const alter = ModifyAlter.fromString(alter_str orelse return) orelse return;
+    const direction = ModifyDirection.fromString(direction_str orelse return) orelse return;
+    const granularity = ModifyGranularity.fromString(granularity_str orelse return) orelse return;
 
     const range = self._range orelse return;
 

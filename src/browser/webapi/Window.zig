@@ -738,12 +738,15 @@ pub fn queueMicrotask(_: *Window, cb: js.Function, frame: *Frame) void {
     frame.js.queueMicrotaskFunc(cb);
 }
 
-pub fn clearTimeout(self: *Window, id: u32) void {
-    self._timers.clear(id);
+// `clearTimeout(optional unsigned long handle = 0)`: the handle is optional,
+// and handle 0 never names a timer, so a bare call is a no-op rather than a
+// refusal (Chrome 151 reports clearTimeout.length === 0).
+pub fn clearTimeout(self: *Window, id: ?u32) void {
+    self._timers.clear(id orelse return);
 }
 
-pub fn clearInterval(self: *Window, id: u32) void {
-    self._timers.clear(id);
+pub fn clearInterval(self: *Window, id: ?u32) void {
+    self._timers.clear(id orelse return);
 }
 
 pub fn clearImmediate(self: *Window, id: u32) void {
@@ -1211,8 +1214,11 @@ const ScrollToOpts = union(enum) {
         behavior: []const u8 = "",
     };
 };
-pub fn scrollTo(self: *Window, opts: ScrollToOpts, y: ?i32, frame: *Frame) !void {
-    const new_x: u32, const new_y: u32 = switch (opts) {
+// Both overloads take everything optional -- `scrollTo()` scrolls to where the
+// page already is -- so Chrome 151 reports scrollTo.length === 0 and a bare call
+// does nothing rather than refusing.
+pub fn scrollTo(self: *Window, opts_: ?ScrollToOpts, y: ?i32, frame: *Frame) !void {
+    const new_x: u32, const new_y: u32 = switch (opts_ orelse return) {
         .x => |x| .{ @intCast(@max(x, 0)), @intCast(@max(0, y orelse 0)) },
         .opts => |o| .{ @intCast(@max(0, o.left)), @intCast(@max(0, o.top)) },
     };
@@ -1277,12 +1283,12 @@ pub fn scrollTo(self: *Window, opts: ScrollToOpts, y: ?i32, frame: *Frame) !void
     );
 }
 
-pub fn scrollBy(self: *Window, opts: ScrollToOpts, y: ?i32, frame: *Frame) !void {
+pub fn scrollBy(self: *Window, opts_: ?ScrollToOpts, y: ?i32, frame: *Frame) !void {
     // The scroll is relative to the current position. So compute to new
     // absolute position.
     var absx: i32 = undefined;
     var absy: i32 = undefined;
-    switch (opts) {
+    switch (opts_ orelse return) {
         .x => |x| {
             absx = @as(i32, @intCast(self._scroll_pos.x)) + x;
             absy = @as(i32, @intCast(self._scroll_pos.y)) + (y orelse 0);

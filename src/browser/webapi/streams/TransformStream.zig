@@ -191,8 +191,10 @@ pub const TransformStreamDefaultController = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        pub const enqueue = bridge.function(TransformStreamDefaultController.enqueueValue, .{});
-        pub const @"error" = bridge.function(TransformStreamDefaultController.doError, .{});
+        // Both arguments are optional in the IDL, the same as on
+        // ReadableStreamDefaultController: Chrome 151 reports length 0 for both.
+        pub const enqueue = bridge.function(TransformStreamDefaultController.enqueueValue, .{ .arity = 0 });
+        pub const @"error" = bridge.function(TransformStreamDefaultController.doError, .{ .arity = 0 });
         pub const terminate = bridge.function(TransformStreamDefaultController.terminate, .{});
     };
 };

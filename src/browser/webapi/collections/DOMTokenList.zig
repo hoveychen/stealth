@@ -334,8 +334,8 @@ pub const JsApi = struct {
 
     pub const contains = bridge.function(DOMTokenList.contains, .{});
     pub const supports = bridge.function(DOMTokenList.supports, .{});
-    pub const add = bridge.function(DOMTokenList.add, .{ .ce_reactions = true });
-    pub const remove = bridge.function(DOMTokenList.remove, .{ .ce_reactions = true });
+    pub const add = bridge.function(DOMTokenList.add, .{ .ce_reactions = true, .arity = 0 });
+    pub const remove = bridge.function(DOMTokenList.remove, .{ .ce_reactions = true, .arity = 0 });
     pub const toggle = bridge.function(DOMTokenList.toggle, .{ .ce_reactions = true });
     pub const replace = bridge.function(DOMTokenList.replace, .{ .ce_reactions = true });
     pub const value = bridge.accessor(DOMTokenList.getValue, DOMTokenList.setValue, .{ .ce_reactions = true });

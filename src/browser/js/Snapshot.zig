@@ -1071,14 +1071,20 @@ fn attachClass(comptime JsApi: type, comptime flatten: bool, isolate: *v8.Isolat
                 // For non-static functions, use the signature to validate the
                 // receiver, unless the operation has to reject rather than throw.
                 const func_signature = if (value.static or value.rejects_bad_receiver) null else signature;
-                const function_template = v8.v8__FunctionTemplate__New__Config(isolate, &.{
-                    .callback = value.func,
-                    .length = value.arity,
-                    .signature = func_signature,
-                }).?;
                 // A member may override its JS-visible name (see Response.json_static)
                 const fn_name = value.js_name orelse name;
                 const js_name = v8.v8__String__NewFromUtf8(isolate, fn_name.ptr, v8.kNormal, @intCast(fn_name.len));
+                const function_template = v8.v8__FunctionTemplate__New__Config(isolate, &.{
+                    .callback = value.func,
+                    // The same string the class name uses, handed to the
+                    // callback as its data: a refusal that names the operation
+                    // ("Failed to execute 'createElement' on 'Document'") has no
+                    // other way to reach the name. See
+                    // Caller.FunctionCallbackInfo.operationName.
+                    .data = @ptrCast(js_name),
+                    .length = value.arity,
+                    .signature = func_signature,
+                }).?;
                 v8.v8__FunctionTemplate__SetClassName(function_template, js_name);
                 if (value.static and !own_properties) {
                     v8.v8__Template__Set(@ptrCast(template), js_name, @ptrCast(function_template), v8.None);

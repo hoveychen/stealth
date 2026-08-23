@@ -509,9 +509,9 @@ pub const JsApi = struct {
     pub const substringData = bridge.function(CData.substringData, .{});
 
     pub const remove = bridge.function(CData.remove, .{ .ce_reactions = true });
-    pub const before = bridge.function(CData.before, .{ .ce_reactions = true });
-    pub const after = bridge.function(CData.after, .{ .ce_reactions = true });
-    pub const replaceWith = bridge.function(CData.replaceWith, .{ .ce_reactions = true });
+    pub const before = bridge.function(CData.before, .{ .ce_reactions = true, .arity = 0 });
+    pub const after = bridge.function(CData.after, .{ .ce_reactions = true, .arity = 0 });
+    pub const replaceWith = bridge.function(CData.replaceWith, .{ .ce_reactions = true, .arity = 0 });
 
     pub const nextElementSibling = bridge.accessor(CData.nextElementSibling, null, .{});
     pub const previousElementSibling = bridge.accessor(CData.previousElementSibling, null, .{});

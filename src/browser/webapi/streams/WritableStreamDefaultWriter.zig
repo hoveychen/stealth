@@ -142,5 +142,6 @@ pub const JsApi = struct {
     pub const abort = bridge.function(T.abort, .{});
     pub const close = bridge.function(T.close, .{});
     pub const releaseLock = bridge.function(T.releaseLock, .{});
-    pub const write = bridge.function(T.write, .{});
+    // `write(optional any chunk)`: Chrome 151 reports write.length === 0.
+    pub const write = bridge.function(T.write, .{ .arity = 0 });
 };

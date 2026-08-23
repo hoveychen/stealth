@@ -199,7 +199,14 @@ pub const Function = struct {
             .arity = opts.arity orelse getArity(@TypeOf(func), if (opts.static) 0 else 1),
             .func = if (opts.noop) noopFunction else struct {
                 fn wrap(handle: ?*const v8.FunctionCallbackInfo) callconv(.c) void {
-                    Caller.Function.call(T, handle.?, func, opts);
+                    // The arity is also the count Chrome refuses below, so the
+                    // check and the reported `length` can never disagree.
+                    const call_opts = comptime blk: {
+                        var o = opts;
+                        o.required_args = opts.arity orelse getArity(@TypeOf(func), if (opts.static) 0 else 1);
+                        break :blk o;
+                    };
+                    Caller.Function.call(T, handle.?, func, call_opts);
                 }
             }.wrap,
         };
