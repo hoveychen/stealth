@@ -1,0 +1,178 @@
+{
+ "el.append()": {
+  "throws": false
+ },
+ "el.prepend()": {
+  "throws": false
+ },
+ "el.replaceChildren()": {
+  "throws": false
+ },
+ "el.after()": {
+  "throws": false
+ },
+ "el.before()": {
+  "throws": false
+ },
+ "el.replaceWith()": {
+  "throws": false
+ },
+ "text.after()": {
+  "throws": false
+ },
+ "text.before()": {
+  "throws": false
+ },
+ "text.replaceWith()": {
+  "throws": false
+ },
+ "frag.append()": {
+  "throws": false
+ },
+ "frag.prepend()": {
+  "throws": false
+ },
+ "frag.replaceChildren()": {
+  "throws": false
+ },
+ "doc.append()": {
+  "throws": false
+ },
+ "doc.prepend()": {
+  "throws": false
+ },
+ "doc.replaceChildren()": {
+  "throws": false
+ },
+ "doc.write()": {
+  "throws": false
+ },
+ "doc.writeln()": {
+  "throws": false
+ },
+ "el.classList.add()": {
+  "throws": false
+ },
+ "el.classList.remove()": {
+  "throws": false
+ },
+ "document.all.item()": {
+  "throws": false
+ },
+ "clearTimeout()": {
+  "throws": false
+ },
+ "clearInterval()": {
+  "throws": false
+ },
+ "window.scroll()": {
+  "throws": false
+ },
+ "window.scrollTo()": {
+  "throws": false
+ },
+ "window.scrollBy()": {
+  "throws": false
+ },
+ "selection.containsNode(node)": {
+  "throws": false
+ },
+ "selection.modify()": {
+  "throws": false
+ },
+ "writer.write()": {
+  "throws": false
+ },
+ "transformController.enqueue()": {
+  "throws": false
+ },
+ "document.createElement()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'createElement' on 'Document': 1 argument required, but only 0 present."
+ },
+ "el.setAttribute('x')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'setAttribute' on 'Element': 2 arguments required, but only 1 present."
+ },
+ "el.matches()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'matches' on 'Element': 1 argument required, but only 0 present."
+ },
+ "el.closest()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'closest' on 'Element': 1 argument required, but only 0 present."
+ },
+ "document.querySelector()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'querySelector' on 'Document': 1 argument required, but only 0 present."
+ },
+ "history.pushState()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'pushState' on 'History': 2 arguments required, but only 0 present."
+ },
+ "localStorage.setItem('k')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 1 present."
+ },
+ "el.getAttribute()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'getAttribute' on 'Element': 1 argument required, but only 0 present."
+ },
+ "el.removeAttribute()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'removeAttribute' on 'Element': 1 argument required, but only 0 present."
+ },
+ "document.createTextNode()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'createTextNode' on 'Document': 1 argument required, but only 0 present."
+ },
+ "el.querySelectorAll()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'querySelectorAll' on 'Element': 1 argument required, but only 0 present."
+ },
+ "document.getElementsByClassName()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'getElementsByClassName' on 'Document': 1 argument required, but only 0 present."
+ },
+ "new URL()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to construct 'URL': 1 argument required, but only 0 present."
+ },
+ "node.contains()": {
+  "throws": false
+ },
+ "document.getElementById()": {
+  "throws": false
+ },
+ "node.isSameNode()": {
+  "throws": false
+ },
+ "el.hasAttributeNS()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "document.createElementNS()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "history.pushState(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'pushState' on 'History': 2 arguments required, but only 1 present."
+ }
+}

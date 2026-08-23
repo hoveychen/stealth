@@ -929,12 +929,16 @@ error for calling without `new`). The forty-seventh is `Option` — see below.
   so a filled path leaves no pixels.
 - **`BeforeInstallPromptEvent.platforms` is not frozen.** Chrome hands back a
   frozen array; the v8 bridge has no `SetIntegrityLevel`.
-- **A method missing an argument says "invalid argument".** Chrome says
+- ~~**A method missing an argument says "invalid argument".** Chrome says
   "1 argument required, but only 0 present.". The bridge only counts arguments
   for *constructors*; the classes in this batch that needed the Chrome wording
   (`XSLTProcessor`, `Highlight`, `HighlightRegistry`, `Sanitizer`,
   `ClipboardItem.supports`, `URLPattern`) count them by hand with a variadic
-  `[]js.Value`. `TimeRanges.start()` and the rest still say "invalid argument".
+  `[]js.Value`. `TimeRanges.start()` and the rest still say "invalid
+  argument".~~ Fixed 2026-08-22: the bridge counts an operation's arguments
+  before converting them, the same as a constructor's — see "Every operation
+  counts its own arguments now" below. The hand-rolled counters still work and
+  were left alone.
 - **A typed dictionary argument says "invalid argument" too.** `new DOMQuad(5)`
   should say "The provided value is not of type 'DOMPointInit'.". The
   hand-rolled reader in `webapi/dictionary.zig` produces Chrome's three messages
@@ -1053,11 +1057,13 @@ contradicts something that looked obvious:
   `GPUTexture` of the canvas' live size with the configured format and usage,
   and re-configuring or a resize replaces it, which is what a page reads back —
   but no pixels are ever produced, exactly as for the WebGL contexts.
-- **`canvas.getContext()` with no arguments still says "invalid argument".**
+- ~~**`canvas.getContext()` with no arguments still says "invalid argument".**
   Chrome says "1 argument required, but only 0 present.". This is the
   engine-wide bridge limitation recorded under batch 15; every method *inside*
   the WebGPU family counts its own arguments and produces Chrome's wording
-  (measured for all fifty-odd of them in `win42`).
+  (measured for all fifty-odd of them in `win42`).~~ Fixed 2026-08-22 with the
+  batch-15 limitation itself — see "Every operation counts its own arguments
+  now" below.
 - **A setlike's `@@iterator` is not the same function object as its `values`.**
   Chrome's `GPUSupportedFeatures.prototype[Symbol.iterator] === …values`; here
   it is a separate function with the same name. The name is what an enumeration
@@ -1506,11 +1512,12 @@ five are the engine-wide gaps below.
 
 ### What is still missing
 
-- **The bridge produces WebIDL's "N argument(s) required, but only M present."
+- ~~**The bridge produces WebIDL's "N argument(s) required, but only M present."
   only for constructors.** An operation gets `TypeError: invalid argument`
   unless the module reads the argument as `?js.Value` and throws by hand, which
   is what `recognition.zig`, `filesystem.zig`, `CustomStateSet.zig` and
-  `ElementInternals.zig` do.
+  `ElementInternals.zig` do.~~ Fixed 2026-08-22 — see "Every operation counts
+  its own arguments now" below.
 - ~~**`new HTMLDivElement()` — and every other element interface — throws a
   TypeError with an empty message** where Chrome says `Failed to construct
   'HTMLDivElement': Illegal constructor`. `HTMLFrameElement` and
@@ -8835,3 +8842,76 @@ challenges and `dd-g2`.
 So this one is banked as fidelity, not as a station flipped: a POST with no
 `Origin` is a shape no browser produces, and it was on every POST this engine
 made.
+
+### Every operation counts its own arguments now
+
+`Failed to execute '<op>' on '<Interface>': N argument(s) required, but only M
+present.` used to come out of the bridge for constructors only; an operation
+answered `TypeError: invalid argument`, which no browser says, and a dozen
+modules counted their arguments by hand to get Chrome's wording. The refusal was
+already there — `Caller.getArgs` stops at a missing non-optional parameter — so
+what changed is *when* it fires and *what it says*: it now runs before any
+argument is converted, the way Chrome's does, and writes Blink's sentence.
+
+Naming the operation was the awkward part, and it is worth recording how, since
+nothing else in the bridge needs the JS-visible name at call time.
+`bridge.function` receives the Zig function, never the `JsApi` declaration it is
+bound under, and the two differ often enough — `Element.matches` is also
+`webkitMatchesSelector`, `Response.json_static` is `json`, nine interfaces bind
+`_item` as `item` — that deriving the name from the Zig one would misname them.
+`Snapshot` does know the name, so it hands each operation's function template
+the same name string it already builds for `SetClassName`, as the template's
+data; `Caller.FunctionCallbackInfo.operationName` reads it back on the refusal
+path only.
+
+**A check that fires before conversion is only safe if the count is WebIDL's**,
+and ours was not. `probe-operation-arity.js` sweeps every operation's `length`
+on both engines — 3714 members in Chrome, 3486 here, 3470 shared — and found 30
+where ours was larger. All 30 are fixed here, because every one of them would
+have become a refusal Chrome does not make:
+
+- **19 variadics reported 1 instead of 0.** `Element`/`Document`/
+  `DocumentFragment`'s `append`/`prepend`/`replaceChildren`, `Element`/
+  `CharacterData`'s `after`/`before`/`replaceWith`, `DOMTokenList.add`/`remove`,
+  `document.write`/`writeln`. A variadic contributes nothing to `length`, but
+  here a variadic and a sequence parameter are the same slice, so they say
+  `.arity = 0` explicitly. Their runtime behaviour was already right —
+  `getArgs` decides variadic-ness from the argument it actually got — so only
+  the readable `length` was wrong.
+- **10 made an optional IDL parameter required, and 9 of those already threw**
+  where Chrome returns quietly: `document.all.item()`, `clearTimeout()`,
+  `clearInterval()`, `window.scroll()`/`scrollTo()`/`scrollBy()`,
+  `selection.containsNode(node)`, `selection.modify()`,
+  `transformController.enqueue()`. Those take their parameter optionally now.
+  `TransformStreamDefaultController` also just lacked the `.arity = 0` its
+  `ReadableStreamDefaultController` sibling already had.
+
+One related bridge rule changed with them: **a missing argument bound to an IDL
+`any` parameter is now the `undefined` V8 hands back for an out-of-range index,
+not a refusal.** `js.Value` is the one type here that can carry undefined, and
+in JS a missing argument *is* undefined — Chrome's `controller.enqueue()`
+enqueues it.
+
+`history.pushState`/`replaceState` went the other way: WebIDL makes both `data`
+and `unused` required, so Chrome reports 2 and refuses a one-argument call,
+while our optional title derived 1. Both say `.arity = 2` now.
+
+**A reading in `audio.html` turned out to be wrong.** It recorded that Chrome
+left `new OfflineAudioContext(1, 256, 8000).suspend()`'s promise pending,
+converting the missing argument to NaN. Re-measured on Chrome 151: it rejects
+with `TypeError: Failed to execute 'suspend' on 'OfflineAudioContext': 1
+argument required, but only 0 present.`, like every other operation —
+promise-returning ones reject rather than throw, which `Worklet.addModule()`,
+`caches.open()` and `navigator.locks.request()` all do too.
+
+Result, `probe-arity-refusal.js` (48 cases, both engines): **27 differences
+before, 5 after.** All five are the opposite problem — 92 members whose `length`
+is *below* Chrome's, so the check stays silent where Chrome speaks
+(`div.contains()`, `document.getElementById()`, `div.isSameNode()`,
+`el.hasAttributeNS()`, `document.createElementNS()`; 48 of the 92 are WebGL and
+12 are RTC). That is its own change, not this one. On
+`probe-invalid-argument.js` the count still answering `invalid argument` went
+**39 → 32**, the remaining 32 being the per-parameter conversion sentences.
+
+Readings: `results/probes/probe-operation-arity.{chrome,lightpanda}.json`,
+`probe-arity-refusal.{chrome,lightpanda}.json`.

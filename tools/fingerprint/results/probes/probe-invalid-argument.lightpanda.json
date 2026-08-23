@@ -1,0 +1,255 @@
+{
+ "new Blob([], 1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new AudioContext(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new CSSStyleSheet(1)": {
+  "throws": false
+ },
+ "new DocumentTimeline(1)": {
+  "throws": false
+ },
+ "new TaskController(1)": {
+  "throws": false
+ },
+ "new RTCIceCandidate('nope')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new RTCIceCandidate(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new DOMQuad(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new EventSource('/x', 1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new IntersectionObserver(fn, 1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new MutationObserver(fn) then observe(el, 1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.addEventListener('x', fn, 1)": {
+  "throws": false
+ },
+ "new Blob(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Headers(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Headers('nope')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new CSSTransformValue(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new CSSUnparsedValue(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new URLSearchParams(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Request(url, {cache:'nope'})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Request(url, {credentials:'nope'})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Request(url, {redirect:'nope'})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Request(url, {priority:'nope'})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Request(url, {mode:'nope'})": {
+  "throws": false
+ },
+ "new Response('x', {status:99})": {
+  "throws": false
+ },
+ "el.attachShadow({mode:'nope'})": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.scrollIntoView({behavior:'nope'})": {
+  "throws": false
+ },
+ "el.insertAdjacentHTML('nope', 'x')": {
+  "throws": true,
+  "name": "SyntaxError",
+  "message": "The string did not match the expected pattern"
+ },
+ "document.createNodeIterator(el, 1, 1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new Animation(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new FormData(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new KeyframeEffect(1, null)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to construct 'KeyframeEffect': parameter 1 is not of type 'Element'."
+ },
+ "el.appendChild(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.insertBefore(1, null)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.removeChild(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new CSSRotate(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to construct 'CSSRotate': Must pass an angle to CSSRotate"
+ },
+ "new CSSSkewX(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "crypto.getRandomValues(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "crypto.getRandomValues([])": {
+  "throws": false
+ },
+ "document.createElement()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'createElement' on 'Document': 1 argument required, but only 0 present."
+ },
+ "el.setAttribute('x')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'setAttribute' on 'Element': 2 arguments required, but only 1 present."
+ },
+ "el.matches()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'matches' on 'Element': 1 argument required, but only 0 present."
+ },
+ "el.closest()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'closest' on 'Element': 1 argument required, but only 0 present."
+ },
+ "document.querySelector()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'querySelector' on 'Document': 1 argument required, but only 0 present."
+ },
+ "el.animate(1)": {
+  "throws": false
+ },
+ "fetch(1)": {
+  "throws": false
+ },
+ "new URL()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to construct 'URL': 1 argument required, but only 0 present."
+ },
+ "history.pushState()": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'pushState' on 'History': 2 arguments required, but only 0 present."
+ },
+ "localStorage.setItem('k')": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 1 present."
+ },
+ "new MutationObserver(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new IntersectionObserver(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new PerformanceObserver(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "new ResizeObserver(1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "el.addEventListener('x', 1)": {
+  "throws": true,
+  "name": "TypeError",
+  "message": "invalid argument"
+ },
+ "url.href = 'nope'": {
+  "throws": true,
+  "name": "TypeError",
+  "message": ""
+ },
+ "el.innerHTML = trusted-types?": {
+  "throws": false
+ }
+}

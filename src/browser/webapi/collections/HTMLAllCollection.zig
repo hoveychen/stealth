@@ -128,7 +128,11 @@ pub const JsApi = struct {
     pub const @"[str]" = bridge.namedIndexed(HTMLAllCollection.getByName, null, null, null, null, .{ .null_as_undefined = true });
 
     pub const item = bridge.function(_item, .{});
-    fn _item(self: *HTMLAllCollection, index: i32, frame: *Frame) ?*Element {
+    // `item(optional DOMString nameOrIndex)`: the argument is optional, so a
+    // bare item() answers null rather than refusing (Chrome 151 reports
+    // item.length === 0 and accepts the call).
+    fn _item(self: *HTMLAllCollection, index_: ?i32, frame: *Frame) ?*Element {
+        const index = index_ orelse return null;
         if (index < 0) {
             return null;
         }

@@ -511,3 +511,27 @@
 
 </body>
 </html>
+
+<script id=document_variadic_lengths>
+  {
+    // As on Element: variadic, so `length` is 0 and a no-argument call is
+    // accepted (measured on Chrome 151). Measured against a detached document
+    // so write()/writeln() cannot disturb this page.
+    for (const name of ['append', 'prepend', 'replaceChildren', 'write', 'writeln']) {
+      testing.expectEqual(0, Document.prototype[name].length, { desc: name + '.length' });
+    }
+
+    const doc = document.implementation.createHTMLDocument('probe');
+    let threw = false;
+    try {
+      doc.append();
+      doc.prepend();
+      doc.replaceChildren();
+      doc.write();
+      doc.writeln();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+  }
+</script>

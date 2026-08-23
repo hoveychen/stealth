@@ -216,10 +216,10 @@ pub const JsApi = struct {
     pub const childElementCount = bridge.accessor(DocumentFragment.getChildElementCount, null, .{});
     pub const firstElementChild = bridge.accessor(DocumentFragment.firstElementChild, null, .{});
     pub const lastElementChild = bridge.accessor(DocumentFragment.lastElementChild, null, .{});
-    pub const append = bridge.function(DocumentFragment.append, .{ .ce_reactions = true });
-    pub const prepend = bridge.function(DocumentFragment.prepend, .{ .ce_reactions = true });
+    pub const append = bridge.function(DocumentFragment.append, .{ .ce_reactions = true, .arity = 0 });
+    pub const prepend = bridge.function(DocumentFragment.prepend, .{ .ce_reactions = true, .arity = 0 });
     pub const moveBefore = bridge.function(DocumentFragment.moveBefore, .{ .ce_reactions = true });
-    pub const replaceChildren = bridge.function(DocumentFragment.replaceChildren, .{ .ce_reactions = true });
+    pub const replaceChildren = bridge.function(DocumentFragment.replaceChildren, .{ .ce_reactions = true, .arity = 0 });
 
     pub const innerHTML = bridge.accessor(_getInnerHTML, _setInnerHTML, .{ .ce_reactions = true });
     fn _getInnerHTML(self: *DocumentFragment, frame: *Frame) ![]const u8 {

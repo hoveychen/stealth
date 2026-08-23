@@ -188,3 +188,9 @@
   assertList(['Nested paragraph'], root.querySelectorAll('  div.nested    p.text  '));
 }
 </script>
+
+<script id=querySelectorAll_missing_argument>
+  testing.expectError(
+    "TypeError: Failed to execute 'querySelectorAll' on 'Element': 1 argument required, but only 0 present.",
+    () => document.createElement('div').querySelectorAll());
+</script>

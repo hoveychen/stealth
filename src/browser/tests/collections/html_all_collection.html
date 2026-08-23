@@ -103,3 +103,16 @@
     testing.expectEqual(false, !!document.all);
   }
 </script>
+
+<script id=all_collection_item_optional>
+  {
+    // `item(optional DOMString nameOrIndex)`: the argument is optional, so
+    // Chrome 151 reports length 0 and accepts a bare item(). We made the index
+    // a required i32 and threw "invalid argument".
+    testing.expectEqual(0, HTMLAllCollection.prototype.item.length);
+
+    let threw = false;
+    try { document.all.item(); } catch (e) { threw = true; }
+    testing.expectEqual(false, threw);
+  }
+</script>

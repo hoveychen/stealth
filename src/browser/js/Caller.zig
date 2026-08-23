@@ -615,6 +615,22 @@ fn interfaceName(comptime T: type) []const u8 {
     return @typeName(T);
 }
 
+// Blink's sentence for an operation called with fewer arguments than WebIDL
+// requires. The count is comptime, so only the operation's name and the count
+// we got are formatted at runtime; the message goes on call_arena because
+// handleError reads it after this frame is gone.
+fn missingArgument(comptime T: type, local: *const Local, info: FunctionCallbackInfo, comptime required: usize, got: u32) anyerror {
+    // No name means this is not an operation's template, so we cannot write
+    // Blink's sentence -- keep the old generic refusal rather than a half one.
+    const operation = info.operationName(local) orelse return error.InvalidArgument;
+    const fmt = comptime "Failed to execute '{s}' on '" ++ interfaceName(T) ++ std.fmt.comptimePrint(
+        "': {d} argument{s} required, but only ",
+        .{ required, if (required == 1) "" else "s" },
+    ) ++ "{d} present.";
+    const message = std.fmt.allocPrint(local.call_arena, fmt, .{ operation, got }) catch return error.OutOfMemory;
+    return local.ctx.fail(error.TypeError, message);
+}
+
 fn handleError(comptime T: type, comptime F: type, local: *const Local, err: anyerror, info: anytype) void {
     const isolate = local.isolate;
 
@@ -817,6 +833,24 @@ pub const FunctionCallbackInfo = struct {
         return v8.v8__External__Value(@ptrCast(data));
     }
 
+    // The member's JS-visible name. A message that names the operation --
+    // "Failed to execute 'createElement' on 'Document'" -- cannot get the name
+    // any other way: bridge.function is handed the Zig function, never the
+    // JsApi declaration it is bound under, and the two differ often enough
+    // (Element.matches is also webkitMatchesSelector, Response.json_static is
+    // json) that deriving it from the Zig name would misname them. Snapshot
+    // knows the name and hands each operation's function template its own name
+    // string as the template's data, which is where this reads it back.
+    //
+    // Only operations get a name here: an accessor's template carries no data,
+    // and the internal callbacks in Local.zig carry a v8::External instead.
+    pub fn operationName(self: FunctionCallbackInfo, local: *const js.Local) ?[]const u8 {
+        const data = v8.v8__FunctionCallbackInfo__Data(self.handle) orelse return null;
+        const value = js.Value{ .local = local, .handle = @ptrCast(data) };
+        const str = value.isString() orelse return null;
+        return str.toSlice() catch null;
+    }
+
     pub fn getThis(self: FunctionCallbackInfo) *const v8.Object {
         return v8.v8__FunctionCallbackInfo__This(self.handle).?;
     }
@@ -884,6 +918,11 @@ pub const Function = struct {
         // Overrides the arity derived from the Zig signature; see
         // bridge.Constructor.Opts.arity for why a variadic operation needs it.
         arity: ?usize = null,
+        // The operation's WebIDL `length`: how many arguments it requires. Set
+        // from bridge.Function, not by a member -- it is the same number as
+        // `arity` resolves to, kept separate so an accessor's template (which
+        // shares this Opts type) does not inherit an operation's check.
+        required_args: usize = 0,
         // Web IDL makes interface members enumerable, but a handful of Blink's
         // legacy [Global] attributes aren't: window.offscreenBuffering and
         // window.webkitURL both come back with enumerable: false (measured on a
@@ -981,6 +1020,20 @@ pub const Function = struct {
 
     fn _call(comptime T: type, local: *const Local, info: FunctionCallbackInfo, func: anytype, comptime opts: Opts) !js.Value {
         const F = @TypeOf(func);
+
+        // Too few arguments. Chrome counts them before it converts any of them,
+        // the same way the constructor path does (see Caller.constructor), and
+        // names the operation and the interface that declares it. getArgs would
+        // eventually refuse the missing parameter too, but only after
+        // converting the ones before it, and with the generic "invalid
+        // argument" that no browser says.
+        if (comptime opts.required_args > 0) {
+            const got = info.length();
+            if (got < opts.required_args) {
+                return missingArgument(T, local, info, opts.required_args, got);
+            }
+        }
+
         var args: ParameterTypes(F) = undefined;
         if (comptime opts.static) {
             args = try getArgs(F, 0, local, info);
@@ -1181,10 +1234,21 @@ fn getArgs(comptime F: type, comptime offset: usize, local: *const Local, info: 
         } else if (comptime isExecution(param.type.?)) {
             @compileError("Execution must be the last parameter: " ++ @typeName(F));
         } else if (i >= js_parameter_count) {
-            if (@typeInfo(param.type.?) != .optional) {
+            // A missing argument is `undefined` in JS, and an IDL `any`
+            // parameter is the one Zig type here that can carry it -- V8 hands
+            // back undefined for an out-of-range index, so pass it through
+            // rather than refusing. Chrome's controller.enqueue() enqueues
+            // undefined; refusing it was a throw no browser does. Anything else
+            // has no way to say "absent" unless it is optional, and a genuinely
+            // required argument is refused before conversion starts (see
+            // Function._call).
+            if (comptime param.type.? == js.Value) {
+                @field(args, tupleFieldName(field_index)) = info.getArg(@intCast(i), local);
+            } else if (@typeInfo(param.type.?) != .optional) {
                 return error.InvalidArgument;
+            } else {
+                @field(args, tupleFieldName(field_index)) = null;
             }
-            @field(args, tupleFieldName(field_index)) = null;
         } else {
             const js_val = info.getArg(@intCast(i), local);
             // Only fold errors we don't recognize into InvalidArgument; let

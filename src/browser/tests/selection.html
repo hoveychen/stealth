@@ -737,3 +737,23 @@
     testing.expectEqual(3, sel.anchorNode.nodeType);
   }
 </script>
+
+<script id=selection_optional_arguments>
+  {
+    // containsNode's second argument and all three of modify's are optional in
+    // WebIDL, so Chrome 151 reports 1 and 0 and accepts both short calls. We
+    // made them required and threw "invalid argument".
+    testing.expectEqual(1, Selection.prototype.containsNode.length);
+    testing.expectEqual(0, Selection.prototype.modify.length);
+
+    const el = document.createElement('div');
+    let threw = false;
+    try {
+      getSelection().containsNode(el);
+      getSelection().modify();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+  }
+</script>

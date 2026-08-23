@@ -2273,7 +2273,7 @@ pub const JsApi = struct {
 
     // Operations, alphabetical, as WebIDL requires and Chrome emits.
     pub const adoptNode = bridge.function(Document.adoptNode, .{ .ce_reactions = true });
-    pub const append = bridge.function(Document.append, .{ .ce_reactions = true });
+    pub const append = bridge.function(Document.append, .{ .ce_reactions = true, .arity = 0 });
     pub const captureEvents = bridge.function(Document.captureEvents, .{});
     pub const caretPositionFromPoint = bridge.function(Document.caretPositionFromPoint, .{});
     pub const caretRangeFromPoint = bridge.function(Document.caretRangeFromPoint, .{});
@@ -2324,7 +2324,7 @@ pub const JsApi = struct {
     pub const importNode = bridge.function(Document.importNode, .{ .ce_reactions = true });
     pub const moveBefore = bridge.function(Document.moveBefore, .{ .ce_reactions = true });
     pub const open = bridge.function(Document.open, .{ .ce_reactions = true });
-    pub const prepend = bridge.function(Document.prepend, .{ .ce_reactions = true });
+    pub const prepend = bridge.function(Document.prepend, .{ .ce_reactions = true, .arity = 0 });
     pub const queryCommandEnabled = bridge.function(Document.queryCommandEnabled, .{});
     pub const queryCommandIndeterm = bridge.function(Document.queryCommandIndeterm, .{});
     pub const queryCommandState = bridge.function(Document.queryCommandState, .{});
@@ -2333,14 +2333,14 @@ pub const JsApi = struct {
     pub const querySelector = bridge.function(Document.querySelector, .{});
     pub const querySelectorAll = bridge.function(Document.querySelectorAll, .{});
     pub const releaseEvents = bridge.function(Document.releaseEvents, .{});
-    pub const replaceChildren = bridge.function(Document.replaceChildren, .{ .ce_reactions = true });
+    pub const replaceChildren = bridge.function(Document.replaceChildren, .{ .ce_reactions = true, .arity = 0 });
     pub const requestStorageAccess = bridge.function(Document.requestStorageAccess, .{});
     pub const requestStorageAccessFor = bridge.function(Document.requestStorageAccessFor, .{});
     pub const startViewTransition = bridge.function(Document.startViewTransition, .{});
     pub const webkitCancelFullScreen = bridge.function(Document.webkitCancelFullScreen, .{});
     pub const webkitExitFullscreen = bridge.function(Document.webkitExitFullscreen, .{});
-    pub const write = bridge.function(Document.write, .{ .ce_reactions = true });
-    pub const writeln = bridge.function(Document.writeln, .{ .ce_reactions = true });
+    pub const write = bridge.function(Document.write, .{ .ce_reactions = true, .arity = 0 });
+    pub const writeln = bridge.function(Document.writeln, .{ .ce_reactions = true, .arity = 0 });
 
     // Chrome emits these after `constructor`, i.e. after the main IDL block:
     // they are runtime-enabled features, appended as they are switched on.

@@ -3007,11 +3007,11 @@ pub const JsApi = struct {
     pub const childElementCount = bridge.accessor(Element.getChildElementCount, null, .{});
     pub const previousElementSibling = bridge.accessor(Element.previousElementSibling, null, .{});
     pub const nextElementSibling = bridge.accessor(Element.nextElementSibling, null, .{});
-    pub const after = bridge.function(Element.after, .{ .ce_reactions = true });
+    pub const after = bridge.function(Element.after, .{ .ce_reactions = true, .arity = 0 });
     pub const animate = bridge.function(Element.animate, .{});
-    pub const append = bridge.function(Element.append, .{ .ce_reactions = true });
+    pub const append = bridge.function(Element.append, .{ .ce_reactions = true, .arity = 0 });
     pub const attachShadow = bridge.function(_attachShadow, .{});
-    pub const before = bridge.function(Element.before, .{ .ce_reactions = true });
+    pub const before = bridge.function(Element.before, .{ .ce_reactions = true, .arity = 0 });
     pub const checkVisibility = bridge.function(Element.checkVisibility, .{});
     pub const closest = bridge.function(Element.closest, .{});
     pub const computedStyleMap = bridge.function(_computedStyleMap, .{});
@@ -3036,7 +3036,7 @@ pub const JsApi = struct {
     pub const insertAdjacentText = bridge.function(Element.insertAdjacentText, .{ .ce_reactions = true });
     pub const matches = bridge.function(Element.matches, .{});
     pub const moveBefore = bridge.function(Element.moveBefore, .{ .ce_reactions = true });
-    pub const prepend = bridge.function(Element.prepend, .{ .ce_reactions = true });
+    pub const prepend = bridge.function(Element.prepend, .{ .ce_reactions = true, .arity = 0 });
     pub const querySelector = bridge.function(Element.querySelector, .{});
     pub const querySelectorAll = bridge.function(Element.querySelectorAll, .{});
     pub const releasePointerCapture = bridge.function(Element.releasePointerCapture, .{});
@@ -3044,8 +3044,8 @@ pub const JsApi = struct {
     pub const removeAttribute = bridge.function(Element.removeAttribute, .{ .ce_reactions = true });
     pub const removeAttributeNS = bridge.function(_removeAttributeNS, .{ .ce_reactions = true });
     pub const removeAttributeNode = bridge.function(Element.removeAttributeNode, .{ .ce_reactions = true });
-    pub const replaceChildren = bridge.function(Element.replaceChildren, .{ .ce_reactions = true });
-    pub const replaceWith = bridge.function(Element.replaceWith, .{ .ce_reactions = true });
+    pub const replaceChildren = bridge.function(Element.replaceChildren, .{ .ce_reactions = true, .arity = 0 });
+    pub const replaceWith = bridge.function(Element.replaceWith, .{ .ce_reactions = true, .arity = 0 });
     pub const requestFullscreen = bridge.function(Element.requestFullscreen, .{});
     pub const requestPointerLock = bridge.function(Element.requestPointerLock, .{});
     pub const scroll = bridge.function(Element.scrollTo, .{});

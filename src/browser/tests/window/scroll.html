@@ -47,3 +47,24 @@
     });
   }
 </script>
+
+<script id=window_scroll_optional_arguments>
+  {
+    // Both overloads take everything optional, so Chrome 151 reports length 0
+    // for all three and accepts a bare call. We made the options union
+    // required and threw "invalid argument".
+    testing.expectEqual(0, window.scroll.length);
+    testing.expectEqual(0, window.scrollTo.length);
+    testing.expectEqual(0, window.scrollBy.length);
+
+    let threw = false;
+    try {
+      window.scroll();
+      window.scrollTo();
+      window.scrollBy();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+  }
+</script>

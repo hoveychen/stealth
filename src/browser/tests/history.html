@@ -16,3 +16,18 @@
 </script>
 
 <iframe id=frame src="support/history.html"></iframe>
+
+<script id=history_missing_argument>
+  // WebIDL makes `data` and `unused` both required, so history.pushState takes
+  // two: Chrome 151 reports pushState.length === 2 and refuses a one-argument
+  // call. We derived the length from the Zig signature, where the unused title
+  // is optional, and reported 1.
+  testing.expectEqual(2, History.prototype.pushState.length);
+  testing.expectEqual(2, History.prototype.replaceState.length);
+  testing.expectError(
+    "TypeError: Failed to execute 'pushState' on 'History': 2 arguments required, but only 0 present.",
+    () => history.pushState());
+  testing.expectError(
+    "TypeError: Failed to execute 'pushState' on 'History': 2 arguments required, but only 1 present.",
+    () => history.pushState(1));
+</script>

@@ -446,3 +446,30 @@
 
 </body>
 </html>
+
+<script id=element_variadic_lengths>
+  {
+    // A variadic operation contributes nothing to WebIDL `length`: Chrome 151
+    // reports 0 for all six, and accepts a call with no arguments at all. We
+    // derived the length from the Zig signature, where the variadic and a
+    // sequence parameter are the same slice, and reported 1 -- readable off
+    // `Element.prototype.append.length` without calling anything.
+    for (const name of ['append', 'prepend', 'replaceChildren', 'after', 'before', 'replaceWith']) {
+      testing.expectEqual(0, Element.prototype[name].length, { desc: name + '.length' });
+    }
+
+    const el = document.createElement('div');
+    let threw = false;
+    try {
+      el.append();
+      el.prepend();
+      el.replaceChildren();
+      el.after();
+      el.before();
+      el.replaceWith();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+  }
+</script>

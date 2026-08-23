@@ -93,3 +93,9 @@
   }, () => container.matches(''));
 }
 </script>
+
+<script id=matches_missing_argument>
+  testing.expectError(
+    "TypeError: Failed to execute 'matches' on 'Element': 1 argument required, but only 0 present.",
+    () => document.getElementById('test-container').matches());
+</script>
