@@ -10532,3 +10532,54 @@ Where it stands after the value-punctuation pass, which writes every comma as
 | before the selector serialiser | 331 | 120 / 183 |
 | after it | 139 | 164 / 183 |
 | after value punctuation | **112** | **169 / 183** |
+
+## The round-1 wobble belongs to both arms; only the surplus is ours (P1, 2026-08-23)
+
+`cfsc-r1-payload-length` was opened on two readings taken from four runs: the
+widget's first `fo/` POST is 4 716 bytes on the oracle in every sitting it had
+been seen in, and 4 855 / 4 866 here — a ~140-byte surplus *and* a run-to-run
+wobble the reference did not have. The second of those readings does not
+survive more samples.
+
+Six runs in one sitting, `dev.973+946e2ad02`, `cfsc-fo-diff.mjs`, alternating
+arms (`results/r1len-{lp-1..4,oracle-1,oracle-2}.json`):
+
+| arm | page `fo/` #1 | widget `fo/` #1 | widget `fo/` #2 | cleared |
+|---|---|---|---|---|
+| here a | 2 316 | 4 866 | 85 570 | no |
+| here b | 2 306 | 4 866 | 85 687 | no |
+| here c | 2 306 | 4 876 | 85 548 | no |
+| here d | 2 306 | 4 866 | 85 996 | no |
+| oracle a | 2 306 | **4 706** | 88 535 | yes |
+| oracle b | 2 306 | **4 727** | 88 716 | yes |
+
+The oracle's widget round 1 is 4 706 in one run and 4 727 in the next. Read
+together with the three earlier sittings (4 716, 4 716, 4 706) its range is
+4 706–4 727, spread **21**; ours across seven runs is 4 855–4 876, spread
+**21**. The two arms wobble by the same amount. "4 716 three times" was three
+samples of a distribution, not a constant, and the earlier note that a
+deterministic length means every field is fixed-width was drawn from it.
+
+The page-level POST says the same thing from the other side: it is 2 306 on
+every run of either arm except one of ours, which is 2 316 — one step of the
+same size, on the arm and the payload that otherwise agree exactly.
+
+Both observed step sizes are 10 or 11, and the spread is 21 = 10 + 11 rather
+than a multiple of either. That is what a base-64-shaped encoding does to a
+plaintext that moved by 8 bytes: 8 × 4/3 = 10.67, which lands alternately on 10
+and 11. So the wobble is ~8 plaintext bytes on both arms — a timestamp digit, a
+duration, one number — and it is not a tell.
+
+What survives is the surplus, and it is far steadier than either arm's wobble:
+
+| | oracle | here | gap |
+|---|---|---|---|
+| min | 4 706 | 4 855 | 149 |
+| median | 4 716 | 4 866 | 150 |
+| max | 4 727 | 4 876 | 149 |
+
+**~150 encoded characters, every run, ≈ 112 plaintext bytes at 4/3.** That is
+the thing to localise, and P2/P3 are re-aimed at it: not "find the
+variable-length field" — both arms have one and it is the same size — but "find
+the ~112 bytes this engine puts in the round-1 telemetry that the reference does
+not."
