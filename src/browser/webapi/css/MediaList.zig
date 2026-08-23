@@ -160,6 +160,17 @@ pub const JsApi = struct {
     pub const deleteMedium = bridge.function(MediaList.deleteMedium, .{});
     pub const item = bridge.function(MediaList.item, .{});
     pub const toString = bridge.function(MediaList.toString, .{});
-    pub const @"[]" = bridge.indexed(MediaList.item, null, .{ .null_as_undefined = true });
+    pub const @"[]" = bridge.indexed(MediaList.item, getIndexes, .{ .null_as_undefined = true });
     pub const symbol_iterator = bridge.iterator(MediaList.values, .{});
+
+    /// The indices are own properties, as in CSSRuleList -- see the note there.
+    /// Chrome stringifies a two-medium list as `{"0":"screen","1":"print"}`.
+    fn getIndexes(self: *MediaList, exec: *const js.Execution) !js.Array {
+        const len = self.getLength();
+        var arr = exec.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
 };

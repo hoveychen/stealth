@@ -64,6 +64,16 @@ pub const JsApi = struct {
 
     pub const length = bridge.accessor(StyleSheetList.length, null, .{});
     pub const item = bridge.function(StyleSheetList.item, .{});
-    pub const @"[]" = bridge.indexed(StyleSheetList.item, null, .{ .null_as_undefined = true });
+    pub const @"[]" = bridge.indexed(StyleSheetList.item, getIndexes, .{ .null_as_undefined = true });
     pub const symbol_iterator = bridge.iterator(StyleSheetList.values, .{});
+
+    /// The indices are own properties, as in CSSRuleList -- see the note there.
+    fn getIndexes(self: *StyleSheetList, exec: *const js.Execution) !js.Array {
+        const len = self.length();
+        var arr = exec.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
 };
