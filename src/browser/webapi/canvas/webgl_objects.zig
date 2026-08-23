@@ -28,6 +28,7 @@
 //! the chained allocation, which buys the prototype link a detector walks.
 
 const js = @import("../../js/js.zig");
+const glsl = @import("glsl.zig");
 const Precision = @import("gpu.zig").Precision;
 
 pub fn registerTypes() []const type {
@@ -112,16 +113,85 @@ fn PlainHandle(comptime js_name: [:0]const u8) type {
 /// Allocates a handle with its WebGLObject base, since a `create*` call site
 /// cannot use the plain factory once the type has a prototype.
 pub fn handle(comptime T: type, exec: *const js.Execution) !*T {
-    return exec._factory.chained(.{ WebGLObject{}, T{ ._proto = undefined } });
+    return handleInit(T, exec, .{ ._proto = undefined });
 }
 
-pub const WebGLBuffer = Handle("WebGLBuffer");
+/// The same, for the three handles that carry state and therefore have
+/// something to say at creation time.
+pub fn handleInit(comptime T: type, exec: *const js.Execution, value: T) !*T {
+    return exec._factory.chained(.{ WebGLObject{}, value });
+}
+
+/// Three of the handles are no longer opaque: a shader remembers its source
+/// and what that source compiled to, a program remembers what is attached to
+/// it and whether it linked, and a buffer remembers its bytes. Everything
+/// downstream of `COMPILE_STATUS` needs them -- see webgl_state.zig for why
+/// answering that question honestly is the point.
+pub const WebGLShader = struct {
+    pub const Proto = WebGLObject;
+
+    _proto: *WebGLObject,
+    /// VERTEX_SHADER or FRAGMENT_SHADER, fixed at createShader.
+    _kind: u32 = 0,
+    _source: []const u8 = "",
+    /// Null until a source compiles, which is exactly COMPILE_STATUS.
+    _program: ?glsl.Shader = null,
+    _deleted: bool = false,
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(WebGLShader);
+
+        pub const Meta = struct {
+            pub const name = "WebGLShader";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+    };
+};
+
+pub const WebGLProgram = struct {
+    pub const Proto = WebGLObject;
+
+    _proto: *WebGLObject,
+    _vertex: ?*WebGLShader = null,
+    _fragment: ?*WebGLShader = null,
+    _linked: bool = false,
+    _validated: bool = false,
+    _deleted: bool = false,
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(WebGLProgram);
+
+        pub const Meta = struct {
+            pub const name = "WebGLProgram";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+    };
+};
+
+pub const WebGLBuffer = struct {
+    pub const Proto = WebGLObject;
+
+    _proto: *WebGLObject,
+    _data: []const u8 = "",
+    _deleted: bool = false,
+
+    pub const JsApi = struct {
+        pub const bridge = js.Bridge(WebGLBuffer);
+
+        pub const Meta = struct {
+            pub const name = "WebGLBuffer";
+            pub const prototype_chain = bridge.prototypeChain();
+            pub var class_id: bridge.ClassId = undefined;
+        };
+    };
+};
+
 pub const WebGLFramebuffer = Handle("WebGLFramebuffer");
-pub const WebGLProgram = Handle("WebGLProgram");
 pub const WebGLQuery = Handle("WebGLQuery");
 pub const WebGLRenderbuffer = Handle("WebGLRenderbuffer");
 pub const WebGLSampler = Handle("WebGLSampler");
-pub const WebGLShader = Handle("WebGLShader");
 pub const WebGLSync = Handle("WebGLSync");
 pub const WebGLTexture = Handle("WebGLTexture");
 pub const WebGLTransformFeedback = Handle("WebGLTransformFeedback");
