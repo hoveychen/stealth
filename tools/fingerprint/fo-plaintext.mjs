@@ -37,10 +37,27 @@
 // reach, so records come back over the console (same reason vm-trace does it)
 // and are collected from every session, not just the page's.
 //
+// The document realm turned out not to be where the payload is built -- no
+// fetch, no XHR, no WebCrypto, nothing over 172 bytes through `JSON.stringify`,
+// and the POSTs went out anyway. It happens in blob-URL workers, and a worker
+// has no Page domain to install a document script into. Reaching in through the
+// auto-attach pause instead stalled the challenge three times, which read as
+// detection until the records were checked: those runs carried *no* records from
+// the worker session, not even the recorder's own `installed` line, and their
+// `runIfWaitingForDebugger` never came back. A `Runtime.evaluate` sent to a
+// target paused on start blocks that session's inspector queue head-on, so the
+// resume behind it never arrives and the worker never reaches its first
+// statement. `worker-arm-probe.mjs` reproduces exactly that against a local page
+// with no Cloudflare in it, and finds the shape that works: don't involve the
+// debugger at all. Wrap `Blob` in the document realm -- which *can* be armed
+// before its own code -- and prepend the recorder to the worker's source text.
+// That lands ahead of the worker's first statement, where the pause-and-evaluate
+// route lands after its first fetch.
+//
 // usage:
 //   node tools/fingerprint/fo-plaintext.mjs <lightpanda|chrome>
 //        [--headed-ua] [--url u] [--settle ms] [--out path] [--port n]
-//        [--min n] [--max-records n]
+//        [--min n] [--max-records n] [--inject-worker]
 // env: LP_BIN, CHROME
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -73,6 +90,9 @@ const OUT = arg('--out', null);
 const MIN = Number(arg('--min', '400'));
 const MAX_RECORDS = Number(arg('--max-records', '400'));
 const headedUa = has('--headed-ua');
+// Capturing a worker's source text only reads it; prepending the recorder to it
+// changes what the worker runs. Two separate questions, so two separate runs.
+const injectWorker = has('--inject-worker');
 const LIGHTPANDA = process.env.LP_BIN ?? path.join(REPO, 'zig-out/bin/lightpanda');
 const CHROME = process.env.CHROME
     ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -81,16 +101,36 @@ const CHROME = process.env.CHROME
 // installed in. `MARK` prefixes each console line so the collector can tell its
 // own records from the page's chatter.
 const MARK = '@@FOPT@@';
-const RECORDER = `(function () {
+const CORE = `(function () {
   var MARK = ${JSON.stringify(MARK)};
   var MIN = ${MIN};
   var n = 0;
   var log = console.log.bind(console);
   var origToString = Function.prototype.toString;
+  // Recording a record is itself a JSON.stringify and a console.log, so without
+  // this the stringify wrapper feeds itself and the whole record budget goes on
+  // the instrument watching itself -- which is what the 4 187 JSON.stringify
+  // calls in the first worker-era runs were.
+  var inside = false;
 
   function emit(rec) {
-    if (n++ > ${MAX_RECORDS}) return;
+    if (inside || n++ > ${MAX_RECORDS}) return;
+    inside = true;
     try { log(MARK + JSON.stringify(rec)); } catch (e) { /* unserialisable */ }
+    inside = false;
+  }
+
+  // describe() stringifies too, so it has to run inside the guard rather than
+  // as an argument evaluated ahead of it.
+  function record(label, value, extra) {
+    if (inside || n++ > ${MAX_RECORDS}) return;
+    inside = true;
+    try {
+      var rec = { k: label, a: describe(value) };
+      if (extra) rec.url = extra;
+      log(MARK + JSON.stringify(rec));
+    } catch (e) { /* unserialisable */ }
+    inside = false;
   }
 
   // A wrapper that answers toString() with the native text is a wrapper the
@@ -132,7 +172,7 @@ const RECORDER = `(function () {
     if (typeof original !== 'function') return;
     try {
       owner[key] = disguise(function () {
-        try { emit({ k: label, a: describe(arguments[argIndex]) }); } catch (e) { /* keep going */ }
+        try { record(label, arguments[argIndex]); } catch (e) { /* keep going */ }
         // A bare call to a *global* function (btoa, fetch) passes this ===
         // undefined, and forwarding that to the original raises "Illegal
         // invocation" -- which in a worker means the telemetry POST never goes
@@ -161,16 +201,125 @@ const RECORDER = `(function () {
     if (typeof origFetch === 'function') {
       globalThis.fetch = disguise(function (input, init) {
         try {
-          emit({ k: 'fetch', url: String((input && input.url) || input || '').slice(0, 200),
-                 a: describe(init && init.body) });
+          var body = init && init.body !== undefined ? init.body
+            : (input && typeof input === 'object' ? input.body : undefined);
+          record('fetch', body, String((input && input.url) || input || '').slice(0, 200));
         } catch (e) { /* keep going */ }
         return origFetch.apply(this === undefined ? globalThis : this, arguments);
       }, origFetch);
     }
   } catch (e) {}
 
-  emit({ k: 'installed', href: String(location.href).slice(0, 200) });
+  emit({ k: 'installed',
+         href: String((globalThis.location || {}).href || '?').slice(0, 200),
+         worker: typeof globalThis.WorkerGlobalScope !== 'undefined' });
 })();`;
+
+// The document-realm half. It is the only realm that can be armed before its own
+// code runs, and it is where the worker is built, so this is where the worker's
+// source text is readable -- and, with --inject-worker, where the recorder can be
+// put in front of it.
+//
+// Both interceptions are Proxies rather than hand-written functions. A Proxy
+// keeps `Blob.prototype`, `Blob.name`, `instanceof` and `toString()` answering
+// exactly as the original did, with no disguise to maintain.
+const WORKER_HOOK = `(function () {
+  var MARK = ${JSON.stringify(MARK)};
+  var INJECT = ${injectWorker ? 'true' : 'false'};
+  var PAYLOAD = ${JSON.stringify(CORE)};
+  var log = console.log.bind(console);
+  // Taken before CORE replaces it, so these records do not each show up as a
+  // stringify call of their own with the record as its argument.
+  var stringify = JSON.stringify;
+  var blobSeq = 0;
+  // No ceiling here, unlike the funnel recorder: these fire once per worker
+  // built, not once per call, and a truncated program is worth nothing.
+  function emit(rec) {
+    try { log(MARK + stringify(rec)); } catch (e) { /* unserialisable */ }
+  }
+
+  // A blob is worker source when its one part is a string of JavaScript. Rather
+  // than guess at that, record every string blob and let the report say which.
+  function textOf(parts) {
+    if (!parts || typeof parts.length !== 'number') return null;
+    var out = '';
+    for (var i = 0; i < parts.length; i++) {
+      if (typeof parts[i] !== 'string') return null;
+      out += parts[i];
+    }
+    return out;
+  }
+
+  try {
+    var OrigBlob = globalThis.Blob;
+    if (typeof OrigBlob === 'function') {
+      globalThis.Blob = new Proxy(OrigBlob, {
+        construct: function (target, args) {
+          var src = null;
+          try { src = textOf(args[0]); } catch (e) { /* exotic parts */ }
+          if (src !== null) {
+            // A worker program is tens of kilobytes and a console argument is
+            // not a guaranteed-lossless channel at that size, so it goes over in
+            // pieces the collector stitches back together.
+            var id = 'b' + (blobSeq++);
+            emit({ k: 'blob', id: id, n: src.length, type: String((args[1] && args[1].type) || '') });
+            for (var off = 0; off < src.length; off += 8192) {
+              emit({ k: 'blob.part', id: id, at: off, src: src.slice(off, off + 8192) });
+            }
+            if (INJECT) {
+              try { args = [[PAYLOAD + '\\n' + src], args[1]]; } catch (e) { /* leave it */ }
+            }
+          }
+          return new target(args[0], args[1]);
+        },
+      });
+    }
+  } catch (e) { /* non-writable */ }
+
+  // What the document hands the worker, and what comes back, are both plaintext
+  // -- and reading them costs the worker nothing, since an extra listener does
+  // not displace the page's own.
+  try {
+    var OrigWorker = globalThis.Worker;
+    if (typeof OrigWorker === 'function') {
+      globalThis.Worker = new Proxy(OrigWorker, {
+        construct: function (target, args) {
+          var inst = new target(args[0], args[1]);
+          emit({ k: 'worker', url: String(args[0] || '').slice(0, 200) });
+          try {
+            inst.addEventListener('message', function (ev) {
+              var d = ev.data;
+              emit({ k: 'worker.onmessage',
+                     a: typeof d === 'string' ? { t: 'str', n: d.length, v: d }
+                                              : { t: typeof d, n: -1, v: (function () {
+                                                    try { return stringify(d); } catch (e) { return undefined; }
+                                                  })() } });
+            });
+          } catch (e) { /* not a message port */ }
+          try {
+            var origPost = inst.postMessage.bind(inst);
+            inst.postMessage = function (d) {
+              try {
+                emit({ k: 'worker.postMessage',
+                       a: typeof d === 'string' ? { t: 'str', n: d.length, v: d }
+                                                : { t: typeof d, n: -1, v: (function () {
+                                                      try { return stringify(d); } catch (e) { return undefined; }
+                                                    })() } });
+              } catch (e) { /* keep going */ }
+              return origPost.apply(null, arguments);
+            };
+          } catch (e) { /* frozen */ }
+          return inst;
+        },
+      });
+    }
+  } catch (e) { /* non-writable */ }
+})();`;
+
+// Document realms get the worker hook and the funnels, in that order so the
+// hook's own records do not pass through the wrapped stringify. A worker that has
+// been injected into gets the funnels alone, prepended to its own source above.
+const RECORDER = `${WORKER_HOOK}\n${CORE}`;
 
 async function headedUserAgent() {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-ua-'));
@@ -198,7 +347,9 @@ async function headedUserAgent() {
 const state = {
     engine, url: URL_, headedUa, settleMs: SETTLE, min: MIN,
     userAgentOverride: null,
+    injectWorker,
     records: [],     // one per instrumented call, in arrival order
+    blobs: [],       // worker source text, stitched back from its console chunks
     realms: [],      // which sessions got the recorder, and whether it installed
     posts: [],       // the fo/ POSTs on the wire, to key the records against
     console: [],
@@ -257,32 +408,19 @@ try {
             await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: RECORDER }, sid);
             rec.installed = true;
         } catch (err) { rec.err = String(err.message ?? err); }
-        // Workers have no Page domain, and a worker is where this station
-        // assembles its telemetry: with the document realm fully armed the
-        // funnels saw no fetch, no btoa, no WebCrypto and nothing over 172
-        // bytes through JSON.stringify, while the POSTs went out regardless.
-        // Auto-attach pauses a new target before its first statement, so the
-        // window to evaluate the recorder into it is right here, ahead of
-        // runIfWaitingForDebugger below.
-        //
-        // Do NOT await this. A target paused on start has its script thread
-        // blocked by the debugger, so the evaluate cannot run until the resume
-        // below -- awaiting it deadlocks the arm() call, the resume never
-        // happens, and the whole challenge stalls at round 1 (measured: one POST
-        // instead of four, and the final evaluate times out). Fire it and let it
-        // land the moment the worker is released, which is still seconds ahead of
-        // the telemetry POST.
-        if (!rec.installed) {
-            rec.via = 'evaluate';
-            cdp.send('Runtime.evaluate', { expression: RECORDER, awaitPromise: false }, sid)
-                .then((r) => {
-                    rec.installed = !r.exceptionDetails;
-                    if (r.exceptionDetails) rec.evalErr = r.exceptionDetails.text?.slice(0, 160);
-                })
-                .catch((err) => { rec.evalErr = String(err.message ?? err); });
-        }
+        // A failure here is a worker: no Page domain, so no document script.
+        // Nothing is evaluated into it. The route that pauses a worker on start
+        // and evaluates the recorder in was tried three times and stalled the
+        // challenge every time, and `worker-arm-probe.mjs` shows why against a
+        // local page with no Cloudflare in it: the evaluate blocks that session's
+        // inspector queue, the `runIfWaitingForDebugger` behind it never
+        // arrives, and the worker never reaches its first statement. Even sent
+        // after the resume, where it does run, it lands after the worker's own
+        // first fetch. The worker is reached from the document realm instead, by
+        // WORKER_HOOK above -- so workers are not paused at all here.
+        if (!rec.installed) rec.worker = true;
         await cdp.send('Target.setAutoAttach',
-            { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sid).catch(() => { });
+            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sid).catch(() => { });
         await cdp.send('Network.enable', { maxPostDataSize: 1048576 }, sid).catch(() => { });
         // Whether or not the pause took, releasing is harmless.
         await cdp.send('Runtime.runIfWaitingForDebugger', undefined, sid)
@@ -298,9 +436,20 @@ try {
         if (msg.method === 'Runtime.consoleAPICalled') {
             const text = (p.args ?? []).map((a) => a.value ?? a.description ?? '').join(' ');
             if (text.startsWith(MARK)) {
-                try {
-                    state.records.push({ session: msg.sessionId ?? 'page', ...JSON.parse(text.slice(MARK.length)) });
-                } catch { state.records.push({ session: msg.sessionId ?? 'page', unparsed: text.length }); }
+                let rec;
+                try { rec = JSON.parse(text.slice(MARK.length)); } catch { /* truncated */ }
+                if (!rec) {
+                    state.records.push({ session: msg.sessionId ?? 'page', unparsed: text.length });
+                } else if (rec.k === 'blob') {
+                    state.blobs.push({ session: msg.sessionId ?? 'page', id: rec.id, n: rec.n, type: rec.type, src: '' });
+                } else if (rec.k === 'blob.part') {
+                    // Parts arrive in emit order, so appending is enough; `at`
+                    // is kept only so a gap would be visible in the record.
+                    const b = state.blobs.find((x) => x.id === rec.id);
+                    if (b) { if (b.src.length !== rec.at) b.gapAt = rec.at; b.src += rec.src; }
+                } else {
+                    state.records.push({ session: msg.sessionId ?? 'page', ...rec });
+                }
             } else if (state.console.length < 200) {
                 state.console.push(`${p.type}: ${text.slice(0, 200)}`);
             }
@@ -348,7 +497,7 @@ try {
 state.engineLog = engineLog.join('').slice(-4000);
 
 // --- report ---------------------------------------------------------------
-console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''} ===`);
+console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''} ===`);
 console.log(`realms armed: ${state.realms.filter((r) => r.installed).length}/${state.realms.length}`);
 const tally = new Map();
 for (const r of state.records) tally.set(r.k, (tally.get(r.k) ?? 0) + 1);
@@ -357,6 +506,10 @@ for (const r of state.records.filter((r) => (r.a?.v ?? '').length >= MIN).slice(
     console.log(`  ${String(r.k).padEnd(18)} ${String(r.a.t).padEnd(5)} n=${String(r.a.n).padStart(7)}`
         + `  ${JSON.stringify((r.a.v ?? '').slice(0, 60))}`);
 }
+for (const b of state.blobs) {
+    console.log(`  blob ${b.id} declared=${b.n} got=${b.src.length}`
+        + `${b.gapAt !== undefined ? ` GAP@${b.gapAt}` : ''} type=${JSON.stringify(b.type)}`);
+}
 for (const p of state.posts) console.log(`  POST ${String(p.postLen).padStart(7)} ${p.verdict ?? '?'}  ${p.url.slice(-40)}`);
 console.log(`FINAL ${JSON.stringify(state.final)}`);
 if (state.error) console.log(`ERROR ${state.error}`);
@@ -364,6 +517,16 @@ if (state.error) console.log(`ERROR ${state.error}`);
 if (OUT) {
     const out = path.resolve(REPO, OUT.startsWith('tools/') ? OUT : path.join('tools/fingerprint', OUT));
     await fs.mkdir(path.dirname(out), { recursive: true });
-    await fs.writeFile(out, JSON.stringify(state, null, 1));
+    // The programs go beside the run rather than inside it: a worker source is
+    // read as source, and a JSON string of it is not readable.
+    const stem = out.replace(/\.json$/, '');
+    for (const b of state.blobs) {
+        if (!b.src) continue;
+        const file = `${stem}-${b.id}.js`;
+        await fs.writeFile(file, b.src);
+        console.log(`wrote ${file} (${b.src.length} bytes)`);
+    }
+    await fs.writeFile(out, JSON.stringify(
+        { ...state, blobs: state.blobs.map(({ src, ...b }) => ({ ...b, srcLen: src.length })) }, null, 1));
     console.log(`wrote ${out}`);
 }
