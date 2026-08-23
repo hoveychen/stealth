@@ -8990,3 +8990,87 @@ browser with one bad field fails it.
 well-posed: with the oracle passing on demand, capture both round-3 bodies from
 the same sitting and find what the accepted one says that the declined one does
 not.
+
+## Round 3 is not where the payload first differs (E1, 2026-08-23)
+
+The oracle passes on demand now, so the previous chapter's diff is runnable: two
+arms, same sitting, same harness, and every challenge body read whole.
+
+One harness change was needed first. `cfsc-fo-diff.mjs` read response bodies
+after settle, and an arm that *clears* tears the widget iframe down the moment
+the interstitial is replaced — the iframe's CDP session goes with it, so the
+after-settle pass answered `Session with given id not found` for exactly the
+exchanges the passing arm exists to show. Bodies for frame sessions are now read
+on `loadingFinished`, while the session is alive. The oracle still clears with
+the read in place (`cfsc-r3-oracle-b.json`), so the extra out-of-band CDP call
+does not perturb the outcome it measures.
+
+Four runs, two per arm:
+
+| run | widget `fo/` #1 post | its response | widget `fo/` #2 post | verdict | cleared |
+|---|---|---|---|---|---|
+| oracle a | 4 716 | — | 88 332 | `cf-chl-out` | yes |
+| oracle b | 4 716 | 846 108 | 90 092 | `cf-chl-out` | yes |
+| this engine a | 4 855 | 823 116 | 85 943 | `cf-chl-gen` | no |
+| this engine b | 4 866 | 845 996 | 87 255 | `cf-chl-gen` | no |
+
+`cf-chl-out` / `cf-chl-out-s` on the reply to the second widget POST is the
+accept; `cf-chl-gen` is "here is another challenge". Read those header names,
+not the `clearance` field.
+
+### Four things this rules out
+
+**The server does not hand the two arms different programs.** The reply to
+widget POST #1 is 846 108 bytes to the oracle and 845 996 to this engine — 112
+apart on a 846 KB body, and byte-for-byte different from offset 0, which is what
+a per-session key looks like rather than a different program. Same program, same
+size, both arms.
+
+**The request head is not the tell.** On POST #2 the `User-Agent`,
+`sec-ch-ua`, `sec-ch-ua-mobile`, `sec-ch-ua-platform`, `content-type` and
+`cf-chl-ra` values are identical across arms. (Chrome's
+`Network.requestWillBeSent` reports only the subset of headers the renderer set,
+so the `accept` / `sec-fetch-*` / high-entropy-hint rows that appear on this
+engine and not on the oracle are an instrument artefact, not an absence. The
+byte-exact head comparison lives in `accept-ch-echo.mjs`, and it already agrees
+22/22 and 16/16.)
+
+**The payload is one ciphertext, so a byte diff is not available.** `$` is a
+character in the encoding alphabet, not a field separator: splitting POST #2 on
+it yields 1 389 pieces for the oracle and 1 385 for this engine, which is noise.
+Round 1 is 2 306 bytes on all four runs with entirely different content, which
+is what a fixed-length plaintext under a per-session key looks like.
+
+**Payload size does not decide the verdict.** The declined headless-UA Chrome
+arm posted the largest POST #2 of any run (89 612) and was declined; the oracle
+was accepted at 88 332.
+
+### Where the arms actually first differ, and it is one round earlier
+
+Widget POST #1 is **4 716 bytes on the oracle, twice, and 4 716 in the older
+`cfsc-fo-oracle-recheck` sitting too** — the same length across three sessions
+with three different keys. This engine posts 4 855 and 4 866, and an older build
+posted 4 663.
+
+Two separate facts fall out of that column, and both are cheaper to chase than a
+90 KB blob:
+
+1. **This engine's round-1 widget payload is ~140 bytes longer than the
+   oracle's.** Whatever it puts there, the reference does not.
+2. **Its length is not stable, and the oracle's is.** 4 855 versus 4 866 in two
+   consecutive runs of the same binary. A deterministic plaintext length means
+   every field is fixed-width or fixed-content; an 11-byte wobble means at least
+   one field this engine contributes is variable-length — a number with a
+   varying digit count, a duration, an error string, a URL.
+
+That is the divergence to instrument, and it sits in the payload the *widget
+document* assembles — a 264 KB plaintext JS document `vm-trace.mjs` already
+knows how to patch and replay, unlike the round-2 program which arrives
+encrypted. The parent's page-level round 1 is 2 306 bytes on every arm, so the
+first place the two engines write different bytes onto the wire is the widget's
+first POST.
+
+The old note that "the widget realm is not where this engine differs" was drawn
+from `--reach` call counts, which match. Call counts matching and payload bytes
+differing are consistent: the program takes the same path and is handed
+different answers.

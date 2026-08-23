@@ -145,6 +145,19 @@ try {
     const byId = new Map();
     const key = (sid, id) => `${sid ?? 'page'}|${id}`;
 
+    // Bodies read mid-flight, keyed the same way, plus the in-flight reads so the
+    // report can wait for them instead of racing the teardown it exists to beat.
+    const pending = [];
+    function grabBody(e) {
+        pending.push(cdp.send('Network.getResponseBody', { requestId: e.id }, e.session ?? pageSession)
+            .then((r) => {
+                e.liveBody = r.base64Encoded
+                    ? Buffer.from(r.body, 'base64').toString('latin1')
+                    : r.body;
+            })
+            .catch((err) => { e.liveBodyErr = String(err.message ?? err); }));
+    }
+
     cdp.on((msg) => {
         const p = msg.params ?? {};
         // A freshly attached target is silent until its own domains are on, and
@@ -191,7 +204,18 @@ try {
             }
             case 'Network.loadingFinished': {
                 const e = byId.get(key(sid, p.requestId));
-                if (e) { e.encoded = p.encodedDataLength ?? 0; e.finished = true; }
+                if (e) {
+                    e.encoded = p.encodedDataLength ?? 0;
+                    e.finished = true;
+                    // An arm that *clears* tears the widget iframe down the moment
+                    // the interstitial is replaced, and the iframe's CDP session
+                    // goes with it -- so the after-settle pass below answers
+                    // "Session with given id not found" for exactly the exchanges
+                    // the passing arm exists to show. Read those bodies while the
+                    // session is still alive. The call is out-of-band CDP traffic;
+                    // the page cannot observe it.
+                    if (frame && INTERESTING.test(e.url)) grabBody(e);
+                }
                 state.wire.push({ ev: 'done', frame, id: p.requestId, encoded: p.encodedDataLength ?? 0 });
                 break;
             }
@@ -245,6 +269,7 @@ try {
     // The bodies. Asked for after settle so a challenge that is still running
     // has finished writing them, and only for the endpoints that matter -- the
     // whole page's worth would be megabytes of framework JS.
+    await Promise.all(pending);
     for (const [, e] of byId) {
         if (!INTERESTING.test(e.url)) continue;
         const rec = {
@@ -256,13 +281,17 @@ try {
             requestHeaders: e.requestHeaders,
             responseHeaders: e.responseHeaders,
         };
-        try {
+        if (e.liveBody !== undefined) {
+            rec.bodyLen = e.liveBody.length;
+            rec.body = e.liveBody;
+            rec.bodyLive = true;
+        } else try {
             const r = await cdp.send('Network.getResponseBody', { requestId: e.id }, e.session ?? pageSession);
             const body = r.base64Encoded ? Buffer.from(r.body, 'base64').toString('latin1') : r.body;
             rec.bodyLen = body.length;
             rec.body = body;
         } catch (err) {
-            rec.bodyErr = String(err.message ?? err);
+            rec.bodyErr = e.liveBodyErr ?? String(err.message ?? err);
         }
         state.exchanges.push(rec);
     }
