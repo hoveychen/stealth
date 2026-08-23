@@ -1799,8 +1799,8 @@ pub const JsApi = struct {
     pub const isConnected = bridge.accessor(Node.isConnected, null, .{});
     pub const ownerDocument = bridge.accessor(Node.ownerDocument, null, .{});
     pub const hasChildNodes = bridge.function(Node.hasChildNodes, .{});
-    pub const isSameNode = bridge.function(Node.isSameNode, .{});
-    pub const contains = bridge.function(Node.contains, .{});
+    pub const isSameNode = bridge.function(Node.isSameNode, .{ .arity = 1 });
+    pub const contains = bridge.function(Node.contains, .{ .arity = 1 });
     pub const removeChild = bridge.function(Node.removeChild, .{ .ce_reactions = true });
     pub const nodeValue = bridge.accessor(Node.getNodeValue, Node.setNodeValue, .{ .ce_reactions = true });
     pub const insertBefore = bridge.function(_insertBefore, .{ .ce_reactions = true });
@@ -1818,9 +1818,9 @@ pub const JsApi = struct {
         return self.getRootNode(opts orelse .{});
     }
     pub const isEqualNode = bridge.function(Node.isEqualNode, .{});
-    pub const lookupNamespaceURI = bridge.function(Node.lookupNamespaceURI, .{});
-    pub const lookupPrefix = bridge.function(Node.lookupPrefix, .{});
-    pub const isDefaultNamespace = bridge.function(Node.isDefaultNamespace, .{});
+    pub const lookupNamespaceURI = bridge.function(Node.lookupNamespaceURI, .{ .arity = 1 });
+    pub const lookupPrefix = bridge.function(Node.lookupPrefix, .{ .arity = 1 });
+    pub const isDefaultNamespace = bridge.function(Node.isDefaultNamespace, .{ .arity = 1 });
 
     pub const baseURI = bridge.accessor(_baseURI, null, .{});
     fn _baseURI(self: *Node, frame: *const Frame) []const u8 {

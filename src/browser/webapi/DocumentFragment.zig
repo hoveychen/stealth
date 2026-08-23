@@ -198,7 +198,7 @@ pub const JsApi = struct {
 
     pub const constructor = bridge.constructor(DocumentFragment.init, .{});
 
-    pub const getElementById = bridge.function(_getElementById, .{});
+    pub const getElementById = bridge.function(_getElementById, .{ .arity = 1 });
     fn _getElementById(self: *DocumentFragment, value_: ?js.Value) !?*Element {
         const value = value_ orelse return null;
         if (value.isNull()) {
