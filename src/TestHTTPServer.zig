@@ -118,6 +118,17 @@ fn handleConnection(self: *TestHTTPServer, conn: std.Io.net.Stream) !void {
 }
 
 pub fn sendFile(req: *std.http.Server.Request, file_path: []const u8) !void {
+    return sendFileWithHeaders(req, file_path, &.{});
+}
+
+// The same, plus response headers the file itself cannot carry. A document's
+// cross-origin isolation is negotiated in headers, so a test for it has to be
+// served rather than merely read.
+pub fn sendFileWithHeaders(
+    req: *std.http.Server.Request,
+    file_path: []const u8,
+    extra: []const std.http.Header,
+) !void {
     var url_buf: [1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&url_buf);
     var unescaped_file_path = try URL.unescape(fba.allocator(), file_path);
@@ -133,12 +144,14 @@ pub fn sendFile(req: *std.http.Server.Request, file_path: []const u8) !void {
     const stat = try file.stat(lp.io);
     var send_buffer: [4096]u8 = undefined;
 
+    var header_buf: [8]std.http.Header = undefined;
+    header_buf[0] = .{ .name = "content-type", .value = getContentType(unescaped_file_path) };
+    for (extra, 1..) |h, i| header_buf[i] = h;
+
     var res = try req.respondStreaming(&send_buffer, .{
         .content_length = stat.size,
         .respond_options = .{
-            .extra_headers = &.{
-                .{ .name = "content-type", .value = getContentType(unescaped_file_path) },
-            },
+            .extra_headers = header_buf[0 .. 1 + extra.len],
         },
     });
 

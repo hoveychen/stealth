@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  A document served with COOP: same-origin and COEP: require-corp is
+  cross-origin isolated, and says so.
+
+  This is not a hypothetical pairing. The Cloudflare managed-challenge
+  interstitial is served with both, and every realm of it -- the interstitial,
+  its about:blank and about:srcdoc children, and the Turnstile widget document
+  -- answers `crossOriginIsolated: true` on a reference Chrome 151, while the
+  ordinary page that replaces it once the challenge clears answers false
+  (measured, `tools/fingerprint/results/fopt-e3-oracle.json`). Answering false
+  on a page that carries the headers is a one-property disagreement with the
+  browser this engine claims to be, on exactly the page that is looking.
+
+  The runner serves any test file whose name starts with
+  `cross_origin_isolated` with those two headers; see `testHTTPHandler`.
+-->
+
+<script id="isolated_document">
+  testing.expectEqual(true, window.crossOriginIsolated);
+</script>
+
+<script id="own_property_of_window">
+  // Still an own accessor of the global rather than something inherited from
+  // Window.prototype -- the shape must not change with the answer.
+  testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, 'crossOriginIsolated'));
+  const d = Object.getOwnPropertyDescriptor(window, 'crossOriginIsolated');
+  testing.expectEqual('function', typeof d.get);
+  testing.expectEqual(undefined, d.set);
+</script>
+
+<script id="child_frame_inherits">
+  // A same-origin child of an isolated document is isolated too: it is served
+  // from the same route, so it carries the headers itself, and an about:blank
+  // child carries none and takes its parent's answer.
+  const f = document.createElement('iframe');
+  document.documentElement.appendChild(f);
+  testing.expectEqual(true, f.contentWindow.crossOriginIsolated);
+</script>
