@@ -180,16 +180,16 @@ pub fn constructor(self: *Caller, comptime T: type, func: anytype, handle: *cons
         }
     }
 
-    self._constructor(func, info, opts) catch |err| {
+    self._constructor(T, func, info, opts) catch |err| {
         handleError(T, @TypeOf(func), local, err, info);
     };
 }
 
-fn _constructor(self: *Caller, func: anytype, info: FunctionCallbackInfo, comptime opts: CallOpts) !void {
+fn _constructor(self: *Caller, comptime T: type, func: anytype, info: FunctionCallbackInfo, comptime opts: CallOpts) !void {
     const F = @TypeOf(func);
     const local = &self.local;
     const offset: comptime_int = if (opts.new_target) 1 else 0;
-    var args = try getArgs(F, offset, local, info);
+    var args = try getArgs(T, true, F, offset, local, info);
     if (comptime opts.new_target) {
         const new_target_handle = v8.v8__FunctionCallbackInfo__NewTarget(info.handle).?;
         @field(args, "0") = js.Function{ .local = local, .handle = @ptrCast(new_target_handle) };
@@ -631,6 +631,102 @@ fn missingArgument(comptime T: type, local: *const Local, info: FunctionCallback
     return local.ctx.fail(error.TypeError, message);
 }
 
+// The name Blink puts in "parameter N is not of type '<name>'." Only the types
+// whose name Blink can be shown to write are answered; everything else returns
+// null and keeps the generic refusal, because a confidently wrong type name
+// reads worse than a generic one.
+fn idlTypeName(comptime T: type) ?[]const u8 {
+    switch (@typeInfo(T)) {
+        .optional => |o| return idlTypeName(o.child),
+        .pointer => |ptr| if (ptr.size == .one) {
+            switch (@typeInfo(ptr.child)) {
+                .@"struct", .@"union", .@"enum", .@"opaque" => {
+                    if (@hasDecl(ptr.child, "JsApi")) {
+                        return interfaceName(ptr.child);
+                    }
+                },
+                else => {},
+            }
+        },
+        .@"struct" => {
+            // js.Nullable(X) is a required argument that accepts null; the name
+            // belongs to what it wraps.
+            if (@hasDecl(T, "js_nullable")) {
+                return idlTypeName(T.js_nullable);
+            }
+            if (T == js.Function or T == js.Function.Global) {
+                return "Function";
+            }
+            if (T == js.Object or T == js.Object.Global) {
+                return "Object";
+            }
+        },
+        .@"union" => |u| {
+            // A WebIDL callback interface -- EventListener, NodeFilter -- takes
+            // either a function or an object, which is exactly this shape, and
+            // Blink names it 'Object': not the interface, and not 'Function'
+            // even though a function is what it usually receives (measured on
+            // Chrome 151 for addEventListener and createNodeIterator). Any
+            // other union is a real IDL union, whose name is its whole
+            // spelling, and nothing here knows it.
+            inline for (u.fields) |field| {
+                const name = idlTypeName(field.type) orelse return null;
+                if (!std.mem.eql(u8, name, "Function") and !std.mem.eql(u8, name, "Object")) {
+                    return null;
+                }
+            }
+            return "Object";
+        },
+        else => {},
+    }
+    return null;
+}
+
+// An IDL sequence parameter arrives here as a slice. A slice of a numeric
+// scalar is ambiguous -- jsValueToZig takes a typed array there too, so the
+// parameter may be a BufferSource, which Blink refuses by type name rather than
+// as a sequence -- so only the slices that cannot be one claim the sentence.
+// `[]const u8` is a DOMString, not a sequence, and is excluded by the same test.
+fn isIdlSequence(comptime T: type) bool {
+    switch (@typeInfo(T)) {
+        .optional => |o| return isIdlSequence(o.child),
+        .pointer => |ptr| {
+            if (ptr.size != .slice) {
+                return false;
+            }
+            return switch (@typeInfo(ptr.child)) {
+                .int, .float => false,
+                else => true,
+            };
+        },
+        else => return false,
+    }
+}
+
+// Blink's sentence for an argument it could not convert. The prefix is the same
+// one the arity sentence uses -- the interface, and for an operation its name --
+// and the detail says which parameter and what it wanted. Both halves are
+// comptime except the operation's name, which only the template's data knows.
+fn conversionFailure(
+    comptime T: type,
+    comptime is_constructor: bool,
+    comptime detail: []const u8,
+    local: *const Local,
+    info: FunctionCallbackInfo,
+) anyerror {
+    if (comptime is_constructor) {
+        return local.ctx.fail(error.TypeError, comptime "Failed to construct '" ++
+            interfaceName(T) ++ "': " ++ detail);
+    }
+    // No name means this is not an operation's template -- an accessor's
+    // carries no data -- so we cannot write the prefix. Keep the old generic
+    // refusal rather than half a sentence.
+    const operation = info.operationName(local) orelse return error.InvalidArgument;
+    const fmt = comptime "Failed to execute '{s}' on '" ++ interfaceName(T) ++ "': " ++ detail;
+    const message = std.fmt.allocPrint(local.call_arena, fmt, .{operation}) catch return error.OutOfMemory;
+    return local.ctx.fail(error.TypeError, message);
+}
+
 fn handleError(comptime T: type, comptime F: type, local: *const Local, err: anyerror, info: anytype) void {
     const isolate = local.isolate;
 
@@ -1036,12 +1132,12 @@ pub const Function = struct {
 
         var args: ParameterTypes(F) = undefined;
         if (comptime opts.static) {
-            args = try getArgs(F, 0, local, info);
+            args = try getArgs(T, false, F, 0, local, info);
         } else if (comptime opts.embedded_receiver) {
-            args = try getArgs(F, 1, local, info);
+            args = try getArgs(T, false, F, 1, local, info);
             @field(args, "0") = @ptrCast(@alignCast(info.getData() orelse unreachable));
         } else {
-            args = try getArgs(F, 1, local, info);
+            args = try getArgs(T, false, F, 1, local, info);
             @field(args, "0") = try TaggedOpaque.fromJS(*T, info.getThis());
         }
         const res = @call(.auto, func, args);
@@ -1159,7 +1255,7 @@ pub const Function = struct {
 // Finally, if the JS function is called with _more_ parameters and
 // the last parameter in Zig is an array, we'll try to slurp the additional
 // parameters into the array.
-fn getArgs(comptime F: type, comptime offset: usize, local: *const Local, info: FunctionCallbackInfo) !ParameterTypes(F) {
+fn getArgs(comptime T: type, comptime is_constructor: bool, comptime F: type, comptime offset: usize, local: *const Local, info: FunctionCallbackInfo) !ParameterTypes(F) {
     var args: ParameterTypes(F) = undefined;
 
     const params = @typeInfo(F).@"fn".params[offset..];
@@ -1266,6 +1362,28 @@ fn getArgs(comptime F: type, comptime offset: usize, local: *const Local, info: 
                 const DOMException = @import("../webapi/DOMException.zig");
                 if (DOMException.fromError(err) != null) {
                     return err;
+                }
+                // Blink says which argument it refused and what it wanted. The
+                // position is this loop's comptime index, counted from 1 the
+                // way WebIDL does; the sequence refusal is the one detail that
+                // carries neither position nor type name.
+                if (comptime isIdlSequence(param.type.?)) {
+                    return conversionFailure(
+                        T,
+                        is_constructor,
+                        "The provided value cannot be converted to a sequence.",
+                        local,
+                        info,
+                    );
+                }
+                if (comptime idlTypeName(param.type.?)) |type_name| {
+                    return conversionFailure(
+                        T,
+                        is_constructor,
+                        comptime std.fmt.comptimePrint("parameter {d} is not of type '{s}'.", .{ i + 1, type_name }),
+                        local,
+                        info,
+                    );
                 }
                 return error.InvalidArgument;
             };
