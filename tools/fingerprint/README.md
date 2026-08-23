@@ -10512,3 +10512,23 @@ open, the same eleven as before the change and the same four shut
 what a 139-character residue on one payload predicts; the reading that matters
 here is the absence of a regression, since the normalised text is what the
 cascade re-parses.
+
+### Measuring the rest without a sitting
+
+`keyframes-roundtrip.mjs` feeds our own recorded payload back through a fresh
+`CSSStyleSheet` and diffs the re-read against the oracle's text. Because both
+arms recorded the same 183 rules, that re-runs the whole serialiser over real
+CSS in about three seconds, with no station and no challenge:
+
+```
+node tools/fingerprint/keyframes-roundtrip.mjs [--verbose]
+```
+
+Where it stands after the value-punctuation pass, which writes every comma as
+`, ` and every slash as ` / ` (and every `stroke-dasharray` separator as `, `):
+
+| | gap | rules byte-identical |
+| --- | --- | --- |
+| before the selector serialiser | 331 | 120 / 183 |
+| after it | 139 | 164 / 183 |
+| after value punctuation | **112** | **169 / 183** |
