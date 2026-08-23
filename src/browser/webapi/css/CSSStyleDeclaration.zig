@@ -3136,6 +3136,10 @@ test "WebApi: CSSStyleDeclaration value list serialize" {
     try testing.htmlRunner("css/value_list_serialize.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration animation serialize" {
+    try testing.htmlRunner("css/animation_serialize.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration shadow serialize" {
     try testing.htmlRunner("css/shadow_serialize.html", .{});
 }

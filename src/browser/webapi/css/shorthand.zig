@@ -709,6 +709,17 @@ fn accepts(longhand: []const u8, component: []const u8) bool {
             }
         }
     }
+    // An easing written as a function. The generator measured both
+    // timing-function longhands as taking no value class at all -- the class
+    // vocabulary has no name for an easing -- so `cubic-bezier()` matched
+    // nothing below, `place` found it no slot, and the whole shorthand declined
+    // and was kept as the author wrote it. That is why `animation: a 1s
+    // cubic-bezier(...)` did not expand where `animation: a 1s linear` did.
+    // Measured with tools/fingerprint/probes/expr-animation-serialize.js.
+    if (isEasingFunction(component) and isTimingFunction(longhand)) {
+        return true;
+    }
+
     const taken = table.value_classes.get(longhand) orelse return false;
     for (taken) |class| {
         if (switch (class) {
@@ -980,6 +991,26 @@ fn functionClass(name: []const u8) Classes {
         if (std.ascii.eqlIgnoreCase(name, known)) return .{ .function = true };
     }
     return .{};
+}
+
+/// The two longhands an easing lands in. Both were measured with an empty value
+/// class list, so `accepts` has to name them rather than read them off a table.
+fn isTimingFunction(longhand: []const u8) bool {
+    return std.mem.eql(u8, longhand, "animation-timing-function") or
+        std.mem.eql(u8, longhand, "transition-timing-function");
+}
+
+/// Whether the component is an `<easing-function>` written as a call. The three
+/// names are the whole of the grammar; a bare `ease` or `linear` is an
+/// identifier and reaches the keyword table instead.
+fn isEasingFunction(component: []const u8) bool {
+    if (component.len == 0 or component[component.len - 1] != ')') return false;
+    const open = std.mem.indexOfScalar(u8, component, '(') orelse return false;
+    const name = component[0..open];
+    for ([_][]const u8{ "cubic-bezier", "steps", "linear" }) |known| {
+        if (std.ascii.eqlIgnoreCase(name, known)) return true;
+    }
+    return false;
 }
 
 /// How much of the component is a number, 0 when it does not start with one.
