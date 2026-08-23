@@ -1,0 +1,181 @@
+{
+ "summary": {
+  "paths": 34,
+  "compared": 34,
+  "shared": 3,
+  "unstable": 0,
+  "unreachable": 0
+ },
+ "paths": {
+  "screen": {
+   "status": "shared",
+   "stable": true,
+   "tag": "[object Screen]"
+  },
+  "screen.orientation": {
+   "status": "shared",
+   "stable": true,
+   "tag": "[object ScreenOrientation]"
+  },
+  "visualViewport": {
+   "status": "shared",
+   "stable": true,
+   "tag": "[object VisualViewport]"
+  },
+  "navigator": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Navigator]"
+  },
+  "navigator.connection": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object NetworkInformation]"
+  },
+  "navigator.storage": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object StorageManager]"
+  },
+  "navigator.permissions": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Permissions]"
+  },
+  "navigator.mediaDevices": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object MediaDevices]"
+  },
+  "navigator.serviceWorker": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object ServiceWorkerContainer]"
+  },
+  "navigator.credentials": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object CredentialsContainer]"
+  },
+  "navigator.geolocation": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Geolocation]"
+  },
+  "navigator.clipboard": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Clipboard]"
+  },
+  "navigator.locks": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object LockManager]"
+  },
+  "navigator.plugins": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object PluginArray]"
+  },
+  "navigator.mimeTypes": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object MimeTypeArray]"
+  },
+  "navigator.userAgentData": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object NavigatorUAData]"
+  },
+  "crypto": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Crypto]"
+  },
+  "crypto.subtle": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object SubtleCrypto]"
+  },
+  "localStorage": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Storage]"
+  },
+  "sessionStorage": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Storage]"
+  },
+  "indexedDB": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object IDBFactory]"
+  },
+  "caches": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object CacheStorage]"
+  },
+  "performance": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Performance]"
+  },
+  "performance.timing": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object PerformanceTiming]"
+  },
+  "performance.navigation": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object PerformanceNavigation]"
+  },
+  "history": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object History]"
+  },
+  "location": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Location]"
+  },
+  "navigation": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object Navigation]"
+  },
+  "document": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object HTMLDocument]"
+  },
+  "document.documentElement": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object HTMLHtmlElement]"
+  },
+  "customElements": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object CustomElementRegistry]"
+  },
+  "speechSynthesis": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object SpeechSynthesis]"
+  },
+  "styleMedia": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object StyleMedia]"
+  },
+  "console": {
+   "status": "distinct",
+   "stable": true,
+   "tag": "[object console]"
+  }
+ }
+}
