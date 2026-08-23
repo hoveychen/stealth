@@ -9867,3 +9867,41 @@ those are per-parameter conversion sentences, a different half of the wording.
 Readings: `results/probes/probe-arity-gaps.{chrome,lightpanda}.json`,
 `probe-operation-arity.{chrome,lightpanda}.json`,
 `probe-arity-refusal.{chrome,lightpanda}.json`.
+
+#### Objects two realms were sharing (2026-08-23)
+
+Chased from the `subtle.digest` reading above. The sweep walks 34 objects
+reachable from the global and compares each against the same path on a
+same-origin iframe. Chrome shares none of them; we shared five.
+
+| | before | after | Chrome |
+| --- | --- | --- | --- |
+| shared with a same-origin iframe | 5 | **2** | 0 |
+
+`crypto.subtle` had two causes stacked, and fixing only the first made it worse
+rather than better — worth writing down, because the second is a hazard the rest
+of the tree shares.
+
+`Crypto` carried `empty_with_no_proto`, the marker that says a type is stateless
+enough to skip its internal field. `TaggedOpaque.fromJS` answers such a type with
+`@constCast(@as(*const T, &.{}))` — one comptime instance for the whole process.
+`Crypto` is not stateless: it owns `_subtle`, and `&self._subtle` off that single
+instance is one address, so the identity map handed every realm the same
+`SubtleCrypto`. Dropping the marker alone then made `crypto.subtle` come back as
+`[object Crypto]` with no `digest` on it, because `_subtle` was the *first* field
+and `&self._subtle == &self`: the identity map is keyed on the address alone, so
+it found the `Crypto` entry already sitting there. A padding field ahead of
+`_subtle` separates the two. Any embedded struct handed to JS from offset zero
+has the same collision waiting.
+
+`localStorage` and `sessionStorage` were a different shape of the same problem
+and not a bug in the storage code: the store really is per-origin and really is
+shared with every same-origin frame. It is the `Storage` *object* Chrome makes
+per-realm. So `storage.View` is now the per-Window handle and `storage.Lookup`
+stays the per-origin state, which is one wrapper per realm because the identity
+map keys on the address it is handed.
+
+`screen` and `visualViewport` are still shared. Both are EventTargets with their
+own listener lists, so splitting them per realm is not a handle over shared
+state the way `Storage` was — it is a second instance with its own dispatch, and
+that is its own plan (`cfsc-realm-screen-viewport`), not a line in this one.

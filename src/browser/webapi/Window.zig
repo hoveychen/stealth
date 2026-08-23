@@ -88,6 +88,8 @@ _frame: *Frame,
 _document: *Document,
 _css: CSS = .init,
 _crypto: Crypto = .init,
+_local_storage: ?storage.View = null,
+_session_storage: ?storage.View = null,
 _console: Console = .init,
 _navigator: Navigator = .init,
 _model_context: ModelContext = .init,
@@ -409,12 +411,23 @@ fn bucketForOrigin(self: *Window) *storage.Bucket {
     ) catch @panic("OOM");
 }
 
-pub fn getLocalStorage(self: *Window) *storage.Lookup {
-    return &self.bucketForOrigin().local;
+/// Two handles kept on the Window rather than one Lookup handed straight out:
+/// the store is per-origin and shared with every same-origin frame, but the
+/// `Storage` *object* is per-realm in Chrome, and the identity map keys the JS
+/// wrapper on the address it is given. Handing out `&bucket.local` gave every
+/// realm the same wrapper, so a patch in an iframe reached its parent.
+pub fn getLocalStorage(self: *Window) *storage.View {
+    if (self._local_storage == null) {
+        self._local_storage = .{ ._lookup = &self.bucketForOrigin().local };
+    }
+    return &self._local_storage.?;
 }
 
-pub fn getSessionStorage(self: *Window) *storage.Lookup {
-    return &self.bucketForOrigin().session;
+pub fn getSessionStorage(self: *Window) *storage.View {
+    if (self._session_storage == null) {
+        self._session_storage = .{ ._lookup = &self.bucketForOrigin().session };
+    }
+    return &self._session_storage.?;
 }
 
 pub fn getCookieStore(self: *Window, exec: *Execution) !*CookieStore {

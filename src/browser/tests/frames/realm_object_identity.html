@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  Two realms must not hand out the same object.
+
+  Measured on the Cloudflare widget (README, "Reading the same two files record
+  by record"): a recorder installed in ten realms wrapped `crypto.subtle.digest`
+  ten times over, because every realm's `crypto.subtle` was one object. Chrome
+  shares none of these — a same-origin iframe gets its own wrapper over the same
+  underlying state — so a patch applied in one realm reaching another is a tell
+  that needs no cleverness to read.
+-->
+
+<script id="realm_crypto_subtle_is_per_realm">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    // The realms themselves are distinct, which is the premise of the rest.
+    testing.expectTrue(w !== window);
+    testing.expectTrue(w.document !== document);
+    testing.expectTrue(w.Object !== Object);
+    testing.expectTrue(w.crypto !== crypto);
+
+    // And so is the object hanging off it.
+    testing.expectTrue(w.crypto.subtle !== crypto.subtle);
+    testing.expectTrue(w.crypto.subtle.digest !== crypto.subtle.digest);
+
+    f.remove();
+}
+</script>
+
+<script id="realm_crypto_subtle_patch_does_not_leak">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    const before = crypto.subtle.digest;
+    w.crypto.subtle.digest = function () { return 'patched'; };
+    testing.expectTrue(crypto.subtle.digest === before);
+    testing.expectEqual('patched', w.crypto.subtle.digest());
+
+    f.remove();
+}
+</script>
+
+<script id="realm_storage_is_per_realm_over_one_store">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    // Same origin, so the same store -- but not the same object. Chrome draws
+    // that line and so does this engine now: the Storage handle is per-Window,
+    // the data behind it is per-origin.
+    testing.expectTrue(w.localStorage !== localStorage);
+    testing.expectTrue(w.sessionStorage !== sessionStorage);
+    testing.expectTrue(w.localStorage.getItem !== localStorage.getItem);
+
+    localStorage.setItem('realm-probe', 'parent');
+    testing.expectEqual('parent', w.localStorage.getItem('realm-probe'));
+    w.localStorage.setItem('realm-probe', 'child');
+    testing.expectEqual('child', localStorage.getItem('realm-probe'));
+    testing.expectEqual(localStorage.length, w.localStorage.length);
+    localStorage.removeItem('realm-probe');
+    testing.expectEqual(null, w.localStorage.getItem('realm-probe'));
+
+    // localStorage and sessionStorage are two stores, not one.
+    sessionStorage.setItem('realm-probe', 'session');
+    testing.expectEqual(null, localStorage.getItem('realm-probe'));
+    sessionStorage.removeItem('realm-probe');
+
+    f.remove();
+}
+</script>
+
+<script id="realm_crypto_wrappers_are_stable">
+{
+    // The check above is only meaningful if a wrapper is stable within one
+    // realm: a getter minting a fresh object per read would read as "distinct"
+    // across realms for the wrong reason.
+    testing.expectTrue(crypto === crypto);
+    testing.expectTrue(crypto.subtle === crypto.subtle);
+    testing.expectTrue(crypto.subtle.digest === crypto.subtle.digest);
+}
+</script>
+
+</body>
+</html>

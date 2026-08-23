@@ -23,6 +23,13 @@ const SubtleCrypto = @import("SubtleCrypto.zig");
 const QuotaExceededError = @import("QuotaExceededError.zig");
 
 const Crypto = @This();
+/// Keeps `_subtle` off offset zero. The identity map that gives a Zig instance
+/// its one JS wrapper is keyed on the address alone, so an embedded struct
+/// sitting at its parent's address collides with it: `&self._subtle` would be
+/// `&self`, the map would find the Crypto entry, and `crypto.subtle` would come
+/// back as a second reference to `crypto` — measured, `[object Crypto]` with no
+/// `digest` on it. A field ahead of it separates the two addresses.
+_pad: bool = false,
 _subtle: SubtleCrypto = .{},
 
 pub const init: Crypto = .{};
@@ -86,7 +93,15 @@ pub const JsApi = struct {
         pub const name = "Crypto";
         pub const prototype_chain = bridge.prototypeChain();
         pub var class_id: bridge.ClassId = undefined;
-        pub const empty_with_no_proto = true;
+        // No `empty_with_no_proto`, on purpose. A type carrying that marker is
+        // never given an internal field, so recovering the Zig receiver from a
+        // JS object hands back a pointer to one comptime instance shared by the
+        // whole process (TaggedOpaque.fromJS). Crypto is not stateless: it owns
+        // `_subtle`, and `&self._subtle` off that one shared instance is one
+        // address, so the identity map handed every realm the same
+        // SubtleCrypto. Chrome gives each realm its own, and the Cloudflare
+        // widget's recorder found the difference by wrapping digest ten times
+        // over (README, "Reading the same two files record by record").
     };
 
     pub const getRandomValues = bridge.function(Crypto.getRandomValues, .{});
