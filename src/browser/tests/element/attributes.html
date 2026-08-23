@@ -236,10 +236,11 @@
   div.setAttribute('data-test-123', 'value5');
   testing.expectEqual('value5', div.getAttribute('data-test-123'));
 
-  // toggleAttribute takes the same relaxed set.
+  // toggleAttribute takes the same relaxed set. '-invalid' is already on the
+  // element from the setAttribute run above, so toggling it removes it.
   testing.expectTrue(div.toggleAttribute('.invalid'));
   testing.expectTrue(div.toggleAttribute('0invalid'));
-  testing.expectTrue(div.toggleAttribute('-invalid'));
+  testing.expectFalse(div.toggleAttribute('-invalid'));
 
   testing.withError((err) => {
     testing.expectEqual(5, err.code);

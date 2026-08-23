@@ -96,7 +96,7 @@ pub fn createDocument(_: *const DOMImplementation, namespace_nullable: js.Nullab
     };
 
     if (qname.len > 0) {
-        _ = try Document.validateAndExtract(namespace_, qname, .element);
+        _ = try Document.validateAndExtract(namespace_, qname, .element, "createDocument", "DOMImplementation", frame);
     }
 
     // Create XML Document

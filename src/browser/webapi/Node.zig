@@ -273,35 +273,82 @@ fn validateNodeInsertion(parent: *Node, node: *Node) !void {
 // node type, then the document-parent structure rules.
 const PreInsertMode = enum { insert, replace };
 
-fn ensurePreInsertValidity(parent: *Node, node: *Node, child: ?*Node, comptime mode: PreInsertMode) !void {
+// Blink has seven sentences behind HierarchyRequestError and three behind the
+// NotFoundError, and which one comes out says which of these branches rejected
+// the call -- so a page can tell them apart without catching a different error.
+// All measured against Chrome 151.
+const hierarchy_bad_parent = "This node type does not support this method.";
+const hierarchy_cycle = "The new child element contains the parent.";
+const hierarchy_two_elements = "Only one element on document allowed.";
+const hierarchy_two_doctypes = "Only one doctype on document allowed.";
+const hierarchy_doctype_after_root = "Can't insert a doctype after the root element.";
+const hierarchy_element_before_doctype = "Can't insert an element before a doctype.";
+
+// Three operations, three NotFoundError sentences: the verb follows what the
+// missing child was going to be used for.
+const insert_before_missing_child = "The node before which the new node is to be inserted is not a child of this node.";
+const replace_child_missing_child = "The node to be replaced is not a child of this node.";
+const remove_child_missing_child = "The node to be removed is not a child of this node.";
+
+fn hierarchyPrefix(comptime op: []const u8) []const u8 {
+    return "Failed to execute '" ++ op ++ "' on 'Node': ";
+}
+
+fn failHierarchy(comptime op: []const u8, comptime sentence: []const u8, frame: *Frame) anyerror {
+    return frame.js.fail(error.HierarchyError, comptime hierarchyPrefix(op) ++ sentence);
+}
+
+// The one parameterised sentence: both node names are echoed, the child's then
+// the parent's, and an element's is its nodeName -- upper case in an HTML
+// document, which the sentence preserves.
+fn failNodeTypes(comptime op: []const u8, node: *Node, parent: *Node, frame: *Frame) anyerror {
+    var node_buf: [128]u8 = undefined;
+    var parent_buf: [128]u8 = undefined;
+    const message = std.fmt.allocPrint(
+        frame.call_arena,
+        comptime hierarchyPrefix(op) ++ "Nodes of type '{s}' may not be inserted inside nodes of type '{s}'.",
+        .{ node.getNodeName(frame, &node_buf), parent.getNodeName(frame, &parent_buf) },
+    ) catch return error.OutOfMemory;
+    return frame.js.fail(error.HierarchyError, message);
+}
+
+fn ensurePreInsertValidity(
+    parent: *Node,
+    node: *Node,
+    child: ?*Node,
+    comptime mode: PreInsertMode,
+    comptime op: []const u8,
+    comptime missing_child: []const u8,
+    frame: *Frame,
+) !void {
     switch (parent._type) {
         .document, .document_fragment, .element => {},
-        else => return error.HierarchyError,
+        else => return failHierarchy(op, hierarchy_bad_parent, frame),
     }
 
     if (node.contains(parent)) {
-        return error.HierarchyError;
+        return failHierarchy(op, hierarchy_cycle, frame);
     }
 
     if (child) |c| {
         if (c._parent == null or c._parent.? != parent) {
-            return error.NotFound;
+            return frame.js.fail(error.NotFound, comptime hierarchyPrefix(op) ++ missing_child);
         }
     }
 
     switch (node._type) {
-        .document, .attribute => return error.HierarchyError,
+        .document, .attribute => return failNodeTypes(op, node, parent, frame),
         .cdata => {
             const cd = node.subtype(CData);
             if ((cd._type == .text or cd._type == .cdata_section) and parent._type == .document) {
                 // A Text node (CDATASection included) cannot be a child of a
                 // document.
-                return error.HierarchyError;
+                return failNodeTypes(op, node, parent, frame);
             }
         },
         .document_type => {
             if (parent._type != .document) {
-                return error.HierarchyError;
+                return failNodeTypes(op, node, parent, frame);
             }
         },
         else => {},
@@ -323,26 +370,26 @@ fn ensurePreInsertValidity(parent: *Node, node: *Node, child: ?*Node, comptime m
                         // A Text node (CDATASection included) cannot be a
                         // child of a document.
                         if (cd._type == .text or cd._type == .cdata_section) {
-                            return error.HierarchyError;
+                            return failNodeTypes(op, frag_child, parent, frame);
                         }
                     },
                     else => {},
                 }
             }
             if (element_count > 1) {
-                return error.HierarchyError;
+                return failHierarchy(op, hierarchy_two_elements, frame);
             }
             if (element_count == 1) {
-                try checkDocumentElementRules(parent, node, child, mode);
+                try checkDocumentElementRules(parent, node, child, mode, op, frame);
             }
         },
-        .element => try checkDocumentElementRules(parent, node, child, mode),
+        .element => try checkDocumentElementRules(parent, node, child, mode, op, frame),
         .document_type => {
             var it = parent.childrenIterator();
             while (it.next()) |existing| {
                 if (existing._type == .document_type and existing != node) {
                     if (mode == .replace and existing == child) continue;
-                    return error.HierarchyError;
+                    return failHierarchy(op, hierarchy_two_doctypes, frame);
                 }
             }
             if (child) |c| {
@@ -350,14 +397,14 @@ fn ensurePreInsertValidity(parent: *Node, node: *Node, child: ?*Node, comptime m
                 var prev = c.previousSibling();
                 while (prev) |p| : (prev = p.previousSibling()) {
                     if (p._type == .element) {
-                        return error.HierarchyError;
+                        return failHierarchy(op, hierarchy_doctype_after_root, frame);
                     }
                 }
             } else if (mode == .insert) {
                 var it2 = parent.childrenIterator();
                 while (it2.next()) |existing| {
                     if (existing._type == .element) {
-                        return error.HierarchyError;
+                        return failHierarchy(op, hierarchy_doctype_after_root, frame);
                     }
                 }
             }
@@ -366,31 +413,38 @@ fn ensurePreInsertValidity(parent: *Node, node: *Node, child: ?*Node, comptime m
     }
 }
 
-fn checkDocumentElementRules(parent: *Node, node: *Node, child: ?*Node, comptime mode: PreInsertMode) !void {
+fn checkDocumentElementRules(
+    parent: *Node,
+    node: *Node,
+    child: ?*Node,
+    comptime mode: PreInsertMode,
+    comptime op: []const u8,
+    frame: *Frame,
+) !void {
     // A document can have at most one element child.
     var it = parent.childrenIterator();
     while (it.next()) |existing| {
         if (existing._type == .element and existing != node) {
             if (mode == .replace and existing == child) continue;
-            return error.HierarchyError;
+            return failHierarchy(op, hierarchy_two_elements, frame);
         }
     }
     if (child) |c| {
         if (mode == .insert and c._type == .document_type) {
-            return error.HierarchyError;
+            return failHierarchy(op, hierarchy_element_before_doctype, frame);
         }
         // A doctype following child?
         var next = c.nextSibling();
         while (next) |n| : (next = n.nextSibling()) {
             if (n._type == .document_type) {
-                return error.HierarchyError;
+                return failHierarchy(op, hierarchy_element_before_doctype, frame);
             }
         }
     }
 }
 
 pub fn appendChild(self: *Node, child: *Node, frame: *Frame) !*Node {
-    try ensurePreInsertValidity(self, child, null, .insert);
+    try ensurePreInsertValidity(self, child, null, .insert, "appendChild", "", frame);
 
     if (child.is(DocumentFragment)) |_| {
         try frame.appendAllChildren(child, self);
@@ -817,11 +871,14 @@ pub fn removeChild(self: *Node, child: *Node, frame: *Frame) !*Node {
             return child;
         }
     }
-    return error.NotFound;
+    return frame.js.fail(
+        error.NotFound,
+        comptime hierarchyPrefix("removeChild") ++ remove_child_missing_child,
+    );
 }
 
 pub fn insertBefore(self: *Node, new_node: *Node, ref_node_: ?*Node, frame: *Frame) !*Node {
-    try ensurePreInsertValidity(self, new_node, ref_node_, .insert);
+    try ensurePreInsertValidity(self, new_node, ref_node_, .insert, "insertBefore", insert_before_missing_child, frame);
     return self.insertBeforeInner(new_node, ref_node_, frame);
 }
 
@@ -885,7 +942,7 @@ fn insertBeforeInner(self: *Node, new_node: *Node, ref_node_: ?*Node, frame: *Fr
 }
 
 pub fn replaceChild(self: *Node, new_child: *Node, old_child: *Node, frame: *Frame) !*Node {
-    try ensurePreInsertValidity(self, new_child, old_child, .replace);
+    try ensurePreInsertValidity(self, new_child, old_child, .replace, "replaceChild", replace_child_missing_child, frame);
 
     frame.domChanged();
     const notify = Frame.observers.hasMutationObservers(frame);

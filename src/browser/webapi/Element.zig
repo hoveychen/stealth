@@ -918,7 +918,7 @@ pub fn getAttributeNode(self: *Element, name: String, frame: *Frame) !?*Attribut
 }
 
 pub fn setAttribute(self: *Element, name: String, value: String, frame: *Frame) !void {
-    try Attribute.validateAttributeName(name);
+    try Attribute.validateAttributeName(name, "setAttribute", frame);
     _ = try self._attributes.put(name, value, self, frame);
 }
 
@@ -929,6 +929,23 @@ pub fn setAttributeNS(
     value: String,
     frame: *Frame,
 ) !void {
+    // Same rule as setAttribute, worded a third way: this one calls the input a
+    // qualified name and names the character it tripped over.
+    if (Attribute.checkAttributeName(qualified_name)) |rejection| {
+        const prefix = "Failed to execute 'setAttributeNS' on 'Element': ";
+        switch (rejection) {
+            .empty => return frame.js.fail(
+                error.InvalidCharacterError,
+                prefix ++ "The qualified name provided is empty.",
+            ),
+            .character => |c| return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+                frame.call_arena,
+                prefix ++ "The qualified name provided ('{s}') contains the invalid character '{c}'.",
+                .{ qualified_name, c },
+            )),
+        }
+    }
+
     const local_start = if (std.mem.indexOfScalarPos(u8, qualified_name, 0, ':')) |idx| blk: {
         if (idx == 0 or idx == qualified_name.len - 1) {
             // cannot be at the start or end of the qname
@@ -1066,7 +1083,7 @@ pub fn removeAttributeSafe(self: *Element, name: String, frame: *Frame) void {
 }
 
 pub fn toggleAttribute(self: *Element, name: String, force: ?bool, frame: *Frame) !bool {
-    try Attribute.validateAttributeName(name);
+    try Attribute.validateAttributeName(name, "toggleAttribute", frame);
     const has = try self.hasAttribute(name, frame);
 
     const should_add = force orelse !has;
@@ -1578,15 +1595,18 @@ pub fn getChildElementCount(self: *Element) usize {
 }
 
 pub fn matches(self: *Element, selector: []const u8, frame: *Frame) !bool {
-    return Selector.matches(self, selector, frame) catch |err| Selector.mapErrorToDOM(err);
+    return Selector.matches(self, selector, frame) catch |err|
+        Selector.failToDOM(err, selector, "matches", "Element", frame);
 }
 
 pub fn querySelector(self: *Element, selector: []const u8, frame: *Frame) !?*Element {
-    return Selector.querySelector(self.asNode(), selector, frame) catch |err| Selector.mapErrorToDOM(err);
+    return Selector.querySelector(self.asNode(), selector, frame) catch |err|
+        Selector.failToDOM(err, selector, "querySelector", "Element", frame);
 }
 
 pub fn querySelectorAll(self: *Element, input: []const u8, frame: *Frame) !*Selector.List {
-    return Selector.querySelectorAll(self.asNode(), input, frame) catch |err| Selector.mapErrorToDOM(err);
+    return Selector.querySelectorAll(self.asNode(), input, frame) catch |err|
+        Selector.failToDOM(err, input, "querySelectorAll", "Element", frame);
 }
 
 pub fn getAnimations(_: *const Element) []*Animation {
@@ -1610,11 +1630,11 @@ pub fn animate(self: *Element, keyframes: ?js.Value, options: ?js.Value, exec: *
 }
 
 pub fn closest(self: *Element, input: []const u8, frame: *Frame) !?*Element {
-    if (input.len == 0) {
-        return error.SyntaxError;
-    }
-
-    const selector = try Selector.cachedParse(frame._session.browser, input);
+    // Unlike its three neighbours this one never went through the DOMException
+    // mapping, so a bad selector came out as the raw Zig error name
+    // (`Error: InvalidIDSelector`), which no browser produces.
+    const selector = Selector.cachedParse(frame._session.browser, input) catch |err|
+        return Selector.failToDOM(err, input, "closest", "Element", frame);
 
     var current: ?*Element = self;
     while (current) |el| {
