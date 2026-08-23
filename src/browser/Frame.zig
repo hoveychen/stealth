@@ -2498,6 +2498,54 @@ pub fn performance(self: *Frame) *Performance {
     return &self.window._performance;
 }
 
+// Files a finished subresource load as a `resource` PerformanceEntry, for the
+// loads this frame starts itself -- stylesheets, images, the favicon. Scripts
+// go through ScriptManagerBase.Script.recordResourceTiming, which has the
+// Script's own bookkeeping to work from; XHR and fetch call Performance
+// directly, since they hold an Execution already.
+//
+// `initiator` names what started the load rather than what came back, and the
+// strings are measured against Chrome 151 by
+// tools/fingerprint/resource-timing-initiators.mjs rather than remembered.
+//
+// A failure to record is logged and dropped rather than propagated. Every
+// caller is on the delivery path of a load that already succeeded, and failing
+// the load because its bookkeeping failed would cost the page the stylesheet
+// or the image as well as the entry.
+pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
+    const perf = self.performance();
+    _ = perf.resourceLoaded(r.url, .{
+        .initiator_type = r.initiator,
+        .next_hop_protocol = r.next_hop_protocol,
+        .render_blocking_status = if (r.render_blocking) "blocking" else "non-blocking",
+        .fetch_start = r.fetch_start,
+        .response_end = perf.now(),
+        .response_status = r.status,
+        .encoded_body_size = r.body_len,
+        .decoded_body_size = r.body_len,
+    }, &self.js.execution) catch |err| {
+        log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
+    };
+}
+
+pub const ResourceTimingRecord = struct {
+    url: []const u8,
+    initiator: []const u8,
+    fetch_start: f64,
+    status: u16,
+    body_len: usize,
+
+    // The protocol the response arrived over, as libcurl reports it
+    // ("http/1.1", "h2", "h3"). Empty only when no connection was made.
+    next_hop_protocol: []const u8 = "",
+
+    // Whether the load held up rendering. A stylesheet does; an image does
+    // not. Chrome reports it per entry, and reporting every load as
+    // non-blocking would say this engine renders before its stylesheets
+    // arrive, which is the opposite of what it does.
+    render_blocking: bool = false,
+};
+
 // Tracks a file input's FileList so its File refs are released at teardown.
 pub fn trackFileList(self: *Frame, file_list: *FileList) !void {
     try self._file_lists.append(self.arena, file_list);
@@ -2620,6 +2668,10 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
 
     const http_client = &session.browser.http_client;
 
+    // Taken before the transfer, not after: a resource entry's startTime is
+    // when the load began.
+    const fetch_start = self.performance().now();
+
     // `syncRequest` below registers a blocking request for this frame; the
     // client's dispatcher holds back every OTHER transfer's callbacks for
     // the frame while it's registered (they'd run JS on the parser's stack)
@@ -2665,6 +2717,26 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         return self.queueElementEvent(Factory.protoOf(link), .@"error");
     };
     defer response.deinit();
+
+    // Filed before the status and size checks below: what a resource entry
+    // records is that a load happened, not that it was useful. Chrome leaves
+    // one behind for a 404 too -- the favicon row of
+    // tools/fingerprint/resource-timing-initiators.mjs is exactly that.
+    //
+    // "link" is the element that asked, not the bytes that came back; a sheet
+    // reached through an @import would be "css", which cannot arise here
+    // because nothing follows an @import yet.
+    self.recordResourceTiming(.{
+        .url = resolved,
+        .initiator = "link",
+        .fetch_start = fetch_start,
+        .status = response.status,
+        .body_len = response.body.items.len,
+        .next_hop_protocol = response.next_hop_protocol,
+        // A stylesheet holds up rendering until its rules are in, which is
+        // why this fetch is the synchronous one to begin with.
+        .render_blocking = true,
+    });
 
     if (response.status < 200 or response.status >= 300) {
         log.info(.http, "external stylesheet status", .{ .status = response.status, .url = resolved });
@@ -2754,16 +2826,40 @@ pub fn loadImage(self: *Frame, element: *Element.Html, src: []const u8) !void {
     return self.requestImage(resolved, element);
 }
 
-// One in-flight `<img>` request, holding what the transfer needs to report an
-// outcome to the page.
+// One in-flight image request, holding what the transfer needs to report an
+// outcome to the page and to file the load in the resource timing buffer.
 //
 // The element outlives the request -- it belongs to the document, not to us --
 // which is the same assumption `ScriptManagerBase.Script.queueHintEvent`
 // makes, and it is why nothing here has to be unwound when the element is
 // removed mid-flight.
+//
+// The favicon has no element: nothing on the page fires `load` for it. It
+// still rides this struct, because it is still a load a browser leaves an
+// entry behind for -- Chrome files it as "other" (measured by
+// tools/fingerprint/resource-timing-initiators.mjs).
 const ImageRequest = struct {
     frame: *Frame,
-    element: *Element.Html,
+    element: ?*Element.Html,
+
+    // Frame-arena'd like the request itself, so it outlives the transfer.
+    url: []const u8,
+
+    // "img" for an <img src>, "other" for the favicon.
+    initiator: []const u8,
+
+    // Taken where the request goes out; see Frame.recordResourceTiming.
+    fetch_start: f64,
+
+    status: u16 = 0,
+
+    // libcurl's label for the protocol the response came over; a literal, so
+    // it outlives the connection it was read from.
+    next_hop_protocol: []const u8 = "",
+
+    // How many bytes arrived, which `prefix` cannot say: it stops at the
+    // signature length on purpose.
+    bytes: usize = 0,
 
     // The head of the body, kept until it has all arrived. Nothing here
     // decodes, so a signature is as close to "it became a picture" as this
@@ -2780,11 +2876,15 @@ const ImageRequest = struct {
     fn headerCallback(transfer: *HttpClient.Transfer) !HttpClient.Transfer.HeaderResult {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
 
-        // The status is not consulted, on purpose. Chrome 151 fires `load` for
-        // an <img> whose response answers 404 or 500 with real PNG bytes, and
-        // `error` for one that answers 200 with a page (probe
-        // `tools/fingerprint/img-sniff.mjs`): what settles it is the body, and
-        // a status code does not see the body.
+        // The status is not consulted for the *event*, on purpose. Chrome 151
+        // fires `load` for an <img> whose response answers 404 or 500 with
+        // real PNG bytes, and `error` for one that answers 200 with a page
+        // (probe `tools/fingerprint/img-sniff.mjs`): what settles it is the
+        // body, and a status code does not see the body. It is kept anyway,
+        // because the resource entry reports it verbatim.
+        self.status = transfer.responseStatus() orelse 0;
+        self.next_hop_protocol = transfer.nextHopProtocol();
+
         if (transfer.contentType()) |ct| {
             const mime = Mime.parse(ct) catch null;
             if (mime) |m| {
@@ -2804,6 +2904,7 @@ const ImageRequest = struct {
     // for a decoder we do not have.
     fn dataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
+        self.bytes += data.len;
         const room = self.prefix.len - self.prefix_len;
         if (room == 0) {
             return;
@@ -2815,6 +2916,18 @@ const ImageRequest = struct {
 
     fn doneCallback(ctx: *anyopaque) !void {
         const self: *ImageRequest = @ptrCast(@alignCast(ctx));
+        // The entry is filed for any completed transfer, including one whose
+        // bytes turned out not to be a picture: what it records is that a
+        // load happened. Only errorCallback -- a transfer that never
+        // completed -- leaves nothing behind.
+        self.frame.recordResourceTiming(.{
+            .url = self.url,
+            .initiator = self.initiator,
+            .fetch_start = self.fetch_start,
+            .status = self.status,
+            .body_len = self.bytes,
+            .next_hop_protocol = self.next_hop_protocol,
+        });
         self.report(if (self.arrived()) .load else .@"error");
     }
 
@@ -2843,8 +2956,12 @@ const ImageRequest = struct {
     // Queued, not dispatched: these callbacks run inside the HTTP pump, where
     // running page JS would be a re-entrancy point that does not exist today.
     // `Script.queueHintEvent` queues for the same reason.
+    //
+    // The favicon has no element and so no outcome to report; it still went
+    // through the transfer, and its resource entry is filed the same way.
     fn report(self: *ImageRequest, kind: QueuedEvent.Kind) void {
-        self.frame.queueElementEvent(self.element, kind) catch |err| {
+        const element = self.element orelse return;
+        self.frame.queueElementEvent(element, kind) catch |err| {
             log.warn(.http, "image event", .{ .err = err, .kind = kind });
         };
     }
@@ -2852,8 +2969,9 @@ const ImageRequest = struct {
 
 // Shared tail of loadImage and the favicon fetch: same destination, same
 // discarded body, only the URL resolution differs. The favicon passes no
-// element -- there is nothing on the page it belongs to -- and keeps the
-// default callbacks, which drop the body and say nothing.
+// element -- there is nothing on the page it belongs to -- so nothing fires
+// for it, but it takes the same callbacks: a browser files a resource entry
+// for the favicon too, under "other" rather than "img".
 fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !void {
     const session = self._session;
 
@@ -2872,17 +2990,21 @@ fn requestImage(self: *Frame, resolved: [:0]const u8, element: ?*Element.Html) !
         .shutdown_callback = HttpClient.noopShutdown,
     };
 
-    if (element) |el| {
-        // Frame-arena'd: the transfer is torn down with the frame, so there is
-        // no lifetime here that outlasts one.
-        const pending = try self.arena.create(ImageRequest);
-        pending.* = .{ .frame = self, .element = el };
-        request.ctx = pending;
-        request.header_callback = ImageRequest.headerCallback;
-        request.data_callback = ImageRequest.dataCallback;
-        request.done_callback = ImageRequest.doneCallback;
-        request.error_callback = ImageRequest.errorCallback;
-    }
+    // Frame-arena'd: the transfer is torn down with the frame, so there is no
+    // lifetime here that outlasts one.
+    const pending = try self.arena.create(ImageRequest);
+    pending.* = .{
+        .frame = self,
+        .element = element,
+        .url = resolved,
+        .initiator = if (element == null) "other" else "img",
+        .fetch_start = self.performance().now(),
+    };
+    request.ctx = pending;
+    request.header_callback = ImageRequest.headerCallback;
+    request.data_callback = ImageRequest.dataCallback;
+    request.done_callback = ImageRequest.doneCallback;
+    request.error_callback = ImageRequest.errorCallback;
 
     self.makeRequest(request) catch |err| {
         // The request never went out, so no callback of ours will ever run.

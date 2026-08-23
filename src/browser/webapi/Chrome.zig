@@ -126,7 +126,7 @@ fn runningState(_: *Api) []const u8 {
 // milliseconds since navigation, and tran is the transition type — 15 is what a
 // normal navigation reports.
 fn csi(_: *Api, frame: *Frame) Csi {
-    const start_e: f64 = @floatFromInt(frame.window._performance._epoch_origin_ms);
+    const start_e: f64 = @floatFromInt(frame.window._performance.epochOriginMs());
     return .{
         .startE = start_e,
         .onloadT = if (frame.window._load_epoch_ms == 0) start_e else @floatFromInt(frame.window._load_epoch_ms),
@@ -146,7 +146,7 @@ fn csi(_: *Api, frame: *Frame) Csi {
 // this claim against the protocol it actually served would see the difference
 // on an HTTP/1.1 origin.
 fn loadTimes(_: *Api, frame: *Frame) LoadTimes {
-    const start = @as(f64, @floatFromInt(frame.window._performance._epoch_origin_ms)) / 1000.0;
+    const start = @as(f64, @floatFromInt(frame.window._performance.epochOriginMs())) / 1000.0;
     const loaded = if (frame.window._load_epoch_ms == 0)
         start
     else

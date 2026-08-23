@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Chrome does not echo the `animation` shorthand: it expands the value into the
+  eight longhands, fills in the ones the author left out, and writes them back
+  in its own order -- duration, timing-function, delay, iteration-count,
+  direction, fill-mode, play-state, and the NAME LAST.
+
+  This engine already answered that shape for a value made of bare words and
+  numbers. What it declined was an easing written as a function: the measured
+  value classes give `animation-timing-function` none at all, so
+  `cubic-bezier()` matched no slot, the expansion failed, and the shorthand was
+  kept as the author wrote it. Seven rules of the Cloudflare challenge page's
+  `@keyframes` payload differ for exactly that reason.
+
+  Measured on Chrome over http://localhost with
+  tools/fingerprint/probes/expr-animation-serialize.js.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+function declOf(text) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync('x{' + text + '}');
+    return sheet.cssRules[0].style.cssText;
+}
+</script>
+
+<script id="animation_easing_function_is_placed">
+{
+    // The four shapes the Cloudflare payload carries.
+    testing.expectEqual(
+        'animation: 0.3s cubic-bezier(0.55, 0.085, 0.68, 0.53) 0s 1 normal both running scale-up-center;',
+        declOf('animation:scale-up-center 0.3s cubic-bezier(0.55,0.085,0.68,0.53) both'));
+    testing.expectEqual(
+        'animation: 0.4s cubic-bezier(0.65, 0, 0.45, 1) 0.3s 1 normal forwards running stroke;',
+        declOf('animation:stroke 0.4s cubic-bezier(0.65,0,0.45,1) 0.3s forwards'));
+    testing.expectEqual(
+        'animation: 0.1s cubic-bezier(1, 1, 0, 1) 0.4s 1 normal backwards running fade-in-animation;',
+        declOf('animation:fade-in-animation 0.1s 0.4s cubic-bezier(1,1,0,1) backwards'));
+    testing.expectEqual(
+        'animation: 0.7s cubic-bezier(0.65, 0, 0.45, 1) 0s 1 normal forwards running unspin;',
+        declOf('animation:unspin 0.7s cubic-bezier(0.65,0,0.45,1) forwards'));
+    // A bare cubic-bezier, and the two other easing functions.
+    testing.expectEqual(
+        'animation: 1s cubic-bezier(0.1, 0.2, 0.3, 0.4) 0s 1 normal none running a;',
+        declOf('animation:a 1s cubic-bezier(0.1,0.2,0.3,0.4)'));
+}
+</script>
+
+<script id="animation_keyword_easing_still_works">
+{
+    // The path that already worked, kept honest: a bare keyword easing, and a
+    // value with every slot written out in a shuffled order.
+    testing.expectEqual(
+        'animation: 1s ease 0s 1 normal none running a;',
+        declOf('animation:a 1s'));
+    testing.expectEqual(
+        'animation: 1s ease-in-out 0s 1 normal none running a;',
+        declOf('animation:a 1s ease-in-out'));
+    testing.expectEqual(
+        'animation: 1s linear 2s 3 reverse both paused a;',
+        declOf('animation:a 1s linear 2s 3 reverse both paused'));
+    testing.expectEqual(
+        'animation: 2s linear 1s 3 reverse both paused a;',
+        declOf('animation:paused both reverse 3 2s linear 1s a'));
+    // Two times are the duration then the delay, in that order.
+    testing.expectEqual(
+        'animation: 1s ease 2s 1 normal none running a;',
+        declOf('animation:a 1s 2s'));
+    // A delay set as a longhand after the shorthand folds back into it.
+    testing.expectEqual(
+        'animation: 1s ease 2s 1 normal none running a;',
+        declOf('animation:a 1s;animation-delay:2s'));
+    // A name is the only thing left for a word no slot claims.
+    testing.expectEqual(
+        'animation: 1s linear 0s 1 normal both running A;',
+        declOf('animation:A 1s LINEAR BOTH'));
+}
+</script>

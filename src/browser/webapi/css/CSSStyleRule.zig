@@ -6,6 +6,7 @@ const CSSRule = @import("CSSRule.zig");
 const CSSRuleList = @import("CSSRuleList.zig");
 const CSSStyleDeclaration = @import("CSSStyleDeclaration.zig");
 const rules = @import("rules.zig");
+const selector_text = @import("selector_text.zig");
 const typed_om = @import("typed_om.zig");
 
 const CSSStyleRule = @This();
@@ -34,8 +35,12 @@ pub fn getSelectorText(self: *const CSSStyleRule) []const u8 {
     return self._selector_text;
 }
 
+/// Chrome re-serialises the selector rather than storing the author's bytes,
+/// so this is the one place both the parser and `rule.selectorText = ...` go
+/// through. See selector_text.zig for what that re-serialisation is.
 pub fn setSelectorText(self: *CSSStyleRule, text: []const u8, frame: *Frame) !void {
-    self._selector_text = try frame.dupeString(text);
+    const normalized = try selector_text.normalize(frame.call_arena, text);
+    self._selector_text = try frame.dupeString(normalized);
 }
 
 pub fn getStyle(self: *CSSStyleRule, frame: *Frame) !*CSSStyleDeclaration {
@@ -130,3 +135,8 @@ pub const JsApi = struct {
     pub const deleteRule = bridge.function(CSSStyleRule.deleteRule, .{});
     pub const insertRule = bridge.function(CSSStyleRule.insertRule, .{});
 };
+
+const testing = @import("../../../testing.zig");
+test "WebApi: CSSStyleRule selector serialisation" {
+    try testing.htmlRunner("css/selector_serialize.html", .{});
+}

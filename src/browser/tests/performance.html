@@ -21,6 +21,14 @@
   const origin = performance.timeOrigin;
   testing.expectEqual('number', typeof origin);
   testing.expectEqual(true, origin > 0);
+
+  // Epoch milliseconds, not the boot-relative clock `now()` counts from. The
+  // pair is the check a fingerprinter runs: Chrome answers `origin + now()`
+  // within a millisecond of `Date.now()`, and an engine counting from boot is
+  // off by however long the machine has been up.
+  testing.expectEqual(true, origin > 1700000000000);
+  testing.expectEqual(true, origin < 4000000000000);
+  testing.expectEqual(true, Math.abs(origin + performance.now() - Date.now()) < 1000);
 </script>
 
 <script id=now_relative_to_origin>

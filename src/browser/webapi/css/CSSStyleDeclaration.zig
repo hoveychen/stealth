@@ -285,9 +285,12 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
 }
 
 /// The shorthand `name` reads back as, or null when it is not a shorthand this
-/// engine expands or not every longhand it covers is in the declaration.
+/// engine joins or not every longhand it covers is in the declaration. Reading
+/// one back is a wider set than storing one: `border-image` joins here without
+/// being expandable, so `getPropertyValue("border-image")` answers the same
+/// text cssText writes.
 fn shorthandValue(self: *const CSSStyleDeclaration, name: []const u8, frame: *Frame) ?[]const u8 {
-    const entry = shorthand.lookup(name) orelse return null;
+    const entry = shorthand.lookupJoinable(name) orelse return null;
     const held = frame.local_arena.alloc([]const u8, entry.longhands.len) catch return null;
     for (entry.longhands, held) |longhand, *value| {
         const prop = self.findProperty(.wrap(longhand)) orelse return null;
@@ -560,7 +563,7 @@ fn writeShorthand(
     first: *bool,
     frame: *Frame,
 ) !bool {
-    const entry = shorthand.lookup(name) orelse return false;
+    const entry = shorthand.lookupJoinable(name) orelse return false;
     const held = try frame.local_arena.alloc([]const u8, entry.longhands.len);
     var important = false;
     for (entry.longhands, held, 0..) |longhand, *value, i| {
@@ -699,6 +702,26 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
         }
     }
 
+    // A shadow's components come back in Chrome's order rather than the
+    // author's, whichever of the two properties carries them.
+    if (std.mem.eql(u8, property_name, "box-shadow") or
+        std.mem.eql(u8, property_name, "text-shadow"))
+    {
+        if (try writeShadow(arena, value)) |ordered| {
+            return ordered;
+        }
+    }
+
+    // An origin is written with its horizontal axis first, and with the axis
+    // the author left out filled in.
+    if (std.mem.eql(u8, property_name, "transform-origin") or
+        std.mem.eql(u8, property_name, "perspective-origin"))
+    {
+        if (try writeOrigin(arena, value)) |ordered| {
+            return ordered;
+        }
+    }
+
     // Canonicalize anchor-size() function: anchor name (dashed ident) comes before size keyword
     if (std.mem.indexOf(u8, value, "anchor-size(")) |idx| {
         return canonicalizeAnchorSize(arena, value, idx);
@@ -713,6 +736,174 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
     }
 
     return value;
+}
+
+/// Which axis an origin component names, or null for a length or a percentage,
+/// which takes whichever axis its slot gives it.
+const OriginAxis = enum { horizontal, vertical, either };
+
+fn originAxis(part: []const u8) ?OriginAxis {
+    if (std.ascii.eqlIgnoreCase(part, "left") or std.ascii.eqlIgnoreCase(part, "right")) {
+        return .horizontal;
+    }
+    if (std.ascii.eqlIgnoreCase(part, "top") or std.ascii.eqlIgnoreCase(part, "bottom")) {
+        return .vertical;
+    }
+    if (std.ascii.eqlIgnoreCase(part, "center")) return .either;
+    return null;
+}
+
+/// `transform-origin` and `perspective-origin` as Chrome writes them. Measured
+/// with tools/fingerprint/probes/expr-transform-serialize.js: both axes are
+/// always written, horizontal first, and a third component -- the z offset --
+/// stays where it is while the first two swap.
+///
+/// A lone component takes `center` on the other axis, and which side it goes
+/// depends on the axis the component itself names: `top` is `center top` where
+/// `right` is `right center` and `50%` is `50% center`.
+///
+/// Answers null for anything not of that shape, which keeps the value as
+/// written. That covers `transform-origin: top 20px`, which Chrome refuses
+/// outright: swapping it would invent `20px top`, a value with a different
+/// meaning that Chrome never writes, and keeping it is the wrong this engine
+/// already had.
+fn writeOrigin(arena: Allocator, value: []const u8) !?[]const u8 {
+    if (hasVerbatimFunction(value)) {
+        return null;
+    }
+
+    var parts: [3][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = shorthand.Components.init(value);
+    while (walk.next()) |part| {
+        if (count == parts.len) return null;
+        parts[count] = part;
+        count += 1;
+    }
+    // A `/` stops the walk, and an origin never carries one.
+    if (walk.stopped or count == 0) return null;
+
+    if (count == 1) {
+        const filled: [2][]const u8 = if (originAxis(parts[0]) == .vertical)
+            .{ "center", parts[0] }
+        else
+            .{ parts[0], "center" };
+        return try std.mem.join(arena, " ", &filled);
+    }
+
+    // Only a vertical keyword in front of something that can hold the
+    // horizontal axis is out of order. A length second -- `top 20px` -- is the
+    // shape Chrome refuses, and is left alone rather than swapped.
+    const lead = originAxis(parts[0]);
+    const follow = originAxis(parts[1]);
+    if (lead != .vertical or (follow != .horizontal and follow != .either)) {
+        return null;
+    }
+
+    var out: [3][]const u8 = .{ parts[1], parts[0], undefined };
+    if (count == 3) out[2] = parts[2];
+    return try std.mem.join(arena, " ", out[0..count]);
+}
+
+/// A shadow layer as Chrome writes it: the colour first, then the lengths in
+/// the order the author gave them, then `inset`. Measured with
+/// `tools/fingerprint/probes/expr-shadow-serialize.js` over `box-shadow` and
+/// `text-shadow` -- `inset 0 0 0 rgb(34, 139, 73)` comes back
+/// `rgb(34, 139, 73) 0px 0px 0px inset`, which is seven of the rules in the
+/// Cloudflare @keyframes payload.
+///
+/// Chrome reorders but does not fill in: `1px 1px red` keeps its two lengths
+/// rather than gaining the blur and spread it was written without. The lengths
+/// are also the one slot a unitless zero can hide in, and Chrome answers it
+/// `0px` there -- `normalizePropertyValue`'s whole-value rule never reaches it,
+/// because the zero is one component of a list.
+///
+/// Answers null for anything that is not this shape, which leaves the value the
+/// bytes it arrived with: `none` and the CSS-wide keywords, a layer carrying no
+/// length at all, a second colour or a second `inset`, and a value calling a
+/// function whose text this engine does not have.
+fn writeShadow(arena: Allocator, value: []const u8) !?[]const u8 {
+    // A substitution stands in for text that arrives later, so which slot each
+    // component lands in is not knowable here.
+    if (hasVerbatimFunction(value)) {
+        return null;
+    }
+
+    // The colour slot takes a colour keyword and nothing else, so the measured
+    // spellings of one are enough to re-case it. `background-color` carries
+    // that list -- the same 160-odd names, `currentcolor` and `transparent`
+    // included -- and a name that is not on it is left alone.
+    const colours = chrome_keywords.keywords.get("background-color");
+
+    var buf = std.Io.Writer.Allocating.init(arena);
+    errdefer buf.deinit();
+
+    var layers = shorthand.Layers.init(value);
+    var first = true;
+    while (layers.next()) |layer| {
+        var lengths: [4][]const u8 = undefined;
+        var length_count: usize = 0;
+        var colour: ?[]const u8 = null;
+        var inset = false;
+
+        var parts = shorthand.Components.init(layer);
+        while (parts.next()) |part| {
+            if (std.ascii.eqlIgnoreCase(part, "inset")) {
+                if (inset) return null;
+                inset = true;
+            } else if (isLengthToken(part)) {
+                if (length_count == lengths.len) return null;
+                // Only a zero is a bare number a length slot takes; writing
+                // `px` onto any other would invent a length Chrome refused.
+                lengths[length_count] = if (std.mem.eql(u8, part, "0")) "0px" else part;
+                length_count += 1;
+            } else {
+                if (colour != null) return null;
+                colour = keywordSpelling(colours, part, false);
+            }
+        }
+        // A `/` stops the walk, and a shadow never carries one.
+        if (parts.stopped) return null;
+        // Two lengths are the fewest a shadow has. Fewer means this is not one:
+        // `none`, `inherit`, or a value that did not parse as a shadow at all.
+        if (length_count < 2) return null;
+
+        if (!first) {
+            try buf.writer.writeAll(", ");
+        }
+        first = false;
+
+        if (colour) |name| {
+            try buf.writer.writeAll(name);
+            try buf.writer.writeByte(' ');
+        }
+        for (lengths[0..length_count], 0..) |dimension, i| {
+            if (i != 0) try buf.writer.writeByte(' ');
+            try buf.writer.writeAll(dimension);
+        }
+        if (inset) {
+            try buf.writer.writeAll(" inset");
+        }
+    }
+
+    // A value already in Chrome's order is far commoner than one out of it, so
+    // the copy is usually thrown away.
+    if (std.mem.eql(u8, buf.written(), value)) {
+        buf.deinit();
+        return null;
+    }
+    return buf.written();
+}
+
+/// Whether a shadow component is one of its lengths rather than its colour: a
+/// number, optionally signed, optionally carrying a unit. `-webkit-x` opens
+/// with the same byte as `-1px` and is not one, so the sign has to be followed
+/// by a digit or a dot.
+fn isLengthToken(part: []const u8) bool {
+    var i: usize = 0;
+    if (i < part.len and (part[i] == '-' or part[i] == '+')) i += 1;
+    if (i >= part.len) return false;
+    return std.ascii.isDigit(part[i]) or part[i] == '.';
 }
 
 /// Rewrite a value into the text Chrome answers with. Measured
@@ -762,6 +953,11 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
     const is_font_family = std.mem.eql(u8, property_name, "font-family") or
         std.mem.eql(u8, property_name, "font");
 
+    // Measured: `stroke-dasharray` is a list whatever separates it, and Chrome
+    // answers every separator as `, ` -- `32 32` comes back `32, 32`. No other
+    // property in the measurement turns a space into a comma.
+    const is_dasharray = std.mem.eql(u8, property_name, "stroke-dasharray");
+
     var buf = std.Io.Writer.Allocating.init(arena);
     errdefer buf.deinit();
     var changed = false;
@@ -769,6 +965,39 @@ fn canonicaliseValue(arena: Allocator, property_name: []const u8, value: []const
     while (i < value.len) {
         const c = value[i];
         const before_i = i;
+        const before_len = buf.written().len;
+
+        // Chrome re-serialises a value's punctuation rather than echoing it:
+        // whatever the author wrote, every comma comes back `, ` and every
+        // slash ` / `. Measured across font-family, transition, will-change,
+        // grid-area, grid-row, aspect-ratio, font and border-radius; a custom
+        // property never reaches here, and its punctuation stays as written.
+        if (std.ascii.isWhitespace(c)) {
+            var end = i;
+            while (end < value.len and std.ascii.isWhitespace(value[end])) end += 1;
+            // A run in front of a comma or a slash belongs to that token's own
+            // spacing, and a run at the end is not part of the value at all.
+            if (end < value.len and value[end] != ',' and value[end] != '/') {
+                if (buf.written().len != 0) {
+                    try buf.writer.writeAll(if (is_dasharray) ", " else " ");
+                }
+            }
+            changed = changed or !std.mem.eql(u8, buf.written()[before_len..], value[i..end]);
+            i = end;
+            continue;
+        }
+
+        if (c == ',' or c == '/') {
+            if (c == ',') {
+                try buf.writer.writeAll(", ");
+            } else {
+                try buf.writer.writeAll(if (buf.written().len == 0) "/ " else " / ");
+            }
+            i += 1;
+            while (i < value.len and std.ascii.isWhitespace(value[i])) i += 1;
+            changed = changed or !std.mem.eql(u8, buf.written()[before_len..], value[before_i..i]);
+            continue;
+        }
 
         // A string is content rather than syntax: `content: "MiXeD"` keeps its
         // case, quotes and escapes. A font family is the exception -- there the
@@ -2047,6 +2276,18 @@ fn tooManyComponents(name: []const u8, value: []const u8) bool {
     if (std.mem.indexOf(u8, value, "/*") != null) return false;
     if (std.ascii.indexOfIgnoreCase(value, "var(") != null) return false;
 
+    // A `<transform-list>` is one value however many functions it holds. The
+    // arity sweep that built the table never offered `transform` two of them --
+    // only identifier and generic-value pairs -- so it reads as one-component,
+    // and `rotate(0deg) scale(1)` was thrown away as a declaration holding too
+    // much. That is a style the page loses, not only a serialisation
+    // difference. Measured (expr-transform-serialize.js): Chrome keeps a list
+    // of calls and refuses one with anything else in it, which is what the
+    // count below still answers -- `rotate(45deg) 5px` is not exempted here.
+    if (std.mem.eql(u8, name, "transform") and isTransformList(value)) {
+        return false;
+    }
+
     const holds: usize = if (chrome_arity.one_component.has(name))
         1
     else if (twoValueRule(name) != null)
@@ -2065,6 +2306,21 @@ fn tooManyComponents(name: []const u8, value: []const u8) bool {
         if (count > holds) return true;
     }
     return false;
+}
+
+/// Whether every top-level component of the value is a function call, which is
+/// what makes a `transform` a list rather than a declaration holding too much.
+/// Two or more: a single call was never in question, and answering true for one
+/// would exempt `transform: 5px` from the count as well.
+fn isTransformList(value: []const u8) bool {
+    var walk = shorthand.Components.init(value);
+    var count: usize = 0;
+    while (walk.next()) |part| {
+        if (part.len == 0 or part[part.len - 1] != ')') return false;
+        if (std.mem.indexOfScalar(u8, part, '(') == null) return false;
+        count += 1;
+    }
+    return !walk.stopped and count > 1;
 }
 
 fn isLengthProperty(name: []const u8) bool {
@@ -2736,6 +2992,52 @@ test "normalizePropertyValue: unitless zero to 0px" {
     }
 }
 
+// Measured with tools/fingerprint/probes/expr-shadow-serialize.js: Chrome
+// writes a shadow layer as `[colour] <lengths, as written> [inset]`, however
+// the author ordered them. The lengths keep their count -- an omitted blur is
+// not filled in -- but a unitless zero among them becomes `0px`, which the
+// whole-value rule above never reaches inside a list.
+test "normalizePropertyValue: a shadow layer is colour, lengths, inset" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const cases = .{
+        // The colour moves to the front from wherever it was written.
+        .{ "box-shadow", "1px 2px red", "red 1px 2px" },
+        .{ "box-shadow", "1px 2px 3px 4px red", "red 1px 2px 3px 4px" },
+        // Already in Chrome's order: unchanged.
+        .{ "box-shadow", "red 1px 2px", "red 1px 2px" },
+        // `inset` moves to the end, from either side.
+        .{ "box-shadow", "inset 1px 2px red", "red 1px 2px inset" },
+        .{ "box-shadow", "1px 2px red inset", "red 1px 2px inset" },
+        .{ "box-shadow", "red inset 1px 2px", "red 1px 2px inset" },
+        // Keywords are lowercased, the colour folds to rgb().
+        .{ "box-shadow", "INSET 1px 2px RED", "red 1px 2px inset" },
+        .{ "box-shadow", "inset 0 0 0 #228b49", "rgb(34, 139, 73) 0px 0px 0px inset" },
+        // The exact shape the Cloudflare payload carries.
+        .{ "box-shadow", "inset 0 0 0 rgb(34, 139, 73)", "rgb(34, 139, 73) 0px 0px 0px inset" },
+        // A unitless zero in a length slot gains `px`; `0em` keeps its unit.
+        .{ "box-shadow", "0px 0em 0 0 red", "red 0px 0em 0px 0px" },
+        // Each comma layer is ordered on its own.
+        .{ "box-shadow", "1px 1px red,2px 2px blue", "red 1px 1px, blue 2px 2px" },
+        .{ "box-shadow", "inset 0 0 0 red,0 1px 2px blue", "red 0px 0px 0px inset, blue 0px 1px 2px" },
+        // A layer with no colour keeps its lengths; Chrome invents none.
+        .{ "box-shadow", "inset 1px 2px 3px 4px", "1px 2px 3px 4px inset" },
+        .{ "box-shadow", "1px 2px", "1px 2px" },
+        // `none` is a keyword, not a layer.
+        .{ "box-shadow", "none", "none" },
+        // text-shadow takes the same rule, minus `inset`.
+        .{ "text-shadow", "1px 2px 3px red", "red 1px 2px 3px" },
+        .{ "text-shadow", "0 0 red", "red 0px 0px" },
+        .{ "text-shadow", "1px 1px red,2px 2px blue", "red 1px 1px, blue 2px 2px" },
+    };
+    inline for (cases) |case| {
+        const result = try normalizePropertyValue(allocator, case[0], case[1]);
+        try testing.expectEqual(case[2], result);
+    }
+}
+
 test "normalizePropertyValue: first baseline to baseline" {
     const result = try normalizePropertyValue(testing.allocator, "align-items", "first baseline");
     try testing.expectEqual("baseline", result);
@@ -2935,6 +3237,26 @@ test "WebApi: CSSStyleDeclaration computed per-tag values" {
 
 test "WebApi: CSSStyleDeclaration serialize" {
     try testing.htmlRunner("css/declaration_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration value list serialize" {
+    try testing.htmlRunner("css/value_list_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration transform serialize" {
+    try testing.htmlRunner("css/transform_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration border image serialize" {
+    try testing.htmlRunner("css/border_image_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration animation serialize" {
+    try testing.htmlRunner("css/animation_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration shadow serialize" {
+    try testing.htmlRunner("css/shadow_serialize.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration custom properties" {

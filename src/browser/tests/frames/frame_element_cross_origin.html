@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+`window.frameElement` is the one handle a framed document has on its embedder,
+and the element belongs to the embedder's document -- so a cross-origin child
+must not get it. Chrome answers `null` there, without throwing: measured on a
+headed Chrome 151 in tools/fingerprint/probes/expr-frame-element-cross-origin.js
+(`data:` child reads "null", same-origin child reads the iframe), and on the
+live Turnstile widget, which is challenges.cloudflare.com inside the site's own
+origin and is handed `null`.
+
+localhost is cross-origin to the 127.0.0.1 test page, so the second child below
+is a real cross-origin frame without needing the network.
+-->
+
+<script id=frame_element_across_origins type=module>
+{
+  const state = await testing.async();
+
+  const ask = (base) => new Promise((resolve) => {
+    window.addEventListener('message', function onMessage(e) {
+      if (!e.data || e.data.kind !== 'frameElement') return;
+      window.removeEventListener('message', onMessage);
+      resolve(e.data.out);
+    });
+    const iframe = document.createElement('iframe');
+    iframe.src = base + 'frames/support/frame_element_report.html';
+    document.documentElement.appendChild(iframe);
+  });
+
+  const sameOrigin = await ask(testing.BASE_URL);
+  const crossOrigin = await ask(testing.BASE_URL.replace('127.0.0.1', 'localhost'));
+  state.resolve();
+
+  await state.done(() => {
+    testing.expectEqual(JSON.stringify({
+      value: '[object HTMLIFrameElement]', tag: 'IFRAME', isNull: false, type: 'object',
+    }), JSON.stringify(sameOrigin));
+
+    testing.expectEqual(JSON.stringify({
+      value: 'null', tag: '-', isNull: true, type: 'object',
+    }), JSON.stringify(crossOrigin));
+  });
+}
+</script>
+
+<script id=frame_element_on_the_top_frame>
+  // The top frame has no embedder at all, cross-origin question or not.
+  testing.expectEqual(null, window.frameElement);
+</script>

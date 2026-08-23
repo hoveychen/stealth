@@ -42,6 +42,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `expr-diff.mjs` | Diffs two `run-expr` readings case by case, for a probe that returns an object keyed by case name rather than the collectors' fixed property list. Handles the double JSON parse (a probe's answer is a JSON string) so each probe does not have to. |
 | `run-expr.mjs` | Evaluates one expression file against either engine and prints the result as JSON. The collectors walk a fixed property list; this answers a one-off "what does Chrome say about X", and the answer to "are we aligned" is the diff of the two outputs. |
 | `probes/` | The expression files the sections below cite by name, and what `run-expr.mjs` takes. |
+| `resource-timing-initiators.mjs` | Serves a page carrying one of every subresource kind a parser can start — script (classic/defer/async/module/import), stylesheet, `@import`ed sheet, `<link rel=preload>`, image, XHR, favicon — navigates either engine to it, and prints each `resource` entry with every field a fingerprinter reads. Answers "what should this load be filed under", which is the one question the entry's shape cannot. |
 | `run-probe.mjs` | Runs one `probe-*.js` on either engine and prints the result as JSON. Takes a url, because `about:blank` is not a secure context and this engine does not run scheduled tasks under an outstanding `awaitPromise` evaluate — a probe that awaits a timer needs a real page. |
 | `run-page-probe.mjs` | Runs a probe on this engine as a *page load* rather than through CDP, for the same timer reason. `lightpanda fetch --dump` decides the load is over somewhere between two and six seconds, so this is the short-probe path; anything with a longer wait budget belongs on `run-probe.mjs`. |
 | `webrtc-protochain.mjs` | Ground truth for every `RTC*` global: prototype chain, class-side inheritance, the window property descriptor, and the exact `TypeError` text for a few argument shapes. |
@@ -10407,3 +10408,500 @@ closed. Chrome hands that buffer straight back and this engine used to render
 through `audio-graph-trace.mjs` on a loopback page, both engines report the
 graph record for record and the render comes back sample for sample identical
 (1 000/1 000, maximum difference zero). → `cfsc-audio-buffer-passthrough`, done.
+
+## The `@keyframes` shortfall is a selector serialiser, not a missing rule (2026-08-23)
+
+The 329-character gap in the page's `@keyframes` payload (`a3-oracle.json`
+records[67], 20 696 chars; `a3-lp.json` records[26], 20 367) is not a rule we
+fail to produce. Both arms emit the same 183 rules in the same order. Split on
+`|` and diffed entry by entry, 120 are already byte-identical and every
+remaining one is a *serialisation* difference in how a rule's `cssText` is
+written back.
+
+Three normalisations account for two thirds of the gap, applied to our own
+payload and re-measured:
+
+| applied to our text | chars recovered | entries now identical |
+| --- | --- | --- |
+| `,` → `, ` in selector and value lists | 190 | |
+| `~` → ` ~ ` | 26 | |
+| `grid-area: 1/1` → `1 / 1` | 2 | 168 of 183 |
+
+The remaining 111 characters are in 15 entries and are value-level, listed
+here largest first so whoever picks them up knows the size of each:
+
+| what | example: oracle vs ours | net |
+| --- | --- | --- |
+| `animation` shorthand order | `0.3s cubic-bezier(…) 0s 1 normal both running scale-up-center` vs `scale-up-center 0.3s cubic-bezier(…) both` | +90 |
+| `box-shadow` order and units | `rgb(34, 139, 73) 0px 0px 0px inset` vs `inset 0 0 0 rgb(34, 139, 73)` | +42 |
+| `transform` dropped entirely | `transform: rotate(0deg) scale(1)` vs absent | +34 |
+| `border-image` kept as longhands | `border-image: none` vs five `border-image-*` plus a spurious `border-top-width` | −98 |
+| `transform-origin` order | `center bottom` vs `bottom center` | +2 |
+| `stroke-dasharray` separator | `32, 32` vs `32 32` | +1 |
+
+One structural leftover: our payload has a 184th element, the single character
+`2`, where the oracle's list ends at 183. Both end the last rule with a bare
+`0` appended after the closing brace, so the collector concatenates something
+beyond the joined `cssText` list; what our extra `|2` is has not been run down.
+
+### What Chrome actually does to a selector, measured
+
+`probes/expr-selector-serialize.js` puts 38 selectors through
+`new CSSStyleSheet().replaceSync()` and reads `selectorText` back. Chrome never
+returns the author's bytes — it re-serialises the parsed selector. We return
+the source, trimmed, so 32 of the 38 disagree:
+
+| written | Chrome | ours |
+| --- | --- | --- |
+| `a,b` | `a, b` | `a,b` |
+| `  a  ,  b  ` | `a, b` | `a  ,  b` |
+| `a~b` / `a>b` / `a+b` | `a ~ b` / `a > b` / `a + b` | unchanged |
+| `a   b` | `a b` | unchanged |
+| `:not(a,b)` | `:not(a, b)` | unchanged |
+| `:not(a~b)` | `:not(a ~ b)` | unchanged |
+| `a:has(+b)` | `a:has(+ b)` | unchanged |
+| `DIV.Foo#Bar` | `div.Foo#Bar` | unchanged |
+| `A:HOVER` | `a:hover` | unchanged |
+| `[HREF]` | `[href]` | unchanged |
+| `a:before` | `a::before` | unchanged |
+| `[a=b]` / `[a='b']` | `[a="b"]` | unchanged |
+| `*\|a` | `a` | unchanged |
+
+And the things Chrome leaves alone, which a normaliser must not touch:
+`[class~="x"]` and `[class\|="x"]` keep their matchers unspaced, `a[href~="b,c"]`
+keeps the comma inside the string, `a:nth-child(2n+1)` keeps its `+` unspaced,
+`.\31 23` keeps its escape, and class and id names keep their case.
+
+### What the selector serialiser recovered, on the payload itself
+
+`selector_text.zig` rewrites a parsed selector the way Blink does, at the one
+point both the stylesheet parser and `rule.selectorText = ...` go through.
+Re-measured on the 38-case probe, this engine now agrees with Chrome on 36 of
+38, up from 6. The two left are deliberate: Chrome rejects the column
+combinator `a||b` outright, which is a parser-acceptance difference rather than
+a serialisation one, and `*|a` needs namespace elision.
+
+Replayed against the sitting's own bytes — our 183 rules fed back through a
+fresh `CSSStyleSheet` and joined the way the collector joins them — the
+shortfall against the oracle's text:
+
+| | chars | gap | rules byte-identical |
+| --- | --- | --- | --- |
+| oracle | 20 695 | — | — |
+| before | 20 364 | 331 | 120 / 183 |
+| after | **20 556** | **139** | **164 / 183** |
+
+Every one of the 19 rules still differing differs in a *declaration*, not a
+selector. Ranked, that residue is: the `animation` shorthand written name-last
+in Chrome's eight-longhand order rather than as the author wrote it; the
+`box-shadow` colour written first with `0px` rather than `0`; `font-family` and
+`stroke-dasharray` lists needing `, ` where we join with `,`; `grid-area: 1 / 1`
+for our `1/1`; a `transform` declaration we drop entirely; and `border-image`
+which Chrome folds back into one shorthand where we emit five longhands plus a
+`border-top-width` Chrome does not. → `cfsc-keyframes-shortfall`, done; the
+declaration side is its own plan.
+
+Noticed while pinning the cascade side of this and not chased: a `color`
+declared by a stylesheet rule does not reach `getComputedStyle().color` here at
+all — it reads `rgb(0, 0, 0)` whatever the selector, while `display` from the
+same sheet cascades correctly. That is not a selector bug (a bare `.class` rule
+misses it too) and Chrome answers with the cascaded colour.
+
+Swept afterwards (`results/kf-selector-sweep-after.json`): 11 of 15 stations
+open, the same eleven as before the change and the same four shut
+(cf-scrapingcourse, cf-nopecha, cf-zeroclover, dd-g2). No door moved, which is
+what a 139-character residue on one payload predicts; the reading that matters
+here is the absence of a regression, since the normalised text is what the
+cascade re-parses.
+
+### Measuring the rest without a sitting
+
+`keyframes-roundtrip.mjs` feeds our own recorded payload back through a fresh
+`CSSStyleSheet` and diffs the re-read against the oracle's text. Because both
+arms recorded the same 183 rules, that re-runs the whole serialiser over real
+CSS in about three seconds, with no station and no challenge:
+
+```
+node tools/fingerprint/keyframes-roundtrip.mjs [--verbose]
+```
+
+Where it stands after the value-punctuation pass, which writes every comma as
+`, ` and every slash as ` / ` (and every `stroke-dasharray` separator as `, `):
+
+| | gap | rules byte-identical |
+| --- | --- | --- |
+| before the selector serialiser | 331 | 120 / 183 |
+| after it | 139 | 164 / 183 |
+| after value punctuation | **112** | **169 / 183** |
+
+## The round-1 wobble belongs to both arms; only the surplus is ours (P1, 2026-08-23)
+
+`cfsc-r1-payload-length` was opened on two readings taken from four runs: the
+widget's first `fo/` POST is 4 716 bytes on the oracle in every sitting it had
+been seen in, and 4 855 / 4 866 here — a ~140-byte surplus *and* a run-to-run
+wobble the reference did not have. The second of those readings does not
+survive more samples.
+
+Six runs in one sitting, `dev.973+946e2ad02`, `cfsc-fo-diff.mjs`, alternating
+arms (`results/r1len-{lp-1..4,oracle-1,oracle-2}.json`):
+
+| arm | page `fo/` #1 | widget `fo/` #1 | widget `fo/` #2 | cleared |
+|---|---|---|---|---|
+| here a | 2 316 | 4 866 | 85 570 | no |
+| here b | 2 306 | 4 866 | 85 687 | no |
+| here c | 2 306 | 4 876 | 85 548 | no |
+| here d | 2 306 | 4 866 | 85 996 | no |
+| oracle a | 2 306 | **4 706** | 88 535 | yes |
+| oracle b | 2 306 | **4 727** | 88 716 | yes |
+
+The oracle's widget round 1 is 4 706 in one run and 4 727 in the next. Read
+together with the three earlier sittings (4 716, 4 716, 4 706) its range is
+4 706–4 727, spread **21**; ours across seven runs is 4 855–4 876, spread
+**21**. The two arms wobble by the same amount. "4 716 three times" was three
+samples of a distribution, not a constant, and the earlier note that a
+deterministic length means every field is fixed-width was drawn from it.
+
+The page-level POST says the same thing from the other side: it is 2 306 on
+every run of either arm except one of ours, which is 2 316 — one step of the
+same size, on the arm and the payload that otherwise agree exactly.
+
+Both observed step sizes are 10 or 11, and the spread is 21 = 10 + 11 rather
+than a multiple of either. That is what a base-64-shaped encoding does to a
+plaintext that moved by 8 bytes: 8 × 4/3 = 10.67, which lands alternately on 10
+and 11. So the wobble is ~8 plaintext bytes on both arms — a timestamp digit, a
+duration, one number — and it is not a tell.
+
+What survives is the surplus, and it is far steadier than either arm's wobble:
+
+| | oracle | here | gap |
+|---|---|---|---|
+| min | 4 706 | 4 855 | 149 |
+| median | 4 716 | 4 866 | 150 |
+| max | 4 727 | 4 876 | 149 |
+
+**~150 encoded characters, every run, ≈ 112 plaintext bytes at 4/3.** That is
+the thing to localise, and P2/P3 are re-aimed at it: not "find the
+variable-length field" — both arms have one and it is the same size — but "find
+the ~112 bytes this engine puts in the round-1 telemetry that the reference does
+not."
+
+## What the widget reads before round 1, and where it is told something else (P2, 2026-08-23)
+
+The round-1 body is one ciphertext and `fo-plaintext.mjs` already showed the
+plaintext never passes a funnel — no WebCrypto, no `btoa`, nothing over two
+bytes through `JSON.stringify` in the widget realm before the POST goes out. So
+the last place the payload is readable in the clear is one property getter at a
+time, which is what `fo-reads.mjs` records: every configurable accessor on the
+standard prototypes forwards to its original and writes down what it answered,
+disguised the same way the funnel wrappers are, cut at the realm's first
+`XMLHttpRequest.send`.
+
+The honesty check is the same one and it passes: **the oracle cleared with the
+tracer installed, twice** — "You bypassed the Cloudflare challenge! :D" in both
+`results/r1reads-oracle-{1,2}.json`.
+
+| run | widget realm reads | before first send | round-1 POST | cleared |
+|---|---|---|---|---|
+| oracle 1 | 797 | 124 | 4 727 | yes |
+| oracle 2 | 797 | 124 | 4 716 | yes |
+| here 1 | 889 | 171 | 4 887 | no |
+| here 2 | 889 | 171 | 4 887 | no |
+
+Two things to read off that table before the diff. The reads are *stable* per
+arm — identical counts across runs on both — and the widget makes essentially
+the same ones on each: 47 of our 51-read surplus is `window.window`, which
+Chrome refuses to let the tracer wrap at all (see below), so it is reads the
+instrument cannot see rather than reads Chrome does not make. And our round-1
+POST was 4 887 both times with the tracer in, against 4 866–4 876 without it:
+the recorder costs about 20 bytes of its own, which is inside the wobble and
+does not move the ~150-byte gap.
+
+`fo-reads-diff.mjs` puts two runs side by side, either two arms or two runs of
+one arm. Same arm, twice, only three keys move — `Date.now()`, `Math.random()`
+and `performance.now()` — which is the 8-byte wobble P1 measured and nothing
+else. Across arms, six keys differ for a reason that is not a clock.
+
+### The six, re-measured off the station
+
+`probes/expr-r1-reads.js` asks both engines directly, so none of these rests on
+a reading taken through a challenge:
+
+| read | Chrome | here |
+|---|---|---|
+| `performance.timeOrigin` | `1787494938199.7` — epoch ms | `244508796.7` — boot-relative |
+| `timeOrigin + now() - Date.now()` | **1 ms** | **-1 787 250 459 740** |
+| `<style>.innerText` | its text | `""` |
+| `JSON.stringify(el.classList)` | `{"0":"main-wrapper","1":".tOHY4"}` | `{}` |
+| `Object.getOwnPropertyNames(el.classList)` | `0 1` | *(empty)* |
+| `window.window` descriptor | `configurable: false` | `configurable: true` |
+| `window.top` descriptor | `configurable: false` | `configurable: true` |
+| `window.frameElement`, cross-origin child | `null` | the `<iframe>` element |
+
+`self`, `parent`, `frameElement` and `location` already carry Chrome's exact
+descriptor shape; `window` and `top` are the two that do not, and the tracer
+found them by being *able* to replace them here and not there. The
+`display: none` fallback for `innerText` is already right — a hidden `<div>`
+answers with its text on both — so the `<style>` case is its own bug and not
+that one.
+
+`frameElement` is the odd one out: its descriptor matches, its value does not,
+and only on the station, because it needs a cross-origin embedder to differ at
+all. A widget that can reach the `<iframe>` element embedding it can read the
+embedder's attributes; Chrome hands it `null`. This engine already denies
+`document`, `navigator` and the rest of the must-deny list on an outbound
+cross-origin `contentWindow` (`results/probes/probe-cross-origin-surface.*`) —
+the inbound direction is what was never closed.
+
+None of these can be attributed to a byte count from here: the payload is
+encrypted and there is no field boundary to attribute against. They are the set
+of things the widget was told and was told wrong, and the round-1 length is the
+instrument that says whether closing them moves it. That is P3.
+
+## Five of the six are closed, and the payload did not move (P3, 2026-08-23)
+
+Every difference P2 found is fixed and re-measured, and none of them was the
+150 bytes.
+
+| what | before | after |
+|---|---|---|
+| `performance.timeOrigin` | `244508796.7`, boot-relative | `1787495569894.4`, epoch ms |
+| `timeOrigin + now() - Date.now()` | `-1 787 250 459 740` | **1**, Chrome's answer exactly |
+| `window.window` / `window.top` descriptor | `configurable: true` | `false`, like `location` and `document` |
+| `<style>.innerText` | `""` | its CSS |
+| `display:none` div's `innerText` | `"one\n\ntwo"` | `"onetwo"` |
+| `JSON.stringify(el.classList)` | `{}` | `{"0":"one","1":"two"}` |
+| cross-origin child's `frameElement` | the `<iframe>` | `null` |
+
+The last one is the only one that needs a frame boundary to show, and it is
+also the only one with a plausible story about *volume*: a widget that can
+reach the element embedding it can read the embedder's attributes. It reads
+`null` now, the way Chrome's does.
+
+Three runs afterwards, `dev.979+9cd217ce7`, with an oracle control in the same
+sitting (`results/r1len-after-*.json`):
+
+| arm | page `fo/` #1 | widget `fo/` #1 |
+|---|---|---|
+| here a | 2 306 | 4 855 |
+| here b | 2 316 | 4 866 |
+| here c | 2 306 | 4 876 |
+| oracle | 2 306 | **4 716** |
+
+That is the same distribution as before the change, wobble and all. **The
+surplus is not made of the values the widget reads.**
+
+### What the tracer can now see, and what it cannot
+
+Rerun with the fixes in and an enumeration pass added — `Object.keys`,
+`getOwnPropertyNames`, `getOwnPropertySymbols`, `values`, `entries`,
+`getOwnPropertyDescriptors`, `getPrototypeOf`, `Reflect.ownKeys` and
+`Function.prototype.toString`, each keyed by the brand of its argument
+(`results/r1enum-{lp,oracle}-1.json`) — five keys differ across the arms and
+four of them are a clock or a `Math.random()`. `window.window`, `window.top`,
+`innerText` and `classList` have all dropped out of the diff, which is the
+station confirming the fixes from the other side.
+
+The enumeration pass is a clean negative and it rules out the biggest
+outstanding suspect. In the widget realm, before the round-1 POST, this engine
+makes **three** enumeration calls: `Function.prototype.toString` twice (both
+`function eval() { [native code] }`) and one `Object.keys` returning
+`["window"]`. Nothing walks `window`. So the ~112 plaintext bytes are not a
+list of globals, which was the obvious candidate given this engine carries 237
+own names on `window` that Chrome does not.
+
+Stack strings are ruled out too, off the station:
+`probes/expr-error-stack-shape.js` reads byte-identical on both engines for a
+bare `Error`, one with a message, a nested call, and a native `TypeError` —
+same length, same line count, same wording, same `Error.stackTraceLimit`.
+
+Two named leads survive, neither of which explains the volume on its own:
+
+- **`window.parent` from the widget.** Chrome's cross-origin WindowProxy makes
+  `JSON.stringify` of it throw, so the tracer records `[object Object]`; ours
+  returns `{}`, meaning the stringify walked it. Something on the must-deny
+  list — `toJSON` at least — is reachable through the inbound proxy here.
+- **`performance.timing.secureConnectionStart`** is `0` here on an https load
+  and a real stamp in Chrome. That one makes Chrome's payload *longer*, not
+  ours, so it is a parity bug rather than a candidate for the surplus.
+
+### Where the next attempt should look
+
+The page-level round 1 is 2 306 bytes on both arms, exactly, run after run —
+assembled by the same Cloudflare code family, in the page realm, and it agrees.
+The widget's is 150 longer here. Whatever the surplus is, it is specific to the
+*widget* realm, and it is not a property value, not an enumeration and not a
+stack. What is left that the widget has and the page does not: the DOM it builds
+for itself (an iframe with its own shadow tree and styles) and reads back, and
+the challenge parameters it is handed over `postMessage`. Both are readable with
+the instruments already in this directory — `fo-plaintext.mjs` records the
+trampoline conversation, and the widget's own subtree can be serialised from the
+document realm the recorder is already installed in.
+
+## The assembly step, and what it is not (P3 again, 2026-08-23)
+
+The previous attempt wrapped the values and found six differences, fixed five,
+and did not move the length. This one wrapped the step after the values: the
+one that turns what was collected into a string.
+
+`fo-join.mjs` is that instrument. Its lead came out of `fo-plaintext.mjs`'s own
+records: every block of the widget's later rounds arrives pipe-joined —
+`"0|0|0|..."`, `"@keyframes spin { ... }|@keyframes scale..."` — which is
+`Array.prototype.join`, a funnel nobody had wrapped. So it wraps `join` (keyed
+by separator), `Array.prototype.toString`, `String.fromCharCode`,
+`encodeURIComponent`, `btoa`, `JSON.stringify` and `XMLSerializer`, and it adds
+a `message` listener, which answers the other half of the README's open lead —
+the challenge parameters the parent hands the widget — in the same run. Records
+stop at each realm's first `XMLHttpRequest.send`, because only what was built
+before the send can be in the body it carried.
+
+The lead was right about the mechanism. `join("")` in the widget realm returns
+**the round-1 ciphertext exactly**: 4 855 characters here, 4 716 on the oracle,
+byte-for-byte the body of the send that follows it. The payload is assembled by
+joining an array of encoded characters, and that is the last place it exists as
+one object.
+
+Honesty check, same as its two predecessors: the oracle cleared with the
+wrappers in — "You bypassed the Cloudflare challenge! :D".
+
+### Both arms build the same things, in the same order
+
+| # | here | oracle |
+|---|---|---|
+| 1 | `split<-` 15 469 — the program's `;` string table | `split<-` 16 359 |
+| 2 | `charCodeAt<-` 318 | `charCodeAt<-` 318 (identical) |
+| 3 | `message` 67 — `{"event":"init",...}` | same |
+| 4 | `message` 3 297 — the `managed` parameters | `message` 4 378 |
+| 5 | — | `split<-` 629 — a permutation of 0..184 |
+| 6 | `join("")` ×3 — the three widget link labels | same |
+| 7 | `split<-` 4 542 — the Cloudflare logo path | same |
+| 8 | `message` 1 439 — `cs`, a list of captured stacks | `message` 1 441 |
+| 9 | `charCodeAt<-` 5 206 | **identical string** |
+| 10 | `charCodeAt<-` 1 663 / 575 — cf tokens | 1 514 / 575 |
+| 11 | `join("")` **4 855** = the send | `join("")` **4 716** = the send |
+
+Two negatives worth keeping, because both were live suspects:
+
+- **The inbound parameters are not the surplus.** The `cs` message — the one
+  that carries `Error` stacks captured in the page realm, and the obvious way a
+  stack difference could reach a payload it is not thrown in — is 1 439 bytes
+  here against 1 441 there. It corroborates `expr-error-stack-shape.js` from the
+  other side rather than contradicting it.
+- **The one parameter that does differ pushes the wrong way.**
+  `apiJsResourceTiming` is a 1 035-byte entry on the oracle and `undefined`
+  here, so the oracle's inbound is 1 081 bytes *longer* while its payload is
+  139 shorter. Whatever the widget does with it, it is not echoing it.
+
+The string table and the two cf tokens differ in length between arms, but those
+are per-session server-issued values: the tables are made of random five-character
+identifiers (`shiZs;NEQqF;hrYYt4…` against `OFPbR;plKjc;ySGNg…`), so a run-to-run
+difference there is noise, not a tell. The 629-character permutation the oracle
+splits and we never do sits inside that same per-session table, so it cannot be
+attributed either.
+
+So the assembly step is understood and the surplus is still not attributed. Four
+routes are now closed by measurement — property values, enumeration, stack
+strings, and now the assembly funnels and the inbound parameters. The plaintext
+itself is reachable by no funnel: it is handed to nothing and read by nothing
+until it is already encoded.
+
+## What the run did find: the resource timing buffer never fills
+
+`apiJsResourceTiming` arriving as `undefined` is not a missing field. It is an
+empty buffer, and it is an engine-level gap rather than a challenge-specific one.
+
+`probes/expr-resource-timing.js` asks both engines directly — fetch something,
+then look:
+
+| | here | Chrome |
+|---|---|---|
+| `typeof PerformanceResourceTiming` | `function` | `function` |
+| `"resource"` in `supportedEntryTypes` | **yes** | yes |
+| `getEntriesByType('resource')` after a `fetch` | **0** | 1 |
+| `performance.getEntries()` entry types | `navigation`, `visibility-state`, `paint`, `paint` | …, `resource` |
+
+`Performance.zig` says so itself, at the `onresourcetimingbufferfull` handler:
+"Nothing fires it — the resource buffer never fills because nothing fills it."
+Every subresource a page loads — every script, stylesheet, image, XHR and
+`fetch` — leaves no entry behind.
+
+That surface contradicts itself, which is the part that matters. Advertising
+`resource` in `supportedEntryTypes` and then answering every query with an empty
+list is not a browser with a feature missing; it is a browser whose own
+self-description is wrong. And it is read on the station: Cloudflare's api.js
+reads the resource timing of *itself* and the page posts it to the widget, which
+is how the gap turned up here at all.
+
+That is `perf-resource-timing`, and it is worth more than the 139 bytes this
+plan was chasing.
+
+## The buffer fills now, and the station reads it
+
+`perf-resource-timing` wired the producer and every load that reaches it. The
+ground truth for what a load should be filed under is
+`resource-timing-initiators.mjs`: it serves its own origin carrying one of every
+load kind — a classic `<script src>`, a `defer`, an `async`, a module and the
+module it imports, a `<link rel=stylesheet>`, a sheet that stylesheet
+`@import`s, a `<link rel=preload as=script>` with a `<script src>` that consumes
+it, an `<img>`, an XHR, and the favicon — navigates both engines to it, and
+reads the buffer back with every field a fingerprinter can see.
+
+What Chrome 151 answers, and what this engine now answers identically for every
+row but the last:
+
+| load | `initiatorType` | `renderBlockingStatus` |
+|---|---|---|
+| `<script src>` (no async/defer) | `script` | `blocking` |
+| `<script defer>` / `async` / `type=module` / static import | `script` | `non-blocking` |
+| `<link rel=preload as=script>` | `link` | `non-blocking` |
+| `<link rel=stylesheet>` | `link` | `blocking` |
+| `@import`ed sheet | `css` | `blocking` | ← **not produced here** |
+| `<img>` | `img` | `non-blocking` |
+| favicon | `other` | `non-blocking` |
+| XHR | `xmlhttprequest` | `non-blocking` |
+
+Two of those took measuring rather than guessing. The prescan starts a fetch for
+every `<script src>` it finds in the raw HTML before parsing; that head start is
+internal, and Chrome files such a load under the script, not under a `<link>`
+the page never wrote — so a preload with no hint element records `script`. And
+because the prescan sees the whole document first, a URL that both a
+`<link rel=preload>` and a `<script src>` name was already registered by the time
+the link was parsed, which made the link's own registration a no-op and cost the
+entry its `link` attribution. The link adopts the in-flight fetch now, which
+also gives it the `load` event it had been silently missing.
+
+The eleventh row is the one still missing: an `@import`ed sheet leaves no entry
+here because no `@import` is followed at all. That is a missing request, not a
+missing entry, and it belongs to CSS rather than to this.
+
+### On the station
+
+`apiJsResourceTiming` is no longer `undefined`. The page-level challenge now
+posts a 33-key, 836-byte entry for api.js, with `initiatorType: "script"` and
+`nextHopProtocol: "h2"` — the protocol plumbing reporting a real negotiated
+version off the live connection. The capture is
+`results/r1join-lp-after-resource-timing.json`; the oracle column below is
+`results/r1join-oracle-2.json`.
+
+Against the oracle's 1 065 bytes, the residue is named rather than a length:
+
+| field | oracle | here |
+|---|---|---|
+| `navigationId` | `9894` | *absent* — 33 keys against 34 |
+| `contentType` / `contentEncoding` | `text/javascript` / `br` | `""` / `""` |
+| `domainLookupStart` … `finalResponseHeadersStart` (9 milestones) | real | all `0` |
+| `serverTiming` | one `cfExtPri` entry | `[]` |
+| `encodedBodySize` | 27 124 | 84 236 |
+| `nextHopProtocol` | `h3` | `h2` |
+
+`serverTiming` is the server's own header and cannot be invented. The rest can:
+the entry carries no content type or encoding, none of the nine connection
+milestones, and an `encodedBodySize` that is the *decoded* size — api.js arrives
+brotli-compressed and this reports what it decompressed to, which says the
+response was not compressed at all. That is the next plan, not this one.
+
+The sweep says nothing moved that should not have:
+`results/antibot-2026-08-23-perf-resource-timing.json` against
+`results/r1-fixes-sweep-after.json` is verdict-for-verdict identical across all
+fifteen stations, 11/15 either way. Filling a buffer that was empty is a change
+in what every page can read about itself, so the reading that matters here is
+the absence of a regression rather than a number going up.

@@ -347,9 +347,22 @@ pub fn asEventTarget(self: *HtmlElement) *@import("../EventTarget.zig") {
 
 pub fn getInnerText(self: *HtmlElement, writer: *std.Io.Writer, frame: *Frame) !void {
     const tag = self.asElement().getTag();
-    switch (innerTextDisplay(self, tag, frame)) {
-        .skip, .replaced => return,
-        else => {},
+
+    // innerText's first step: an element with no box at all answers with its
+    // descendant text content, which is textContent's answer and not the layout
+    // walk's -- no line breaks, whatever its children are. Measured on Chrome
+    // 151 (probes/expr-inner-text-{skip-tags,not-rendered-subtree,detached}.js):
+    // a `<style>` reads its CSS, a `display: none` div reads its blocks run
+    // together, and a detached one does too.
+    if (!isBeingRendered(self, tag, frame)) {
+        return self.asNode().getTextContent(writer);
+    }
+
+    // A replaced element *is* rendered; its subtree just is not text. That is a
+    // different answer from the one above -- `<textarea>x</textarea>` reads ""
+    // in Chrome, not "x".
+    if (innerTextDisplay(self, tag, frame) == .replaced) {
+        return;
     }
 
     var state = InnerTextState{
@@ -2123,6 +2136,52 @@ fn enterBlock(he: *HtmlElement, tag: Element.Tag, state: *InnerTextState) std.Io
         return he.collectInnerText(state);
     }
     return he.collectInnerText(state);
+}
+
+/// How far up `isBeingRendered` walks before giving up, matching the ceiling the
+/// style manager's own inheritance walks use.
+const max_render_ancestor_depth = 100;
+
+/// Does `he` generate a box? innerText asks this first, and the answer is not
+/// the element's own `display` alone: having no box is inherited downwards, so
+/// an element inside `<head>`, inside a `<template>`, inside a `display: none`
+/// subtree, or in no document at all has none however its own `display`
+/// computes.
+fn isBeingRendered(he: *HtmlElement, tag: Element.Tag, frame: *Frame) bool {
+    if (innerTextTagDisplay(he, tag) == .skip) {
+        return false;
+    }
+    if (!he.asNode().isConnected()) {
+        return false;
+    }
+    if (declaresDisplayNone(he.asElement(), frame)) {
+        return false;
+    }
+
+    var current = he.asElement().parentElement();
+    var depth: usize = 0;
+    while (current) |element| : (depth += 1) {
+        if (depth >= max_render_ancestor_depth) {
+            break;
+        }
+        if (element.is(HtmlElement)) |ancestor| {
+            if (innerTextTagDisplay(ancestor, element.getTag()) == .skip) {
+                return false;
+            }
+        }
+        if (declaresDisplayNone(element, frame)) {
+            return false;
+        }
+        current = element.parentElement();
+    }
+    return true;
+}
+
+/// `display: none` as cascaded onto `element` itself. `display` does not
+/// inherit, so this is one lookup per ancestor rather than a walk of its own.
+fn declaresDisplayNone(element: *Element, frame: *Frame) bool {
+    const value = frame._style_manager.computedDisplay(element) orelse return false;
+    return std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "none");
 }
 
 /// Which of innerText's categories `he` falls into. innerText is defined in

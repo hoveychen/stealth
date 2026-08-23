@@ -464,6 +464,27 @@
   }
 </script>
 
+<script id=unforgeable_self_references>
+  // Web IDL [LegacyUnforgeable]. Chrome makes `window`, `top`, `location` and
+  // `document` non-configurable and leaves `self`, `parent` and `frameElement`
+  // replaceable; a page that walks the descriptors sees which is which, and a
+  // getter it can redefine is a getter it can watch.
+  {
+    const kind = (k) => {
+      const d = Object.getOwnPropertyDescriptor(window, k);
+      return [typeof d.get, typeof d.set, d.enumerable, d.configurable].join(' ');
+    };
+    testing.expectEqual('function undefined true false', kind('window'));
+    testing.expectEqual('function undefined true false', kind('top'));
+    testing.expectEqual('function function true false', kind('location'));
+    testing.expectEqual('function undefined true false', kind('document'));
+
+    testing.expectEqual('function function true true', kind('self'));
+    testing.expectEqual('function function true true', kind('parent'));
+    testing.expectEqual('function undefined true true', kind('frameElement'));
+  }
+</script>
+
 <script id=global_flattening_own_props>
   // WebIDL [Global] flattening: members of the Window interface must be OWN
   // properties of the global object, not merely inherited via the prototype
