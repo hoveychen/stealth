@@ -59,21 +59,10 @@
 //        [--headed-ua] [--url u] [--settle ms] [--out path] [--port n]
 //        [--min n] [--max-records n] [--inject-worker]
 // env: LP_BIN, CHROME
-import { spawn } from 'node:child_process';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Cdp, sleep } from './cdp.mjs';
-
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(HERE, '../..');
-
-const arg = (n, d) => {
-    const i = process.argv.indexOf(n);
-    return i < 0 ? d : process.argv[i + 1];
-};
-const has = (n) => process.argv.includes(n);
+//
+// The launch/arm/collect machinery lives in fo-harness.mjs; what is here is the
+// recorder and the report.
+import { arg, has, headedUserAgent, runTrace, writeRun } from './fo-harness.mjs';
 
 const engine = process.argv[2];
 if (engine !== 'lightpanda' && engine !== 'chrome') {
@@ -93,10 +82,6 @@ const headedUa = has('--headed-ua');
 // Capturing a worker's source text only reads it; prepending the recorder to it
 // changes what the worker runs. Two separate questions, so two separate runs.
 const injectWorker = has('--inject-worker');
-const LIGHTPANDA = process.env.LP_BIN ?? path.join(REPO, 'zig-out/bin/lightpanda');
-const CHROME = process.env.CHROME
-    ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-
 // The recorder. Runs before the document's own code in every realm it is
 // installed in. `MARK` prefixes each console line so the collector can tell its
 // own records from the page's chatter.
@@ -331,39 +316,11 @@ const WORKER_HOOK = `(function () {
 // been injected into gets the funnels alone, prepended to its own source above.
 const RECORDER = `${WORKER_HOOK}\n${CORE}`;
 
-async function headedUserAgent() {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-ua-'));
-    const probe = spawn(CHROME, [
-        `--remote-debugging-port=${PORT + 1}`,
-        `--user-data-dir=${dir}`,
-        '--no-first-run', '--no-default-browser-check', '--headless=new',
-    ], { stdio: 'ignore' });
-    try {
-        for (let i = 0; i < 100; i++) {
-            try {
-                const { 'User-Agent': ua } = await (await fetch(`http://127.0.0.1:${PORT + 1}/json/version`)).json();
-                if (ua) return ua.replace('HeadlessChrome', 'Chrome');
-            } catch { /* not up yet */ }
-            await sleep(200);
-        }
-        throw new Error('could not read the browser user agent for --headed-ua');
-    } finally {
-        probe.kill('SIGKILL');
-        await fs.rm(dir, { recursive: true, force: true }).catch(() => { });
-        await sleep(300);
-    }
-}
-
 const state = {
     engine, url: URL_, headedUa, settleMs: SETTLE, min: MIN,
     userAgentOverride: null,
     injectWorker,
-    records: [],     // one per instrumented call, in arrival order
-    blobs: [],       // worker source text, stitched back from its console chunks
-    realms: [],      // which sessions got the recorder, and whether it installed
     posts: [],       // the fo/ POSTs on the wire, to key the records against
-    console: [],
-    exceptions: [],
 };
 
 if (headedUa) {
@@ -371,119 +328,19 @@ if (headedUa) {
         console.error('--headed-ua only makes sense with the chrome engine');
         process.exit(2);
     }
-    state.userAgentOverride = await headedUserAgent();
+    state.userAgentOverride = await headedUserAgent(PORT + 1);
     console.log(`--headed-ua: ${state.userAgentOverride}`);
 }
 
-let profile;
-const proc = engine === 'chrome'
-    ? spawn(CHROME, [
-        `--remote-debugging-port=${PORT}`,
-        `--user-data-dir=${profile = await fs.mkdtemp(path.join(os.tmpdir(), 'fp-pt-'))}`,
-        '--no-first-run', '--no-default-browser-check', '--window-size=1920,1080',
-        '--headless=new',
-        ...(state.userAgentOverride ? [`--user-agent=${state.userAgentOverride}`] : []),
-    ], { stdio: ['ignore', 'pipe', 'pipe'] })
-    : spawn(LIGHTPANDA, ['serve', '--host', '127.0.0.1', '--port', String(PORT),
-        '--log_level', arg('--log-level', 'info')], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-const engineLog = [];
-proc.stdout.on('data', (d) => engineLog.push(String(d)));
-proc.stderr.on('data', (d) => engineLog.push(String(d)));
-
-let cdp = null;
-try {
-    for (let i = 0; i < 100; i++) {
-        try {
-            const r = await fetch(`http://127.0.0.1:${PORT}/json/version`);
-            if (r.ok) { state.version = await r.json(); break; }
-        } catch { /* not up */ }
-        await sleep(250);
-    }
-
-    cdp = await Cdp.connect(`http://127.0.0.1:${PORT}`);
-    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
-    const { sessionId: pageSession } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
-
-    // A child target must be armed before its document runs, and the only hook
-    // that is early enough is addScriptToEvaluateOnNewDocument on the child's
-    // own session -- which does not exist until the child is attached. Pausing
-    // new targets on start is what buys the window in between.
-    //
-    // Which is why the pause is back, and why it is now type-aware. Under
-    // Chrome's site isolation the Turnstile widget is an out-of-process frame
-    // with a target of its own, and a target that is not paused has already run
-    // its first document by the time the script lands: the recorder then applies
-    // only to documents created *after* it, which is why an unpaused chrome arm
-    // reports itself installed at about:blank and about:srcdoc and never at the
-    // widget itself. Lightpanda has no such split -- every realm is the one
-    // session -- so the same run armed the widget there and not here, and the
-    // arms looked like they behaved differently when only the instrument did.
-    //
-    // Workers are the reason the pause was dropped, and they are excluded from
-    // it rather than from the run: a paused worker's session queue is blocked
-    // head-on by anything sent ahead of the resume, so a worker session is
-    // resumed first and only then asked anything. Nothing is installed into it
-    // either way; it is reached from the document realm by WORKER_HOOK above.
-    async function arm(sid, why, type) {
-        const rec = { session: sid ?? 'page', why, type, installed: false, resumed: false };
-        state.realms.push(rec);
-        if (type && /worker/.test(type)) {
-            rec.worker = true;
-            await cdp.send('Runtime.runIfWaitingForDebugger', undefined, sid)
-                .then(() => { rec.resumed = true; }).catch(() => { });
-            await cdp.send('Network.enable', { maxPostDataSize: 1048576 }, sid).catch(() => { });
-            return;
-        }
-        await cdp.send('Runtime.enable', undefined, sid).catch(() => { });
-        await cdp.send('Page.enable', undefined, sid).catch(() => { });
-        try {
-            await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: RECORDER }, sid);
-            rec.installed = true;
-        } catch (err) { rec.err = String(err.message ?? err); }
-        await cdp.send('Target.setAutoAttach',
-            { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sid).catch(() => { });
-        await cdp.send('Network.enable', { maxPostDataSize: 1048576 }, sid).catch(() => { });
-        // Whether or not the pause took, releasing is harmless.
-        await cdp.send('Runtime.runIfWaitingForDebugger', undefined, sid)
-            .then(() => { rec.resumed = true; }).catch(() => { });
-    }
-
-    cdp.on((msg) => {
+await runTrace({
+    engine, url: URL_, settleMs: SETTLE, port: PORT, recorder: RECORDER, mark: MARK,
+    userAgentOverride: state.userAgentOverride, logLevel: arg('--log-level', 'info'), state,
+    // The POSTs on the wire are what the records have to be keyed against: a
+    // record is only interesting once it is the body of one of these.
+    onMessage(msg, st) {
         const p = msg.params ?? {};
-        if (msg.method === 'Target.attachedToTarget' && p.sessionId) {
-            arm(p.sessionId, p.targetInfo?.url ?? '?', p.targetInfo?.type ?? '?').catch(() => { });
-            return;
-        }
-        if (msg.method === 'Runtime.consoleAPICalled') {
-            const text = (p.args ?? []).map((a) => a.value ?? a.description ?? '').join(' ');
-            if (text.startsWith(MARK)) {
-                let rec;
-                try { rec = JSON.parse(text.slice(MARK.length)); } catch { /* truncated */ }
-                if (!rec) {
-                    state.records.push({ session: msg.sessionId ?? 'page', unparsed: text.length });
-                } else if (rec.k === 'blob') {
-                    state.blobs.push({ session: msg.sessionId ?? 'page', id: rec.id, n: rec.n, type: rec.type, src: '' });
-                } else if (rec.k === 'blob.part') {
-                    // Parts arrive in emit order, so appending is enough; `at`
-                    // is kept only so a gap would be visible in the record.
-                    const b = state.blobs.find((x) => x.id === rec.id);
-                    if (b) { if (b.src.length !== rec.at) b.gapAt = rec.at; b.src += rec.src; }
-                } else {
-                    state.records.push({ session: msg.sessionId ?? 'page', ...rec });
-                }
-            } else if (state.console.length < 200) {
-                state.console.push(`${p.type}: ${text.slice(0, 200)}`);
-            }
-            return;
-        }
-        if (msg.method === 'Runtime.exceptionThrown' && state.exceptions.length < 60) {
-            state.exceptions.push((p.exceptionDetails?.exception?.description
-                ?? p.exceptionDetails?.text ?? '').split('\n')[0].slice(0, 200));
-            return;
-        }
         if (msg.method === 'Network.requestWillBeSent' && /\/fo\//.test(String(p.request?.url ?? ''))) {
-            state.posts.push({
+            st.posts.push({
                 url: String(p.request.url).slice(0, 120),
                 postLen: p.request.postData?.length ?? (p.request.hasPostData ? -1 : 0),
             });
@@ -491,32 +348,11 @@ try {
         if (msg.method === 'Network.responseReceived' && /\/fo\//.test(String(p.response?.url ?? ''))) {
             const hdrs = p.response.headers ?? {};
             const verdict = Object.keys(hdrs).filter((k) => /^cf-chl/i.test(k)).sort();
-            const last = state.posts[state.posts.length - 1];
+            const last = st.posts[st.posts.length - 1];
             if (last && !last.verdict) last.verdict = verdict.join('+');
         }
-    });
-
-    await arm(pageSession, 'page', 'page');
-    await cdp.send('Page.navigate', { url: URL_ }, pageSession);
-    await sleep(SETTLE);
-
-    try {
-        state.final = await cdp.send('Runtime.evaluate', {
-            expression: `JSON.stringify({
-                title: document.title,
-                text: (document.body ? document.body.innerText : '').slice(0, 200),
-            })`,
-            returnByValue: true,
-        }, pageSession).then((r) => JSON.parse(r.result?.value ?? 'null'));
-    } catch (err) { state.final = { err: String(err.message ?? err) }; }
-} catch (err) {
-    state.error = String(err.message ?? err);
-} finally {
-    cdp?.close();
-    proc.kill('SIGKILL');
-    if (profile) await fs.rm(profile, { recursive: true, force: true }).catch(() => { });
-}
-state.engineLog = engineLog.join('').slice(-4000);
+    },
+});
 
 // --- report ---------------------------------------------------------------
 console.log(`=== ${engine}${headedUa ? ' --headed-ua' : ''}${injectWorker ? ' --inject-worker' : ''} ===`);
@@ -536,19 +372,4 @@ for (const p of state.posts) console.log(`  POST ${String(p.postLen).padStart(7)
 console.log(`FINAL ${JSON.stringify(state.final)}`);
 if (state.error) console.log(`ERROR ${state.error}`);
 
-if (OUT) {
-    const out = path.resolve(REPO, OUT.startsWith('tools/') ? OUT : path.join('tools/fingerprint', OUT));
-    await fs.mkdir(path.dirname(out), { recursive: true });
-    // The programs go beside the run rather than inside it: a worker source is
-    // read as source, and a JSON string of it is not readable.
-    const stem = out.replace(/\.json$/, '');
-    for (const b of state.blobs) {
-        if (!b.src) continue;
-        const file = `${stem}-${b.id}.js`;
-        await fs.writeFile(file, b.src);
-        console.log(`wrote ${file} (${b.src.length} bytes)`);
-    }
-    await fs.writeFile(out, JSON.stringify(
-        { ...state, blobs: state.blobs.map(({ src, ...b }) => ({ ...b, srcLen: src.length })) }, null, 1));
-    console.log(`wrote ${out}`);
-}
+if (OUT) await writeRun(OUT, state);
