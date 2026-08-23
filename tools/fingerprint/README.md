@@ -10226,3 +10226,38 @@ And the things Chrome leaves alone, which a normaliser must not touch:
 `[class~="x"]` and `[class\|="x"]` keep their matchers unspaced, `a[href~="b,c"]`
 keeps the comma inside the string, `a:nth-child(2n+1)` keeps its `+` unspaced,
 `.\31 23` keeps its escape, and class and id names keep their case.
+
+### What the selector serialiser recovered, on the payload itself
+
+`selector_text.zig` rewrites a parsed selector the way Blink does, at the one
+point both the stylesheet parser and `rule.selectorText = ...` go through.
+Re-measured on the 38-case probe, this engine now agrees with Chrome on 36 of
+38, up from 6. The two left are deliberate: Chrome rejects the column
+combinator `a||b` outright, which is a parser-acceptance difference rather than
+a serialisation one, and `*|a` needs namespace elision.
+
+Replayed against the sitting's own bytes — our 183 rules fed back through a
+fresh `CSSStyleSheet` and joined the way the collector joins them — the
+shortfall against the oracle's text:
+
+| | chars | gap | rules byte-identical |
+| --- | --- | --- | --- |
+| oracle | 20 695 | — | — |
+| before | 20 364 | 331 | 120 / 183 |
+| after | **20 556** | **139** | **164 / 183** |
+
+Every one of the 19 rules still differing differs in a *declaration*, not a
+selector. Ranked, that residue is: the `animation` shorthand written name-last
+in Chrome's eight-longhand order rather than as the author wrote it; the
+`box-shadow` colour written first with `0px` rather than `0`; `font-family` and
+`stroke-dasharray` lists needing `, ` where we join with `,`; `grid-area: 1 / 1`
+for our `1/1`; a `transform` declaration we drop entirely; and `border-image`
+which Chrome folds back into one shorthand where we emit five longhands plus a
+`border-top-width` Chrome does not. → `cfsc-keyframes-shortfall`, done; the
+declaration side is its own plan.
+
+Noticed while pinning the cascade side of this and not chased: a `color`
+declared by a stylesheet rule does not reach `getComputedStyle().color` here at
+all — it reads `rgb(0, 0, 0)` whatever the selector, while `display` from the
+same sheet cascades correctly. That is not a selector bug (a bare `.class` rule
+misses it too) and Chrome answers with the cascaded colour.

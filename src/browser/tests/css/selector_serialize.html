@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <script src="../testing.js"></script>
 
+<style id="minified">.sel-a>.sel-b{display:flex}.sel-c,.sel-d{display:grid}[DATA-SEL=x]{display:inline-block}.sel-e > .sel-f{display:flex}</style>
+<div class="sel-a"><div class="sel-b" id="sel-inner"></div></div>
+<div class="sel-c" id="sel-c"></div>
+<div class="sel-d" id="sel-d"></div>
+<div data-sel="x" id="sel-attr"></div>
+<div class="sel-e"><div class="sel-f" id="sel-spaced"></div></div>
+
 <!--
   A style rule does not hand back the selector the author wrote. Chrome
   re-serialises the parsed selector, which is why a minified sheet's `a,b`
@@ -155,27 +162,20 @@ function cssTextOf(selector) {
 
 <script id="selector_normalisation_still_matches">
 {
-    // The normalised text is what the cascade re-parses, so a rule written
-    // minified must still match after being rewritten.
-    const style = document.createElement('style');
-    style.textContent = '.sel-a>.sel-b{color:rgb(1, 2, 3)}.sel-c,.sel-d{color:rgb(4, 5, 6)}';
-    document.head.appendChild(style);
+    // The rewritten text is what the cascade re-parses, so a rule written
+    // minified has to keep matching after it has been normalised.
+    const sheet = document.getElementById('minified').sheet;
+    testing.expectEqual('.sel-a > .sel-b', sheet.cssRules[0].selectorText);
+    testing.expectEqual('.sel-c, .sel-d', sheet.cssRules[1].selectorText);
+    testing.expectEqual('[data-sel="x"]', sheet.cssRules[2].selectorText);
 
-    const outer = document.createElement('div');
-    outer.className = 'sel-a';
-    const inner = document.createElement('div');
-    inner.className = 'sel-b';
-    outer.appendChild(inner);
-    const c = document.createElement('div');
-    c.className = 'sel-c';
-    const d = document.createElement('div');
-    d.className = 'sel-d';
-    document.body.append(outer, c, d);
-
-    testing.expectEqual('.sel-a > .sel-b', style.sheet.cssRules[0].selectorText);
-    testing.expectEqual('.sel-c, .sel-d', style.sheet.cssRules[1].selectorText);
-    testing.expectEqual('rgb(1, 2, 3)', getComputedStyle(inner).color);
-    testing.expectEqual('rgb(4, 5, 6)', getComputedStyle(c).color);
-    testing.expectEqual('rgb(4, 5, 6)', getComputedStyle(d).color);
+    const display = (id) => getComputedStyle(document.getElementById(id)).display;
+    testing.expectEqual('grid', display('sel-c'));
+    testing.expectEqual('grid', display('sel-d'));
+    testing.expectEqual('inline-block', display('sel-attr'));
+    // A rewritten `>` has to be worth exactly as much to the cascade as one
+    // that arrived already spaced.
+    testing.expectEqual('flex', display('sel-spaced'));
+    testing.expectEqual('flex', display('sel-inner'));
 }
 </script>
