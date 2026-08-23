@@ -555,3 +555,70 @@
 
   cv.remove();
 </script>
+
+<script id=innerTextNotRendered>
+  // innerText's first step: an element that is not being rendered returns its
+  // descendant text content, with none of the line breaks the layout walk adds.
+  // Measured on Chrome 151, probes/expr-inner-text-{skip-tags,not-rendered-subtree,detached}.js.
+  {
+    const body = document.body;
+
+    // Never-rendered tags. Chrome answers with the text inside each of them,
+    // where a rendered element would answer with the laid-out text.
+    // `optgroup` is deliberately not here: Chrome renders it (display: block)
+    // and reads its text, so its `""` is the select/optgroup child filter
+    // below in this file, not this rule. Measured in
+    // probes/expr-optgroup-inner-text.js.
+    for (const tag of ['style', 'template', 'base', 'link', 'meta', 'title',
+                       'source', 'track', 'param', 'area', 'datalist',
+                       'noscript']) {
+      const el = document.createElement(tag);
+      el.textContent = 'T' + tag;
+      body.appendChild(el);
+      testing.expectEqual('T' + tag, el.innerText);
+      el.remove();
+    }
+
+    // `select` and `textarea` are rendered; their text is not. Both engines
+    // already read `""` there and the change must not turn that into text.
+    for (const tag of ['select', 'textarea']) {
+      const el = document.createElement(tag);
+      el.textContent = 'T' + tag;
+      body.appendChild(el);
+      testing.expectEqual('', el.innerText);
+      el.remove();
+    }
+
+    const mk = (html, style, parent) => {
+      const d = document.createElement('div');
+      if (style) d.setAttribute('style', style);
+      d.innerHTML = html;
+      (parent || body).appendChild(d);
+      return d;
+    };
+
+    // display:none, on the element itself and inherited from an ancestor.
+    const none = mk('<p>one</p><p>two</p>', 'display:none');
+    testing.expectEqual('onetwo', none.innerText);
+    none.remove();
+
+    const shown = mk('<p>one</p><p>two</p>', null);
+    testing.expectEqual('one\n\ntwo', shown.innerText);
+    shown.remove();
+
+    const outer = mk('', 'display:none');
+    const innerChild = mk('<p>x</p><p>y</p>', null, outer);
+    testing.expectEqual('xy', innerChild.innerText);
+    outer.remove();
+
+    // Not in the document at all, and inside <head> — both are subtrees with
+    // no box, however the element's own display computes.
+    const detached = document.createElement('div');
+    detached.innerHTML = '<p>one</p><p>two</p>';
+    testing.expectEqual('onetwo', detached.innerText);
+
+    const inHead = mk('<p>h1</p><p>h2</p>', null, document.head);
+    testing.expectEqual('h1h2', inHead.innerText);
+    inHead.remove();
+  }
+</script>

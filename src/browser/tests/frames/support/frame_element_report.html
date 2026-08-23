@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!--
+Loaded by frames/frame_element_cross_origin.html, once from the page's own
+origin and once from the other one. Reports what `window.frameElement` answers
+from inside, which is the only place the question can be asked -- the embedder
+holds the element either way.
+-->
+<script>
+  var out = {};
+  try {
+    var el = window.frameElement;
+    out.value = String(el);
+    out.tag = el && el.tagName ? el.tagName : '-';
+    out.isNull = el === null;
+    out.type = typeof el;
+  } catch (e) {
+    out.threw = (e && e.name ? e.name : 'Error');
+  }
+  parent.postMessage({ kind: 'frameElement', out: out }, '*');
+</script>

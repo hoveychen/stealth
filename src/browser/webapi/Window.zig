@@ -615,8 +615,24 @@ pub fn getSelection(self: *const Window) *Selection {
     return &self._document._selection;
 }
 
+/// The element embedding this document, or null when the embedder is
+/// cross-origin. The element belongs to the *parent's* document, so handing it
+/// across the boundary would let a framed document read its embedder's
+/// attributes -- and it is the one handle a frame has on the page framing it.
+/// Chrome answers null there, without throwing (measured in
+/// probes/expr-frame-element-cross-origin.js, and on the Turnstile widget,
+/// which is challenges.cloudflare.com inside the site's own origin).
+///
+/// Not an `Access`-style question: the spec compares the container document to
+/// *this* document, not to whoever is asking, so the answer is the same for
+/// every caller.
 pub fn getFrameElement(self: *const Window) ?*Element.Html.IFrame {
-    return self._frame.iframe;
+    const iframe = self._frame.iframe orelse return null;
+    const parent = self._frame.parent orelse return null;
+    if (parent.js.origin != self._frame.js.origin) {
+        return null;
+    }
+    return iframe;
 }
 
 pub fn getLocation(self: *const Window) *Location {
@@ -1487,9 +1503,13 @@ pub const JsApi = struct {
     pub const document = bridge.accessor(Window.getDocument, null, .{ .cache = .{ .internal = 1 }, .deletable = false });
     pub const console = bridge.accessor(Window.getConsole, Window.setConsole, .{});
 
-    pub const top = bridge.accessor(Window.getTop, null, .{});
+    // Web IDL [LegacyUnforgeable], same as location and document below: Chrome
+    // makes these four non-configurable, so a page cannot redefine the getter
+    // to watch what reads it. `self` and `parent` are Replaceable instead and
+    // stay configurable.
+    pub const top = bridge.accessor(Window.getTop, null, .{ .deletable = false });
     pub const self = bridge.accessor(Window.getWindow, Window.setSelf, .{});
-    pub const window = bridge.accessor(Window.getWindow, null, .{});
+    pub const window = bridge.accessor(Window.getWindow, null, .{ .deletable = false });
     pub const parent = bridge.accessor(Window.getParent, Window.setParent, .{});
     pub const navigator = bridge.accessor(Window.getNavigator, null, .{});
     pub const speechSynthesis = bridge.accessor(Window.getSpeechSynthesis, null, .{});

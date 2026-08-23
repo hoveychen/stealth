@@ -667,3 +667,24 @@
     testing.expectEqual('', el.className);
   }
 </script>
+
+<script id=indexed_own_properties>
+  // A DOMTokenList's indices are own properties, so a page that walks
+  // getOwnPropertyNames -- or just stringifies the list -- sees the tokens.
+  // Measured on Chrome 151 in probes/expr-indexed-own-names.js, where
+  // JSON.stringify(el.classList) reads {"0":"one","1":"two"}.
+  {
+    const el = document.createElement('div');
+    el.className = 'one two';
+    testing.expectEqual('0 1', Object.getOwnPropertyNames(el.classList).join(' '));
+    testing.expectEqual('0 1', Object.keys(el.classList).join(' '));
+    testing.expectEqual('{"0":"one","1":"two"}', JSON.stringify(el.classList));
+
+    el.className = '';
+    testing.expectEqual('', Object.getOwnPropertyNames(el.classList).join(' '));
+    testing.expectEqual('{}', JSON.stringify(el.classList));
+
+    el.className = 'a b c';
+    testing.expectEqual('0 1 2', Object.getOwnPropertyNames(el.classList).join(' '));
+  }
+</script>

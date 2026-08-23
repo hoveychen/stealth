@@ -10532,3 +10532,206 @@ Where it stands after the value-punctuation pass, which writes every comma as
 | before the selector serialiser | 331 | 120 / 183 |
 | after it | 139 | 164 / 183 |
 | after value punctuation | **112** | **169 / 183** |
+
+## The round-1 wobble belongs to both arms; only the surplus is ours (P1, 2026-08-23)
+
+`cfsc-r1-payload-length` was opened on two readings taken from four runs: the
+widget's first `fo/` POST is 4 716 bytes on the oracle in every sitting it had
+been seen in, and 4 855 / 4 866 here — a ~140-byte surplus *and* a run-to-run
+wobble the reference did not have. The second of those readings does not
+survive more samples.
+
+Six runs in one sitting, `dev.973+946e2ad02`, `cfsc-fo-diff.mjs`, alternating
+arms (`results/r1len-{lp-1..4,oracle-1,oracle-2}.json`):
+
+| arm | page `fo/` #1 | widget `fo/` #1 | widget `fo/` #2 | cleared |
+|---|---|---|---|---|
+| here a | 2 316 | 4 866 | 85 570 | no |
+| here b | 2 306 | 4 866 | 85 687 | no |
+| here c | 2 306 | 4 876 | 85 548 | no |
+| here d | 2 306 | 4 866 | 85 996 | no |
+| oracle a | 2 306 | **4 706** | 88 535 | yes |
+| oracle b | 2 306 | **4 727** | 88 716 | yes |
+
+The oracle's widget round 1 is 4 706 in one run and 4 727 in the next. Read
+together with the three earlier sittings (4 716, 4 716, 4 706) its range is
+4 706–4 727, spread **21**; ours across seven runs is 4 855–4 876, spread
+**21**. The two arms wobble by the same amount. "4 716 three times" was three
+samples of a distribution, not a constant, and the earlier note that a
+deterministic length means every field is fixed-width was drawn from it.
+
+The page-level POST says the same thing from the other side: it is 2 306 on
+every run of either arm except one of ours, which is 2 316 — one step of the
+same size, on the arm and the payload that otherwise agree exactly.
+
+Both observed step sizes are 10 or 11, and the spread is 21 = 10 + 11 rather
+than a multiple of either. That is what a base-64-shaped encoding does to a
+plaintext that moved by 8 bytes: 8 × 4/3 = 10.67, which lands alternately on 10
+and 11. So the wobble is ~8 plaintext bytes on both arms — a timestamp digit, a
+duration, one number — and it is not a tell.
+
+What survives is the surplus, and it is far steadier than either arm's wobble:
+
+| | oracle | here | gap |
+|---|---|---|---|
+| min | 4 706 | 4 855 | 149 |
+| median | 4 716 | 4 866 | 150 |
+| max | 4 727 | 4 876 | 149 |
+
+**~150 encoded characters, every run, ≈ 112 plaintext bytes at 4/3.** That is
+the thing to localise, and P2/P3 are re-aimed at it: not "find the
+variable-length field" — both arms have one and it is the same size — but "find
+the ~112 bytes this engine puts in the round-1 telemetry that the reference does
+not."
+
+## What the widget reads before round 1, and where it is told something else (P2, 2026-08-23)
+
+The round-1 body is one ciphertext and `fo-plaintext.mjs` already showed the
+plaintext never passes a funnel — no WebCrypto, no `btoa`, nothing over two
+bytes through `JSON.stringify` in the widget realm before the POST goes out. So
+the last place the payload is readable in the clear is one property getter at a
+time, which is what `fo-reads.mjs` records: every configurable accessor on the
+standard prototypes forwards to its original and writes down what it answered,
+disguised the same way the funnel wrappers are, cut at the realm's first
+`XMLHttpRequest.send`.
+
+The honesty check is the same one and it passes: **the oracle cleared with the
+tracer installed, twice** — "You bypassed the Cloudflare challenge! :D" in both
+`results/r1reads-oracle-{1,2}.json`.
+
+| run | widget realm reads | before first send | round-1 POST | cleared |
+|---|---|---|---|---|
+| oracle 1 | 797 | 124 | 4 727 | yes |
+| oracle 2 | 797 | 124 | 4 716 | yes |
+| here 1 | 889 | 171 | 4 887 | no |
+| here 2 | 889 | 171 | 4 887 | no |
+
+Two things to read off that table before the diff. The reads are *stable* per
+arm — identical counts across runs on both — and the widget makes essentially
+the same ones on each: 47 of our 51-read surplus is `window.window`, which
+Chrome refuses to let the tracer wrap at all (see below), so it is reads the
+instrument cannot see rather than reads Chrome does not make. And our round-1
+POST was 4 887 both times with the tracer in, against 4 866–4 876 without it:
+the recorder costs about 20 bytes of its own, which is inside the wobble and
+does not move the ~150-byte gap.
+
+`fo-reads-diff.mjs` puts two runs side by side, either two arms or two runs of
+one arm. Same arm, twice, only three keys move — `Date.now()`, `Math.random()`
+and `performance.now()` — which is the 8-byte wobble P1 measured and nothing
+else. Across arms, six keys differ for a reason that is not a clock.
+
+### The six, re-measured off the station
+
+`probes/expr-r1-reads.js` asks both engines directly, so none of these rests on
+a reading taken through a challenge:
+
+| read | Chrome | here |
+|---|---|---|
+| `performance.timeOrigin` | `1787494938199.7` — epoch ms | `244508796.7` — boot-relative |
+| `timeOrigin + now() - Date.now()` | **1 ms** | **-1 787 250 459 740** |
+| `<style>.innerText` | its text | `""` |
+| `JSON.stringify(el.classList)` | `{"0":"main-wrapper","1":".tOHY4"}` | `{}` |
+| `Object.getOwnPropertyNames(el.classList)` | `0 1` | *(empty)* |
+| `window.window` descriptor | `configurable: false` | `configurable: true` |
+| `window.top` descriptor | `configurable: false` | `configurable: true` |
+| `window.frameElement`, cross-origin child | `null` | the `<iframe>` element |
+
+`self`, `parent`, `frameElement` and `location` already carry Chrome's exact
+descriptor shape; `window` and `top` are the two that do not, and the tracer
+found them by being *able* to replace them here and not there. The
+`display: none` fallback for `innerText` is already right — a hidden `<div>`
+answers with its text on both — so the `<style>` case is its own bug and not
+that one.
+
+`frameElement` is the odd one out: its descriptor matches, its value does not,
+and only on the station, because it needs a cross-origin embedder to differ at
+all. A widget that can reach the `<iframe>` element embedding it can read the
+embedder's attributes; Chrome hands it `null`. This engine already denies
+`document`, `navigator` and the rest of the must-deny list on an outbound
+cross-origin `contentWindow` (`results/probes/probe-cross-origin-surface.*`) —
+the inbound direction is what was never closed.
+
+None of these can be attributed to a byte count from here: the payload is
+encrypted and there is no field boundary to attribute against. They are the set
+of things the widget was told and was told wrong, and the round-1 length is the
+instrument that says whether closing them moves it. That is P3.
+
+## Five of the six are closed, and the payload did not move (P3, 2026-08-23)
+
+Every difference P2 found is fixed and re-measured, and none of them was the
+150 bytes.
+
+| what | before | after |
+|---|---|---|
+| `performance.timeOrigin` | `244508796.7`, boot-relative | `1787495569894.4`, epoch ms |
+| `timeOrigin + now() - Date.now()` | `-1 787 250 459 740` | **1**, Chrome's answer exactly |
+| `window.window` / `window.top` descriptor | `configurable: true` | `false`, like `location` and `document` |
+| `<style>.innerText` | `""` | its CSS |
+| `display:none` div's `innerText` | `"one\n\ntwo"` | `"onetwo"` |
+| `JSON.stringify(el.classList)` | `{}` | `{"0":"one","1":"two"}` |
+| cross-origin child's `frameElement` | the `<iframe>` | `null` |
+
+The last one is the only one that needs a frame boundary to show, and it is
+also the only one with a plausible story about *volume*: a widget that can
+reach the element embedding it can read the embedder's attributes. It reads
+`null` now, the way Chrome's does.
+
+Three runs afterwards, `dev.979+9cd217ce7`, with an oracle control in the same
+sitting (`results/r1len-after-*.json`):
+
+| arm | page `fo/` #1 | widget `fo/` #1 |
+|---|---|---|
+| here a | 2 306 | 4 855 |
+| here b | 2 316 | 4 866 |
+| here c | 2 306 | 4 876 |
+| oracle | 2 306 | **4 716** |
+
+That is the same distribution as before the change, wobble and all. **The
+surplus is not made of the values the widget reads.**
+
+### What the tracer can now see, and what it cannot
+
+Rerun with the fixes in and an enumeration pass added — `Object.keys`,
+`getOwnPropertyNames`, `getOwnPropertySymbols`, `values`, `entries`,
+`getOwnPropertyDescriptors`, `getPrototypeOf`, `Reflect.ownKeys` and
+`Function.prototype.toString`, each keyed by the brand of its argument
+(`results/r1enum-{lp,oracle}-1.json`) — five keys differ across the arms and
+four of them are a clock or a `Math.random()`. `window.window`, `window.top`,
+`innerText` and `classList` have all dropped out of the diff, which is the
+station confirming the fixes from the other side.
+
+The enumeration pass is a clean negative and it rules out the biggest
+outstanding suspect. In the widget realm, before the round-1 POST, this engine
+makes **three** enumeration calls: `Function.prototype.toString` twice (both
+`function eval() { [native code] }`) and one `Object.keys` returning
+`["window"]`. Nothing walks `window`. So the ~112 plaintext bytes are not a
+list of globals, which was the obvious candidate given this engine carries 237
+own names on `window` that Chrome does not.
+
+Stack strings are ruled out too, off the station:
+`probes/expr-error-stack-shape.js` reads byte-identical on both engines for a
+bare `Error`, one with a message, a nested call, and a native `TypeError` —
+same length, same line count, same wording, same `Error.stackTraceLimit`.
+
+Two named leads survive, neither of which explains the volume on its own:
+
+- **`window.parent` from the widget.** Chrome's cross-origin WindowProxy makes
+  `JSON.stringify` of it throw, so the tracer records `[object Object]`; ours
+  returns `{}`, meaning the stringify walked it. Something on the must-deny
+  list — `toJSON` at least — is reachable through the inbound proxy here.
+- **`performance.timing.secureConnectionStart`** is `0` here on an https load
+  and a real stamp in Chrome. That one makes Chrome's payload *longer*, not
+  ours, so it is a parity bug rather than a candidate for the surplus.
+
+### Where the next attempt should look
+
+The page-level round 1 is 2 306 bytes on both arms, exactly, run after run —
+assembled by the same Cloudflare code family, in the page realm, and it agrees.
+The widget's is 150 longer here. Whatever the surplus is, it is specific to the
+*widget* realm, and it is not a property value, not an enumeration and not a
+stack. What is left that the widget has and the page does not: the DOM it builds
+for itself (an iframe with its own shadow tree and styles) and reads back, and
+the challenge parameters it is handed over `postMessage`. Both are readable with
+the instruments already in this directory — `fo-plaintext.mjs` records the
+trampoline conversation, and the widget's own subtree can be serialised from the
+document realm the recorder is already installed in.
