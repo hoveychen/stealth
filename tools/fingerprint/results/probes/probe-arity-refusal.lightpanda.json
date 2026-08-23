@@ -57,112 +57,94 @@
   "throws": false
  },
  "document.all.item()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "clearTimeout()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "clearInterval()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "window.scroll()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "window.scrollTo()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "window.scrollBy()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "selection.containsNode(node)": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "selection.modify()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "writer.write()": {
   "throws": false
  },
  "transformController.enqueue()": {
-  "throws": true,
-  "name": "TypeError",
-  "message": "invalid argument"
+  "throws": false
  },
  "document.createElement()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'createElement' on 'Document': 1 argument required, but only 0 present."
  },
  "el.setAttribute('x')": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'setAttribute' on 'Element': 2 arguments required, but only 1 present."
  },
  "el.matches()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'matches' on 'Element': 1 argument required, but only 0 present."
  },
  "el.closest()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'closest' on 'Element': 1 argument required, but only 0 present."
  },
  "document.querySelector()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'querySelector' on 'Document': 1 argument required, but only 0 present."
  },
  "history.pushState()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'pushState' on 'History': 2 arguments required, but only 0 present."
  },
  "localStorage.setItem('k')": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 1 present."
  },
  "el.getAttribute()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'getAttribute' on 'Element': 1 argument required, but only 0 present."
  },
  "el.removeAttribute()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'removeAttribute' on 'Element': 1 argument required, but only 0 present."
  },
  "document.createTextNode()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'createTextNode' on 'Document': 1 argument required, but only 0 present."
  },
  "el.querySelectorAll()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'querySelectorAll' on 'Element': 1 argument required, but only 0 present."
  },
  "document.getElementsByClassName()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'getElementsByClassName' on 'Document': 1 argument required, but only 0 present."
  },
  "new URL()": {
   "throws": true,
@@ -189,6 +171,8 @@
   "message": "invalid argument"
  },
  "history.pushState(1)": {
-  "throws": false
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'pushState' on 'History': 2 arguments required, but only 1 present."
  }
 }

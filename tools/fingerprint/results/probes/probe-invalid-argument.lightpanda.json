@@ -176,27 +176,27 @@
  "document.createElement()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'createElement' on 'Document': 1 argument required, but only 0 present."
  },
  "el.setAttribute('x')": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'setAttribute' on 'Element': 2 arguments required, but only 1 present."
  },
  "el.matches()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'matches' on 'Element': 1 argument required, but only 0 present."
  },
  "el.closest()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'closest' on 'Element': 1 argument required, but only 0 present."
  },
  "document.querySelector()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'querySelector' on 'Document': 1 argument required, but only 0 present."
  },
  "el.animate(1)": {
   "throws": false
@@ -212,12 +212,12 @@
  "history.pushState()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'pushState' on 'History': 2 arguments required, but only 0 present."
  },
  "localStorage.setItem('k')": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 1 present."
  },
  "new MutationObserver(1)": {
   "throws": true,
