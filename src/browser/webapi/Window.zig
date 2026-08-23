@@ -1487,9 +1487,13 @@ pub const JsApi = struct {
     pub const document = bridge.accessor(Window.getDocument, null, .{ .cache = .{ .internal = 1 }, .deletable = false });
     pub const console = bridge.accessor(Window.getConsole, Window.setConsole, .{});
 
-    pub const top = bridge.accessor(Window.getTop, null, .{});
+    // Web IDL [LegacyUnforgeable], same as location and document below: Chrome
+    // makes these four non-configurable, so a page cannot redefine the getter
+    // to watch what reads it. `self` and `parent` are Replaceable instead and
+    // stay configurable.
+    pub const top = bridge.accessor(Window.getTop, null, .{ .deletable = false });
     pub const self = bridge.accessor(Window.getWindow, Window.setSelf, .{});
-    pub const window = bridge.accessor(Window.getWindow, null, .{});
+    pub const window = bridge.accessor(Window.getWindow, null, .{ .deletable = false });
     pub const parent = bridge.accessor(Window.getParent, Window.setParent, .{});
     pub const navigator = bridge.accessor(Window.getNavigator, null, .{});
     pub const speechSynthesis = bridge.accessor(Window.getSpeechSynthesis, null, .{});
