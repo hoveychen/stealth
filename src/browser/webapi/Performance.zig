@@ -1259,3 +1259,9 @@ const testing = @import("../../testing.zig");
 test "WebApi: Performance" {
     try testing.htmlRunner("performance.html", .{});
 }
+
+test "WebApi: Performance resource entries" {
+    // The stylesheet is one of the loads under test, so it has to actually go
+    // out: the runner leaves external stylesheets off by default.
+    try testing.htmlRunner("performance_resource.html", .{ .load_external_stylesheets = true });
+}
