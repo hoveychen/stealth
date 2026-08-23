@@ -166,7 +166,11 @@ const CORE = `(function () {
       var t = typeof v;
       if (t === 'number') return Math.round(v * 10000) / 10000;
       if (t === 'boolean' || t === 'undefined') return v === undefined ? '?' : v;
-      if (t === 'string') return v.length <= 96 ? v : { s: v.length, v: v.slice(0, 64) };
+      // Shader sources arrive here as one long string and are the one argument
+      // that has to survive whole: a fragment shader truncated to its first
+      // line is not something a rasteriser can be written against. 1024 keeps
+      // the widget's longest (413 chars) intact.
+      if (t === 'string') return v.length <= 1024 ? v : { s: v.length, v: v.slice(0, 512) };
       var u = viewOf(v);
       if (u) return { buf: u.length, head: hex(u, 24) };
       if (t === 'object' || t === 'function') {
