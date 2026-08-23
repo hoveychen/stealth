@@ -8755,3 +8755,83 @@ tightened for everyone, this run cannot say. What it can say is that
 again, and that re-establishing a passing oracle is the prerequisite, not the
 widget's solve. Raw traces: `results/cfsc-fo-lightpanda-postfix.json`,
 `results/cfsc-fo-chrome-postfix{,2}.json`.
+
+## The POST that did not say where it came from
+
+Three headers separate a POST from the GET beside it, and this engine placed
+all three wrong — one of them by leaving it out entirely. Cloudflare's managed
+challenge is three POSTs (2306, ~4.8KB, ~86KB against `cf-scrapingcourse`), so
+the POST is not a side surface here; it is where the challenge lives.
+
+### What was measured
+
+The probe is `accept-ch-echo.mjs`, which already loads a page that issues a
+same-origin `fetch` GET and a same-origin XHR POST, and records the byte-exact
+request head of each. Run twice per engine: once with Cloudflare's nine-hint
+`Accept-CH` (the hinted subresource table) and once with `--hints ""`, an empty
+ask, which is the unhinted table. Four arms, one page, no live station
+involved.
+
+Chrome's POST, unhinted (`results/xhr-post-nohints-chrome.json`):
+
+```
+Host, Connection, Content-Length,
+sec-ch-ua-platform, User-Agent, sec-ch-ua, content-type, sec-ch-ua-mobile,
+Accept, Origin, Sec-Fetch-Site, Sec-Fetch-Mode, Sec-Fetch-Dest,
+Referer, Accept-Encoding, Accept-Language
+```
+
+and hinted (`results/acceptch-chrome.json`), where `content-type` follows
+`User-Agent` instead of `sec-ch-ua` — the hint block is a different sequence,
+so the position does not carry over between the two tables.
+
+This engine, before: no `Origin` at all, and `content-type` and
+`Content-Length` after `Accept-Language`, in the trailing pass `emitHeaders`
+gives a name no table knows.
+
+### Origin is not "the origin of every request"
+
+Fetch appends it when the response tainting is cors — any cross-origin
+fetch/XHR — **or** when the method is neither GET nor HEAD. That is why the
+same-origin POST carries it and the same-origin GET on the same page does not,
+which is exactly what both Chrome arms show. A rule of "send it on cors
+requests" would have put it on the GET too, and been a new tell rather than a
+fixed one.
+
+`Content-Length` had to become a header this engine writes, not one curl
+appends: curl emits its copy from the `H1_HD_CONTENT` slot, after every custom
+header, and slot order is not ours to pick from the header list. Ours is placed
+by the table; curl skips its own once the list carries one
+(`Curl_checkheaders`), so the number on the wire is unchanged and there is no
+duplicate. Both it and `Origin` are re-seeded after a redirect: a 301/302/303
+turns the request into a GET and drops the body, and a length header left
+behind would announce bytes that are never sent.
+
+### After
+
+| arm | POST header order vs Chrome |
+|---|---|
+| hinted (9 hints) | identical, 22 of 22 |
+| unhinted | identical, 16 of 16 |
+
+Values check out too: `Content-Length: 5` for a 5-byte body, `Origin` the
+initiator's serialized origin, no duplicated field, and every GET on the page
+unchanged — no stray `Origin` or `Content-Length` where Chrome has none.
+
+Arms: `results/xhr-post-{hints,nohints}-lightpanda.json` against
+`results/acceptch-chrome.json` and `results/xhr-post-nohints-chrome.json`.
+
+### What it did not buy
+
+`cf-scrapingcourse` still ends on `Just a moment...`, and its three POSTs are
+still answered with `cf-chl-gen` — a fresh challenge
+(`results/cfsc-fo-lp-xhrpost.json`). That is the expected outcome while the
+headless Chrome oracle fails the same station the same way (previous chapter):
+the gate there is not the POST's header shape. The 15-station sweep reads
+11/15 (`results/xhr-post-sweep-after.json`), matching the best recent run and
+regressing nothing — the four failures are the same three Cloudflare
+challenges and `dd-g2`.
+
+So this one is banked as fidelity, not as a station flipped: a POST with no
+`Origin` is a shape no browser produces, and it was on every POST this engine
+made.
