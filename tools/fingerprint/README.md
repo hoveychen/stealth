@@ -10261,3 +10261,10 @@ declared by a stylesheet rule does not reach `getComputedStyle().color` here at
 all — it reads `rgb(0, 0, 0)` whatever the selector, while `display` from the
 same sheet cascades correctly. That is not a selector bug (a bare `.class` rule
 misses it too) and Chrome answers with the cascaded colour.
+
+Swept afterwards (`results/kf-selector-sweep-after.json`): 11 of 15 stations
+open, the same eleven as before the change and the same four shut
+(cf-scrapingcourse, cf-nopecha, cf-zeroclover, dd-g2). No door moved, which is
+what a 139-character residue on one payload predicts; the reading that matters
+here is the absence of a regression, since the normalised text is what the
+cascade re-parses.
