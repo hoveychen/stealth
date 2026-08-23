@@ -937,3 +937,30 @@
     });
   }
 </script>
+
+<script id=crypto_random_values_error_message>
+{
+  // Both getRandomValues rejections quote the argument back: the view's type
+  // for the wrong-type one, and the byte length -- not the element count --
+  // for the quota one. Measured against Chrome 151.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const pre = "Failed to execute 'getRandomValues' on 'Crypto': ";
+  const wrong_type = (type) => 'TypeMismatchError: ' + pre +
+    `The provided ArrayBufferView is of type '${type}', which is not an integer array type.`;
+
+  testing.expectEqual(wrong_type('Float64'), msg(() => crypto.getRandomValues(new Float64Array(1))));
+  testing.expectEqual(wrong_type('Float32'), msg(() => crypto.getRandomValues(new Float32Array(1))));
+  testing.expectEqual(wrong_type('DataView'), msg(() => crypto.getRandomValues(new DataView(new ArrayBuffer(8)))));
+
+  const quota = (bytes) => 'QuotaExceededError: ' + pre +
+    `The ArrayBufferView's byte length (${bytes}) exceeds the number of bytes of entropy available via this API (65536).`;
+
+  testing.expectEqual(quota(65537), msg(() => crypto.getRandomValues(new Uint8Array(65537))));
+  // A Uint16Array is counted in bytes, so 65536 elements is 131072 bytes.
+  testing.expectEqual(quota(131072), msg(() => crypto.getRandomValues(new Uint16Array(65536))));
+
+  // Exactly at the limit is still fine, and a BigInt64Array is an integer type.
+  testing.expectEqual(65536, crypto.getRandomValues(new Uint8Array(65536)).length);
+  testing.expectEqual(1, crypto.getRandomValues(new BigInt64Array(1)).length);
+}
+</script>

@@ -170,25 +170,31 @@
 {
   const div = document.createElement('div');
 
-  testing.withError((err) => {
-    testing.expectEqual(5, err.code);
-    testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.setAttribute('0abc', 'value'));
+  // Blink does not hold attribute names to the XML Name production. A name is
+  // rejected only when it is empty or contains NUL, tab, LF, FF, CR, space,
+  // '/', '=' or '>' -- measured by walking 0x00-0xFF through setAttribute in
+  // Chrome 151, in first and in middle position. So a leading digit, a leading
+  // '-' or '.', '@', '!' and '~' are all names Chrome accepts.
+  div.setAttribute('0abc', 'v');
+  testing.expectEqual('v', div.getAttribute('0abc'));
 
-  testing.withError((err) => {
-    testing.expectEqual(5, err.code);
-    testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.setAttribute('123', 'value'));
+  div.setAttribute('123', 'v');
+  testing.expectEqual('v', div.getAttribute('123'));
 
-  testing.withError((err) => {
-    testing.expectEqual(5, err.code);
-    testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.setAttribute('-invalid', 'value'));
+  div.setAttribute('-invalid', 'v');
+  testing.expectEqual('v', div.getAttribute('-invalid'));
 
-  testing.withError((err) => {
-    testing.expectEqual(5, err.code);
-    testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.setAttribute('.foo', 'value'));
+  div.setAttribute('.foo', 'v');
+  testing.expectEqual('v', div.getAttribute('.foo'));
+
+  div.setAttribute('my@attr', 'v');
+  testing.expectEqual('v', div.getAttribute('my@attr'));
+
+  div.setAttribute('attr!', 'v');
+  testing.expectEqual('v', div.getAttribute('attr!'));
+
+  div.setAttribute('~', 'v');
+  testing.expectEqual('v', div.getAttribute('~'));
 
   testing.withError((err) => {
     testing.expectEqual(5, err.code);
@@ -198,17 +204,17 @@
   testing.withError((err) => {
     testing.expectEqual(5, err.code);
     testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.setAttribute('my@attr', 'value'));
+  }, () => div.setAttribute('a/b', 'value'));
 
   testing.withError((err) => {
     testing.expectEqual(5, err.code);
     testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.setAttribute('attr!', 'value'));
+  }, () => div.setAttribute('a=b', 'value'));
 
   testing.withError((err) => {
     testing.expectEqual(5, err.code);
     testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.setAttribute('~', 'value'));
+  }, () => div.setAttribute('a>b', 'value'));
 
   testing.withError((err) => {
     testing.expectEqual(5, err.code);
@@ -230,20 +236,15 @@
   div.setAttribute('data-test-123', 'value5');
   testing.expectEqual('value5', div.getAttribute('data-test-123'));
 
-  testing.withError((err) => {
-    testing.expectEqual(5, err.code);
-    testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.toggleAttribute('.invalid'));
+  // toggleAttribute takes the same relaxed set.
+  testing.expectTrue(div.toggleAttribute('.invalid'));
+  testing.expectTrue(div.toggleAttribute('0invalid'));
+  testing.expectTrue(div.toggleAttribute('-invalid'));
 
   testing.withError((err) => {
     testing.expectEqual(5, err.code);
     testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.toggleAttribute('0invalid'));
-
-  testing.withError((err) => {
-    testing.expectEqual(5, err.code);
-    testing.expectEqual("InvalidCharacterError", err.name);
-  }, () => div.toggleAttribute('-invalid'));
+  }, () => div.toggleAttribute('in valid'));
 }
 </script>
 

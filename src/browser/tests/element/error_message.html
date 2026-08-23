@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<head>
+  <title>Element exception messages</title>
+  <script src="../testing.js"></script>
+</head>
+
+<script id=element_error_message_set_attribute>
+{
+  // Measured against Chrome 151. The interface in the sentence follows the
+  // receiver, so the same selector rejection reads 'Document' or 'Element'
+  // depending on who was asked.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const div = () => document.createElement('div');
+
+  const bad_attr = (op, name) => `InvalidCharacterError: Failed to execute '${op}' on 'Element': ` +
+    `'${name}' is not a valid attribute name.`;
+
+  testing.expectEqual(bad_attr('setAttribute', ''), msg(() => div().setAttribute('', 'v')));
+  testing.expectEqual(bad_attr('setAttribute', 'a b'), msg(() => div().setAttribute('a b', 'v')));
+  testing.expectEqual(bad_attr('toggleAttribute', ''), msg(() => div().toggleAttribute('')));
+  testing.expectEqual(bad_attr('toggleAttribute', 'a=b'), msg(() => div().toggleAttribute('a=b')));
+
+  // setAttributeNS words it a fourth way and names the offending character.
+  testing.expectEqual(
+    "InvalidCharacterError: Failed to execute 'setAttributeNS' on 'Element': " +
+    "The qualified name provided is empty.",
+    msg(() => div().setAttributeNS(null, '', 'v')));
+  testing.expectEqual(
+    "InvalidCharacterError: Failed to execute 'setAttributeNS' on 'Element': " +
+    "The qualified name provided ('a/b') contains the invalid character '/'.",
+    msg(() => div().setAttributeNS(null, 'a/b', 'v')));
+}
+</script>
+
+<script id=element_error_message_selectors>
+{
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const div = () => document.createElement('div');
+
+  const bad_sel = (op) => `SyntaxError: Failed to execute '${op}' on 'Element': '###' is not a valid selector.`;
+
+  testing.expectEqual(bad_sel('querySelector'), msg(() => div().querySelector('###')));
+  testing.expectEqual(bad_sel('querySelectorAll'), msg(() => div().querySelectorAll('###')));
+  testing.expectEqual(bad_sel('matches'), msg(() => div().matches('###')));
+
+  // closest did not even reach the DOMException mapping: it threw the raw Zig
+  // error name, which no browser produces and which is louder than any wording.
+  testing.expectEqual(bad_sel('closest'), msg(() => div().closest('###')));
+
+  testing.expectEqual(
+    "SyntaxError: Failed to execute 'querySelectorAll' on 'Element': The provided selector is empty.",
+    msg(() => div().querySelectorAll('')));
+}
+</script>
+
+<script id=element_error_message_fragment_interface>
+{
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  // A DocumentFragment names itself, not Document or Element.
+  testing.expectEqual(
+    "SyntaxError: Failed to execute 'querySelector' on 'DocumentFragment': '###' is not a valid selector.",
+    msg(() => document.createDocumentFragment().querySelector('###')));
+}
+</script>
+
+<script id=element_error_message_attribute_name_rule>
+{
+  // The rule itself, not just its wording. Blink stopped requiring the XML Name
+  // production for attribute names: an attribute name is rejected only when it
+  // is empty or contains NUL, tab, LF, FF, CR, space, '/', '=' or '>'. Measured
+  // by walking every code point 0x00-0xFF through setAttribute in Chrome 151 --
+  // those nine were the whole rejected set, in first or in middle position.
+  const div = document.createElement('div');
+  const rejects = (name) => {
+    try { document.createElement('div').setAttribute(name, 'v'); return false; } catch (e) { return true; }
+  };
+
+  for (const name of ['0abc', '123', '-invalid', '.foo', 'my@attr', 'attr!', '~', 'a"b', "a'b", 'a<b', 'é']) {
+    div.setAttribute(name, 'ok');
+    testing.expectEqual('ok', div.getAttribute(name));
+    testing.expectFalse(rejects(name));
+  }
+
+  for (const name of ['', 'my attr', 'a\tb', 'a\nb', 'a\fb', 'a\rb', 'a/b', 'a=b', 'a>b', 'a\0b']) {
+    testing.expectTrue(rejects(name));
+  }
+
+  // Vertical tab is *not* in Blink's set, even though it is whitespace.
+  testing.expectFalse(rejects('a\vb'));
+}
+</script>
