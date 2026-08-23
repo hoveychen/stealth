@@ -10125,21 +10125,41 @@ Payloads of 1 000 bytes or more, counted by size:
 | 30 902 | 3 | 3 | the `getComputedStyle` dump — **closed** |
 | 15 361 | 4 | 4 | the audio vector — **closed this round** |
 | 20 696 / 20 367 | 2 / 0 | 0 / 2 | the page's `@keyframes` text, 329 characters short |
-| 13 468 | 3 | 0 | a payload this engine never produces at all |
+| 13 468 ×3 / 14 007 / 4 416 / 1 792 | 1 each | 0 | *not payloads* — see below |
 | 9 216 | 1 | 2 | RGBA pixel readback |
 | 8 624 | 3 | 2 | RGBA pixel readback |
-| 4 416 / 4 096 / 1 792 / 1 168 ×2 / 1 024 / 1 009 | 1 each | 0 | never produced here |
+| 4 096 / 1 168 ×2 / 1 024 / 1 009 | 1 each | 0 | never produced here |
 | round 2 POST | 4 716 | 4 866 | 150 bytes wider than the arm that clears |
 
-So the two largest rows of the E1 table are now identical on both arms, and what
-is left is the pixel readbacks (`cfsc-canvas-pixel-readback`), the `@keyframes`
-shortfall, and seven payloads this engine never emits — the 13 468 one three
-times over, which is the biggest of them and has no plan yet.
+**Half of those rows were the same payload counted twice (2026-08-23).** Every
+`subtle.digest` in `a3-oracle.json` is handed the UTF-8 encoding of the string
+the `TextEncoder.encode` immediately before it was given, and the funnel records
+*both*, so one collection shows up under two sizes whenever the string is not
+plain ASCII. It is arithmetic, not a second surface — `Buffer.byteLength(v)` of
+each encode input reproduces the digest size exactly:
 
-One more gap the audio trace turned up and which nothing covers: the widget's
-**third** OfflineAudioContext is `createBuffer(1, 1000, 44100)` filled by the
-page, through `createBufferSource()` to the destination. Chrome hands that
-buffer straight back — measured on a loopback page, all 1 000 samples identical
-— and this engine renders 1 000 zeros. Unlike the two compressor graphs this is
-a passthrough with no DSP in it, so it can be computed rather than recorded.
-→ `cfsc-audio-buffer-passthrough`.
+| encode (chars) | digest (bytes) | which |
+| --- | --- | --- |
+| 8 624 | 13 468 | RGBA pixel readback, three times over |
+| 9 216 | 14 007 | RGBA pixel readback |
+| 4 096 | 4 416 | never produced here |
+| 1 024 | 1 792 | never produced here |
+| 15 361 | 15 361 | the audio vector — ASCII, so the two agree |
+
+So the 13 468 row was never "the biggest payload this engine never produces".
+It is the digest of the 8 624-byte pixel readback, and it appears three times
+because that readback does — which puts it inside `cfsc-canvas-pixel-readback`
+rather than in a plan of its own. Reading the records directly, the `lp` arm
+emits *no* readback digest at all in this sitting: its only encode/digest pairs
+above 1 000 bytes are 30 902 (computed style) and 20 367 (`@keyframes`).
+
+Which leaves the genuinely unclaimed list shorter than it looked: the pixel
+readbacks, the `@keyframes` shortfall, and 4 096 / 1 168 ×2 / 1 024 / 1 009.
+
+The widget's **third** OfflineAudioContext — `createBuffer(1, 1000, 44100)`
+filled by the page, through `createBufferSource()` to the destination — is now
+closed. Chrome hands that buffer straight back and this engine used to render
+1 000 zeros; `buffer_render.zig` computes the passthrough instead. Traced
+through `audio-graph-trace.mjs` on a loopback page, both engines report the
+graph record for record and the render comes back sample for sample identical
+(1 000/1 000, maximum difference zero). → `cfsc-audio-buffer-passthrough`, done.
