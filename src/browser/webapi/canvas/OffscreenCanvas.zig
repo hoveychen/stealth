@@ -20,6 +20,9 @@ const std = @import("std");
 const js = @import("../../js/js.zig");
 
 const Blob = @import("../Blob.zig");
+const DOMException = @import("../DOMException.zig");
+const ImageBitmap = @import("ImageBitmap.zig");
+const Surface = @import("raster.zig");
 const png = @import("png.zig");
 const OffscreenCanvasRenderingContext2D = @import("OffscreenCanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("WebGLRenderingContext.zig");
@@ -156,10 +159,62 @@ pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js
     return exec.js.local.?.resolvePromise(blob);
 }
 
-/// Returns an ImageBitmap with the rendered content (stub).
-pub fn transferToImageBitmap(_: *OffscreenCanvas) ?void {
-    // ImageBitmap not implemented yet, return null
-    return null;
+fn refuseTransfer(exec: *Execution, comptime message: []const u8, name: []const u8) anyerror {
+    const local = exec.js.local orelse return error.JsException;
+    const full = "Failed to execute 'transferToImageBitmap' on 'OffscreenCanvas': " ++ message;
+    const value = local.zigValueToJs(DOMException.init(full, name), .{}) catch return error.JsException;
+    _ = local.isolate.throwException(value.handle);
+    return error.JsException;
+}
+
+/// Hands the canvas' bitmap to a fresh ImageBitmap and leaves the canvas blank
+/// — the transfer the name promises, rather than the copy `createImageBitmap`
+/// takes. The Turnstile widget reaches an ImageBitmap of one 49x44 render by
+/// both routes and reads each back, so answering only the copy is a readback it
+/// never gets to take (tools/fingerprint/README.md).
+///
+/// Measured on Chrome with probes/expr-transfer-to-image-bitmap.js: the source
+/// reads as fully transparent afterwards, through its own context and through a
+/// later createImageBitmap alike, while keeping its size; the context object
+/// survives, still answers `ctx.canvas === canvas`, and is drawable again; and
+/// the bitmap is an ordinary one, unaffected by a later resize of the source and
+/// detachable with close().
+pub fn transferToImageBitmap(self: *OffscreenCanvas, exec: *Execution) !*ImageBitmap {
+    const cached = self._cached orelse return refuseTransfer(
+        exec,
+        "Cannot transfer an ImageBitmap from an OffscreenCanvas with no context",
+        "InvalidStateError",
+    );
+    // A degenerate extent is refused as a construction failure rather than an
+    // invalid state, and only once there is a context to fail for (measured:
+    // a 0x1 canvas hands back a 2D context and then refuses the transfer).
+    if (self._width == 0 or self._height == 0) {
+        return refuseTransfer(exec, "ImageBitmap construction failed", "UnknownError");
+    }
+
+    var taken: Surface = .{ .arena = exec.arena };
+    switch (cached) {
+        .@"2d" => |context| {
+            // Moved, not copied: the bitmap takes the buffer and the context is
+            // left with an empty one, which is both what "transfer" means and
+            // why a second transfer answers transparent. The rest of the
+            // context's state — transform, paint, path — is untouched; only
+            // resizing resets that.
+            taken = context._surface;
+            context._surface = .{ .arena = taken.arena };
+        },
+        // Chrome's bitmap carries the cleared colour off a WebGL canvas, but
+        // nothing is rasterised behind one here — the same gap
+        // `createImageBitmap` already has for a WebGL-only source. Left alone
+        // so the two routes to a bitmap keep answering the same thing.
+        .webgl, .webgl2, .webgpu => {},
+    }
+
+    return exec._factory.create(ImageBitmap{
+        ._width = self._width,
+        ._height = self._height,
+        ._surface = taken,
+    });
 }
 
 pub const JsApi = struct {
