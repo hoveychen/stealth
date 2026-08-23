@@ -248,6 +248,24 @@ const RECORDER = `(function () {
       emit({ k: m, node: idOf(node, 'node'), when: args.length ? args[0] : undefined });
     });
   });
+  // AudioBufferSourceNode.start is Blink's own three-argument overload rather
+  // than the inherited one, so wrapping only the base above sees an
+  // oscillator's start and misses every buffer source's -- which is exactly the
+  // node whose offset and duration decide what the render contains.
+  var BufSrc = globalThis.AudioBufferSourceNode && globalThis.AudioBufferSourceNode.prototype;
+  if (BufSrc && Object.prototype.hasOwnProperty.call(BufSrc, 'start')) {
+    wrap(BufSrc, 'start', function (node, args) {
+      emit({ k: 'start', node: idOf(node, 'buffersource'),
+             when: args.length > 0 ? args[0] : undefined,
+             offset: args.length > 1 ? args[1] : undefined,
+             duration: args.length > 2 ? args[2] : undefined });
+    });
+  }
+  ['loop', 'loopStart', 'loopEnd'].forEach(function (key) {
+    wrapSetter(BufSrc, key, function (node, v) {
+      emit({ k: 'nodeProp', node: idOf(node, 'buffersource'), name: key, v: String(v) });
+    });
+  });
 
   // --- the render -----------------------------------------------------------
   // The buffer itself, not a hash of it: the point of the trace is to be able
@@ -337,7 +355,16 @@ for (const r of state.records) {
         case 'connect': case 'disconnect':
             console.log(`  ${r.from}.${r.k}(${r.to}${r.param ? `.${r.param}` : ''})`);
             break;
-        case 'start': case 'stop': console.log(`  ${r.node}.${r.k}(${r.when ?? ''})`); break;
+        // offset and duration are printed, not just recorded: they decide
+        // which frames of a buffer reach the destination, and a summary line
+        // reading `start(0)` for a call that skipped into the middle of the
+        // buffer is how that argument goes unnoticed.
+        case 'start': case 'stop': {
+            const args = [r.when ?? '', r.offset, r.duration];
+            while (args.length > 1 && args[args.length - 1] === undefined) args.pop();
+            console.log(`  ${r.node}.${r.k}(${args.join(', ')})`);
+            break;
+        }
         case 'startRendering': console.log(`  ${r.ctx}.startRendering()  ${r.length} frames at ${r.sampleRate}`); break;
         case 'rendered': {
             const b = r.buffer ?? {};
