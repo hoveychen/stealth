@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  The UA stylesheet's per-tag defaults, as a computed style reports them.
+
+  computed_initial_values.html covers the value a longhand takes when nothing
+  declares it -- measured off a bare <div>, which is what
+  webapi/css/chrome_initial_values.zig records. That table is flat, so every
+  element got the div's answer, and the UA stylesheet's per-tag rules were
+  invisible: a <body> reported `margin: 0px` where Chrome reports 8px, a <span>
+  reported `unicode-bidi: isolate` where Chrome reports normal.
+
+  Measured on the same light-scheme headless Chrome 151 the flat table was
+  measured on, by tools/fingerprint/dump-css-per-tag-values.mjs. Every
+  expectation below is one row of what that dump recorded.
+-->
+
+<div id="bare"></div>
+<p id="para"></p>
+<h1 id="head1"></h1>
+<pre id="prefmt"></pre>
+<ul id="list"></ul>
+<span id="inl"></span>
+<bdo id="over"></bdo>
+<a id="link"></a>
+<hr id="rule">
+<table id="tbl"><tbody><tr><td id="cell"></td></tr></tbody></table>
+
+<script id="body_carries_the_ua_margin">
+{
+    // The one that showed up on the real widget: it reads a <body>, and the
+    // flat table answered with the div's zero.
+    const cs = getComputedStyle(document.body);
+    testing.expectEqual('8px', cs.marginTop);
+    testing.expectEqual('8px', cs.marginRight);
+    testing.expectEqual('8px', cs.marginBottom);
+    testing.expectEqual('8px', cs.marginLeft);
+    testing.expectEqual('8px', cs.marginBlockStart);
+    testing.expectEqual('8px', cs.marginBlockEnd);
+    testing.expectEqual('8px', cs.marginInlineStart);
+    testing.expectEqual('8px', cs.marginInlineEnd);
+
+    // Both spellings resolve to the same row.
+    testing.expectEqual('8px', cs.getPropertyValue('margin-top'));
+    testing.expectEqual('8px', cs.getPropertyValue('margin-inline-start'));
+
+    // The shorthands and the -webkit- aliases are read by name too, and the
+    // widget reads them: they are enumerable keys, not indexed longhands.
+    testing.expectEqual('8px', cs.margin);
+    testing.expectEqual('8px', cs.marginBlock);
+    testing.expectEqual('8px', cs.marginInline);
+    testing.expectEqual('8px', cs.webkitMarginBefore);
+    testing.expectEqual('8px', cs.webkitMarginAfter);
+    testing.expectEqual('8px', cs.webkitMarginStart);
+    testing.expectEqual('8px', cs.webkitMarginEnd);
+}
+</script>
+
+<script id="unicode_bidi_follows_the_tag">
+{
+    // Chrome's UA sheet puts `unicode-bidi: isolate` on the block-level
+    // elements and leaves the rest at the property's initial `normal`. The flat
+    // table recorded the div's `isolate` and handed it to everything.
+    testing.expectEqual('isolate', getComputedStyle(document.getElementById('bare')).unicodeBidi);
+    testing.expectEqual('isolate', getComputedStyle(document.getElementById('para')).unicodeBidi);
+    testing.expectEqual('normal', getComputedStyle(document.body).unicodeBidi);
+    testing.expectEqual('normal', getComputedStyle(document.documentElement).unicodeBidi);
+    testing.expectEqual('normal', getComputedStyle(document.getElementById('inl')).unicodeBidi);
+    testing.expectEqual('normal', getComputedStyle(document.getElementById('link')).unicodeBidi);
+    testing.expectEqual('isolate-override', getComputedStyle(document.getElementById('over')).unicodeBidi);
+}
+</script>
+
+<script id="block_margins_differ_per_tag">
+{
+    testing.expectEqual('0px', getComputedStyle(document.getElementById('bare')).marginTop);
+    testing.expectEqual('16px', getComputedStyle(document.getElementById('para')).marginTop);
+    testing.expectEqual('16px', getComputedStyle(document.getElementById('list')).marginTop);
+    testing.expectEqual('21.44px', getComputedStyle(document.getElementById('head1')).marginTop);
+    testing.expectEqual('13px', getComputedStyle(document.getElementById('prefmt')).marginTop);
+    testing.expectEqual('8px', getComputedStyle(document.getElementById('rule')).marginTop);
+}
+</script>
+
+<script id="other_per_tag_rows">
+{
+    // A spread over the rest of the dump, so a regeneration that loses a whole
+    // family shows up here rather than only on the widget.
+    const h1 = getComputedStyle(document.getElementById('head1'));
+    testing.expectEqual('32px', h1.fontSize);
+    testing.expectEqual('700', h1.fontWeight);
+
+    const pre = getComputedStyle(document.getElementById('prefmt'));
+    testing.expectEqual('monospace', pre.fontFamily);
+    testing.expectEqual('13px', pre.fontSize);
+    testing.expectEqual('preserve', pre.whiteSpaceCollapse);
+
+    const ul = getComputedStyle(document.getElementById('list'));
+    testing.expectEqual('40px', ul.paddingInlineStart);
+    testing.expectEqual('40px', ul.paddingLeft);
+
+    const hr = getComputedStyle(document.getElementById('rule'));
+    testing.expectEqual('rgb(128, 128, 128)', hr.borderTopColor);
+    testing.expectEqual('inset', hr.borderTopStyle);
+    testing.expectEqual('hidden', hr.overflowX);
+
+    const td = getComputedStyle(document.getElementById('cell'));
+    testing.expectEqual('1px', td.paddingTop);
+    testing.expectEqual('1px', td.paddingInlineStart);
+
+    const table = getComputedStyle(document.getElementById('tbl'));
+    testing.expectEqual('border-box', table.boxSizing);
+    testing.expectEqual('2px', table.webkitBorderHorizontalSpacing);
+}
+</script>
+
+<script id="a_declaration_still_outranks_the_ua_default">
+{
+    // The per-tag rows are a default, not an override: anything declared on the
+    // element still wins, and so does the flat table for a name the tag has no
+    // row for.
+    const p = document.getElementById('para');
+    p.style.marginTop = '3px';
+    testing.expectEqual('3px', getComputedStyle(p).marginTop);
+    testing.expectEqual('16px', getComputedStyle(p).marginBottom);
+    testing.expectEqual('0px', getComputedStyle(p).paddingTop);
+    p.removeAttribute('style');
+    testing.expectEqual('16px', getComputedStyle(p).marginTop);
+}
+</script>
+</body>

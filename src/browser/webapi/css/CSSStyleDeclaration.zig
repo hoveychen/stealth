@@ -2913,6 +2913,10 @@ test "WebApi: CSSStyleDeclaration computed initial values" {
     try testing.htmlRunner("css/computed_initial_values.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration computed per-tag values" {
+    try testing.htmlRunner("css/computed_per_tag_values.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration serialize" {
     try testing.htmlRunner("css/declaration_serialize.html", .{});
 }
