@@ -25,22 +25,30 @@
 // the engine hashed to the same value, which is a signal no browser produces.
 //
 // What is here: an RGBA8 (straight, *not* premultiplied — that is what
-// `getImageData` hands back) buffer plus axis-aligned rectangle fills with
-// source-over compositing. What is not here, and is not planned: paths,
-// transforms, gradients, image decoding, and glyph rasterisation. Text in
-// particular needs a font rasteriser to land any ink at all, so a text-based
-// canvas fingerprint still will not match Chrome's — see tools/fingerprint.
+// `getImageData` hands back) buffer, axis-aligned rectangle fills with
+// source-over compositing, and a scanline fill and stroke for the flattened
+// paths `path.zig` builds. What is still not here: gradients, image decoding,
+// and glyph rasterisation. Text in particular needs a font rasteriser to land
+// any ink at all, so a text-based canvas fingerprint still will not match
+// Chrome's — see tools/fingerprint.
 //
-// Coordinates are rounded to whole pixels rather than antialiased, so a
+// Rectangles are rounded to whole pixels rather than antialiased, so a
 // fractional rectangle edge lands one pixel off from Chrome's coverage-blended
-// edge.
+// edge. Paths are not: a path edge crosses pixels at arbitrary angles, and
+// snapping those would turn every curve into a staircase no browser produces.
+// They are sampled on a 4x4 grid per pixel instead, which costs 16 point-in-
+// polygon tests on canvases that are tens of pixels across.
 
 const std = @import("std");
 
 const color = @import("../../color.zig");
+const path_mod = @import("path.zig");
 
 const Allocator = std.mem.Allocator;
 const RGBA = color.RGBA;
+const Path = path_mod.Path;
+const Point = path_mod.Point;
+const FillRule = path_mod.FillRule;
 
 const Surface = @This();
 
@@ -215,6 +223,237 @@ pub fn strokeRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64,
     }
 }
 
+/// Samples per pixel along each axis. Sixteen samples resolve a sixteenth of
+/// a pixel of coverage, which is finer than the eighth Chrome's own edges
+/// quantise to in practice.
+const samples = 4;
+
+/// One flattened edge, kept in the order the winding test wants: `dir` is +1
+/// when the edge runs downwards and -1 when it runs up.
+const Edge = struct {
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    dir: f64,
+};
+
+/// Coverage of one sample point under `rule`, from the edges crossing the ray
+/// that runs to the right of it.
+fn covers(edges: []const Edge, x: f64, y: f64, rule: FillRule) bool {
+    var winding: i32 = 0;
+    for (edges) |e| {
+        // Half-open in y so a vertex shared by two edges is counted once.
+        if ((y >= e.y0) != (y >= e.y1)) {
+            const t = (y - e.y0) / (e.y1 - e.y0);
+            if (e.x0 + t * (e.x1 - e.x0) > x) {
+                winding += if (e.dir > 0) 1 else -1;
+            }
+        }
+    }
+    return switch (rule) {
+        .nonzero => winding != 0,
+        .evenodd => @rem(winding, 2) != 0,
+    };
+}
+
+/// Collects every subpath's segments as edges, closing each subpath — a fill
+/// closes implicitly whether or not `closePath` was called.
+fn edgesOf(arena: Allocator, p: *const Path) ?[]Edge {
+    var total: usize = 0;
+    for (p.subpaths.items) |sub| {
+        if (sub.points.items.len >= 2) total += sub.points.items.len;
+    }
+    if (total == 0) return null;
+
+    const edges = arena.alloc(Edge, total) catch return null;
+    var n: usize = 0;
+    for (p.subpaths.items) |sub| {
+        const pts = sub.points.items;
+        if (pts.len < 2) continue;
+        for (pts, 0..) |from, i| {
+            const to = pts[(i + 1) % pts.len];
+            if (from.y == to.y) continue;
+            edges[n] = if (from.y < to.y)
+                .{ .x0 = from.x, .y0 = from.y, .x1 = to.x, .y1 = to.y, .dir = 1 }
+            else
+                .{ .x0 = to.x, .y0 = to.y, .x1 = from.x, .y1 = from.y, .dir = -1 };
+            n += 1;
+        }
+    }
+    if (n == 0) return null;
+    return edges[0..n];
+}
+
+/// The pixel rectangle the edges can possibly touch, clipped to the canvas.
+fn edgeBounds(edges: []const Edge, width: u32, height: u32) ?Bounds {
+    var min_x: f64 = std.math.floatMax(f64);
+    var min_y: f64 = std.math.floatMax(f64);
+    var max_x: f64 = -std.math.floatMax(f64);
+    var max_y: f64 = -std.math.floatMax(f64);
+    for (edges) |e| {
+        min_x = @min(min_x, @min(e.x0, e.x1));
+        max_x = @max(max_x, @max(e.x0, e.x1));
+        min_y = @min(min_y, e.y0);
+        max_y = @max(max_y, e.y1);
+    }
+    if (!std.math.isFinite(min_x) or !std.math.isFinite(max_x) or
+        !std.math.isFinite(min_y) or !std.math.isFinite(max_y))
+    {
+        return null;
+    }
+    return Bounds.clip(@floor(min_x), @floor(min_y), @ceil(max_x) - @floor(min_x) + 1, @ceil(max_y) - @floor(min_y) + 1, width, height);
+}
+
+/// Fills `p` — already flattened and already in device space — with `paint`.
+/// `scratch` is only used for the edge list and may be a call-lifetime arena.
+pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, rule: FillRule, paint: RGBA, global_alpha: f64) void {
+    const edges = edgesOf(scratch, p) orelse return;
+    const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
+
+    const alpha = std.math.clamp(global_alpha, 0, 1) * paint.normalizedAlpha();
+    if (alpha <= 0) {
+        return;
+    }
+    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+
+    const step: f64 = 1.0 / @as(f64, samples);
+    const per_sample = step / 2;
+
+    var row = bounds.y0;
+    while (row < bounds.y1) : (row += 1) {
+        var col = bounds.x0;
+        while (col < bounds.x1) : (col += 1) {
+            var hits: u32 = 0;
+            var sy: usize = 0;
+            while (sy < samples) : (sy += 1) {
+                const y = @as(f64, @floatFromInt(row)) + @as(f64, @floatFromInt(sy)) * step + per_sample;
+                var sx: usize = 0;
+                while (sx < samples) : (sx += 1) {
+                    const x = @as(f64, @floatFromInt(col)) + @as(f64, @floatFromInt(sx)) * step + per_sample;
+                    if (covers(edges, x, y, rule)) hits += 1;
+                }
+            }
+            if (hits == 0) continue;
+            const coverage = @as(f64, @floatFromInt(hits)) / (samples * samples);
+            const at = (row * canvas_width + col) * 4;
+            blend(pixels[at..][0..4], paint, alpha * coverage);
+        }
+    }
+}
+
+/// Strokes `p` by filling, for each segment, the quad `line_width` across that
+/// the segment sweeps, plus a disc at every join. A round join everywhere is
+/// not what `lineJoin` says, but it is the shape a miter and a bevel both
+/// approach as the segments get short — and a flattened curve's segments are
+/// short by construction.
+pub fn strokePath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, line_width: f64, paint: RGBA, global_alpha: f64) void {
+    if (!std.math.isFinite(line_width) or line_width <= 0) {
+        return;
+    }
+    const half = line_width / 2;
+
+    // One outline holding every quad and disc, filled in one pass under the
+    // non-zero rule so the overlaps between them do not double-composite.
+    var outline: Path = .{};
+    for (p.subpaths.items) |sub| {
+        const pts = sub.points.items;
+        if (pts.len == 0) continue;
+        if (pts.len == 1) {
+            disc(scratch, &outline, pts[0], half);
+            continue;
+        }
+        const last = if (sub.closed) pts.len else pts.len - 1;
+        for (0..last) |i| {
+            const from = pts[i];
+            const to = pts[(i + 1) % pts.len];
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const len = @sqrt(dx * dx + dy * dy);
+            if (len <= 0 or !std.math.isFinite(len)) continue;
+            const nx = -dy / len * half;
+            const ny = dx / len * half;
+            quad(scratch, &outline, .{
+                .{ .x = from.x + nx, .y = from.y + ny },
+                .{ .x = to.x + nx, .y = to.y + ny },
+                .{ .x = to.x - nx, .y = to.y - ny },
+                .{ .x = from.x - nx, .y = from.y - ny },
+            });
+        }
+        // Joins, and the two ends when the subpath is open. Chrome's default
+        // cap is butt, so the ends themselves get nothing.
+        const joins_from: usize = if (sub.closed) 0 else 1;
+        const joins_to: usize = if (sub.closed) pts.len else pts.len - 1;
+        for (joins_from..joins_to) |i| {
+            disc(scratch, &outline, pts[i], half);
+        }
+    }
+
+    self.fillPath(scratch, canvas_width, canvas_height, &outline, .nonzero, paint, global_alpha);
+}
+
+/// Erases the path's coverage, the way `clearRect` erases a rectangle. Only
+/// reached for a rotated or skewed `clearRect`; the axis-aligned case has an
+/// exact implementation of its own.
+pub fn clearPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path) void {
+    const edges = edgesOf(scratch, p) orelse return;
+    const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
+    const pixels = self.peekMut(canvas_width, canvas_height) orelse return;
+
+    const step: f64 = 1.0 / @as(f64, samples);
+    const per_sample = step / 2;
+
+    var row = bounds.y0;
+    while (row < bounds.y1) : (row += 1) {
+        var col = bounds.x0;
+        while (col < bounds.x1) : (col += 1) {
+            var hits: u32 = 0;
+            var sy: usize = 0;
+            while (sy < samples) : (sy += 1) {
+                const y = @as(f64, @floatFromInt(row)) + @as(f64, @floatFromInt(sy)) * step + per_sample;
+                var sx: usize = 0;
+                while (sx < samples) : (sx += 1) {
+                    const x = @as(f64, @floatFromInt(col)) + @as(f64, @floatFromInt(sx)) * step + per_sample;
+                    if (covers(edges, x, y, .nonzero)) hits += 1;
+                }
+            }
+            if (hits == 0) continue;
+            const at = (row * canvas_width + col) * 4;
+            if (hits == samples * samples) {
+                @memset(pixels[at..][0..4], 0);
+                continue;
+            }
+            const keep = 1 - @as(f64, @floatFromInt(hits)) / (samples * samples);
+            const alpha: f64 = @floatFromInt(pixels[at + 3]);
+            pixels[at + 3] = @intFromFloat(std.math.clamp(@round(alpha * keep), 0, 255));
+        }
+    }
+}
+
+fn quad(arena: Allocator, out: *Path, corners: [4]Point) void {
+    out.subpaths.append(arena, .{}) catch return;
+    const sub = &out.subpaths.items[out.subpaths.items.len - 1];
+    for (corners) |c| {
+        sub.points.append(arena, c) catch return;
+    }
+    sub.closed = true;
+}
+
+fn disc(arena: Allocator, out: *Path, at: Point, radius: f64) void {
+    if (radius <= 0) return;
+    const steps = 16;
+    out.subpaths.append(arena, .{}) catch return;
+    const sub = &out.subpaths.items[out.subpaths.items.len - 1];
+    for (0..steps) |i| {
+        const angle = std.math.tau * @as(f64, @floatFromInt(i)) / steps;
+        sub.points.append(arena, .{
+            .x = at.x + radius * @cos(angle),
+            .y = at.y + radius * @sin(angle),
+        }) catch return;
+    }
+    sub.closed = true;
+}
+
 /// Copies a `sw` x `sh` window starting at (`sx`, `sy`) into `out`, which must
 /// be `sw * sh * 4` long and already zeroed. The window may sit partly (or
 /// entirely) outside the canvas; those pixels stay transparent black.
@@ -305,4 +544,50 @@ test "raster: readPixels windows out of bounds" {
     try testing.expectEqualSlices(u8, &.{ 0, 255, 0, 255 }, out[0..4]);
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, out[4..8]);
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, out[8..12]);
+}
+
+test "raster: a filled path is ink, and the winding rule decides the hole" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var surface = Surface{ .arena = alloc };
+    defer surface.reset();
+
+    // Two concentric circles wound the same way on a 16x16 canvas.
+    var p: Path = .{};
+    const ctm = path_mod.Transform.identity;
+    try p.arc(alloc, 8, 8, 7, 0, std.math.tau, false, ctm);
+    try p.arc(alloc, 8, 8, 3, 0, std.math.tau, false, ctm);
+
+    surface.fillPath(alloc, 16, 16, &p, .evenodd, RGBA.Named.red, 1);
+    // The middle is inside both, so even-odd leaves it alone.
+    try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[(8 * 16 + 8) * 4 ..][0..4]);
+    // A point between the two radii is inside exactly one.
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[(3 * 16 + 8) * 4 ..][0..4]);
+
+    // The same path under the non-zero rule has no hole.
+    surface.reset();
+    surface.fillPath(alloc, 16, 16, &p, .nonzero, RGBA.Named.red, 1);
+    try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[(8 * 16 + 8) * 4 ..][0..4]);
+}
+
+test "raster: a stroke lands on both sides of its path" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    var surface = Surface{ .arena = alloc };
+    defer surface.reset();
+
+    var p: Path = .{};
+    const ctm = path_mod.Transform.identity;
+    try p.moveTo(alloc, 0, 4, ctm);
+    try p.lineTo(alloc, 8, 4, ctm);
+
+    // Two wide, centred on y=4: rows 3 and 4 are covered whole, row 5 is not.
+    surface.strokePath(alloc, 8, 8, &p, 2, RGBA.Named.lime, 1);
+    try testing.expectEqualSlices(u8, &.{ 0, 255, 0, 255 }, surface.pixels[(3 * 8 + 4) * 4 ..][0..4]);
+    try testing.expectEqualSlices(u8, &.{ 0, 255, 0, 255 }, surface.pixels[(4 * 8 + 4) * 4 ..][0..4]);
+    try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[(6 * 8 + 4) * 4 ..][0..4]);
 }
