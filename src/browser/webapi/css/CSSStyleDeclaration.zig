@@ -2869,6 +2869,10 @@ test "WebApi: CSSStyleDeclaration surface" {
     try testing.htmlRunner("css/declaration_surface.html", .{});
 }
 
+test "WebApi: CSSStyleDeclaration computed initial values" {
+    try testing.htmlRunner("css/computed_initial_values.html", .{});
+}
+
 test "WebApi: CSSStyleDeclaration serialize" {
     try testing.htmlRunner("css/declaration_serialize.html", .{});
 }

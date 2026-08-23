@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+  What a computed style answers for a longhand nobody declared.
+
+  The Cloudflare widget dumps getComputedStyle over every enumerable key and
+  stringifies the result (README, "Reading the same two files record by
+  record"). Chrome filled 702 of 736 values there; this engine filled 16 and
+  answered "" to the rest, which is a value Chrome never reports for a
+  supported longhand -- so each of the other 720 was a tell on its own.
+
+  The table these read from is webapi/css/chrome_initial_values.zig, measured by
+  tools/fingerprint/dump-css-initial-values.mjs off a light-scheme Chrome.
+-->
+
+<div id="bare"></div>
+
+<script id="computed_style_answers_every_longhand">
+{
+    const cs = getComputedStyle(document.getElementById('bare'));
+
+    // The six longhands that resolve against the box are answered by the
+    // layout path rather than the table, so they are non-empty too and the
+    // count below covers all 475.
+    let empty = [];
+    for (let i = 0; i < cs.length; i++) {
+        if (cs.getPropertyValue(cs[i]) === '') empty.push(cs[i]);
+    }
+    testing.expectEqual('', empty.join(','));
+}
+</script>
+
+<script id="computed_style_initial_values_match_chrome">
+{
+    const cs = getComputedStyle(document.getElementById('bare'));
+
+    // A spread across the table: an inherited keyword, a number, a length, a
+    // colour, a compound value, and a -webkit- alias. All measured on Chrome
+    // 151 for a div that declares nothing.
+    testing.expectEqual('horizontal-tb', cs.writingMode);
+    testing.expectEqual('2', cs.widows);
+    testing.expectEqual('0px', cs.wordSpacing);
+    testing.expectEqual('auto', cs.willChange);
+    testing.expectEqual('16px', cs.fontSize);
+    testing.expectEqual('400', cs.fontWeight);
+    testing.expectEqual('normal', cs.fontStyle);
+    testing.expectEqual('1', cs.zoom);
+    testing.expectEqual('rgb(0, 0, 0)', cs.caretColor);
+    testing.expectEqual('none', cs.transform);
+    testing.expectEqual('0s', cs.animationDuration);
+    testing.expectEqual('ltr', cs.direction);
+    testing.expectEqual('start', cs.textAlign);
+    testing.expectEqual('none', cs.webkitBoxReflect);
+
+    // Both spellings normalise to the same entry.
+    testing.expectEqual('horizontal-tb', cs.getPropertyValue('writing-mode'));
+    testing.expectEqual(cs.fontSize, cs.getPropertyValue('font-size'));
+}
+</script>
+
+<script id="computed_style_keeps_the_box_dependent_answers">
+{
+    const cs = getComputedStyle(document.getElementById('bare'));
+
+    // The stored table deliberately holds no entry for these six: they resolve
+    // against the box, so a stored number would be wrong on every element of a
+    // different size. The layout path answers them, and Chrome's relations
+    // between them hold -- the logical sizes are the physical ones in a
+    // horizontal-tb box, and both origins sit at the box's centre.
+    testing.expectTrue(cs.width.endsWith('px'));
+    testing.expectTrue(cs.height.endsWith('px'));
+    testing.expectEqual(cs.width, cs.inlineSize);
+    testing.expectEqual(cs.height, cs.blockSize);
+
+    const half = (v) => (parseFloat(v) / 2) + 'px';
+    testing.expectEqual(half(cs.width) + ' ' + half(cs.height), cs.transformOrigin);
+    testing.expectEqual(half(cs.width) + ' ' + half(cs.height), cs.perspectiveOrigin);
+}
+</script>
+
+<script id="computed_style_declared_values_still_win">
+{
+    // The table is a fallback, not an override: anything declared reads back as
+    // declared, and the initial value only fills the gaps around it.
+    const el = document.createElement('div');
+    el.style.fontStyle = 'italic';
+    el.style.writingMode = 'vertical-rl';
+    document.body.appendChild(el);
+    const cs = getComputedStyle(el);
+    testing.expectEqual('italic', cs.fontStyle);
+    testing.expectEqual('vertical-rl', cs.writingMode);
+    testing.expectEqual('400', cs.fontWeight);
+    testing.expectEqual('2', cs.widows);
+    el.remove();
+}
+</script>
+
+</body>
+</html>
