@@ -11376,3 +11376,82 @@ navigator.userAgentData` is `false` there and `true` here, and `.brands` is
 
 One `===` reads it, with no iframe and no realm involved. Out of scope for this
 plan — noting it where it was measured.
+
+## The other ten indexed collections (2026-08-23)
+
+`classList` was fixed first because the Turnstile widget stringifies it, and
+the commit that fixed it named the ten collections with the same hole and left
+them for a plan of their own. This is that plan. An indexed property getter
+makes the indices *own* properties in Web IDL; an implementation that answers
+`list[0]` but registers no enumerator leaves them reachable and invisible, so
+`Object.getOwnPropertyNames(list)` is empty and `JSON.stringify(list)` reads
+`{}`.
+
+`probes/expr-indexed-own-names.js` grew four readings for this (the keyframes
+rule, a radio node list, a form's controls collection, `document.all`, plus
+`document.styleSheets` re-read once it has entries, and `window`'s own numeric
+names with the descriptor behind index 0). Twenty readings against Chrome 151:
+
+| | before | after |
+|---|---|---|
+| readings identical to Chrome | 7 | **13** |
+| own-name lists identical to Chrome | 9 | **16** |
+
+Ten enumerators, in three commits: CSSRuleList, StyleSheetList, MediaList and
+CSSKeyframesRule; RadioNodeList, HTMLFormControlsCollection,
+HTMLOptionsCollection, HTMLAllCollection and DOMStringList; and `window`
+itself. The loop is copied per JsApi rather than shared, because the fourteen
+collections that already carried an enumerator each carry their own copy.
+
+`window` needed more than the enumerator, and every flag below is measured, not
+inferred:
+
+| reading | before | after | Chrome |
+|---|---|---|---|
+| `getOwnPropertyNames`, numeric | — | `0 1` | `0 1` |
+| `Object.keys`, numeric | — | `0 1` | `0 1` |
+| descriptor of `0` | `{e:false, c:true, w:true}` | `{e:true, c:true, w:false}` | `{e:true, c:true, w:false}` |
+| `window[0] = 5`, strict | silently allowed | `TypeError` | `TypeError` |
+| `delete window[0]` | `true` | `false` | `false` |
+| `window[99] = x` then read | dropped | dropped | dropped |
+
+The indices are *enumerable*, which is the one place they differ from a
+collection's named entries: `HTMLCollection` is
+`[LegacyUnenumerableNamedProperties]` and `window`'s frame indices are not.
+`window[99]` is refused in all three columns because `window`'s
+[[DefineOwnProperty]] rejects every array index, in range or not — that one was
+measured on Chrome before it was pinned, and it happened to already hold here.
+
+Pins: `src/browser/tests/css/indexed_own_names.html`,
+`collections/indexed_own_names.html`, `frames/window_frame_indices.html`.
+Readings: `results/probes/expr-indexed-own-names.{chrome,lightpanda,lightpanda-before}.json`.
+`antibot-sweep --only cf-scrapingcourse` after the change: `cf-challenge`, doc
+`403->200`, 47 nodes, "Just a moment…" — unchanged.
+
+### What the sweep still reads differently, and none of it is an index
+
+Seven of the twenty readings still differ, and the four that belong to this
+family are all about *named* properties rather than indices:
+
+- **`form.elements` and `select.options`** own their supported names in Chrome
+  (`0 1 a b`) and *enumerably* — unlike `HTMLCollection`, whose named entries
+  are own but skipped by `Object.keys`. Neither is wired up here: only
+  `HTMLCollection` carries the `getNames`/`queryByName`/`describeByName` trio.
+- **`document.all`** owns its ids the `HTMLCollection` way (own, not
+  enumerable). Same missing machinery.
+- **`element.attributes`** is the mirror image: our named entries are own *and*
+  enumerable, where Chrome's `class`/`id` are own and not. So
+  `JSON.stringify(el.attributes)` reads `{"0":{},"1":{},"class":{},"id":{}}`
+  here against Chrome's `{"0":{},"1":{}}` — a divergence in the direction
+  nobody added on purpose.
+- **`window.fa`**, a frame reached by its name, is `undefined` here. `window`
+  has no named-property handler at all, and adding one to the global object is
+  not a line in this plan.
+
+The remaining three are not this family: `getClientRects` is layout numbers,
+`inlineStyle` is the CSS property list, and `document.all` counts 20 elements
+here against Chrome's 21 on the same page. One more thing fell out of the
+window probe and is worth writing down where it was measured: removing an
+`<iframe>` element leaves `window.length` at its old value here and drops it
+immediately in Chrome, so the frame is not detached from `child_frames` when
+its element goes.
