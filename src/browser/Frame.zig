@@ -486,7 +486,9 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._proto = undefined,
         ._document = self.document,
         ._location = undefined,
-        ._performance = .init(),
+        // Born not-isolated, as `cross_origin_isolated` is; the clamp follows
+        // it once a document commits.
+        ._performance = .init(Performance.clock_resolution_micros),
         ._screen = screen,
         ._visual_viewport = visual_viewport,
         // Not shared with the parent frame the way screen and visualViewport
@@ -814,7 +816,8 @@ pub fn commitSecureContext(self: *Frame) void {
 // The answer also decides whether the context's global carries
 // SharedArrayBuffer, which is gated on isolation in a real browser. Unlike the
 // [SecureContext] gate, that one goes both ways -- see
-// Context.hideSharedArrayBuffer.
+// Context.hideSharedArrayBuffer. And it decides how coarse `performance.now()`
+// is, the second thing a page can read the isolation bit off of.
 pub fn commitCrossOriginIsolated(self: *Frame, coep: []const u8, coop: []const u8) void {
     self.cross_origin_isolated = self.computeCrossOriginIsolated(coep, coop);
     if (self.cross_origin_isolated) {
@@ -822,6 +825,10 @@ pub fn commitCrossOriginIsolated(self: *Frame, coep: []const u8, coop: []const u
     } else {
         self.js.hideSharedArrayBuffer();
     }
+    self.window._performance.setClockResolution(if (self.cross_origin_isolated)
+        Performance.clock_resolution_isolated_micros
+    else
+        Performance.clock_resolution_micros);
 }
 
 fn computeCrossOriginIsolated(self: *const Frame, coep: []const u8, coop: []const u8) bool {

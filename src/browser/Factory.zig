@@ -277,7 +277,10 @@ fn eventInit(arena: *lp.Arena, typ: String, value: anytype) !Event {
     // Round to 2ms for privacy (browsers do this)
     // Same (already coarsened) clock as the performance time origin, so the
     // timeStamp getter can report it relative to that origin.
-    const time_stamp = @import("webapi/Performance.zig").highResTimestamp();
+    // The coarse clamp regardless of realm isolation, for the reason in
+    // Event.initWithTrusted.
+    const Performance = @import("webapi/Performance.zig");
+    const time_stamp = Performance.highResTimestamp(Performance.clock_resolution_micros);
 
     return .{
         ._rc = .{},

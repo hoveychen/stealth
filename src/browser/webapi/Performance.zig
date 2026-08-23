@@ -36,6 +36,10 @@ const Performance = @This();
 
 _time_origin: u64,
 
+// What `now()` rounds to. One of the two clock_resolution_* constants below,
+// per this realm's cross-origin isolation.
+_clock_resolution_micros: u64,
+
 // Wall-clock epoch milliseconds at the same instant as _time_origin. The
 // monotonic clock above is boot-relative, so it can't be turned into a date
 // after the fact; chrome.csi() and chrome.loadTimes() both report the
@@ -90,7 +94,8 @@ pub const NavPhase = enum(u8) {
     complete,
 };
 
-/// How coarse the clock is, in microseconds.
+/// How coarse the clock is, in microseconds, outside a cross-origin isolated
+/// realm.
 ///
 /// Every browser clamps this, and which number it clamps to is itself a
 /// fingerprint -- the clamp is the resolution a timing attack has to work
@@ -101,21 +106,36 @@ pub const NavPhase = enum(u8) {
 /// number: finer than the browser this engine claims to be, and finer is not
 /// safer here -- it hands a timing attack twenty times the resolution while
 /// naming a browser that would not have given it.
-const clock_resolution_micros = 100;
+pub const clock_resolution_micros = 100;
+
+/// And inside one. Cross-origin isolation is the condition Chrome trades the
+/// coarse clock for: a realm that cannot be shared with an untrusted origin
+/// gets 5μs, the same number `SharedArrayBuffer` is gated on. Measured on the
+/// Cloudflare interstitial, which carries COOP+COEP -- the reference reads
+/// 0.004999995 there and 0.1 on the ordinary page that replaces it
+/// (`tools/fingerprint/results/p4-oracle.json`).
+pub const clock_resolution_isolated_micros = 5;
 
 /// Get high-resolution timestamp in microseconds, clamped to the resolution
-/// the claimed browser reports.
-pub fn highResTimestamp() u64 {
+/// the claimed browser reports for the realm asking.
+pub fn highResTimestamp(resolution_micros: u64) u64 {
     const micros = lp.datetime.microTimestamp(.boot);
-    const half = clock_resolution_micros / 2;
-    return @divTrunc(micros + half, clock_resolution_micros) * clock_resolution_micros;
+    const half = resolution_micros / 2;
+    return @divTrunc(micros + half, resolution_micros) * resolution_micros;
 }
 
-pub fn init() Performance {
+pub fn init(resolution_micros: u64) Performance {
     return .{
-        ._time_origin = highResTimestamp(),
+        ._clock_resolution_micros = resolution_micros,
+        ._time_origin = highResTimestamp(resolution_micros),
         ._epoch_origin_ms = lp.datetime.DateTime.now().unix(.milliseconds),
     };
+}
+
+/// Follows the realm's cross-origin isolation, which is settled per committed
+/// document rather than at birth -- see Frame.commitCrossOriginIsolated.
+pub fn setClockResolution(self: *Performance, resolution_micros: u64) void {
+    self._clock_resolution_micros = resolution_micros;
 }
 
 pub fn getTiming(self: *Performance) *PerformanceTiming {
@@ -123,7 +143,7 @@ pub fn getTiming(self: *Performance) *PerformanceTiming {
 }
 
 pub fn now(self: *const Performance) f64 {
-    const current = highResTimestamp();
+    const current = highResTimestamp(self._clock_resolution_micros);
     const elapsed = current - self._time_origin;
     // Return as milliseconds with microsecond precision
     return @as(f64, @floatFromInt(elapsed)) / 1000.0;

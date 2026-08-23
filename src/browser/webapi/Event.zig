@@ -199,7 +199,13 @@ fn initWithTrusted(arena: *lp.Arena, typ: String, opts_: ?Options, comptime trus
 
     // Same (already coarsened) clock as the performance time origin, so the
     // timeStamp getter can report it relative to that origin.
-    const time_stamp = @import("Performance.zig").highResTimestamp();
+    //
+    // Always the coarse clamp, even in a cross-origin isolated realm where
+    // `performance.now()` is finer: an Event is built from an arena and has no
+    // realm to ask. Chrome would give both the fine one there. Nothing measured
+    // reads a timeStamp's granularity, so this stays until something does.
+    const Performance = @import("Performance.zig");
+    const time_stamp = Performance.highResTimestamp(Performance.clock_resolution_micros);
 
     const event = try arena.create(Event);
     event.* = .{
