@@ -391,21 +391,35 @@ test "WebApi: recorded canonical audio renders" {
     const chrome_audio = @import("chrome_audio.zig");
 
     const tail = struct {
-        fn sum(platform: chrome_audio.Platform) f64 {
+        fn sum(graph: chrome_audio.Graph, platform: chrome_audio.Platform) f64 {
             var total: f64 = 0;
-            for (chrome_audio.samples(platform)[4500..5000]) |sample| {
+            for (chrome_audio.samples(graph, platform)[4500..5000]) |sample| {
                 total += @abs(@as(f64, sample));
             }
             return total;
         }
     };
 
-    try std.testing.expectEqual(@as(f64, 124.04347624466754), tail.sum(.macos));
-    try std.testing.expectEqual(@as(f64, 124.04347527516074), tail.sum(.linux));
+    try std.testing.expectEqual(@as(f64, 124.04347624466754), tail.sum(.fingerprintjs, .macos));
+    try std.testing.expectEqual(@as(f64, 124.04347527516074), tail.sum(.fingerprintjs, .linux));
+    try std.testing.expectEqual(@as(f64, 112.4458671315806), tail.sum(.turnstile, .macos));
+    try std.testing.expectEqual(@as(f64, 112.46367831656244), tail.sum(.turnstile, .linux));
 
-    // The compressor's 6 ms pre-delay, measured identical on both platforms.
-    for (chrome_audio.samples(.macos)[0..265]) |sample| {
-        try std.testing.expectEqual(@as(f32, 0), sample);
+    // The compressor's 6 ms pre-delay, measured identical on both platforms and
+    // for both graphs -- they share a sample rate, and that is all it depends
+    // on.
+    for (std.enums.values(chrome_audio.Graph)) |graph| {
+        for (chrome_audio.samples(graph, .macos)[0..265]) |sample| {
+            try std.testing.expectEqual(@as(f32, 0), sample);
+        }
+        try std.testing.expect(chrome_audio.samples(graph, .macos)[265] != 0);
     }
-    try std.testing.expect(chrome_audio.samples(.macos)[265] != 0);
+
+    // And the two are not each other: a stored table per graph is only worth
+    // having if the graphs render differently.
+    try std.testing.expect(!std.mem.eql(
+        f32,
+        chrome_audio.samples(.fingerprintjs, .macos),
+        chrome_audio.samples(.turnstile, .macos),
+    ));
 }
