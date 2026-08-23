@@ -751,12 +751,12 @@ pub const JsApi = struct {
     pub const onaddstream = bridge.accessor(handlerProperty(RTCPeerConnection, .onaddstream).get, handlerProperty(RTCPeerConnection, .onaddstream).set, .{});
     pub const onremovestream = bridge.accessor(handlerProperty(RTCPeerConnection, .onremovestream).get, handlerProperty(RTCPeerConnection, .onremovestream).set, .{});
     pub const addIceCandidate = bridge.function(RTCPeerConnection.addIceCandidate, .{});
-    pub const addStream = bridge.function(RTCPeerConnection.addStream, .{});
-    pub const addTrack = bridge.function(RTCPeerConnection.addTrack, .{});
-    pub const addTransceiver = bridge.function(RTCPeerConnection.addTransceiver, .{});
+    pub const addStream = bridge.function(RTCPeerConnection.addStream, .{ .arity = 1 });
+    pub const addTrack = bridge.function(RTCPeerConnection.addTrack, .{ .arity = 1 });
+    pub const addTransceiver = bridge.function(RTCPeerConnection.addTransceiver, .{ .arity = 1 });
     pub const close = bridge.function(RTCPeerConnection.close, .{});
     pub const createAnswer = bridge.function(RTCPeerConnection.createAnswer, .{});
-    pub const createDTMFSender = bridge.function(RTCPeerConnection.createDTMFSender, .{});
+    pub const createDTMFSender = bridge.function(RTCPeerConnection.createDTMFSender, .{ .arity = 1 });
     pub const createDataChannel = bridge.function(RTCPeerConnection.createDataChannel, .{});
     pub const createOffer = bridge.function(RTCPeerConnection.createOffer, .{});
     pub const getConfiguration = bridge.function(RTCPeerConnection.getConfiguration, .{});
@@ -766,12 +766,12 @@ pub const JsApi = struct {
     pub const getSenders = bridge.function(RTCPeerConnection.getSenders, .{});
     pub const getStats = bridge.function(RTCPeerConnection.getStats, .{});
     pub const getTransceivers = bridge.function(RTCPeerConnection.getTransceivers, .{});
-    pub const removeStream = bridge.function(RTCPeerConnection.removeStream, .{});
-    pub const removeTrack = bridge.function(RTCPeerConnection.removeTrack, .{});
+    pub const removeStream = bridge.function(RTCPeerConnection.removeStream, .{ .arity = 1 });
+    pub const removeTrack = bridge.function(RTCPeerConnection.removeTrack, .{ .arity = 1 });
     pub const restartIce = bridge.function(RTCPeerConnection.restartIce, .{});
     pub const setConfiguration = bridge.function(RTCPeerConnection.setConfiguration, .{});
     pub const setLocalDescription = bridge.function(RTCPeerConnection.setLocalDescription, .{});
-    pub const setRemoteDescription = bridge.function(RTCPeerConnection.setRemoteDescription, .{});
+    pub const setRemoteDescription = bridge.function(RTCPeerConnection.setRemoteDescription, .{ .arity = 1 });
 };
 
 const testing = @import("../../../testing.zig");

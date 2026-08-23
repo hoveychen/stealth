@@ -165,8 +165,8 @@ pub const RTCRtpSender = struct {
         pub const createEncodedStreams = bridge.function(RTCRtpSender.createEncodedStreams, .{});
         pub const getParameters = bridge.function(RTCRtpSender.getParameters, .{});
         pub const getStats = bridge.function(RTCRtpSender.getStats, .{});
-        pub const replaceTrack = bridge.function(RTCRtpSender.replaceTrack, .{});
-        pub const setParameters = bridge.function(RTCRtpSender.setParameters, .{});
+        pub const replaceTrack = bridge.function(RTCRtpSender.replaceTrack, .{ .arity = 1 });
+        pub const setParameters = bridge.function(RTCRtpSender.setParameters, .{ .arity = 1 });
         pub const setStreams = bridge.function(RTCRtpSender.setStreams, .{});
         pub const transform = bridge.accessor(RTCRtpSender.getTransform, RTCRtpSender.setTransform, .{});
     };
@@ -322,8 +322,8 @@ pub const RTCRtpTransceiver = struct {
         pub const currentDirection = bridge.accessor(RTCRtpTransceiver.getCurrentDirection, null, .{});
         pub const getHeaderExtensionsToNegotiate = bridge.function(RTCRtpTransceiver.getHeaderExtensionsToNegotiate, .{});
         pub const getNegotiatedHeaderExtensions = bridge.function(RTCRtpTransceiver.getNegotiatedHeaderExtensions, .{});
-        pub const setCodecPreferences = bridge.function(RTCRtpTransceiver.setCodecPreferences, .{});
-        pub const setHeaderExtensionsToNegotiate = bridge.function(RTCRtpTransceiver.setHeaderExtensionsToNegotiate, .{});
+        pub const setCodecPreferences = bridge.function(RTCRtpTransceiver.setCodecPreferences, .{ .arity = 1 });
+        pub const setHeaderExtensionsToNegotiate = bridge.function(RTCRtpTransceiver.setHeaderExtensionsToNegotiate, .{ .arity = 1 });
         pub const stop = bridge.function(RTCRtpTransceiver.stop, .{});
     };
 };
