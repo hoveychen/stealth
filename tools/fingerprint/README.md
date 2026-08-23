@@ -10735,3 +10735,100 @@ the challenge parameters it is handed over `postMessage`. Both are readable with
 the instruments already in this directory — `fo-plaintext.mjs` records the
 trampoline conversation, and the widget's own subtree can be serialised from the
 document realm the recorder is already installed in.
+
+## The assembly step, and what it is not (P3 again, 2026-08-23)
+
+The previous attempt wrapped the values and found six differences, fixed five,
+and did not move the length. This one wrapped the step after the values: the
+one that turns what was collected into a string.
+
+`fo-join.mjs` is that instrument. Its lead came out of `fo-plaintext.mjs`'s own
+records: every block of the widget's later rounds arrives pipe-joined —
+`"0|0|0|..."`, `"@keyframes spin { ... }|@keyframes scale..."` — which is
+`Array.prototype.join`, a funnel nobody had wrapped. So it wraps `join` (keyed
+by separator), `Array.prototype.toString`, `String.fromCharCode`,
+`encodeURIComponent`, `btoa`, `JSON.stringify` and `XMLSerializer`, and it adds
+a `message` listener, which answers the other half of the README's open lead —
+the challenge parameters the parent hands the widget — in the same run. Records
+stop at each realm's first `XMLHttpRequest.send`, because only what was built
+before the send can be in the body it carried.
+
+The lead was right about the mechanism. `join("")` in the widget realm returns
+**the round-1 ciphertext exactly**: 4 855 characters here, 4 716 on the oracle,
+byte-for-byte the body of the send that follows it. The payload is assembled by
+joining an array of encoded characters, and that is the last place it exists as
+one object.
+
+Honesty check, same as its two predecessors: the oracle cleared with the
+wrappers in — "You bypassed the Cloudflare challenge! :D".
+
+### Both arms build the same things, in the same order
+
+| # | here | oracle |
+|---|---|---|
+| 1 | `split<-` 15 469 — the program's `;` string table | `split<-` 16 359 |
+| 2 | `charCodeAt<-` 318 | `charCodeAt<-` 318 (identical) |
+| 3 | `message` 67 — `{"event":"init",...}` | same |
+| 4 | `message` 3 297 — the `managed` parameters | `message` 4 378 |
+| 5 | — | `split<-` 629 — a permutation of 0..184 |
+| 6 | `join("")` ×3 — the three widget link labels | same |
+| 7 | `split<-` 4 542 — the Cloudflare logo path | same |
+| 8 | `message` 1 439 — `cs`, a list of captured stacks | `message` 1 441 |
+| 9 | `charCodeAt<-` 5 206 | **identical string** |
+| 10 | `charCodeAt<-` 1 663 / 575 — cf tokens | 1 514 / 575 |
+| 11 | `join("")` **4 855** = the send | `join("")` **4 716** = the send |
+
+Two negatives worth keeping, because both were live suspects:
+
+- **The inbound parameters are not the surplus.** The `cs` message — the one
+  that carries `Error` stacks captured in the page realm, and the obvious way a
+  stack difference could reach a payload it is not thrown in — is 1 439 bytes
+  here against 1 441 there. It corroborates `expr-error-stack-shape.js` from the
+  other side rather than contradicting it.
+- **The one parameter that does differ pushes the wrong way.**
+  `apiJsResourceTiming` is a 1 035-byte entry on the oracle and `undefined`
+  here, so the oracle's inbound is 1 081 bytes *longer* while its payload is
+  139 shorter. Whatever the widget does with it, it is not echoing it.
+
+The string table and the two cf tokens differ in length between arms, but those
+are per-session server-issued values: the tables are made of random five-character
+identifiers (`shiZs;NEQqF;hrYYt4…` against `OFPbR;plKjc;ySGNg…`), so a run-to-run
+difference there is noise, not a tell. The 629-character permutation the oracle
+splits and we never do sits inside that same per-session table, so it cannot be
+attributed either.
+
+So the assembly step is understood and the surplus is still not attributed. Four
+routes are now closed by measurement — property values, enumeration, stack
+strings, and now the assembly funnels and the inbound parameters. The plaintext
+itself is reachable by no funnel: it is handed to nothing and read by nothing
+until it is already encoded.
+
+## What the run did find: the resource timing buffer never fills
+
+`apiJsResourceTiming` arriving as `undefined` is not a missing field. It is an
+empty buffer, and it is an engine-level gap rather than a challenge-specific one.
+
+`probes/expr-resource-timing.js` asks both engines directly — fetch something,
+then look:
+
+| | here | Chrome |
+|---|---|---|
+| `typeof PerformanceResourceTiming` | `function` | `function` |
+| `"resource"` in `supportedEntryTypes` | **yes** | yes |
+| `getEntriesByType('resource')` after a `fetch` | **0** | 1 |
+| `performance.getEntries()` entry types | `navigation`, `visibility-state`, `paint`, `paint` | …, `resource` |
+
+`Performance.zig` says so itself, at the `onresourcetimingbufferfull` handler:
+"Nothing fires it — the resource buffer never fills because nothing fills it."
+Every subresource a page loads — every script, stylesheet, image, XHR and
+`fetch` — leaves no entry behind.
+
+That surface contradicts itself, which is the part that matters. Advertising
+`resource` in `supportedEntryTypes` and then answering every query with an empty
+list is not a browser with a feature missing; it is a browser whose own
+self-description is wrong. And it is read on the station: Cloudflare's api.js
+reads the resource timing of *itself* and the page posts it to the widget, which
+is how the gap turned up here at all.
+
+That is `perf-resource-timing`, and it is worth more than the 139 bytes this
+plan was chasing.
