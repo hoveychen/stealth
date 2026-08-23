@@ -1207,12 +1207,14 @@
 
 <script id=audio_canonical_render type=module>
 {
-  // The one graph that gets rendered rather than left silent: a 10 kHz triangle
-  // through a compressor with fingerprintjs's five settings, which is what every
-  // clone of that library builds. It cannot be computed (G10) so it is recorded
-  // per platform (G21, chrome_audio.zig), and the recording is keyed to what the
-  // engine *claims* to be — so the buffer and navigator.platform have to agree,
-  // which is what this test pins.
+  // The graphs that get rendered rather than left silent, both of them a
+  // triangle through a compressor: fingerprintjs's, which every clone of that
+  // library builds, and the Cloudflare Turnstile widget's, which is the same
+  // shape with three of the numbers moved (traced off the live station by
+  // tools/fingerprint/audio-graph-trace.mjs). Neither can be computed (G10) so
+  // both are recorded per platform (G21, chrome_audio.zig), and the recordings
+  // are keyed to what the engine *claims* to be — so the buffer and
+  // navigator.platform have to agree, which is what this test pins.
   const state = await testing.async();
 
   // fingerprintjs reads exactly this window and sums the magnitudes.
@@ -1221,28 +1223,33 @@
     for (let i = 4500; i < 5000; i++) sum += Math.abs(data[i]);
     return sum;
   };
-  // The two platforms with a recorded render. Anywhere else there is nothing to
+
+  const GRAPHS = {
+    fingerprintjs: { frequency: 10000, threshold: -50, knee: 40, ratio: 12, attack: 0, release: 0.25 },
+    turnstile: { frequency: 9998.123456, threshold: -52, knee: 40, ratio: 12, attack: 0.0001, release: 0.25 },
+  };
+  // The two platforms with recorded renders. Anywhere else there is nothing to
   // replay and the render stays silent, which is what 0 means here.
   const expected = {
-    'MacIntel': 124.04347624466754,
-    'Linux x86_64': 124.04347527516074,
-  }[navigator.platform] ?? 0;
+    'MacIntel': { fingerprintjs: 124.04347624466754, turnstile: 112.4458671315806 },
+    'Linux x86_64': { fingerprintjs: 124.04347527516074, turnstile: 112.46367831656244 },
+  }[navigator.platform] ?? { fingerprintjs: 0, turnstile: 0 };
 
-  // `frames` and the five compressor settings are the canonical ones unless a
-  // case below says otherwise; every deviation is a near-miss that must NOT
-  // replay, because a detector that probes the shape instead of hashing one
-  // render would read a loose match as an outright lie.
-  const render = async (frames, rate, tweak) => {
+  // `frames` and the graph's own settings are used as they stand unless a case
+  // below says otherwise; every deviation is a near-miss that must NOT replay,
+  // because a detector that probes the shape instead of hashing one render
+  // would read a loose match as an outright lie.
+  const render = async (frames, rate, tweak, g = GRAPHS.fingerprintjs) => {
     const ctx = new OfflineAudioContext(1, frames, rate);
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
-    osc.frequency.value = 10000;
+    osc.frequency.value = g.frequency;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -50;
-    comp.knee.value = 40;
-    comp.ratio.value = 12;
-    comp.attack.value = 0;
-    comp.release.value = 0.25;
+    comp.threshold.value = g.threshold;
+    comp.knee.value = g.knee;
+    comp.ratio.value = g.ratio;
+    comp.attack.value = g.attack;
+    comp.release.value = g.release;
     let start = 0;
     let wired = true;
     if (tweak) ({ start = 0, wired = true } = tweak(ctx, osc, comp) ?? {});
@@ -1271,8 +1278,19 @@
     osc.connect(comp); // a duplicate connect() is a no-op in Chrome
   });
 
+  // The widget's own graph, and the 1 000 frames of it it actually asks for.
+  const turnstile = await render(5000, 44100, null, GRAPHS.turnstile);
+  const turnstileShort = await render(1000, 44100, null, GRAPHS.turnstile);
+
   const nearMisses = {
     threshold: await render(5000, 44100, (ctx, osc, comp) => { comp.threshold.value = -40; }),
+    // Two known graphs mean a new way to be wrong: half of one and half of the
+    // other is neither, and has no recording of its own to hand back.
+    crossedThreshold: await render(5000, 44100, (ctx, osc, comp) => { comp.threshold.value = -52; }),
+    crossedFrequency: await render(5000, 44100, (ctx, osc) => { osc.frequency.value = 9998.123456; }),
+    crossedAttack: await render(5000, 44100, (ctx, osc, comp) => { comp.attack.value = 0.0001; }),
+    turnstileFrequencyOnly: await render(5000, 44100,
+      (ctx, osc) => { osc.frequency.value = 10000; }, GRAPHS.turnstile),
     knee: await render(5000, 44100, (ctx, osc, comp) => { comp.knee.value = 30; }),
     attack: await render(5000, 44100, (ctx, osc, comp) => { comp.attack.value = 0.003; }),
     rate: await render(5000, 48000, null),
@@ -1322,20 +1340,38 @@
   state.resolve();
   await state.done(() => {
     testing.expectEqual(5000, canonical.length);
-    testing.expectEqual(expected, tail(canonical));
+    testing.expectEqual(expected.fingerprintjs, tail(canonical));
     // The compressor's 6 ms pre-delay: exactly 265 zero samples, then signal.
     testing.expectEqual(true, canonical.slice(0, 265).every((v) => v === 0));
-    testing.expectEqual(expected !== 0, canonical[265] !== 0);
+    testing.expectEqual(expected.fingerprintjs !== 0, canonical[265] !== 0);
 
     testing.expectEqual(1000, short.length);
     testing.expectEqual(true, short.every((v, i) => v === canonical[i]));
 
     testing.expectEqual(6000, long.length);
-    testing.expectEqual(expected, tail(long));
+    testing.expectEqual(expected.fingerprintjs, tail(long));
     // The recorded gap: past frame 5000 there is nothing to replay.
     testing.expectEqual(true, long.slice(5000).every((v) => v === 0));
 
-    testing.expectEqual(expected, tail(harmless));
+    testing.expectEqual(expected.fingerprintjs, tail(harmless));
+
+    // The widget's graph, which used to fall through to silence: the same 6 ms
+    // of pre-delay, then 735 frames of signal in the 1 000 it asks for.
+    testing.expectEqual(expected.turnstile, tail(turnstile));
+    testing.expectEqual(true, turnstile.slice(0, 265).every((v) => v === 0));
+    testing.expectEqual(expected.turnstile !== 0, turnstile[265] !== 0);
+    testing.expectEqual(1000, turnstileShort.length);
+    testing.expectEqual(true, turnstileShort.every((v, i) => v === turnstile[i]));
+    testing.expectEqual(
+      expected.turnstile !== 0,
+      turnstileShort.slice(265).every((v) => v !== 0),
+    );
+    // And the two recordings are not each other, which is the whole reason
+    // there are two.
+    testing.expectEqual(
+      expected.turnstile !== 0,
+      turnstile.slice(265).some((v, i) => v !== canonical[265 + i]),
+    );
 
     for (const [which, data] of Object.entries(nearMisses)) {
       testing.expectEqual(`${which}:silent`, `${which}:${data.every((v) => v === 0) ? 'silent' : 'replayed'}`);

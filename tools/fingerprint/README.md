@@ -10011,3 +10011,102 @@ six records and two realms. So the shallow reach is the station, not the change,
 and this sitting says nothing about pass or fail either way. The byte comparison
 above is what stands in for it: it checks the same payload against the same
 oracle bytes without needing the station to answer at all.
+
+### The 1 000 floats: the widget's audio graph is not fingerprintjs's (2026-08-23)
+
+The other half of the E1 table was the audio vector — 15 361 characters of
+`|`-joined floats on the oracle arm, 1 999 here, because ours are 1 000 zeros.
+`canonical_render.zig` replays a recorded render only for the graph it
+recognises and falls back to silence for anything else, by design. Which of its
+predicates refused was the open question.
+
+**It can be answered without the station, up to a point.** Three sittings on
+disk (`p4b`, `p5`, `p6`) carry the same vector byte for byte, so the widget's
+render is deterministic and is a fixed target. `audio-graph-solve.mjs` searches
+real Chrome for the graph that produces it, scoring candidates inside the page
+so only a number per candidate crosses CDP, and it carries a control:
+fingerprintjs's graph against `chrome_audio_macos.bin` must score exactly zero
+or the harness is measuring something other than what was recorded.
+
+Walking the five compressor settings moved the error by less than a thousandth —
+which said the difference was not the compressor. Fitting a sinusoid to both
+renders said what it was instead:
+
+| | ours | oracle |
+| --- | --- | --- |
+| leading zeros | 265 | 265 |
+| zero crossings in 1 000 frames | 333, at the same indices | 333, at the same indices |
+| best-fit tone | 10 000.000 000 Hz | **9 998.125 Hz** |
+| phase over frames 270..910 | flat | drifts +0.171 rad, linearly |
+
+A phase that drifts linearly apart from an identical waveform is a frequency
+difference and nothing else. Correcting it cut the error 4.5×, and re-walking
+the compressor from there cut it another 26×. The search then stalled at a
+4.8e-5 residual with parameters that had stopped being plausible numbers
+(threshold −49.998, gain 1.0001), which is what a structural gap looks like from
+inside a search — and in any case `matches()` compares exact doubles, so an
+approximation buys nothing.
+
+**So watch the construction.** `audio-graph-trace.mjs` wraps every funnel a
+graph has to pass through — the context constructors, `create*`, `connect`,
+`AudioParam.value` and its ramp methods, `OscillatorNode.type`, `start`/`stop`,
+`startRendering` and `getChannelData` — in the widget's own realm, ahead of its
+own code. The installation is fo-plaintext's, now shared as `fo-harness.mjs`:
+arming a cross-origin child before its document runs, resuming worker sessions
+before asking them anything, and collecting records over the console are the
+same fight whatever the question. The report reads back as the source that
+produced it (`results/a1-oracle.json`, and the arm cleared):
+
+```
+OfflineAudioContext(1, 1000, 44100)
+osc.type = 'triangle'
+osc.frequency.value = 9998.123456
+comp.threshold.value = -52
+comp.knee.value = 40
+comp.ratio.value = 12
+comp.attack.value = 0.0001
+comp.release.value = 0.25
+osc -> comp -> destination
+osc.start(0)
+```
+
+Rendered in Chrome, that graph reproduces `p4b-oracle.json`'s 1 000 floats with
+a **maximum difference of zero** — a different sitting, weeks apart. So the
+identification is not a fit, it is the bytes.
+
+Three of `matches()`'s predicates refused it: `threshold` (−50), `attack` (0)
+and `frequency` (10000). The numeric solve had the frequency right to five
+figures and the compressor wrong, which is the argument for having run both.
+
+Two smaller things the same trace shows, neither chased here:
+
+- The widget builds the graph **three** times per visit — twice as above, which
+  is why the oracle's payload carries the vector twice, and once more as
+  `createBuffer(1, 1000, 44100)` → `createBufferSource()` → destination with the
+  buffer filled by the page itself. That third render is a pure passthrough with
+  no DSP in it, so unlike these two it could be computed rather than recorded.
+- `AudioBufferSourceNode.prototype.start` is its own overload in Blink rather
+  than inherited from `AudioScheduledSourceNode`, so a recorder that wraps only
+  the base class sees an oscillator start and never a buffer source's.
+
+**And it closes.** `chrome_audio.zig` now carries a `Graph` enum with a
+recording per graph per platform, and `canonical_render`'s `matches()` became
+`which()`: the structure every recorded graph shares — a started triangle
+oscillator into a compressor into a mono destination — is checked once, and the
+six numbers are then checked against each candidate in turn, so half of one
+graph and half of another is neither and still gets silence. Regenerating both
+recordings reproduced the existing fingerprintjs tail sums exactly on both
+platforms, which is the control that says the second graph did not disturb the
+first.
+
+Asked the widget's graph on a loopback page (`results/a2-lp-turnstile.json`),
+this engine now answers:
+
+| | before | after | oracle |
+| --- | --- | --- | --- |
+| the audio vector | 1 000 zeros | **265 zeros + 735 floats** | 265 zeros + 735 floats |
+| samples differing from the station's | 735 | **0** | — |
+| the string the widget then encodes | 1 999 chars | **15 361** | 15 361 |
+
+The tail sums the recordings hash to, for whoever regenerates them next: macOS
+`112.4458671315806`, Linux `112.46367831656244`.
