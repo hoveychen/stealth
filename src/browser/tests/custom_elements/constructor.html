@@ -73,18 +73,28 @@
 }
 
 {
-    // `new HTMLElement()` directly is illegal (no registered constructor).
-    let threw = false;
-    try { new HTMLElement(); } catch (e) { threw = true; }
-    testing.expectEqual(true, threw);
+    // `new HTMLElement()` directly is illegal (no registered constructor), and
+    // Chrome names the interface: "Failed to construct 'HTMLElement': Illegal
+    // constructor" (measured on Chrome 151). This used to be an Error rather
+    // than a TypeError, carrying "Illegal Constructor" and no interface.
+    let message = null;
+    try { new HTMLElement(); } catch (e) { message = `${e.name}: ${e.message}`; }
+    testing.expectEqual("TypeError: Failed to construct 'HTMLElement': Illegal constructor", message);
 }
 
 {
-    // Unregistered subclass of HTMLElement is also illegal.
+    // An unregistered subclass is illegal too, and the interface Chrome names is
+    // the one whose constructor super() reached -- not new.target, which is the
+    // subclass. Both measured on Chrome 151.
     class Unregistered extends HTMLElement {}
-    let threw = false;
-    try { new Unregistered(); } catch (e) { threw = true; }
-    testing.expectEqual(true, threw);
+    let message = null;
+    try { new Unregistered(); } catch (e) { message = `${e.name}: ${e.message}`; }
+    testing.expectEqual("TypeError: Failed to construct 'HTMLElement': Illegal constructor", message);
+
+    class UnregisteredBuiltIn extends HTMLDivElement {}
+    message = null;
+    try { new UnregisteredBuiltIn(); } catch (e) { message = `${e.name}: ${e.message}`; }
+    testing.expectEqual("TypeError: Failed to construct 'HTMLDivElement': Illegal constructor", message);
 }
 </script>
 

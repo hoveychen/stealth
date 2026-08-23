@@ -91,10 +91,27 @@
 
 <script id=webrtc_ice_candidate>
 {
-  // An init that names neither a mid nor an m-line index is a TypeError.
-  let threw = null;
-  try { new RTCIceCandidate({ candidate: 'x' }); } catch (e) { threw = e.name; }
-  testing.expectEqual('TypeError', threw);
+  // An init that names neither a mid nor an m-line index is a TypeError, and
+  // Chrome says which of the two is missing -- the same sentence for {},
+  // undefined and a candidate-only init (measured on Chrome 151). The message
+  // used to be empty, which no browser has.
+  //
+  // Not pinned here: an argument that is not a dictionary at all
+  // (`new RTCIceCandidate('nope')`) fails one step earlier, in the argument
+  // conversion, and still answers "invalid argument". Chrome says "The provided
+  // value is not of type 'RTCIceCandidateInit'." -- a sentence every dictionary
+  // parameter in the engine shares, so it belongs to a change that words them
+  // all rather than this one interface.
+  const raised = (fn) => {
+    try { fn(); } catch (e) { return `${e.name}: ${e.message}`; }
+    return null;
+  };
+  testing.expectEqual(
+    "TypeError: Failed to construct 'RTCIceCandidate': sdpMid and sdpMLineIndex are both null.",
+    raised(() => new RTCIceCandidate({ candidate: 'x' })));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'RTCIceCandidate': sdpMid and sdpMLineIndex are both null.",
+    raised(() => new RTCIceCandidate()));
 
   const line = 'candidate:1107373719 1 udp 2113937151 abc-def.local 54588 typ host ' +
     'generation 0 ufrag 3Ade network-cost 999';
@@ -534,9 +551,20 @@
                    'RTCDTMFSender', 'RTCCertificate']) {
     testing.expectError('TypeError', () => new window[n]());
   }
-  // These two need a frame to clone, which no page can produce here.
-  testing.expectError('TypeError', () => new RTCEncodedAudioFrame());
-  testing.expectError('TypeError', () => new RTCEncodedVideoFrame({}));
+  // These two need a frame to clone, which no page can produce here. Chrome
+  // words the refusal as a failed parameter conversion, and words it the same
+  // for any argument that is not already a frame (measured on Chrome 151 with
+  // {}, null and a string); an absent argument fails the arity check first.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  testing.expectEqual(
+    "TypeError: Failed to construct 'RTCEncodedAudioFrame': 1 argument required, but only 0 present.",
+    msg(() => new RTCEncodedAudioFrame()));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'RTCEncodedAudioFrame': parameter 1 is not of type 'RTCEncodedAudioFrame'.",
+    msg(() => new RTCEncodedAudioFrame({})));
+  testing.expectEqual(
+    "TypeError: Failed to construct 'RTCEncodedVideoFrame': parameter 1 is not of type 'RTCEncodedVideoFrame'.",
+    msg(() => new RTCEncodedVideoFrame({})));
   testing.expectError('TypeError', () => new RTCRtpScriptTransform());
 }
 </script>

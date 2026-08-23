@@ -29,13 +29,24 @@
 
 <script id=text_decoder_stream_invalid_label>
   {
-    let errorThrown = false;
-    try {
-      new TextDecoderStream('windows-1252');
-    } catch (e) {
-      errorThrown = true;
-    }
-    testing.expectEqual(true, errorThrown);
+    // Same sentence as TextDecoder's, with this interface's name and the label
+    // echoed verbatim -- not trimmed, not lowercased, the empty string included
+    // (measured on Chrome 151, probes/probe-encoding-label.js). It used to be a
+    // RangeError with an empty message, which no browser has.
+    const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+    const invalid = (label) => 'RangeError: ' +
+      `Failed to construct 'TextDecoderStream': The encoding label provided ('${label}') is invalid.`;
+
+    testing.expectEqual(invalid('invalid-encoding'), msg(() => new TextDecoderStream('invalid-encoding')));
+    testing.expectEqual(invalid('Invalid-Encoding'), msg(() => new TextDecoderStream('Invalid-Encoding')));
+    testing.expectEqual(invalid(''), msg(() => new TextDecoderStream('')));
+    testing.expectEqual(invalid('replacement'), msg(() => new TextDecoderStream('replacement')));
+
+    // Not Chrome's reading: this stream only decodes utf-8, so it refuses labels
+    // Chrome accepts (windows-1252 gives a stream whose encoding is
+    // "windows-1252" there -- measured, same probe). The wording is Blink's; the
+    // refusal itself is this engine's own gap, and a wider one than a message.
+    testing.expectEqual(invalid('windows-1252'), msg(() => new TextDecoderStream('windows-1252')));
   }
 </script>
 

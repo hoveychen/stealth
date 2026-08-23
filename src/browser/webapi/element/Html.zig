@@ -141,7 +141,14 @@ pub fn construct(new_target: js.Function, frame: *Frame) !*Element {
 // be extended, so super() has to create them. All of these types have their
 // constructors routed here.
 pub fn upgradeConstruct(frame: *Frame) !*Element {
-    const node = frame._upgrading_element orelse return error.TypeError;
+    // Nothing set up an element to upgrade, so this is page script calling
+    // `new HTMLDivElement()` (or `new` on an unregistered subclass of one).
+    // Chrome refuses with "Failed to construct 'HTMLDivElement': Illegal
+    // constructor" (measured on Chrome 151); a bare TypeError left the message
+    // empty, which no browser has for any constructor. The interface named comes
+    // from the callback being generated per interface -- see
+    // Snapshot.upgradeConstructor.
+    const node = frame._upgrading_element orelse return error.IllegalConstructor;
     if (frame._upgrading_consumed) {
         return error.TypeError;
     }
@@ -2622,7 +2629,6 @@ pub const JsApi = struct {
     pub const focusGroup = bridge.accessor(HtmlElement.getFocusGroup, HtmlElement.setFocusGroup, .{ .ce_reactions = true });
     pub const focusGroupStart = bridge.accessor(HtmlElement.getFocusGroupStart, HtmlElement.setFocusGroupStart, .{ .ce_reactions = true });
     pub const onpointerrawupdate = bridge.accessor(HtmlElement.getOnPointerRawUpdate, HtmlElement.setOnPointerRawUpdate, .{});
-    pub const upgrade_constructor = bridge.constructor(HtmlElement.upgradeConstruct, .{});
     pub const constructor = bridge.constructor(HtmlElement.construct, .{ .new_target = true });
 };
 
