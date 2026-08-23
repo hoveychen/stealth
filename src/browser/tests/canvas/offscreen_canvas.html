@@ -224,3 +224,43 @@
   testing.expectEqual(5, ctx.getTransform().a);
 }
 </script>
+
+<script id="OffscreenCanvas#drawImage">
+{
+  // This member did not exist on the offscreen context at all -- the element
+  // context had it and this one did not, so calling it raised a TypeError that
+  // took the rest of the caller's function with it. That is what stops five of
+  // the Turnstile widget's readbacks from happening here (README, "The
+  // eighteen pixel readbacks").
+  const src = new OffscreenCanvas(4, 4);
+  const sctx = src.getContext('2d');
+  sctx.fillStyle = '#ff0000';
+  sctx.fillRect(0, 0, 4, 4);
+
+  const dst = new OffscreenCanvas(8, 8);
+  const dctx = dst.getContext('2d');
+  testing.expectEqual('function', typeof dctx.drawImage);
+  testing.expectEqual(3, dctx.drawImage.length);
+
+  dctx.drawImage(src, 0, 0);
+  testing.expectEqual([255, 0, 0, 255], Array.from(dctx.getImageData(3, 3, 1, 1).data));
+  // The source is 4x4, so nothing lands past it.
+  testing.expectEqual([0, 0, 0, 0], Array.from(dctx.getImageData(4, 4, 1, 1).data));
+
+  // The nine-argument form scales; a 4x4 source into a 2x2 box leaves the
+  // other half of the destination alone.
+  const box = new OffscreenCanvas(4, 4);
+  const bctx = box.getContext('2d');
+  bctx.drawImage(src, 0, 0, 4, 4, 0, 0, 2, 2);
+  testing.expectEqual([255, 0, 0, 255], Array.from(bctx.getImageData(1, 1, 1, 1).data));
+  testing.expectEqual([0, 0, 0, 0], Array.from(bctx.getImageData(3, 3, 1, 1).data));
+
+  // A source that was never drawn into has no pixels to give.
+  const blank = new OffscreenCanvas(4, 4);
+  blank.getContext('2d');
+  const after = new OffscreenCanvas(4, 4);
+  const actx = after.getContext('2d');
+  actx.drawImage(blank, 0, 0);
+  testing.expectEqual([0, 0, 0, 0], Array.from(actx.getImageData(0, 0, 1, 1).data));
+}
+</script>

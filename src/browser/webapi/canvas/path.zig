@@ -91,6 +91,22 @@ pub const Transform = struct {
         return true;
     }
 
+    /// The inverse, or null when the matrix is singular. `drawImage` needs it:
+    /// the destination is walked pixel by pixel and each centre is mapped back
+    /// into the source, which is the only way a rotated blit stays seamless.
+    pub fn invert(self: Transform) ?Transform {
+        const det = self.a * self.d - self.b * self.c;
+        if (det == 0 or !std.math.isFinite(det)) return null;
+        return .{
+            .a = self.d / det,
+            .b = -self.b / det,
+            .c = -self.c / det,
+            .d = self.a / det,
+            .e = (self.c * self.f - self.d * self.e) / det,
+            .f = (self.b * self.e - self.a * self.f) / det,
+        };
+    }
+
     /// The average of the two axis scales, which is what a stroke width has to
     /// be multiplied by. A non-uniform scale makes a stroke elliptical rather
     /// than uniformly wide, and this does not model that.

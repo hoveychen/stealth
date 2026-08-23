@@ -36,6 +36,8 @@ const path = @import("path.zig");
 const Surface = @import("raster.zig");
 const state = @import("context_state.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
+const CanvasElement = @import("../element/html/Canvas.zig");
+const OffscreenCanvas = @import("OffscreenCanvas.zig");
 
 const Execution = js.Execution;
 const Transform = path.Transform;
@@ -294,6 +296,91 @@ pub fn Mixin(comptime T: type) type {
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
             self._surface.clearPath(exec.call_arena, width(self), height(self), &quad);
+        }
+
+        /// `drawImage(source, dx, dy)`, `(source, dx, dy, dw, dh)` and the
+        /// nine-argument form, for the sources that have pixels behind them:
+        /// a canvas element and an `OffscreenCanvas`. An `ImageBitmap` carries
+        /// only its dimensions here (see ImageBitmap.zig), and an image
+        /// element would need a decoder, so both deposit nothing — the call
+        /// still succeeds, which is the part that matters: on the offscreen
+        /// context this member did not exist at all, and the `TypeError` that
+        /// raised took the rest of the caller's function with it.
+        pub fn drawImage(self: *T, source: js.Value, a: f64, b: f64, c: ?f64, d: ?f64, e: ?f64, f: ?f64, g: ?f64, h: ?f64, exec: *Execution) void {
+            const src = sourceOf(source) orelse return;
+            const sw: f64 = @floatFromInt(src.width);
+            const sh: f64 = @floatFromInt(src.height);
+            if (sw == 0 or sh == 0) return;
+
+            // Which of the three forms this is, by how many numbers arrived.
+            const blit: Surface.Blit = if (e) |dx| .{
+                .sx = a,
+                .sy = b,
+                .sw = c orelse return,
+                .sh = d orelse return,
+                .dx = dx,
+                .dy = f orelse return,
+                .dw = g orelse return,
+                .dh = h orelse return,
+            } else if (c) |dw| .{
+                .sx = 0,
+                .sy = 0,
+                .sw = sw,
+                .sh = sh,
+                .dx = a,
+                .dy = b,
+                .dw = dw,
+                .dh = d orelse return,
+            } else .{
+                .sx = 0,
+                .sy = 0,
+                .sw = sw,
+                .sh = sh,
+                .dx = a,
+                .dy = b,
+                .dw = sw,
+                .dh = sh,
+            };
+
+            self._surface.drawSurface(
+                exec.call_arena,
+                width(self),
+                height(self),
+                src.surface,
+                src.width,
+                src.height,
+                blit,
+                self._transform,
+                self._global_alpha,
+            );
+        }
+
+        const Source = struct {
+            surface: *const Surface,
+            width: u32,
+            height: u32,
+        };
+
+        /// The pixels behind a `CanvasImageSource`, when there are any. Both
+        /// canvas types keep theirs on the 2D context they handed out, so a
+        /// canvas that was never drawn into — or was only ever used for WebGL
+        /// — has nothing to give.
+        fn sourceOf(value: js.Value) ?Source {
+            if (value.toZig(*CanvasElement)) |canvas| {
+                const cached = canvas._cached orelse return null;
+                return switch (cached) {
+                    .@"2d" => |ctx| .{ .surface = &ctx._surface, .width = canvas.getWidth(), .height = canvas.getHeight() },
+                    else => null,
+                };
+            } else |_| {}
+            if (value.toZig(*OffscreenCanvas)) |canvas| {
+                const cached = canvas._cached orelse return null;
+                return switch (cached) {
+                    .@"2d" => |ctx| .{ .surface = &ctx._surface, .width = canvas.getWidth(), .height = canvas.getHeight() },
+                    else => null,
+                };
+            } else |_| {}
+            return null;
         }
 
         /// Everything the rasteriser drops on `reset()`.

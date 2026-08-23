@@ -856,3 +856,28 @@
   testing.expectEqual([0, 0, 0, 0], at(5, 8));
 }
 </script>
+
+<script id="CanvasRenderingContext2D#drawImage">
+{
+  const src = document.createElement('canvas');
+  src.width = 4;
+  src.height = 4;
+  const sctx = src.getContext('2d');
+  sctx.fillStyle = '#0000ff';
+  sctx.fillRect(0, 0, 2, 2);
+
+  const dst = document.createElement('canvas');
+  dst.width = 8;
+  dst.height = 8;
+  const ctx = dst.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  // Placed under the current transform, like every other drawing call.
+  ctx.translate(4, 4);
+  ctx.drawImage(src, 0, 0);
+  testing.expectEqual([0, 0, 255, 255], at(5, 5));
+  testing.expectEqual([0, 0, 0, 0], at(1, 1));
+  // Only the source's own opaque quarter came across.
+  testing.expectEqual([0, 0, 0, 0], at(7, 7));
+}
+</script>

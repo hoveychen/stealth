@@ -269,6 +269,7 @@ pub const arcTo = draw.arcTo;
 pub const ellipse = draw.ellipse;
 pub const rect = draw.rect;
 pub const roundRect = draw.roundRect;
+pub const drawImage = draw.drawImage;
 pub const fill = draw.fill;
 pub const stroke = draw.stroke;
 
@@ -342,6 +343,7 @@ pub const JsApi = struct {
     pub const createPattern = bridge.function(OffscreenCanvasRenderingContext2D.createPattern, .{});
 
     pub const putImageData = bridge.function(OffscreenCanvasRenderingContext2D.putImageData, .{ .noop = true });
+    pub const drawImage = bridge.function(OffscreenCanvasRenderingContext2D.drawImage, .{ .arity = 3 });
     pub const getImageData = bridge.function(OffscreenCanvasRenderingContext2D.getImageData, .{});
     pub const save = bridge.function(OffscreenCanvasRenderingContext2D.save, .{ .arity = 0 });
     pub const restore = bridge.function(OffscreenCanvasRenderingContext2D.restore, .{ .arity = 0 });

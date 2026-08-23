@@ -392,6 +392,83 @@ pub fn strokePath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_
     self.fillPath(scratch, canvas_width, canvas_height, &outline, .nonzero, paint, global_alpha);
 }
 
+/// The source rectangle and the destination rectangle `drawImage` was given,
+/// both in the units the caller used: source pixels and user space.
+pub const Blit = struct {
+    sx: f64,
+    sy: f64,
+    sw: f64,
+    sh: f64,
+    dx: f64,
+    dy: f64,
+    dw: f64,
+    dh: f64,
+};
+
+/// Composites another surface's pixels into this one under `ctm`.
+///
+/// The destination is walked pixel by pixel and each centre is mapped back
+/// through the inverse transform into the source, which handles a rotated or
+/// skewed blit with the same code as an upright one. Sampling is
+/// nearest-neighbour: Chrome box-filters a downscale when
+/// `imageSmoothingEnabled` is on, so a minified image is the one case where
+/// this lands a different colour rather than a different edge.
+pub fn drawSurface(
+    self: *Surface,
+    scratch: Allocator,
+    canvas_width: u32,
+    canvas_height: u32,
+    src: *const Surface,
+    src_width: u32,
+    src_height: u32,
+    blit: Blit,
+    ctm: path_mod.Transform,
+    global_alpha: f64,
+) void {
+    const source = src.peek(src_width, src_height) orelse return;
+    if (blit.dw == 0 or blit.dh == 0 or blit.sw == 0 or blit.sh == 0) return;
+    const inverse = ctm.invert() orelse return;
+
+    // The destination quad, only to find which pixels can be touched.
+    var quad_path: Path = .{};
+    quad_path.rect(scratch, blit.dx, blit.dy, blit.dw, blit.dh, ctm) catch return;
+    const edges = edgesOf(scratch, &quad_path) orelse return;
+    const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
+
+    const alpha = std.math.clamp(global_alpha, 0, 1);
+    if (alpha <= 0) return;
+    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+
+    const left = @min(blit.dx, blit.dx + blit.dw);
+    const top = @min(blit.dy, blit.dy + blit.dh);
+
+    var row = bounds.y0;
+    while (row < bounds.y1) : (row += 1) {
+        var col = bounds.x0;
+        while (col < bounds.x1) : (col += 1) {
+            const user = inverse.apply(@as(f64, @floatFromInt(col)) + 0.5, @as(f64, @floatFromInt(row)) + 0.5);
+            // Where in the destination rectangle, as a fraction of it.
+            const u = (user.x - left) / @abs(blit.dw);
+            const v = (user.y - top) / @abs(blit.dh);
+            if (u < 0 or u >= 1 or v < 0 or v >= 1) continue;
+
+            const fx = blit.sx + u * blit.sw;
+            const fy = blit.sy + v * blit.sh;
+            if (fx < 0 or fy < 0) continue;
+            const src_x: u32 = @intFromFloat(@floor(fx));
+            const src_y: u32 = @intFromFloat(@floor(fy));
+            if (src_x >= src_width or src_y >= src_height) continue;
+
+            const from = (@as(usize, src_y) * src_width + src_x) * 4;
+            const texel = source[from..][0..4];
+            if (texel[3] == 0) continue;
+            const paint = RGBA{ .r = texel[0], .g = texel[1], .b = texel[2], .a = 255 };
+            const at = (row * canvas_width + col) * 4;
+            blend(pixels[at..][0..4], paint, alpha * (@as(f64, @floatFromInt(texel[3])) / 255));
+        }
+    }
+}
+
 /// Erases the path's coverage, the way `clearRect` erases a rectangle. Only
 /// reached for a rotated or skewed `clearRect`; the axis-aligned case has an
 /// exact implementation of its own.
