@@ -58,6 +58,14 @@ const SAME_ORIGIN = {
     // A parameterised content-type, to see whether the entry keeps the
     // parameter or only the MIME essence.
     '/param.css': ['text/CSS; charset=UTF-8', Buffer.from('body { color: rgb(1, 2, 3); }'), {}],
+    // The legacy JavaScript MIME type, which is what Cloudflare serves api.js
+    // as while the oracle's entry reads `text/javascript` -- so something
+    // between the header and the entry rewrites it, and this is where that gets
+    // measured rather than assumed.
+    '/legacy.js': ['application/javascript; charset=UTF-8', Buffer.from(BODY), {}],
+    '/xjs.js': ['application/x-javascript', Buffer.from(BODY), {}],
+    // Does a Server-Timing header reach the entry's serverTiming array?
+    '/timed.js': ['text/javascript', Buffer.from(BODY), { 'server-timing': 'cfExtPri;dur=0, db;dur=53;desc="lookup"' }],
 };
 
 // The same script four ways on origin B, because two separate gates are in
@@ -109,6 +117,9 @@ const PAGE = `<!DOCTYPE html><html><head>
 <script src="/plain.js"></script>
 <script src="/br.js"></script>
 <script src="/gzip.js"></script>
+<script src="/legacy.js"></script>
+<script src="/xjs.js"></script>
+<script src="/timed.js"></script>
 <script src="${crossOrigin}/tao.js"></script>
 <script src="${crossOrigin}/notao.js"></script>
 <script crossorigin src="${crossOrigin}/cors.js"></script>
@@ -148,6 +159,7 @@ const READ = `(() => {
             transferSize: e.transferSize,
             encodedBodySize: e.encodedBodySize,
             decodedBodySize: e.decodedBodySize,
+            serverTiming: (e.serverTiming || []).map((st) => st.toJSON()),
             hasNavigationId: 'navigationId' in e,
             navigationId: e.navigationId,
             keyCount: Object.keys(e.toJSON()).length,

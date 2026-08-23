@@ -300,6 +300,14 @@ pub const ResponseLabels = struct {
         const len = @min(essence.len, MAX_CONTENT_TYPE_LEN);
         _ = std.ascii.lowerString(self._type[0..len], essence[0..len]);
         self._type_len = @intCast(len);
+
+        // Every JavaScript MIME type reports as `text/javascript`, whichever of
+        // the sixteen the server actually sent. See Mime.isJavaScriptType.
+        if (Mime.isJavaScriptType(self.contentType())) {
+            const canonical = "text/javascript";
+            @memcpy(self._type[0..canonical.len], canonical);
+            self._type_len = canonical.len;
+        }
     }
 
     pub fn setContentEncoding(self: *ResponseLabels, raw: []const u8) void {

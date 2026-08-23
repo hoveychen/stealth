@@ -1242,7 +1242,10 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
     if (std.mem.eql(u8, path, "/served/compressed.js")) {
         return req.respond(&GZIPPED_SCRIPT, .{
             .extra_headers = &.{
-                .{ .name = "Content-Type", .value = "text/javascript; charset=UTF-8" },
+                // The legacy JavaScript MIME type, which is what Cloudflare
+                // serves api.js as. A resource entry reports `text/javascript`
+                // for it -- see Mime.isJavaScriptType.
+                .{ .name = "Content-Type", .value = "application/javascript; charset=UTF-8" },
                 .{ .name = "Content-Encoding", .value = "gzip" },
             },
         });
