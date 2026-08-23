@@ -355,7 +355,16 @@ for (const r of state.records) {
         case 'connect': case 'disconnect':
             console.log(`  ${r.from}.${r.k}(${r.to}${r.param ? `.${r.param}` : ''})`);
             break;
-        case 'start': case 'stop': console.log(`  ${r.node}.${r.k}(${r.when ?? ''})`); break;
+        // offset and duration are printed, not just recorded: they decide
+        // which frames of a buffer reach the destination, and a summary line
+        // reading `start(0)` for a call that skipped into the middle of the
+        // buffer is how that argument goes unnoticed.
+        case 'start': case 'stop': {
+            const args = [r.when ?? '', r.offset, r.duration];
+            while (args.length > 1 && args[args.length - 1] === undefined) args.pop();
+            console.log(`  ${r.node}.${r.k}(${args.join(', ')})`);
+            break;
+        }
         case 'startRendering': console.log(`  ${r.ctx}.startRendering()  ${r.length} frames at ${r.sampleRate}`); break;
         case 'rendered': {
             const b = r.buffer ?? {};
