@@ -36,6 +36,7 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const http = @import("../../../network/http.zig");
 
 const Element = @import("../Element.zig");
 const DOMRectReadOnly = @import("../DOMRectReadOnly.zig");
@@ -77,6 +78,11 @@ pub fn registerTypes() []const type {
 /// The trailing block is navigation-only; a plain resource entry leaves it at
 /// zero.
 pub const Timing = struct {
+    // Which navigation this entry belongs to. Every entry in one navigation
+    // carries the same number and the next navigation draws a fresh one; see
+    // Performance.newNavigationId.
+    navigation_id: u32 = 0,
+
     initiator_type: []const u8 = "navigation",
     next_hop_protocol: []const u8 = "",
     delivery_type: []const u8 = "",
@@ -124,6 +130,44 @@ pub const Timing = struct {
         }
         return @floatFromInt(self.encoded_body_size + 300);
     }
+
+    /// Lays libcurl's connection walk onto the eight milestones between
+    /// fetchStart and responseStart. `fetch_start` must already be set.
+    ///
+    /// Chrome 151 over plain HTTP fills seven of the nine and leaves exactly
+    /// two at zero: secureConnectionStart, because there is no TLS handshake to
+    /// time, and firstInterimResponseStart, because there was no 1xx (measured,
+    /// tools/fingerprint/resource-timing-response-fields.mjs). A reused
+    /// connection collapses the first four onto fetchStart, which is what a
+    /// browser reports for one too — nothing was looked up and nothing opened.
+    ///
+    /// curl has no name-resolution *start*: it starts resolving as soon as the
+    /// transfer does, so domainLookupStart is fetchStart.
+    pub fn setConnectionMilestones(self: *Timing, times: http.ResponseTimes) void {
+        const at = self.fetch_start;
+        const ms = struct {
+            fn f(micros: u64) f64 {
+                return @as(f64, @floatFromInt(micros)) / 1000.0;
+            }
+        }.f;
+
+        self.domain_lookup_start = at;
+        self.domain_lookup_end = at + ms(times.name_lookup);
+        self.connect_start = self.domain_lookup_end;
+
+        if (times.app_connect > 0) {
+            // The TLS handshake begins once the socket is up, so the TCP
+            // connect time is where the secure part starts.
+            self.secure_connection_start = at + ms(times.connect);
+            self.connect_end = at + ms(times.app_connect);
+        } else {
+            self.connect_end = at + ms(times.connect);
+        }
+
+        self.request_start = at + ms(times.pre_transfer);
+        self.response_start = at + ms(times.start_transfer);
+        self.final_response_headers_start = self.response_start;
+    }
 };
 
 pub const ResourceTiming = struct {
@@ -132,7 +176,7 @@ pub const ResourceTiming = struct {
     _proto: *Entry,
     _timing: *const Timing,
 
-    /// The 33 keys Chrome's PerformanceResourceTiming.toJSON() answers, in
+    /// The 34 keys Chrome's PerformanceResourceTiming.toJSON() answers, in
     /// Chrome's order — which is not the prototype's order (measured: the
     /// prototype interleaves secureConnectionStart between connectStart and
     /// connectEnd, toJSON does not).
@@ -141,6 +185,7 @@ pub const ResourceTiming = struct {
         entryType: []const u8,
         startTime: f64,
         duration: f64,
+        navigationId: u32,
         initiatorType: []const u8,
         deliveryType: []const u8,
         nextHopProtocol: []const u8,
@@ -179,6 +224,7 @@ pub const ResourceTiming = struct {
             .entryType = self._proto.getEntryType(),
             .startTime = self._proto._start_time,
             .duration = self._proto._duration,
+            .navigationId = t.navigation_id,
             .initiatorType = t.initiator_type,
             .deliveryType = t.delivery_type,
             .nextHopProtocol = t.next_hop_protocol,
@@ -209,6 +255,10 @@ pub const ResourceTiming = struct {
             .responseStatus = t.response_status,
             .serverTiming = &.{},
         };
+    }
+
+    fn navigationId(self: *const ResourceTiming) u32 {
+        return self._timing.navigation_id;
     }
 
     fn initiatorType(self: *const ResourceTiming) []const u8 {
@@ -330,6 +380,7 @@ pub const ResourceTiming = struct {
 
         const R = ResourceTiming;
 
+        pub const navigationId = bridge.accessor(R.navigationId, null, .{});
         pub const initiatorType = bridge.accessor(R.initiatorType, null, .{});
         pub const nextHopProtocol = bridge.accessor(R.nextHopProtocol, null, .{});
         pub const deliveryType = bridge.accessor(R.deliveryType, null, .{});
@@ -369,13 +420,14 @@ pub const NavigationTiming = struct {
     _proto: *ResourceTiming,
     _confidence: TimingConfidence = .{},
 
-    /// PerformanceResourceTiming's 33 keys followed by navigation's own 14, in
+    /// PerformanceResourceTiming's 34 keys followed by navigation's own 14, in
     /// Chrome's order (win25-chrome.json `confidenceValues.navToJSONKeys`).
     pub const Json = struct {
         name: []const u8,
         entryType: []const u8,
         startTime: f64,
         duration: f64,
+        navigationId: u32,
         initiatorType: []const u8,
         deliveryType: []const u8,
         nextHopProtocol: []const u8,
@@ -429,6 +481,7 @@ pub const NavigationTiming = struct {
             .entryType = base.entryType,
             .startTime = base.startTime,
             .duration = base.duration,
+            .navigationId = base.navigationId,
             .initiatorType = base.initiatorType,
             .deliveryType = base.deliveryType,
             .nextHopProtocol = base.nextHopProtocol,

@@ -684,11 +684,14 @@
 
 <script id=navigation_timing_to_json>
   {
-    // The 47 keys Chrome's navigation toJSON() answers, in Chrome's order
-    // (win25-chrome.json).
+    // The 48 keys Chrome's navigation toJSON() answers, in Chrome's order
+    // (win25-chrome.json, plus the navigationId Chrome 151 sits between
+    // duration and initiatorType -- measured across twenty navigations by
+    // tools/fingerprint/resource-timing-response-fields.mjs).
     const json = performance.getEntriesByType('navigation')[0].toJSON();
     testing.expectEqual([
-      'name', 'entryType', 'startTime', 'duration', 'initiatorType',
+      'name', 'entryType', 'startTime', 'duration', 'navigationId',
+      'initiatorType',
       'deliveryType', 'nextHopProtocol', 'renderBlockingStatus', 'contentType',
       'contentEncoding', 'workerStart', 'workerRouterEvaluationStart',
       'workerCacheLookupStart', 'workerMatchedSourceType',

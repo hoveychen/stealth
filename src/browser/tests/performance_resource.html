@@ -3,6 +3,7 @@
   <script src="testing.js"></script>
   <link rel="stylesheet" href="/styles/visibility.css">
   <link rel="preload" as="script" href="/src/browser/tests/shape.js">
+  <script src="/served/compressed.js"></script>
 </head>
 <body>
   <img id="pic" src="/src/browser/tests/performance_resource.png">
@@ -109,6 +110,129 @@
     await state.done(() => {
       testing.expectEqual(1, entries.length);
       testing.expectEqual('link', entries[0].initiatorType);
+    });
+  </script>
+
+  <script id=resource_entry_reports_the_wire_size type=module>
+    const state = await testing.async();
+    // The two sizes are not the same number. `encodedBodySize` is what came off
+    // the wire; `decodedBodySize` is what it became once the content-encoding
+    // was undone. Reporting the decoded size for both says the response was
+    // served uncompressed -- which, for a script a real site serves under
+    // brotli, is a claim about the server that the server itself contradicts.
+    //
+    // Measured on Chrome 151 (tools/fingerprint/resource-timing-response-fields.mjs):
+    // a br-encoded 7 046-byte body answered encodedBodySize 65 (the compressed
+    // length) against decodedBodySize 7 046, and transferSize was the encoded
+    // size plus the flat 300 bytes of header overhead.
+    const entries = await waitForResourceEntry('/served/compressed.js');
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(1, entries.length);
+      testing.expectEqual(72, entries[0].encodedBodySize);
+      testing.expectEqual(1745, entries[0].decodedBodySize);
+      testing.expectEqual(372, entries[0].transferSize);
+      // The script really did run, so the body that got decoded is the body the
+      // decoded size counts.
+      testing.expectEqual(1, window.__compressed);
+    });
+  </script>
+
+  <script id=resource_entry_quotes_the_response_labels type=module>
+    const state = await testing.async();
+    // `contentType` is the MIME essence -- the parameters dropped and the rest
+    // lowercased -- and `contentEncoding` is the Content-Encoding header as it
+    // was sent. Both measured on Chrome 151
+    // (tools/fingerprint/resource-timing-response-fields.mjs): a sheet served
+    // as `text/CSS; charset=UTF-8` filed `text/css`, and a br-encoded script
+    // filed `br`.
+    //
+    // Answering "" for both is what this engine did, and it is a claim no
+    // server makes: a response with a body has a type, and the whole point of
+    // the Content-Encoding header is that something on the wire read it.
+    const compressed = await waitForResourceEntry('/served/compressed.js');
+    const sheet = await waitForResourceEntry('/styles/visibility.css');
+    state.resolve();
+    await state.done(() => {
+      // Served as `text/javascript; charset=UTF-8`; the parameter is not part
+      // of what the entry reports.
+      testing.expectEqual('text/javascript', compressed[0].contentType);
+      testing.expectEqual('gzip', compressed[0].contentEncoding);
+      // No Content-Encoding on the sheet, so the field stays empty -- an empty
+      // string here means "not encoded", which is true of this one.
+      testing.expectEqual('text/css', sheet[0].contentType);
+      testing.expectEqual('', sheet[0].contentEncoding);
+    });
+  </script>
+
+  <script id=resource_entry_walks_the_connection type=module>
+    const state = await testing.async();
+    // The nine connection milestones were all zero, which reads as a load that
+    // resolved no name, opened no socket and sent no request -- while
+    // responseEnd said bytes arrived. Chrome 151 over plain HTTP fills seven of
+    // the nine and leaves exactly two at zero: secureConnectionStart, because
+    // there was no TLS handshake, and firstInterimResponseStart, because there
+    // was no 1xx (measured, resource-timing-response-fields.mjs).
+    const entries = await waitForResourceEntry('/served/compressed.js');
+    state.resolve();
+    await state.done(() => {
+      const e = entries[0];
+      // Not an assertion about wall-clock values -- those cannot be predicted
+      // -- but about the order a load happens in, which is the part a reader
+      // of the entry can check.
+      const walk = [
+        e.fetchStart, e.domainLookupStart, e.domainLookupEnd,
+        e.connectStart, e.connectEnd, e.requestStart,
+        e.responseStart, e.responseEnd,
+      ];
+      for (let i = 1; i < walk.length; i++) {
+        testing.expectEqual(true, walk[i] >= walk[i - 1]);
+      }
+      // A round trip happened, so the response cannot have started at the
+      // instant the fetch did. This is what fails when the milestones are
+      // stamped with fetchStart instead of measured.
+      testing.expectEqual(true, e.responseStart > e.fetchStart);
+      // Chrome reports the same instant for both: this engine reads no
+      // interim responses, so the final headers are the only headers.
+      testing.expectEqual(e.responseStart, e.finalResponseHeadersStart);
+      // The two Chrome leaves at zero over plain HTTP.
+      testing.expectEqual(0, e.secureConnectionStart);
+      testing.expectEqual(0, e.firstInterimResponseStart);
+    });
+  </script>
+
+  <script id=entries_carry_one_navigation_id type=module>
+    const state = await testing.async();
+    // Chrome 151 stamps every entry of a navigation with the same
+    // `navigationId`, and a fresh one on the next navigation -- twenty
+    // navigations across two tabs answered twenty different four-digit numbers,
+    // all inside [1, 10000], each shared by that navigation's whole buffer
+    // (measured; the oracle's api.js entry carries 9894).
+    //
+    // The property was missing outright here, which is the difference between
+    // the oracle's 34-key entry and this engine's 33-key one.
+    await waitForResourceEntry('/served/compressed.js');
+    const resources = performance.getEntriesByType('resource');
+    const nav = performance.getEntriesByType('navigation')[0];
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(true, resources.length > 1);
+      const id = nav.navigationId;
+      testing.expectEqual('number', typeof id);
+      testing.expectEqual(true, id >= 1 && id <= 10000);
+      // One navigation, one id -- a per-entry number would let a reader count
+      // the loads by counting the ids.
+      for (const e of resources) {
+        testing.expectEqual(id, e.navigationId);
+      }
+      // Chrome's key counts and the slot navigationId sits in: straight after
+      // duration, ahead of initiatorType, on both entry types.
+      const resKeys = Object.keys(resources[0].toJSON());
+      const navKeys = Object.keys(nav.toJSON());
+      testing.expectEqual(34, resKeys.length);
+      testing.expectEqual(48, navKeys.length);
+      testing.expectEqual(4, resKeys.indexOf('navigationId'));
+      testing.expectEqual(4, navKeys.indexOf('navigationId'));
     });
   </script>
 
