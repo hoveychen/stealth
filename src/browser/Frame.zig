@@ -467,20 +467,17 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
     self._queued_events = &self._queued_events_1;
     self._http_owner = .init(&page.blob_urls, &self.origin);
 
-    var screen: *Screen = undefined;
-    var visual_viewport: *VisualViewport = undefined;
-    if (parent) |p| {
-        screen = p.window._screen;
-        visual_viewport = p.window._visual_viewport;
-    } else {
-        screen = try factory.eventTarget(Screen{
-            ._proto = undefined,
-            ._orientation = null,
-        });
-        visual_viewport = try factory.eventTarget(VisualViewport{
-            ._proto = undefined,
-        });
-    }
+    // One per realm, like Chrome: the numbers they report belong to the page,
+    // but the objects carrying them do not. Both are EventTargets, so a shared
+    // instance would be a shared listener list -- an iframe hearing the
+    // parent's resize is a tell (README, "Objects two realms were sharing").
+    const screen = try factory.eventTarget(Screen{
+        ._proto = undefined,
+        ._orientation = null,
+    });
+    const visual_viewport = try factory.eventTarget(VisualViewport{
+        ._proto = undefined,
+    });
 
     const window_template = Window{
         ._frame = self,
@@ -492,8 +489,7 @@ pub fn init(self: *Frame, frame_id: u32, page: *Page, opts: InitOpts) !void {
         ._performance = .init(Performance.clock_resolution_micros),
         ._screen = screen,
         ._visual_viewport = visual_viewport,
-        // Not shared with the parent frame the way screen and visualViewport
-        // are: in Chrome an iframe's navigator.connection is its own object.
+        // Its own object too, as in Chrome.
         ._connection = try factory.eventTarget(NetworkInformation{
             ._proto = undefined,
         }),

@@ -11308,3 +11308,71 @@ carrying the decoded length in `dataLength` and the wire length in
 `loadingFinished` reports. Nothing here needs it — the totals are right without
 it — but a trace consumer that watches a transfer progress rather than complete
 sees nothing until it ends. Recorded as a gap, not scheduled as work.
+
+## The last three objects two realms were sharing (2026-08-23)
+
+The sweep in "Objects two realms were sharing" left `screen` and
+`visualViewport` behind on purpose: both are EventTargets, so splitting them is
+not a handle over shared state the way `Storage` was, it is a second instance
+with its own listener list. That is this section.
+
+The sweep is now a committed probe rather than an ad-hoc paste,
+`probes/expr-realm-shared-objects.js`: 34 paths reachable from the global, each
+read in the page and again on a same-origin iframe's `contentWindow`, plus a
+`stable` guard so a path that mints a fresh object per read cannot be mistaken
+for per-realm identity.
+
+| | before | after | Chrome |
+|---|---|---|---|
+| paths compared | 34 | 34 | 34 |
+| **same object in both realms** | **3** | **0** | **0** |
+| unstable within one realm | 0 | 0 | 1 |
+
+The three were `screen`, `screen.orientation` and `visualViewport` — the earlier
+count of two did not walk `screen.orientation`, which was shared for the same
+reason and by inheritance from it: the `ScreenOrientation` is created lazily on
+first read and cached on the `Screen`, so one `Screen` was one orientation
+object as well. Every frame now mints its own `Screen` and `VisualViewport` and
+all three fall out together. The numbers they report are unchanged, and asserted
+unchanged: both types read `frame._page.getViewport()`, so the measurements stay
+page-level and only the object identity is per-realm. Pins in
+`src/browser/tests/frames/realm_object_identity.html`.
+
+`antibot-sweep --only cf-scrapingcourse` after the change reads exactly as
+before it: `cf-challenge`, doc `403->200`, 47 nodes, "Just a moment…". Closing
+the last three shared objects did not move that station's verdict.
+
+Readings: `results/probes/expr-realm-shared-objects.{chrome,lightpanda,lightpanda-before}.json`.
+The probe needs a real origin — served over loopback, not the bare `about:blank`
+target, where a child frame is cross-origin to its parent here and every read
+comes back `SecurityError`.
+
+### There is no resize or orientation event to fan out
+
+The plan expected this change to also split an existing dispatch across the new
+instances. There is none to split: nothing in this engine fires `resize`,
+`orientationchange` or the orientation's `change` at all (`grep` over `src` for
+each; every `resize` hit is `ResizeObserver`, the CSS property, an allocator
+vtable's `resize` or a comment about the terminal, and `onorientationchange`
+occurs only in the two attribute-name tables that spell every `on*` name — the
+`Screen`'s `onchange` and the orientation's listener list have no dispatcher
+behind them). The viewport can move — `Emulation.setDeviceMetricsOverride` writes
+`browser.viewport_override` and every reader goes through `Page.getViewport` —
+but no event follows it, before this change or after. So the per-realm instances
+are per-realm listener lists that nothing in-engine dispatches to yet, and a
+page that installs a resize handler hears nothing in either arm of a headless
+run. Recorded as a gap, not scheduled as work: adding an event Chrome only fires
+when metrics change would be new behaviour, not a divergence anyone measured.
+
+### One the sweep did find: `navigator.userAgentData` is stable here
+
+The `stable` column is not decoration. Chrome answers a **fresh
+`NavigatorUAData` on every read** — `navigator.userAgentData ===
+navigator.userAgentData` is `false` there and `true` here, and `.brands` is
+`false` in both arms because that one already builds a new array per read.
+
+    chrome        { uaData: false, brands: false, plugins: true }
+    lightpanda    { uaData: true,  brands: false, plugins: true }
+
+One `===` reads it, with no iframe and no realm involved. Out of scope for this
+plan — noting it where it was measured.
