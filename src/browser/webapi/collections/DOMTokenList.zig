@@ -345,5 +345,19 @@ pub const JsApi = struct {
     pub const entries = bridge.function(DOMTokenList.entries, .{});
     pub const symbol_iterator = bridge.iterator(DOMTokenList.values, .{});
     pub const forEach = bridge.function(DOMTokenList.forEach, .{});
-    pub const @"[]" = bridge.indexed(DOMTokenList.item, null, .{ .null_as_undefined = true });
+    pub const @"[]" = bridge.indexed(DOMTokenList.item, getIndexes, .{ .null_as_undefined = true });
+
+    /// Web IDL: an indexed property getter makes the indices *own* properties,
+    /// so `Object.getOwnPropertyNames(el.classList)` is `["0","1"]` and
+    /// `JSON.stringify` of one reads the tokens back. Without an enumerator the
+    /// indices are reachable but invisible, which is a difference a page reads
+    /// by stringifying the list (probes/expr-indexed-own-names.js).
+    fn getIndexes(self: *DOMTokenList, frame: *Frame) !js.Array {
+        const len = try self.length(frame);
+        var arr = frame.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
 };
