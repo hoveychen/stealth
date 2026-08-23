@@ -93,3 +93,17 @@
   testing.expectEqual(detached, ood.parentNode);
   testing.expectEqual(detached, parentSeenAtDisconnect);
 </script>
+
+<script id=appendChild_parameter_brand>
+  // A parameter that isn't the interface WebIDL asks for is named, both the
+  // position and the type: Blink writes "parameter 1 is not of type 'Node'".
+  // The bridge used to fold every conversion failure into "invalid argument",
+  // which no browser says and which a detector can read straight off
+  // (measured on Chrome 151).
+  let err = null;
+  try { $('#d1').appendChild(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to execute 'appendChild' on 'Node': parameter 1 is not of type 'Node'.",
+    err,
+  );
+</script>

@@ -137,3 +137,14 @@
     testing.expectEqual('test', savedRecords[0].attributeName);
   });
 </script>
+
+<script id=mutationObserver_callback_brand>
+  // A callback parameter that isn't callable is refused by type name
+  // 'Function', with the parameter's position (measured on Chrome 151).
+  let err = null;
+  try { new MutationObserver(1); } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to construct 'MutationObserver': parameter 1 is not of type 'Function'.",
+    err,
+  );
+</script>
