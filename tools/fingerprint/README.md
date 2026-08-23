@@ -10986,3 +10986,126 @@ The sweep says nothing moved that should not have:
 fifteen stations, 11/15 either way. Filling a buffer that was empty is a change
 in what every page can read about itself, so the reading that matters here is
 the absence of a regression rather than a number going up.
+
+## The two WebGL readbacks are arithmetic, and both now happen (2026-08-23)
+
+`cfsc-webgl-shader-readback`. The previous round left five oracle readbacks we
+never made, and named the first two: `readPixels` on 16×16 and on 4×1, blocked
+behind `getShaderParameter(shader, COMPILE_STATUS)` answering `false`. It also
+named the trap — answering `true` without executing the shader would put 1024
+zero bytes where Chrome puts a colour, which is a wrong value in place of a
+missing one.
+
+So the shaders are executed. The point worth keeping is **why that was
+affordable**: a WebGL readback of this kind is arithmetic, not graphics.
+
+    precision mediump float;
+    void main(){gl_FragColor=vec4(sin(1.0),cos(1.0),sin(1.0)*cos(1.0),1.0);}
+
+Chrome answers `d78a74ff` for all 256 pixels. Those are `sin(1)`, `cos(1)` and
+their product quantised to eight bits. No GPU decided any of it. The second
+shader is 413 characters and per-pixel, but it reads only `gl_FragCoord`, so it
+is the same statement with a coordinate in it — two loops, four
+transcendentals, a `fract`, and Chrome's sixteen bytes come out.
+
+Both were checked in JavaScript before a line of Zig was written: fp32
+arithmetic, transcendentals at double rounded once to fp32, and the bytes
+matched. That is the reading the interpreter is built to, and getting the
+rounding the other way round would have produced numbers that look right and
+are not.
+
+`canvas/glsl.zig` is the interpreter (lexer, precedence-climbing parser,
+tree-walking evaluator over one-to-four-component values).
+`canvas/webgl_state.zig` is the state both contexts delegate to, with a
+perspective divide, a viewport transform and a point-in-triangle test on pixel
+centres between the two interpreter runs.
+
+### The row order the widget would never have caught
+
+The widget reads `gl_FragCoord.x` only, so nothing in either readback notices
+if the rows come back upside down. A 3×3 viewport whose shader reads both
+components does, and Chrome says:
+
+    202000ff 602000ff 9f2000ff   <- returned first
+    206000ff 606000ff 9f6000ff
+    209f00ff 609f00ff 9f9f00ff
+
+Green climbs down the returned buffer while red climbs across it: GL's window
+origin is the bottom-left and `readPixels` hands back the bottom row first. The
+surface underneath stores rows top-down like every other surface in the tree,
+so the flip lives where window coordinates become row indices.
+
+### Refusing is part of the answer
+
+Every call in a shader is resolved at compile time, not when a fragment runs.
+A shader reaching a builtin this interpreter does not have fails
+`COMPILE_STATUS` instead of reporting success and then drawing nothing — a page
+told its shader compiled and handed an empty readback has been misled twice,
+where a page told it did not compile is in a state real drivers put it in. The
+same holds for a draw with no linked program, an unsupported primitive or a
+short attribute buffer: the destination keeps whatever the caller put there.
+
+### Five neighbours, all measured rather than assumed
+
+Reading the spec would have got one of these wrong. `getActiveAttrib` reports
+the **declared** type — `FLOAT_VEC2` for `attribute vec2 p`, not the `vec4` the
+value is padded to on the way in, which is what had been written before the
+measurement contradicted it.
+
+| reading | before | Chrome 151 |
+|---|---|---|
+| `ATTACHED_SHADERS` | 0 | 2 |
+| `ACTIVE_ATTRIBUTES` | 0 | 1 |
+| `getAttribLocation(p, "p")` | -1 | 0 |
+| `getShaderSource` | `""` | the source it was given |
+| `getActiveAttrib(p, 0).type` | (null record) | 35664 = `FLOAT_VEC2` |
+
+Two existing assertions were wrong in the same direction: a context cleared to
+opaque black reads an alpha of **255**, not 0, and the degenerate triangle in
+`#doesNotThrow` (`gl_Position = vec4(0.0)`, so `w` is zero) puts nothing on
+screen, which means what comes back there is the clear colour.
+
+Twenty-two operations also stopped being registered as literal no-ops, which
+makes them throw for a missing argument the way Chrome does. Each arity was
+measured, because an optional object parameter does not count towards WebIDL
+`length` and would have silently dropped it — the same cause as the seventeen
+in `#missing_argument`.
+
+### What the live trace says
+
+Both arms, 90 s settle, `canvas-draw-trace.mjs` (35 s is no longer enough for
+our arm: reaching the WebGL branch is *more* work than failing out of it, and
+the widget's own pacing then runs past the old window — 3.8 s of CPU over 120 s
+of wall clock, so the wait is the page's, not ours):
+
+|  | oracle | here |
+|---|---|---|
+| readbacks | 18 | 16 |
+| WebGL `readPixels` | 2 | **2** |
+| ... `[16,16]` | `zeros=0/1024` | `zeros=0/1024`, fnv `1785938531` both |
+| ... `[4,1]` | `zeros=0/16` | `zeros=0/16`, fnv `1065983184` both |
+| readbacks only that arm makes | 4 | 2 |
+
+The context list is now in Chrome's order for the first five, which it was not
+before — the widget was taking a different branch here and creating its
+canvases in a different sequence.
+
+What still differs is what the other plans hold. The two `[2,2] n=8` reads are
+`getImageData` with `{colorSpace: 'display-p3', storageFormat: 'float16'}`,
+where we answer four bytes; the `[48,48]` is `zeros=8536/9216` against 1211,
+which is radial-gradient fill and glyph rasterisation; one of the three
+`[49,44]` reads comes back empty here.
+
+One difference belongs to this plan and is being left: `getShaderInfoLog` for a
+source that does not compile is 85 characters of ANGLE diagnostic in Chrome and
+empty here. Inventing that text would put a made-up string where a driver's
+belongs, and no shader the widget compiles reaches it.
+
+### The station still does not clear
+
+    headed chrome  pass         doc=403->200 nodes=34  "Cloudflare Challenge - ScrapingCourse.co"
+    lightpanda     cf-challenge doc=403->200 nodes=47  "Just a moment..."
+
+Unchanged from before this plan, which is the expected shape: this closed one
+of the five, and the remaining four are `cfsc-imagebitmap-pixels`, the gradient
+and glyph work behind the 48×48, and the float16 `getImageData` options.

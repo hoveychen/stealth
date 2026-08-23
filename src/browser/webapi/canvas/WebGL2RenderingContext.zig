@@ -30,6 +30,7 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 const objects = @import("webgl_objects.zig");
+const gl_state = @import("webgl_state.zig");
 const gpu_table = @import("gpu.zig");
 const gpu = gpu_table.gpu;
 const DOMException = @import("../DOMException.zig");
@@ -44,6 +45,11 @@ pub fn registerTypes() []const type {
 const WebGL2RenderingContext = @This();
 
 _canvas: Surface,
+
+/// The context's own state, shared with WebGLRenderingContext. See
+/// webgl_state.zig -- the two are separate types with the same job, and a
+/// detector picks whichever one it likes.
+_gl: gl_state,
 
 /// Shared with WebGL 1, along with the two colour-space attributes below: see
 /// WebGLRenderingContext.
@@ -931,8 +937,8 @@ pub fn createRenderbuffer(_: *const WebGL2RenderingContext, exec: *Execution) !*
     return objects.handle(objects.WebGLRenderbuffer, exec);
 }
 
-pub fn createShader(_: *const WebGL2RenderingContext, _: u32, exec: *Execution) !*objects.WebGLShader {
-    return objects.handle(objects.WebGLShader, exec);
+pub fn createShader(_: *const WebGL2RenderingContext, kind: u32, exec: *Execution) !*objects.WebGLShader {
+    return objects.handleInit(objects.WebGLShader, exec, .{ ._proto = undefined, ._kind = kind });
 }
 
 pub fn createTexture(_: *const WebGL2RenderingContext, exec: *Execution) !*objects.WebGLTexture {
@@ -1030,22 +1036,29 @@ pub fn getProgramInfoLog(_: *const WebGL2RenderingContext, _: ?*objects.WebGLPro
     return "";
 }
 
-pub fn getShaderSource(_: *const WebGL2RenderingContext, _: ?*objects.WebGLShader) []const u8 {
-    return "";
+pub fn getShaderSource(_: *const WebGL2RenderingContext, shader: ?*objects.WebGLShader) []const u8 {
+    return (shader orelse return "")._source;
 }
 
-pub fn getShaderParameter(_: *const WebGL2RenderingContext, _: ?*objects.WebGLShader, pname: u32) ?Parameter {
+pub fn getShaderParameter(_: *const WebGL2RenderingContext, shader: ?*objects.WebGLShader, pname: u32) ?Parameter {
+    const target = shader orelse return null;
     return switch (pname) {
-        SHADER_TYPE => .{ .number = VERTEX_SHADER },
-        DELETE_STATUS, COMPILE_STATUS => .{ .boolean = false },
+        SHADER_TYPE => .{ .number = @floatFromInt(target._kind) },
+        DELETE_STATUS => .{ .boolean = target._deleted },
+        COMPILE_STATUS => .{ .boolean = target._program != null },
         else => null,
     };
 }
 
-pub fn getProgramParameter(_: *const WebGL2RenderingContext, _: ?*objects.WebGLProgram, pname: u32) ?Parameter {
+pub fn getProgramParameter(self: *const WebGL2RenderingContext, program: ?*objects.WebGLProgram, pname: u32) ?Parameter {
+    const target = program orelse return null;
     return switch (pname) {
-        DELETE_STATUS, LINK_STATUS, VALIDATE_STATUS => .{ .boolean = false },
-        ATTACHED_SHADERS, ACTIVE_UNIFORMS, ACTIVE_ATTRIBUTES, ACTIVE_UNIFORM_BLOCKS, TRANSFORM_FEEDBACK_VARYINGS => .{ .number = 0 },
+        DELETE_STATUS => .{ .boolean = target._deleted },
+        LINK_STATUS => .{ .boolean = target._linked },
+        VALIDATE_STATUS => .{ .boolean = target._validated },
+        ATTACHED_SHADERS => .{ .number = @floatFromInt(self._gl.attachedShaders(target)) },
+        ACTIVE_ATTRIBUTES => .{ .number = @floatFromInt(self._gl.activeAttributes(target)) },
+        ACTIVE_UNIFORMS, ACTIVE_UNIFORM_BLOCKS, TRANSFORM_FEEDBACK_VARYINGS => .{ .number = 0 },
         TRANSFORM_FEEDBACK_BUFFER_MODE => .{ .number = INTERLEAVED_ATTRIBS },
         else => null,
     };
@@ -1127,8 +1140,14 @@ pub fn getShaderPrecisionFormat(
     return try exec._factory.create(format);
 }
 
-pub fn getActiveAttrib(_: *const WebGL2RenderingContext, _: ?*objects.WebGLProgram, _: u32) ?*objects.WebGLActiveInfo {
-    return null;
+pub fn getActiveAttrib(self: *const WebGL2RenderingContext, program: ?*objects.WebGLProgram, index: u32, exec: *Execution) !?*objects.WebGLActiveInfo {
+    const list = self._gl.attributeList(program) orelse return null;
+    if (index >= list.len) return null;
+    return try exec._factory.create(objects.WebGLActiveInfo{
+        ._size = 1,
+        ._type = gl_state.attribType(list[index].components),
+        ._name = list[index].name,
+    });
 }
 
 pub fn getActiveUniform(_: *const WebGL2RenderingContext, _: ?*objects.WebGLProgram, _: u32) ?*objects.WebGLActiveInfo {
@@ -1139,12 +1158,12 @@ pub fn getTransformFeedbackVarying(_: *const WebGL2RenderingContext, _: ?*object
     return null;
 }
 
-pub fn getAttachedShaders(_: *const WebGL2RenderingContext, _: ?*objects.WebGLProgram) []const *objects.WebGLShader {
-    return &.{};
+pub fn getAttachedShaders(self: *const WebGL2RenderingContext, program: ?*objects.WebGLProgram, exec: *Execution) ![]const *objects.WebGLShader {
+    return self._gl.attachedShaderList(program, exec.arena);
 }
 
-pub fn getAttribLocation(_: *const WebGL2RenderingContext, _: ?*objects.WebGLProgram, _: []const u8) i32 {
-    return -1;
+pub fn getAttribLocation(self: *const WebGL2RenderingContext, program: ?*objects.WebGLProgram, name: []const u8) i32 {
+    return self._gl.attribLocation(program, name);
 }
 
 pub fn getFragDataLocation(_: *const WebGL2RenderingContext, _: ?*objects.WebGLProgram, _: []const u8) i32 {
@@ -1258,15 +1277,20 @@ pub fn getContextAttributes(_: *const WebGL2RenderingContext) ContextAttributes 
     return .{};
 }
 
-// The state setters, plus readPixels and getBufferSubData, which write into a
-// caller-supplied buffer that Chrome leaves at zero for a context this empty.
+// The state setters. The ones with something to remember delegate to
+// webgl_state.zig; the rest are here for their parameter count alone, which is
+// all of them that is JS-visible.
 
 pub fn activeTexture(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn attachShader(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
+pub fn attachShader(self: *WebGL2RenderingContext, program: ?*objects.WebGLProgram, shader: ?*objects.WebGLShader) void {
+    self._gl.attachShader(program, shader);
+}
 pub fn beginQuery(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn beginTransformFeedback(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn bindAttribLocation(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn bindBuffer(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
+pub fn bindBuffer(self: *WebGL2RenderingContext, target: u32, buffer: ?*objects.WebGLBuffer) void {
+    self._gl.bindBuffer(target, buffer);
+}
 pub fn bindBufferBase(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn bindBufferRange(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn bindFramebuffer(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
@@ -1281,18 +1305,30 @@ pub fn blendEquationSeparate(_: *const WebGL2RenderingContext, _: js.Value, _: j
 pub fn blendFunc(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn blendFuncSeparate(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn blitFramebuffer(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn bufferData(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+/// The second argument is either a byte length or the bytes themselves. Only
+/// the bytes are kept: a size-only call allocates a zeroed buffer in GL, and a
+/// draw that reads one gets zeroes here too.
+pub fn bufferData(self: *WebGL2RenderingContext, target: u32, data: js.Value, _: u32) void {
+    if (data.isNumber()) return;
+    self._gl.bufferData(target, data.toStringSmart() catch return);
+}
 pub fn bufferSubData(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn clear(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn clear(self: *WebGL2RenderingContext, mask: u32) void {
+    self._gl.clear(mask, self._canvas.width(), self._canvas.height());
+}
 pub fn clearBufferfi(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn clearBufferfv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn clearBufferiv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn clearBufferuiv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn clearColor(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn clearColor(self: *WebGL2RenderingContext, r: f32, g: f32, b: f32, a: f32) void {
+    self._gl.clearColor(r, g, b, a);
+}
 pub fn clearDepth(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn clearStencil(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn colorMask(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn compileShader(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn compileShader(self: *WebGL2RenderingContext, shader: ?*objects.WebGLShader) void {
+    self._gl.compileShader(shader);
+}
 pub fn compressedTexImage2D(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn compressedTexImage3D(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn compressedTexSubImage2D(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
@@ -1302,13 +1338,19 @@ pub fn copyTexImage2D(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value
 pub fn copyTexSubImage2D(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn copyTexSubImage3D(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn cullFace(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn deleteBuffer(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn deleteBuffer(_: *const WebGL2RenderingContext, buffer: ?*objects.WebGLBuffer) void {
+    (buffer orelse return)._deleted = true;
+}
 pub fn deleteFramebuffer(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn deleteProgram(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn deleteProgram(_: *const WebGL2RenderingContext, program: ?*objects.WebGLProgram) void {
+    (program orelse return)._deleted = true;
+}
 pub fn deleteQuery(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn deleteRenderbuffer(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn deleteSampler(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn deleteShader(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn deleteShader(_: *const WebGL2RenderingContext, shader: ?*objects.WebGLShader) void {
+    (shader orelse return)._deleted = true;
+}
 pub fn deleteSync(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn deleteTexture(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn deleteTransformFeedback(_: *const WebGL2RenderingContext, _: js.Value) void {}
@@ -1316,10 +1358,16 @@ pub fn deleteVertexArray(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn depthFunc(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn depthMask(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn depthRange(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
-pub fn detachShader(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
+pub fn detachShader(self: *WebGL2RenderingContext, program: ?*objects.WebGLProgram, shader: ?*objects.WebGLShader) void {
+    self._gl.detachShader(program, shader);
+}
 pub fn disable(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn disableVertexAttribArray(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn drawArrays(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn disableVertexAttribArray(self: *WebGL2RenderingContext, index: u32) void {
+    self._gl.enableVertexAttribArray(index, false);
+}
+pub fn drawArrays(self: *WebGL2RenderingContext, mode: u32, first: i32, count: i32) void {
+    self._gl.drawArrays(mode, first, count, self._canvas.width(), self._canvas.height());
+}
 pub fn drawArraysInstanced(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn drawBuffers(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn drawElements(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
@@ -1327,7 +1375,9 @@ pub fn drawElementsInstanced(_: *const WebGL2RenderingContext, _: js.Value, _: j
 pub fn drawingBufferStorage(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn drawRangeElements(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn enable(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn enableVertexAttribArray(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn enableVertexAttribArray(self: *WebGL2RenderingContext, index: u32) void {
+    self._gl.enableVertexAttribArray(index, true);
+}
 pub fn endQuery(_: *const WebGL2RenderingContext, _: js.Value) void {}
 pub fn endTransformFeedback(_: *const WebGL2RenderingContext) void {}
 pub fn finish(_: *const WebGL2RenderingContext) void {}
@@ -1342,12 +1392,26 @@ pub fn hint(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn invalidateFramebuffer(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn invalidateSubFramebuffer(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn lineWidth(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn linkProgram(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn linkProgram(self: *WebGL2RenderingContext, program: ?*objects.WebGLProgram) void {
+    self._gl.linkProgram(program);
+}
 pub fn pauseTransformFeedback(_: *const WebGL2RenderingContext) void {}
 pub fn pixelStorei(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn polygonOffset(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn readBuffer(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn readPixels(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+/// Reads the drawing buffer back into the caller's view; see the WebGL1 twin.
+pub fn readPixels(
+    self: *WebGL2RenderingContext,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    format: u32,
+    kind: u32,
+    dest: js.Object,
+) void {
+    self._gl.readPixels(x, y, w, h, format, kind, gl_state.destination(dest) orelse return);
+}
 pub fn renderbufferStorage(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn renderbufferStorageMultisample(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn resumeTransformFeedback(_: *const WebGL2RenderingContext) void {}
@@ -1355,7 +1419,9 @@ pub fn sampleCoverage(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value
 pub fn samplerParameterf(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn samplerParameteri(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn scissor(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn shaderSource(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
+pub fn shaderSource(self: *WebGL2RenderingContext, shader: ?*objects.WebGLShader, source: []const u8) void {
+    self._gl.shaderSource(shader, source);
+}
 pub fn stencilFunc(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn stencilFuncSeparate(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn stencilMask(_: *const WebGL2RenderingContext, _: js.Value) void {}
@@ -1405,8 +1471,12 @@ pub fn uniformMatrix3x4fv(_: *const WebGL2RenderingContext, _: js.Value, _: js.V
 pub fn uniformMatrix4fv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn uniformMatrix4x2fv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn uniformMatrix4x3fv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn useProgram(_: *const WebGL2RenderingContext, _: js.Value) void {}
-pub fn validateProgram(_: *const WebGL2RenderingContext, _: js.Value) void {}
+pub fn useProgram(self: *WebGL2RenderingContext, program: ?*objects.WebGLProgram) void {
+    self._gl.useProgram(program);
+}
+pub fn validateProgram(self: *WebGL2RenderingContext, program: ?*objects.WebGLProgram) void {
+    self._gl.validateProgram(program);
+}
 pub fn vertexAttrib1f(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn vertexAttrib1fv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn vertexAttrib2f(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
@@ -1421,8 +1491,12 @@ pub fn vertexAttribI4iv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Val
 pub fn vertexAttribI4ui(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
 pub fn vertexAttribI4uiv(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value) void {}
 pub fn vertexAttribIPointer(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn vertexAttribPointer(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
-pub fn viewport(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value, _: js.Value) void {}
+pub fn vertexAttribPointer(self: *WebGL2RenderingContext, index: u32, size: i32, kind: u32, _: bool, stride: i32, offset: i32) void {
+    self._gl.vertexAttribPointer(index, size, kind, stride, offset);
+}
+pub fn viewport(self: *WebGL2RenderingContext, x: i32, y: i32, w: i32, h: i32) void {
+    self._gl.setViewport(x, y, w, h);
+}
 pub fn waitSync(_: *const WebGL2RenderingContext, _: js.Value, _: js.Value, _: js.Value) void {}
 
 pub const JsApi = struct {
@@ -1507,11 +1581,11 @@ pub const JsApi = struct {
     pub const isVertexArray = bridge.function(WebGL2RenderingContext.isVertexArray, .{ .arity = 1 });
 
     pub const activeTexture = bridge.function(WebGL2RenderingContext.activeTexture, .{ .noop = true });
-    pub const attachShader = bridge.function(WebGL2RenderingContext.attachShader, .{ .noop = true });
+    pub const attachShader = bridge.function(WebGL2RenderingContext.attachShader, .{ .arity = 2 });
     pub const beginQuery = bridge.function(WebGL2RenderingContext.beginQuery, .{ .noop = true });
     pub const beginTransformFeedback = bridge.function(WebGL2RenderingContext.beginTransformFeedback, .{ .noop = true });
     pub const bindAttribLocation = bridge.function(WebGL2RenderingContext.bindAttribLocation, .{ .noop = true });
-    pub const bindBuffer = bridge.function(WebGL2RenderingContext.bindBuffer, .{ .noop = true });
+    pub const bindBuffer = bridge.function(WebGL2RenderingContext.bindBuffer, .{ .arity = 2 });
     pub const bindBufferBase = bridge.function(WebGL2RenderingContext.bindBufferBase, .{ .noop = true });
     pub const bindBufferRange = bridge.function(WebGL2RenderingContext.bindBufferRange, .{ .noop = true });
     pub const bindFramebuffer = bridge.function(WebGL2RenderingContext.bindFramebuffer, .{ .noop = true });
@@ -1526,18 +1600,18 @@ pub const JsApi = struct {
     pub const blendFunc = bridge.function(WebGL2RenderingContext.blendFunc, .{ .noop = true });
     pub const blendFuncSeparate = bridge.function(WebGL2RenderingContext.blendFuncSeparate, .{ .noop = true });
     pub const blitFramebuffer = bridge.function(WebGL2RenderingContext.blitFramebuffer, .{ .noop = true });
-    pub const bufferData = bridge.function(WebGL2RenderingContext.bufferData, .{ .noop = true });
+    pub const bufferData = bridge.function(WebGL2RenderingContext.bufferData, .{ .arity = 3 });
     pub const bufferSubData = bridge.function(WebGL2RenderingContext.bufferSubData, .{ .noop = true });
-    pub const clear = bridge.function(WebGL2RenderingContext.clear, .{ .noop = true });
+    pub const clear = bridge.function(WebGL2RenderingContext.clear, .{ .arity = 1 });
     pub const clearBufferfi = bridge.function(WebGL2RenderingContext.clearBufferfi, .{ .noop = true });
     pub const clearBufferfv = bridge.function(WebGL2RenderingContext.clearBufferfv, .{ .noop = true });
     pub const clearBufferiv = bridge.function(WebGL2RenderingContext.clearBufferiv, .{ .noop = true });
     pub const clearBufferuiv = bridge.function(WebGL2RenderingContext.clearBufferuiv, .{ .noop = true });
-    pub const clearColor = bridge.function(WebGL2RenderingContext.clearColor, .{ .noop = true });
+    pub const clearColor = bridge.function(WebGL2RenderingContext.clearColor, .{ .arity = 4 });
     pub const clearDepth = bridge.function(WebGL2RenderingContext.clearDepth, .{ .noop = true });
     pub const clearStencil = bridge.function(WebGL2RenderingContext.clearStencil, .{ .noop = true });
     pub const colorMask = bridge.function(WebGL2RenderingContext.colorMask, .{ .noop = true });
-    pub const compileShader = bridge.function(WebGL2RenderingContext.compileShader, .{ .noop = true });
+    pub const compileShader = bridge.function(WebGL2RenderingContext.compileShader, .{ .arity = 1 });
     pub const compressedTexImage2D = bridge.function(WebGL2RenderingContext.compressedTexImage2D, .{ .noop = true });
     pub const compressedTexImage3D = bridge.function(WebGL2RenderingContext.compressedTexImage3D, .{ .noop = true });
     pub const compressedTexSubImage2D = bridge.function(WebGL2RenderingContext.compressedTexSubImage2D, .{ .noop = true });
@@ -1547,13 +1621,13 @@ pub const JsApi = struct {
     pub const copyTexSubImage2D = bridge.function(WebGL2RenderingContext.copyTexSubImage2D, .{ .noop = true });
     pub const copyTexSubImage3D = bridge.function(WebGL2RenderingContext.copyTexSubImage3D, .{ .noop = true });
     pub const cullFace = bridge.function(WebGL2RenderingContext.cullFace, .{ .noop = true });
-    pub const deleteBuffer = bridge.function(WebGL2RenderingContext.deleteBuffer, .{ .noop = true });
+    pub const deleteBuffer = bridge.function(WebGL2RenderingContext.deleteBuffer, .{ .arity = 1 });
     pub const deleteFramebuffer = bridge.function(WebGL2RenderingContext.deleteFramebuffer, .{ .noop = true });
-    pub const deleteProgram = bridge.function(WebGL2RenderingContext.deleteProgram, .{ .noop = true });
+    pub const deleteProgram = bridge.function(WebGL2RenderingContext.deleteProgram, .{ .arity = 1 });
     pub const deleteQuery = bridge.function(WebGL2RenderingContext.deleteQuery, .{ .noop = true });
     pub const deleteRenderbuffer = bridge.function(WebGL2RenderingContext.deleteRenderbuffer, .{ .noop = true });
     pub const deleteSampler = bridge.function(WebGL2RenderingContext.deleteSampler, .{ .noop = true });
-    pub const deleteShader = bridge.function(WebGL2RenderingContext.deleteShader, .{ .noop = true });
+    pub const deleteShader = bridge.function(WebGL2RenderingContext.deleteShader, .{ .arity = 1 });
     pub const deleteSync = bridge.function(WebGL2RenderingContext.deleteSync, .{ .noop = true });
     pub const deleteTexture = bridge.function(WebGL2RenderingContext.deleteTexture, .{ .noop = true });
     pub const deleteTransformFeedback = bridge.function(WebGL2RenderingContext.deleteTransformFeedback, .{ .noop = true });
@@ -1561,10 +1635,10 @@ pub const JsApi = struct {
     pub const depthFunc = bridge.function(WebGL2RenderingContext.depthFunc, .{ .noop = true });
     pub const depthMask = bridge.function(WebGL2RenderingContext.depthMask, .{ .noop = true });
     pub const depthRange = bridge.function(WebGL2RenderingContext.depthRange, .{ .noop = true });
-    pub const detachShader = bridge.function(WebGL2RenderingContext.detachShader, .{ .noop = true });
+    pub const detachShader = bridge.function(WebGL2RenderingContext.detachShader, .{ .arity = 2 });
     pub const disable = bridge.function(WebGL2RenderingContext.disable, .{ .noop = true });
-    pub const disableVertexAttribArray = bridge.function(WebGL2RenderingContext.disableVertexAttribArray, .{ .noop = true });
-    pub const drawArrays = bridge.function(WebGL2RenderingContext.drawArrays, .{ .noop = true });
+    pub const disableVertexAttribArray = bridge.function(WebGL2RenderingContext.disableVertexAttribArray, .{ .arity = 1 });
+    pub const drawArrays = bridge.function(WebGL2RenderingContext.drawArrays, .{ .arity = 3 });
     pub const drawArraysInstanced = bridge.function(WebGL2RenderingContext.drawArraysInstanced, .{ .noop = true });
     pub const drawBuffers = bridge.function(WebGL2RenderingContext.drawBuffers, .{ .noop = true });
     pub const drawElements = bridge.function(WebGL2RenderingContext.drawElements, .{ .noop = true });
@@ -1572,7 +1646,7 @@ pub const JsApi = struct {
     pub const drawingBufferStorage = bridge.function(WebGL2RenderingContext.drawingBufferStorage, .{ .noop = true });
     pub const drawRangeElements = bridge.function(WebGL2RenderingContext.drawRangeElements, .{ .noop = true });
     pub const enable = bridge.function(WebGL2RenderingContext.enable, .{ .noop = true });
-    pub const enableVertexAttribArray = bridge.function(WebGL2RenderingContext.enableVertexAttribArray, .{ .noop = true });
+    pub const enableVertexAttribArray = bridge.function(WebGL2RenderingContext.enableVertexAttribArray, .{ .arity = 1 });
     pub const endQuery = bridge.function(WebGL2RenderingContext.endQuery, .{ .noop = true });
     pub const endTransformFeedback = bridge.function(WebGL2RenderingContext.endTransformFeedback, .{ .noop = true });
     pub const finish = bridge.function(WebGL2RenderingContext.finish, .{ .noop = true });
@@ -1587,12 +1661,12 @@ pub const JsApi = struct {
     pub const invalidateFramebuffer = bridge.function(WebGL2RenderingContext.invalidateFramebuffer, .{ .noop = true });
     pub const invalidateSubFramebuffer = bridge.function(WebGL2RenderingContext.invalidateSubFramebuffer, .{ .noop = true });
     pub const lineWidth = bridge.function(WebGL2RenderingContext.lineWidth, .{ .noop = true });
-    pub const linkProgram = bridge.function(WebGL2RenderingContext.linkProgram, .{ .noop = true });
+    pub const linkProgram = bridge.function(WebGL2RenderingContext.linkProgram, .{ .arity = 1 });
     pub const pauseTransformFeedback = bridge.function(WebGL2RenderingContext.pauseTransformFeedback, .{ .noop = true });
     pub const pixelStorei = bridge.function(WebGL2RenderingContext.pixelStorei, .{ .noop = true });
     pub const polygonOffset = bridge.function(WebGL2RenderingContext.polygonOffset, .{ .noop = true });
     pub const readBuffer = bridge.function(WebGL2RenderingContext.readBuffer, .{ .noop = true });
-    pub const readPixels = bridge.function(WebGL2RenderingContext.readPixels, .{ .noop = true });
+    pub const readPixels = bridge.function(WebGL2RenderingContext.readPixels, .{ .arity = 7 });
     pub const renderbufferStorage = bridge.function(WebGL2RenderingContext.renderbufferStorage, .{ .noop = true });
     pub const renderbufferStorageMultisample = bridge.function(WebGL2RenderingContext.renderbufferStorageMultisample, .{ .noop = true });
     pub const resumeTransformFeedback = bridge.function(WebGL2RenderingContext.resumeTransformFeedback, .{ .noop = true });
@@ -1600,7 +1674,7 @@ pub const JsApi = struct {
     pub const samplerParameterf = bridge.function(WebGL2RenderingContext.samplerParameterf, .{ .noop = true });
     pub const samplerParameteri = bridge.function(WebGL2RenderingContext.samplerParameteri, .{ .noop = true });
     pub const scissor = bridge.function(WebGL2RenderingContext.scissor, .{ .noop = true });
-    pub const shaderSource = bridge.function(WebGL2RenderingContext.shaderSource, .{ .noop = true });
+    pub const shaderSource = bridge.function(WebGL2RenderingContext.shaderSource, .{ .arity = 2 });
     pub const stencilFunc = bridge.function(WebGL2RenderingContext.stencilFunc, .{ .noop = true });
     pub const stencilFuncSeparate = bridge.function(WebGL2RenderingContext.stencilFuncSeparate, .{ .noop = true });
     pub const stencilMask = bridge.function(WebGL2RenderingContext.stencilMask, .{ .noop = true });
@@ -1650,8 +1724,8 @@ pub const JsApi = struct {
     pub const uniformMatrix4fv = bridge.function(WebGL2RenderingContext.uniformMatrix4fv, .{ .noop = true });
     pub const uniformMatrix4x2fv = bridge.function(WebGL2RenderingContext.uniformMatrix4x2fv, .{ .noop = true });
     pub const uniformMatrix4x3fv = bridge.function(WebGL2RenderingContext.uniformMatrix4x3fv, .{ .noop = true });
-    pub const useProgram = bridge.function(WebGL2RenderingContext.useProgram, .{ .noop = true });
-    pub const validateProgram = bridge.function(WebGL2RenderingContext.validateProgram, .{ .noop = true });
+    pub const useProgram = bridge.function(WebGL2RenderingContext.useProgram, .{ .arity = 1 });
+    pub const validateProgram = bridge.function(WebGL2RenderingContext.validateProgram, .{ .arity = 1 });
     pub const vertexAttrib1f = bridge.function(WebGL2RenderingContext.vertexAttrib1f, .{ .noop = true });
     pub const vertexAttrib1fv = bridge.function(WebGL2RenderingContext.vertexAttrib1fv, .{ .noop = true });
     pub const vertexAttrib2f = bridge.function(WebGL2RenderingContext.vertexAttrib2f, .{ .noop = true });
@@ -1666,8 +1740,8 @@ pub const JsApi = struct {
     pub const vertexAttribI4ui = bridge.function(WebGL2RenderingContext.vertexAttribI4ui, .{ .noop = true });
     pub const vertexAttribI4uiv = bridge.function(WebGL2RenderingContext.vertexAttribI4uiv, .{ .noop = true });
     pub const vertexAttribIPointer = bridge.function(WebGL2RenderingContext.vertexAttribIPointer, .{ .noop = true });
-    pub const vertexAttribPointer = bridge.function(WebGL2RenderingContext.vertexAttribPointer, .{ .noop = true });
-    pub const viewport = bridge.function(WebGL2RenderingContext.viewport, .{ .noop = true });
+    pub const vertexAttribPointer = bridge.function(WebGL2RenderingContext.vertexAttribPointer, .{ .arity = 6 });
+    pub const viewport = bridge.function(WebGL2RenderingContext.viewport, .{ .arity = 4 });
     pub const waitSync = bridge.function(WebGL2RenderingContext.waitSync, .{ .noop = true });
 
     // Web IDL constants live on both the interface object and the prototype.

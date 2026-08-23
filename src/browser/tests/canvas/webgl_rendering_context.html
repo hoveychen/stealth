@@ -331,6 +331,193 @@
 }
 </script>
 
+<script id=WebGLRenderingContext#shader_readback>
+{
+  // The widget's WebGL probe, call for call. It compiles a constant-colour
+  // fragment shader, links it, draws a full-screen quad into a 16x16 viewport
+  // and reads the 1024 bytes back. Chrome answers d7 8a 74 ff for all 256
+  // pixels: the three components are sin(1), cos(1) and their product
+  // quantised to eight bits, so the value is arithmetic rather than something
+  // a GPU decides, and the same bytes are reachable without one.
+  //
+  // Answering COMPILE_STATUS false is what sends the widget down its failure
+  // branch -- it deletes the shaders and falls back to a 70-call getParameter
+  // sweep no browser performs -- so the status and the pixels have to land
+  // together. Reporting true over a buffer left at zero would put 1024 zero
+  // bytes where Chrome puts a colour: a wrong value in place of a missing one,
+  // which is not an improvement.
+  //
+  // Every expectation below is a reading off Chrome 151, not a reading of the
+  // spec (probe /tmp/expr-webgl-status.js, headless).
+  const gl = document.createElement("canvas").getContext("webgl");
+
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+
+  // Status is per-stage: a shader that has a source but has not been compiled
+  // still reads false, so a blanket true is not what Chrome does either.
+  testing.expectEqual(false, gl.getShaderParameter(vs, gl.COMPILE_STATUS));
+  gl.shaderSource(vs, "attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}");
+  testing.expectEqual(false, gl.getShaderParameter(vs, gl.COMPILE_STATUS));
+  testing.expectEqual("attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}", gl.getShaderSource(vs));
+  gl.compileShader(vs);
+
+  gl.shaderSource(fs, "precision mediump float;void main(){gl_FragColor=vec4(sin(1.0),cos(1.0),sin(1.0)*cos(1.0),1.0);}");
+  gl.compileShader(fs);
+
+  testing.expectEqual(true, gl.getShaderParameter(vs, gl.COMPILE_STATUS));
+  testing.expectEqual(true, gl.getShaderParameter(fs, gl.COMPILE_STATUS));
+  testing.expectEqual(false, gl.getShaderParameter(fs, gl.DELETE_STATUS));
+  testing.expectEqual("", gl.getShaderInfoLog(fs));
+
+  // And a source that is not GLSL still fails, which is the reading that keeps
+  // the status honest rather than hard-coded the other way round.
+  const bad = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(bad, "this is not glsl");
+  gl.compileShader(bad);
+  testing.expectEqual(false, gl.getShaderParameter(bad, gl.COMPILE_STATUS));
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
+
+  const program = gl.createProgram();
+  testing.expectEqual(false, gl.getProgramParameter(program, gl.LINK_STATUS));
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+
+  testing.expectEqual(true, gl.getProgramParameter(program, gl.LINK_STATUS));
+  testing.expectEqual(false, gl.getProgramParameter(program, gl.DELETE_STATUS));
+  testing.expectEqual(2, gl.getProgramParameter(program, gl.ATTACHED_SHADERS));
+  testing.expectEqual(1, gl.getProgramParameter(program, gl.ACTIVE_ATTRIBUTES));
+  testing.expectEqual(0, gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS));
+  testing.expectEqual(0, gl.getAttribLocation(program, "p"));
+
+  // VALIDATE_STATUS is not LINK_STATUS under another name: it stays false
+  // until validateProgram is actually called.
+  testing.expectEqual(false, gl.getProgramParameter(program, gl.VALIDATE_STATUS));
+  gl.validateProgram(program);
+  testing.expectEqual(true, gl.getProgramParameter(program, gl.VALIDATE_STATUS));
+
+  gl.useProgram(program);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.viewport(0, 0, 16, 16);
+  gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+
+  const pixels = new Uint8Array(16 * 16 * 4);
+  gl.readPixels(0, 0, 16, 16, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  let hex = "";
+  for (let i = 0; i < pixels.length; i++) hex += pixels[i].toString(16).padStart(2, "0");
+  testing.expectEqual("d78a74ff".repeat(256), hex);
+}
+</script>
+
+<script id=WebGLRenderingContext#fragcoord_readback>
+{
+  // The widget's second readback, which is the same call sequence as the first
+  // with a shader that reads gl_FragCoord instead of ignoring it: two loops,
+  // four transcendentals and a fract, over a 4x1 viewport. Chrome answers
+  // sixteen bytes, and the second component walking ce cf d0 d1 across the row
+  // is the whole reason this one cannot be answered with a constant.
+  //
+  // It runs on the same context as the first, straight after it, exactly as
+  // the widget does -- the previous draw is still in the buffer, and this one
+  // has to land on top of it.
+  const gl = document.createElement("canvas").getContext("webgl");
+
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, "attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}");
+  gl.compileShader(vs);
+
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
+
+  const draw = (source, w, h) => {
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, source);
+    gl.compileShader(fs);
+    testing.expectEqual(true, gl.getShaderParameter(fs, gl.COMPILE_STATUS));
+
+    const program = gl.createProgram();
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    testing.expectEqual(true, gl.getProgramParameter(program, gl.LINK_STATUS));
+
+    gl.useProgram(program);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    gl.viewport(0, 0, w, h);
+    gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+
+    const pixels = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    let hex = "";
+    for (let i = 0; i < pixels.length; i++) hex += pixels[i].toString(16).padStart(2, "0");
+    return { program, hex };
+  };
+
+  const first = draw(
+    "precision mediump float;void main(){gl_FragColor=vec4(sin(1.0),cos(1.0),sin(1.0)*cos(1.0),1.0);}",
+    16, 16);
+  testing.expectEqual("d78a74ff".repeat(256), first.hex);
+
+  gl.deleteProgram(first.program);
+
+  const second = draw(`precision highp float;
+void main() {
+  float a = gl_FragCoord.x;
+  float b = 1.0;
+  for (int i = 0; i < 20; i++) { b = b * 1.1 + 0.001; }
+  float c = sin(cos(sin(cos(a * 0.1))));
+  float d = 1.0;
+  for (int i = 0; i < 10; i++) { d = inversesqrt(d + 0.01); }
+  float e = fract(a * 12345.6789);
+  gl_FragColor = vec4(
+    fract(b * 0.5 + 0.5),
+    fract(c * 0.5 + 0.5),
+    fract(d * 0.5 + 0.5),
+    fract(e)
+  );
+}`, 4, 1);
+  testing.expectEqual("e4ceffd6e4cfff84e4d0ff32e4d1ffdf", second.hex);
+
+  // The widget only reads gl_FragCoord.x, so nothing above would notice the
+  // rows coming back in the wrong order. This one does: GL's window origin is
+  // the bottom-left and readPixels hands back the bottom row first, so the
+  // green channel has to climb 20 -> 60 -> 9f down the returned buffer while
+  // the red channel climbs across it. Measured on Chrome 151.
+  const third = draw(
+    "precision highp float;void main(){gl_FragColor=vec4(fract(gl_FragCoord.x*0.25),fract(gl_FragCoord.y*0.25),0.0,1.0);}",
+    3, 3);
+  testing.expectEqual(
+    "202000ff602000ff9f2000ff206000ff606000ff9f6000ff209f00ff609f00ff9f9f00ff",
+    third.hex);
+}
+</script>
+
+<script id=WebGLRenderingContext#clear_alpha>
+{
+  // A context nobody has touched reads back transparent black, which is what
+  // writing nothing already produces -- but one `clear` later the colour is
+  // the clear colour, and an untouched buffer reports an alpha of 0 where
+  // Chrome reports 255.
+  const gl = document.createElement("canvas").getContext("webgl");
+  const virgin = new Uint8Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, virgin);
+  testing.expectEqual("0,0,0,0", virgin.join(","));
+
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const cleared = new Uint8Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, cleared);
+  testing.expectEqual("0,0,0,255", cleared.join(","));
+}
+</script>
+
 <script id=WebGLRenderingContext#doesNotThrow>
 {
   // The whole point of the stub: a consumer that feature-detects WebGL and then
@@ -369,12 +556,13 @@
   gl.finish();
   gl.flush();
 
-  // readPixels leaves the destination alone, as Chrome does for a context that
-  // has never been drawn into.
+  // The draw above puts nothing on screen -- the vertex shader sends all three
+  // vertices to vec4(0.0), and a w of zero is a degenerate triangle -- so what
+  // comes back is the clear colour, opaque black. Measured on Chrome 151.
   const pixels = new Uint8Array(4);
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
   testing.expectEqual(0, pixels[0]);
-  testing.expectEqual(0, pixels[3]);
+  testing.expectEqual(255, pixels[3]);
 
   gl.deleteBuffer(buffer);
   gl.deleteTexture(texture);
