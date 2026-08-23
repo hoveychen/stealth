@@ -8740,7 +8740,13 @@ out is a *category* difference: this is not an engine sending a stub, or a
 tenth of the telemetry. Both arms post the same order of magnitude to the same
 endpoint and get a same-sized program back.
 
-### The oracle stopped clearing
+### The oracle stopped clearing — WRONG, see "The oracle was never dead" below
+
+**Retracted.** Both runs below were launched without `--headed-ua`, so the
+oracle's user agent said `HeadlessChrome` — the one word this repo had already
+measured as fatal on this station. The arm was misconfigured, not demoted, and
+Chrome clears `cf-scrapingcourse` on demand once the flag is passed. The
+paragraphs are kept for the trace they cite; read the conclusion as void.
 
 The headless Chrome arm no longer clears `cf-scrapingcourse` either. Two
 consecutive runs, both `clearance: false`, both ending on `Just a moment...`,
@@ -8915,3 +8921,70 @@ is *below* Chrome's, so the check stays silent where Chrome speaks
 
 Readings: `results/probes/probe-operation-arity.{chrome,lightpanda}.json`,
 `probe-arity-refusal.{chrome,lightpanda}.json`.
+
+## The oracle was never dead: one flag, and the diff it hands back (2026-08-23)
+
+The previous chapter but one concluded that headless Chrome had stopped
+clearing `cf-scrapingcourse`, and that every plan under
+`cf-scrapingcourse-oracle-diff` was therefore blocked until a passing arm could
+be rebuilt. That conclusion is wrong, and cheaply so.
+
+Both of its Chrome runs record `headedUa: false`. Without `--headed-ua` the
+arm's user agent contains `HeadlessChrome`, and this repo has a whole chapter on
+that word being the single fatal tell on this station
+(`antibot-oracle-headless-ua`). The runs measured a Chrome that announces itself
+as headless, which fails the way anything announcing itself as headless fails.
+
+Re-run with the flag, same station, same harness, thirty minutes later:
+
+```
+$ node tools/fingerprint/cfsc-fo-diff.mjs chrome --headed-ua
+FINAL title="Cloudflare Challenge - ScrapingCourse.com"
+      text="You bypassed the Cloudflare challenge! :D"
+```
+
+`results/cfsc-fo-oracle-recheck.json`. The `clearance` field in that JSON still
+reads `false` — it looks for a `cf_clearance` cookie and does not see one
+through this harness — so read the title and the body text, not that flag. The
+two older passing traces (`cfsc-fo-oracle.json`,
+`cfsc-fo-oracle-hints.json`) say `clearance: false` and
+`"You bypassed the Cloudflare challenge!"` in the same breath, which is what
+made the field look like evidence of a failure it never described.
+
+### The three arms, and where they part
+
+| # | bytes | endpoint | oracle (`--headed-ua`) | this engine | Chrome, no `--headed-ua` |
+|---|---|---|---|---|---|
+| 1 | ~2.3K | `{sc}` page-level `fo/` | `cf-chl-gen` | `cf-chl-gen` | `cf-chl-gen` |
+| 2 | ~4.8K | `{cf}` widget `fo/` | `cf-chl-gen` | `cf-chl-gen` | `cf-chl-gen` |
+| 3 | ~86-89K | `{cf}` widget `fo/` | **no `cf-chl-gen`** | `cf-chl-gen` | `cf-chl-gen` |
+| 4 | ~8.8K | `{sc}` page-level `fo/` | sent | — | — |
+| 5 | ~2.6K | `POST /cloudflare-challenge` | sent, 4207-byte page | — | — |
+
+So the first divergence is not a request we fail to make. All three arms send
+the same first three POSTs to the same two endpoints; the oracle's third reply
+comes back **without** a new challenge and every other arm's comes back with
+one. POSTs 4 and 5 are what an accepted round 3 unlocks: another page-level
+telemetry post, then the form submit that swaps the interstitial for the real
+page.
+
+Two things fall out of the table. `cf-chl-gen` on round 3 is the verdict line
+to instrument — not the payload size, and not the endpoint choice E1 suspected
+(both arms post round 2 and 3 to the widget instance, and round 1 and 4 to the
+page-level one). And payload size is *not* the discriminator: the declined
+Chrome arm posted the largest round 3 of the three (89612 bytes) and was
+declined anyway, while the oracle was accepted at 88727 and this engine
+declined at 85655.
+
+The useful control here is the headless-UA Chrome arm. It is a real Chrome —
+every API, every timing, every rendering signal genuine — and it is declined at
+exactly the same step, in exactly the same shape, as this engine. Whatever round
+3 carries, one wrong value in it is enough, and being otherwise a real browser
+does not save the arm. That is the encouraging reading: this engine is not
+failing round 3 by a mile of missing surface, it is failing it the way a real
+browser with one bad field fails it.
+
+`cfsc-widget-solve-declined` is therefore unblocked, and its diff is
+well-posed: with the oracle passing on demand, capture both round-3 bodies from
+the same sitting and find what the accepted one says that the declined one does
+not.
