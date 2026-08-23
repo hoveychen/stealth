@@ -3,6 +3,7 @@
   <script src="testing.js"></script>
   <link rel="stylesheet" href="/styles/visibility.css">
   <link rel="preload" as="script" href="/src/browser/tests/shape.js">
+  <script src="/served/compressed.js"></script>
 </head>
 <body>
   <img id="pic" src="/src/browser/tests/performance_resource.png">
@@ -109,6 +110,31 @@
     await state.done(() => {
       testing.expectEqual(1, entries.length);
       testing.expectEqual('link', entries[0].initiatorType);
+    });
+  </script>
+
+  <script id=resource_entry_reports_the_wire_size type=module>
+    const state = await testing.async();
+    // The two sizes are not the same number. `encodedBodySize` is what came off
+    // the wire; `decodedBodySize` is what it became once the content-encoding
+    // was undone. Reporting the decoded size for both says the response was
+    // served uncompressed -- which, for a script a real site serves under
+    // brotli, is a claim about the server that the server itself contradicts.
+    //
+    // Measured on Chrome 151 (tools/fingerprint/resource-timing-response-fields.mjs):
+    // a br-encoded 7 046-byte body answered encodedBodySize 65 (the compressed
+    // length) against decodedBodySize 7 046, and transferSize was the encoded
+    // size plus the flat 300 bytes of header overhead.
+    const entries = await waitForResourceEntry('/served/compressed.js');
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(1, entries.length);
+      testing.expectEqual(72, entries[0].encodedBodySize);
+      testing.expectEqual(1745, entries[0].decodedBodySize);
+      testing.expectEqual(372, entries[0].transferSize);
+      // The script really did run, so the body that got decoded is the body the
+      // decoded size counts.
+      testing.expectEqual(1, window.__compressed);
     });
   </script>
 

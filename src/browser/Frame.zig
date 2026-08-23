@@ -2521,7 +2521,7 @@ pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
         .fetch_start = r.fetch_start,
         .response_end = perf.now(),
         .response_status = r.status,
-        .encoded_body_size = r.body_len,
+        .encoded_body_size = if (r.encoded_body_len > 0) r.encoded_body_len else r.body_len,
         .decoded_body_size = r.body_len,
     }, &self.js.execution) catch |err| {
         log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
@@ -2533,7 +2533,14 @@ pub const ResourceTimingRecord = struct {
     initiator: []const u8,
     fetch_start: f64,
     status: u16,
+
+    // What the body decoded to; `decodedBodySize`.
     body_len: usize,
+
+    // What the body weighed on the wire; `encodedBodySize`. Zero means nobody
+    // measured it, and the decoded length stands in -- a response that was not
+    // compressed has the same number for both.
+    encoded_body_len: u64 = 0,
 
     // The protocol the response arrived over, as libcurl reports it
     // ("http/1.1", "h2", "h3"). Empty only when no connection was made.
@@ -2732,6 +2739,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .fetch_start = fetch_start,
         .status = response.status,
         .body_len = response.body.items.len,
+        .encoded_body_len = response.encoded_body_size,
         .next_hop_protocol = response.next_hop_protocol,
         // A stylesheet holds up rendering until its rules are in, which is
         // why this fetch is the synchronous one to begin with.
@@ -2861,6 +2869,10 @@ const ImageRequest = struct {
     // signature length on purpose.
     bytes: usize = 0,
 
+    // The same body as it came off the wire, before any content-encoding was
+    // undone. Read per chunk because doneCallback has no transfer to ask.
+    encoded_bytes: u64 = 0,
+
     // The head of the body, kept until it has all arrived. Nothing here
     // decodes, so a signature is as close to "it became a picture" as this
     // engine gets -- close enough that the residual gap is a truncated image,
@@ -2905,6 +2917,7 @@ const ImageRequest = struct {
     fn dataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
         const self: *ImageRequest = @ptrCast(@alignCast(transfer.req.ctx));
         self.bytes += data.len;
+        self.encoded_bytes = transfer.encodedBodySize();
         const room = self.prefix.len - self.prefix_len;
         if (room == 0) {
             return;
@@ -2926,6 +2939,7 @@ const ImageRequest = struct {
             .fetch_start = self.fetch_start,
             .status = self.status,
             .body_len = self.bytes,
+            .encoded_body_len = self.encoded_bytes,
             .next_hop_protocol = self.next_hop_protocol,
         });
         self.report(if (self.arrived()) .load else .@"error");

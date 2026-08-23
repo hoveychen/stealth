@@ -80,6 +80,11 @@ _perf_fetch_start: f64 = 0,
 // alive. A libcurl literal, so it needs no arena.
 _perf_next_hop_protocol: []const u8 = "",
 
+// What the body weighed on the wire. `_response_data` holds the decoded
+// bytes, so the two differ for every compressed response; read per chunk
+// because the transfer is released before the entry is filed.
+_perf_encoded_body_size: u64 = 0,
+
 _ready_state: ReadyState = .unsent,
 _with_credentials: bool = false,
 _timeout: u32 = 0,
@@ -559,6 +564,7 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
 
 fn httpDataCallback(transfer: *Transfer, data: []const u8) !void {
     const self: *XMLHttpRequest = @ptrCast(@alignCast(transfer.req.ctx));
+    self._perf_encoded_body_size = transfer.encodedBodySize();
     try self._response_data.appendSlice(self._arena.allocator(), data);
 
     try self._proto.dispatch(.progress, .{
@@ -594,7 +600,7 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
             .fetch_start = self._perf_fetch_start,
             .response_end = exec.performance().now(),
             .response_status = self._response_status,
-            .encoded_body_size = loaded_len,
+            .encoded_body_size = if (self._perf_encoded_body_size > 0) self._perf_encoded_body_size else loaded_len,
             .decoded_body_size = loaded_len,
         },
         exec,

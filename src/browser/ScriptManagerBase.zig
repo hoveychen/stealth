@@ -630,6 +630,12 @@ pub const Script = struct {
     // it outlives the connection it was read from.
     perf_next_hop_protocol: []const u8 = "",
 
+    // What the body weighed on the wire. `source` holds the decoded bytes, so
+    // for a compressed script the two sizes differ and only this one describes
+    // what the server sent. Read in dataCallback because the count is not
+    // final until the body is, and doneCallback has no transfer to ask.
+    perf_encoded_body_size: u64 = 0,
+
     // The entry's stored timing, once filed. Kept so the prescan's guess can
     // be corrected: it starts a fetch before the parser reaches the <script>,
     // so whether that script blocks the parser is not knowable when the
@@ -799,6 +805,7 @@ pub const Script = struct {
 
     pub fn dataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
         const self: *Script = @ptrCast(@alignCast(transfer.req.ctx));
+        self.perf_encoded_body_size = transfer.encodedBodySize();
         self._dataCallback(transfer, data) catch |err| {
             log.err(.http, "SM.dataCallback", .{ .err = err, .transfer = transfer, .len = data.len });
             return err;
@@ -839,7 +846,7 @@ pub const Script = struct {
             .fetch_start = self.perf_fetch_start,
             .response_end = perf.now(),
             .response_status = self.status,
-            .encoded_body_size = len,
+            .encoded_body_size = if (self.perf_encoded_body_size > 0) self.perf_encoded_body_size else len,
             .decoded_body_size = len,
         }, exec) catch |err| {
             log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });

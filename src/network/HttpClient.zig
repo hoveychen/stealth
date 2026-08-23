@@ -1267,6 +1267,10 @@ const SyncContext = struct {
     // gone by the time syncRequest returns.
     next_hop_protocol: []const u8 = "",
 
+    // Same reason, one callback later: the encoded size is only final once the
+    // body has arrived.
+    encoded_body_size: u64 = 0,
+
     // Acquired on the first byte we have to buffer, so a bodyless response
     // never takes one. Ownership moves to the SyncResponse.
     arena: ?*lp.Arena = null,
@@ -1296,6 +1300,7 @@ const SyncContext = struct {
 
     fn dataCallback(transfer: *Transfer, data: []const u8) anyerror!void {
         const self: *SyncContext = @ptrCast(@alignCast(transfer.req.ctx));
+        self.encoded_body_size = transfer.encodedBodySize();
         try self.body.appendSlice(try self.bodyAllocator(null), data);
     }
 
@@ -1374,6 +1379,7 @@ pub fn syncRequest(self: *Client, transfer: *Transfer) !SyncResponse {
             .body = sync_ctx.body,
             .arena = sync_ctx.arena,
             .next_hop_protocol = sync_ctx.next_hop_protocol,
+            .encoded_body_size = sync_ctx.encoded_body_size,
         },
         .err => |e| return e,
     }
@@ -1801,6 +1807,11 @@ fn processOneMessage(self: *Client, msg: http.Handles.MultiMessage, transfer: *T
         } else |_| {}
     }
 
+    // The authoritative reading, taken while the conn is still ours: the
+    // per-chunk one above stops at the last chunk, and a bodyless response has
+    // no chunks at all.
+    transfer.res.encoded_body_size = msg.conn.getEncodedBodySize() catch transfer.res.encoded_body_size;
+
     // Release the conn before any of this response's callbacks can run —
     // they'll want it for the next resource.
     self.removeConn(msg.conn);
@@ -1990,6 +2001,10 @@ pub const SyncResponse = struct {
     // The protocol the response arrived over, for the resource entry the
     // caller files. A literal from libcurl, so it needs no arena.
     next_hop_protocol: []const u8 = "",
+
+    // What the body weighed on the wire, which `body.items.len` cannot say for
+    // a compressed response: curl hands over the decoded bytes.
+    encoded_body_size: u64 = 0,
 
     // Owns `body`. Null when the response had nothing to buffer. Callers that
     // keep `body` past this call take the arena instead of releasing it.
@@ -3665,6 +3680,10 @@ pub const Transfer = struct {
         }
 
         res.bytes_received += chunk_len;
+        // Read per chunk rather than once at completion: a streaming transfer
+        // hands its data to the consumer while the conn is still live, and the
+        // consumer files its resource entry off the last chunk it sees.
+        res.encoded_body_size = conn.getEncodedBodySize() catch res.encoded_body_size;
 
         const chunk = buffer[0..chunk_len];
 
@@ -3748,6 +3767,17 @@ pub const Transfer = struct {
     pub fn nextHopProtocol(self: *const Transfer) []const u8 {
         const rh = self.res.header orelse return "";
         return rh.next_hop_protocol;
+    }
+
+    /// Resource Timing's `encodedBodySize`: the body as it arrived, before the
+    /// content-encoding was undone. Falls back to the decoded byte count for a
+    /// response that never came off a socket -- a cache hit or a synthetic
+    /// reply was not encoded, so the two sizes are the same number there.
+    pub fn encodedBodySize(self: *const Transfer) u64 {
+        if (self.res.encoded_body_size > 0) {
+            return self.res.encoded_body_size;
+        }
+        return self.res.bytes_received;
     }
 
     pub fn redirectCount(self: *const Transfer) ?u32 {
@@ -3923,6 +3953,13 @@ const Response = struct {
     // total bytes received in the response, including the response status
     // line, the headers, and the [encoded] body.
     bytes_received: usize = 0,
+
+    // Body bytes as they came off the socket, before curl undid any
+    // content-encoding -- Resource Timing's `encodedBodySize`. The callbacks
+    // above see the *decoded* body, so for every compressed response this is
+    // the smaller of the two numbers, and it is the only one the server can be
+    // said to have sent.
+    encoded_body_size: u64 = 0,
 
     skip_body: bool = false,
     first_data_received: bool = false,

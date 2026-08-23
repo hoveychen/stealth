@@ -245,6 +245,12 @@ pub const CurlInfo = enum(c.CURLINFO) {
     total_time_t = c.CURLINFO_TOTAL_TIME_T,
     num_connects = c.CURLINFO_NUM_CONNECTS,
     conn_id = c.CURLINFO_CONN_ID,
+    // Bytes of body read off the socket. Counted *before* curl undoes the
+    // content-encoding, which is what makes it the encoded body size Resource
+    // Timing reports -- verified against a brotli response with no
+    // Content-Length: `curl --compressed -w %{size_download}` answered 26 616
+    // for a body that landed as 84 236 bytes.
+    size_download_t = c.CURLINFO_SIZE_DOWNLOAD_T,
 };
 
 pub const Error = error{
@@ -680,6 +686,7 @@ pub fn curl_easy_getinfo(easy: *Curl, comptime info: CurlInfo, out: anytype) Err
         },
         .total_time_t,
         .conn_id,
+        .size_download_t,
         => blk: {
             const p: *c.curl_off_t = out;
             break :blk c.curl_easy_getinfo(easy, inf, p);

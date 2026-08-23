@@ -621,6 +621,19 @@ pub const Connection = struct {
         return opened == 0;
     }
 
+    /// Body bytes read off the socket so far, before any content-encoding was
+    /// undone -- Resource Timing's `encodedBodySize`. Read while the connection
+    /// is alive; curl keeps counting, so the last reading before completion is
+    /// the whole body.
+    pub fn getEncodedBodySize(self: *const Connection) !u64 {
+        var size: i64 = undefined;
+        try libcurl.curl_easy_getinfo(self._easy, .size_download_t, &size);
+        if (size < 0) {
+            return 0;
+        }
+        return @intCast(size);
+    }
+
     // Total transfer time (name lookup to completion) in microseconds.
     pub fn getTotalTimeMicros(self: *const Connection) !c_long {
         var micros: c_long = undefined;

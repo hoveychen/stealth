@@ -431,6 +431,7 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                 script.status = response.status;
                 script.complete = true;
                 script.perf_next_hop_protocol = response.next_hop_protocol;
+                script.perf_encoded_body_size = response.encoded_body_size;
 
                 // The blocking path never reaches a doneCallback, so the entry
                 // is filed here -- as blocking, which is the whole reason this

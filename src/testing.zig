@@ -699,6 +699,26 @@ const ONE_PIXEL_PNG = [_]u8{
     0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 };
 
+// A gzip-encoded script, served at `/served/compressed.js`. A resource entry
+// reports two sizes -- what came off the wire and what it became after
+// decoding -- and they only differ for a response that was actually compressed,
+// so telling them apart needs a body the test server did not encode itself.
+//
+// Produced once by gzipping GZIPPED_SCRIPT_SOURCE at level 9; the bytes are
+// checked in rather than compressed at request time so the two lengths below
+// are fixed and a test can name them.
+const GZIPPED_SCRIPT = [_]u8{
+    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x13, 0x2b, 0xcf, 0xcc, 0x4b, 0xc9, 0x2f,
+    0xd7, 0x8b, 0x8f, 0x4f, 0xce, 0xcf, 0x2d, 0x28, 0x4a, 0x2d, 0x2e, 0x4e, 0x4d, 0x51, 0xb0, 0x55,
+    0x30, 0xb4, 0xe6, 0xd2, 0xd7, 0x57, 0x28, 0x48, 0x4c, 0x49, 0xc9, 0xcc, 0x4b, 0x27, 0x44, 0x8f,
+    0x2a, 0x1d, 0x55, 0x3a, 0xaa, 0x74, 0x54, 0xe9, 0xa8, 0xd2, 0x51, 0xa5, 0x03, 0xaf, 0x14, 0x00,
+    0x22, 0x79, 0x72, 0xb2, 0xd1, 0x06, 0x00, 0x00,
+};
+
+// What GZIPPED_SCRIPT decodes to: `window.__compressed = 1;` followed by forty
+// identical comment lines, which is what makes it compress 24-fold.
+const GZIPPED_SCRIPT_DECODED_LEN = 1745;
+
 fn testHTTPHandler(req: *std.http.Server.Request) !void {
     const path = req.head.target;
 
@@ -1217,6 +1237,15 @@ fn testHTTPHandler(req: *std.http.Server.Request) !void {
         }
         // strip off leading / so that it's relative to CWD
         return TestHTTPServer.sendFile(req, path[1..]);
+    }
+
+    if (std.mem.eql(u8, path, "/served/compressed.js")) {
+        return req.respond(&GZIPPED_SCRIPT, .{
+            .extra_headers = &.{
+                .{ .name = "Content-Type", .value = "text/javascript; charset=UTF-8" },
+                .{ .name = "Content-Encoding", .value = "gzip" },
+            },
+        });
     }
 
     // Responses whose bytes, declared type and status deliberately disagree:
