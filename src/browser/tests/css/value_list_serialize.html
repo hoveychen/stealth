@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Chrome re-serialises a declaration's punctuation rather than echoing it: a
+  comma always comes back `, ` and a slash always ` / `, however the author
+  wrote them. A custom property is the exception and stays verbatim.
+
+  Measured on Chrome over http://localhost with
+  tools/fingerprint/probes/expr-value-list-serialize.js. Three of the rules the
+  Cloudflare challenge page's `@keyframes` payload still differs on are here:
+  `font-family`, `stroke-dasharray` and `grid-area`.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+function declOf(text) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync('x{' + text + '}');
+    return sheet.cssRules[0].style.cssText;
+}
+</script>
+
+<script id="value_comma_separator">
+{
+    testing.expectEqual('font-family: a, b, c;', declOf('font-family:a,b,c'));
+    testing.expectEqual('font-family: a, b;', declOf('font-family: a ,  b'));
+    testing.expectEqual(
+        'font-family: -apple-system, system-ui, "Segoe UI", arial, sans-serif;',
+        declOf('font-family:-apple-system,system-ui,"Segoe UI",arial,sans-serif'));
+    testing.expectEqual('transition: color 1s, background 2s;', declOf('transition:color 1s,background 2s'));
+    testing.expectEqual('will-change: opacity, transform;', declOf('will-change:opacity,transform'));
+    testing.expectEqual('background-image: url("a"), url("b");', declOf('background-image:url(a),url(b)'));
+    testing.expectEqual('mask: none, none;', declOf('mask:none,none'));
+}
+</script>
+
+<script id="value_slash_separator">
+{
+    testing.expectEqual('grid-area: 1 / 1;', declOf('grid-area:1/1'));
+    testing.expectEqual('grid-area: 1 / 2 / 3 / 4;', declOf('grid-area:1 / 2 / 3 / 4'));
+    testing.expectEqual('grid-row: 1 / 3;', declOf('grid-row:1/3'));
+    testing.expectEqual('grid-column: span 2 / 4;', declOf('grid-column:span 2/4'));
+    testing.expectEqual('grid-template: 1fr / 2fr;', declOf('grid-template:1fr/2fr'));
+    testing.expectEqual('aspect-ratio: 16 / 9;', declOf('aspect-ratio:16/9'));
+    testing.expectEqual('font: 12px / 1.5 arial;', declOf('font:12px/1.5 arial'));
+    testing.expectEqual('border-radius: 1px 2px / 3px 4px;', declOf('border-radius:1px 2px/3px 4px'));
+}
+</script>
+
+<script id="value_dasharray_separator">
+{
+    // stroke-dasharray is a list whatever separates it: Chrome answers every
+    // separator, space or comma, as `, `.
+    testing.expectEqual('stroke-dasharray: 32, 32;', declOf('stroke-dasharray:32 32'));
+    testing.expectEqual('stroke-dasharray: 0, 100, 0;', declOf('stroke-dasharray:0,100,0'));
+    testing.expectEqual('stroke-dasharray: 0, 100, 0;', declOf('stroke-dasharray: 0 100 0'));
+    testing.expectEqual('stroke-dasharray: 1px, 2px;', declOf('stroke-dasharray:1px 2px'));
+    testing.expectEqual('stroke-dasharray: 1, 2, 3;', declOf('stroke-dasharray:1,2 3'));
+    // One value is not a list and gains no separator.
+    testing.expectEqual('stroke-dasharray: 166;', declOf('stroke-dasharray:166'));
+}
+</script>
+
+<script id="value_custom_property_is_verbatim">
+{
+    // A custom property's value is a token stream nobody has parsed, so its
+    // punctuation is left exactly as written.
+    testing.expectEqual('--x: a,b,c;', declOf('--x:a,b,c'));
+    testing.expectEqual('--slash: 1/1;', declOf('--slash:1/1'));
+    // A grid-template-areas string is content, not a list.
+    testing.expectEqual('grid-template-areas: "a";', declOf('grid-template-areas:"a"'));
+}
+</script>

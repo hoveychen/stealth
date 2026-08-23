@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  Two readings behind rules 115, 116 and 16 of the Cloudflare @keyframes
+  payload.
+
+  First: `transform: rotate(0deg) scale(1)` was thrown away here and kept by
+  Chrome. The measured arity table has `transform` down as taking one
+  component, because the sweep that built it only ever offered identifier and
+  generic-value pairs -- never two transform functions -- so a <transform-list>
+  of more than one function read as a declaration holding too much. That is a
+  style a page loses, not only a serialisation difference.
+
+  Second: `transform-origin: bottom center` reads back `center bottom`. Chrome
+  writes the horizontal axis first and fills in the axis the author left out.
+  `perspective-origin` takes the same rule.
+
+  Measured on Chrome over http://localhost with
+  tools/fingerprint/probes/expr-transform-serialize.js.
+-->
+
+<script>
+// Helper block (no id, so the runner does not treat it as a test).
+function declOf(text) {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync('x{' + text + '}');
+    return sheet.cssRules[0].style.cssText;
+}
+</script>
+
+<script id="transform_list_of_functions_is_kept">
+{
+    testing.expectEqual(
+        'transform: rotate(0deg) scale(1);', declOf('transform:rotate(0deg) scale(1)'));
+    testing.expectEqual(
+        'transform: rotate(45deg) scale(1);', declOf('transform:rotate(45deg) scale(1)'));
+    testing.expectEqual(
+        'transform: translate(1px, 2px) rotate(45deg) skewX(1deg);',
+        declOf('transform:translate(1px, 2px) rotate(45deg) skewX(1deg)'));
+    testing.expectEqual(
+        'transform: translateX(10px) rotate(1turn);',
+        declOf('transform:translateX(10px) rotate(1turn)'));
+    // The -webkit- spelling is stored under the unprefixed name.
+    testing.expectEqual(
+        'transform: rotate(45deg) scale(1);', declOf('-webkit-transform:rotate(45deg) scale(1)'));
+    // One function, and none, were never the problem.
+    testing.expectEqual('transform: rotate(45deg);', declOf('transform:rotate(45deg)'));
+    testing.expectEqual('transform: none;', declOf('transform:none'));
+}
+</script>
+
+<script id="transform_list_of_anything_else_is_still_refused">
+{
+    // A function next to something that is not one is not a transform list,
+    // and Chrome throws the declaration away. The component count still
+    // answers these, which is why the exemption is only for a list of calls.
+    testing.expectEqual('', declOf('transform:rotate(45deg) 5px'));
+    testing.expectEqual('', declOf('transform:5px rotate(45deg)'));
+    testing.expectEqual('', declOf('transform:rotate(45deg) none'));
+}
+</script>
+
+<script id="origin_writes_the_horizontal_axis_first">
+{
+    testing.expectEqual('transform-origin: center bottom;', declOf('transform-origin:bottom center'));
+    testing.expectEqual('transform-origin: center bottom;', declOf('transform-origin:center bottom'));
+    testing.expectEqual('transform-origin: left top;', declOf('transform-origin:top left'));
+    testing.expectEqual('transform-origin: left top;', declOf('transform-origin:left top'));
+    testing.expectEqual('transform-origin: right bottom;', declOf('transform-origin:bottom right'));
+    testing.expectEqual('transform-origin: right bottom;', declOf('transform-origin:right bottom'));
+    // The keyword case is folded on the way, as anywhere else.
+    testing.expectEqual('transform-origin: center bottom;', declOf('transform-origin:BOTTOM CENTER'));
+    // A z offset stays third while the first two swap.
+    testing.expectEqual(
+        'transform-origin: right bottom 10px;', declOf('transform-origin:bottom right 10px'));
+    testing.expectEqual(
+        'transform-origin: right bottom 10px;', declOf('transform-origin:right bottom 10px'));
+}
+</script>
+
+<script id="origin_fills_in_the_axis_left_out">
+{
+    // A lone vertical keyword takes `center` in front of it; everything else
+    // takes it behind.
+    testing.expectEqual('transform-origin: center top;', declOf('transform-origin:top'));
+    testing.expectEqual('transform-origin: center bottom;', declOf('transform-origin:bottom'));
+    testing.expectEqual('transform-origin: right center;', declOf('transform-origin:right'));
+    testing.expectEqual('transform-origin: left center;', declOf('transform-origin:left'));
+    testing.expectEqual('transform-origin: center center;', declOf('transform-origin:center'));
+    testing.expectEqual('transform-origin: 50% center;', declOf('transform-origin:50%'));
+    testing.expectEqual('transform-origin: 10px center;', declOf('transform-origin:10px'));
+}
+</script>
+
+<script id="origin_positions_are_left_where_they_were_written">
+{
+    // A length or a percentage takes whichever axis its slot gives it, so
+    // there is nothing to reorder and nothing to fill in.
+    testing.expectEqual('transform-origin: 50% 50%;', declOf('transform-origin:50% 50%'));
+    testing.expectEqual('transform-origin: 10px 20px;', declOf('transform-origin:10px 20px'));
+    testing.expectEqual('transform-origin: 50% 50% 10px;', declOf('transform-origin:50% 50% 10px'));
+    testing.expectEqual('transform-origin: left 20px;', declOf('transform-origin:left 20px'));
+    testing.expectEqual('transform-origin: 20px top;', declOf('transform-origin:20px top'));
+}
+</script>
+
+<script id="perspective_origin_takes_the_same_rule">
+{
+    testing.expectEqual('perspective-origin: right bottom;', declOf('perspective-origin:bottom right'));
+    testing.expectEqual('perspective-origin: right center;', declOf('perspective-origin:right'));
+    testing.expectEqual('perspective-origin: center center;', declOf('perspective-origin:center'));
+    testing.expectEqual('perspective-origin: 50% 50%;', declOf('perspective-origin:50% 50%'));
+}
+</script>
