@@ -313,6 +313,55 @@ pub fn navigationComplete(self: *Performance) void {
     }
 }
 
+/// Records a finished subresource load as a `resource` entry.
+///
+/// Chrome leaves one of these behind for every script, stylesheet, image, XHR
+/// and fetch a document makes. This engine left none, while still advertising
+/// `resource` in `PerformanceObserver.supportedEntryTypes` — a surface that
+/// contradicts itself, which is worse than one feature missing. Cloudflare's
+/// own api.js reads its entry back and the page posts it to the Turnstile
+/// widget, where it arrived as a 1 035-byte object on a real Chrome and
+/// `undefined` here (tools/fingerprint/README.md, "the resource timing buffer
+/// never fills"; `probes/expr-resource-timing.js` measures it off the station).
+///
+/// Built eagerly, unlike the navigation entry: that one is lazy because none of
+/// its milestone callbacks have an Execution to allocate against, whereas every
+/// caller here is script-facing and has one. So the entry can exist — and reach
+/// the observers — when the load finished rather than when something first asks.
+/// Returns the entry's stored timing, so a caller that learns something about
+/// the load only after it landed can amend it. The prescan is the case that
+/// needs it: it starts a `<script src>` fetch before the parser reaches the
+/// element, so whether that script blocks the parser is not knowable when the
+/// response arrives.
+pub fn resourceLoaded(
+    self: *Performance,
+    name: []const u8,
+    t: timing.Timing,
+    exec: *const Execution,
+) !*timing.Timing {
+    // ResourceTiming reads its milestones through a pointer, so the timing has
+    // to outlive this call rather than ride along on the stack.
+    const stored = try exec.arena.create(timing.Timing);
+    stored.* = t;
+
+    const entry = try exec._factory.chained(.{
+        Entry{
+            ._name = try exec.arena.dupe(u8, name),
+            ._start_time = t.fetch_start,
+            ._duration = t.response_end - t.fetch_start,
+            ._type = undefined,
+        },
+        timing.ResourceTiming{
+            ._proto = undefined,
+            ._timing = stored,
+        },
+    });
+    entry._proto._type = .{ .resource = entry };
+    try self._entries.append(exec.arena, entry._proto);
+    try self.notifyObservers(entry._proto, exec);
+    return stored;
+}
+
 /// Builds the entries a document has without anyone asking for them — the one
 /// navigation entry, the `visible` visibility-state entry, and the paint pair
 /// — and leaves the buffer sorted by startTime, which is the order Chrome's
@@ -1215,4 +1264,10 @@ pub const PerformanceNavigation = struct {
 const testing = @import("../../testing.zig");
 test "WebApi: Performance" {
     try testing.htmlRunner("performance.html", .{});
+}
+
+test "WebApi: Performance resource entries" {
+    // The stylesheet is one of the loads under test, so it has to actually go
+    // out: the runner leaves external stylesheets off by default.
+    try testing.htmlRunner("performance_resource.html", .{ .load_external_stylesheets = true });
 }

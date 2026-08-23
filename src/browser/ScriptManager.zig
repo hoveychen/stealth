@@ -98,11 +98,34 @@ pub fn tailHook(base: *ScriptManagerBase) void {
     }
 }
 
-// Returns true when a fetch was started: the link's load/error event fires
-// when the fetch settles. false (duplicate hint) = no event will fire.
+// Returns true when this link now owns a fetch: its load/error event fires
+// when that fetch settles. That covers a fetch started here and one already in
+// flight that had no link behind it (the prescan's), which this element
+// adopts. false = no event will fire, so the caller queues a synthetic load.
 // element is null when the hint came from the prescan rather than a <link>.
 pub fn preloadScript(self: *ScriptManager, element: ?*Element.Html, url: []const u8) !bool {
-    if (self.preloaded_scripts.contains(url)) {
+    if (self.preloaded_scripts.getPtr(url)) |existing| {
+        // The prescan reads the raw HTML before parsing, so a <script src>
+        // anywhere in the document registers this URL ahead of the <link
+        // rel=preload as=script> in the head that declared it. The link is
+        // still what asked for the bytes as far as the page is concerned: it
+        // is what fires load/error, and what names the resource entry ("link"
+        // rather than "script" — Chrome 151, measured by
+        // tools/fingerprint/resource-timing-initiators.mjs, which files one
+        // entry for a preloaded script no matter how many elements consume
+        // the response).
+        //
+        // Only while the fetch is still in flight. Once it has landed, its
+        // doneCallback has already fired the (element-less, so silent) hint
+        // event and filed the entry, and answering true here would promise a
+        // load event that nothing is left to send.
+        switch (existing.state) {
+            .loading => |script| if (element != null and script.hint_element == null) {
+                script.hint_element = element;
+                return true;
+            },
+            .done => {},
+        }
         return false;
     }
 
@@ -122,6 +145,7 @@ pub fn preloadScript(self: *ScriptManager, element: ?*Element.Html, url: []const
         .source = .{ .remote = .empty },
         .extra = .preload,
         .hint_element = element,
+        .perf_fetch_start = self.base.perfNow(),
     };
 
     try self.preloaded_scripts.putNoClobber(self.base.allocator, owned_url, .{ .state = .{ .loading = script } });
@@ -343,6 +367,7 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
         .complete = false,
         .url = remote_url,
         .extra = frame_extra,
+        .perf_fetch_start = self.base.perfNow(),
     };
 
     if (mode == .normal) {
@@ -366,6 +391,21 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                 script.source = pre.source;
                 script.status = pre.status;
                 script.complete = true;
+
+                // The preload filed the entry, so this <script> does not. But
+                // when the prescan started that fetch there was no element yet
+                // to say whether it blocks the parser, and this one does: it
+                // carries neither async nor defer. Correct the entry in place.
+                //
+                // A real <link rel=preload as=script> is left alone: Chrome
+                // 151 reports one of those non-blocking even when a plain
+                // <script src> consumes it
+                // (tools/fingerprint/resource-timing-initiators.mjs).
+                if (pre.hint_element == null) {
+                    if (pre.perf_timing) |t| {
+                        t.render_blocking_status = "blocking";
+                    }
+                }
             } else {
                 const transfer = try self.base.client.newRequest(.{
                     .url = remote_url,
@@ -390,6 +430,14 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                 script.source = .{ .remote = response.body };
                 script.status = response.status;
                 script.complete = true;
+                script.perf_next_hop_protocol = response.next_hop_protocol;
+
+                // The blocking path never reaches a doneCallback, so the entry
+                // is filed here -- as blocking, which is the whole reason this
+                // fetch is synchronous. A consumed preload deliberately files
+                // nothing here: the fetch that landed already did, and one
+                // network load is one entry.
+                script.recordResourceTiming("script", true);
             }
             handover = true;
         }
@@ -530,6 +578,17 @@ const PreloadedScript = struct {
 
     fn doneCallback(ctx: *anyopaque) !void {
         const script: *Script = @ptrCast(@alignCast(ctx));
+        // Claimed here rather than after the adoption check, so the element
+        // that asked for the bytes names the entry whether or not a <script>
+        // has taken the response over by now. Script.doneCallback's own call
+        // is a no-op once this one has run.
+        //
+        // Only a real <link rel=preload as=script> is "link". A `hint_element`
+        // of null means the *prescan* started this fetch after finding a
+        // <script src> ahead of the parser -- an internal head start, which
+        // Chrome files under the script element it belongs to, not under a
+        // link that the page never wrote.
+        script.recordResourceTiming(if (script.hint_element == null) "script" else "link", false);
         if (script.extra != .preload) {
             // Adopted by a real <script> element (addFromElement) while the
             // fetch was in flight; complete it as a normal frame script.

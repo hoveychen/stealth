@@ -42,6 +42,7 @@ Node >= 22 only, no npm dependencies (global `WebSocket` and `fetch`).
 | `expr-diff.mjs` | Diffs two `run-expr` readings case by case, for a probe that returns an object keyed by case name rather than the collectors' fixed property list. Handles the double JSON parse (a probe's answer is a JSON string) so each probe does not have to. |
 | `run-expr.mjs` | Evaluates one expression file against either engine and prints the result as JSON. The collectors walk a fixed property list; this answers a one-off "what does Chrome say about X", and the answer to "are we aligned" is the diff of the two outputs. |
 | `probes/` | The expression files the sections below cite by name, and what `run-expr.mjs` takes. |
+| `resource-timing-initiators.mjs` | Serves a page carrying one of every subresource kind a parser can start — script (classic/defer/async/module/import), stylesheet, `@import`ed sheet, `<link rel=preload>`, image, XHR, favicon — navigates either engine to it, and prints each `resource` entry with every field a fingerprinter reads. Answers "what should this load be filed under", which is the one question the entry's shape cannot. |
 | `run-probe.mjs` | Runs one `probe-*.js` on either engine and prints the result as JSON. Takes a url, because `about:blank` is not a secure context and this engine does not run scheduled tasks under an outstanding `awaitPromise` evaluate — a probe that awaits a timer needs a real page. |
 | `run-page-probe.mjs` | Runs a probe on this engine as a *page load* rather than through CDP, for the same timer reason. `lightpanda fetch --dump` decides the load is over somewhere between two and six seconds, so this is the short-probe path; anything with a longer wait budget belongs on `run-probe.mjs`. |
 | `webrtc-protochain.mjs` | Ground truth for every `RTC*` global: prototype chain, class-side inheritance, the window property descriptor, and the exact `TypeError` text for a few argument shapes. |
@@ -10735,3 +10736,172 @@ the challenge parameters it is handed over `postMessage`. Both are readable with
 the instruments already in this directory — `fo-plaintext.mjs` records the
 trampoline conversation, and the widget's own subtree can be serialised from the
 document realm the recorder is already installed in.
+
+## The assembly step, and what it is not (P3 again, 2026-08-23)
+
+The previous attempt wrapped the values and found six differences, fixed five,
+and did not move the length. This one wrapped the step after the values: the
+one that turns what was collected into a string.
+
+`fo-join.mjs` is that instrument. Its lead came out of `fo-plaintext.mjs`'s own
+records: every block of the widget's later rounds arrives pipe-joined —
+`"0|0|0|..."`, `"@keyframes spin { ... }|@keyframes scale..."` — which is
+`Array.prototype.join`, a funnel nobody had wrapped. So it wraps `join` (keyed
+by separator), `Array.prototype.toString`, `String.fromCharCode`,
+`encodeURIComponent`, `btoa`, `JSON.stringify` and `XMLSerializer`, and it adds
+a `message` listener, which answers the other half of the README's open lead —
+the challenge parameters the parent hands the widget — in the same run. Records
+stop at each realm's first `XMLHttpRequest.send`, because only what was built
+before the send can be in the body it carried.
+
+The lead was right about the mechanism. `join("")` in the widget realm returns
+**the round-1 ciphertext exactly**: 4 855 characters here, 4 716 on the oracle,
+byte-for-byte the body of the send that follows it. The payload is assembled by
+joining an array of encoded characters, and that is the last place it exists as
+one object.
+
+Honesty check, same as its two predecessors: the oracle cleared with the
+wrappers in — "You bypassed the Cloudflare challenge! :D".
+
+### Both arms build the same things, in the same order
+
+| # | here | oracle |
+|---|---|---|
+| 1 | `split<-` 15 469 — the program's `;` string table | `split<-` 16 359 |
+| 2 | `charCodeAt<-` 318 | `charCodeAt<-` 318 (identical) |
+| 3 | `message` 67 — `{"event":"init",...}` | same |
+| 4 | `message` 3 297 — the `managed` parameters | `message` 4 378 |
+| 5 | — | `split<-` 629 — a permutation of 0..184 |
+| 6 | `join("")` ×3 — the three widget link labels | same |
+| 7 | `split<-` 4 542 — the Cloudflare logo path | same |
+| 8 | `message` 1 439 — `cs`, a list of captured stacks | `message` 1 441 |
+| 9 | `charCodeAt<-` 5 206 | **identical string** |
+| 10 | `charCodeAt<-` 1 663 / 575 — cf tokens | 1 514 / 575 |
+| 11 | `join("")` **4 855** = the send | `join("")` **4 716** = the send |
+
+Two negatives worth keeping, because both were live suspects:
+
+- **The inbound parameters are not the surplus.** The `cs` message — the one
+  that carries `Error` stacks captured in the page realm, and the obvious way a
+  stack difference could reach a payload it is not thrown in — is 1 439 bytes
+  here against 1 441 there. It corroborates `expr-error-stack-shape.js` from the
+  other side rather than contradicting it.
+- **The one parameter that does differ pushes the wrong way.**
+  `apiJsResourceTiming` is a 1 035-byte entry on the oracle and `undefined`
+  here, so the oracle's inbound is 1 081 bytes *longer* while its payload is
+  139 shorter. Whatever the widget does with it, it is not echoing it.
+
+The string table and the two cf tokens differ in length between arms, but those
+are per-session server-issued values: the tables are made of random five-character
+identifiers (`shiZs;NEQqF;hrYYt4…` against `OFPbR;plKjc;ySGNg…`), so a run-to-run
+difference there is noise, not a tell. The 629-character permutation the oracle
+splits and we never do sits inside that same per-session table, so it cannot be
+attributed either.
+
+So the assembly step is understood and the surplus is still not attributed. Four
+routes are now closed by measurement — property values, enumeration, stack
+strings, and now the assembly funnels and the inbound parameters. The plaintext
+itself is reachable by no funnel: it is handed to nothing and read by nothing
+until it is already encoded.
+
+## What the run did find: the resource timing buffer never fills
+
+`apiJsResourceTiming` arriving as `undefined` is not a missing field. It is an
+empty buffer, and it is an engine-level gap rather than a challenge-specific one.
+
+`probes/expr-resource-timing.js` asks both engines directly — fetch something,
+then look:
+
+| | here | Chrome |
+|---|---|---|
+| `typeof PerformanceResourceTiming` | `function` | `function` |
+| `"resource"` in `supportedEntryTypes` | **yes** | yes |
+| `getEntriesByType('resource')` after a `fetch` | **0** | 1 |
+| `performance.getEntries()` entry types | `navigation`, `visibility-state`, `paint`, `paint` | …, `resource` |
+
+`Performance.zig` says so itself, at the `onresourcetimingbufferfull` handler:
+"Nothing fires it — the resource buffer never fills because nothing fills it."
+Every subresource a page loads — every script, stylesheet, image, XHR and
+`fetch` — leaves no entry behind.
+
+That surface contradicts itself, which is the part that matters. Advertising
+`resource` in `supportedEntryTypes` and then answering every query with an empty
+list is not a browser with a feature missing; it is a browser whose own
+self-description is wrong. And it is read on the station: Cloudflare's api.js
+reads the resource timing of *itself* and the page posts it to the widget, which
+is how the gap turned up here at all.
+
+That is `perf-resource-timing`, and it is worth more than the 139 bytes this
+plan was chasing.
+
+## The buffer fills now, and the station reads it
+
+`perf-resource-timing` wired the producer and every load that reaches it. The
+ground truth for what a load should be filed under is
+`resource-timing-initiators.mjs`: it serves its own origin carrying one of every
+load kind — a classic `<script src>`, a `defer`, an `async`, a module and the
+module it imports, a `<link rel=stylesheet>`, a sheet that stylesheet
+`@import`s, a `<link rel=preload as=script>` with a `<script src>` that consumes
+it, an `<img>`, an XHR, and the favicon — navigates both engines to it, and
+reads the buffer back with every field a fingerprinter can see.
+
+What Chrome 151 answers, and what this engine now answers identically for every
+row but the last:
+
+| load | `initiatorType` | `renderBlockingStatus` |
+|---|---|---|
+| `<script src>` (no async/defer) | `script` | `blocking` |
+| `<script defer>` / `async` / `type=module` / static import | `script` | `non-blocking` |
+| `<link rel=preload as=script>` | `link` | `non-blocking` |
+| `<link rel=stylesheet>` | `link` | `blocking` |
+| `@import`ed sheet | `css` | `blocking` | ← **not produced here** |
+| `<img>` | `img` | `non-blocking` |
+| favicon | `other` | `non-blocking` |
+| XHR | `xmlhttprequest` | `non-blocking` |
+
+Two of those took measuring rather than guessing. The prescan starts a fetch for
+every `<script src>` it finds in the raw HTML before parsing; that head start is
+internal, and Chrome files such a load under the script, not under a `<link>`
+the page never wrote — so a preload with no hint element records `script`. And
+because the prescan sees the whole document first, a URL that both a
+`<link rel=preload>` and a `<script src>` name was already registered by the time
+the link was parsed, which made the link's own registration a no-op and cost the
+entry its `link` attribution. The link adopts the in-flight fetch now, which
+also gives it the `load` event it had been silently missing.
+
+The eleventh row is the one still missing: an `@import`ed sheet leaves no entry
+here because no `@import` is followed at all. That is a missing request, not a
+missing entry, and it belongs to CSS rather than to this.
+
+### On the station
+
+`apiJsResourceTiming` is no longer `undefined`. The page-level challenge now
+posts a 33-key, 836-byte entry for api.js, with `initiatorType: "script"` and
+`nextHopProtocol: "h2"` — the protocol plumbing reporting a real negotiated
+version off the live connection. The capture is
+`results/r1join-lp-after-resource-timing.json`; the oracle column below is
+`results/r1join-oracle-2.json`.
+
+Against the oracle's 1 065 bytes, the residue is named rather than a length:
+
+| field | oracle | here |
+|---|---|---|
+| `navigationId` | `9894` | *absent* — 33 keys against 34 |
+| `contentType` / `contentEncoding` | `text/javascript` / `br` | `""` / `""` |
+| `domainLookupStart` … `finalResponseHeadersStart` (9 milestones) | real | all `0` |
+| `serverTiming` | one `cfExtPri` entry | `[]` |
+| `encodedBodySize` | 27 124 | 84 236 |
+| `nextHopProtocol` | `h3` | `h2` |
+
+`serverTiming` is the server's own header and cannot be invented. The rest can:
+the entry carries no content type or encoding, none of the nine connection
+milestones, and an `encodedBodySize` that is the *decoded* size — api.js arrives
+brotli-compressed and this reports what it decompressed to, which says the
+response was not compressed at all. That is the next plan, not this one.
+
+The sweep says nothing moved that should not have:
+`results/antibot-2026-08-23-perf-resource-timing.json` against
+`results/r1-fixes-sweep-after.json` is verdict-for-verdict identical across all
+fifteen stations, 11/15 either way. Filling a buffer that was empty is a change
+in what every page can read about itself, so the reading that matters here is
+the absence of a regression rather than a number going up.

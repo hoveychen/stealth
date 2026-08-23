@@ -29,6 +29,7 @@ const ImportMap = @import("ImportMap.zig");
 const WorkerGlobalScope = @import("webapi/WorkerGlobalScope.zig");
 
 const Element = @import("webapi/Element.zig");
+const timing = @import("webapi/performance/timing.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -175,6 +176,13 @@ fn acquireArena(self: *ScriptManagerBase, size_or_bucket: anytype, debug: []cons
     return self.owner.session().getArena(size_or_bucket, debug);
 }
 
+// The performance clock of whichever global owns this manager. Read where a
+// fetch goes out rather than where it lands: a resource entry's startTime is
+// when the load began, and nothing after the fact can reconstruct it.
+pub fn perfNow(self: *ScriptManagerBase) f64 {
+    return self.owner.jsContext().execution.performance().now();
+}
+
 pub fn scriptList(self: *ScriptManagerBase, script: *const Script) *std.DoublyLinkedList {
     return switch (script.extra) {
         .import, .import_async => &self.async_scripts,
@@ -233,6 +241,7 @@ pub fn preloadImport(self: *ScriptManagerBase, url: [:0]const u8, referrer: []co
         .source = .{ .remote = .empty },
         .extra = .import,
         .hint_element = opts.hint_element,
+        .perf_fetch_start = self.perfNow(),
     };
 
     gop.value_ptr.* = .{ .state = .{ .loading = script }, .hint = opts.hint };
@@ -426,6 +435,7 @@ pub fn getAsyncImport(self: *ScriptManagerBase, url: [:0]const u8, cb: ImportAsy
             .callback = cb,
             .data = cb_data,
         } },
+        .perf_fetch_start = self.perfNow(),
     };
 
     if (comptime lp.IS_DEBUG) {
@@ -612,6 +622,26 @@ pub const Script = struct {
     // getAsyncImport replacing .import with .import_async) can't lose it.
     hint_element: ?*Element.Html = null,
 
+    // When the fetch was handed to the client, on the performance clock: the
+    // resource entry's startTime is measured from here.
+    perf_fetch_start: f64 = 0,
+
+    // libcurl's label for the protocol the response came over; a literal, so
+    // it outlives the connection it was read from.
+    perf_next_hop_protocol: []const u8 = "",
+
+    // The entry's stored timing, once filed. Kept so the prescan's guess can
+    // be corrected: it starts a fetch before the parser reaches the <script>,
+    // so whether that script blocks the parser is not knowable when the
+    // response lands. See ScriptManager.addFromElement's blocking path.
+    perf_timing: ?*timing.Timing = null,
+
+    // Set once this load has been filed as a `resource` entry. One network
+    // load is one entry, and a preloaded script reaches two done paths:
+    // PreloadedScript.doneCallback forwards to Script.doneCallback once a
+    // <script> has adopted the response. The first of them names the entry.
+    perf_recorded: bool = false,
+
     // for debugging a rare production issue
     header_callback_called: bool = false,
 
@@ -698,6 +728,7 @@ pub const Script = struct {
         const self: *Script = @ptrCast(@alignCast(transfer.req.ctx));
 
         self.status = transfer.responseStatus().?;
+        self.perf_next_hop_protocol = transfer.nextHopProtocol();
         if (transfer.responseStatus() != 200) {
             log.info(.http, "script header", .{
                 .req = transfer,
@@ -778,12 +809,55 @@ pub const Script = struct {
         try self.source.remote.appendSlice(self.sourceAllocator(), data);
     }
 
+    // Files this fetch as a `resource` PerformanceEntry, which is what a
+    // browser leaves behind for every subresource it loads.
+    //
+    // `initiator` names what *started* the load, not what came back: a script
+    // fetched by a <link rel=preload as=script> is "link" in Chrome even
+    // though the bytes are a script, and only one entry exists for it however
+    // many <script> elements go on to consume the response (measured by
+    // tools/fingerprint/resource-timing-initiators.mjs against Chrome 151).
+    // First caller wins, so the preload path can claim the load before the
+    // element that adopts it reaches the same callback.
+    //
+    // The name is the request URL rather than the response's: nothing here
+    // holds the transfer, so a redirected script is filed under where it was
+    // asked for. XHR and fetch, which do hold it, use the destination.
+    pub fn recordResourceTiming(self: *Script, initiator: []const u8, render_blocking: bool) void {
+        if (self.perf_recorded) {
+            return;
+        }
+        self.perf_recorded = true;
+
+        const exec = &self.manager.owner.jsContext().execution;
+        const perf = exec.performance();
+        const len = self.source.content().len;
+        self.perf_timing = perf.resourceLoaded(self.url, .{
+            .initiator_type = initiator,
+            .next_hop_protocol = self.perf_next_hop_protocol,
+            .render_blocking_status = if (render_blocking) "blocking" else "non-blocking",
+            .fetch_start = self.perf_fetch_start,
+            .response_end = perf.now(),
+            .response_status = self.status,
+            .encoded_body_size = len,
+            .decoded_body_size = len,
+        }, exec) catch |err| {
+            log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });
+            return;
+        };
+    }
+
     pub fn doneCallback(ctx: *anyopaque) !void {
         const self: *Script = @ptrCast(@alignCast(ctx));
         self.complete = true;
         if (comptime lp.IS_DEBUG) {
             log.debug(.http, "script fetch complete", .{ .req = self.url });
         }
+        // Only a <script src> with neither async nor defer holds up the
+        // parser, and that one never reaches here: it is fetched
+        // synchronously and files its own entry. Everything routed through
+        // this callback is out of the parser's way by construction.
+        self.recordResourceTiming("script", false);
 
         const manager = self.manager;
         switch (self.extra) {

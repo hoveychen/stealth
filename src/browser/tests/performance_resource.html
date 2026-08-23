@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<head>
+  <script src="testing.js"></script>
+  <link rel="stylesheet" href="/styles/visibility.css">
+  <link rel="preload" as="script" href="/src/browser/tests/shape.js">
+</head>
+<body>
+  <img id="pic" src="/src/browser/tests/performance_resource.png">
+
+  <!--
+    Every subresource a browser loads leaves a `resource` PerformanceEntry
+    behind, filed under an `initiatorType` that names *how* the load was
+    started. The parser-driven ones are the half that matters on the station:
+    Cloudflare's api.js is a `<script>`, not a fetch, so the entry the page
+    posts to the Turnstile widget as `apiJsResourceTiming` — `undefined` here
+    and a 1 035-byte object on a real Chrome — can only come from this path.
+
+    The expected initiatorType strings are measured, not remembered:
+    `tools/fingerprint/resource-timing-initiators.mjs` serves a page carrying
+    one of each load kind and reads the buffer back off Chrome 151.
+  -->
+
+  <!-- No id: the runner asks every identified block for an assertion, and
+       this one only defines a helper the blocks below share. -->
+  <script>
+    // Poll rather than listen: an <img> here answers `complete === true` even
+    // while its bytes are in flight (nothing decodes, so every image is in the
+    // "broken" state), and a <link rel=preload> has no element event at all
+    // when the prescan started its fetch. The entry itself is the signal.
+    window.waitForResourceEntry = async function (path) {
+      const name = testing.ORIGIN + path;
+      for (let i = 0; i < 100; i++) {
+        const found = performance.getEntriesByName(name, 'resource');
+        if (found.length > 0) return found;
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      return performance.getEntriesByName(name, 'resource');
+    };
+  </script>
+
+  <script id=resource_entry_for_classic_script type=module>
+    const state = await testing.async();
+    // `<script src=testing.js>` in the head above, which every test page in
+    // this tree carries: a classic parser-driven script.
+    const entries = await waitForResourceEntry('/src/browser/tests/testing.js');
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(1, entries.length);
+      testing.expectEqual('script', entries[0].initiatorType);
+      testing.expectEqual('resource', entries[0].entryType);
+      testing.expectEqual(true, entries[0] instanceof PerformanceResourceTiming);
+      testing.expectEqual(true, entries[0].startTime > 0);
+      testing.expectEqual(true, entries[0].duration >= 0);
+      // The protocol the response actually arrived over. Reporting "" while
+      // claiming a Chrome user agent says the connection had no version,
+      // which no real one does.
+      testing.expectEqual('http/1.1', entries[0].nextHopProtocol);
+      // A <script src> with neither async nor defer blocks the parser, and
+      // Chrome 151 says so in the entry.
+      testing.expectEqual('blocking', entries[0].renderBlockingStatus);
+      testing.expectEqual(200, entries[0].responseStatus);
+      // Nothing was served from a cache, so the delivery is a plain fetch.
+      testing.expectEqual('', entries[0].deliveryType);
+    });
+  </script>
+
+  <script id=resource_entry_for_stylesheet type=module>
+    const state = await testing.async();
+    // `<link rel=stylesheet>` is "link" — the element that started it, not the
+    // kind of bytes that came back. A sheet reached through `@import` would be
+    // "css", which this engine cannot produce yet because it never follows an
+    // @import in the first place.
+    const entries = await waitForResourceEntry('/styles/visibility.css');
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(1, entries.length);
+      testing.expectEqual('link', entries[0].initiatorType);
+      testing.expectEqual('http/1.1', entries[0].nextHopProtocol);
+      // A stylesheet holds up rendering until its rules are in, which is why
+      // this engine fetches it synchronously in the first place.
+      testing.expectEqual('blocking', entries[0].renderBlockingStatus);
+    });
+  </script>
+
+  <script id=resource_entry_for_image type=module>
+    const state = await testing.async();
+    const entries = await waitForResourceEntry('/src/browser/tests/performance_resource.png');
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(1, entries.length);
+      testing.expectEqual('img', entries[0].initiatorType);
+      testing.expectEqual('http/1.1', entries[0].nextHopProtocol);
+      // An image is fetched alongside rendering, never ahead of it.
+      testing.expectEqual('non-blocking', entries[0].renderBlockingStatus);
+      // The one-pixel PNG the test server answers every image path with.
+      testing.expectEqual(true, entries[0].encodedBodySize > 0);
+      testing.expectEqual(entries[0].encodedBodySize, entries[0].decodedBodySize);
+    });
+  </script>
+
+  <script id=resource_entry_for_preload_link type=module>
+    const state = await testing.async();
+    // A `<link rel=preload as=script>` is filed under the *link* that asked
+    // for it, even though what arrives is a script — measured on Chrome 151,
+    // which also files only one entry when a later `<script src>` consumes the
+    // preloaded response rather than a second one for the reuse.
+    const entries = await waitForResourceEntry('/src/browser/tests/shape.js');
+    state.resolve();
+    await state.done(() => {
+      testing.expectEqual(1, entries.length);
+      testing.expectEqual('link', entries[0].initiatorType);
+    });
+  </script>
+
+  <script id=resource_entries_are_one_buffer type=module>
+    const state = await testing.async();
+    await waitForResourceEntry('/src/browser/tests/performance_resource.png');
+    const all = performance.getEntriesByType('resource');
+    state.resolve();
+    await state.done(() => {
+      // getEntriesByType has to agree with getEntriesByName about all of them:
+      // one buffer, not a per-initiator list that only looks right one lookup
+      // at a time.
+      for (const path of ['/src/browser/tests/testing.js', '/styles/visibility.css', '/src/browser/tests/performance_resource.png']) {
+        testing.expectEqual(true, all.some((e) => e.name === testing.ORIGIN + path));
+      }
+      testing.expectEqual(true, all.every((e) => e.entryType === 'resource'));
+    });
+  </script>
+</body>
