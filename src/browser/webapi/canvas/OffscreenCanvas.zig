@@ -119,8 +119,8 @@ pub fn getContext(self: *OffscreenCanvas, context_type: []const u8, exec: *Execu
             ._canvas = self,
             ._surface = .{ .arena = exec.arena },
         }) },
-        .webgl => .{ .webgl = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .offscreen = self } }) },
-        .webgl2 => .{ .webgl2 = try exec._factory.create(WebGL2RenderingContext{ ._canvas = .{ .offscreen = self } }) },
+        .webgl => .{ .webgl = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena) }) },
+        .webgl2 => .{ .webgl2 = try exec._factory.create(WebGL2RenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena) }) },
         // An OffscreenCanvas gets a WebGPU context too, and `ctx.canvas` is
         // then the offscreen canvas itself (measured).
         .webgpu => .{ .webgpu = try exec._factory.create(GPUCanvasContext{ ._canvas = .{ .offscreen = self } }) },
