@@ -70,10 +70,16 @@ const ROUTES = {
     // An empty 204: the floor case, where the only bytes on the wire are the
     // headers.
     '/empty': { body: Buffer.alloc(0), type: null, framing: 'content-length', status: 204 },
+    // A redirect, because curl accumulates its header-byte counter across a
+    // chain it follows itself. This engine follows redirects by hand, so the
+    // reading should be per-response -- but that is a claim worth measuring
+    // rather than asserting, and the row for /redirected.js is where it shows.
+    '/redirect.js': { body: Buffer.alloc(0), type: null, framing: 'content-length', status: 302, location: '/redirected.js' },
+    '/redirected.js': { body: Buffer.from(BODY), type: 'text/javascript', framing: 'content-length' },
 };
 
 const PAGE = `<!DOCTYPE html><html><head><title>encodedDataLength</title></head><body>
-${Object.keys(ROUTES).filter((p) => p.endsWith('.js')).map((p) => `<script src="${p}"></script>`).join('\n')}
+${Object.keys(ROUTES).filter((p) => p.endsWith('.js') && p !== '/redirected.js').map((p) => `<script src="${p}"></script>`).join('\n')}
 <script>fetch('/empty');</script>
 </body></html>`;
 
@@ -86,8 +92,9 @@ const written = new Map(); // path -> { headerBytes, bodyBytes }
 
 function buildResponse(p, route) {
     const status = route.status ?? 200;
-    const reason = status === 204 ? 'No Content' : 'OK';
+    const reason = { 204: 'No Content', 302: 'Found' }[status] ?? 'OK';
     const lines = [`HTTP/1.1 ${status} ${reason}`];
+    if (route.location) lines.push(`location: ${route.location}`);
     if (route.type) lines.push(`content-type: ${route.type}`);
     if (route.encoding) lines.push(`content-encoding: ${route.encoding}`);
     // Chrome hides the response fields of a cross-origin load; everything here
@@ -203,7 +210,17 @@ const seen = new Map();
 function slot(requestId) {
     let s = seen.get(requestId);
     if (!s) {
-        s = { url: null, responseReceived: null, loadingFinished: null, dataChunks: 0, dataBytes: 0 };
+        s = {
+            url: null,
+            responseReceived: null,
+            loadingFinished: null,
+            dataChunks: 0,
+            dataBytes: 0,
+            // A redirect keeps the same request id, so its bytes are reported
+            // on the hop that carries `redirectResponse` and would otherwise
+            // be overwritten by the hop that follows.
+            redirectBytes: 0,
+        };
         seen.set(requestId, s);
     }
     return s;
@@ -213,9 +230,12 @@ cdp.on((msg) => {
     if (msg.sessionId !== sessionId) return;
     const p = msg.params;
     switch (msg.method) {
-        case 'Network.requestWillBeSent':
-            slot(p.requestId).url = p.request.url;
+        case 'Network.requestWillBeSent': {
+            const s = slot(p.requestId);
+            s.url = p.request.url;
+            if (p.redirectResponse) s.redirectBytes += p.redirectResponse.encodedDataLength ?? 0;
             break;
+        }
         case 'Network.responseReceived': {
             const s = slot(p.requestId);
             s.url = s.url ?? p.response.url;
@@ -271,6 +291,7 @@ for (const [, s] of seen) {
         wireHeaderBytes: w?.headerBytes ?? null,
         wireBodyBytes: w?.bodyBytes ?? null,
         wireTotalBytes: w ? w.headerBytes + w.bodyBytes : null,
+        cdpRedirectBytes: s.redirectBytes,
         cdpResponseReceived: s.responseReceived,
         cdpDataReceivedSum: s.dataBytes,
         cdpDataReceivedChunks: s.dataChunks,
@@ -287,11 +308,12 @@ console.log(JSON.stringify(out, null, 2));
 
 const pad = (v, n) => String(v ?? '-').padEnd(n);
 console.error('');
-console.error(`${pad('path', 18)}${pad('framing', 16)}${pad('hdr', 6)}${pad('body', 8)}${pad('sum', 8)}${pad('rcvd', 8)}${pad('data', 8)}${pad('finished', 10)}${pad('rtEnc', 8)}${pad('rtXfer', 8)}`);
+console.error(`${pad('path', 18)}${pad('framing', 16)}${pad('hdr', 6)}${pad('body', 8)}${pad('sum', 8)}${pad('redir', 7)}${pad('rcvd', 8)}${pad('data', 8)}${pad('finished', 10)}${pad('rtEnc', 8)}${pad('rtXfer', 8)}`);
 for (const r of rows) {
     console.error(
         pad(r.path, 18) + pad(r.framing, 16) + pad(r.wireHeaderBytes, 6) +
-        pad(r.wireBodyBytes, 8) + pad(r.wireTotalBytes, 8) + pad(r.cdpResponseReceived, 8) +
+        pad(r.wireBodyBytes, 8) + pad(r.wireTotalBytes, 8) + pad(r.cdpRedirectBytes, 7) +
+        pad(r.cdpResponseReceived, 8) +
         pad(r.cdpDataReceivedSum, 8) + pad(r.cdpLoadingFinished, 10) +
         pad(r.rtEncodedBodySize, 8) + pad(r.rtTransferSize, 8),
     );

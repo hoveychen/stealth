@@ -435,7 +435,9 @@ pub fn httpRequestDone(bc: *CDP.BrowserContext, msg: *const Notification.Request
     try bc.cdp.sendEvent("Network.loadingFinished", .{
         .requestId = &id.toRequestId(msg.transfer),
         .timestamp = lp.datetime.timestamp(.boot),
-        .encodedDataLength = msg.content_length,
+        // The whole response as it sat on the wire, head included -- not the
+        // Content-Length header, which a streamed response never sends.
+        .encodedDataLength = msg.transfer.encodedDataLength(),
     }, .{ .session_id = session_id });
 }
 
@@ -597,10 +599,11 @@ const ResponseWriter = struct {
             try jws.write(transfer._conn_reused);
             try jws.objectField("connectionId");
             try jws.write(transfer._conn_id);
-            // Bytes received so far, which is zero for a streaming response:
-            // its headers are reported before any of the body is read.
+            // Bytes received so far. This event fires the moment the head is
+            // in and before any of the body is read, so what has arrived is
+            // exactly the head -- which is the number Chrome puts here.
             try jws.objectField("encodedDataLength");
-            try jws.write(transfer._content_length);
+            try jws.write(transfer.responseHeaderSize());
             try jws.objectField("securityState");
             try jws.write(securityState(response_url));
         }

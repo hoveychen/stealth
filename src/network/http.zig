@@ -716,6 +716,19 @@ pub const Connection = struct {
         return @intCast(size);
     }
 
+    /// Bytes the response head weighed on the wire: status line, headers and
+    /// the blank line after them. Final as soon as the headers are in, which
+    /// is where it gets read -- CDP reports it as the `encodedDataLength` of
+    /// a response whose body has not arrived yet.
+    pub fn getResponseHeaderSize(self: *const Connection) !u64 {
+        var size: c_long = undefined;
+        try libcurl.curl_easy_getinfo(self._easy, .header_size, &size);
+        if (size < 0) {
+            return 0;
+        }
+        return @intCast(size);
+    }
+
     /// The connection walk so far. Read once the response headers are in,
     /// where every one of these is already final -- they all describe work
     /// that had to finish before a byte of response could arrive.

@@ -2933,6 +2933,7 @@ pub const Transfer = struct {
             try conn.getResponseCode();
 
         self.res.times = conn.getResponseTimes();
+        self.res.header_bytes = conn.getResponseHeaderSize() catch 0;
 
         self.res.header = .{
             .url = url,
@@ -3837,6 +3838,37 @@ pub const Transfer = struct {
         return self.res.bytes_received;
     }
 
+    /// What the response head weighed on the wire. CDP reports this as the
+    /// `encodedDataLength` of a response at the moment `responseReceived`
+    /// fires, when no body has arrived yet: measured against Chrome 151, a
+    /// 135-byte head over a socket writing known bytes answered 135 there.
+    /// Zero for a response that never came off a socket -- a cache hit, a
+    /// data: URL, a reply an interceptor fulfilled -- which is also what
+    /// Chrome reports for those.
+    pub fn responseHeaderSize(self: *const Transfer) u64 {
+        return self.res.header_bytes;
+    }
+
+    /// The whole response as it sat on the wire: head plus the body before
+    /// its content-encoding was undone. This is CDP's `encodedDataLength` on
+    /// `loadingFinished`; the same Chrome reading that answered 135 at the
+    /// headers answered 7194 here, for a 7059-byte body.
+    ///
+    /// Reads slightly low for a chunked response, where Chrome counts the
+    /// chunk headers and curl strips them before anything here can see them.
+    pub fn encodedDataLength(self: *const Transfer) u64 {
+        const body = self.encodedBodySize();
+        if (body > 0) {
+            return self.res.header_bytes + body;
+        }
+        // Nothing was counted off a socket, which is either an empty response
+        // or one that never touched the network. The second kind still has a
+        // length -- Chrome reports a data: subresource as its body's size, not
+        // as nothing -- and `_content_length` is where the buffered paths put
+        // it. Both readings are zero for a genuinely empty reply.
+        return self.res.header_bytes + self._content_length;
+    }
+
     pub fn redirectCount(self: *const Transfer) ?u32 {
         const rh = self.res.header orelse return null;
         return rh.redirect_count;
@@ -3969,7 +4001,6 @@ pub const Transfer = struct {
                     if (transfer._notify_cdp) {
                         req.notification.dispatch(.http_request_done, &.{
                             .transfer = transfer,
-                            .content_length = transfer._content_length,
                         });
                     }
                     req.done_callback(req.ctx) catch |err| {
@@ -4007,9 +4038,15 @@ const Response = struct {
     // completion (or set directly by cache / synthetic / fulfill).
     headers: []const http.Header = &.{},
 
-    // total bytes received in the response, including the response status
-    // line, the headers, and the [encoded] body.
+    // Body bytes handed to the write callback, which sees the body *after*
+    // curl has undone any content-encoding. Compare encoded_body_size below
+    // for what the server actually sent.
     bytes_received: usize = 0,
+
+    // What the response head weighed on the wire: status line, headers, and
+    // the blank line ending them. Captured where the conn is still ours,
+    // since that is also the moment the head is complete.
+    header_bytes: u64 = 0,
 
     // Body bytes as they came off the socket, before curl undid any
     // content-encoding -- Resource Timing's `encodedBodySize`. The callbacks
