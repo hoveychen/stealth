@@ -615,8 +615,24 @@ pub fn getSelection(self: *const Window) *Selection {
     return &self._document._selection;
 }
 
+/// The element embedding this document, or null when the embedder is
+/// cross-origin. The element belongs to the *parent's* document, so handing it
+/// across the boundary would let a framed document read its embedder's
+/// attributes -- and it is the one handle a frame has on the page framing it.
+/// Chrome answers null there, without throwing (measured in
+/// probes/expr-frame-element-cross-origin.js, and on the Turnstile widget,
+/// which is challenges.cloudflare.com inside the site's own origin).
+///
+/// Not an `Access`-style question: the spec compares the container document to
+/// *this* document, not to whoever is asking, so the answer is the same for
+/// every caller.
 pub fn getFrameElement(self: *const Window) ?*Element.Html.IFrame {
-    return self._frame.iframe;
+    const iframe = self._frame.iframe orelse return null;
+    const parent = self._frame.parent orelse return null;
+    if (parent.js.origin != self._frame.js.origin) {
+        return null;
+    }
+    return iframe;
 }
 
 pub fn getLocation(self: *const Window) *Location {
