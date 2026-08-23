@@ -58,6 +58,9 @@ _perf_next_hop_protocol: []const u8 = "",
 // transfer is released before the entry is filed.
 _perf_encoded_body_size: u64 = 0,
 
+// contentType / contentEncoding for the entry, copied off the headers.
+_perf_labels: HttpClient.ResponseLabels = .{},
+
 pub const Input = Request.Input;
 pub const InitOpts = Request.InitOpts;
 
@@ -166,6 +169,7 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     }
 
     self._perf_next_hop_protocol = transfer.nextHopProtocol();
+    self._perf_labels = transfer.responseLabels();
 
     const arena = self._response._arena;
     if (transfer.getContentLength()) |cl| {
@@ -261,6 +265,8 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
         .{
             .initiator_type = "fetch",
             .next_hop_protocol = self._perf_next_hop_protocol,
+            .content_type = self._perf_labels.contentType(),
+            .content_encoding = self._perf_labels.contentEncoding(),
             .fetch_start = self._perf_fetch_start,
             .response_end = exec.performance().now(),
             .response_status = response._status,

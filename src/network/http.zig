@@ -26,6 +26,7 @@ const crypto = @import("../sys/libcrypto.zig");
 
 const IpFilter = @import("IpFilter.zig");
 const tls_client_hello = @import("tls_client_hello.zig");
+const Mime = @import("../browser/mime.zig");
 
 const log = @import("lightpanda").log;
 
@@ -218,6 +219,9 @@ pub const AuthChallenge = struct {
 pub const ResponseHead = struct {
     // Matches Mime.parse's 255-byte cap
     pub const MAX_CONTENT_TYPE_LEN = 255;
+    // Long enough for every encoding chain a server can plausibly send;
+    // Chrome's own four fit in nine characters.
+    pub const MAX_CONTENT_ENCODING_LEN = 48;
 
     status: u16,
     url: [*c]const u8,
@@ -227,12 +231,66 @@ pub const ResponseHead = struct {
     next_hop_protocol: []const u8 = "",
     _content_type_len: usize = 0,
     _content_type: [MAX_CONTENT_TYPE_LEN]u8 = undefined,
+    // Kept for the resource entry's `contentEncoding`. curl undoes the encoding
+    // before anything here sees the body, so the header is the only record that
+    // the response was encoded at all.
+    _content_encoding_len: usize = 0,
+    _content_encoding: [MAX_CONTENT_ENCODING_LEN]u8 = undefined,
 
     pub fn contentType(self: *ResponseHead) ?[]u8 {
         if (self._content_type_len == 0) {
             return null;
         }
         return self._content_type[0..self._content_type_len];
+    }
+
+    pub fn contentEncoding(self: *ResponseHead) ?[]u8 {
+        if (self._content_encoding_len == 0) {
+            return null;
+        }
+        return self._content_encoding[0..self._content_encoding_len];
+    }
+};
+
+/// The pair of response labels a `resource` PerformanceEntry quotes back:
+/// `contentType` and `contentEncoding`. Held inline rather than by reference,
+/// because every consumer files its entry after the transfer that owns the
+/// headers has been released.
+///
+/// Chrome answers the MIME *essence* for the first — parameters dropped and the
+/// rest lowercased, so a sheet served as `text/CSS; charset=UTF-8` files as
+/// `text/css` — and the Content-Encoding header verbatim for the second, empty
+/// when the response carried none. Both measured on Chrome 151 by
+/// tools/fingerprint/resource-timing-response-fields.mjs.
+pub const ResponseLabels = struct {
+    pub const MAX_CONTENT_TYPE_LEN = 96;
+    pub const MAX_CONTENT_ENCODING_LEN = 48;
+
+    _type_len: u8 = 0,
+    _type: [MAX_CONTENT_TYPE_LEN]u8 = undefined,
+    _encoding_len: u8 = 0,
+    _encoding: [MAX_CONTENT_ENCODING_LEN]u8 = undefined,
+
+    pub fn contentType(self: *const ResponseLabels) []const u8 {
+        return self._type[0..self._type_len];
+    }
+
+    pub fn contentEncoding(self: *const ResponseLabels) []const u8 {
+        return self._encoding[0..self._encoding_len];
+    }
+
+    pub fn setContentType(self: *ResponseLabels, raw: []const u8) void {
+        const essence = Mime.ContentTypeIterator.init(raw).essence;
+        const len = @min(essence.len, MAX_CONTENT_TYPE_LEN);
+        _ = std.ascii.lowerString(self._type[0..len], essence[0..len]);
+        self._type_len = @intCast(len);
+    }
+
+    pub fn setContentEncoding(self: *ResponseLabels, raw: []const u8) void {
+        const trimmed = std.mem.trim(u8, raw, " \t");
+        const len = @min(trimmed.len, MAX_CONTENT_ENCODING_LEN);
+        @memcpy(self._encoding[0..len], trimmed[0..len]);
+        self._encoding_len = @intCast(len);
     }
 };
 

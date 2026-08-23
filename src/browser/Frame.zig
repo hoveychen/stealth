@@ -1840,19 +1840,18 @@ fn frameDataCallback(transfer: *HttpClient.Transfer, data: []const u8) !void {
     if (self._parse_state == .pre) {
         // Navigation Timing's contentType is the MIME essence, not the raw
         // header: Chrome answered "text/html" for a `text/html; charset=utf-8`
-        // response (win20-chrome.json).
-        var essence: []const u8 = "";
-        if (transfer.contentType()) |ct| {
-            const end = std.mem.indexOfScalar(u8, ct, ';') orelse ct.len;
-            essence = try std.ascii.allocLowerString(self.arena, std.mem.trim(u8, ct[0..end], " \t"));
-        }
+        // response (win20-chrome.json). `responseLabels` does that reduction,
+        // and carries the content-encoding alongside it -- the document is as
+        // often compressed as any subresource.
+        const labels = transfer.responseLabels();
         perf.navigationResponseStarted(
             transfer.responseStatus() orelse 0,
-            essence,
+            try self.arena.dupe(u8, labels.contentType()),
+            try self.arena.dupe(u8, labels.contentEncoding()),
             transfer.nextHopProtocol(),
         );
     }
-    perf.navigationBodyChunk(data.len);
+    perf.navigationBodyChunk(data.len, transfer.encodedBodySize());
 
     if (self._parse_state == .pre) {
         // we lazily do this, because we might need the first chunk of data
@@ -2517,6 +2516,8 @@ pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
     _ = perf.resourceLoaded(r.url, .{
         .initiator_type = r.initiator,
         .next_hop_protocol = r.next_hop_protocol,
+        .content_type = r.labels.contentType(),
+        .content_encoding = r.labels.contentEncoding(),
         .render_blocking_status = if (r.render_blocking) "blocking" else "non-blocking",
         .fetch_start = r.fetch_start,
         .response_end = perf.now(),
@@ -2545,6 +2546,9 @@ pub const ResourceTimingRecord = struct {
     // The protocol the response arrived over, as libcurl reports it
     // ("http/1.1", "h2", "h3"). Empty only when no connection was made.
     next_hop_protocol: []const u8 = "",
+
+    // contentType / contentEncoding, as the response declared them.
+    labels: HttpClient.ResponseLabels = .{},
 
     // Whether the load held up rendering. A stylesheet does; an image does
     // not. Chrome reports it per entry, and reporting every load as
@@ -2741,6 +2745,7 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
         .body_len = response.body.items.len,
         .encoded_body_len = response.encoded_body_size,
         .next_hop_protocol = response.next_hop_protocol,
+        .labels = response.labels,
         // A stylesheet holds up rendering until its rules are in, which is
         // why this fetch is the synchronous one to begin with.
         .render_blocking = true,
@@ -2865,6 +2870,9 @@ const ImageRequest = struct {
     // it outlives the connection it was read from.
     next_hop_protocol: []const u8 = "",
 
+    // contentType / contentEncoding, copied off the headers in headerCallback.
+    labels: HttpClient.ResponseLabels = .{},
+
     // How many bytes arrived, which `prefix` cannot say: it stops at the
     // signature length on purpose.
     bytes: usize = 0,
@@ -2896,6 +2904,7 @@ const ImageRequest = struct {
         // because the resource entry reports it verbatim.
         self.status = transfer.responseStatus() orelse 0;
         self.next_hop_protocol = transfer.nextHopProtocol();
+        self.labels = transfer.responseLabels();
 
         if (transfer.contentType()) |ct| {
             const mime = Mime.parse(ct) catch null;
@@ -2941,6 +2950,7 @@ const ImageRequest = struct {
             .body_len = self.bytes,
             .encoded_body_len = self.encoded_bytes,
             .next_hop_protocol = self.next_hop_protocol,
+            .labels = self.labels,
         });
         self.report(if (self.arrived()) .load else .@"error");
     }

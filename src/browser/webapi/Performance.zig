@@ -261,6 +261,7 @@ pub fn navigationResponseStarted(
     self: *Performance,
     status: u16,
     content_type: []const u8,
+    content_encoding: []const u8,
     next_hop_protocol: []const u8,
 ) void {
     const at = self.now();
@@ -268,13 +269,18 @@ pub fn navigationResponseStarted(
     self._nav.final_response_headers_start = at;
     self._nav.response_status = status;
     self._nav.content_type = content_type;
+    self._nav.content_encoding = content_encoding;
     self._nav.next_hop_protocol = next_hop_protocol;
     self._nav_phase = .response;
 }
 
-pub fn navigationBodyChunk(self: *Performance, len: usize) void {
-    self._nav.encoded_body_size += len;
+/// `len` is what the chunk decoded to; `encoded_total` is what the whole body
+/// has weighed on the wire so far. They are the same number only for a document
+/// the server did not compress, and a document that says so while carrying a
+/// Content-Encoding header contradicts its own headers.
+pub fn navigationBodyChunk(self: *Performance, len: usize, encoded_total: u64) void {
     self._nav.decoded_body_size += len;
+    self._nav.encoded_body_size = encoded_total;
 }
 
 pub fn navigationResponseEnded(self: *Performance) void {
@@ -343,6 +349,15 @@ pub fn resourceLoaded(
     // to outlive this call rather than ride along on the stack.
     const stored = try exec.arena.create(timing.Timing);
     stored.* = t;
+
+    // The two response labels are the only fields whose bytes belong to
+    // whoever performed the fetch -- an inline buffer on a Script, an
+    // ImageRequest or a SyncResponse, all of which are released well before
+    // the buffer is read back. Everything else in `t` is a number or a
+    // literal. Copied here rather than at each of the five call sites, so a
+    // new recorder cannot forget to.
+    stored.content_type = try exec.arena.dupe(u8, t.content_type);
+    stored.content_encoding = try exec.arena.dupe(u8, t.content_encoding);
 
     const entry = try exec._factory.chained(.{
         Entry{

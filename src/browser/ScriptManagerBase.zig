@@ -636,6 +636,10 @@ pub const Script = struct {
     // final until the body is, and doneCallback has no transfer to ask.
     perf_encoded_body_size: u64 = 0,
 
+    // The entry's contentType / contentEncoding, copied off the response
+    // headers while the transfer still exists.
+    perf_labels: HttpClient.ResponseLabels = .{},
+
     // The entry's stored timing, once filed. Kept so the prescan's guess can
     // be corrected: it starts a fetch before the parser reaches the <script>,
     // so whether that script blocks the parser is not knowable when the
@@ -735,6 +739,7 @@ pub const Script = struct {
 
         self.status = transfer.responseStatus().?;
         self.perf_next_hop_protocol = transfer.nextHopProtocol();
+        self.perf_labels = transfer.responseLabels();
         if (transfer.responseStatus() != 200) {
             log.info(.http, "script header", .{
                 .req = transfer,
@@ -842,6 +847,8 @@ pub const Script = struct {
         self.perf_timing = perf.resourceLoaded(self.url, .{
             .initiator_type = initiator,
             .next_hop_protocol = self.perf_next_hop_protocol,
+            .content_type = self.perf_labels.contentType(),
+            .content_encoding = self.perf_labels.contentEncoding(),
             .render_blocking_status = if (render_blocking) "blocking" else "non-blocking",
             .fetch_start = self.perf_fetch_start,
             .response_end = perf.now(),

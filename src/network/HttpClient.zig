@@ -32,6 +32,11 @@ const CookieJar = @import("../browser/webapi/storage/Cookie.zig").Jar;
 
 const Config = @import("../Config.zig");
 const http = @import("http.zig");
+
+/// Re-exported so the resource-timing recorders — which know HttpClient and not
+/// the curl layer under it — can hold one between a header callback and the
+/// entry they file later.
+pub const ResponseLabels = http.ResponseLabels;
 const Network = @import("Network.zig");
 const Cache = @import("cache/Cache.zig");
 const RobotsGate = @import("RobotsGate.zig");
@@ -1271,6 +1276,9 @@ const SyncContext = struct {
     // body has arrived.
     encoded_body_size: u64 = 0,
 
+    // contentType / contentEncoding for the resource entry the caller files.
+    labels: ResponseLabels = .{},
+
     // Acquired on the first byte we have to buffer, so a bodyless response
     // never takes one. Ownership moves to the SyncResponse.
     arena: ?*lp.Arena = null,
@@ -1280,6 +1288,7 @@ const SyncContext = struct {
         lp.assert(transfer.responseStatus() != null, "HttpClient.SyncRequest.headerCallback", .{ .value = transfer.responseStatus() });
         self.status = transfer.responseStatus().?;
         self.next_hop_protocol = transfer.nextHopProtocol();
+        self.labels = transfer.responseLabels();
         if (transfer.getContentLength()) |cl| {
             try self.body.ensureTotalCapacityPrecise(try self.bodyAllocator(cl), cl);
         }
@@ -1380,6 +1389,7 @@ pub fn syncRequest(self: *Client, transfer: *Transfer) !SyncResponse {
             .arena = sync_ctx.arena,
             .next_hop_protocol = sync_ctx.next_hop_protocol,
             .encoded_body_size = sync_ctx.encoded_body_size,
+            .labels = sync_ctx.labels,
         },
         .err => |e| return e,
     }
@@ -2005,6 +2015,9 @@ pub const SyncResponse = struct {
     // What the body weighed on the wire, which `body.items.len` cannot say for
     // a compressed response: curl hands over the decoded bytes.
     encoded_body_size: u64 = 0,
+
+    // contentType / contentEncoding, held inline so they survive the transfer.
+    labels: ResponseLabels = .{},
 
     // Owns `body`. Null when the response had nothing to buffer. Callers that
     // keep `body` past this call take the arena instead of releasing it.
@@ -2924,6 +2937,14 @@ pub const Transfer = struct {
             hdr._content_type_len = len;
             @memcpy(hdr._content_type[0..len], value[0..len]);
         }
+
+        if (conn.getResponseHeader("content-encoding", 0)) |ce| {
+            var hdr = &self.res.header.?;
+            const value = ce.value;
+            const len = @min(value.len, http.ResponseHead.MAX_CONTENT_ENCODING_LEN);
+            hdr._content_encoding_len = len;
+            @memcpy(hdr._content_encoding[0..len], value[0..len]);
+        }
     }
 
     pub fn format(self: *Transfer, writer: *std.Io.Writer) !void {
@@ -3762,6 +3783,27 @@ pub const Transfer = struct {
             return rh.contentType();
         }
         return null;
+    }
+
+    pub fn contentEncoding(self: *Transfer) ?[]const u8 {
+        if (self.res.header) |*rh| {
+            return rh.contentEncoding();
+        }
+        return null;
+    }
+
+    /// The two labels a `resource` PerformanceEntry quotes back, copied out of
+    /// the response so they outlive the transfer. Every recorder captures this
+    /// from its header callback and files it later.
+    pub fn responseLabels(self: *Transfer) ResponseLabels {
+        var labels: ResponseLabels = .{};
+        if (self.contentType()) |ct| {
+            labels.setContentType(ct);
+        }
+        if (self.contentEncoding()) |ce| {
+            labels.setContentEncoding(ce);
+        }
+        return labels;
     }
 
     pub fn nextHopProtocol(self: *const Transfer) []const u8 {

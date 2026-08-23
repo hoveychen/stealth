@@ -138,6 +138,33 @@
     });
   </script>
 
+  <script id=resource_entry_quotes_the_response_labels type=module>
+    const state = await testing.async();
+    // `contentType` is the MIME essence -- the parameters dropped and the rest
+    // lowercased -- and `contentEncoding` is the Content-Encoding header as it
+    // was sent. Both measured on Chrome 151
+    // (tools/fingerprint/resource-timing-response-fields.mjs): a sheet served
+    // as `text/CSS; charset=UTF-8` filed `text/css`, and a br-encoded script
+    // filed `br`.
+    //
+    // Answering "" for both is what this engine did, and it is a claim no
+    // server makes: a response with a body has a type, and the whole point of
+    // the Content-Encoding header is that something on the wire read it.
+    const compressed = await waitForResourceEntry('/served/compressed.js');
+    const sheet = await waitForResourceEntry('/styles/visibility.css');
+    state.resolve();
+    await state.done(() => {
+      // Served as `text/javascript; charset=UTF-8`; the parameter is not part
+      // of what the entry reports.
+      testing.expectEqual('text/javascript', compressed[0].contentType);
+      testing.expectEqual('gzip', compressed[0].contentEncoding);
+      // No Content-Encoding on the sheet, so the field stays empty -- an empty
+      // string here means "not encoded", which is true of this one.
+      testing.expectEqual('text/css', sheet[0].contentType);
+      testing.expectEqual('', sheet[0].contentEncoding);
+    });
+  </script>
+
   <script id=resource_entries_are_one_buffer type=module>
     const state = await testing.async();
     await waitForResourceEntry('/src/browser/tests/performance_resource.png');
