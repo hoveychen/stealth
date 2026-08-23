@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<head>
+  <title>Node mutation exception messages</title>
+  <script src="../testing.js"></script>
+</head>
+
+<script id=node_error_message_hierarchy>
+{
+  // Blink has seven distinct sentences behind HierarchyRequestError, and which
+  // one comes out says which branch of "ensure pre-insert validity" rejected
+  // the call. One generic description for all seven is the tell. Measured
+  // against Chrome 151.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const div = () => document.createElement('div');
+  const pre = (op) => `HierarchyRequestError: Failed to execute '${op}' on 'Node': `;
+
+  // A node that already contains the parent -- the self-append case included.
+  testing.expectEqual(pre('appendChild') + 'The new child element contains the parent.',
+    msg(() => { const d = div(); d.appendChild(d); }));
+  testing.expectEqual(pre('appendChild') + 'The new child element contains the parent.',
+    msg(() => { const a = div(), b = div(); a.appendChild(b); b.appendChild(a); }));
+
+  // Both node names are echoed: the child's, then the parent's. An element's
+  // nodeName is upper case in an HTML document, which the sentence preserves.
+  testing.expectEqual(
+    pre('appendChild') + "Nodes of type '#document' may not be inserted inside nodes of type 'DIV'.",
+    msg(() => div().appendChild(document)));
+  testing.expectEqual(
+    pre('appendChild') + "Nodes of type '#document' may not be inserted inside nodes of type 'SPAN'.",
+    msg(() => document.createElement('span').appendChild(document)));
+  testing.expectEqual(
+    pre('insertBefore') + "Nodes of type '#document' may not be inserted inside nodes of type 'DIV'.",
+    msg(() => div().insertBefore(document, null)));
+
+  // An Attr is rejected the same way, and its nodeName is the attribute name.
+  testing.expectEqual(
+    pre('appendChild') + "Nodes of type 'a' may not be inserted inside nodes of type 'DIV'.",
+    msg(() => div().appendChild(document.createAttribute('a'))));
+
+  // A parent that cannot have children at all is a different sentence: it does
+  // not name the types, because the parent is what is wrong.
+  testing.expectEqual(pre('appendChild') + 'This node type does not support this method.',
+    msg(() => document.createTextNode('a').appendChild(div())));
+  testing.expectEqual(pre('appendChild') + 'This node type does not support this method.',
+    msg(() => document.createComment('a').appendChild(div())));
+}
+</script>
+
+<script id=node_error_message_document_structure>
+{
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const pre = (op) => `HierarchyRequestError: Failed to execute '${op}' on 'Node': `;
+  const mk = () => document.implementation.createDocument(null, null, null);
+  const dt = (d) => d.implementation.createDocumentType('x', '', '');
+
+  // The document-structure rules each get their own wording, and a two-element
+  // DocumentFragment reports as the element case rather than as a fragment.
+  testing.expectEqual(pre('appendChild') + 'Only one element on document allowed.',
+    msg(() => { const d = mk(); d.appendChild(d.createElement('a')); d.appendChild(d.createElement('b')); }));
+  testing.expectEqual(pre('appendChild') + 'Only one element on document allowed.',
+    msg(() => {
+      const d = mk(), f = d.createDocumentFragment();
+      f.appendChild(d.createElement('a'));
+      f.appendChild(d.createElement('b'));
+      d.appendChild(f);
+    }));
+  testing.expectEqual(pre('appendChild') + 'Only one doctype on document allowed.',
+    msg(() => { const d = mk(); d.appendChild(dt(d)); d.appendChild(dt(d)); }));
+  testing.expectEqual(pre('appendChild') + "Can't insert a doctype after the root element.",
+    msg(() => { const d = mk(); d.appendChild(d.createElement('a')); d.appendChild(dt(d)); }));
+  testing.expectEqual(pre('insertBefore') + "Can't insert an element before a doctype.",
+    msg(() => { const d = mk(), t = dt(d); d.appendChild(t); d.insertBefore(d.createElement('a'), t); }));
+
+  // A Text node in a Document falls back to the "nodes of type" sentence.
+  testing.expectEqual(
+    pre('appendChild') + "Nodes of type '#text' may not be inserted inside nodes of type '#document'.",
+    msg(() => { const d = mk(); d.appendChild(d.createTextNode('x')); }));
+}
+</script>
+
+<script id=node_error_message_not_found>
+{
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const div = () => document.createElement('div');
+
+  // Three operations, three sentences, all NotFoundError: the verb changes with
+  // what the missing child was going to be used for.
+  testing.expectEqual(
+    "NotFoundError: Failed to execute 'insertBefore' on 'Node': " +
+    'The node before which the new node is to be inserted is not a child of this node.',
+    msg(() => div().insertBefore(div(), div())));
+  testing.expectEqual(
+    "NotFoundError: Failed to execute 'removeChild' on 'Node': " +
+    'The node to be removed is not a child of this node.',
+    msg(() => div().removeChild(div())));
+  testing.expectEqual(
+    "NotFoundError: Failed to execute 'replaceChild' on 'Node': " +
+    'The node to be replaced is not a child of this node.',
+    msg(() => div().replaceChild(div(), div())));
+}
+</script>

@@ -59,7 +59,17 @@ pub fn init(message_: ?[]const u8, options_: ?Options, exec: *const Execution) !
 }
 
 pub fn throw(local: *const js.Local, exec: *const Execution) error{ TryCatchRethrow, OutOfMemory } {
-    const self = init(null, null, exec) catch return error.OutOfMemory;
+    return throwWithMessage(local, exec, null);
+}
+
+/// The exception is built here rather than raised as a Zig error, so it does not
+/// go through `Context.fail` -- the Blink sentence has to be handed in.
+pub fn throwWithMessage(
+    local: *const js.Local,
+    exec: *const Execution,
+    message: ?[]const u8,
+) error{ TryCatchRethrow, OutOfMemory } {
+    const self = init(message, null, exec) catch return error.OutOfMemory;
     const js_val = local.zigValueToJs(self, .{}) catch return error.OutOfMemory;
     _ = local.isolate.throwException(js_val.handle);
     return error.TryCatchRethrow;

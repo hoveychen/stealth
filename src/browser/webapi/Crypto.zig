@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const std = @import("std");
 const lp = @import("lightpanda");
 const js = @import("../js/js.zig");
 
@@ -34,19 +35,44 @@ _subtle: SubtleCrypto = .{},
 
 pub const init: Crypto = .{};
 
+// Both rejections quote the argument back: the view's type for the wrong-type
+// one, and the byte length -- not the element count -- for the quota one, so a
+// Uint16Array of 65536 reports 131072. Measured on Chrome 151.
+const random_values_prefix = "Failed to execute 'getRandomValues' on 'Crypto': ";
+
 // We take a js.Value, because we want to return the same instance, not a new
 // TypedArray
 pub fn getRandomValues(_: *const Crypto, js_obj: js.Object, exec: *const js.Execution) !js.Object {
     const value = js_obj.toValue();
-    if (value.isFloat16Array() or value.isFloat32Array() or value.isFloat64Array() or (value.isArrayBufferView() and !value.isTypedArray())) {
+    const rejected_type: ?[]const u8 = blk: {
+        if (value.isFloat16Array()) break :blk "Float16";
+        if (value.isFloat32Array()) break :blk "Float32";
+        if (value.isFloat64Array()) break :blk "Float64";
+        // An ArrayBufferView that is not a TypedArray is a DataView, and Blink
+        // names it by its interface rather than by an element type.
+        if (value.isArrayBufferView() and !value.isTypedArray()) break :blk "DataView";
+        break :blk null;
+    };
+    if (rejected_type) |type_name| {
         // only integer TypedArrays are supported
-        return error.TypeMismatch;
+        return exec.js.fail(error.TypeMismatch, try std.fmt.allocPrint(
+            exec.call_arena,
+            random_values_prefix ++
+                "The provided ArrayBufferView is of type '{s}', which is not an integer array type.",
+            .{type_name},
+        ));
     }
 
     var into = try js_obj.toZig(RandomValues);
     const buf = into.asBuffer();
     if (buf.len > 65_536) {
-        return QuotaExceededError.throw(js_obj.local, exec);
+        return QuotaExceededError.throwWithMessage(js_obj.local, exec, try std.fmt.allocPrint(
+            exec.call_arena,
+            random_values_prefix ++
+                "The ArrayBufferView's byte length ({d}) exceeds the number of bytes of entropy " ++
+                "available via this API (65536).",
+            .{buf.len},
+        ));
     }
     lp.io.random(buf);
     return js_obj;

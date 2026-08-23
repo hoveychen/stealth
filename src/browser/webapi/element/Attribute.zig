@@ -494,30 +494,45 @@ fn shouldAddToIdMap(normalized_name: String, element: *Element) bool {
     return node.isConnected();
 }
 
-pub fn validateAttributeName(name: String) !void {
+/// Why a name was rejected, so each caller can word its own sentence: Blink has
+/// four for this one rule ("is not a valid attribute name", "The localName
+/// provided (…) contains an invalid character", "The qualified name provided is
+/// empty" and one that names the offending character).
+pub const NameRejection = union(enum) {
+    empty,
+    character: u8,
+};
+
+/// Blink does not hold an attribute name to the XML Name production: a name is
+/// rejected only when it is empty or contains one of nine characters. Measured
+/// by walking every code point 0x00-0xFF through setAttribute in Chrome 151, in
+/// first and in middle position -- those nine were the whole rejected set, and
+/// a leading digit, '@', '!' and '~' were all accepted. Vertical tab is *not*
+/// among them, so this cannot be `std.ascii.isWhitespace`.
+pub fn checkAttributeName(name: []const u8) ?NameRejection {
+    if (name.len == 0) {
+        return .empty;
+    }
+    for (name) |c| {
+        switch (c) {
+            0, '\t', '\n', 0x0C, '\r', ' ', '/', '=', '>' => return .{ .character = c },
+            else => {},
+        }
+    }
+    return null;
+}
+
+/// The Element-side wording, shared by setAttribute and toggleAttribute.
+pub fn validateAttributeName(name: String, comptime op: []const u8, frame: *Frame) !void {
     const name_str = name.str();
-
-    if (name_str.len == 0) {
-        return error.InvalidCharacterError;
+    if (checkAttributeName(name_str) == null) {
+        return;
     }
-
-    const first = name_str[0];
-    if ((first >= '0' and first <= '9') or first == '-' or first == '.') {
-        return error.InvalidCharacterError;
-    }
-
-    for (name_str) |c| {
-        if (c == 0 or c == '/' or c == '=' or c == '>' or std.ascii.isWhitespace(c)) {
-            return error.InvalidCharacterError;
-        }
-
-        const is_valid = std.ascii.isAlphanumeric(c) or
-            c == '_' or c == '-' or c == '.' or c == ':';
-
-        if (!is_valid) {
-            return error.InvalidCharacterError;
-        }
-    }
+    return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+        frame.call_arena,
+        "Failed to execute '" ++ op ++ "' on 'Element': '{s}' is not a valid attribute name.",
+        .{name_str},
+    ));
 }
 
 // Every stored entry name either comes from the static String.intern or from

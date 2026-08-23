@@ -1122,7 +1122,7 @@ pub fn postMessage(self: *Window, message: js.Value, target_origin: ?[]const u8,
         try_catch.init(&ls.local);
         defer try_catch.deinit();
 
-        const c = message.structuredCloneTo(&ls.local) catch {
+        const c = message.structuredCloneTo(&ls.local, null) catch {
             return error.DataClone;
         };
         break :blk try c.persist();
@@ -1166,7 +1166,7 @@ pub fn atob(_: *const Window, input: base64.BinInput, frame: *Frame) !js.String.
 
 pub fn structuredClone(_: *const Window, value: js.Value) !js.Value {
     // the serializer already threw (e.g. a DataCloneError); keep it
-    return value.structuredClone() catch error.TryCatchRethrow;
+    return value.structuredClone("Failed to execute 'structuredClone' on 'Window': ") catch error.TryCatchRethrow;
 }
 
 pub fn getFrame(self: *Window, idx: usize) !?*Window {

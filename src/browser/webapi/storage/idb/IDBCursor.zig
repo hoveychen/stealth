@@ -250,7 +250,7 @@ pub fn update(self: *IDBCursor, value: js.Value, exec: *Execution) !*IDBRequest 
     // Structured-clone the value now, synchronously: an unserializable value must
     // throw DataCloneError from update() itself, not fail later in the drain. The
     // stored clone also decouples the record from any later mutation of the arg.
-    const serialized = value.serialize() catch return error.TryCatchRethrow;
+    const serialized = value.serialize(null) catch return error.TryCatchRethrow;
     defer serialized.deinit();
 
     // For an in-line store, the value's own key must match the record's key.

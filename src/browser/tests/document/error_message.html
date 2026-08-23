@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<head>
+  <title>Document exception messages</title>
+  <script src="../testing.js"></script>
+</head>
+
+<script id=document_error_message_create_element>
+{
+  // `e.message` is a reading: plain property access gets it, and it is prose,
+  // so it does not match by accident. Blink names the operation and the
+  // interface, then echoes the argument back -- the generic DOMException
+  // description is the tell. Every string here was measured against Chrome 151.
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  const bad_tag = (tag) => "InvalidCharacterError: Failed to execute 'createElement' on 'Document': " +
+    `The tag name provided ('${tag}') is not a valid name.`;
+
+  testing.expectEqual(bad_tag(''), msg(() => document.createElement('')));
+  testing.expectEqual(bad_tag('1x'), msg(() => document.createElement('1x')));
+  testing.expectEqual(bad_tag('a b'), msg(() => document.createElement('a b')));
+  testing.expectEqual(bad_tag('<'), msg(() => document.createElement('<')));
+
+  // createElementNS has its own sentence: a qualified name, and it points at
+  // the first offending character rather than quoting the whole name.
+  testing.expectEqual(
+    "InvalidCharacterError: Failed to execute 'createElementNS' on 'Document': " +
+    "The qualified name provided ('1x') contains the invalid character '1'.",
+    msg(() => document.createElementNS(null, '1x')));
+}
+</script>
+
+<script id=document_error_message_query_selector>
+{
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  // The selector is echoed back, quoted, and an empty selector gets a sentence
+  // of its own rather than being reported as an unparseable one.
+  testing.expectEqual(
+    "SyntaxError: Failed to execute 'querySelector' on 'Document': '###' is not a valid selector.",
+    msg(() => document.querySelector('###')));
+  testing.expectEqual(
+    "SyntaxError: Failed to execute 'querySelector' on 'Document': The provided selector is empty.",
+    msg(() => document.querySelector('')));
+
+  // The operation name follows the method, not the family.
+  testing.expectEqual(
+    "SyntaxError: Failed to execute 'querySelectorAll' on 'Document': '###' is not a valid selector.",
+    msg(() => document.querySelectorAll('###')));
+  testing.expectEqual(
+    "SyntaxError: Failed to execute 'querySelectorAll' on 'Document': The provided selector is empty.",
+    msg(() => document.querySelectorAll('')));
+}
+</script>
+
+<script id=document_error_message_create_attribute>
+{
+  const msg = (fn) => { try { fn(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  // createAttribute words the same rejection a third way -- "localName", and
+  // "contains an invalid character" rather than "is not a valid attribute
+  // name". Three sentences for one rule, so they cannot share one constant.
+  const bad_attr = (name) => "InvalidCharacterError: Failed to execute 'createAttribute' on 'Document': " +
+    `The localName provided ('${name}') contains an invalid character.`;
+
+  testing.expectEqual(bad_attr(''), msg(() => document.createAttribute('')));
+  testing.expectEqual(bad_attr('my attr'), msg(() => document.createAttribute('my attr')));
+  testing.expectEqual(bad_attr('a/b'), msg(() => document.createAttribute('a/b')));
+
+  // And it takes the same relaxed name set as setAttribute does.
+  testing.expectEqual('0abc', document.createAttribute('0abc').name);
+  testing.expectEqual('~', document.createAttribute('~').name);
+}
+</script>

@@ -11455,3 +11455,98 @@ window probe and is worth writing down where it was measured: removing an
 `<iframe>` element leaves `window.length` at its old value here and drops it
 immediately in Chrome, so the frame is not detached from `child_frames` when
 its element goes.
+
+## Seven sentences behind one exception name (2026-08-23)
+
+`js-error-message-text` measured 28 deliberate throws in both engines and found
+one shape of divergence: `name`, `code`, the constructor and whether the call
+throws at all already matched Chrome everywhere, and only `message` differed.
+Two sibling plans closed `atob`/`btoa` and the constructor `TypeError`s. This
+one takes the rest — the DOM throwers a page reaches in one line, plus
+`getRandomValues` and `structuredClone`.
+
+The mechanism was never the obstacle. `Context.fail` already stores a message
+that `domExceptionToJs` puts on the exception, leaving the spec's generic table
+as the fallback. What each site needed was to be handed the sentence, and the
+sentences are not one per exception name — they are one per *branch*:
+
+| exception | Chrome's sentences |
+|---|---|
+| `HierarchyRequestError` | 7 |
+| `NotFoundError` (node mutation) | 3 |
+| `InvalidCharacterError` (attribute names) | 4 |
+| `InvalidCharacterError` (element names) | 5 |
+| `SyntaxError` (selectors) | 2 × interface |
+
+So `e.message` tells a page which of seven pre-insert branches rejected its
+`appendChild`, and one generic description for all seven is the tell.
+
+### The parts that are interpolated
+
+A single case per family would have missed all of these, so the probe reads
+several per family:
+
+- **The tag name and the selector are echoed back**, quoted:
+  `The tag name provided ('1x') is not a valid name.`,
+  `'###' is not a valid selector.`
+- **The interface follows the receiver.** `document.querySelector('###')` says
+  `'Document'`, `div.querySelector('###')` says `'Element'`, and a
+  `DocumentFragment` names itself. Same rejection, three sentences.
+- **`createElementNS` names the first character the production tripped over**
+  (`contains the invalid character '1'`), not the whole name — so knowing
+  *that* a name is invalid is not enough to write the message.
+- **Node mutation echoes both node names**, the child's then the parent's, and
+  an element's is its `nodeName`: upper case in an HTML document.
+  `Nodes of type '#document' may not be inserted inside nodes of type 'DIV'.`
+- **`getRandomValues` quotes the byte length, not the element count.** A
+  `Uint16Array` of 65536 elements reports `131072`.
+- **`structuredClone` names the interface of a host object it cannot clone**:
+  `HTMLDivElement object could not be cloned.`
+
+### Two of these were behaviour, not wording
+
+The sweep that produced the sentences also caught two divergences that no
+amount of message text would have fixed:
+
+- **`closest` never went through the DOMException mapping** its three
+  neighbours share, so `div.closest('###')` threw `Error: InvalidIDSelector` —
+  the raw Zig error name, which no browser produces and which is a louder
+  reading than any wording. It goes through the same funnel now.
+- **Attribute names were held to the XML `Name` production.** Blink is not:
+  walking every code point `0x00`-`0xFF` through `setAttribute` in Chrome 151,
+  in first and in middle position, the entire rejected set is *empty name* plus
+  NUL, tab, LF, FF, CR, space, `/`, `=` and `>`. Nine characters, position
+  independent. So `setAttribute('0abc')`, `'.foo'`, `'@'`, `'!'` and `'~'` all
+  worked in Chrome and threw here. Vertical tab is *not* in Blink's set even
+  though it is whitespace, which is why the check cannot be
+  `std.ascii.isWhitespace`. The same relaxed rule covers `toggleAttribute`,
+  `createAttribute` and `setAttributeNS` — one rule, four different sentences.
+
+The existing `invalidAttributeNames` test block asserted our stricter rule, so
+it was rewritten against the measurement rather than kept.
+
+### Readings
+
+`probes/expr-error-message-dom-crypto.js`, 34 cases, three arms in
+`results/probes/expr-error-message-dom-crypto.{chrome,lightpanda,lightpanda-before}.json`:
+**2/34 identical to Chrome before, 34/34 after.** The parent plan's 28-case
+sweep, which had been at 27/28 with `structuredClone` the last one out, is now
+**28/28**.
+
+`make test` 1429/1429, `zig fmt --check` clean.
+
+### What was measured and deliberately not built
+
+- **`shadowRoot.querySelector` says `'DocumentFragment'` here.** Chrome says
+  `'ShadowRoot'`. `ShadowRoot` reuses `DocumentFragment`'s methods, so telling
+  them apart means giving `ShadowRoot` its own pair rather than passing a
+  different string. Not read out of Chrome either, so it is a gap, not a fix.
+- **`postMessage` and `BroadcastChannel` still send the bare sentence.** They
+  share the serializer with `structuredClone` and Blink gives each its own
+  prefix (`Failed to execute 'postMessage' on 'Worker': `), but none of those
+  were measured — the prefix is threaded through as an optional argument and
+  those callers pass `null` rather than a guessed string.
+- **`document.appendChild(div)` does not throw here** on an `about:blank` page
+  where Chrome says `Only one element on document allowed.`; the check exists
+  and fires on a `createDocument` tree, so what differs is whether the blank
+  document has an element child at all. Separate from the wording.

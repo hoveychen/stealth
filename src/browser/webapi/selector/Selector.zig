@@ -29,6 +29,34 @@ pub const List = @import("List.zig");
 const String = lp.String;
 const Allocator = std.mem.Allocator;
 
+/// Same mapping, plus the sentence Blink puts on it: the operation, the
+/// receiver's interface, and the selector echoed back. An empty selector gets a
+/// sentence of its own rather than being reported as unparseable. Measured on
+/// Chrome 151 -- `document.querySelector('###')` and `div.querySelector('###')`
+/// differ only in the interface, so the caller has to say which it is.
+pub fn failToDOM(
+    err: anyerror,
+    input: []const u8,
+    comptime op: []const u8,
+    comptime interface: []const u8,
+    frame: *Frame,
+) anyerror {
+    const mapped = mapErrorToDOM(err);
+    if (mapped != error.SyntaxError) {
+        return mapped;
+    }
+    const said = "Failed to execute '" ++ op ++ "' on '" ++ interface ++ "': ";
+    if (input.len == 0) {
+        return frame.js.fail(error.SyntaxError, said ++ "The provided selector is empty.");
+    }
+    const message = std.fmt.allocPrint(
+        frame.call_arena,
+        said ++ "'{s}' is not a valid selector.",
+        .{input},
+    ) catch return error.OutOfMemory;
+    return frame.js.fail(error.SyntaxError, message);
+}
+
 // translate a Selector error to a DOMException known type.
 pub fn mapErrorToDOM(err: anyerror) anyerror {
     return switch (err) {

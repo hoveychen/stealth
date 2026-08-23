@@ -315,10 +315,14 @@
       testing.expectEqual("InvalidCharacterError", err.name);
     }, () => document.createAttribute(''));
 
+    // '.over' is a name Chrome accepts: attribute names are not held to the
+    // XML Name production. A space is what actually gets rejected.
+    testing.expectEqual('.over', document.createAttribute('.over').name);
+
     testing.withError((err) => {
       testing.expectEqual(5, err.code);
       testing.expectEqual("InvalidCharacterError", err.name);
-    }, () => document.createAttribute('.over'));
+    }, () => document.createAttribute('over there'));
   }
 </script>
 

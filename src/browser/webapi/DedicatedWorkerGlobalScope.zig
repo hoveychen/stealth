@@ -122,7 +122,7 @@ pub fn receiveMessage(self: *DedicatedWorkerGlobalScope, data: js.Value) !void {
         defer ls.deinit();
 
         // clones from where it currently is (the Worker's Page context) to our Context
-        const cloned = data.structuredCloneTo(&ls.local) catch break :blk null;
+        const cloned = data.structuredCloneTo(&ls.local, null) catch break :blk null;
         break :blk cloned.persist() catch break :blk null;
     };
 

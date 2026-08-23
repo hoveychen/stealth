@@ -365,7 +365,7 @@ const CreateElementOptions = struct {
 };
 
 pub fn createElement(self: *Document, name: []const u8, options_: ?CreateElementOptions, frame: *Frame) !*Element {
-    try validateElementName(name);
+    try validateElementName(name, frame);
     const ns: Element.Namespace, const normalized_name = blk: {
         if (self._type == .html) {
             break :blk .{ .html, std.ascii.lowerString(&frame.buf, name) };
@@ -393,7 +393,7 @@ pub fn createElement(self: *Document, name: []const u8, options_: ?CreateElement
 }
 
 pub fn createElementNS(self: *Document, namespace: ?[]const u8, name: []const u8, frame: *Frame) !*Element {
-    _ = try validateAndExtract(namespace, name, .element);
+    _ = try validateAndExtract(namespace, name, .element, "createElementNS", "Document", frame);
     const ns = Element.Namespace.parse(namespace);
     // Per spec, createElementNS does NOT lowercase (unlike createElement).
     const node = try Frame.node_factory.createElementNS(frame, ns, name, null);
@@ -414,7 +414,7 @@ pub fn createElementNS(self: *Document, namespace: ?[]const u8, name: []const u8
 }
 
 pub fn createAttribute(_: *const Document, name: String.Global, frame: *Frame) !?*Element.Attribute {
-    try Element.Attribute.validateAttributeName(name.str);
+    try validateLocalName(name.str, "createAttribute", frame);
     return frame._factory.node(Element.Attribute{
         ._name = name.str,
         ._value = String.empty,
@@ -427,12 +427,27 @@ pub fn createAttributeNS(_: *const Document, namespace: []const u8, name: String
         log.warn(.not_implemented, "document.createAttributeNS", .{ .namespace = namespace });
     }
 
-    try Element.Attribute.validateAttributeName(name.str);
+    try validateLocalName(name.str, "createAttributeNS", frame);
     return frame._factory.node(Element.Attribute{
         ._name = name.str,
         ._value = String.empty,
         ._element = null,
     });
+}
+
+/// The Document-side wording for the attribute-name rule: same set of rejected
+/// characters as setAttribute, but Blink calls the input a localName here and
+/// does not name the character. Measured on Chrome 151.
+fn validateLocalName(name: String, comptime op: []const u8, frame: *Frame) !void {
+    const name_str = name.str();
+    if (Element.Attribute.checkAttributeName(name_str) == null) {
+        return;
+    }
+    return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+        frame.call_arena,
+        "Failed to execute '" ++ op ++ "' on 'Document': The localName provided ('{s}') contains an invalid character.",
+        .{name_str},
+    ));
 }
 
 pub fn getElementById(self: *Document, id: []const u8, frame: *Frame) ?*Element {
@@ -501,11 +516,13 @@ pub fn getSelection(self: *Document) *Selection {
 }
 
 pub fn querySelector(self: *Document, input: String, frame: *Frame) !?*Element {
-    return Selector.querySelector(self.asNode(), input.str(), frame) catch |err| Selector.mapErrorToDOM(err);
+    return Selector.querySelector(self.asNode(), input.str(), frame) catch |err|
+        Selector.failToDOM(err, input.str(), "querySelector", "Document", frame);
 }
 
 pub fn querySelectorAll(self: *Document, input: String, frame: *Frame) !*Selector.List {
-    return Selector.querySelectorAll(self.asNode(), input.str(), frame) catch |err| Selector.mapErrorToDOM(err);
+    return Selector.querySelectorAll(self.asNode(), input.str(), frame) catch |err|
+        Selector.failToDOM(err, input.str(), "querySelectorAll", "Document", frame);
 }
 
 pub fn getImplementation(self: *Document, frame: *Frame) !*DOMImplementation {
@@ -1969,6 +1986,17 @@ pub fn isValidNamespacePrefix(prefix: []const u8) bool {
     return true;
 }
 
+/// The first character keeping `prefix` out of the namespace-prefix production.
+pub fn firstInvalidPrefixChar(prefix: []const u8) ?u8 {
+    for (prefix) |c| {
+        switch (c) {
+            '\t', '\n', 0x0C, '\r', ' ', 0, '/', '>' => return c,
+            else => {},
+        }
+    }
+    return null;
+}
+
 pub fn isValidAttributeLocalName(name: []const u8) bool {
     if (name.len == 0) {
         return false;
@@ -1982,10 +2010,47 @@ pub fn isValidAttributeLocalName(name: []const u8) bool {
     return true;
 }
 
-fn validateElementName(name: []const u8) !void {
-    if (!isValidElementLocalName(name)) {
-        return error.InvalidCharacterError;
+/// The first character that keeps `name` out of the element-name production.
+/// createElementNS names it in its rejection sentence, so knowing *that* a name
+/// is invalid is not enough. Mirrors `isValidElementLocalName` branch for
+/// branch; an empty name has no offending character and returns null.
+pub fn firstInvalidElementNameChar(name: []const u8) ?u8 {
+    if (name.len == 0) {
+        return null;
     }
+    if (std.ascii.isAlphabetic(name[0])) {
+        for (name[1..]) |c| {
+            switch (c) {
+                '\t', '\n', 0x0C, '\r', ' ', 0, '/', '>' => return c,
+                else => {},
+            }
+        }
+        return null;
+    }
+    if (name[0] != ':' and name[0] != '_' and name[0] < 0x80) {
+        return name[0];
+    }
+    for (name[1..]) |c| {
+        const valid = std.ascii.isAlphanumeric(c) or
+            c == '-' or c == '.' or c == ':' or c == '_' or c >= 0x80;
+        if (!valid) {
+            return c;
+        }
+    }
+    return null;
+}
+
+fn validateElementName(name: []const u8, frame: *Frame) !void {
+    if (isValidElementLocalName(name)) {
+        return;
+    }
+    // createElement quotes the whole tag name rather than one character, and
+    // calls it a tag name rather than a qualified name. Chrome 151.
+    return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+        frame.call_arena,
+        "Failed to execute 'createElement' on 'Document': The tag name provided ('{s}') is not a valid name.",
+        .{name},
+    ));
 }
 
 pub const ValidatedName = struct {
@@ -1995,12 +2060,33 @@ pub const ValidatedName = struct {
 };
 
 // The DOM spec's "validate and extract a namespace and qualifiedName".
-pub fn validateAndExtract(namespace_: ?[]const u8, qualified_name: []const u8, comptime context: enum { element, attribute }) !ValidatedName {
+/// `op` is the operation Blink names in the rejection sentence; it also fixes
+/// the interface, which is 'Document' for everything here except
+/// createDocument. Chrome 151 has four sentences on this path: empty name,
+/// empty prefix, empty local name, and one that quotes the first character the
+/// name production tripped over.
+pub fn validateAndExtract(
+    namespace_: ?[]const u8,
+    qualified_name: []const u8,
+    comptime context: enum { element, attribute },
+    comptime op: []const u8,
+    comptime interface: []const u8,
+    frame: *Frame,
+) !ValidatedName {
+    const said = "Failed to execute '" ++ op ++ "' on '" ++ interface ++ "': ";
+
     var namespace: ?[]const u8 = namespace_;
     if (namespace) |ns| {
         if (ns.len == 0) {
             namespace = null;
         }
+    }
+
+    if (qualified_name.len == 0) {
+        return frame.js.fail(
+            error.InvalidCharacterError,
+            said ++ "The qualified name provided is empty.",
+        );
     }
 
     var prefix: ?[]const u8 = null;
@@ -2009,7 +2095,18 @@ pub fn validateAndExtract(namespace_: ?[]const u8, qualified_name: []const u8, c
         prefix = qualified_name[0..colon];
         local_name = qualified_name[colon + 1 ..];
         if (!isValidNamespacePrefix(prefix.?)) {
-            return error.InvalidCharacterError;
+            if (prefix.?.len == 0) {
+                return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+                    frame.call_arena,
+                    said ++ "The qualified name provided ('{s}') has an empty namespace prefix.",
+                    .{qualified_name},
+                ));
+            }
+            return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+                frame.call_arena,
+                said ++ "The qualified name provided ('{s}') contains the invalid character '{c}'.",
+                .{ qualified_name, firstInvalidPrefixChar(prefix.?) orelse ' ' },
+            ));
         }
     }
 
@@ -2018,7 +2115,26 @@ pub fn validateAndExtract(namespace_: ?[]const u8, qualified_name: []const u8, c
         .attribute => isValidAttributeLocalName(local_name),
     };
     if (!local_valid) {
-        return error.InvalidCharacterError;
+        if (local_name.len == 0) {
+            return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+                frame.call_arena,
+                said ++ "The qualified name provided ('{s}') has an empty local name.",
+                .{qualified_name},
+            ));
+        }
+        const bad = switch (context) {
+            .element => firstInvalidElementNameChar(local_name),
+            .attribute => switch (Element.Attribute.checkAttributeName(local_name) orelse
+                return error.InvalidCharacterError) {
+                .empty => null,
+                .character => |c| c,
+            },
+        } orelse return error.InvalidCharacterError;
+        return frame.js.fail(error.InvalidCharacterError, try std.fmt.allocPrint(
+            frame.call_arena,
+            said ++ "The qualified name provided ('{s}') contains the invalid character '{c}'.",
+            .{ qualified_name, bad },
+        ));
     }
 
     if (prefix != null and namespace == null) {
