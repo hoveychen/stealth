@@ -9742,3 +9742,29 @@ draws text or paths reads back blank too. → `cfsc-canvas-pixel-readback`.
 
 The `fetch` lead (2 there, 0 here) is the smallest of the four and stays
 unchased; it is plausibly downstream of one of the above.
+
+#### The computed style answers now (2026-08-23)
+
+`chrome_initial_values.zig`, measured by `dump-css-initial-values.mjs`: 692
+initial values, keyed dash-case so both spellings reach the same entry. The six
+longhands that resolve against the box are deliberately absent from it and go
+through the layout path instead — `width`/`inline-size`, `height`/`block-size`,
+and the two origins at the box's centre, plus their `-webkit-` spellings. Which
+six was measured rather than listed: two divs of different sizes, and every name
+that disagreed between them was dropped.
+
+Same offline probe as the reading above, on a bare `<div>`:
+
+|  | before | after | Chrome |
+| --- | --- | --- | --- |
+| empty values out of 738 | 722 | **35** | 35 |
+| `getPropertyValue` empty, first 40 | 39 | **0** | 0 |
+
+The 35 that stay empty are the same 35 by name — `@font-face` and
+`@counter-style` descriptors that a style declaration carries but never
+computes, the `-webkit-*-origin-x/y/z` components, and `cssText`.
+
+Two tests had pinned the old answer and were updated to Chrome's:
+`element/styles.html` expected `""` for an undeclared `letter-spacing`, and
+`css/typed_om.html` expected `undefined` from `computedStyleMap().get('align-items')`
+with a comment naming this exact gap as the reason.

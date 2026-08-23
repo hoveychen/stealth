@@ -77,6 +77,14 @@
     const half = (v) => (parseFloat(v) / 2) + 'px';
     testing.expectEqual(half(cs.width) + ' ' + half(cs.height), cs.transformOrigin);
     testing.expectEqual(half(cs.width) + ' ' + half(cs.height), cs.perspectiveOrigin);
+
+    // The legacy -webkit- spellings of the same four. Chrome answers these and
+    // leaves only the -x/-y/-z components empty, which is why they are the last
+    // four names that differed after the table landed.
+    testing.expectEqual(cs.width, cs.webkitLogicalWidth);
+    testing.expectEqual(cs.height, cs.webkitLogicalHeight);
+    testing.expectEqual(cs.transformOrigin, cs.webkitTransformOrigin);
+    testing.expectEqual(cs.perspectiveOrigin, cs.webkitPerspectiveOrigin);
 }
 </script>
 

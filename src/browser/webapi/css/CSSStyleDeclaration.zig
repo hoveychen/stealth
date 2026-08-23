@@ -257,10 +257,10 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
                 // loops then never terminate. jQuery's .width() reads this
                 // value, so it must also carry clientWidth's content fallback
                 // or append-until-wide marquee loops never terminate.
-                if (wrapped.eql(comptime .wrap("width")) or wrapped.eql(comptime .wrap("inline-size"))) {
+                if (wrapped.eql(comptime .wrap("width")) or wrapped.eql(comptime .wrap("inline-size")) or wrapped.eqlSlice("-webkit-logical-width")) {
                     return resolvedDimension(element, .width, frame);
                 }
-                if (wrapped.eql(comptime .wrap("height")) or wrapped.eql(comptime .wrap("block-size"))) {
+                if (wrapped.eql(comptime .wrap("height")) or wrapped.eql(comptime .wrap("block-size")) or wrapped.eqlSlice("-webkit-logical-height")) {
                     return resolvedDimension(element, .height, frame);
                 }
                 // The other two the recorded table deliberately has no entry
@@ -268,8 +268,11 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
                 // same metrics rather than a stored number. `inline-size` and
                 // `block-size` above are the logical spellings of the physical
                 // pair, which is what they resolve to in a horizontal-tb box —
-                // the only writing mode this engine lays out.
-                if (wrapped.eqlSlice("transform-origin") or wrapped.eqlSlice("perspective-origin")) {
+                // the only writing mode this engine lays out, and the
+                // `-webkit-logical-*` pair is the legacy spelling of the same.
+                if (wrapped.eqlSlice("transform-origin") or wrapped.eqlSlice("perspective-origin") or
+                    wrapped.eqlSlice("-webkit-transform-origin") or wrapped.eqlSlice("-webkit-perspective-origin"))
+                {
                     return boxCentre(element, frame);
                 }
             }
