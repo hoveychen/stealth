@@ -9248,3 +9248,79 @@ spells it.
 The oracle cleared with all of this in place — plain, and again with
 `--inject-worker` — so none of these readings are of a page behaving differently
 because it was watched.
+
+## Chrome runs every one of those probes; the instrument was in the wrong realm (E1-E2, 2026-08-23)
+
+The chrome arm showed no trampoline conversation at all, and the note left with
+it read that as the two arms behaving differently. They do not. Under site
+isolation the Turnstile widget is an out-of-process frame with a CDP target of
+its own, and the run that recorded nothing had stopped pausing new targets on
+start -- so `Page.addScriptToEvaluateOnNewDocument` landed after the widget
+document had already begun, and applied only to documents created after it. That
+is exactly what the run says when read closely: the widget session reports
+itself installed at `about:blank` seven times and at `about:srcdoc` once, and
+never at the widget. Lightpanda has no such split -- every realm is the one
+session -- so the same code armed the widget there and not here.
+
+The pause is back, and typed: worker targets are resumed first and asked
+nothing (that is the head-of-line block `worker-arm-probe.mjs` pinned down),
+while page and iframe targets are armed before their first statement. With that
+one change the chrome arm records eighteen trampoline messages, and still
+clears.
+
+### The probe table, both arms, one sitting
+
+`results/fopt-e3-oracle.json` (clears) against `results/fopt-e3-lp2.json`
+(`Just a moment...`), taken minutes apart against the same station, the engine
+built from `bfb3f1f67`:
+
+| asked | oracle | here |
+|---|---|---|
+| `n.platform, n.languages, n.hardwareConcurrency, n.deviceMemory, n.userAgent` | `MacIntel`, `["en-US","en"]`, `10`, `16`, Chrome 151 | identical |
+| `fetch(…/pat/…)` — status, ok, body | `401`, `0`, `"J"` | identical |
+| `fetch(…brunhild…)` — status and every response header | `TypeError: Failed to fetch` | identical (was `fetch error` before the fix) |
+| `eval("debugger")`, then report | reported | identical |
+| `setTimeout` 55 ×2, 1500, 10000 | all reported | identical |
+| `for(5e3){…}` smallest positive `performance.now()` delta | **`0.004999995231628418`** | **`0.09999999999999432`** |
+| OPFS: `getDirectory` → `createSyncAccessHandle` → time a `flush()` | **`0.4949999749660492`** | **never asked** |
+
+Two rows, and both of them are one fact.
+
+### The challenge page is cross-origin isolated, and we are not
+
+The recorder now reports four realm facts alongside its own arrival. On the
+oracle arm every realm of the challenge — the interstitial, its `about:blank`
+and `about:srcdoc` children, and the widget document — answers
+`crossOriginIsolated: true`, with `SharedArrayBuffer` a function. The last
+realm of the run, the real page that replaces the interstitial once it clears,
+answers `false` and `undefined`: the isolation belongs to the challenge, not to
+the site. Here it is `false` in all four, because `Window.getCrossOriginIsolated`
+returns a literal `false` and `Env.zig` deletes `SharedArrayBuffer` outright.
+Nothing in this engine reads `Cross-Origin-Embedder-Policy` or
+`Cross-Origin-Opener-Policy` at all.
+
+That is where the clock row comes from. Chrome clamps `performance.now()` to
+100 μs, and to 5 μs in a cross-origin isolated realm; the oracle's
+`0.004999995` is the isolated clamp, and our `0.0999999` is the number Chrome
+would give a realm that is *not* isolated. `Performance.zig` hardcodes
+`clock_resolution_micros = 100` with a comment saying 5 μs is Firefox's number
+— which was right for an ordinary page and is wrong for this one. The probe
+does not have to reason about any of it: it reads the clamp off a loop and
+sends the double.
+
+The OPFS row is the third face of the same absence. `navigator.storage` here
+carries `estimate()` and nothing else — no `getDirectory`, no
+`FileSystemDirectoryHandle`, no `createSyncAccessHandle` (the legacy
+`webkitRequestFileSystem` tree in `filesystem.zig` is a different API). The
+widget feature-detects before it asks, so on our arm the probe is never posted
+and the answer field never exists. `probes/expr-trampoline.js` replays the
+whole list offline against both engines and shows the gate directly:
+`getDirectory` is `true` in Chrome on a loopback origin and `false` here, and
+the same probe posted anyway produces no answer at all, not even the `Tltp4`
+error the station's own `catch` would have sent — the throw is synchronous and
+lands before the promise chain exists.
+
+Everything else in the table matches. The three divergences are
+`crossOriginIsolated`/`SharedArrayBuffer`, the clock clamp that follows from
+it, and OPFS.
+

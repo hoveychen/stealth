@@ -210,9 +210,19 @@ const CORE = `(function () {
     }
   } catch (e) {}
 
+  // Alongside the fact that the recorder is here: the four realm facts the
+  // trampoline's answers turn on. Chrome's clock clamp is 100us normally and
+  // 5us in a cross-origin isolated realm, and the widget's answer was the 5us
+  // one, so whether that realm is isolated decides whether the clamp is the
+  // whole story. The other two gate probes rather than answer them.
+  var nav = globalThis.navigator || {};
   emit({ k: 'installed',
          href: String((globalThis.location || {}).href || '?').slice(0, 200),
-         worker: typeof globalThis.WorkerGlobalScope !== 'undefined' });
+         worker: typeof globalThis.WorkerGlobalScope !== 'undefined',
+         coi: !!globalThis.crossOriginIsolated,
+         sec: !!globalThis.isSecureContext,
+         sab: typeof globalThis.SharedArrayBuffer,
+         opfs: !!(nav.storage && nav.storage.getDirectory) });
 })();`;
 
 // The document-realm half. It is the only realm that can be armed before its own
@@ -399,28 +409,40 @@ try {
     // that is early enough is addScriptToEvaluateOnNewDocument on the child's
     // own session -- which does not exist until the child is attached. Pausing
     // new targets on start is what buys the window in between.
-    async function arm(sid, why) {
-        const rec = { session: sid ?? 'page', why, installed: false, resumed: false };
+    //
+    // Which is why the pause is back, and why it is now type-aware. Under
+    // Chrome's site isolation the Turnstile widget is an out-of-process frame
+    // with a target of its own, and a target that is not paused has already run
+    // its first document by the time the script lands: the recorder then applies
+    // only to documents created *after* it, which is why an unpaused chrome arm
+    // reports itself installed at about:blank and about:srcdoc and never at the
+    // widget itself. Lightpanda has no such split -- every realm is the one
+    // session -- so the same run armed the widget there and not here, and the
+    // arms looked like they behaved differently when only the instrument did.
+    //
+    // Workers are the reason the pause was dropped, and they are excluded from
+    // it rather than from the run: a paused worker's session queue is blocked
+    // head-on by anything sent ahead of the resume, so a worker session is
+    // resumed first and only then asked anything. Nothing is installed into it
+    // either way; it is reached from the document realm by WORKER_HOOK above.
+    async function arm(sid, why, type) {
+        const rec = { session: sid ?? 'page', why, type, installed: false, resumed: false };
         state.realms.push(rec);
+        if (type && /worker/.test(type)) {
+            rec.worker = true;
+            await cdp.send('Runtime.runIfWaitingForDebugger', undefined, sid)
+                .then(() => { rec.resumed = true; }).catch(() => { });
+            await cdp.send('Network.enable', { maxPostDataSize: 1048576 }, sid).catch(() => { });
+            return;
+        }
         await cdp.send('Runtime.enable', undefined, sid).catch(() => { });
         await cdp.send('Page.enable', undefined, sid).catch(() => { });
         try {
             await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: RECORDER }, sid);
             rec.installed = true;
         } catch (err) { rec.err = String(err.message ?? err); }
-        // A failure here is a worker: no Page domain, so no document script.
-        // Nothing is evaluated into it. The route that pauses a worker on start
-        // and evaluates the recorder in was tried three times and stalled the
-        // challenge every time, and `worker-arm-probe.mjs` shows why against a
-        // local page with no Cloudflare in it: the evaluate blocks that session's
-        // inspector queue, the `runIfWaitingForDebugger` behind it never
-        // arrives, and the worker never reaches its first statement. Even sent
-        // after the resume, where it does run, it lands after the worker's own
-        // first fetch. The worker is reached from the document realm instead, by
-        // WORKER_HOOK above -- so workers are not paused at all here.
-        if (!rec.installed) rec.worker = true;
         await cdp.send('Target.setAutoAttach',
-            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sid).catch(() => { });
+            { autoAttach: true, waitForDebuggerOnStart: true, flatten: true }, sid).catch(() => { });
         await cdp.send('Network.enable', { maxPostDataSize: 1048576 }, sid).catch(() => { });
         // Whether or not the pause took, releasing is harmless.
         await cdp.send('Runtime.runIfWaitingForDebugger', undefined, sid)
@@ -430,7 +452,7 @@ try {
     cdp.on((msg) => {
         const p = msg.params ?? {};
         if (msg.method === 'Target.attachedToTarget' && p.sessionId) {
-            arm(p.sessionId, p.targetInfo?.url ?? '?').catch(() => { });
+            arm(p.sessionId, p.targetInfo?.url ?? '?', p.targetInfo?.type ?? '?').catch(() => { });
             return;
         }
         if (msg.method === 'Runtime.consoleAPICalled') {
@@ -474,7 +496,7 @@ try {
         }
     });
 
-    await arm(pageSession, 'page');
+    await arm(pageSession, 'page', 'page');
     await cdp.send('Page.navigate', { url: URL_ }, pageSession);
     await sleep(SETTLE);
 
