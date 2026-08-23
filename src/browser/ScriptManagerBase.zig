@@ -29,6 +29,7 @@ const ImportMap = @import("ImportMap.zig");
 const WorkerGlobalScope = @import("webapi/WorkerGlobalScope.zig");
 
 const Element = @import("webapi/Element.zig");
+const timing = @import("webapi/performance/timing.zig");
 
 const log = lp.log;
 const String = lp.String;
@@ -625,6 +626,16 @@ pub const Script = struct {
     // resource entry's startTime is measured from here.
     perf_fetch_start: f64 = 0,
 
+    // libcurl's label for the protocol the response came over; a literal, so
+    // it outlives the connection it was read from.
+    perf_next_hop_protocol: []const u8 = "",
+
+    // The entry's stored timing, once filed. Kept so the prescan's guess can
+    // be corrected: it starts a fetch before the parser reaches the <script>,
+    // so whether that script blocks the parser is not knowable when the
+    // response lands. See ScriptManager.addFromElement's blocking path.
+    perf_timing: ?*timing.Timing = null,
+
     // Set once this load has been filed as a `resource` entry. One network
     // load is one entry, and a preloaded script reaches two done paths:
     // PreloadedScript.doneCallback forwards to Script.doneCallback once a
@@ -717,6 +728,7 @@ pub const Script = struct {
         const self: *Script = @ptrCast(@alignCast(transfer.req.ctx));
 
         self.status = transfer.responseStatus().?;
+        self.perf_next_hop_protocol = transfer.nextHopProtocol();
         if (transfer.responseStatus() != 200) {
             log.info(.http, "script header", .{
                 .req = transfer,
@@ -811,7 +823,7 @@ pub const Script = struct {
     // The name is the request URL rather than the response's: nothing here
     // holds the transfer, so a redirected script is filed under where it was
     // asked for. XHR and fetch, which do hold it, use the destination.
-    pub fn recordResourceTiming(self: *Script, initiator: []const u8) void {
+    pub fn recordResourceTiming(self: *Script, initiator: []const u8, render_blocking: bool) void {
         if (self.perf_recorded) {
             return;
         }
@@ -820,8 +832,10 @@ pub const Script = struct {
         const exec = &self.manager.owner.jsContext().execution;
         const perf = exec.performance();
         const len = self.source.content().len;
-        perf.resourceLoaded(self.url, .{
+        self.perf_timing = perf.resourceLoaded(self.url, .{
             .initiator_type = initiator,
+            .next_hop_protocol = self.perf_next_hop_protocol,
+            .render_blocking_status = if (render_blocking) "blocking" else "non-blocking",
             .fetch_start = self.perf_fetch_start,
             .response_end = perf.now(),
             .response_status = self.status,
@@ -829,6 +843,7 @@ pub const Script = struct {
             .decoded_body_size = len,
         }, exec) catch |err| {
             log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });
+            return;
         };
     }
 
@@ -838,7 +853,11 @@ pub const Script = struct {
         if (comptime lp.IS_DEBUG) {
             log.debug(.http, "script fetch complete", .{ .req = self.url });
         }
-        self.recordResourceTiming("script");
+        // Only a <script src> with neither async nor defer holds up the
+        // parser, and that one never reaches here: it is fetched
+        // synchronously and files its own entry. Everything routed through
+        // this callback is out of the parser's way by construction.
+        self.recordResourceTiming("script", false);
 
         const manager = self.manager;
         switch (self.extra) {

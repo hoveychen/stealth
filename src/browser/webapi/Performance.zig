@@ -328,12 +328,17 @@ pub fn navigationComplete(self: *Performance) void {
 /// its milestone callbacks have an Execution to allocate against, whereas every
 /// caller here is script-facing and has one. So the entry can exist — and reach
 /// the observers — when the load finished rather than when something first asks.
+/// Returns the entry's stored timing, so a caller that learns something about
+/// the load only after it landed can amend it. The prescan is the case that
+/// needs it: it starts a `<script src>` fetch before the parser reaches the
+/// element, so whether that script blocks the parser is not knowable when the
+/// response arrives.
 pub fn resourceLoaded(
     self: *Performance,
     name: []const u8,
     t: timing.Timing,
     exec: *const Execution,
-) !void {
+) !*timing.Timing {
     // ResourceTiming reads its milestones through a pointer, so the timing has
     // to outlive this call rather than ride along on the stack.
     const stored = try exec.arena.create(timing.Timing);
@@ -354,6 +359,7 @@ pub fn resourceLoaded(
     entry._proto._type = .{ .resource = entry };
     try self._entries.append(exec.arena, entry._proto);
     try self.notifyObservers(entry._proto, exec);
+    return stored;
 }
 
 /// Builds the entries a document has without anyone asking for them — the one

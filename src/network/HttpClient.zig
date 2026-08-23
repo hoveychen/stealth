@@ -1263,6 +1263,10 @@ const SyncContext = struct {
     status: u16 = 0,
     body: std.ArrayList(u8),
 
+    // Read here rather than after the wait: the connection it comes off is
+    // gone by the time syncRequest returns.
+    next_hop_protocol: []const u8 = "",
+
     // Acquired on the first byte we have to buffer, so a bodyless response
     // never takes one. Ownership moves to the SyncResponse.
     arena: ?*lp.Arena = null,
@@ -1271,6 +1275,7 @@ const SyncContext = struct {
         const self: *SyncContext = @ptrCast(@alignCast(transfer.req.ctx));
         lp.assert(transfer.responseStatus() != null, "HttpClient.SyncRequest.headerCallback", .{ .value = transfer.responseStatus() });
         self.status = transfer.responseStatus().?;
+        self.next_hop_protocol = transfer.nextHopProtocol();
         if (transfer.getContentLength()) |cl| {
             try self.body.ensureTotalCapacityPrecise(try self.bodyAllocator(cl), cl);
         }
@@ -1368,6 +1373,7 @@ pub fn syncRequest(self: *Client, transfer: *Transfer) !SyncResponse {
             .status = sync_ctx.status,
             .body = sync_ctx.body,
             .arena = sync_ctx.arena,
+            .next_hop_protocol = sync_ctx.next_hop_protocol,
         },
         .err => |e| return e,
     }
@@ -1980,6 +1986,10 @@ pub const Request = struct {
 pub const SyncResponse = struct {
     status: u16,
     body: std.ArrayList(u8),
+
+    // The protocol the response arrived over, for the resource entry the
+    // caller files. A literal from libcurl, so it needs no arena.
+    next_hop_protocol: []const u8 = "",
 
     // Owns `body`. Null when the response had nothing to buffer. Callers that
     // keep `body` past this call take the arena instead of releasing it.

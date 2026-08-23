@@ -391,6 +391,21 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                 script.source = pre.source;
                 script.status = pre.status;
                 script.complete = true;
+
+                // The preload filed the entry, so this <script> does not. But
+                // when the prescan started that fetch there was no element yet
+                // to say whether it blocks the parser, and this one does: it
+                // carries neither async nor defer. Correct the entry in place.
+                //
+                // A real <link rel=preload as=script> is left alone: Chrome
+                // 151 reports one of those non-blocking even when a plain
+                // <script src> consumes it
+                // (tools/fingerprint/resource-timing-initiators.mjs).
+                if (pre.hint_element == null) {
+                    if (pre.perf_timing) |t| {
+                        t.render_blocking_status = "blocking";
+                    }
+                }
             } else {
                 const transfer = try self.base.client.newRequest(.{
                     .url = remote_url,
@@ -415,12 +430,14 @@ pub fn addFromElement(self: *ScriptManager, comptime from_parser: bool, script_e
                 script.source = .{ .remote = response.body };
                 script.status = response.status;
                 script.complete = true;
+                script.perf_next_hop_protocol = response.next_hop_protocol;
 
                 // The blocking path never reaches a doneCallback, so the entry
-                // is filed here. A consumed preload deliberately isn't: the
-                // <link> that fetched it already filed one, and one network
-                // load is one entry.
-                script.recordResourceTiming("script");
+                // is filed here -- as blocking, which is the whole reason this
+                // fetch is synchronous. A consumed preload deliberately files
+                // nothing here: the fetch that landed already did, and one
+                // network load is one entry.
+                script.recordResourceTiming("script", true);
             }
             handover = true;
         }
@@ -571,7 +588,7 @@ const PreloadedScript = struct {
         // <script src> ahead of the parser -- an internal head start, which
         // Chrome files under the script element it belongs to, not under a
         // link that the page never wrote.
-        script.recordResourceTiming(if (script.hint_element == null) "script" else "link");
+        script.recordResourceTiming(if (script.hint_element == null) "script" else "link", false);
         if (script.extra != .preload) {
             // Adopted by a real <script> element (addFromElement) while the
             // fetch was in flight; complete it as a normal frame script.

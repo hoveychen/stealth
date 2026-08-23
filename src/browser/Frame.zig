@@ -2512,26 +2512,39 @@ pub fn performance(self: *Frame) *Performance {
 // caller is on the delivery path of a load that already succeeded, and failing
 // the load because its bookkeeping failed would cost the page the stylesheet
 // or the image as well as the entry.
-pub fn recordResourceTiming(
-    self: *Frame,
+pub fn recordResourceTiming(self: *Frame, r: ResourceTimingRecord) void {
+    const perf = self.performance();
+    _ = perf.resourceLoaded(r.url, .{
+        .initiator_type = r.initiator,
+        .next_hop_protocol = r.next_hop_protocol,
+        .render_blocking_status = if (r.render_blocking) "blocking" else "non-blocking",
+        .fetch_start = r.fetch_start,
+        .response_end = perf.now(),
+        .response_status = r.status,
+        .encoded_body_size = r.body_len,
+        .decoded_body_size = r.body_len,
+    }, &self.js.execution) catch |err| {
+        log.warn(.http, "resource timing", .{ .err = err, .url = r.url, .initiator = r.initiator });
+    };
+}
+
+pub const ResourceTimingRecord = struct {
     url: []const u8,
     initiator: []const u8,
     fetch_start: f64,
     status: u16,
     body_len: usize,
-) void {
-    const perf = self.performance();
-    perf.resourceLoaded(url, .{
-        .initiator_type = initiator,
-        .fetch_start = fetch_start,
-        .response_end = perf.now(),
-        .response_status = status,
-        .encoded_body_size = body_len,
-        .decoded_body_size = body_len,
-    }, &self.js.execution) catch |err| {
-        log.warn(.http, "resource timing", .{ .err = err, .url = url, .initiator = initiator });
-    };
-}
+
+    // The protocol the response arrived over, as libcurl reports it
+    // ("http/1.1", "h2", "h3"). Empty only when no connection was made.
+    next_hop_protocol: []const u8 = "",
+
+    // Whether the load held up rendering. A stylesheet does; an image does
+    // not. Chrome reports it per entry, and reporting every load as
+    // non-blocking would say this engine renders before its stylesheets
+    // arrive, which is the opposite of what it does.
+    render_blocking: bool = false,
+};
 
 // Tracks a file input's FileList so its File refs are released at teardown.
 pub fn trackFileList(self: *Frame, file_list: *FileList) !void {
@@ -2713,7 +2726,17 @@ pub fn loadExternalStylesheet(self: *Frame, link: *Element.Html.Link, href: []co
     // "link" is the element that asked, not the bytes that came back; a sheet
     // reached through an @import would be "css", which cannot arise here
     // because nothing follows an @import yet.
-    self.recordResourceTiming(resolved, "link", fetch_start, response.status, response.body.items.len);
+    self.recordResourceTiming(.{
+        .url = resolved,
+        .initiator = "link",
+        .fetch_start = fetch_start,
+        .status = response.status,
+        .body_len = response.body.items.len,
+        .next_hop_protocol = response.next_hop_protocol,
+        // A stylesheet holds up rendering until its rules are in, which is
+        // why this fetch is the synchronous one to begin with.
+        .render_blocking = true,
+    });
 
     if (response.status < 200 or response.status >= 300) {
         log.info(.http, "external stylesheet status", .{ .status = response.status, .url = resolved });
@@ -2830,6 +2853,10 @@ const ImageRequest = struct {
 
     status: u16 = 0,
 
+    // libcurl's label for the protocol the response came over; a literal, so
+    // it outlives the connection it was read from.
+    next_hop_protocol: []const u8 = "",
+
     // How many bytes arrived, which `prefix` cannot say: it stops at the
     // signature length on purpose.
     bytes: usize = 0,
@@ -2856,6 +2883,7 @@ const ImageRequest = struct {
         // body, and a status code does not see the body. It is kept anyway,
         // because the resource entry reports it verbatim.
         self.status = transfer.responseStatus() orelse 0;
+        self.next_hop_protocol = transfer.nextHopProtocol();
 
         if (transfer.contentType()) |ct| {
             const mime = Mime.parse(ct) catch null;
@@ -2892,7 +2920,14 @@ const ImageRequest = struct {
         // bytes turned out not to be a picture: what it records is that a
         // load happened. Only errorCallback -- a transfer that never
         // completed -- leaves nothing behind.
-        self.frame.recordResourceTiming(self.url, self.initiator, self.fetch_start, self.status, self.bytes);
+        self.frame.recordResourceTiming(.{
+            .url = self.url,
+            .initiator = self.initiator,
+            .fetch_start = self.fetch_start,
+            .status = self.status,
+            .body_len = self.bytes,
+            .next_hop_protocol = self.next_hop_protocol,
+        });
         self.report(if (self.arrived()) .load else .@"error");
     }
 

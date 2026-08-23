@@ -49,6 +49,10 @@ _manual_redirect: bool,
 // before the transfer rather than reconstructed after it.
 _perf_fetch_start: f64 = 0,
 
+// The protocol the response arrived over, read while the transfer is still
+// alive. A libcurl literal, so it needs no arena.
+_perf_next_hop_protocol: []const u8 = "",
+
 pub const Input = Request.Input;
 pub const InitOpts = Request.InitOpts;
 
@@ -156,6 +160,8 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
         }
     }
 
+    self._perf_next_hop_protocol = transfer.nextHopProtocol();
+
     const arena = self._response._arena;
     if (transfer.getContentLength()) |cl| {
         try self._buf.ensureTotalCapacityPrecise(arena.allocator(), cl);
@@ -244,10 +250,11 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
     // redirected request is filed under its destination, not its request URL.
     const exec = self._exec;
     const loaded_len = self._buf.items.len;
-    try exec.performance().resourceLoaded(
+    _ = try exec.performance().resourceLoaded(
         if (response._url.len > 0) response._url else self._url,
         .{
             .initiator_type = "fetch",
+            .next_hop_protocol = self._perf_next_hop_protocol,
             .fetch_start = self._perf_fetch_start,
             .response_end = exec.performance().now(),
             .response_status = response._status,

@@ -76,6 +76,10 @@ _response_type: ResponseType = .default,
 // before the transfer rather than reconstructed after it.
 _perf_fetch_start: f64 = 0,
 
+// The protocol the response arrived over, read while the transfer is still
+// alive. A libcurl literal, so it needs no arena.
+_perf_next_hop_protocol: []const u8 = "",
+
 _ready_state: ReadyState = .unsent,
 _with_credentials: bool = false,
 _timeout: u32 = 0,
@@ -533,6 +537,7 @@ fn httpHeaderDoneCallback(transfer: *Transfer) !Transfer.HeaderResult {
     }
 
     self._response_status = transfer.responseStatus().?;
+    self._perf_next_hop_protocol = transfer.nextHopProtocol();
     if (transfer.getContentLength()) |cl| {
         self._response_len = cl;
         try self._response_data.ensureTotalCapacityPrecise(self._arena.allocator(), cl);
@@ -581,10 +586,11 @@ fn httpDoneCallback(ctx: *anyopaque) !void {
     // Chrome names the entry with the URL the response finally came from, so a
     // redirected request is filed under its destination, not its request URL.
     const loaded_len = self._response_data.items.len;
-    try exec.performance().resourceLoaded(
+    _ = try exec.performance().resourceLoaded(
         if (self._response_url.len > 0) self._response_url else self._url,
         .{
             .initiator_type = "xmlhttprequest",
+            .next_hop_protocol = self._perf_next_hop_protocol,
             .fetch_start = self._perf_fetch_start,
             .response_end = exec.performance().now(),
             .response_status = self._response_status,
