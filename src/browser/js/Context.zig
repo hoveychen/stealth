@@ -150,6 +150,12 @@ identity_arena: Allocator,
 // across origins.
 global_modules: std.ArrayList(v8.Global) = .empty,
 
+// The SharedArrayBuffer constructor V8 installed on this context's global,
+// kept because the global is stripped of it at creation and a cross-origin
+// isolated document has to be handed it back. See Env.createContext and
+// showSharedArrayBuffer.
+shared_array_buffer: ?v8.Global = null,
+
 // Our module cache: normalized module specifier => module.
 module_cache: std.StringHashMapUnmanaged(ModuleEntry) = .empty,
 
@@ -260,6 +266,10 @@ pub fn deinit(self: *Context) void {
         v8.v8__Global__Reset(global);
     }
 
+    if (self.shared_array_buffer) |*global| {
+        v8.v8__Global__Reset(global);
+    }
+
     self.page.releaseOrigin(self.origin);
 
     // Clear the embedder data so that if V8 keeps this context alive
@@ -345,6 +355,54 @@ pub fn hideSecureContextGlobals(self: *Context) void {
             if (v8.v8__Value__IsObject(proto) == false) break;
             target = .{ .local = &ls.local, .handle = @ptrCast(proto) };
         }
+    }
+}
+
+// Takes SharedArrayBuffer off this context's global, for a document that is not
+// cross-origin isolated.
+//
+// Measured on a headed Chrome 151 at http://localhost:8731/, where
+// crossOriginIsolated is false: `typeof SharedArrayBuffer` is "undefined" and
+// it is not a window own property. Atomics (waitAsync included) and
+// WebAssembly.Memory are not gated with it and stay; also measured.
+//
+// Unlike hideSecureContextGlobals, this pair has to put the constructor back
+// (showSharedArrayBuffer) rather than lean on the snapshot restoring it. The
+// gate that took it away runs in Env.createContext, *before* any document
+// commits, so navigating within the context does not undo it: a context whose
+// first document was not isolated has no SharedArrayBuffer left to inherit.
+// Verified -- with the restore side absent, an isolated document still answered
+// `typeof SharedArrayBuffer === "undefined"`.
+pub fn hideSharedArrayBuffer(self: *Context) void {
+    var ls: js.Local.Scope = undefined;
+    self.localScope(&ls);
+    defer ls.deinit();
+
+    const global = self.globalObject(&ls.local);
+    _ = global.delete("SharedArrayBuffer");
+}
+
+// Puts SharedArrayBuffer back on this context's global, for a document that is
+// cross-origin isolated, from the handle stashed when the context was created.
+//
+// Non-enumerable and otherwise default, which is how V8 installed it and how
+// Chrome carries every other constructor on window: measured on a headed
+// Chrome 151 at a COOP+COEP origin, the descriptor is
+// {writable: true, enumerable: false, configurable: true}.
+pub fn showSharedArrayBuffer(self: *Context) void {
+    const stashed = if (self.shared_array_buffer) |*global| global else return;
+
+    var ls: js.Local.Scope = undefined;
+    self.localScope(&ls);
+    defer ls.deinit();
+
+    const value: js.Value = .{
+        .local = &ls.local,
+        .handle = @ptrCast(v8.v8__Global__Get(stashed, self.isolate.handle)),
+    };
+    const global = self.globalObject(&ls.local);
+    if (global.defineOwnProperty("SharedArrayBuffer", value, v8.DontEnum) != true) {
+        log.err(.js, "SharedArrayBuffer restore", .{});
     }
 }
 

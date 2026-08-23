@@ -417,22 +417,29 @@ fn _createContext(self: *Env, global: anytype, params: ContextParams) !*Context 
             log.err(.js, "console own property", .{ .err = err });
         }
 
-        // SharedArrayBuffer is behind cross-origin isolation, and nothing here
-        // negotiates COOP+COEP, so Window.getCrossOriginIsolated answers false.
-        // A real browser in that state does not expose the constructor at all:
-        // measured on a headed Chrome 150 at http://localhost:8731/, where
-        // `crossOriginIsolated` is false exactly as here, `typeof
-        // SharedArrayBuffer` is "undefined" and it is not a window own
-        // property. V8 installs it unconditionally, so it is removed here.
+        // SharedArrayBuffer is behind cross-origin isolation. A real browser
+        // that is not isolated does not expose the constructor at all: measured
+        // on a headed Chrome 150 at http://localhost:8731/, where
+        // `crossOriginIsolated` is false, `typeof SharedArrayBuffer` is
+        // "undefined" and it is not a window own property. V8 installs it
+        // unconditionally, so it is removed here and the handle kept, for
+        // Frame.commitCrossOriginIsolated to hand back to a document that turns
+        // out to carry COOP+COEP.
         //
-        // This is a per-context gate rather than a snapshot-time one because
-        // cross-origin isolation is a property of the page, not of the engine --
-        // the day COOP+COEP is negotiated, this is where the condition goes.
-        // `Atomics` (waitAsync included) and `WebAssembly.Memory` are *not*
-        // gated with it and stay; also measured.
+        // Not-isolated is the right state to start in: a context is born before
+        // any document commits, and the frame settles the question from the
+        // response headers afterwards. `Atomics` (waitAsync included) and
+        // `WebAssembly.Memory` are *not* gated with it and stay; also measured.
         //
         // This was the last CreepJS `.unsupport` span between this engine and
         // the reference browser: with it gone both score 128.
+        if (global_object.get("SharedArrayBuffer")) |value| {
+            var sab_global: v8.Global = undefined;
+            v8.v8__Global__New(isolate.handle, value.handle, &sab_global);
+            context.shared_array_buffer = sab_global;
+        } else |err| {
+            log.err(.js, "SharedArrayBuffer stash", .{ .err = err });
+        }
         if (global_object.delete("SharedArrayBuffer") != true) {
             log.err(.js, "SharedArrayBuffer gate", .{});
         }

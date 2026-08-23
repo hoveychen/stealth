@@ -39,3 +39,16 @@
   document.documentElement.appendChild(f);
   testing.expectEqual(true, f.contentWindow.crossOriginIsolated);
 </script>
+
+<script id="shared_array_buffer_is_exposed">
+  // The constructor is behind cross-origin isolation, and this document has
+  // it. Measured on a headed Chrome 151: on a page with crossOriginIsolated
+  // false, `typeof SharedArrayBuffer` is "undefined" and it is not a window
+  // own property (that reading is asserted in window_extras.html); on an
+  // isolated one it is a function, own and non-enumerable, exactly as the
+  // other constructors are.
+  testing.expectEqual('function', typeof SharedArrayBuffer);
+  testing.expectEqual(true, Object.prototype.hasOwnProperty.call(window, 'SharedArrayBuffer'));
+  const sab = new SharedArrayBuffer(8);
+  testing.expectEqual(8, sab.byteLength);
+</script>

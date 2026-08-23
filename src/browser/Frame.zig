@@ -810,8 +810,18 @@ pub fn commitSecureContext(self: *Frame) void {
 // get its own opener policy -- it has no browsing-context group to sever --
 // so it is isolated when its top-level is and it carries the embedder policy
 // itself.
+//
+// The answer also decides whether the context's global carries
+// SharedArrayBuffer, which is gated on isolation in a real browser. Unlike the
+// [SecureContext] gate, that one goes both ways -- see
+// Context.hideSharedArrayBuffer.
 pub fn commitCrossOriginIsolated(self: *Frame, coep: []const u8, coop: []const u8) void {
     self.cross_origin_isolated = self.computeCrossOriginIsolated(coep, coop);
+    if (self.cross_origin_isolated) {
+        self.js.showSharedArrayBuffer();
+    } else {
+        self.js.hideSharedArrayBuffer();
+    }
 }
 
 fn computeCrossOriginIsolated(self: *const Frame, coep: []const u8, coop: []const u8) bool {
