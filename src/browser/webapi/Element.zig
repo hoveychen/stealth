@@ -2908,7 +2908,17 @@ pub const JsApi = struct {
         const mode: ShadowRoot.Mode = blk: {
             if (init.mode.eql(comptime .wrap("open"))) break :blk .open;
             if (init.mode.eql(comptime .wrap("closed"))) break :blk .closed;
-            return error.InvalidArgument;
+            // Blink nests the wording for a dictionary member: the operation's
+            // prefix, then which member of which dictionary was read, then the
+            // value and the enum type -- the one name in the sentence that
+            // comes without quotes (measured on Chrome 151).
+            return frame.js.fail(error.TypeError, try std.fmt.allocPrint(
+                frame.call_arena,
+                "Failed to execute 'attachShadow' on 'Element': Failed to read the 'mode' property " ++
+                    "from 'ShadowRootInit': The provided value '{s}' is not a valid enum value of " ++
+                    "type ShadowRootMode.",
+                .{init.mode.str()},
+            ));
         };
         const slot_assignment: ShadowRoot.SlotAssignment = blk: {
             const sa = init.slotAssignment orelse break :blk .named;
