@@ -262,6 +262,22 @@ pub const ResponseHead = struct {
 /// `text/css` — and the Content-Encoding header verbatim for the second, empty
 /// when the response carried none. Both measured on Chrome 151 by
 /// tools/fingerprint/resource-timing-response-fields.mjs.
+/// How far into a transfer each stage of the connection finished, in
+/// microseconds, as libcurl measured it. Resource Timing wants nine milestones
+/// on the document's clock; these five plus the fetch's start time produce
+/// eight of them, and the ninth (firstInterimResponseStart) needs a 1xx
+/// response this engine never reads.
+///
+/// A reused connection answers zero for the first three, which is what a
+/// browser reports too: nothing was looked up and nothing was opened.
+pub const ResponseTimes = struct {
+    name_lookup: u64 = 0,
+    connect: u64 = 0,
+    app_connect: u64 = 0,
+    pre_transfer: u64 = 0,
+    start_transfer: u64 = 0,
+};
+
 pub const ResponseLabels = struct {
     pub const MAX_CONTENT_TYPE_LEN = 96;
     pub const MAX_CONTENT_ENCODING_LEN = 48;
@@ -690,6 +706,25 @@ pub const Connection = struct {
             return 0;
         }
         return @intCast(size);
+    }
+
+    /// The connection walk so far. Read once the response headers are in,
+    /// where every one of these is already final -- they all describe work
+    /// that had to finish before a byte of response could arrive.
+    pub fn getResponseTimes(self: *const Connection) ResponseTimes {
+        return .{
+            .name_lookup = self.getTimerMicros(.namelookup_time_t),
+            .connect = self.getTimerMicros(.connect_time_t),
+            .app_connect = self.getTimerMicros(.appconnect_time_t),
+            .pre_transfer = self.getTimerMicros(.pretransfer_time_t),
+            .start_transfer = self.getTimerMicros(.starttransfer_time_t),
+        };
+    }
+
+    fn getTimerMicros(self: *const Connection, comptime info: libcurl.CurlInfo) u64 {
+        var micros: i64 = 0;
+        libcurl.curl_easy_getinfo(self._easy, info, &micros) catch return 0;
+        return if (micros < 0) 0 else @intCast(micros);
     }
 
     // Total transfer time (name lookup to completion) in microseconds.

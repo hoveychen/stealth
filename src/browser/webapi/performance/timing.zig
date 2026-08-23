@@ -36,6 +36,7 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const http = @import("../../../network/http.zig");
 
 const Element = @import("../Element.zig");
 const DOMRectReadOnly = @import("../DOMRectReadOnly.zig");
@@ -123,6 +124,44 @@ pub const Timing = struct {
             return 0;
         }
         return @floatFromInt(self.encoded_body_size + 300);
+    }
+
+    /// Lays libcurl's connection walk onto the eight milestones between
+    /// fetchStart and responseStart. `fetch_start` must already be set.
+    ///
+    /// Chrome 151 over plain HTTP fills seven of the nine and leaves exactly
+    /// two at zero: secureConnectionStart, because there is no TLS handshake to
+    /// time, and firstInterimResponseStart, because there was no 1xx (measured,
+    /// tools/fingerprint/resource-timing-response-fields.mjs). A reused
+    /// connection collapses the first four onto fetchStart, which is what a
+    /// browser reports for one too — nothing was looked up and nothing opened.
+    ///
+    /// curl has no name-resolution *start*: it starts resolving as soon as the
+    /// transfer does, so domainLookupStart is fetchStart.
+    pub fn setConnectionMilestones(self: *Timing, times: http.ResponseTimes) void {
+        const at = self.fetch_start;
+        const ms = struct {
+            fn f(micros: u64) f64 {
+                return @as(f64, @floatFromInt(micros)) / 1000.0;
+            }
+        }.f;
+
+        self.domain_lookup_start = at;
+        self.domain_lookup_end = at + ms(times.name_lookup);
+        self.connect_start = self.domain_lookup_end;
+
+        if (times.app_connect > 0) {
+            // The TLS handshake begins once the socket is up, so the TCP
+            // connect time is where the secure part starts.
+            self.secure_connection_start = at + ms(times.connect);
+            self.connect_end = at + ms(times.app_connect);
+        } else {
+            self.connect_end = at + ms(times.connect);
+        }
+
+        self.request_start = at + ms(times.pre_transfer);
+        self.response_start = at + ms(times.start_transfer);
+        self.final_response_headers_start = self.response_start;
     }
 };
 

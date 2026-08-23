@@ -640,6 +640,9 @@ pub const Script = struct {
     // headers while the transfer still exists.
     perf_labels: HttpClient.ResponseLabels = .{},
 
+    // The connection walk behind the response, for the entry's milestones.
+    perf_times: HttpClient.ResponseTimes = .{},
+
     // The entry's stored timing, once filed. Kept so the prescan's guess can
     // be corrected: it starts a fetch before the parser reaches the <script>,
     // so whether that script blocks the parser is not knowable when the
@@ -740,6 +743,7 @@ pub const Script = struct {
         self.status = transfer.responseStatus().?;
         self.perf_next_hop_protocol = transfer.nextHopProtocol();
         self.perf_labels = transfer.responseLabels();
+        self.perf_times = transfer.responseTimes();
         if (transfer.responseStatus() != 200) {
             log.info(.http, "script header", .{
                 .req = transfer,
@@ -844,7 +848,7 @@ pub const Script = struct {
         const exec = &self.manager.owner.jsContext().execution;
         const perf = exec.performance();
         const len = self.source.content().len;
-        self.perf_timing = perf.resourceLoaded(self.url, .{
+        var t: timing.Timing = .{
             .initiator_type = initiator,
             .next_hop_protocol = self.perf_next_hop_protocol,
             .content_type = self.perf_labels.contentType(),
@@ -855,7 +859,9 @@ pub const Script = struct {
             .response_status = self.status,
             .encoded_body_size = if (self.perf_encoded_body_size > 0) self.perf_encoded_body_size else len,
             .decoded_body_size = len,
-        }, exec) catch |err| {
+        };
+        t.setConnectionMilestones(self.perf_times);
+        self.perf_timing = perf.resourceLoaded(self.url, t, exec) catch |err| {
             log.warn(.http, "script resource timing", .{ .err = err, .req = self.url });
             return;
         };

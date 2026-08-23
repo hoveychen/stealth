@@ -24,6 +24,7 @@ const js = @import("../js/js.zig");
 const EventCounts = @import("EventCounts.zig");
 const PerformanceObserver = @import("PerformanceObserver.zig");
 const timing = @import("performance/timing.zig");
+const http = @import("../../network/http.zig");
 
 const Execution = js.Execution;
 const Allocator = std.mem.Allocator;
@@ -263,8 +264,14 @@ pub fn navigationResponseStarted(
     content_type: []const u8,
     content_encoding: []const u8,
     next_hop_protocol: []const u8,
+    times: http.ResponseTimes,
 ) void {
     const at = self.now();
+    // The document's own connection walk, same as any subresource's. What
+    // navigationStarted stamped were placeholders: it had nothing to measure
+    // yet, and leaving them said the document resolved and connected in the
+    // same instant the navigation began.
+    self._nav.setConnectionMilestones(times);
     self._nav.response_start = at;
     self._nav.final_response_headers_start = at;
     self._nav.response_status = status;

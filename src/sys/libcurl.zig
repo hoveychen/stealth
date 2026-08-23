@@ -251,6 +251,14 @@ pub const CurlInfo = enum(c.CURLINFO) {
     // Content-Length: `curl --compressed -w %{size_download}` answered 26 616
     // for a body that landed as 84 236 bytes.
     size_download_t = c.CURLINFO_SIZE_DOWNLOAD_T,
+    // The connection walk, each measured from the start of the transfer.
+    // Together they are eight of Resource Timing's nine milestones; the ninth,
+    // firstInterimResponseStart, would need a 1xx this engine never reads.
+    namelookup_time_t = c.CURLINFO_NAMELOOKUP_TIME_T,
+    connect_time_t = c.CURLINFO_CONNECT_TIME_T,
+    appconnect_time_t = c.CURLINFO_APPCONNECT_TIME_T,
+    pretransfer_time_t = c.CURLINFO_PRETRANSFER_TIME_T,
+    starttransfer_time_t = c.CURLINFO_STARTTRANSFER_TIME_T,
 };
 
 pub const Error = error{
@@ -687,6 +695,11 @@ pub fn curl_easy_getinfo(easy: *Curl, comptime info: CurlInfo, out: anytype) Err
         .total_time_t,
         .conn_id,
         .size_download_t,
+        .namelookup_time_t,
+        .connect_time_t,
+        .appconnect_time_t,
+        .pretransfer_time_t,
+        .starttransfer_time_t,
         => blk: {
             const p: *c.curl_off_t = out;
             break :blk c.curl_easy_getinfo(easy, inf, p);

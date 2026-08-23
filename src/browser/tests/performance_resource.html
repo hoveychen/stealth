@@ -165,6 +165,42 @@
     });
   </script>
 
+  <script id=resource_entry_walks_the_connection type=module>
+    const state = await testing.async();
+    // The nine connection milestones were all zero, which reads as a load that
+    // resolved no name, opened no socket and sent no request -- while
+    // responseEnd said bytes arrived. Chrome 151 over plain HTTP fills seven of
+    // the nine and leaves exactly two at zero: secureConnectionStart, because
+    // there was no TLS handshake, and firstInterimResponseStart, because there
+    // was no 1xx (measured, resource-timing-response-fields.mjs).
+    const entries = await waitForResourceEntry('/served/compressed.js');
+    state.resolve();
+    await state.done(() => {
+      const e = entries[0];
+      // Not an assertion about wall-clock values -- those cannot be predicted
+      // -- but about the order a load happens in, which is the part a reader
+      // of the entry can check.
+      const walk = [
+        e.fetchStart, e.domainLookupStart, e.domainLookupEnd,
+        e.connectStart, e.connectEnd, e.requestStart,
+        e.responseStart, e.responseEnd,
+      ];
+      for (let i = 1; i < walk.length; i++) {
+        testing.expectEqual(true, walk[i] >= walk[i - 1]);
+      }
+      // A round trip happened, so the response cannot have started at the
+      // instant the fetch did. This is what fails when the milestones are
+      // stamped with fetchStart instead of measured.
+      testing.expectEqual(true, e.responseStart > e.fetchStart);
+      // Chrome reports the same instant for both: this engine reads no
+      // interim responses, so the final headers are the only headers.
+      testing.expectEqual(e.responseStart, e.finalResponseHeadersStart);
+      // The two Chrome leaves at zero over plain HTTP.
+      testing.expectEqual(0, e.secureConnectionStart);
+      testing.expectEqual(0, e.firstInterimResponseStart);
+    });
+  </script>
+
   <script id=resource_entries_are_one_buffer type=module>
     const state = await testing.async();
     await waitForResourceEntry('/src/browser/tests/performance_resource.png');

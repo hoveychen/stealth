@@ -37,6 +37,7 @@ const http = @import("http.zig");
 /// the curl layer under it — can hold one between a header callback and the
 /// entry they file later.
 pub const ResponseLabels = http.ResponseLabels;
+pub const ResponseTimes = http.ResponseTimes;
 const Network = @import("Network.zig");
 const Cache = @import("cache/Cache.zig");
 const RobotsGate = @import("RobotsGate.zig");
@@ -1279,6 +1280,9 @@ const SyncContext = struct {
     // contentType / contentEncoding for the resource entry the caller files.
     labels: ResponseLabels = .{},
 
+    // The connection walk, same reason.
+    times: ResponseTimes = .{},
+
     // Acquired on the first byte we have to buffer, so a bodyless response
     // never takes one. Ownership moves to the SyncResponse.
     arena: ?*lp.Arena = null,
@@ -1289,6 +1293,7 @@ const SyncContext = struct {
         self.status = transfer.responseStatus().?;
         self.next_hop_protocol = transfer.nextHopProtocol();
         self.labels = transfer.responseLabels();
+        self.times = transfer.responseTimes();
         if (transfer.getContentLength()) |cl| {
             try self.body.ensureTotalCapacityPrecise(try self.bodyAllocator(cl), cl);
         }
@@ -1390,6 +1395,7 @@ pub fn syncRequest(self: *Client, transfer: *Transfer) !SyncResponse {
             .next_hop_protocol = sync_ctx.next_hop_protocol,
             .encoded_body_size = sync_ctx.encoded_body_size,
             .labels = sync_ctx.labels,
+            .times = sync_ctx.times,
         },
         .err => |e| return e,
     }
@@ -2018,6 +2024,9 @@ pub const SyncResponse = struct {
 
     // contentType / contentEncoding, held inline so they survive the transfer.
     labels: ResponseLabels = .{},
+
+    // The connection walk behind the response, for the entry's milestones.
+    times: ResponseTimes = .{},
 
     // Owns `body`. Null when the response had nothing to buffer. Callers that
     // keep `body` past this call take the arena instead of releasing it.
@@ -2923,6 +2932,8 @@ pub const Transfer = struct {
         else
             try conn.getResponseCode();
 
+        self.res.times = conn.getResponseTimes();
+
         self.res.header = .{
             .url = url,
             .status = status,
@@ -3785,6 +3796,10 @@ pub const Transfer = struct {
         return null;
     }
 
+    pub fn responseTimes(self: *const Transfer) ResponseTimes {
+        return self.res.times;
+    }
+
     pub fn contentEncoding(self: *Transfer) ?[]const u8 {
         if (self.res.header) |*rh| {
             return rh.contentEncoding();
@@ -4002,6 +4017,10 @@ const Response = struct {
     // the smaller of the two numbers, and it is the only one the server can be
     // said to have sent.
     encoded_body_size: u64 = 0,
+
+    // The connection walk behind this response, captured where the conn is
+    // still ours. Every consumer files its entry long after that.
+    times: http.ResponseTimes = .{},
 
     skip_body: bool = false,
     first_data_received: bool = false,
