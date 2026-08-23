@@ -1735,6 +1735,14 @@ pub const CSSUnparsedValue = struct {
     /// parameter cannot tell those two apart.
     pub fn init(members: js.Value, frame: *Frame) !*CSSUnparsedValue {
         if (members.isUndefined()) return error.TypeError;
+        // An IDL sequence handed something it cannot iterate gets Blink's own
+        // sentence, which names neither the parameter nor a type. Converting
+        // first and reporting whatever the conversion said produced the generic
+        // "invalid argument" no browser writes.
+        if (!members.isArray()) return frame.js.fail(
+            error.TypeError,
+            "Failed to construct 'CSSUnparsedValue': The provided value cannot be converted to a sequence.",
+        );
         return create(try members.toZig([]const Segment), frame);
     }
 
@@ -2789,7 +2797,16 @@ pub const CSSTransformValue = struct {
     _proto: *CSSStyleValue,
     _items: std.ArrayList(*CSSTransformComponent),
 
-    pub fn init(components: []const *CSSTransformComponent, frame: *Frame) !*CSSTransformValue {
+    // Takes the raw value rather than a slice so the refusal can be Blink's.
+    // Bound as a slice, the bridge reads a non-array first argument as the start
+    // of a variadic list and reports whatever converting that one element said,
+    // which came out as the generic "invalid argument".
+    pub fn init(components_: js.Value, frame: *Frame) !*CSSTransformValue {
+        if (!components_.isArray()) return frame.js.fail(
+            error.TypeError,
+            "Failed to construct 'CSSTransformValue': The provided value cannot be converted to a sequence.",
+        );
+        const components = try components_.toZig([]const *CSSTransformComponent);
         // Measured: an empty list is a TypeError with this sentence, while a
         // missing argument never reaches here -- the bridge's WebIDL arity check
         // answers "1 argument required, but only 0 present." first, exactly as
