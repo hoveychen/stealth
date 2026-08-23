@@ -9905,3 +9905,38 @@ map keys on the address it is handed.
 own listener lists, so splitting them per realm is not a handle over shared
 state the way `Storage` was — it is a second instance with its own dispatch, and
 that is its own plan (`cfsc-realm-screen-viewport`), not a line in this one.
+
+#### Both arms again, after the two fixes (2026-08-23)
+
+`results/p5-oracle.json` / `p5-lp.json`, one sitting. Neither arm cleared this
+time — the oracle got `Just a moment...` too, so this reading says nothing about
+pass or fail. What it does say is what the widget now collects, and two of the
+four holes from the reading above are closed or nearly so.
+
+| | before | now | oracle |
+| --- | --- | --- | --- |
+| `subtle.digest` records | 66 (55 `obj`) | **11, all `view`** | 15, all `view` |
+| `getComputedStyle` dump | 27 142 chars | **30 972** | 30 902 |
+| values differing from the oracle | 720 | **26** | — |
+| `installed` / `worker` realms | 10 / 7 | 10 / 7 | 10 / 7 |
+| the audio vector | 1 000 zeros | 1 000 zeros | 265 zeros + 735 floats |
+| the 9 216-byte pixel read | all zero | all zero | 8 005 non-zero bytes |
+
+The digest count landing on 1:1 with `TextEncoder.encode` is the realm fix
+showing up where it was first noticed: the recorder is no longer wrapping one
+shared object seven times.
+
+The 26 values still differing are not 26 separate problems. They are three:
+
+- **thirteen `margin*` spellings** read `0px` where Chrome reads `8px`. The
+  recorded table is flat and was measured on a `<div>`; the element here has the
+  UA sheet's body margin. Same shape as `display`, which already has a per-tag
+  path.
+- **`unicode-bidi`** reads `isolate` where Chrome reads `normal` — again a
+  per-tag UA default that a flat table cannot carry.
+- **twelve layout names** (`width`, `height`, the logical and `-webkit-`
+  spellings, and both origins) read `1920px` / `100000000px` where Chrome reads
+  `0px`. `100000000px` is a sentinel escaping the client-height path, not a
+  table entry: the table deliberately holds nothing for these six.
+
+→ `cfsc-computed-style-per-tag`.
