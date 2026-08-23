@@ -9940,3 +9940,135 @@ The 26 values still differing are not 26 separate problems. They are three:
   table entry: the table deliberately holds nothing for these six.
 
 → `cfsc-computed-style-per-tag`.
+
+## The eighteen pixel readbacks, and the one return value that stops five of them (2026-08-23)
+
+`fo-plaintext` established that the widget hashes pixels, and that this engine
+hands it the wrong ones. Four readbacks passed through `TextEncoder.encode` in
+the widget's realm, and the two arms disagreed about all four:
+
+| chars | arm that clears | this fork |
+|---|---|---|
+| 9216 | 1211 of them zero | 9216 zero |
+| 1024 | none zero, one solid colour | never happens |
+| 8624 | 1725 zero | 8624 zero |
+| 4096 | 3744 zero | never happens |
+
+Two arrive the right *size* and the wrong *content*, so the readback path itself
+is wired up and it is the drawing underneath that is missing. Two do not arrive
+at all, which is a different question: some branch upstream is not taken here.
+
+Neither observation says *which* drawing calls to implement. A readback is the
+end of a sequence, so `canvas-draw-trace.mjs` records the sequence: every method
+and every settable accessor on `CanvasRenderingContext2D`,
+`OffscreenCanvasRenderingContext2D`, `WebGLRenderingContext` and
+`WebGL2RenderingContext`, held in a per-context log and flushed when a readback
+happens, with the readback's own result attached. What comes out is one record
+per readback saying *these fifty-seven calls produced these 9216 bytes*.
+
+The prototypes are wrapped rather than the instances: the widget hands its
+context around, and a per-instance wrapper would have to be re-applied at every
+entry point that can hand one back. Accessors are wrapped alongside methods,
+because `fillStyle`, `font` and `globalCompositeOperation` are assignments
+rather than calls and a trace with the fills but not the colours cannot be
+replayed. `CanvasGradient.prototype.addColorStop` is wrapped too, and the stops
+ride along on the gradient to the point it is assigned to `fillStyle` — a
+gradient without its stops is not reproducible either.
+
+Whether the instrument is honest is a measurement, not an argument. Three
+separate oracle runs with all four prototypes wrapped ended at *You bypassed the
+Cloudflare challenge! :D*, so the wrappers did not change what the page decided.
+
+    node tools/fingerprint/canvas-draw-trace.mjs chrome --headed-ua --out results/cdt-oracle.json
+    node tools/fingerprint/canvas-draw-trace.mjs lightpanda --out results/cdt-lp.json
+
+### What the two big readbacks are
+
+**9216 is a 48×48 OffscreenCanvas 2D**, 57 calls. Six `createRadialGradient`
+calls, each assigned to `fillStyle` with two colour stops; `shadowBlur` and
+`shadowColor` set and cleared around each shape; paths built from `moveTo`,
+`quadraticCurveTo`, `bezierCurveTo` and `ellipse`, each both `stroke`n and
+`fill`ed; a `scale(0.384, 0.384)` over the lot; and text in a font that does not
+exist (`27.77777777777778px aanotafontaa`) through `fillText` and `strokeText`.
+
+**8624 is a 49×44 OffscreenCanvas 2D**, 36 calls. Ten `measureText` calls on
+emoji at `16px sans-serif`, then `scale(0.4, 0.4)`, then three filled `arc`
+circles in `#f2f`, `#2ff` and `#ff2` with `globalCompositeOperation` switched to
+`multiply` between them, and finally a `#fff` two-`arc` path filled with the
+`evenodd` rule — a ring.
+
+`raster.zig` rasterises `fillRect`, `clearRect` and `strokeRect`. Not one call
+in either sequence is one of those three, which is why both come back as zeroes
+at exactly the right length.
+
+### The WebGL readbacks stop at `getShaderParameter`
+
+The 1024-byte readback is not 2D at all. It is `readPixels` on a 16×16 WebGL
+context, and the sequence is thirteen calls this fork executes identically:
+three `createShader`/`shaderSource`/`compileShader` triples, a `createBuffer`
+with 32 bytes of clip-space quad, and then `getShaderParameter(shader,
+COMPILE_STATUS)`.
+
+There the arms part. Chrome answers `true` and the widget goes on to
+`createProgram`, `linkProgram`, `getProgramParameter(LINK_STATUS)`,
+`useProgram`, `vertexAttribPointer`, `viewport(0,0,16,16)`,
+`drawArrays(TRIANGLE_FAN,0,4)` and `readPixels`. This fork answers `false` —
+`WebGLRenderingContext.getShaderParameter` returns `.{ .boolean = false }` for
+`DELETE_STATUS` and `COMPILE_STATUS`, and `getProgramParameter` does the same
+for `LINK_STATUS` — and the widget tears the whole attempt down:
+`deleteShader` three times, `deleteBuffer`, done. Both WebGL readbacks die on
+that one return value.
+
+The colour it would have read back is not a GPU's opinion. The fragment shader
+is `gl_FragColor = vec4(sin(1.0), cos(1.0), sin(1.0)*cos(1.0), 1.0)`, and
+quantising those three constants to 8 bits gives `d7 8a 74 ff` — byte for byte
+the 1024 bytes Chrome returns, all 256 pixels of them.
+
+What follows the teardown is worth recording separately, because it only exists
+on the failing arm: 70 further calls on the WebGL1 context and 122 on the WebGL2
+one — `getParameter` sweeps, `getShaderPrecisionFormat` for six precisions in
+both shader stages, `getSupportedExtensions`, and 35 `getInternalformatParameter`
+probes followed by seven `renderbufferStorage`/`checkFramebufferStatus` rounds.
+The oracle arm makes **none** of those calls. They are the widget's fallback for
+a context that would not compile a shader, so the sweep is not a second thing to
+match — it is a symptom of the first.
+
+Finding them at all needed a change to the instrument. Flush-on-readback was the
+only exit, so a sequence that never reached a readback was collected and then
+thrown away — and the arm that needed explaining was precisely the one that
+reported nothing. The recorder now drains idle logs on a timer as well.
+
+### The eighteen, side by side
+
+Eighteen readbacks on the oracle arm, thirteen here. Eleven pair up by call
+sequence, and **two of those eleven are byte-identical** — both of them
+`fillRect(0,0,16,16)` followed by a one-pixel read, which is the one shape
+`raster.zig` covers.
+
+| produced by | oracle | lightpanda |
+|---|---|---|
+| `font` + `fillText` on a flag emoji, 1×1 | `00000029` | `00000000` |
+| radial gradients, paths, shadows, text — 48×48 | 9216 B, 1211 zero | 9216 B, **all zero** |
+| shader compile → `drawArrays` → `readPixels`, 16×16 | 1024 B, `d78a74ff` | **absent** |
+| second shader program, `readPixels` 4×1 | 16 B | **absent** |
+| `fillRect` + `arc` + `fill`, 2×2 | `ffffffff c0c0c0ff f4f4f4ff 353535ff` | `000000ff` ×4 |
+| `fillStyle = color(display-p3 …)`, 2×2, four attribute sets | `ff1b7fff` / `ff407fff` / 8 B `5b3cc92e…` / 8 B `003c0034…` | `000000ff` four times, always 4 B |
+| emoji `measureText` + composite arcs + evenodd ring — 49×44 | 8624 B, 1725 zero | 8624 B, **all zero** |
+| `drawImage(ImageBitmap)`, 49×44, twice | 8624 B, same hash as above | **absent** |
+| text at 80×24 downscaled into 1×1 by `drawImage`, then read | 4 B | reads the **80×24** instead, 7680 B all white |
+| `fillRect` + `arc` + `fillText`, 16×16 | 1024 B, 90 zero | 1024 B, 2 zero |
+| `filter: grayscale(1)` + `difference` composite via `drawImage`, 16×16 | 1024 B, 90 zero | `drawImage` absent from the log entirely |
+| `fillRect(0,0,16,16)` then a 1×1 read, twice | `f06d06ff` | `f06d06ff` — **match** |
+
+The four `display-p3` rows are a separate reading: the widget passes
+`getImageData` an options bag, and the byte counts on the oracle arm (4, 4, 8,
+8) say two of the four asked for `float16` storage. This fork returns four bytes
+every time and the same `000000ff` for a fill it cannot parse.
+
+The `drawImage` rows are the same missing primitive seen three ways: an
+`ImageBitmap` source, an `OffscreenCanvas` source, and a downscaling
+nine-argument form. It is a no-op here, so the two readbacks that only read what
+`drawImage` deposited never happen, and the downscale case reads the source
+canvas at full size instead.
+
+→ `cfsc-canvas-pixel-readback` P2 (drawing), P3 (the branches that never run).
