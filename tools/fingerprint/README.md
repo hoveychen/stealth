@@ -10088,3 +10088,25 @@ Two smaller things the same trace shows, neither chased here:
 - `AudioBufferSourceNode.prototype.start` is its own overload in Blink rather
   than inherited from `AudioScheduledSourceNode`, so a recorder that wraps only
   the base class sees an oscillator start and never a buffer source's.
+
+**And it closes.** `chrome_audio.zig` now carries a `Graph` enum with a
+recording per graph per platform, and `canonical_render`'s `matches()` became
+`which()`: the structure every recorded graph shares — a started triangle
+oscillator into a compressor into a mono destination — is checked once, and the
+six numbers are then checked against each candidate in turn, so half of one
+graph and half of another is neither and still gets silence. Regenerating both
+recordings reproduced the existing fingerprintjs tail sums exactly on both
+platforms, which is the control that says the second graph did not disturb the
+first.
+
+Asked the widget's graph on a loopback page (`results/a2-lp-turnstile.json`),
+this engine now answers:
+
+| | before | after | oracle |
+| --- | --- | --- | --- |
+| the audio vector | 1 000 zeros | **265 zeros + 735 floats** | 265 zeros + 735 floats |
+| samples differing from the station's | 735 | **0** | — |
+| the string the widget then encodes | 1 999 chars | **15 361** | 15 361 |
+
+The tail sums the recordings hash to, for whoever regenerates them next: macOS
+`112.4458671315806`, Linux `112.46367831656244`.
