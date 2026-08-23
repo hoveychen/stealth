@@ -2,12 +2,12 @@
  "url.href = 'nope'": {
   "throws": true,
   "name": "TypeError",
-  "message": ""
+  "message": "Failed to set the 'href' property on 'URL': Invalid URL"
  },
  "url.href = ''": {
   "throws": true,
   "name": "TypeError",
-  "message": ""
+  "message": "Failed to set the 'href' property on 'URL': Invalid URL"
  },
  "url.protocol = 'no pe'": {
   "throws": false,
@@ -55,12 +55,12 @@
  "treeWalker.currentNode = 1": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to set the 'currentNode' property on 'TreeWalker': Failed to convert value to 'Node'."
  },
  "treeWalker.currentNode = {}": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to set the 'currentNode' property on 'TreeWalker': Failed to convert value to 'Node'."
  },
  "document.adoptedStyleSheets = 1": {
   "throws": true,
@@ -85,7 +85,7 @@
  "input.size = 0": {
   "throws": true,
   "name": "IndexSizeError",
-  "message": "Index or size is negative or greater than the allowed amount"
+  "message": "Failed to set the 'size' property on 'HTMLInputElement': The value provided is 0, which is an invalid size."
  },
  "textarea.cols = 0": {
   "throws": false
@@ -96,12 +96,12 @@
  "input.maxLength = -1": {
   "throws": true,
   "name": "IndexSizeError",
-  "message": "Index or size is negative or greater than the allowed amount"
+  "message": "Failed to set the 'maxLength' property on 'HTMLInputElement': The value provided (-1) is not positive or 0."
  },
  "textarea.maxLength = -1": {
   "throws": true,
   "name": "IndexSizeError",
-  "message": "Index or size is negative or greater than the allowed amount"
+  "message": "Failed to set the 'maxLength' property on 'HTMLTextAreaElement': The value provided (-1) is not positive or 0."
  },
  "select.length = -1": {
   "throws": false
@@ -115,7 +115,7 @@
  "input.selectionStart = 1 (type=number)": {
   "throws": true,
   "name": "InvalidStateError",
-  "message": "The object is in an invalid state"
+  "message": "Failed to set the 'selectionStart' property on 'HTMLInputElement': The input element's type ('number') does not support selection."
  },
  "input.valueAsNumber = 1 (type=text)": {
   "throws": false
@@ -126,7 +126,7 @@
  "document.domain = 'evil.test'": {
   "throws": true,
   "name": "SecurityError",
-  "message": "The operation is insecure"
+  "message": "Failed to set the 'domain' property on 'Document': 'evil.test' is not a suffix of '127.0.0.1'."
  },
  "video.currentTime = 'x'": {
   "throws": false
@@ -186,17 +186,17 @@
  "'use strict' navigator.userAgent = 'x'": {
   "throws": true,
   "name": "TypeError",
-  "message": "Cannot assign to read only property 'userAgent' of object '#<Navigator>'"
+  "message": "Cannot set property userAgent of #<Navigator> which has only a getter"
  },
  "'use strict' document.URL = 'x'": {
   "throws": true,
   "name": "TypeError",
-  "message": "Cannot assign to read only property 'URL' of object '#<HTMLDocument>'"
+  "message": "Cannot set property URL of #<Document> which has only a getter"
  },
  "'use strict' el.tagName = 'x'": {
   "throws": true,
   "name": "TypeError",
-  "message": "Cannot assign to read only property 'tagName' of object '#<HTMLBodyElement>'"
+  "message": "Cannot set property tagName of #<Element> which has only a getter"
  },
  "'use strict' window.origin = 'x'": {
   "throws": false
@@ -223,7 +223,7 @@
  "documentElement.outerHTML = 'x'": {
   "throws": true,
   "name": "NoModificationAllowedError",
-  "message": "The object can not be modified"
+  "message": "Failed to set the 'outerHTML' property on 'Element': This element's parent is a Document, which may not be modified."
  },
  "descriptors": {
   "URL.href set.name": "set href",

@@ -267,8 +267,11 @@ pub fn setDomain(self: *Document, value: []const u8) !void {
         return doc_frame.js.fail(error.SecurityError, prefix ++ "'' is an empty domain.");
     }
     if (isRelaxableTo(base, requested) == false) {
+        // call_arena, not the local one: handleError reads the message after
+        // this frame is gone, and local_arena is reset before it gets there --
+        // which showed up as a SecurityError carrying a run of blanks.
         return doc_frame.js.fail(error.SecurityError, try std.fmt.allocPrint(
-            arena,
+            doc_frame.call_arena,
             prefix ++ "'{s}' is not a suffix of '{s}'.",
             .{ value, base },
         ));

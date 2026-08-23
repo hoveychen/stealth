@@ -247,7 +247,7 @@
  "url.href = 'nope'": {
   "throws": true,
   "name": "TypeError",
-  "message": ""
+  "message": "Failed to set the 'href' property on 'URL': Invalid URL"
  },
  "el.innerHTML = trusted-types?": {
   "throws": false

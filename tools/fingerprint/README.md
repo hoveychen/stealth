@@ -9389,8 +9389,9 @@ converting that one element instead of from the parameter as a whole; it takes
 the raw value now. `CSSUnparsedValue` only had to check before converting.
 
 Result on `probe-invalid-argument.js` (55 cases): **13 identical to Chrome
-before, 42 after**, and the count answering `invalid argument` went **39 → 32 →
-3**. What is left, and none of it is wording:
+before, 42 after** — 43 once the setter pass below landed — and the count
+answering `invalid argument` went **39 → 32 → 3**. What is left, and none of it
+is wording:
 
 - **7 cases Chrome refuses and we do not.** `new CSSStyleSheet(1)`,
   `new DocumentTimeline(1)`, `new TaskController(1)`,
@@ -9406,6 +9407,129 @@ before, 42 after**, and the count answering `invalid argument` went **39 → 32 
   expected pattern" where Chrome lists all four legal values.
 - **1 setter**: `url.href = 'nope'` is still an empty message. The prefix
   pipeline does not reach accessors — `Snapshot` sets no data on getter/setter
-  templates — so no setter can name itself yet.
+  templates — so no setter can name itself yet. Fixed in the next section,
+  which is about setters and nothing else.
 
 Readings: `results/probes/probe-invalid-argument.{chrome,lightpanda}.json`.
+
+
+### The third lead-in: what a setter says when it refuses
+
+The last item on that list — `url.href = 'nope'` answering an empty message —
+was left for its own pass because it is not one bug. Blink has three lead-ins,
+not two, and the third belongs to attributes:
+
+```
+Failed to construct 'URL': Invalid URL              <- constructor
+Failed to execute 'createElement' on 'Document': …  <- operation
+Failed to set the 'href' property on 'URL': …       <- attribute
+```
+
+`probe-setter-refusal.js` walks 61 assignments across every mechanism a setter
+can refuse with. **24 agreed with a headed Chrome 151 before this pass and 37
+after.** The readings are in
+`results/probes/probe-setter-refusal.{chrome,lightpanda}.json`.
+
+The property named is the attribute's own spelling — `href`, not the `set href`
+the accessor function goes by — and the interface is the one that *declares* the
+attribute, not the receiver's class. `input.maxLength` and `textarea.maxLength`
+name `HTMLInputElement` and `HTMLTextAreaElement` respectively; `audio.volume`
+names `HTMLMediaElement` and not `HTMLAudioElement`.
+
+**The setter's brand sentence is not the operation's.** This is the reading
+worth keeping, because it is exactly the kind of detail a shared code path gets
+wrong by being shared:
+
+| where the value came from | Blink's detail |
+|---|---|
+| an operation's parameter | `parameter <N> is not of type '<Type>'.` |
+| an attribute | `Failed to convert value to '<Type>'.` |
+
+No position, because an attribute takes one value and there is nothing to
+number. A union and a sequence keep the sentences they already had — `The
+provided value is not of type '(MediaSourceHandle or MediaStream)'.` and `The
+provided value cannot be converted to a sequence.` — so only the brand case
+forks.
+
+The same lead-in also fronts the DOMExceptions a setter's own steps raise, which
+is where most of this engine's readings were wrong: it answered the stock
+DOMException text and Blink answers a written detail.
+
+| assignment | Chrome 151 |
+|---|---|
+| `input.size = 'x'` | `IndexSizeError: … 'size' … : The value provided is 0, which is an invalid size.` |
+| `input.maxLength = -1` | `IndexSizeError: … 'maxLength' … : The value provided (-1) is not positive or 0.` |
+| `input.selectionStart = 1` on `type=number` | `InvalidStateError: … : The input element's type ('number') does not support selection.` |
+| `document.domain = 'evil.test'` | `SecurityError: … : 'evil.test' is not a suffix of '127.0.0.1'.` |
+| `document.domain = ''` | `SecurityError: … : '' is an empty domain.` |
+| `document.documentElement.outerHTML = 'x'` | `NoModificationAllowedError: … : This element's parent is a Document, which may not be modified.` |
+
+Two of those are worth stating as negatives, since guessing them the obvious way
+gets them wrong: `input.size = -1` does **not** throw (WebIDL wraps it to
+4294967295 and Chrome takes it — only a value that converts to 0 is refused),
+and `document.domain = 'com'` gets the plain suffix sentence, not a
+top-level-domain one.
+
+Where the sentence lives now follows what the engine already did. Roughly forty
+setters in `webapi/` were already writing their own full sentence, with
+`dictionary.SetterReader` as the comptime helper for it, so the six that were
+not now do the same. Only one refusal cannot work that way — the value failed to
+convert, so the bridge refused before the Zig setter ran and there is no site to
+hold the sentence — and that one the bridge writes, the way it already writes an
+operation's. `Snapshot.attachAccessorProperty` set no data on either accessor
+template; the setter half now carries the attribute's name, which is what
+`Caller.setterPrefix` reads back.
+
+#### A read-only attribute picks V8's other sentence
+
+Writing a read-only attribute in strict mode is refused by V8, not Blink, and
+V8 has two sentences for it:
+
+```
+Cannot set property userAgent of #<Navigator> which has only a getter   <- Chrome
+Cannot assign to read only property 'userAgent' of object '#<Navigator>' <- was here
+```
+
+The second is V8's sentence for a non-writable **data** property. Both engines'
+descriptors for `Navigator.prototype.userAgent` are identical — `get` a
+function, `set` undefined, enumerable, configurable — so nothing you can read
+tells the two apart. What differed was invisible from JS: this engine passed
+v8's `ReadOnly` attribute bit alongside the getter-only accessor, and V8 checks
+that bit before it looks inside the accessor pair. WebIDL makes a read-only
+attribute an accessor whose setter is *absent*; the bit is a different claim.
+
+Dropping it fixes the object name as well as the sentence. V8's accessor path
+names the **holder** — the prototype the accessor lives on — so `document.URL`
+reads `#<Document>` and not `#<HTMLDocument>`, and `el.tagName` reads
+`#<Element>` and not `#<HTMLBodyElement>`. Every read-only attribute in the
+engine was carrying this.
+
+#### What is left, and none of it is wording
+
+The remaining differences are cases where this engine does not refuse at all,
+which is a coverage question rather than a wording one:
+
+- **No brand check on an interface-typed attribute**: `document.body`,
+  `table.tHead`/`tFoot`/`caption`, `media.srcObject`, `input.valueAsDate`.
+  `document.body` is the loud one — its setter here takes an HTML *string*, so
+  `document.body = 1` does not throw and replaces the body with one containing
+  "1", where the IDL says `attribute HTMLElement body`.
+- **No range or finiteness guard**: `audio.volume = 5`, `video.currentTime = 'x'`,
+  `audio.playbackRate = 'x'`, `input.valueAsNumber` on a `type=text`.
+- **An enum attribute that does not fall back**: `img.loading = 'nope'` keeps
+  `'nope'` where Chrome reports `'auto'`. (The engine gets the others right —
+  `xhr.responseType`, `history.scrollRestoration`, `img.crossOrigin` and
+  `input.type` all ignore a bad value silently, which is what WebIDL requires of
+  an enum-typed attribute. Turning any of those into a throw would be a new
+  tell, not a fix.)
+- **`document.adoptedStyleSheets = 1`** stays generic: the setter takes a bare
+  `js.Object`, so the bridge cannot tell it was meant to be a sequence. It is
+  the only one of the 24 remaining differences that is still about wording; the
+  other 23 are all assignments this engine simply takes.
+
+One note for whoever writes the next one of these: a formatted refusal has to go
+on `call_arena`, not `local_arena`. `document.domain` first shipped on the local
+one and came back through CDP as `SecurityError:` followed by a run of blanks —
+the arena is reset before `handleError` reads the message. The html test did not
+catch it and the probe did, which is the whole argument for taking a reading
+after the tests go green.
