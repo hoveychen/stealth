@@ -167,3 +167,20 @@
     testing.expectEqual(1, acss.length);
   }
 </script>
+
+<script id=attachShadow_enum_member_refusal>
+{
+  // The same nested sentence an operation's dictionary gets: the execute
+  // prefix, the member and its dictionary, then the value and the enum type
+  // unquoted (measured on Chrome 151).
+  let err = null;
+  try {
+    document.createElement('div').attachShadow({ mode: 'nope' });
+  } catch (e) { err = `${e.name}: ${e.message}`; }
+  testing.expectEqual(
+    "TypeError: Failed to execute 'attachShadow' on 'Element': Failed to read the 'mode' property from " +
+      "'ShadowRootInit': The provided value 'nope' is not a valid enum value of type ShadowRootMode.",
+    err,
+  );
+}
+</script>
