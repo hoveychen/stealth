@@ -32,6 +32,7 @@ const Allocator = std.mem.Allocator;
 
 const chrome_arity = @import("chrome_arity.zig");
 const chrome_keywords = @import("chrome_keywords.zig");
+const chrome_initial_values = @import("chrome_initial_values.zig");
 const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
@@ -256,11 +257,20 @@ fn propertyValue(self: *const CSSStyleDeclaration, property_name: []const u8, fr
                 // loops then never terminate. jQuery's .width() reads this
                 // value, so it must also carry clientWidth's content fallback
                 // or append-until-wide marquee loops never terminate.
-                if (wrapped.eql(comptime .wrap("width"))) {
+                if (wrapped.eql(comptime .wrap("width")) or wrapped.eql(comptime .wrap("inline-size"))) {
                     return resolvedDimension(element, .width, frame);
                 }
-                if (wrapped.eql(comptime .wrap("height"))) {
+                if (wrapped.eql(comptime .wrap("height")) or wrapped.eql(comptime .wrap("block-size"))) {
                     return resolvedDimension(element, .height, frame);
+                }
+                // The other two the recorded table deliberately has no entry
+                // for: both origins are the box's centre, so they follow the
+                // same metrics rather than a stored number. `inline-size` and
+                // `block-size` above are the logical spellings of the physical
+                // pair, which is what they resolve to in a horizontal-tb box —
+                // the only writing mode this engine lays out.
+                if (wrapped.eqlSlice("transform-origin") or wrapped.eqlSlice("perspective-origin")) {
+                    return boxCentre(element, frame);
                 }
             }
             return getDefaultPropertyValue(self, wrapped, surface);
@@ -307,6 +317,22 @@ fn resolvedDimension(element: *Element, dimension: enum { width, height }, frame
         .height => element.getClientHeightWithCache(frame, &visibility_cache),
     };
     return std.fmt.allocPrint(frame.local_arena, "{d}px", .{value}) catch "auto";
+}
+
+/// `transform-origin` and `perspective-origin` both compute to the centre of the
+/// border box, which Chrome serialises as two lengths. An element with no box
+/// answers from a zero-sized one, the way the dimension path answers "auto".
+fn boxCentre(element: *Element, frame: *Frame) []const u8 {
+    var visibility_cache: Element.VisibilityCache = .{};
+    if (!element.checkVisibilityCached(&visibility_cache, frame)) {
+        return "0px 0px";
+    }
+    const width = element.getClientWidthWithCache(frame, &visibility_cache);
+    const height = element.getClientHeightWithCache(frame, &visibility_cache);
+    return std.fmt.allocPrint(frame.local_arena, "{d}px {d}px", .{
+        width / 2,
+        height / 2,
+    }) catch "0px 0px";
 }
 
 pub fn getPropertyPriority(self: *const CSSStyleDeclaration, property_name: []const u8, frame: *Frame) []const u8 {
@@ -2282,7 +2308,18 @@ fn getDefaultPropertyValue(self: *const CSSStyleDeclaration, name: String, surfa
         },
         else => {},
     }
-    return "";
+    // Everything the cases above do not special-case comes from the recorded
+    // table. They are ahead of it because they are the ones that depend on the
+    // element rather than only on the property: `color` and `display` differ per
+    // tag, and `border-*-width` differs per surface.
+    //
+    // "" was the old answer for every other longhand, and it is not a value
+    // Chrome computes for one — a widget that dumps getComputedStyle over the
+    // whole enumeration reads 720 empties here against Chrome's 34, which is the
+    // gap this table closes (README, "Reading the same two files record by
+    // record"). The six that resolve against the box are answered by the layout
+    // path before this point and deliberately have no entry.
+    return chrome_initial_values.initial.get(name.str()) orelse "";
 }
 
 /// The one initial value measured to differ between the two surfaces: the

@@ -210,7 +210,10 @@
   testing.expectEqual('700', cs.getPropertyValue('font-weight'));
   testing.expectEqual('rgb(1, 2, 3)', cs.getPropertyValue('color'));
   testing.expectEqual('rgb(1, 2, 3)', div.style.getPropertyValue('color'));
-  testing.expectEqual('', cs.getPropertyValue('letter-spacing'));
+  // Nothing declares it, so it reads its initial value -- `normal`, from the
+  // recorded table in webapi/css/chrome_initial_values.zig. "" is not something
+  // Chrome ever answers for a supported longhand.
+  testing.expectEqual('normal', cs.getPropertyValue('letter-spacing'));
 
   const plainDiv = document.createElement('div');
   document.body.appendChild(plainDiv);
