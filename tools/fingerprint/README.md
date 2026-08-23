@@ -10407,3 +10407,108 @@ closed. Chrome hands that buffer straight back and this engine used to render
 through `audio-graph-trace.mjs` on a loopback page, both engines report the
 graph record for record and the render comes back sample for sample identical
 (1 000/1 000, maximum difference zero). → `cfsc-audio-buffer-passthrough`, done.
+
+## The `@keyframes` shortfall is a selector serialiser, not a missing rule (2026-08-23)
+
+The 329-character gap in the page's `@keyframes` payload (`a3-oracle.json`
+records[67], 20 696 chars; `a3-lp.json` records[26], 20 367) is not a rule we
+fail to produce. Both arms emit the same 183 rules in the same order. Split on
+`|` and diffed entry by entry, 120 are already byte-identical and every
+remaining one is a *serialisation* difference in how a rule's `cssText` is
+written back.
+
+Three normalisations account for two thirds of the gap, applied to our own
+payload and re-measured:
+
+| applied to our text | chars recovered | entries now identical |
+| --- | --- | --- |
+| `,` → `, ` in selector and value lists | 190 | |
+| `~` → ` ~ ` | 26 | |
+| `grid-area: 1/1` → `1 / 1` | 2 | 168 of 183 |
+
+The remaining 111 characters are in 15 entries and are value-level, listed
+here largest first so whoever picks them up knows the size of each:
+
+| what | example: oracle vs ours | net |
+| --- | --- | --- |
+| `animation` shorthand order | `0.3s cubic-bezier(…) 0s 1 normal both running scale-up-center` vs `scale-up-center 0.3s cubic-bezier(…) both` | +90 |
+| `box-shadow` order and units | `rgb(34, 139, 73) 0px 0px 0px inset` vs `inset 0 0 0 rgb(34, 139, 73)` | +42 |
+| `transform` dropped entirely | `transform: rotate(0deg) scale(1)` vs absent | +34 |
+| `border-image` kept as longhands | `border-image: none` vs five `border-image-*` plus a spurious `border-top-width` | −98 |
+| `transform-origin` order | `center bottom` vs `bottom center` | +2 |
+| `stroke-dasharray` separator | `32, 32` vs `32 32` | +1 |
+
+One structural leftover: our payload has a 184th element, the single character
+`2`, where the oracle's list ends at 183. Both end the last rule with a bare
+`0` appended after the closing brace, so the collector concatenates something
+beyond the joined `cssText` list; what our extra `|2` is has not been run down.
+
+### What Chrome actually does to a selector, measured
+
+`probes/expr-selector-serialize.js` puts 38 selectors through
+`new CSSStyleSheet().replaceSync()` and reads `selectorText` back. Chrome never
+returns the author's bytes — it re-serialises the parsed selector. We return
+the source, trimmed, so 32 of the 38 disagree:
+
+| written | Chrome | ours |
+| --- | --- | --- |
+| `a,b` | `a, b` | `a,b` |
+| `  a  ,  b  ` | `a, b` | `a  ,  b` |
+| `a~b` / `a>b` / `a+b` | `a ~ b` / `a > b` / `a + b` | unchanged |
+| `a   b` | `a b` | unchanged |
+| `:not(a,b)` | `:not(a, b)` | unchanged |
+| `:not(a~b)` | `:not(a ~ b)` | unchanged |
+| `a:has(+b)` | `a:has(+ b)` | unchanged |
+| `DIV.Foo#Bar` | `div.Foo#Bar` | unchanged |
+| `A:HOVER` | `a:hover` | unchanged |
+| `[HREF]` | `[href]` | unchanged |
+| `a:before` | `a::before` | unchanged |
+| `[a=b]` / `[a='b']` | `[a="b"]` | unchanged |
+| `*\|a` | `a` | unchanged |
+
+And the things Chrome leaves alone, which a normaliser must not touch:
+`[class~="x"]` and `[class\|="x"]` keep their matchers unspaced, `a[href~="b,c"]`
+keeps the comma inside the string, `a:nth-child(2n+1)` keeps its `+` unspaced,
+`.\31 23` keeps its escape, and class and id names keep their case.
+
+### What the selector serialiser recovered, on the payload itself
+
+`selector_text.zig` rewrites a parsed selector the way Blink does, at the one
+point both the stylesheet parser and `rule.selectorText = ...` go through.
+Re-measured on the 38-case probe, this engine now agrees with Chrome on 36 of
+38, up from 6. The two left are deliberate: Chrome rejects the column
+combinator `a||b` outright, which is a parser-acceptance difference rather than
+a serialisation one, and `*|a` needs namespace elision.
+
+Replayed against the sitting's own bytes — our 183 rules fed back through a
+fresh `CSSStyleSheet` and joined the way the collector joins them — the
+shortfall against the oracle's text:
+
+| | chars | gap | rules byte-identical |
+| --- | --- | --- | --- |
+| oracle | 20 695 | — | — |
+| before | 20 364 | 331 | 120 / 183 |
+| after | **20 556** | **139** | **164 / 183** |
+
+Every one of the 19 rules still differing differs in a *declaration*, not a
+selector. Ranked, that residue is: the `animation` shorthand written name-last
+in Chrome's eight-longhand order rather than as the author wrote it; the
+`box-shadow` colour written first with `0px` rather than `0`; `font-family` and
+`stroke-dasharray` lists needing `, ` where we join with `,`; `grid-area: 1 / 1`
+for our `1/1`; a `transform` declaration we drop entirely; and `border-image`
+which Chrome folds back into one shorthand where we emit five longhands plus a
+`border-top-width` Chrome does not. → `cfsc-keyframes-shortfall`, done; the
+declaration side is its own plan.
+
+Noticed while pinning the cascade side of this and not chased: a `color`
+declared by a stylesheet rule does not reach `getComputedStyle().color` here at
+all — it reads `rgb(0, 0, 0)` whatever the selector, while `display` from the
+same sheet cascades correctly. That is not a selector bug (a bare `.class` rule
+misses it too) and Chrome answers with the cascaded colour.
+
+Swept afterwards (`results/kf-selector-sweep-after.json`): 11 of 15 stations
+open, the same eleven as before the change and the same four shut
+(cf-scrapingcourse, cf-nopecha, cf-zeroclover, dd-g2). No door moved, which is
+what a 139-character residue on one payload predicts; the reading that matters
+here is the absence of a regression, since the normalised text is what the
+cascade re-parses.
