@@ -274,8 +274,12 @@ fn httpErrorCallback(ctx: *anyopaque, err: anyerror) void {
     self._exec.js.localScope(&ls);
     defer ls.deinit();
 
-    // fetch() must reject with a TypeError on network errors per spec
-    ls.toLocal(self._resolver).rejectError("fetch error", .{ .type_error = "fetch error" });
+    // fetch() must reject with a TypeError on network errors per spec, and the
+    // message is not private: Cloudflare's challenge posts a probe into a worker
+    // that fetches cross-origin and reports `String(e)` back to their server.
+    // Headless Chrome 151, measured: connection refused, DNS failure and a CORS
+    // rejection all reject with exactly `TypeError: Failed to fetch`.
+    ls.toLocal(self._resolver).rejectError("fetch error", .{ .type_error = "Failed to fetch" });
 }
 
 fn httpShutdownCallback(ctx: *anyopaque) void {

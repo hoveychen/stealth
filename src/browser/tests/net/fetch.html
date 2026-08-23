@@ -119,6 +119,33 @@
   }
 </script>
 
+<script id=fetch_network_error_message type=module>
+  {
+    // A network error's *wording* leaves the browser: Cloudflare's challenge
+    // posts a probe into a worker that fetches cross-origin and reports
+    // `String(e)` straight back to their server (tools/fingerprint/README.md,
+    // "The worker was never released"). Measured against headless Chrome 151:
+    // connection refused, DNS failure and a CORS rejection all reject with
+    // exactly `TypeError: Failed to fetch`.
+    const state = await testing.async();
+    let name = '', message = '', str = '';
+    try {
+      await fetch('http://127.0.0.1:1/nothing-listens-here');
+    } catch (e) {
+      name = e.name;
+      message = e.message;
+      str = String(e);
+    }
+    state.resolve();
+
+    await state.done(() => {
+      testing.expectEqual('TypeError', name);
+      testing.expectEqual('Failed to fetch', message);
+      testing.expectEqual('TypeError: Failed to fetch', str);
+    });
+  }
+</script>
+
 <script id=fetch_404 type=module>
   {
     const state = await testing.async();
