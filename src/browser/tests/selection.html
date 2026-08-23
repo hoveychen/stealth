@@ -757,3 +757,18 @@
     testing.expectEqual(false, threw);
   }
 </script>
+
+<script id=selection_missing_argument>
+  {
+    // `collapse(Node? node, optional unsigned long offset)`: the node is
+    // nullable but not optional, so `length` is 1 in Chrome 151 and a bare
+    // call is refused. Nullable read as optional here, so both returned
+    // undefined. setPosition is collapse's alias and behaves identically.
+    for (const name of ['collapse', 'setPosition']) {
+      testing.expectEqual(1, Selection.prototype[name].length, { desc: name + '.length' });
+      testing.expectError(
+        `TypeError: Failed to execute '${name}' on 'Selection': 1 argument required, but only 0 present.`,
+        () => getSelection()[name]());
+    }
+  }
+</script>

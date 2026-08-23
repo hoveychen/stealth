@@ -240,3 +240,23 @@
     testing.expectEqual('Test', doc.documentElement.firstChild.textContent);
   }
 </script>
+
+<script id=create_document_type_missing_argument>
+  {
+    // `createDocumentType(qualifiedName, publicId, systemId)` requires all
+    // three. Two of them were optional here, so `length` read 1 and the
+    // refusal asked for one argument -- and a call with one or two arguments
+    // built a DocumentType instead of being refused.
+    testing.expectEqual(3, DOMImplementation.prototype.createDocumentType.length);
+    const impl = document.implementation;
+    testing.expectError(
+      "TypeError: Failed to execute 'createDocumentType' on 'DOMImplementation': 3 arguments required, but only 0 present.",
+      () => impl.createDocumentType());
+    testing.expectError(
+      "TypeError: Failed to execute 'createDocumentType' on 'DOMImplementation': 3 arguments required, but only 1 present.",
+      () => impl.createDocumentType('x'));
+    testing.expectError(
+      "TypeError: Failed to execute 'createDocumentType' on 'DOMImplementation': 3 arguments required, but only 2 present.",
+      () => impl.createDocumentType('x', 'y'));
+  }
+</script>

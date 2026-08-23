@@ -419,3 +419,37 @@
     testing.expectEqual(true, rate(() => gl.getParameter(gl.MAX_TEXTURE_SIZE)) > 100);
   }
 </script>
+
+<script id=WebGLRenderingContext#missing_argument>
+{
+  // Seventeen of WebGLRenderingContext's operations under-report `length`,
+  // all for the same reason: the object parameter -- a program, a shader, a
+  // buffer -- was written optional here, and an optional parameter does not
+  // count towards WebIDL `length`. Half of them then threw the generic
+  // "invalid argument" no browser says; the other half answered as if a null
+  // object had been passed, so `gl.isBuffer()` said false and
+  // `gl.getShaderSource()` said "". Chrome 151 counts first.
+  const gl = document.createElement("canvas").getContext("webgl");
+  const cases = [
+    ['getActiveAttrib', 2], ['getActiveUniform', 2], ['getAttachedShaders', 1],
+    ['getAttribLocation', 2], ['getProgramInfoLog', 1], ['getProgramParameter', 2],
+    ['getShaderInfoLog', 1], ['getShaderParameter', 2], ['getShaderSource', 1],
+    ['getUniform', 2], ['getUniformLocation', 2], ['isBuffer', 1],
+    ['isFramebuffer', 1], ['isProgram', 1], ['isRenderbuffer', 1],
+    ['isShader', 1], ['isTexture', 1],
+  ];
+  for (const [name, n] of cases) {
+    testing.expectEqual(n, WebGLRenderingContext.prototype[name].length, { desc: name + '.length' });
+    testing.expectError(
+      `TypeError: Failed to execute '${name}' on 'WebGLRenderingContext': ${n} argument${n === 1 ? '' : 's'} required, but only 0 present.`,
+      () => gl[name]());
+  }
+
+  // Short by one: the object is there, the name is not.
+  for (const name of ['getAttribLocation', 'getUniformLocation']) {
+    testing.expectError(
+      `TypeError: Failed to execute '${name}' on 'WebGLRenderingContext': 2 arguments required, but only 1 present.`,
+      () => gl[name](gl.createProgram()));
+  }
+}
+</script>

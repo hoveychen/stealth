@@ -139,3 +139,19 @@
   testing.expectEqual('42', r.stringValue);
 }
 </script>
+
+<script id=evaluate_missing_argument>
+  {
+    // `evaluate(expression, contextNode, ...)` requires two. We made the
+    // context node optional, which put `length` at 1 -- so the refusal was
+    // there, but it asked for one argument where Chrome 151 asks for two, and
+    // `document.evaluate('x')` went through and returned an XPathResult.
+    testing.expectEqual(2, Document.prototype.evaluate.length);
+    testing.expectError(
+      "TypeError: Failed to execute 'evaluate' on 'Document': 2 arguments required, but only 0 present.",
+      () => document.evaluate());
+    testing.expectError(
+      "TypeError: Failed to execute 'evaluate' on 'Document': 2 arguments required, but only 1 present.",
+      () => document.evaluate('x'));
+  }
+</script>

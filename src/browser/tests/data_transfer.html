@@ -126,3 +126,16 @@
   testing.expectEqual("text/a,text/b", kinds.join(","));
 }
 </script>
+
+<script id=get_as_string_missing_argument>
+  {
+    // `getAsString(callback)` requires the callback. We took it as optional and
+    // returned undefined without calling anything; Chrome 151 refuses.
+    testing.expectEqual(1, DataTransferItem.prototype.getAsString.length);
+    const dt = new DataTransfer();
+    dt.items.add('x', 'text/plain');
+    testing.expectError(
+      "TypeError: Failed to execute 'getAsString' on 'DataTransferItem': 1 argument required, but only 0 present.",
+      () => dt.items[0].getAsString());
+  }
+</script>
