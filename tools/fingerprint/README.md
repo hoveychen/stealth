@@ -9940,3 +9940,74 @@ The 26 values still differing are not 26 separate problems. They are three:
   table entry: the table deliberately holds nothing for these six.
 
 → `cfsc-computed-style-per-tag`.
+
+#### The 26 values, closed and checked against the oracle's own bytes (2026-08-23)
+
+`cfsc-computed-style-per-tag`. All 26 are gone, and the check is stronger than
+the sitting that would have measured it: the widget's whole computed-style
+payload now comes back **byte-identical** to the 30 902 characters recorded in
+`results/p5-oracle.json`.
+
+The three shapes turned out to be two causes.
+
+**The UA stylesheet is per tag and the table was not.**
+`chrome_initial_values.zig` holds one value per longhand, measured off a bare
+`<div>`, so every element answered a div's answer. That is the `margin*`
+spellings (a `<body>` takes `8px`, a div `0px`) and `unicode-bidi` (a div takes
+`isolate`, everything inline `normal`). `dump-css-initial-values.mjs` now walks
+every HTML tag through the same two differently-sized hosts the two divs go
+through and writes `chrome_per_tag_values.zig`: 1 147 values over 125 tags.
+Three things the measurement decided rather than a list did:
+
+- The fallback for a tag with no rules is **not** the div. A div is itself
+  styled by the UA sheet, so an element the sheet says nothing about answers
+  `unicode-bidi: normal` where a div answers `isolate`. A tag that measured
+  identical to the div still gets a key with an empty row, so a miss can only
+  mean "not an HTML tag" and reaches `unknown_tag`.
+- `html`, `body` and `head` are read out of two about:blank iframes rather than
+  from `createElement`. A synthetic `<html>` does carry the sheet's rules, but
+  not `view-transition-name: root`, which only a document's real root gets.
+- `display` is deliberately never stored. `resolvedDisplay` blockifies a flex or
+  grid parent's children and honours a cascaded `display: none`; a stored
+  per-tag string can express neither, and would shadow both.
+
+**`100000000px` was a root-container constant, not a table entry.**
+`getElementDimensions` sized every `<html>` and `<body>` at any depth from two
+numbers — 1920 wide and 100_000_000 tall, so `calculateDocumentPosition`'s
+100px-per-level stacking always had room — and both went out through
+`getComputedStyle`. A document's root containers fill its *viewport*, and a
+child document's viewport is the iframe element's box. Measured on Chrome 151:
+the `<html>` of a 300x150 iframe reports 300x150 and its `<body>` 284x134 — the
+viewport less the body's own 8px UA margins — while a 0x0 iframe reports `0px`
+throughout.
+
+That 0x0 case is what the widget reads, and it is how the element was
+identified at all: `width: 0px` and `transform-origin: 0px 0px` is neither a
+`display:none` iframe (`auto` and `50% 50%`) nor a default-sized one (`284px`).
+A body filling its viewport is the *quirks* rendering, and an about:blank
+document is in quirks mode — `compatMode` reads `BackCompat`, measured, and it
+reads that for an iframe's document whether or not a `srcdoc` carries a doctype.
+So the viewport is the right answer for exactly the documents these iframes
+hold. For the top-level document Chrome is in standards mode and sizes a body to
+its content, which this faux layout cannot compute; the viewport is the wrong
+half of a real browser's two answers there, but it is one of them, which the
+sentinel never was.
+
+`probes/computed-style-iframe-body.js` reproduces the widget's read offline and
+carries the one-liner that diffs it against the recording.
+
+| | before | after | oracle |
+| --- | --- | --- | --- |
+| `getComputedStyle` dump | 30 972 chars | **30 902** | 30 902 |
+| values differing from the oracle | 26 | **0** | — |
+
+**The sitting itself measured nothing, and a control says why.**
+`results/p6-oracle.json` / `p6-lp.json`, one sitting, and the station was in a
+heavier mood than it was for p5: the oracle got `Just a moment...` again, and
+this arm stopped after 6 records with 2 realms armed where p5 reached 10. That
+reads like a regression until the control is run — `p6-lp-baseline.json` is the
+same sitting with the *pre-change* binary, and its record tally is identical,
+six records and two realms. So the shallow reach is the station, not the change,
+and this sitting says nothing about pass or fail either way. The byte comparison
+above is what stands in for it: it checks the same payload against the same
+oracle bytes without needing the station to answer at all.
