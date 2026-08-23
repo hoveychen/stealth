@@ -11028,3 +11028,82 @@ belongs, and no shader the widget compiles reaches it.
 Unchanged from before this plan, which is the expected shape: this closed one
 of the five, and the remaining four are `cfsc-imagebitmap-pixels`, the gradient
 and glyph work behind the 48×48, and the float16 `getImageData` options.
+
+## An ImageBitmap carries a snapshot, and the read that used it stops coming back empty (2026-08-23)
+
+`ImageBitmap` held its width and its height and nothing else. `drawImage(bmp)`
+therefore had no source to blit, so the widget's readback of the canvas it had
+just drawn a bitmap into came back 8624 zero bytes where Chrome has an image.
+
+`createImageBitmap()` now copies the source's pixels into a surface of the
+bitmap's own — a *snapshot*, taken there and then, so repainting the source
+afterwards does not reach through it — and `close()` releases that copy.
+
+### The half the existing test did not cover, measured rather than reasoned
+
+`src/browser/tests/window/image_bitmap.html` already carried ten expectations
+off Chrome 151. Four things it did not settle would each have been guessed
+wrong or guessed thinly, so `probes/expr-imagebitmap-pixels.js` measured them:
+
+| case | Chrome |
+|---|---|
+| `drawImage` of a closed bitmap, element context | `InvalidStateError: Failed to execute 'drawImage' on 'CanvasRenderingContext2D': The image source is detached` |
+| the same on an `OffscreenCanvas` context | same sentence, but **`OffscreenCanvasRenderingContext2D`** |
+| an `ImageData` source | carries its bytes; bitmap is the ImageData's size |
+| crop `sx=3, sw=2` on a 4-wide source | one column of source pixels, one **transparent** — the rect is not clipped |
+| crop `sx=-1, sw=2` | leading column transparent, then the source's |
+| crop `sx=4, sy=2, sw=-2, sh=-2` | the same rect read forwards |
+| a canvas whose only context was WebGL | the cleared colour, `ff0000ff` |
+
+The detached wording naming the *receiver's* interface is the one that matters
+for the implementation: the message is built from `T.JsApi.Meta.name` in the
+shared mixin rather than hardcoded, and that is measured, not inferred.
+
+Both arms now agree on eight of the probe's nine cases. The ninth is the WebGL
+one: `Canvas.pixels()` rasterises nothing for a WebGL canvas, so our bitmap of
+one is transparent where Chrome's holds the clear colour. `webgl_state.zig`
+does keep a top-down RGBA8 surface now, so closing it is cheap — but the same
+accessor feeds `toDataURL` and `convertToBlob`, and what those should answer
+for a WebGL canvas is unmeasured. Left as its own question.
+
+### On the live trace, the read changes content and not count
+
+Both arms, 90 s settle, `canvas-draw-trace.mjs`. The readback whose entire op
+log is a single `drawImage(ImageBitmap, 0, 0)`:
+
+|  | before | after | oracle |
+|---|---|---|---|
+| bytes | 8624 | 8624 | 8624 |
+| zero bytes | **8624** | **1720** | 1725 |
+| fnv | 1883974240 | 2159546272 | 931458320 |
+
+`2159546272` is not an arbitrary improvement: it is byte-identical to *our own*
+readback of the 36-op render the bitmap was made from. The oracle has exactly
+that relationship — all three of its `[49,44]` reads carry `931458320`, the
+hash of its render. What still separates the two hashes is the render, not the
+bitmap: radial gradients and glyphs, which is the 48×48 work.
+
+**The readback count did not move: 16 here, 18 on the oracle.** That is worth
+stating plainly, because the plan was written expecting it to. The two absent
+readbacks turn out not to be waiting on `drawImage` at all — the context lists
+say so:
+
+    oracle   x9 [49,44]   x10 [49,44]   x11 canvas/2d [1,1]   x12 [49,44]
+    here    x10 [49,44]   x11 [49,44]                          — never created
+
+The oracle builds **three** 49×44 offscreen contexts and we build two, so the
+third's readback has no canvas to happen on. And the `canvas/2d [1,1]` context
+is the oracle's twelfth, created late in the run; here it is the *first* one
+created and its readback is the *first* to fire. Both are the signature of a
+branch taken differently upstream of any drawing call — a different question
+from this one, and the next place to look for these two.
+
+### The station still does not clear
+
+    headed chrome  pass         doc=403->200 nodes=34  "Cloudflare Challenge - ScrapingCourse.co"
+    lightpanda     cf-challenge doc=403->200 nodes=47  "Just a moment..."
+
+Unchanged, as expected: this closed the bitmap's contribution to one readback's
+*contents*. The 48×48 and 49×44 renders still differ, the float16
+`getImageData` options still answer four bytes, and two readbacks still do not
+happen for a reason that is now known to be upstream of the canvas.
