@@ -1,0 +1,101 @@
+{
+  "engine": "chrome",
+  "doc": "tools/fingerprint/results/exc-src5/widget-2026-08-23.html",
+  "docBytes": 268671,
+  "settleMs": 20000,
+  "determinize": true,
+  "topLevel": false,
+  "patchedSites": [
+    {
+      "offset": 88044,
+      "text": "?um:uG[um]"
+    },
+    {
+      "offset": 119484,
+      "text": "?uE:ur[uE]"
+    },
+    {
+      "offset": 125516,
+      "text": "?up:uk[up]"
+    },
+    {
+      "offset": 172812,
+      "text": "?uk:ur[uk]"
+    },
+    {
+      "offset": 230947,
+      "text": "?ur:uE[ur]"
+    },
+    {
+      "offset": 260102,
+      "text": "?uE:uy[uE]"
+    }
+  ],
+  "console": [],
+  "wire": [
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9340/host.html",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9340/host.html"
+    },
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9440/widget.html",
+      "type": "Document"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9440/widget.html"
+    },
+    {
+      "ev": "req",
+      "url": "http://127.0.0.1:9340/favicon.ico",
+      "type": "Other"
+    },
+    {
+      "ev": "res",
+      "status": 200,
+      "url": "http://127.0.0.1:9340/favicon.ico"
+    }
+  ],
+  "exceptions": [],
+  "trace": [],
+  "url": "http://127.0.0.1:9340/host.html",
+  "live": false,
+  "postMessage": "off",
+  "version": {
+    "Browser": "Chrome/151.0.7922.172",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.21",
+    "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9240/devtools/browser/2cea3dd8-3c67-4318-b2b3-e742f6cbcff2"
+  },
+  "realms": [
+    "http://127.0.0.1:9340/host.html",
+    "http://127.0.0.1:9440/widget.html"
+  ],
+  "kick": "threw:runProgram:Failed to execute 'atob' on 'Window': The string to be decoded is not correctly encoded.",
+  "traceLen": 0,
+  "chunks": 0,
+  "engineLog": [
+    "DevTools listening on ws://127.0.0.1:9240/devtools/browser/2cea3dd8-3c67-4318-b2b3-e742f6cbcff2",
+    "Trying to load the allocator multiple times. This is *not* supported.",
+    "[38447:16393250:0822/195245.034049:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[38447:16393250:0822/195245.034745:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.",
+    "[38447:16393302:0822/195247.514549:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT",
+    "[38447:16393302:0822/195247.517681:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "[38447:16393302:0822/195247.522396:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR",
+    "Created TensorFlow Lite XNNPACK delegate for CPU."
+  ],
+  "engineExit": {
+    "code": null,
+    "signal": "SIGKILL"
+  }
+}

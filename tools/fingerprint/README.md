@@ -9074,3 +9074,77 @@ The old note that "the widget realm is not where this engine differs" was drawn
 from `--reach` call counts, which match. Call counts matching and payload bytes
 differing are consistent: the program takes the same path and is handed
 different answers.
+
+## The telemetry is assembled in a worker, and the worker notices (E2, 2026-08-23)
+
+E1 left the diff at the widget's first `fo/` POST and the body is one ciphertext,
+so the plaintext has to be read upstream of the encryption. `fo-plaintext.mjs`
+installs a recorder ahead of the page's own code and wraps the funnels the
+plaintext must pass through — `crypto.subtle.encrypt` / `sign` / `digest`,
+`TextEncoder.prototype.encode`, `JSON.stringify`, `btoa`, `XMLHttpRequest.send`,
+`fetch` — each forwarding to the original unchanged, each disguised so
+`toString()` answers with the native source text.
+
+Whether such an instrument is honest is a measurement, not an argument: the
+oracle arm ran with every wrapper in place and **still cleared**
+(`fopt-oracle.json`, "You bypassed the Cloudflare challenge!"). So the readings
+below are of a page that decided the same thing it decides unwatched.
+
+### The document realm does not build the payload
+
+With the widget document realm armed — `installed` fired at
+`challenges.cloudflare.com/…/new/normal`, so this is not a case of the hook
+landing late:
+
+| funnel | calls in the widget document realm |
+|---|---|
+| `crypto.subtle.encrypt` / `sign` / `digest` | 0 |
+| `TextEncoder.prototype.encode` | 0 |
+| `btoa` | 0 |
+| `XMLHttpRequest.send` | 0 |
+| `fetch` | 0 |
+| `JSON.stringify` | 4 187 calls, **largest argument 172 bytes** |
+
+And the four `fo/` POSTs went out anyway — 2 306, 4 706, 91 479, 8 855, the last
+two under `cf-chl-out`. A realm that issues no fetch and no XHR is not the realm
+that posted them.
+
+The four sessions the recorder could *not* be installed in are all `blob:` URLs,
+and they refuse `Page.addScriptToEvaluateOnNewDocument` with
+`-32601 … wasn't found`: no Page domain means they are workers, not frames. So
+**this station assembles and sends its telemetry from blob-URL workers**, which
+is why every page-realm instrument in this directory — `--reach`, the funnel
+wrappers, the opcode trace — has been looking at the wrong side of a thread
+boundary. It also explains the earlier "the widget realm is not where this engine
+differs": that reading was correct and beside the point.
+
+### Reaching into the worker breaks the challenge, and that is a finding
+
+Auto-attach pauses a new target before its first statement, which is the window
+to evaluate the recorder into a worker. Two things came out of trying it.
+
+`Runtime.evaluate` must not be awaited there. A target paused on start has its
+script thread blocked, so the evaluate cannot complete until the resume that the
+same `arm()` call has not sent yet — awaiting it deadlocks, and the challenge
+stalls at round 1.
+
+With that fixed, the challenge *still* stalls at round 1. Isolated against the
+station rather than assumed:
+
+| arm | runs | result |
+|---|---|---|
+| document realm wrapped only | 1 | cleared |
+| `cfsc-fo-diff` oracle, no instrument | 4 | cleared, 4× |
+| worker realm wrapped as well | 3 | **one POST, then nothing, 3×** |
+
+The last of those four clean control runs was taken *after* the three stalls, in
+the same ten-minute window, so the station is not throttling and the difference
+is the instrument. Three attempts is where this stops per the three-failure rule;
+the next attempt needs a different shape, not a fourth variation.
+
+Two readings, and they are not exclusive: the worker checks its own globals, or
+pausing it on start perturbs a timing it measures. Both are worth knowing, and
+both are cheap to separate — install one wrapper at a time and see which one is
+fatal, and separately arm the worker without `waitForDebuggerOnStart` at all.
+A worker that declines to run when `fetch` is not native is a fingerprint check
+we would want to know about regardless of what the payload turns out to say.
