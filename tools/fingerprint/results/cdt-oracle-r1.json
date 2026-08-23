@@ -1,0 +1,2068 @@
+{
+ "engine": "chrome",
+ "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+ "headedUa": true,
+ "settleMs": 35000,
+ "maxOps": 600,
+ "injectWorker": false,
+ "userAgentOverride": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+ "contexts": [
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "canvas",
+   "kind": "2d",
+   "attrs": null,
+   "got": "CanvasRenderingContext2D",
+   "ctx": "x0",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "webgl",
+   "attrs": null,
+   "got": "WebGLRenderingContext",
+   "ctx": "x1",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "webgl2",
+   "attrs": null,
+   "got": "WebGL2RenderingContext",
+   "ctx": "x2",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x3",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x4",
+   "size": [
+    16,
+    16
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x5",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x6",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x7",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x8",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": null,
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x9",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x10",
+   "size": [
+    49,
+    44
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x11",
+   "size": [
+    49,
+    44
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x12",
+   "size": [
+    49,
+    44
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "getContext",
+   "owner": "canvas",
+   "kind": "webgpu",
+   "attrs": null,
+   "got": "GPUCanvasContext",
+   "ctx": "x13",
+   "size": [
+    300,
+    150
+   ]
+  }
+ ],
+ "readbacks": [
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "2d",
+   "ctx": "x0",
+   "m": "getImageData",
+   "size": [
+    1,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1937540140,
+    "head": "00000029"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=font",
+     "1px sans-serif"
+    ],
+    [
+     "fillText",
+     "ðºð¸",
+     0,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    48,
+    48
+   ],
+   "args": [
+    0,
+    0,
+    48,
+    48
+   ],
+   "r": {
+    "n": 9216,
+    "zeros": 1211,
+    "fnv": 1676186672,
+    "head": "ff800004ff800004ff660005ff802a06ff802008ff802008ff711c09ff711c09ff801a0aff801a0aff801a0aff711c09ff802008ff802008ff6d2407ff802a06ff660005ff663305ff330005ff550006bf200008b974170bb4960f11b1b1141a"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "scale",
+     0.384,
+     0.384
+    ],
+    [
+     "createRadialGradient",
+     33,
+     18,
+     8,
+     42,
+     10,
+     226
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#809900"
+       ],
+       [
+        1,
+        "#404041"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     11
+    ],
+    [
+     "=shadowColor",
+     "#F38020"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "moveTo",
+     9,
+     14
+    ],
+    [
+     "quadraticCurveTo",
+     93,
+     48,
+     116,
+     111
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     77,
+     98,
+     2,
+     27,
+     30,
+     206
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#809900"
+       ],
+       [
+        1,
+        "#404041"
+       ]
+      ]
+     }
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "ellipse",
+     58,
+     55,
+     31,
+     28,
+     1.4442,
+     0.5401,
+     4.0522
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     108,
+     12,
+     10,
+     65,
+     118,
+     169
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#1AB399"
+       ],
+       [
+        1,
+        "#E666B3"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     16
+    ],
+    [
+     "=shadowColor",
+     "#809980"
+    ],
+    [
+     "=font",
+     "27.77777777777778px aanotafontaa"
+    ],
+    [
+     "fillText",
+     "Ry",
+     13,
+     67
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     46,
+     47,
+     0,
+     101,
+     108,
+     207
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#4DB380"
+       ],
+       [
+        1,
+        "#FF4D4D"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     3
+    ],
+    [
+     "=shadowColor",
+     "#FF6633"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "moveTo",
+     54,
+     5
+    ],
+    [
+     "bezierCurveTo",
+     54,
+     90,
+     32,
+     74,
+     71,
+     120
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     119,
+     123,
+     3,
+     109,
+     90,
+     137
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#E6B333"
+       ],
+       [
+        1,
+        "#3366E6"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     4
+    ],
+    [
+     "=shadowColor",
+     "#B3B31A"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "moveTo",
+     76,
+     0
+    ],
+    [
+     "bezierCurveTo",
+     1,
+     49,
+     103,
+     67,
+     49,
+     125
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     34,
+     47,
+     1,
+     37,
+     59,
+     245
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#809900"
+       ],
+       [
+        1,
+        "#404041"
+       ]
+      ]
+     }
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "ellipse",
+     56,
+     57,
+     14,
+     8,
+     1.2273,
+     4.1926,
+     2.8854
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "=shadowBlur",
+     14
+    ],
+    [
+     "=shadowColor",
+     "#809900"
+    ],
+    [
+     "=font",
+     "11.904761904761905px aanotafontaa"
+    ],
+    [
+     "strokeText",
+     "@H1",
+     30,
+     73
+    ],
+    [
+     "=shadowBlur",
+     0
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "gl",
+   "ctx": "x1",
+   "m": "readPixels",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    16,
+    16,
+    6408,
+    5121,
+    {
+     "buf": 1024,
+     "head": "000000000000000000000000000000000000000000000000"
+    }
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 0,
+    "fnv": 1785938531,
+    "head": "d78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "createShader",
+     35633
+    ],
+    [
+     "shaderSource",
+     {
+      "o": "WebGLShader"
+     },
+     "attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}"
+    ],
+    [
+     "compileShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "createShader",
+     35632
+    ],
+    [
+     "shaderSource",
+     {
+      "o": "WebGLShader"
+     },
+     "precision mediump float;void main(){gl_FragColor=vec4(sin(1.0),cos(1.0),sin(1.0)*cos(1.0),1.0);}"
+    ],
+    [
+     "compileShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "createShader",
+     35632
+    ],
+    [
+     "shaderSource",
+     {
+      "o": "WebGLShader"
+     },
+     {
+      "s": 413,
+      "v": "precision highp float;\nvoid main() {\n  float a = gl_FragCoord.x;"
+     }
+    ],
+    [
+     "compileShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "createBuffer"
+    ],
+    [
+     "bindBuffer",
+     34962,
+     {
+      "o": "WebGLBuffer"
+     }
+    ],
+    [
+     "bufferData",
+     34962,
+     {
+      "buf": 32,
+      "head": "000080bf000080bf0000803f000080bf000080bf0000803f"
+     },
+     35044
+    ],
+    [
+     "getShaderParameter",
+     {
+      "o": "WebGLShader"
+     },
+     35713
+    ],
+    [
+     "createProgram"
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "linkProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getProgramParameter",
+     {
+      "o": "WebGLProgram"
+     },
+     35714
+    ],
+    [
+     "useProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getAttribLocation",
+     {
+      "o": "WebGLProgram"
+     },
+     "p"
+    ],
+    [
+     "enableVertexAttribArray",
+     0
+    ],
+    [
+     "vertexAttribPointer",
+     0,
+     2,
+     5126,
+     false,
+     0,
+     0
+    ],
+    [
+     "viewport",
+     0,
+     0,
+     16,
+     16
+    ],
+    [
+     "drawArrays",
+     5,
+     0,
+     4
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "gl",
+   "ctx": "x1",
+   "m": "readPixels",
+   "size": [
+    4,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    4,
+    1,
+    6408,
+    5121,
+    {
+     "buf": 16,
+     "head": "00000000000000000000000000000000"
+    }
+   ],
+   "r": {
+    "n": 16,
+    "zeros": 0,
+    "fnv": 1065983184,
+    "head": "e4ceffd6e4cfff84e4d0ff32e4d1ffdf"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "deleteProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "deleteShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "getShaderParameter",
+     {
+      "o": "WebGLShader"
+     },
+     35713
+    ],
+    [
+     "createProgram"
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "linkProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getProgramParameter",
+     {
+      "o": "WebGLProgram"
+     },
+     35714
+    ],
+    [
+     "useProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getAttribLocation",
+     {
+      "o": "WebGLProgram"
+     },
+     "p"
+    ],
+    [
+     "enableVertexAttribArray",
+     0
+    ],
+    [
+     "vertexAttribPointer",
+     0,
+     2,
+     5126,
+     false,
+     0,
+     0
+    ],
+    [
+     "viewport",
+     0,
+     0,
+     4,
+     1
+    ],
+    [
+     "drawArrays",
+     5,
+     0,
+     4
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    2,
+    2
+   ],
+   "r": {
+    "n": 16,
+    "zeros": 0,
+    "fnv": 1639679896,
+    "head": "ffffffffc0c0c0fff4f4f4ff353535ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#000"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ],
+    [
+     "=fillStyle",
+     "#fff"
+    ],
+    [
+     "fillRect",
+     2,
+     2,
+     1,
+     1
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     0,
+     0,
+     2,
+     0,
+     1,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x5",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 2177093497,
+    "head": "ff1b7fff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x6",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1744669593,
+    "head": "ff407fff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x7",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 8,
+    "zeros": 1,
+    "fnv": 1272842144,
+    "head": "5b3cc92ef537003c"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x8",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 8,
+    "zeros": 4,
+    "fnv": 1425183204,
+    "head": "003c00340038003c"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    49,
+    44
+   ],
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1725,
+    "fnv": 931458320,
+    "head": "00000000000000000000000000000000000000000000000000000000000000000000000000000000ff24ff07ff21ff4eff21ffa3ff21ffceff22ffe2ff21fff6ff21fff5ff22ffe1ff22ffcdff21ffa3ff21ff4dff00ff050000000000000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=font",
+     "16px sans-serif"
+    ],
+    [
+     "measureText",
+     "ð"
+    ],
+    [
+     "measureText",
+     "ð¤£"
+    ],
+    [
+     "measureText",
+     "ð±"
+    ],
+    [
+     "measureText",
+     "ð"
+    ],
+    [
+     "measureText",
+     "ð¥"
+    ],
+    [
+     "measureText",
+     "ð"
+    ],
+    [
+     "measureText",
+     "ð§ "
+    ],
+    [
+     "measureText",
+     "ð¶"
+    ],
+    [
+     "measureText",
+     "ð "
+    ],
+    [
+     "measureText",
+     "âï¸"
+    ],
+    [
+     "getContextAttributes"
+    ],
+    [
+     "scale",
+     0.4,
+     0.4
+    ],
+    [
+     "=globalCompositeOperation",
+     "source-over"
+    ],
+    [
+     "=fillStyle",
+     "#f2f"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     40,
+     40,
+     40,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=globalCompositeOperation",
+     "multiply"
+    ],
+    [
+     "=fillStyle",
+     "#2ff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     80,
+     40,
+     40,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=fillStyle",
+     "#ff2"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     60,
+     80,
+     40,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=globalCompositeOperation",
+     "source-over"
+    ],
+    [
+     "=fillStyle",
+     "#fff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     61,
+     53,
+     20,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "arc",
+     61,
+     53,
+     10,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "fill",
+     "evenodd"
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x11",
+   "m": "getImageData",
+   "size": [
+    49,
+    44
+   ],
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1725,
+    "fnv": 931458320,
+    "head": "00000000000000000000000000000000000000000000000000000000000000000000000000000000ff24ff07ff21ff4eff21ffa3ff21ffceff22ffe2ff21fff6ff21fff5ff22ffe1ff22ffcdff21ffa3ff21ff4dff00ff050000000000000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "drawImage",
+     {
+      "o": "ImageBitmap"
+     },
+     0,
+     0
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    1,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#ffffff"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     80,
+     24
+    ],
+    [
+     "=fillStyle",
+     "#000000"
+    ],
+    [
+     "=font",
+     "16px Arial"
+    ],
+    [
+     "=textBaseline",
+     "top"
+    ],
+    [
+     "fillText",
+     "Hwmqxli",
+     2,
+     4
+    ],
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0,
+     80,
+     24,
+     0,
+     0,
+     1,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    1,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "dropped": 0,
+   "ops": []
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    16,
+    16
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 90,
+    "fnv": 490316027,
+    "head": "00ff00fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#f06d06"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ],
+    [
+     "=fillStyle",
+     "#0000ff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     8,
+     8,
+     5,
+     0,
+     6.2832
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=fillStyle",
+     "#00ff00"
+    ],
+    [
+     "=font",
+     "8px serif"
+    ],
+    [
+     "fillText",
+     "VnYi2",
+     3,
+     12
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     1,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x4",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    16,
+    16
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 90,
+    "fnv": 3828407109,
+    "head": "f06d06ff00ff00fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ],
+    [
+     "=filter",
+     "grayscale(1)"
+    ],
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
+    ],
+    [
+     "=filter",
+     "none"
+    ],
+    [
+     "=globalCompositeOperation",
+     "difference"
+    ],
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
+    ],
+    [
+     "=globalCompositeOperation",
+     "source-over"
+    ],
+    [
+     "=fillStyle",
+     "#f06d06"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ],
+    [
+     "=fillStyle",
+     "#0000ff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     8,
+     8,
+     5,
+     0,
+     6.2832
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=fillStyle",
+     "#00ff00"
+    ],
+    [
+     "=font",
+     "8px serif"
+    ],
+    [
+     "fillText",
+     "VnYi2",
+     3,
+     12
+    ],
+    [
+     "fillRect",
+     1,
+     0,
+     1,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1138563636,
+    "head": "f06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#f06d06"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1138563636,
+    "head": "f06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ]
+   ]
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x12",
+   "m": "getImageData",
+   "size": [
+    49,
+    44
+   ],
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1725,
+    "fnv": 931458320,
+    "head": "00000000000000000000000000000000000000000000000000000000000000000000000000000000ff24ff07ff21ff4eff21ffa3ff21ffceff22ffe2ff21fff6ff21fff5ff22ffe1ff22ffcdff21ffa3ff21ff4dff00ff050000000000000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "drawImage",
+     {
+      "o": "ImageBitmap"
+     },
+     0,
+     0
+    ]
+   ]
+  }
+ ],
+ "drains": [],
+ "realms": [
+  {
+   "session": "45905BAABF3D763425A159C893925453",
+   "why": "page",
+   "type": "page",
+   "installed": true,
+   "resumed": true
+  },
+  {
+   "session": "176B9611CC6CAC2FC26BC06841190F89",
+   "why": "blob:https://www.scrapingcourse.com/b24de554-70e9-4cd5-991b-7d5802fdabf4",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "why": "",
+   "type": "iframe",
+   "installed": true,
+   "resumed": true
+  },
+  {
+   "session": "40EF3551D75CB890B8C80C02CCBEED1D",
+   "why": "blob:https://challenges.cloudflare.com/fcf3e71e-415c-40be-9f9a-eea48d4fd3f0",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  },
+  {
+   "session": "B3008DEF7A58F586BDE39FF2EE9D4270",
+   "why": "blob:https://challenges.cloudflare.com/fcf3e71e-415c-40be-9f9a-eea48d4fd3f0",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  },
+  {
+   "session": "DEB217A5691D35DA5C0ED7AA060541B7",
+   "why": "blob:https://challenges.cloudflare.com/fcf3e71e-415c-40be-9f9a-eea48d4fd3f0",
+   "type": "worker",
+   "installed": false,
+   "resumed": true,
+   "worker": true
+  }
+ ],
+ "installs": [
+  {
+   "session": "45905BAABF3D763425A159C893925453",
+   "k": "installed",
+   "href": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "45905BAABF3D763425A159C893925453",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/tmn23/0x4AAAAAAADnPIDROrmt1Wwj/dark/fbE/new/normal?lang=auto",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "about:srcdoc",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "2F8BD38B606AB9630498ACA476109D5E",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "45905BAABF3D763425A159C893925453",
+   "k": "installed",
+   "href": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 71,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  }
+ ],
+ "console": [
+  "startGroupCollapsed: ",
+  "debug: Error",
+  "log: /.*.*=.*/",
+  "log: /.*.*=.*/",
+  "log: function () { [native code] }",
+  "log: function () { [native code] }",
+  "log: a",
+  "log: a",
+  "count: \u0000: 1",
+  "count: \u0000: 1",
+  "debug: %c%d font-size:0;color:transparent NaN",
+  "debug: %c%d font-size:0;color:transparent NaN",
+  "dir:  Error",
+  "dir:  Error",
+  "dirxml: %c%d font-size:0;color:transparent Error",
+  "dirxml: %c%d font-size:0;color:transparent Error",
+  "error: %c%d font-size:0;color:transparent NaN",
+  "error: %c%d font-size:0;color:transparent NaN",
+  "info: %c%d font-size:0;color:transparent NaN",
+  "info: %c%d font-size:0;color:transparent NaN",
+  "log: %c%d font-size:0;color:transparent NaN",
+  "log: %c%d font-size:0;color:transparent NaN",
+  "table: %c%d font-size:0;color:transparent Error",
+  "table: %c%d font-size:0;color:transparent Error",
+  "trace: %c%d font-size:0;color:transparent NaN",
+  "trace: %c%d font-size:0;color:transparent NaN",
+  "warning: %c%d font-size:0;color:transparent NaN",
+  "warning: %c%d font-size:0;color:transparent NaN",
+  "endGroup: console.groupEnd"
+ ],
+ "exceptions": [],
+ "version": {
+  "Browser": "Chrome/151.0.7922.172",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "V8-Version": "15.1.206.21",
+  "WebKit-Version": "537.36 (@d92c6f366858072e4a819d440f9509128abec614)",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9871/devtools/browser/2d8b75b6-1956-4bbe-8260-5feb50a4d952"
+ },
+ "final": {
+  "title": "Cloudflare Challenge - ScrapingCourse.com",
+  "nodes": 34,
+  "text": "Scraping\nCourse\nCloudflare Challenge\nYou bypassed the Cloudflare challenge! :D"
+ },
+ "engineLog": "\nDevTools listening on ws://127.0.0.1:9871/devtools/browser/2d8b75b6-1956-4bbe-8260-5feb50a4d952\nTrying to load the allocator multiple times. This is *not* supported.\n[25391:18846150:0823/013821.530227:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.\n[25391:18846150:0823/013821.530783:ERROR:chrome/browser/ui/webui/ntp/new_tab_ui.cc:54] Requested load of chrome://newtab/ for incorrect profile type.\n[25396:18846219:0823/013822.011512:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105\n[25396:18846219:0823/013822.011660:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105\n[25396:18846219:0823/013822.011663:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105\n[25396:18846219:0823/013822.013757:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105\n[25396:18846219:0823/013822.013763:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105\n[25396:18846219:0823/013822.013766:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105\n[25396:18846219:0823/013822.013771:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105\n[25396:18846219:0823/013822.013775:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105\n[25396:18846219:0823/013822.013777:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105\n[25396:18846219:0823/013823.041973:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105\n[25396:18846219:0823/013823.041984:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105\n[25396:18846219:0823/013823.041987:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.l.google.com., errorcode: -105\n[25396:18846219:0823/013823.041992:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105\n[25396:18846219:0823/013823.041996:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105\n[25396:18846219:0823/013823.041998:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun1.l.google.com., errorcode: -105\n[25396:18846219:0823/013823.042002:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105\n[25396:18846219:0823/013823.042005:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105\n[25396:18846219:0823/013823.042008:ERROR:services/network/p2p/socket_manager.cc:143] Failed to resolve address for stun.cloudflare.com., errorcode: -105\n[25391:18846170:0823/013824.577675:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR\n[25391:18846170:0823/013824.577752:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT\nCreated TensorFlow Lite XNNPACK delegate for CPU.\n[25391:18846170:0823/013852.109826:ERROR:google_apis/gcm/engine/registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT\n"
+}

@@ -647,3 +647,237 @@
   testing.expectEqual([0, 0, 0, 0], Array.from(drawn.getImageData(0, 0, 1, 1).data));
 }
 </script>
+
+<script id="CanvasRenderingContext2D#fill">
+{
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  // A closed path that is filled is ink, not silence.
+  ctx.fillStyle = '#ff0000';
+  ctx.beginPath();
+  ctx.moveTo(2, 2);
+  ctx.lineTo(10, 2);
+  ctx.lineTo(10, 10);
+  ctx.lineTo(2, 10);
+  ctx.closePath();
+  ctx.fill();
+  testing.expectEqual([255, 0, 0, 255], at(6, 6));
+  // Outside the path stays transparent.
+  testing.expectEqual([0, 0, 0, 0], at(14, 14));
+
+  // arc() encloses its disc, and fill() paints it.
+  ctx.reset();
+  ctx.fillStyle = '#0000ff';
+  ctx.beginPath();
+  ctx.arc(8, 8, 5, 0, Math.PI * 2);
+  ctx.fill();
+  testing.expectEqual([0, 0, 255, 255], at(8, 8));
+  // A corner is more than five away from the centre.
+  testing.expectEqual([0, 0, 0, 0], at(0, 0));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#fill evenodd">
+{
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  // Two concentric circles wound the same way: the even-odd rule reads the
+  // inner one as a hole, the default non-zero rule does not. This is the
+  // shape the Turnstile widget draws (README, "The eighteen pixel readbacks").
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(8, 8, 7, 0, Math.PI * 2);
+  ctx.arc(8, 8, 3, 0, Math.PI * 2);
+  ctx.fill('evenodd');
+  testing.expectEqual([0, 0, 0, 0], at(8, 8));
+  testing.expectEqual([255, 255, 255, 255], at(8, 3));
+
+  // The same path under the non-zero rule has no hole.
+  ctx.reset();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(8, 8, 7, 0, Math.PI * 2);
+  ctx.arc(8, 8, 3, 0, Math.PI * 2);
+  ctx.fill();
+  testing.expectEqual([255, 255, 255, 255], at(8, 8));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#stroke">
+{
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  // A two-wide horizontal line centred on y=4 covers rows 3 and 4.
+  ctx.strokeStyle = '#00ff00';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, 4);
+  ctx.lineTo(16, 4);
+  ctx.stroke();
+  testing.expectEqual([0, 255, 0, 255], at(8, 3));
+  testing.expectEqual([0, 255, 0, 255], at(8, 4));
+  testing.expectEqual([0, 0, 0, 0], at(8, 6));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#transform">
+{
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  // The transform is reported, not assumed.
+  ctx.scale(2, 2);
+  testing.expectEqual(2, ctx.getTransform().a);
+  testing.expectEqual(2, ctx.getTransform().d);
+  ctx.translate(1, 1);
+  testing.expectEqual(2, ctx.getTransform().e);
+  testing.expectEqual(2, ctx.getTransform().f);
+
+  // And it is applied: a 1x1 fill at the origin lands on four device pixels
+  // starting at (2, 2).
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 1, 1);
+  testing.expectEqual([255, 0, 0, 255], at(2, 2));
+  testing.expectEqual([255, 0, 0, 255], at(3, 3));
+  testing.expectEqual([0, 0, 0, 0], at(4, 4));
+
+  // save()/restore() carry the transform with them.
+  ctx.resetTransform();
+  testing.expectEqual(1, ctx.getTransform().a);
+  testing.expectEqual(0, ctx.getTransform().e);
+  ctx.save();
+  ctx.scale(3, 3);
+  testing.expectEqual(3, ctx.getTransform().a);
+  ctx.restore();
+  testing.expectEqual(1, ctx.getTransform().a);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#resize resets the context">
+{
+  // Assigning to width or height resets the whole context, not just the
+  // bitmap: transform, paint, path and the save() stack all go. Measured
+  // against Chrome 151, including that assigning the value it already has
+  // still counts as an assignment.
+  const canvas = document.createElement('canvas');
+  canvas.width = 8;
+  canvas.height = 8;
+  const ctx = canvas.getContext('2d');
+
+  ctx.scale(2, 2);
+  ctx.fillStyle = '#ff0000';
+  ctx.lineWidth = 7;
+  ctx.font = '30px monospace';
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(4, 4);
+  ctx.save();
+
+  canvas.width = 8;
+
+  testing.expectEqual(1, ctx.getTransform().a);
+  testing.expectEqual('#000000', ctx.fillStyle);
+  testing.expectEqual(1, ctx.lineWidth);
+  testing.expectEqual('10px sans-serif', ctx.font);
+  testing.expectEqual(1, ctx.globalAlpha);
+
+  // The path went with it, so stroking now lands no ink at all.
+  ctx.strokeStyle = '#00ff00';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  const data = ctx.getImageData(0, 0, 8, 8).data;
+  let ink = 0;
+  for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) ink++;
+  testing.expectEqual(0, ink);
+
+  // And so did the save() stack: this restore has nothing to pop.
+  ctx.scale(5, 5);
+  ctx.restore();
+  testing.expectEqual(5, ctx.getTransform().a);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#arc counterclockwise">
+{
+  // How a counterclockwise sweep normalises, measured against Chrome 151 on a
+  // 64x64 canvas with r=25 (ink pixels in brackets):
+  //
+  //   arc(0, 2pi)          2032   arc(0, 2pi, true)          2032   a full turn
+  //   arc(0, 2pi + pi/2)   2032   arc(0, 2pi + pi/2, true)   1843
+  //   arc(0, -pi)          1012   arc(0, -pi, true)          1012
+  //   arc(0, -3pi)         1012   arc(0, 3pi, true)          1012
+  //   arc(0, pi/2)          206   arc(0, pi/2, true)         1843
+  //
+  // So a counterclockwise turn of exactly 2pi is a whole circle rather than
+  // nothing, and anything past one turn wraps rather than clamping. This is
+  // the call the Turnstile widget makes: every one of its arcs passes true.
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  ctx.fillStyle = '#ff0000';
+  ctx.beginPath();
+  ctx.arc(8, 8, 5, 0, Math.PI * 2, true);
+  ctx.fill();
+  testing.expectEqual([255, 0, 0, 255], at(8, 8));
+
+  // A counterclockwise quarter is the long way round, so it covers the left
+  // of the disc that the clockwise quarter does not.
+  ctx.reset();
+  ctx.fillStyle = '#ff0000';
+  ctx.beginPath();
+  ctx.arc(8, 8, 5, 0, Math.PI / 2, true);
+  ctx.fill();
+  testing.expectEqual([255, 0, 0, 255], at(5, 8));
+
+  ctx.reset();
+  ctx.fillStyle = '#ff0000';
+  ctx.beginPath();
+  ctx.arc(8, 8, 5, 0, Math.PI / 2, false);
+  ctx.fill();
+  testing.expectEqual([0, 0, 0, 0], at(5, 8));
+}
+</script>
+
+<script id="CanvasRenderingContext2D#drawImage">
+{
+  const src = document.createElement('canvas');
+  src.width = 4;
+  src.height = 4;
+  const sctx = src.getContext('2d');
+  sctx.fillStyle = '#0000ff';
+  sctx.fillRect(0, 0, 2, 2);
+
+  const dst = document.createElement('canvas');
+  dst.width = 8;
+  dst.height = 8;
+  const ctx = dst.getContext('2d');
+  const at = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data);
+
+  // Placed under the current transform, like every other drawing call.
+  ctx.translate(4, 4);
+  ctx.drawImage(src, 0, 0);
+  testing.expectEqual([0, 0, 255, 255], at(5, 5));
+  testing.expectEqual([0, 0, 0, 0], at(1, 1));
+  // Only the source's own opaque quarter came across.
+  testing.expectEqual([0, 0, 0, 0], at(7, 7));
+}
+</script>

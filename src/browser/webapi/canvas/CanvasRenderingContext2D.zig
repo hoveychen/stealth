@@ -25,9 +25,10 @@ const color = @import("../../color.zig");
 const Canvas = @import("../element/html/Canvas.zig");
 const Font = @import("font.zig");
 const state = @import("context_state.zig");
+const path = @import("path.zig");
+const context_draw = @import("context_draw.zig");
 const canvas_objects = @import("canvas_objects.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
-const DOMMatrixReadOnly = @import("../DOMMatrixReadOnly.zig");
 
 const CanvasGradient = canvas_objects.CanvasGradient;
 const CanvasPattern = canvas_objects.CanvasPattern;
@@ -60,6 +61,12 @@ _font: Font = Font.default,
 /// Drawing state the rasteriser does not read. See context_state.zig for
 /// why it is here at all.
 _state: state.State = .{},
+/// The current transformation matrix, and the path being built under it.
+/// Both live in context_draw.zig, which is shared with the other 2D context.
+_transform: path.Transform = .{},
+_path: path.Path = .{},
+/// The save() stack. Frame-arena backed, like the path.
+_saved: std.ArrayList(context_draw.Saved(Font)) = .empty,
 
 pub fn getCanvas(self: *const CanvasRenderingContext2D) *Canvas {
     return self._canvas;
@@ -155,10 +162,6 @@ pub fn createImageData(
 
 pub fn putImageData(_: *const CanvasRenderingContext2D, _: *ImageData, _: f64, _: f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64) void {}
 
-// CanvasImageSource (HTMLImageElement, HTMLCanvasElement, ImageBitmap, ...) is
-// just taken as a js.Value for now since we don't use it, and that's much easier.
-pub fn drawImage(_: *const CanvasRenderingContext2D, _: js.Value, _: f64, _: f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64) void {}
-
 pub fn getImageData(
     self: *const CanvasRenderingContext2D,
     sx: i32,
@@ -205,11 +208,7 @@ pub fn setLineDash(self: *CanvasRenderingContext2D, segments: []const f64, exec:
     self._state.line_dash = state.normaliseLineDash(exec.arena, segments) orelse self._state.line_dash;
 }
 
-/// Always the identity: we do not implement transforms, so there is never
-/// anything else to report.
-pub fn getTransform(_: *const CanvasRenderingContext2D, exec: *Execution) !*DOMMatrix {
-    return DOMMatrix.create(DOMMatrixReadOnly.identity(), true, exec.page);
-}
+pub const getTransform = draw.getTransform;
 
 /// Drops the bitmap and every piece of drawing state, as `reset()` does.
 pub fn reset(self: *CanvasRenderingContext2D) void {
@@ -220,11 +219,9 @@ pub fn reset(self: *CanvasRenderingContext2D) void {
     self._global_alpha = 1;
     self._font = Font.default;
     self._state.reset();
+    draw.resetDrawing(self);
 }
 
-// Path geometry we accept and discard, like the rest of the path API.
-pub fn roundRect(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: ?js.Value) void {}
-pub fn ellipse(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64, _: ?bool) void {}
 pub fn drawFocusIfNeeded(_: *CanvasRenderingContext2D, _: js.Value, _: ?js.Value) void {}
 
 /// No path is ever built, so nothing is ever inside one.
@@ -255,61 +252,40 @@ pub fn createPattern(_: *CanvasRenderingContext2D, _: js.Value, _: js.Value, exe
     return exec._factory.create(CanvasPattern{});
 }
 
-pub fn save(_: *CanvasRenderingContext2D) void {}
-pub fn restore(_: *CanvasRenderingContext2D) void {}
-pub fn scale(_: *CanvasRenderingContext2D, _: f64, _: f64) void {}
-pub fn rotate(_: *CanvasRenderingContext2D, _: f64) void {}
-pub fn translate(_: *CanvasRenderingContext2D, _: f64, _: f64) void {}
-pub fn transform(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn setTransform(_: *CanvasRenderingContext2D, _: ?js.Value, _: ?f64, _: ?f64, _: ?f64, _: ?f64, _: ?f64) void {}
-pub fn resetTransform(_: *CanvasRenderingContext2D) void {}
-pub fn clearRect(self: *CanvasRenderingContext2D, x: f64, y: f64, w: f64, h: f64) void {
-    self._surface.clearRect(self._canvas.getWidth(), self._canvas.getHeight(), x, y, w, h);
-}
+pub const save = draw.save;
+pub const restore = draw.restore;
+pub const scale = draw.scale;
+pub const rotate = draw.rotate;
+pub const translate = draw.translate;
+pub const transform = draw.transform;
+pub const setTransform = draw.setTransform;
+pub const resetTransform = draw.resetTransform;
+pub const fillRect = draw.fillRect;
+pub const strokeRect = draw.strokeRect;
+pub const clearRect = draw.clearRect;
+pub const beginPath = draw.beginPath;
+pub const closePath = draw.closePath;
+pub const moveTo = draw.moveTo;
+pub const lineTo = draw.lineTo;
+pub const quadraticCurveTo = draw.quadraticCurveTo;
+pub const bezierCurveTo = draw.bezierCurveTo;
+pub const arc = draw.arc;
+pub const arcTo = draw.arcTo;
+pub const ellipse = draw.ellipse;
+pub const rect = draw.rect;
+pub const roundRect = draw.roundRect;
+pub const drawImage = draw.drawImage;
+pub const fill = draw.fill;
+pub const stroke = draw.stroke;
 
-pub fn fillRect(self: *CanvasRenderingContext2D, x: f64, y: f64, w: f64, h: f64) void {
-    self._surface.fillRect(
-        self._canvas.getWidth(),
-        self._canvas.getHeight(),
-        x,
-        y,
-        w,
-        h,
-        self._fill_style,
-        self._global_alpha,
-    );
-}
-
-pub fn strokeRect(self: *CanvasRenderingContext2D, x: f64, y: f64, w: f64, h: f64) void {
-    self._surface.strokeRect(
-        self._canvas.getWidth(),
-        self._canvas.getHeight(),
-        x,
-        y,
-        w,
-        h,
-        self._line_width,
-        self._stroke_style,
-        self._global_alpha,
-    );
-}
-
-pub fn beginPath(_: *CanvasRenderingContext2D) void {}
-pub fn closePath(_: *CanvasRenderingContext2D) void {}
-pub fn moveTo(_: *CanvasRenderingContext2D, _: f64, _: f64) void {}
-pub fn lineTo(_: *CanvasRenderingContext2D, _: f64, _: f64) void {}
-pub fn quadraticCurveTo(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn bezierCurveTo(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn arc(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: ?bool) void {}
-pub fn arcTo(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn rect(_: *CanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64) void {}
-pub fn fill(_: *CanvasRenderingContext2D) void {}
-pub fn stroke(_: *CanvasRenderingContext2D) void {}
-pub fn clip(_: *CanvasRenderingContext2D) void {}
+/// No clipping region is kept, so the path a script clips to is discarded --
+/// the same silence as before, now that everything around it draws.
+pub fn clip(_: *CanvasRenderingContext2D, _: ?js.Value, _: ?js.Value) void {}
 pub fn fillText(_: *CanvasRenderingContext2D, _: []const u8, _: f64, _: f64, _: ?f64) void {}
 pub fn strokeText(_: *CanvasRenderingContext2D, _: []const u8, _: f64, _: f64, _: ?f64) void {}
 
 const attr = state.Accessors(CanvasRenderingContext2D);
+const draw = context_draw.Mixin(CanvasRenderingContext2D);
 
 pub const JsApi = struct {
     pub const bridge = js.Bridge(CanvasRenderingContext2D);
@@ -367,8 +343,8 @@ pub const JsApi = struct {
     pub const setLineDash = bridge.function(CanvasRenderingContext2D.setLineDash, .{});
     pub const getTransform = bridge.function(CanvasRenderingContext2D.getTransform, .{});
     pub const reset = bridge.function(CanvasRenderingContext2D.reset, .{});
-    pub const roundRect = bridge.function(CanvasRenderingContext2D.roundRect, .{ .noop = true });
-    pub const ellipse = bridge.function(CanvasRenderingContext2D.ellipse, .{ .noop = true });
+    pub const roundRect = bridge.function(CanvasRenderingContext2D.roundRect, .{ .arity = 4 });
+    pub const ellipse = bridge.function(CanvasRenderingContext2D.ellipse, .{ .arity = 7 });
     pub const drawFocusIfNeeded = bridge.function(CanvasRenderingContext2D.drawFocusIfNeeded, .{ .noop = true });
     pub const isPointInPath = bridge.function(CanvasRenderingContext2D.isPointInPath, .{});
     pub const isPointInStroke = bridge.function(CanvasRenderingContext2D.isPointInStroke, .{});
@@ -378,30 +354,30 @@ pub const JsApi = struct {
     pub const createPattern = bridge.function(CanvasRenderingContext2D.createPattern, .{});
 
     pub const putImageData = bridge.function(CanvasRenderingContext2D.putImageData, .{ .noop = true });
-    pub const drawImage = bridge.function(CanvasRenderingContext2D.drawImage, .{ .noop = true });
+    pub const drawImage = bridge.function(CanvasRenderingContext2D.drawImage, .{ .arity = 3 });
     pub const getImageData = bridge.function(CanvasRenderingContext2D.getImageData, .{});
-    pub const save = bridge.function(CanvasRenderingContext2D.save, .{ .noop = true });
-    pub const restore = bridge.function(CanvasRenderingContext2D.restore, .{ .noop = true });
-    pub const scale = bridge.function(CanvasRenderingContext2D.scale, .{ .noop = true });
-    pub const rotate = bridge.function(CanvasRenderingContext2D.rotate, .{ .noop = true });
-    pub const translate = bridge.function(CanvasRenderingContext2D.translate, .{ .noop = true });
-    pub const transform = bridge.function(CanvasRenderingContext2D.transform, .{ .noop = true });
-    pub const setTransform = bridge.function(CanvasRenderingContext2D.setTransform, .{ .noop = true });
-    pub const resetTransform = bridge.function(CanvasRenderingContext2D.resetTransform, .{ .noop = true });
+    pub const save = bridge.function(CanvasRenderingContext2D.save, .{ .arity = 0 });
+    pub const restore = bridge.function(CanvasRenderingContext2D.restore, .{ .arity = 0 });
+    pub const scale = bridge.function(CanvasRenderingContext2D.scale, .{ .arity = 2 });
+    pub const rotate = bridge.function(CanvasRenderingContext2D.rotate, .{ .arity = 1 });
+    pub const translate = bridge.function(CanvasRenderingContext2D.translate, .{ .arity = 2 });
+    pub const transform = bridge.function(CanvasRenderingContext2D.transform, .{ .arity = 6 });
+    pub const setTransform = bridge.function(CanvasRenderingContext2D.setTransform, .{ .arity = 0 });
+    pub const resetTransform = bridge.function(CanvasRenderingContext2D.resetTransform, .{ .arity = 0 });
     pub const clearRect = bridge.function(CanvasRenderingContext2D.clearRect, .{});
     pub const fillRect = bridge.function(CanvasRenderingContext2D.fillRect, .{});
     pub const strokeRect = bridge.function(CanvasRenderingContext2D.strokeRect, .{});
-    pub const beginPath = bridge.function(CanvasRenderingContext2D.beginPath, .{ .noop = true });
-    pub const closePath = bridge.function(CanvasRenderingContext2D.closePath, .{ .noop = true });
-    pub const moveTo = bridge.function(CanvasRenderingContext2D.moveTo, .{ .noop = true });
-    pub const lineTo = bridge.function(CanvasRenderingContext2D.lineTo, .{ .noop = true });
-    pub const quadraticCurveTo = bridge.function(CanvasRenderingContext2D.quadraticCurveTo, .{ .noop = true });
-    pub const bezierCurveTo = bridge.function(CanvasRenderingContext2D.bezierCurveTo, .{ .noop = true });
-    pub const arc = bridge.function(CanvasRenderingContext2D.arc, .{ .noop = true });
-    pub const arcTo = bridge.function(CanvasRenderingContext2D.arcTo, .{ .noop = true });
-    pub const rect = bridge.function(CanvasRenderingContext2D.rect, .{ .noop = true });
-    pub const fill = bridge.function(CanvasRenderingContext2D.fill, .{ .noop = true });
-    pub const stroke = bridge.function(CanvasRenderingContext2D.stroke, .{ .noop = true });
+    pub const beginPath = bridge.function(CanvasRenderingContext2D.beginPath, .{ .arity = 0 });
+    pub const closePath = bridge.function(CanvasRenderingContext2D.closePath, .{ .arity = 0 });
+    pub const moveTo = bridge.function(CanvasRenderingContext2D.moveTo, .{ .arity = 2 });
+    pub const lineTo = bridge.function(CanvasRenderingContext2D.lineTo, .{ .arity = 2 });
+    pub const quadraticCurveTo = bridge.function(CanvasRenderingContext2D.quadraticCurveTo, .{ .arity = 4 });
+    pub const bezierCurveTo = bridge.function(CanvasRenderingContext2D.bezierCurveTo, .{ .arity = 6 });
+    pub const arc = bridge.function(CanvasRenderingContext2D.arc, .{ .arity = 5 });
+    pub const arcTo = bridge.function(CanvasRenderingContext2D.arcTo, .{ .arity = 5 });
+    pub const rect = bridge.function(CanvasRenderingContext2D.rect, .{ .arity = 4 });
+    pub const fill = bridge.function(CanvasRenderingContext2D.fill, .{ .arity = 0 });
+    pub const stroke = bridge.function(CanvasRenderingContext2D.stroke, .{ .arity = 0 });
     pub const clip = bridge.function(CanvasRenderingContext2D.clip, .{ .noop = true });
     pub const fillText = bridge.function(CanvasRenderingContext2D.fillText, .{ .noop = true });
     pub const strokeText = bridge.function(CanvasRenderingContext2D.strokeText, .{ .noop = true });
