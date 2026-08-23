@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+The origin private file system. The Turnstile widget's blob worker feature-detects
+`navigator.storage.getDirectory` and, when it is there, posts a probe that walks
+getDirectory -> getFileHandle({create:true}) -> createSyncAccessHandle, writes a
+byte, times a flush() and reports the double. On the oracle arm that answer is
+0.4949999749660492; here the field used to be missing entirely, because
+`navigator.storage` carried `estimate()` and nothing else -- see
+tools/fingerprint/README.md, "The probe table, both arms, one sitting".
+
+The legacy `webkitRequestFileSystem` tree in filesystem.zig is a different API
+with different interfaces; this shares its in-memory Node tree and nothing else.
+-->
+
+<script id=opfs_sync_access_in_worker type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./opfs-worker.js');
+    worker.onmessage = (e) => state.resolve(e.data);
+    setTimeout(() => worker.postMessage(0), 100);
+
+    await state.done((data) => {
+      testing.expectEqual(null, data.err ?? null);
+      testing.expectEqual(true, data.ok);
+      const r = data.results;
+
+      // The gate the widget reads before it posts anything.
+      testing.expectEqual(true, r.gates.has_storage);
+      testing.expectEqual(true, r.gates.has_get_directory);
+
+      // Four of the five interfaces are [Exposed=(Window,Worker)];
+      // FileSystemSyncAccessHandle is [Exposed=DedicatedWorker] -- and this is
+      // a dedicated worker, so all five answer 'function'.
+      testing.expectEqual('function', r.gates.handle_global);
+      testing.expectEqual('function', r.gates.file_handle_global);
+      testing.expectEqual('function', r.gates.directory_handle_global);
+      testing.expectEqual('function', r.gates.sync_handle_global);
+      testing.expectEqual('function', r.gates.writable_global);
+
+      // The root: a directory whose name is the empty string.
+      testing.expectEqual('directory', r.root.kind);
+      testing.expectEqual('', r.root.name);
+      testing.expectEqual('[object FileSystemDirectoryHandle]', r.root.brand);
+      testing.expectEqual(true, r.root.is_directory_handle);
+      testing.expectEqual(true, r.root.is_handle);
+      // Chrome hands out a fresh wrapper per call over the same entry.
+      testing.expectEqual(true, r.root.fresh_wrapper);
+      testing.expectEqual(true, r.root.same_entry);
+
+      testing.expectEqual('file', r.file.kind);
+      testing.expectEqual('Itvrd0', r.file.name);
+      testing.expectEqual('[object FileSystemFileHandle]', r.file.brand);
+      testing.expectEqual(true, r.file.is_file_handle);
+      testing.expectEqual(true, r.file.same_entry);
+      testing.expectEqual(false, r.file.not_root);
+
+      // The sync access handle: every operation on it is synchronous.
+      testing.expectEqual('[object FileSystemSyncAccessHandle]', r.sync.brand);
+      testing.expectEqual(true, r.sync.is_sync_handle);
+      testing.expectEqual(3, r.sync.written);
+      testing.expectEqual(3, r.sync.size_after_write);
+      testing.expectEqual(true, r.sync.flush_is_number);
+      testing.expectEqual(true, r.sync.flush_is_finite);
+      testing.expectEqual(3, r.sync.read);
+      testing.expectEqual(3, r.sync.read_bytes.length);
+      testing.expectEqual(7, r.sync.read_bytes[0]);
+      testing.expectEqual(8, r.sync.read_bytes[1]);
+      testing.expectEqual(9, r.sync.read_bytes[2]);
+      testing.expectEqual(1, r.sync.size_after_truncate);
+      testing.expectEqual('InvalidStateError', r.sync.after_close);
+      // The bytes outlive the handle that wrote them.
+      testing.expectEqual(1, r.sync.size_on_reopen);
+    });
+  }
+</script>
+
+<script id=opfs_window_surface type=module>
+  {
+    const state = await testing.async();
+
+    (async () => {
+      const root = await navigator.storage.getDirectory();
+      const file = await root.getFileHandle('w', { create: true });
+      state.resolve({
+        arity: navigator.storage.getDirectory.length,
+        fn_name: navigator.storage.getDirectory.name,
+        root_kind: root.kind,
+        root_name: root.name,
+        // [Exposed=DedicatedWorker]: neither the interface object nor the
+        // operation that hands one out exists in a window.
+        sync_global: typeof self.FileSystemSyncAccessHandle,
+        create_sync: typeof FileSystemFileHandle.prototype.createSyncAccessHandle,
+        file_kind: file.kind,
+        file_name: file.name,
+        // The window path leads to a writable stream instead.
+        writable: typeof file.createWritable,
+      });
+    })().catch((e) => state.resolve({ err: String(e) }));
+
+    await state.done((d) => {
+      testing.expectEqual(null, d.err ?? null);
+      testing.expectEqual(0, d.arity);
+      testing.expectEqual('getDirectory', d.fn_name);
+      testing.expectEqual('directory', d.root_kind);
+      testing.expectEqual('', d.root_name);
+      testing.expectEqual('undefined', d.sync_global);
+      testing.expectEqual('undefined', d.create_sync);
+      testing.expectEqual('file', d.file_kind);
+      testing.expectEqual('w', d.file_name);
+      testing.expectEqual('function', d.writable);
+    });
+  }
+</script>
+
+<script id=opfs_argument_refusals type=module>
+  {
+    const state = await testing.async();
+
+    const refusal = async (fn) => {
+      try {
+        await fn();
+        return null;
+      } catch (e) {
+        return e.name;
+      }
+    };
+
+    (async () => {
+      const root = await navigator.storage.getDirectory();
+      await root.getDirectoryHandle('d', { create: true });
+      state.resolve({
+        // A name is a name, not a path: a separator is refused before
+        // anything is looked up.
+        slash: await refusal(() => root.getFileHandle('a/b', { create: true })),
+        // No `create`, no entry.
+        missing: await refusal(() => root.getFileHandle('nope')),
+        // A directory where a file was asked for, and the other way round.
+        file_of_directory: await refusal(() => root.getFileHandle('d')),
+        directory_of_file: await refusal(async () => {
+          await root.getFileHandle('f', { create: true });
+          return root.getDirectoryHandle('f');
+        }),
+        removed: await refusal(async () => {
+          await root.removeEntry('f');
+          return root.getFileHandle('f');
+        }),
+      });
+    })().catch((e) => state.resolve({ err: String(e) }));
+
+    await state.done((d) => {
+      testing.expectEqual(null, d.err ?? null);
+      testing.expectEqual('TypeError', d.slash);
+      testing.expectEqual('NotFoundError', d.missing);
+      testing.expectEqual('TypeMismatchError', d.file_of_directory);
+      testing.expectEqual('TypeMismatchError', d.directory_of_file);
+      testing.expectEqual('NotFoundError', d.removed);
+    });
+  }
+</script>

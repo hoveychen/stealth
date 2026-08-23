@@ -51,9 +51,12 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // an own data property of every global, put there per context by Env.zig,
       // the way Chrome has it. The remaining gap to Chrome's 243 is interface
       // objects this engine does not have, not member copies.
-      testing.expectEqual(8, data.gated.length);
+      // Then five more, once the File System Access handles went on: OPFS is
+      // only usable from a worker, so Chrome's worker carries all five and this
+      // one now does too (worker/opfs.html).
+      testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(207, data.count);
+      testing.expectEqual(212, data.count);
     });
   }
 </script>

@@ -579,8 +579,15 @@ comptime {
 }
 
 fn isPageInterfaceName(comptime name: []const u8) bool {
+    // One [SecureContext] list covers both realms, so a name that only a worker
+    // carries -- FileSystemSyncAccessHandle is [Exposed=DedicatedWorker] -- is a
+    // real entry rather than a typo.
+    return isInterfaceNameIn(PageJsApis, name) or isInterfaceNameIn(DedicatedWorkerJsApis, name);
+}
+
+fn isInterfaceNameIn(comptime apis: anytype, comptime name: []const u8) bool {
     comptime {
-        for (PageJsApis) |JsApi| {
+        for (apis) |JsApi| {
             if (!@hasDecl(JsApi.Meta, "name")) continue;
             if (std.mem.eql(u8, JsApi.Meta.name, name)) return true;
             if (@hasDecl(JsApi.Meta, "constructor_alias") and

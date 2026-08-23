@@ -17,6 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const js = @import("../js/js.zig");
+const file_system_access = @import("file_system_access.zig");
 const Execution = js.Execution;
 
 pub fn registerTypes() []const type {
@@ -56,6 +57,18 @@ pub fn estimate(_: *const StorageManager, exec: *const Execution) !js.Promise {
     return exec.js.local.?.resolvePromise(StorageEstimate{});
 }
 
+// The origin private file system's root. This used to be the only member of
+// navigator.storage that was missing, and Turnstile's blob worker
+// feature-detects it before it posts its OPFS probe -- so its absence removed a
+// whole field from the telemetry rather than getting it wrong. See
+// file_system_access.zig.
+pub fn getDirectory(_: *const StorageManager, exec: *const Execution) !js.Promise {
+    return file_system_access.getDirectory(exec);
+}
+
+// persist()/persisted() are not here: this engine has never claimed either, and
+// nothing measured asks. getDirectory is the one that was asked for.
+
 pub const JsApi = struct {
     pub const bridge = js.Bridge(StorageManager);
     pub const Meta = struct {
@@ -65,4 +78,5 @@ pub const JsApi = struct {
         pub const empty_with_no_proto = true;
     };
     pub const estimate = bridge.function(StorageManager.estimate, .{});
+    pub const getDirectory = bridge.function(StorageManager.getDirectory, .{});
 };

@@ -27,6 +27,7 @@ const Factory = @import("Factory.zig");
 const Viewport = @import("Viewport.zig");
 
 const Blob = @import("webapi/Blob.zig");
+const filesystem = @import("webapi/filesystem.zig");
 const SharedWorkerGlobalScope = @import("webapi/SharedWorkerGlobalScope.zig");
 
 const Allocator = std.mem.Allocator;
@@ -79,6 +80,14 @@ origins: std.StringHashMapUnmanaged(*js.Origin) = .empty,
 
 // Blob URL store for URL.createObjectURL.
 blob_urls: Blob.UrlMap = .empty,
+
+// The origin private file system behind navigator.storage.getDirectory(), one
+// tree per origin. It is here rather than on the Frame or the Navigator because
+// OPFS is per-origin in Chrome: a page and the workers it starts reach the same
+// entries, and so do two same-origin frames. Nodes are allocated out of
+// frame_arena, which outlives every worker of this Page.
+// The tree does not survive a navigation, where Chrome's does (it is on disk).
+opfs_roots: std.StringHashMapUnmanaged(*filesystem.Node) = .empty,
 
 // Identity tracking for the main world. All main-world contexts in this Page
 // share this, ensuring object identity works across same-origin frames.
@@ -276,6 +285,22 @@ pub fn getOrCreateOrigin(self: *Page, key_: ?[]const u8) !*js.Origin {
     gop.key_ptr.* = origin.key;
     gop.value_ptr.* = origin;
     return origin;
+}
+
+/// The root of this origin's private file system, created on first ask. An
+/// opaque origin gets its own tree under the "null" key, which is what Chrome
+/// does with anything else it stores per origin.
+pub fn opfsRoot(self: *Page, origin: ?[]const u8) !*filesystem.Node {
+    const key = origin orelse "null";
+    const gop = try self.opfs_roots.getOrPut(self.frame_arena, key);
+    if (gop.found_existing) {
+        return gop.value_ptr.*;
+    }
+    errdefer _ = self.opfs_roots.remove(key);
+    gop.key_ptr.* = try self.frame_arena.dupe(u8, key);
+    const root = try filesystem.createRoot(self.frame_arena);
+    gop.value_ptr.* = root;
+    return root;
 }
 
 pub fn createBlobUrl(self: *Page, blob: *Blob, origin: ?[]const u8, creator_frame_id: u32) ![]const u8 {

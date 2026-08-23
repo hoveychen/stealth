@@ -8,8 +8,10 @@
 // The gated names below are the ones this engine has in the worker realm out of
 // the 234 it used to leak in the window realm.
 const GATED = [
-  'CryptoKey', 'IdleDetector', 'StorageManager', 'SubtleCrypto',
-  'WebTransport', 'WebTransportBidirectionalStream',
+  'CryptoKey', 'FileSystemDirectoryHandle', 'FileSystemFileHandle',
+  'FileSystemHandle', 'FileSystemSyncAccessHandle',
+  'FileSystemWritableFileStream', 'IdleDetector', 'StorageManager',
+  'SubtleCrypto', 'WebTransport', 'WebTransportBidirectionalStream',
   'WebTransportDatagramDuplexStream', 'WebTransportError',
 ];
 // Not [SecureContext]: present whatever the owner's origin.
