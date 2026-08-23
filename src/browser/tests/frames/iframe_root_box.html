@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<body>
+<script src="../testing.js"></script>
+
+<!--
+An iframe's document is laid out in the iframe element's box, and its <html>
+and <body> report that box rather than the top-level one.
+
+The engine sizes a root container from two constants -- 1920 wide and
+100_000_000 tall -- so that calculateDocumentPosition has room to stack any
+document's descendants. Those constants leaked straight out of
+getComputedStyle: a widget that reads the <body> of a 0x0 about:blank iframe
+got `width: 1920px` and `height: 100000000px` where Chrome answers `0px` for
+both, and `transform-origin: 960px 50000000px` where Chrome answers `0px 0px`.
+100000000px is not a number any browser reports, so it is a tell on its own,
+and it is the last 12 of the 26 values the Cloudflare widget read differently.
+
+Every iframe expectation is measured on a light-scheme headless Chrome 151: for
+a 300x150 iframe Chrome reports html 300x150 and body 284x134 -- the viewport
+less the body's own 8px UA margins -- and for a 0x0 iframe it reports 0px
+throughout. A body that fills its viewport is the quirks-mode rendering, and an
+about:blank document is in quirks mode (compatMode reads BackCompat), so this is
+the shape for exactly the documents these iframes hold.
+
+The top-level block pins this engine's answer rather than Chrome's. Chrome in
+standards mode sizes a body to its content, which this faux layout cannot
+compute; the viewport is the other of a real browser's two answers, and unlike
+the constant it replaced it is a number a browser does report.
+-->
+
+<iframe id="zero" width="0" height="0"></iframe>
+<iframe id="sized" style="width:300px;height:150px"></iframe>
+
+<script id="zero_sized_iframe_root_box">
+{
+    const d = document.getElementById('zero').contentDocument;
+    const cs = d.defaultView.getComputedStyle(d.body);
+
+    testing.expectEqual('0px', cs.width);
+    testing.expectEqual('0px', cs.height);
+    testing.expectEqual('0px', cs.inlineSize);
+    testing.expectEqual('0px', cs.blockSize);
+    testing.expectEqual('0px', cs.webkitLogicalWidth);
+    testing.expectEqual('0px', cs.webkitLogicalHeight);
+    testing.expectEqual('0px 0px', cs.transformOrigin);
+    testing.expectEqual('0px 0px', cs.perspectiveOrigin);
+    testing.expectEqual('0px 0px', cs.webkitTransformOrigin);
+    testing.expectEqual('0px 0px', cs.webkitPerspectiveOrigin);
+
+    const hs = d.defaultView.getComputedStyle(d.documentElement);
+    testing.expectEqual('0px', hs.width);
+    testing.expectEqual('0px', hs.height);
+}
+</script>
+
+<script id="sized_iframe_root_box">
+{
+    const d = document.getElementById('sized').contentDocument;
+    const cs = d.defaultView.getComputedStyle(d.body);
+
+    // The body's box is the viewport less its own 8px margins on each side.
+    testing.expectEqual('284px', cs.width);
+    testing.expectEqual('134px', cs.height);
+    testing.expectEqual('142px 67px', cs.transformOrigin);
+
+    const hs = d.defaultView.getComputedStyle(d.documentElement);
+    testing.expectEqual('300px', hs.width);
+    testing.expectEqual('150px', hs.height);
+
+    // clientWidth/clientHeight read the same box, so a script that measures
+    // one against the other does not see two different documents.
+    testing.expectEqual(300, d.documentElement.clientWidth);
+    testing.expectEqual(150, d.documentElement.clientHeight);
+    testing.expectEqual(284, d.body.clientWidth);
+    testing.expectEqual(134, d.body.clientHeight);
+}
+</script>
+
+<script id="top_level_root_box_is_the_viewport">
+{
+    // The top-level document has no iframe element to take a box from, so it
+    // takes the viewport -- the same one window.innerWidth reports, which is
+    // the point: a script comparing the two saw them equal before, where a
+    // browser has them 16px apart because of the body's margins.
+    const hs = getComputedStyle(document.documentElement);
+    testing.expectEqual(window.innerWidth + 'px', hs.width);
+    testing.expectEqual(window.innerHeight + 'px', hs.height);
+
+    const cs = getComputedStyle(document.body);
+    testing.expectEqual((window.innerWidth - 16) + 'px', cs.width);
+    testing.expectEqual((window.innerHeight - 16) + 'px', cs.height);
+    testing.expectEqual(window.innerWidth - 16, document.body.clientWidth);
+
+    // And the number that used to be here, which no browser reports, is gone
+    // from every name that resolved against the root box.
+    for (const el of [document.documentElement, document.body]) {
+        const s = getComputedStyle(el);
+        for (const name of ['width', 'height', 'inlineSize', 'blockSize',
+                            'webkitLogicalWidth', 'webkitLogicalHeight',
+                            'transformOrigin', 'perspectiveOrigin']) {
+            testing.expectFalse(String(s[name]).includes('100000000'));
+            testing.expectFalse(String(s[name]).includes('50000000'));
+        }
+    }
+}
+</script>
+</body>
