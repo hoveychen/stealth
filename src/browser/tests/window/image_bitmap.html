@@ -89,6 +89,83 @@
   }
 </script>
 
+<script id="image_bitmap_pixels" type=module>
+  {
+    // A bitmap here is its dimensions and nothing else, so the two
+    // drawImage(ImageBitmap) reads the widget takes come back empty -- see
+    // tools/fingerprint/README.md, the five that still do not happen. Every
+    // expectation below was read off Chrome 151 rather than off the spec.
+    const state = await testing.async();
+    const out = {};
+    const hex = (d) => { let s = ''; for (let i = 0; i < d.length; i++) s += d[i].toString(16).padStart(2, '0'); return s; };
+
+    (async () => {
+      const src = document.createElement('canvas');
+      src.width = 4; src.height = 2;
+      const sc = src.getContext('2d');
+      sc.fillStyle = '#ff0000'; sc.fillRect(0, 0, 2, 2);
+      sc.fillStyle = '#0000ff'; sc.fillRect(2, 0, 2, 2);
+      out.source = hex(sc.getImageData(0, 0, 4, 2).data);
+
+      const into = (w, h, fn) => {
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const g = c.getContext('2d');
+        fn(g);
+        return hex(g.getImageData(0, 0, w, h).data);
+      };
+
+      const bmp = await createImageBitmap(src);
+      out.blit = into(4, 2, (g) => g.drawImage(bmp, 0, 0));
+      out.offset = into(4, 2, (g) => g.drawImage(bmp, 1, 0));
+      out.scaled = into(2, 1, (g) => g.drawImage(bmp, 0, 0, 2, 1));
+
+      // The crop overload carries the cropped pixels, not the whole source.
+      const cropped = await createImageBitmap(src, 2, 0, 2, 2);
+      out.crop = into(2, 2, (g) => g.drawImage(cropped, 0, 0));
+
+      // An ImageData source and a bitmap source both carry theirs too.
+      out.fromImageData = into(4, 2, (g) => g.drawImage(bmp, 0, 0));
+      const again = await createImageBitmap(bmp);
+      out.fromBitmap = into(4, 2, (g) => g.drawImage(again, 0, 0));
+
+      // A canvas nobody drew into is transparent, and stays that way.
+      const blank = document.createElement('canvas');
+      blank.width = 2; blank.height = 1;
+      const blankBmp = await createImageBitmap(blank);
+      out.blank = into(2, 1, (g) => g.drawImage(blankBmp, 0, 0));
+
+      // close() detaches the pixels, and drawing a detached source throws.
+      const closed = await createImageBitmap(src);
+      closed.close();
+      try { out.closed = into(4, 2, (g) => g.drawImage(closed, 0, 0)); }
+      catch (e) { out.closed = e.name + ': ' + e.message; }
+
+      // The bitmap is a snapshot: repainting the source afterwards does not
+      // reach through it.
+      sc.fillStyle = '#00ff00'; sc.fillRect(0, 0, 4, 2);
+      out.afterSourceRepainted = into(4, 2, (g) => g.drawImage(bmp, 0, 0));
+      state.resolve();
+    })();
+
+    await state.done(() => {
+      const red2blue2 = 'ff0000ffff0000ff0000ffff0000ffffff0000ffff0000ff0000ffff0000ffff';
+      testing.expectEqual(red2blue2, out.source);
+      testing.expectEqual(red2blue2, out.blit);
+      testing.expectEqual('00000000ff0000ffff0000ff0000ffff00000000ff0000ffff0000ff0000ffff', out.offset);
+      testing.expectEqual('ff0000ff0000ffff', out.scaled);
+      testing.expectEqual('0000ffff0000ffff0000ffff0000ffff', out.crop);
+      testing.expectEqual(red2blue2, out.fromImageData);
+      testing.expectEqual(red2blue2, out.fromBitmap);
+      testing.expectEqual('0000000000000000', out.blank);
+      testing.expectEqual(
+        "InvalidStateError: Failed to execute 'drawImage' on 'CanvasRenderingContext2D': The image source is detached",
+        out.closed);
+      testing.expectEqual(red2blue2, out.afterSourceRepainted);
+    });
+  }
+</script>
+
 <script id="image_bitmap_rejections" type=module>
   {
     const state = await testing.async();
