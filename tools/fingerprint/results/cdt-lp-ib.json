@@ -1,0 +1,2939 @@
+{
+ "engine": "lightpanda",
+ "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+ "headedUa": false,
+ "settleMs": 90000,
+ "maxOps": 600,
+ "injectWorker": false,
+ "userAgentOverride": null,
+ "contexts": [
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "canvas",
+   "kind": "2d",
+   "attrs": null,
+   "got": "CanvasRenderingContext2D",
+   "ctx": "x0",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "webgl",
+   "attrs": null,
+   "got": "WebGLRenderingContext",
+   "ctx": "x1",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "webgl2",
+   "attrs": null,
+   "got": "WebGL2RenderingContext",
+   "ctx": "x2",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x3",
+   "size": [
+    1,
+    1
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x4",
+   "size": [
+    16,
+    16
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x5",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x6",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x7",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x8",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": null,
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x9",
+   "size": [
+    2,
+    2
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x10",
+   "size": [
+    49,
+    44
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "offscreen",
+   "kind": "2d",
+   "attrs": {
+    "o": "Object"
+   },
+   "got": "OffscreenCanvasRenderingContext2D",
+   "ctx": "x11",
+   "size": [
+    49,
+    44
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "getContext",
+   "owner": "canvas",
+   "kind": "webgpu",
+   "attrs": null,
+   "got": "GPUCanvasContext",
+   "ctx": "x12",
+   "size": [
+    300,
+    150
+   ]
+  }
+ ],
+ "readbacks": [
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "2d",
+   "ctx": "x0",
+   "m": "getImageData",
+   "size": [
+    1,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 4,
+    "fnv": 2323425376,
+    "head": "00000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=font",
+     "1px sans-serif"
+    ],
+    [
+     "fillText",
+     "ðºð¸",
+     0,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    48,
+    48
+   ],
+   "args": [
+    0,
+    0,
+    48,
+    48
+   ],
+   "r": {
+    "n": 9216,
+    "zeros": 8536,
+    "fnv": 3382649668,
+    "head": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "scale",
+     0.384,
+     0.384
+    ],
+    [
+     "createRadialGradient",
+     33,
+     18,
+     8,
+     42,
+     10,
+     226
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#809900"
+       ],
+       [
+        1,
+        "#404041"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     11
+    ],
+    [
+     "=shadowColor",
+     "#F38020"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "moveTo",
+     9,
+     14
+    ],
+    [
+     "quadraticCurveTo",
+     93,
+     48,
+     116,
+     111
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     77,
+     98,
+     2,
+     27,
+     30,
+     206
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#809900"
+       ],
+       [
+        1,
+        "#404041"
+       ]
+      ]
+     }
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "ellipse",
+     58,
+     55,
+     31,
+     28,
+     1.4442,
+     0.5401,
+     4.0522
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     108,
+     12,
+     10,
+     65,
+     118,
+     169
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#1AB399"
+       ],
+       [
+        1,
+        "#E666B3"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     16
+    ],
+    [
+     "=shadowColor",
+     "#809980"
+    ],
+    [
+     "=font",
+     "27.77777777777778px aanotafontaa"
+    ],
+    [
+     "fillText",
+     "Ry",
+     13,
+     67
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     46,
+     47,
+     0,
+     101,
+     108,
+     207
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#4DB380"
+       ],
+       [
+        1,
+        "#FF4D4D"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     3
+    ],
+    [
+     "=shadowColor",
+     "#FF6633"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "moveTo",
+     54,
+     5
+    ],
+    [
+     "bezierCurveTo",
+     54,
+     90,
+     32,
+     74,
+     71,
+     120
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     119,
+     123,
+     3,
+     109,
+     90,
+     137
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#E6B333"
+       ],
+       [
+        1,
+        "#3366E6"
+       ]
+      ]
+     }
+    ],
+    [
+     "=shadowBlur",
+     4
+    ],
+    [
+     "=shadowColor",
+     "#B3B31A"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "moveTo",
+     76,
+     0
+    ],
+    [
+     "bezierCurveTo",
+     1,
+     49,
+     103,
+     67,
+     49,
+     125
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "createRadialGradient",
+     34,
+     47,
+     1,
+     37,
+     59,
+     245
+    ],
+    [
+     "=fillStyle",
+     {
+      "o": "CanvasGradient",
+      "stops": [
+       [
+        0,
+        "#809900"
+       ],
+       [
+        1,
+        "#404041"
+       ]
+      ]
+     }
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "ellipse",
+     56,
+     57,
+     14,
+     8,
+     1.2273,
+     4.1926,
+     2.8854
+    ],
+    [
+     "stroke"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=shadowBlur",
+     0
+    ],
+    [
+     "=shadowBlur",
+     14
+    ],
+    [
+     "=shadowColor",
+     "#809900"
+    ],
+    [
+     "=font",
+     "11.904761904761905px aanotafontaa"
+    ],
+    [
+     "strokeText",
+     "@H1",
+     30,
+     73
+    ],
+    [
+     "=shadowBlur",
+     0
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "gl",
+   "ctx": "x1",
+   "m": "readPixels",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    16,
+    16,
+    6408,
+    5121,
+    {
+     "buf": 1024,
+     "head": "000000000000000000000000000000000000000000000000"
+    }
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 0,
+    "fnv": 1785938531,
+    "head": "d78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ffd78a74ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "createShader",
+     35633
+    ],
+    [
+     "shaderSource",
+     {
+      "o": "WebGLShader"
+     },
+     "attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}"
+    ],
+    [
+     "compileShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "createShader",
+     35632
+    ],
+    [
+     "shaderSource",
+     {
+      "o": "WebGLShader"
+     },
+     "precision mediump float;void main(){gl_FragColor=vec4(sin(1.0),cos(1.0),sin(1.0)*cos(1.0),1.0);}"
+    ],
+    [
+     "compileShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "createShader",
+     35632
+    ],
+    [
+     "shaderSource",
+     {
+      "o": "WebGLShader"
+     },
+     "precision highp float;\nvoid main() {\n  float a = gl_FragCoord.x;\n  float b = 1.0;\n  for (int i = 0; i < 20; i++) { b = b * 1.1 + 0.001; }\n  float c = sin(cos(sin(cos(a * 0.1))));\n  float d = 1.0;\n  for (int i = 0; i < 10; i++) { d = inversesqrt(d + 0.01); }\n  float e = fract(a * 12345.6789);\n  gl_FragColor = vec4(\n    fract(b * 0.5 + 0.5),\n    fract(c * 0.5 + 0.5),\n    fract(d * 0.5 + 0.5),\n    fract(e)\n  );\n}"
+    ],
+    [
+     "compileShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "createBuffer"
+    ],
+    [
+     "bindBuffer",
+     34962,
+     {
+      "o": "WebGLBuffer"
+     }
+    ],
+    [
+     "bufferData",
+     34962,
+     {
+      "buf": 32,
+      "head": "000080bf000080bf0000803f000080bf000080bf0000803f"
+     },
+     35044
+    ],
+    [
+     "getShaderParameter",
+     {
+      "o": "WebGLShader"
+     },
+     35713
+    ],
+    [
+     "createProgram"
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "linkProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getProgramParameter",
+     {
+      "o": "WebGLProgram"
+     },
+     35714
+    ],
+    [
+     "useProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getAttribLocation",
+     {
+      "o": "WebGLProgram"
+     },
+     "p"
+    ],
+    [
+     "enableVertexAttribArray",
+     0
+    ],
+    [
+     "vertexAttribPointer",
+     0,
+     2,
+     5126,
+     false,
+     0,
+     0
+    ],
+    [
+     "viewport",
+     0,
+     0,
+     16,
+     16
+    ],
+    [
+     "drawArrays",
+     5,
+     0,
+     4
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "gl",
+   "ctx": "x1",
+   "m": "readPixels",
+   "size": [
+    4,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    4,
+    1,
+    6408,
+    5121,
+    {
+     "buf": 16,
+     "head": "00000000000000000000000000000000"
+    }
+   ],
+   "r": {
+    "n": 16,
+    "zeros": 0,
+    "fnv": 1065983184,
+    "head": "e4ceffd6e4cfff84e4d0ff32e4d1ffdf"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "deleteProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "deleteShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "getShaderParameter",
+     {
+      "o": "WebGLShader"
+     },
+     35713
+    ],
+    [
+     "createProgram"
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "attachShader",
+     {
+      "o": "WebGLProgram"
+     },
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "linkProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getProgramParameter",
+     {
+      "o": "WebGLProgram"
+     },
+     35714
+    ],
+    [
+     "useProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getAttribLocation",
+     {
+      "o": "WebGLProgram"
+     },
+     "p"
+    ],
+    [
+     "enableVertexAttribArray",
+     0
+    ],
+    [
+     "vertexAttribPointer",
+     0,
+     2,
+     5126,
+     false,
+     0,
+     0
+    ],
+    [
+     "viewport",
+     0,
+     0,
+     4,
+     1
+    ],
+    [
+     "drawArrays",
+     5,
+     0,
+     4
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    2,
+    2
+   ],
+   "r": {
+    "n": 16,
+    "zeros": 0,
+    "fnv": 1841175300,
+    "head": "ffffffffbfbfbfffefefefff303030ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#000"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ],
+    [
+     "=fillStyle",
+     "#fff"
+    ],
+    [
+     "fillRect",
+     2,
+     2,
+     1,
+     1
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     0,
+     0,
+     2,
+     0,
+     1,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x5",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x6",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x7",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x8",
+   "m": "getImageData",
+   "size": [
+    2,
+    2
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1,
+    {
+     "o": "Object"
+    }
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 3,
+    "fnv": 1232983308,
+    "head": "000000ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "color(display-p3 1 0.25 0.5)"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     2,
+     2
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    49,
+    44
+   ],
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1720,
+    "fnv": 2159546272,
+    "head": "00000000000000000000000000000000000000000000000000000000000000000000000000000000ff22ff10ff22ff60ff22ff9fff22ffbfff22ffffff22ffffff22ffffff22ffffff22ffbfff22ff9fff22ff60ff22ff100000000000000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=font",
+     "16px sans-serif"
+    ],
+    [
+     "measureText",
+     "ð"
+    ],
+    [
+     "measureText",
+     "ð¤£"
+    ],
+    [
+     "measureText",
+     "ð±"
+    ],
+    [
+     "measureText",
+     "ð"
+    ],
+    [
+     "measureText",
+     "ð¥"
+    ],
+    [
+     "measureText",
+     "ð"
+    ],
+    [
+     "measureText",
+     "ð§ "
+    ],
+    [
+     "measureText",
+     "ð¶"
+    ],
+    [
+     "measureText",
+     "ð "
+    ],
+    [
+     "measureText",
+     "âï¸"
+    ],
+    [
+     "getContextAttributes"
+    ],
+    [
+     "scale",
+     0.4,
+     0.4
+    ],
+    [
+     "=globalCompositeOperation",
+     "source-over"
+    ],
+    [
+     "=fillStyle",
+     "#f2f"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     40,
+     40,
+     40,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=globalCompositeOperation",
+     "multiply"
+    ],
+    [
+     "=fillStyle",
+     "#2ff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     80,
+     40,
+     40,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=fillStyle",
+     "#ff2"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     60,
+     80,
+     40,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "closePath"
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=globalCompositeOperation",
+     "source-over"
+    ],
+    [
+     "=fillStyle",
+     "#fff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     61,
+     53,
+     20,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "arc",
+     61,
+     53,
+     10,
+     0,
+     6.2832,
+     true
+    ],
+    [
+     "fill",
+     "evenodd"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    1,
+    1
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 185164868,
+    "head": "ffffffff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#ffffff"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     80,
+     24
+    ],
+    [
+     "=fillStyle",
+     "#000000"
+    ],
+    [
+     "=font",
+     "16px Arial"
+    ],
+    [
+     "=textBaseline",
+     "top"
+    ],
+    [
+     "fillText",
+     "Hwmqxli",
+     2,
+     4
+    ],
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0,
+     80,
+     24,
+     0,
+     0,
+     1,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    16,
+    16
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 138,
+    "fnv": 2490378604,
+    "head": "00ff00fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#f06d06"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ],
+    [
+     "=fillStyle",
+     "#0000ff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     8,
+     8,
+     5,
+     0,
+     6.2832
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=fillStyle",
+     "#00ff00"
+    ],
+    [
+     "=font",
+     "8px serif"
+    ],
+    [
+     "fillText",
+     "VnYi2",
+     3,
+     12
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     1,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x4",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    16,
+    16
+   ],
+   "r": {
+    "n": 1024,
+    "zeros": 138,
+    "fnv": 2405495556,
+    "head": "f06d06ff00ff00fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06fff06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ],
+    [
+     "=filter",
+     "grayscale(1)"
+    ],
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
+    ],
+    [
+     "=filter",
+     "none"
+    ],
+    [
+     "=globalCompositeOperation",
+     "difference"
+    ],
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
+    ],
+    [
+     "=globalCompositeOperation",
+     "source-over"
+    ],
+    [
+     "=fillStyle",
+     "#f06d06"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ],
+    [
+     "=fillStyle",
+     "#0000ff"
+    ],
+    [
+     "beginPath"
+    ],
+    [
+     "arc",
+     8,
+     8,
+     5,
+     0,
+     6.2832
+    ],
+    [
+     "fill"
+    ],
+    [
+     "=fillStyle",
+     "#00ff00"
+    ],
+    [
+     "=font",
+     "8px serif"
+    ],
+    [
+     "fillText",
+     "VnYi2",
+     3,
+     12
+    ],
+    [
+     "fillRect",
+     1,
+     0,
+     1,
+     1
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1138563636,
+    "head": "f06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "=fillStyle",
+     "#f06d06"
+    ],
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x3",
+   "m": "getImageData",
+   "size": [
+    16,
+    16
+   ],
+   "args": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "r": {
+    "n": 4,
+    "zeros": 0,
+    "fnv": 1138563636,
+    "head": "f06d06ff"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "fillRect",
+     0,
+     0,
+     16,
+     16
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "readback",
+   "why": "off2d",
+   "ctx": "x11",
+   "m": "getImageData",
+   "size": [
+    49,
+    44
+   ],
+   "args": [
+    0,
+    0,
+    49,
+    44
+   ],
+   "r": {
+    "n": 8624,
+    "zeros": 1720,
+    "fnv": 2159546272,
+    "head": "00000000000000000000000000000000000000000000000000000000000000000000000000000000ff22ff10ff22ff60ff22ff9fff22ffbfff22ffffff22ffffff22ffffff22ffffff22ffbfff22ff9fff22ff60ff22ff100000000000000000"
+   },
+   "dropped": 0,
+   "ops": [
+    [
+     "drawImage",
+     {
+      "o": "ImageBitmap"
+     },
+     0,
+     0
+    ]
+   ]
+  }
+ ],
+ "drains": [
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x1",
+   "size": [
+    4,
+    1
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "deleteProgram",
+     {
+      "o": "WebGLProgram"
+     }
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35632,
+     36338
+    ],
+    [
+     "deleteShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "deleteShader",
+     {
+      "o": "WebGLShader"
+     }
+    ],
+    [
+     "deleteBuffer",
+     {
+      "o": "WebGLBuffer"
+     }
+    ],
+    [
+     "getParameter",
+     7936
+    ],
+    [
+     "getParameter",
+     7937
+    ],
+    [
+     "getExtension",
+     "WEBGL_debug_renderer_info"
+    ],
+    [
+     "getParameter",
+     37445
+    ],
+    [
+     "getParameter",
+     37446
+    ],
+    [
+     "getSupportedExtensions"
+    ],
+    [
+     "getParameter",
+     3379
+    ],
+    [
+     "getParameter",
+     34024
+    ],
+    [
+     "getParameter",
+     3386
+    ],
+    [
+     "getParameter",
+     34921
+    ],
+    [
+     "getParameter",
+     36348
+    ],
+    [
+     "getParameter",
+     36349
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35632,
+     36341
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35632,
+     36338
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35632,
+     36336
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35632,
+     36337
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35632,
+     36339
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35632,
+     36340
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35633,
+     36338
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35633,
+     36341
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35633,
+     36336
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35633,
+     36337
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35633,
+     36339
+    ],
+    [
+     "getShaderPrecisionFormat",
+     35633,
+     36340
+    ],
+    [
+     "getParameter",
+     7938
+    ],
+    [
+     "getParameter",
+     35724
+    ],
+    [
+     "getParameter",
+     36347
+    ],
+    [
+     "getParameter",
+     34467
+    ],
+    [
+     "getExtension",
+     "EXT_texture_filter_anisotropic"
+    ],
+    [
+     "getExtension",
+     "OES_standard_derivatives"
+    ],
+    [
+     "getExtension",
+     "EXT_disjoint_timer_query"
+    ],
+    [
+     "getContextAttributes"
+    ],
+    [
+     "getParameter",
+     33901
+    ],
+    [
+     "getParameter",
+     33902
+    ],
+    [
+     "getParameter",
+     35661
+    ],
+    [
+     "getParameter",
+     35660
+    ],
+    [
+     "getParameter",
+     34930
+    ],
+    [
+     "getParameter",
+     34076
+    ],
+    [
+     "getParameter",
+     3408
+    ],
+    [
+     "getParameter",
+     3410
+    ],
+    [
+     "getParameter",
+     3411
+    ],
+    [
+     "getParameter",
+     3412
+    ],
+    [
+     "getParameter",
+     3413
+    ],
+    [
+     "getParameter",
+     3414
+    ],
+    [
+     "getParameter",
+     3415
+    ],
+    [
+     "getParameter",
+     32936
+    ],
+    [
+     "getParameter",
+     32937
+    ],
+    [
+     "getParameter",
+     2963
+    ],
+    [
+     "getParameter",
+     2968
+    ],
+    [
+     "getParameter",
+     36004
+    ],
+    [
+     "getParameter",
+     36005
+    ],
+    [
+     "getExtension",
+     "KHR_parallel_shader_compile"
+    ],
+    [
+     "getExtension",
+     "WEBGL_lose_context"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x2",
+   "size": [
+    1,
+    1
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "getParameter",
+     35739
+    ],
+    [
+     "getParameter",
+     35738
+    ],
+    [
+     "getParameter",
+     32883
+    ],
+    [
+     "getParameter",
+     33000
+    ],
+    [
+     "getParameter",
+     33001
+    ],
+    [
+     "getParameter",
+     34045
+    ],
+    [
+     "getParameter",
+     34852
+    ],
+    [
+     "getParameter",
+     35657
+    ],
+    [
+     "getParameter",
+     35658
+    ],
+    [
+     "getParameter",
+     35071
+    ],
+    [
+     "getParameter",
+     35077
+    ],
+    [
+     "getParameter",
+     35659
+    ],
+    [
+     "getParameter",
+     35968
+    ],
+    [
+     "getParameter",
+     35978
+    ],
+    [
+     "getParameter",
+     35979
+    ],
+    [
+     "getParameter",
+     36063
+    ],
+    [
+     "getParameter",
+     36183
+    ],
+    [
+     "getParameter",
+     35371
+    ],
+    [
+     "getParameter",
+     35373
+    ],
+    [
+     "getParameter",
+     35374
+    ],
+    [
+     "getParameter",
+     35375
+    ],
+    [
+     "getParameter",
+     35376
+    ],
+    [
+     "getParameter",
+     35377
+    ],
+    [
+     "getParameter",
+     35379
+    ],
+    [
+     "getParameter",
+     37154
+    ],
+    [
+     "getParameter",
+     37157
+    ],
+    [
+     "getParameter",
+     37137
+    ],
+    [
+     "getParameter",
+     36203
+    ],
+    [
+     "getParameter",
+     35380
+    ],
+    [
+     "getParameter",
+     35076
+    ],
+    [
+     "getParameter",
+     37447
+    ],
+    [
+     "getParameter",
+     7938
+    ],
+    [
+     "getParameter",
+     35724
+    ],
+    [
+     "getParameter",
+     34467
+    ],
+    [
+     "getContextAttributes"
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33321,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33330,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33329,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33332,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33331,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33334,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33333,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33323,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33336,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33335,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33338,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33337,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33340,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33339,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     32849,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     32856,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     35907,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     32857,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36220,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36238,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36975,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36214,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36232,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36208,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36226,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33189,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     33190,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36012,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36168,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     35056,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36013,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     32854,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     32855,
+     32937
+    ],
+    [
+     "getInternalformatParameter",
+     36161,
+     36194,
+     32937
+    ],
+    [
+     "getParameter",
+     3379
+    ],
+    [
+     "getParameter",
+     34024
+    ],
+    [
+     "getParameter",
+     3386
+    ],
+    [
+     "getSupportedExtensions"
+    ],
+    [
+     "getExtension",
+     "WEBGL_compressed_texture_astc"
+    ],
+    [
+     "getExtension",
+     "EXT_color_buffer_float"
+    ],
+    [
+     "getExtension",
+     "EXT_color_buffer_half_float"
+    ],
+    [
+     "createFramebuffer"
+    ],
+    [
+     "bindFramebuffer",
+     36160,
+     {
+      "o": "WebGLFramebuffer"
+     }
+    ],
+    [
+     "createRenderbuffer"
+    ],
+    [
+     "bindRenderbuffer",
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "renderbufferStorage",
+     36161,
+     33325,
+     4,
+     4
+    ],
+    [
+     "framebufferRenderbuffer",
+     36160,
+     36064,
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "checkFramebufferStatus",
+     36160
+    ],
+    [
+     "deleteRenderbuffer",
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "createRenderbuffer"
+    ],
+    [
+     "bindRenderbuffer",
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "renderbufferStorage",
+     36161,
+     33327,
+     4,
+     4
+    ],
+    [
+     "framebufferRenderbuffer",
+     36160,
+     36064,
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "checkFramebufferStatus",
+     36160
+    ],
+    [
+     "deleteRenderbuffer",
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "createRenderbuffer"
+    ],
+    [
+     "bindRenderbuffer",
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "renderbufferStorage",
+     36161,
+     34842,
+     4,
+     4
+    ],
+    [
+     "framebufferRenderbuffer",
+     36160,
+     36064,
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "checkFramebufferStatus",
+     36160
+    ],
+    [
+     "deleteRenderbuffer",
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "createRenderbuffer"
+    ],
+    [
+     "bindRenderbuffer",
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "renderbufferStorage",
+     36161,
+     33326,
+     4,
+     4
+    ],
+    [
+     "framebufferRenderbuffer",
+     36160,
+     36064,
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "checkFramebufferStatus",
+     36160
+    ],
+    [
+     "deleteRenderbuffer",
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "createRenderbuffer"
+    ],
+    [
+     "bindRenderbuffer",
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "renderbufferStorage",
+     36161,
+     33328,
+     4,
+     4
+    ],
+    [
+     "framebufferRenderbuffer",
+     36160,
+     36064,
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "checkFramebufferStatus",
+     36160
+    ],
+    [
+     "deleteRenderbuffer",
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "createRenderbuffer"
+    ],
+    [
+     "bindRenderbuffer",
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "renderbufferStorage",
+     36161,
+     34836,
+     4,
+     4
+    ],
+    [
+     "framebufferRenderbuffer",
+     36160,
+     36064,
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "checkFramebufferStatus",
+     36160
+    ],
+    [
+     "deleteRenderbuffer",
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "createRenderbuffer"
+    ],
+    [
+     "bindRenderbuffer",
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "renderbufferStorage",
+     36161,
+     35898,
+     4,
+     4
+    ],
+    [
+     "framebufferRenderbuffer",
+     36160,
+     36064,
+     36161,
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "checkFramebufferStatus",
+     36160
+    ],
+    [
+     "deleteRenderbuffer",
+     {
+      "o": "WebGLRenderbuffer"
+     }
+    ],
+    [
+     "deleteFramebuffer",
+     {
+      "o": "WebGLFramebuffer"
+     }
+    ],
+    [
+     "getExtension",
+     "WEBGL_lose_context"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x5",
+   "size": [
+    2,
+    2
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x6",
+   "size": [
+    2,
+    2
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x7",
+   "size": [
+    2,
+    2
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x8",
+   "size": [
+    2,
+    2
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x9",
+   "size": [
+    2,
+    2
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "getContextAttributes"
+    ]
+   ]
+  },
+  {
+   "session": "SID-1",
+   "k": "drain",
+   "ctx": "x10",
+   "size": [
+    49,
+    44
+   ],
+   "dropped": 0,
+   "ops": [
+    [
+     "drawImage",
+     {
+      "o": "OffscreenCanvas"
+     },
+     0,
+     0
+    ]
+   ]
+  }
+ ],
+ "realms": [
+  {
+   "session": "SID-1",
+   "why": "page",
+   "type": "page",
+   "installed": true,
+   "resumed": true
+  }
+ ],
+ "installs": [
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/f/av0/rch/x5g1r/0x4AAAAAAADnPIDROrmt1Wwj/light/fbE/new/normal?lang=auto",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:srcdoc",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "wrapped": {
+    "2d": 72,
+    "off2d": 72,
+    "gl": 140,
+    "gl2": 228,
+    "bitmap": 1
+   },
+   "has": {
+    "canvas": "function",
+    "offscreen": "function",
+    "gl": "function",
+    "gl2": "function"
+   }
+  }
+ ],
+ "console": [
+  "debug: [object Object]",
+  "log: [object Object]",
+  "log: [object Object]",
+  "log: function () { [native code] }",
+  "log: function () { [native code] }",
+  "log: [object Object]",
+  "log: [object Object]",
+  "debug: %c%d font-size:0;color:transparent [object Object]",
+  "debug: %c%d font-size:0;color:transparent [object Object]",
+  "dir: ",
+  "dir: ",
+  "dirxml: %c%d font-size:0;color:transparent [object Object]",
+  "dirxml: %c%d font-size:0;color:transparent [object Object]",
+  "error: %c%d font-size:0;color:transparent [object Object]",
+  "error: %c%d font-size:0;color:transparent [object Object]",
+  "info: %c%d font-size:0;color:transparent [object Object]",
+  "info: %c%d font-size:0;color:transparent [object Object]",
+  "log: %c%d font-size:0;color:transparent [object Object]",
+  "log: %c%d font-size:0;color:transparent [object Object]",
+  "trace: %c%d font-size:0;color:transparent [object Object]",
+  "trace: %c%d font-size:0;color:transparent [object Object]",
+  "warning: %c%d font-size:0;color:transparent [object Object]",
+  "warning: %c%d font-size:0;color:transparent [object Object]"
+ ],
+ "exceptions": [],
+ "version": {
+  "Browser": "Lightpanda/1.0",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "Lightpanda-Version": "1.0.0-dev.998+82501fa0f",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9925/"
+ },
+ "final": {
+  "title": "Just a moment...",
+  "nodes": 47,
+  "text": "www.scrapingcourse.com\nPerforming security verification\n\nThis website uses a security service to protect against malicio"
+ },
+ "engineLog": "0,32937],[\"getInternalformatParameter\",36161,36238,32937],[\"getInternalformatParameter\",36161,36975,32937],[\"getInternalformatParameter\",36161,36214,32937],[\"getInternalformatParameter\",36161,36232,32937],[\"getInternalformatParameter\",36161,36208,32937],[\"getInternalformatParameter\",36161,36226,32937],[\"getInternalformatParameter\",36161,33189,32937],[\"getInternalformatParameter\",36161,33190,32937],[\"getInternalformatParameter\",36161,36012,32937],[\"getInternalformatParameter\",36161,36168,32937],[\"getInternalformatParameter\",36161,35056,32937],[\"getInternalformatParameter\",36161,36013,32937],[\"getInternalformatParameter\",36161,32854,32937],[\"getInternalformatParameter\",36161,32855,32937],[\"getInternalformatParameter\",36161,36194,32937],[\"getParameter\",3379],[\"getParameter\",34024],[\"getParameter\",3386],[\"getSupportedExtensions\"],[\"getExtension\",\"WEBGL_compressed_texture_astc\"],[\"getExtension\",\"EXT_color_buffer_float\"],[\"getExtension\",\"EXT_color_buffer_half_float\"],[\"createFramebuffer\"],[\"bindFramebuffer\",36160,{\"o\":\"WebGLFramebuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33325,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33327,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,34842,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33326,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,33328,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,34836,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"createRenderbuffer\"],[\"bindRenderbuffer\",36161,{\"o\":\"WebGLRenderbuffer\"}],[\"renderbufferStorage\",36161,35898,4,4],[\"framebufferRenderbuffer\",36160,36064,36161,{\"o\":\"WebGLRenderbuffer\"}],[\"checkFramebufferStatus\",36160],[\"deleteRenderbuffer\",{\"o\":\"WebGLRenderbuffer\"}],[\"deleteFramebuffer\",{\"o\":\"WebGLFramebuffer\"}],[\"getExtension\",\"WEBGL_lose_context\"]]}\n$time=1787513816092 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x5\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787513816092 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x6\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787513816092 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x7\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787513816092 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x8\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787513816092 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x9\",\"size\":[2,2],\"dropped\":0,\"ops\":[[\"getContextAttributes\"]]}\n$time=1787513816092 $scope=js $level=info $msg=\"console.log\" param.0=@@CDT@@{\"k\":\"drain\",\"ctx\":\"x10\",\"size\":[49,44],\"dropped\":0,\"ops\":[[\"drawImage\",{\"o\":\"OffscreenCanvas\"},0,0]]}\n"
+}

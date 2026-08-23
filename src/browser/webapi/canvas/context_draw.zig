@@ -36,6 +36,8 @@ const path = @import("path.zig");
 const Surface = @import("raster.zig");
 const state = @import("context_state.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
+const ImageBitmap = @import("ImageBitmap.zig");
+const DOMException = @import("../DOMException.zig");
 const CanvasElement = @import("../element/html/Canvas.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
 
@@ -300,14 +302,14 @@ pub fn Mixin(comptime T: type) type {
 
         /// `drawImage(source, dx, dy)`, `(source, dx, dy, dw, dh)` and the
         /// nine-argument form, for the sources that have pixels behind them:
-        /// a canvas element and an `OffscreenCanvas`. An `ImageBitmap` carries
-        /// only its dimensions here (see ImageBitmap.zig), and an image
-        /// element would need a decoder, so both deposit nothing — the call
-        /// still succeeds, which is the part that matters: on the offscreen
-        /// context this member did not exist at all, and the `TypeError` that
-        /// raised took the rest of the caller's function with it.
-        pub fn drawImage(self: *T, source: js.Value, a: f64, b: f64, c: ?f64, d: ?f64, e: ?f64, f: ?f64, g: ?f64, h: ?f64, exec: *Execution) void {
-            const src = sourceOf(source) orelse return;
+        /// a canvas element, an `OffscreenCanvas`, and an `ImageBitmap`. An
+        /// image element would need a decoder, so it deposits nothing — the
+        /// call still succeeds, which is the part that matters: on the
+        /// offscreen context this member did not exist at all, and the
+        /// `TypeError` that raised took the rest of the caller's function with
+        /// it. A *closed* bitmap is the one source that refuses outright.
+        pub fn drawImage(self: *T, source: js.Value, a: f64, b: f64, c: ?f64, d: ?f64, e: ?f64, f: ?f64, g: ?f64, h: ?f64, exec: *Execution) !void {
+            const src = try sourceOf(source, exec) orelse return;
             const sw: f64 = @floatFromInt(src.width);
             const sh: f64 = @floatFromInt(src.height);
             if (sw == 0 or sh == 0) return;
@@ -364,8 +366,8 @@ pub fn Mixin(comptime T: type) type {
         /// The pixels behind a `CanvasImageSource`, when there are any. Both
         /// canvas types keep theirs on the 2D context they handed out, so a
         /// canvas that was never drawn into — or was only ever used for WebGL
-        /// — has nothing to give.
-        fn sourceOf(value: js.Value) ?Source {
+        /// — has nothing to give. An `ImageBitmap` keeps a snapshot of its own.
+        fn sourceOf(value: js.Value, exec: *Execution) !?Source {
             if (value.toZig(*CanvasElement)) |canvas| {
                 const cached = canvas._cached orelse return null;
                 return switch (cached) {
@@ -380,7 +382,26 @@ pub fn Mixin(comptime T: type) type {
                     else => null,
                 };
             } else |_| {}
+            if (value.toZig(*ImageBitmap)) |bitmap| {
+                const snapshot = bitmap.surface() orelse return throwDetached(exec);
+                return .{ .surface = snapshot, .width = bitmap._width, .height = bitmap._height };
+            } else |_| {}
             return null;
+        }
+
+        /// Drawing a closed bitmap is refused, not ignored, and Chrome names
+        /// the receiver's own interface in the message — measured on both 2D
+        /// contexts (probes/expr-imagebitmap-pixels.js).
+        fn throwDetached(exec: *Execution) anyerror {
+            const local = exec.js.local.?;
+            const message = "Failed to execute 'drawImage' on '" ++ T.JsApi.Meta.name ++
+                "': The image source is detached";
+            const value = local.zigValueToJs(
+                DOMException.init(message, "InvalidStateError"),
+                .{},
+            ) catch return error.JsException;
+            _ = local.isolate.throwException(value.handle);
+            return error.JsException;
         }
 
         /// Everything the rasteriser drops on `reset()`.
