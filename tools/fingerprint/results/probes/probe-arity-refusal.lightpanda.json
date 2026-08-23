@@ -152,23 +152,29 @@
   "message": "Failed to construct 'URL': 1 argument required, but only 0 present."
  },
  "node.contains()": {
-  "throws": false
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'contains' on 'Node': 1 argument required, but only 0 present."
  },
  "document.getElementById()": {
-  "throws": false
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'getElementById' on 'Document': 1 argument required, but only 0 present."
  },
  "node.isSameNode()": {
-  "throws": false
+  "throws": true,
+  "name": "TypeError",
+  "message": "Failed to execute 'isSameNode' on 'Node': 1 argument required, but only 0 present."
  },
  "el.hasAttributeNS()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'hasAttributeNS' on 'Element': 2 arguments required, but only 0 present."
  },
  "document.createElementNS()": {
   "throws": true,
   "name": "TypeError",
-  "message": "invalid argument"
+  "message": "Failed to execute 'createElementNS' on 'Document': 2 arguments required, but only 0 present."
  },
  "history.pushState(1)": {
   "throws": true,
