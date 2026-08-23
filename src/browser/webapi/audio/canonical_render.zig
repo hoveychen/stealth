@@ -121,12 +121,12 @@ fn which(context: *BaseAudioContext) ?chrome_audio.Graph {
     const destination = context._destination orelse return null;
     if (destination._proto._channel_count != 1) return null;
 
-    const compressor = switch ((soleSource(context, destination._proto) orelse return null)._type) {
+    const compressor = switch ((context.soleSource(destination._proto) orelse return null)._type) {
         .dynamics_compressor => |compressor| compressor,
         else => return null,
     };
 
-    const source = switch ((soleSource(context, compressor._proto) orelse return null)._type) {
+    const source = switch ((context.soleSource(compressor._proto) orelse return null)._type) {
         .scheduled_source => |scheduled| scheduled,
         else => return null,
     };
@@ -153,21 +153,4 @@ fn which(context: *BaseAudioContext) ?chrome_audio.Graph {
         return graph;
     }
     return null;
-}
-
-/// The single node with an edge into `target`, or null when nothing feeds it or
-/// more than one thing does. A node connected to the same target twice still
-/// counts once, because a repeated connect() is a no-op in Chrome.
-fn soleSource(context: *BaseAudioContext, target: *AudioNode) ?*AudioNode {
-    var found: ?*AudioNode = null;
-    for (context._nodes.items) |node| {
-        if (node == target) continue;
-        for (node._outputs.items) |output| {
-            if (output != target) continue;
-            if (found != null and found != node) return null;
-            found = node;
-            break;
-        }
-    }
-    return found;
 }

@@ -51,6 +51,7 @@ const AudioBuffer = @import("AudioBuffer.zig");
 const AudioListener = @import("AudioListener.zig");
 const BaseAudioContext = @import("BaseAudioContext.zig");
 const AudioDestinationNode = @import("AudioDestinationNode.zig");
+const buffer_render = @import("buffer_render.zig");
 const canonical_render = @import("canonical_render.zig");
 const handler_property = @import("../handler_property.zig");
 const EventTarget = @import("../EventTarget.zig");
@@ -227,11 +228,17 @@ pub fn startRendering(self: *OfflineAudioContext, exec: *Execution) !js.Promise 
         base._sample_rate,
         exec,
     );
-    // Silent unless the graph is the canonical one, in which case the recorded
+    // Silent unless the graph is one this engine answers, in which case the
     // render goes in here — where Chrome captures the graph too, rather than in
     // the completion task below, so a graph edited after startRendering() has no
     // effect on what was rendered.
+    //
+    // Two kinds, and they cannot both match: canonical_render replays a
+    // recording for the two compressor graphs (its own header says why they
+    // cannot be computed), and buffer_render computes the passthrough an
+    // AudioBufferSource feeding the destination renders.
     canonical_render.apply(base, buffer, exec);
+    buffer_render.apply(base, buffer, exec);
 
     try base.transition(.running, exec);
 
