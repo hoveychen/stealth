@@ -22,7 +22,7 @@ const js = @import("../../js/js.zig");
 const Allocator = std.mem.Allocator;
 
 pub fn registerTypes() []const type {
-    return &.{Lookup};
+    return &.{View};
 }
 
 pub const Cookie = @import("Cookie.zig");
@@ -164,9 +164,52 @@ pub const Lookup = struct {
         }
         return arr;
     }
+};
+
+/// The `Storage` object a realm sees. Chrome gives every realm its own -- a
+/// same-origin iframe's `localStorage` is not the parent's object, even though
+/// both read and write the same store -- and the realm-isolation sweep in
+/// tools/fingerprint found ours shared, which lets one realm patch another's.
+/// So the state stays on the per-origin Lookup and this is the per-Window
+/// handle over it: one instance per Window means one JS wrapper per realm,
+/// because the identity map is keyed on the address it is handed.
+pub const View = struct {
+    _lookup: *Lookup,
+
+    pub fn getItem(self: *const View, k: []const u8) ?[]const u8 {
+        return self._lookup.getItem(k);
+    }
+
+    pub fn setItem(self: *const View, k: []const u8, value: []const u8) !void {
+        return self._lookup.setItem(k, value);
+    }
+
+    pub fn removeItem(self: *const View, k: []const u8) void {
+        return self._lookup.removeItem(k);
+    }
+
+    pub fn clear(self: *const View) void {
+        return self._lookup.clear();
+    }
+
+    pub fn key(self: *const View, index: u32) ?[]const u8 {
+        return self._lookup.key(index);
+    }
+
+    pub fn getLength(self: *const View) u32 {
+        return self._lookup.getLength();
+    }
+
+    pub fn hasItem(self: *const View, k: []const u8) bool {
+        return self._lookup.hasItem(k);
+    }
+
+    pub fn keys(self: *const View, exec: *const js.Execution) !js.Array {
+        return self._lookup.keys(exec);
+    }
 
     pub const JsApi = struct {
-        pub const bridge = js.Bridge(Lookup);
+        pub const bridge = js.Bridge(View);
 
         pub const Meta = struct {
             pub const name = "Storage";
@@ -174,35 +217,35 @@ pub const Lookup = struct {
             pub var class_id: bridge.ClassId = undefined;
         };
 
-        pub const length = bridge.accessor(Lookup.getLength, null, .{});
-        pub const getItem = bridge.function(Lookup.getItem, .{});
-        pub const setItem = bridge.function(Lookup.setItem, .{});
-        pub const removeItem = bridge.function(Lookup.removeItem, .{});
-        pub const clear = bridge.function(Lookup.clear, .{});
-        pub const key = bridge.function(Lookup.key, .{});
-        pub const @"[str]" = bridge.namedIndexed(Lookup.getItem, Lookup.setItem, Lookup.removeItem, Lookup.keys, Lookup.hasItem, .{ .null_as_undefined = true });
+        pub const length = bridge.accessor(View.getLength, null, .{});
+        pub const getItem = bridge.function(View.getItem, .{});
+        pub const setItem = bridge.function(View.setItem, .{});
+        pub const removeItem = bridge.function(View.removeItem, .{});
+        pub const clear = bridge.function(View.clear, .{});
+        pub const key = bridge.function(View.key, .{});
+        pub const @"[str]" = bridge.namedIndexed(View.getItem, View.setItem, View.removeItem, View.keys, View.hasItem, .{ .null_as_undefined = true });
         pub const @"[int]" = bridge.indexedReadWrite(_getByIndex, _setByIndex, _removeByIndex, _indexHas, null, .{ .null_as_undefined = true });
 
         // v8 routes storage[9] to the indexed interceptor, so we need to do the
         // int -> string conversion
-        fn _getByIndex(self: *const Lookup, idx: u32) ?[]const u8 {
+        fn _getByIndex(self: *const View, idx: u32) ?[]const u8 {
             var buf: [10]u8 = undefined;
-            return self._data.get(std.fmt.bufPrint(&buf, "{d}", .{idx}) catch unreachable);
+            return self.getItem(std.fmt.bufPrint(&buf, "{d}", .{idx}) catch unreachable);
         }
 
-        fn _setByIndex(self: *Lookup, idx: u32, value: []const u8) !void {
+        fn _setByIndex(self: *const View, idx: u32, value: []const u8) !void {
             var buf: [10]u8 = undefined;
             return self.setItem(std.fmt.bufPrint(&buf, "{d}", .{idx}) catch unreachable, value);
         }
 
-        fn _removeByIndex(self: *Lookup, idx: u32) void {
+        fn _removeByIndex(self: *const View, idx: u32) void {
             var buf: [10]u8 = undefined;
             return self.removeItem(std.fmt.bufPrint(&buf, "{d}", .{idx}) catch unreachable);
         }
 
-        fn _indexHas(self: *const Lookup, idx: u32) bool {
+        fn _indexHas(self: *const View, idx: u32) bool {
             var buf: [10]u8 = undefined;
-            return self._data.contains(std.fmt.bufPrint(&buf, "{d}", .{idx}) catch unreachable);
+            return self.hasItem(std.fmt.bufPrint(&buf, "{d}", .{idx}) catch unreachable);
         }
     };
 };

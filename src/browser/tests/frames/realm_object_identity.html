@@ -48,6 +48,36 @@
 }
 </script>
 
+<script id="realm_storage_is_per_realm_over_one_store">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    // Same origin, so the same store -- but not the same object. Chrome draws
+    // that line and so does this engine now: the Storage handle is per-Window,
+    // the data behind it is per-origin.
+    testing.expectTrue(w.localStorage !== localStorage);
+    testing.expectTrue(w.sessionStorage !== sessionStorage);
+    testing.expectTrue(w.localStorage.getItem !== localStorage.getItem);
+
+    localStorage.setItem('realm-probe', 'parent');
+    testing.expectEqual('parent', w.localStorage.getItem('realm-probe'));
+    w.localStorage.setItem('realm-probe', 'child');
+    testing.expectEqual('child', localStorage.getItem('realm-probe'));
+    testing.expectEqual(localStorage.length, w.localStorage.length);
+    localStorage.removeItem('realm-probe');
+    testing.expectEqual(null, w.localStorage.getItem('realm-probe'));
+
+    // localStorage and sessionStorage are two stores, not one.
+    sessionStorage.setItem('realm-probe', 'session');
+    testing.expectEqual(null, localStorage.getItem('realm-probe'));
+    sessionStorage.removeItem('realm-probe');
+
+    f.remove();
+}
+</script>
+
 <script id="realm_crypto_wrappers_are_stable">
 {
     // The check above is only meaningful if a wrapper is stable within one
