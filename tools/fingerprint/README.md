@@ -9148,3 +9148,103 @@ both are cheap to separate — install one wrapper at a time and see which one i
 fatal, and separately arm the worker without `waitForDebuggerOnStart` at all.
 A worker that declines to run when `fetch` is not native is a fingerprint check
 we would want to know about regardless of what the payload turns out to say.
+
+## The worker was never released, and the probes it runs are readable (2026-08-23)
+
+E2 recorded three round-1 stalls as the worker noticing the instrument, and left
+two readings to separate: a wrapper being detected, or the pause perturbing a
+timing. Neither is what happened. The records from those runs carry **nothing at
+all from the worker session** — not one funnel call, not even the recorder's own
+`installed` line — and their `Runtime.runIfWaitingForDebugger` came back
+`resumed: false`. Nothing was installed for the worker to detect. The worker was
+never let go.
+
+`worker-arm-probe.mjs` settles it away from the station entirely: a local page, a
+local blob worker, the same `arm()` sequence, no Cloudflare in the room.
+
+| variant | worker ran | recorder inside it | caught the worker's first `fetch` |
+|---|---|---|---|
+| `plain` — no pause | yes | no | no |
+| `evaluate` — pause, evaluate, then resume (the E2 shape) | **no** | no | no |
+| `resume` — pause, resume, then evaluate | yes | yes | **no** — too late |
+| `preload` — no debugger; rewrite the worker's source | yes | yes | **yes** |
+
+A `Runtime.evaluate` sent to a target paused on start blocks that session's
+inspector queue head-on, so the resume queued behind it never arrives. Sent
+*after* the resume it does run, but it lands after the worker's own first fetch.
+Neither reading in E2 was needed; the mechanism was the whole story.
+
+So stop involving the debugger. The document realm can be armed before its own
+code, and it is where the worker is built, so wrap `Blob` there and read — or
+with `--inject-worker`, prepend the recorder to — the worker's source text.
+
+### The instrument had been spending its budget on itself
+
+Every record is a `JSON.stringify` and a `console.log`, and `JSON.stringify` was
+one of the wrapped funnels, so each record produced a record. That is what the
+4 187 stringify calls of the earlier runs were, and with a 400-record ceiling the
+recursion consumed the budget before any real call could land. The same local
+page: 805 records before the re-entrancy guard, 10 after — and the ten include
+the worker's `btoa` argument and the `fetch` body it becomes.
+
+**This invalidates E2's headline.** "The document realm does not build the
+payload" was a reading of a starved instrument. With the guard in, the oracle arm
+shows the round-1 body going out of the *page* realm:
+
+| record | oracle arm | our arm |
+|---|---|---|
+| `xhr.send` round 1 | 2 306 bytes, ciphertext | 2 306 bytes, ciphertext |
+| `xhr.send` round 2 | — (widget realm) | 4 866 |
+| `xhr.send`, plaintext | 1 110–1 153 bytes of `{"memory":{"totalJSHeapSize"…` | — |
+
+The blob workers are not where telemetry is assembled either. Their source, now
+readable, is 13 and 291 bytes:
+
+```js
+"you"==="bot"                                    // b0, entire program
+
+var _p=null;if(self.trustedTypes)try{_p=self.trustedTypes.createPolicy('Kssz2',
+{createScript:function(s){return s;}})}catch(e){self.postMessage({type:
+'tt-policy-error',msg:e.message})}
+onmessage=function(e){e.isTrusted&&''===e.origin&&null===e.source&&
+  eval(_p?_p.createScript(e.data):e.data)}
+```
+
+The second is an `eval` trampoline: the page posts source text in, the worker
+runs it and posts the answer back. Both halves of that conversation are plaintext
+in the document realm, which is where the hook already is.
+
+### What the trampoline is asked, on our arm
+
+Every probe below is verbatim from `fopt-src-lp.json`, with its answer:
+
+| asked | answered |
+|---|---|
+| `n.platform, n.languages, n.hardwareConcurrency, n.deviceMemory, n.userAgent` | `MacIntel`, `["en-US","en"]`, `10`, `16`, the Chrome 151 UA |
+| `fetch(…/pat/…)` — status, ok, body | `401`, `0`, `"J"` |
+| `fetch(…brunhild…/i/…, {mode:"cors",credentials:"omit",cache:"no-store"})` — status **and every response header** | `{"ojYA3":"TypeError: fetch error"}` |
+| `for(5e3){…}` smallest positive `performance.now()` delta | `0.09999999999990905` |
+| `eval("debugger")`, then report | reported |
+| `setTimeout(…,55)`, `…,1500`, `…,10000` round trips | all reported |
+
+`hardwareConcurrency 10` and `deviceMemory 16` are correct for this host — that
+pair was measured against headless Chrome 151 here and is asserted in
+`Navigator.zig` — so they are not the tell.
+
+The brunhild row is. The probe asks for a cross-origin response's full header
+list and gets an exception instead, and the exception's *text* goes to Cloudflare
+verbatim through `String(e)`. Ours reads `TypeError: fetch error`, from
+`Fetch.zig`:
+
+```zig
+ls.toLocal(self._resolver).rejectError("fetch error", .{ .type_error = "fetch error" });
+```
+
+Chrome's wording for a failed `fetch` is `TypeError: Failed to fetch`. So the
+answer we hand back is wrong twice over: the probe was supposed to return
+headers, and the failure it returns instead is spelled in a way no browser
+spells it.
+
+The oracle cleared with all of this in place — plain, and again with
+`--inject-worker` — so none of these readings are of a page behaving differently
+because it was watched.
