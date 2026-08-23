@@ -40,11 +40,11 @@ _time_origin: u64,
 // per this realm's cross-origin isolation.
 _clock_resolution_micros: u64,
 
-// Wall-clock epoch milliseconds at the same instant as _time_origin. The
+// Wall-clock epoch microseconds at the same instant as _time_origin. The
 // monotonic clock above is boot-relative, so it can't be turned into a date
-// after the fact; chrome.csi() and chrome.loadTimes() both report the
-// navigation start as an epoch timestamp and need this.
-_epoch_origin_ms: i64,
+// after the fact; `timeOrigin` is defined as this instant, and chrome.csi()
+// and chrome.loadTimes() both report the navigation start from it too.
+_epoch_origin_micros: i64,
 _entries: std.ArrayList(*Entry) = .empty,
 _timing: PerformanceTiming = .{},
 _navigation: PerformanceNavigation = .{},
@@ -119,16 +119,24 @@ pub const clock_resolution_isolated_micros = 5;
 /// Get high-resolution timestamp in microseconds, clamped to the resolution
 /// the claimed browser reports for the realm asking.
 pub fn highResTimestamp(resolution_micros: u64) u64 {
-    const micros = lp.datetime.microTimestamp(.boot);
-    const half = resolution_micros / 2;
-    return @divTrunc(micros + half, resolution_micros) * resolution_micros;
+    return @intCast(clamp(@intCast(lp.datetime.microTimestamp(.boot)), resolution_micros));
+}
+
+/// Round a microsecond stamp to the realm's clock resolution.
+fn clamp(micros: i64, resolution_micros: u64) i64 {
+    const resolution: i64 = @intCast(resolution_micros);
+    const half = @divTrunc(resolution, 2);
+    return @divTrunc(micros + half, resolution) * resolution;
 }
 
 pub fn init(resolution_micros: u64) Performance {
     return .{
         ._clock_resolution_micros = resolution_micros,
         ._time_origin = highResTimestamp(resolution_micros),
-        ._epoch_origin_ms = lp.datetime.DateTime.now().unix(.milliseconds),
+        // Clamped the same way `now()` is: the pair is what a page compares,
+        // and a wall-clock origin finer than the monotonic clock beside it
+        // would hand back resolution the clamp exists to withhold.
+        ._epoch_origin_micros = clamp(lp.datetime.DateTime.now().unix(.microseconds), resolution_micros),
     };
 }
 
@@ -149,9 +157,17 @@ pub fn now(self: *const Performance) f64 {
     return @as(f64, @floatFromInt(elapsed)) / 1000.0;
 }
 
+/// Epoch milliseconds, fractional — not the boot-relative clock `now()` counts
+/// from. `timeOrigin + now()` is `Date.now()` in every browser, and a page that
+/// subtracts the two is asking whether this one is a browser at all.
 pub fn getTimeOrigin(self: *const Performance) f64 {
-    // Return as milliseconds
-    return @as(f64, @floatFromInt(self._time_origin)) / 1000.0;
+    return @as(f64, @floatFromInt(self._epoch_origin_micros)) / 1000.0;
+}
+
+/// The same instant as whole epoch milliseconds, which is the unit chrome.csi()
+/// and the Level 1 timing attributes report.
+pub fn epochOriginMs(self: *const Performance) i64 {
+    return @divFloor(self._epoch_origin_micros, 1000);
 }
 
 pub fn getNavigation(self: *Performance) *PerformanceNavigation {
@@ -1001,11 +1017,11 @@ pub const PerformanceTiming = struct {
         if (@intFromEnum(p._nav_phase) < @intFromEnum(needs)) {
             return 0;
         }
-        return @as(f64, @floatFromInt(p._epoch_origin_ms)) + @round(offset);
+        return @as(f64, @floatFromInt(p.epochOriginMs())) + @round(offset);
     }
 
     fn navigationStart(self: *const PerformanceTiming) f64 {
-        return @floatFromInt(self.perf()._epoch_origin_ms);
+        return @floatFromInt(self.perf().epochOriginMs());
     }
 
     fn zero(_: *const PerformanceTiming) f64 {
