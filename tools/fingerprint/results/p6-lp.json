@@ -1,0 +1,103 @@
+{
+ "engine": "lightpanda",
+ "url": "https://www.scrapingcourse.com/cloudflare-challenge",
+ "headedUa": false,
+ "settleMs": 35000,
+ "min": 400,
+ "userAgentOverride": null,
+ "injectWorker": true,
+ "records": [
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "https://www.scrapingcourse.com/cloudflare-challenge",
+   "worker": false,
+   "coi": true,
+   "sec": true,
+   "sab": "function",
+   "opfs": true
+  },
+  {
+   "session": "SID-1",
+   "k": "worker",
+   "url": "blob:https://www.scrapingcourse.com/c830bd1f-afa0-4859-93b4-07a548ae8fd1"
+  },
+  {
+   "session": "SID-1",
+   "k": "installed",
+   "href": "about:blank",
+   "worker": false,
+   "coi": true,
+   "sec": true,
+   "sab": "function",
+   "opfs": true
+  },
+  {
+   "session": "SID-1",
+   "k": "JSON.stringify",
+   "a": {
+    "t": "obj",
+    "n": 2
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "xhr.send",
+   "a": {
+    "t": "str",
+    "n": 2306,
+    "v": "vIbyyfKz+hVNtIkSy6F-$i2$E+dHl6FbZzsV6p-R8DWnPkFGHM4K-eL+Mo06g67VuzwDhVvJ6zXbneCiQt+KUQt7XHf80Du$QtIq-dlXD6pUsRlNzCxYdH8+2K$70GzVa5XMOXc$$5$0X6hdEggDyOm6frgKEQaFrajfKR1WGsKn8mM0--6XPsm3fWyFbstHDi0bEkxCL-qP+RImXWknx7zieWmyP$HaGTWSbW$AVSmVa2LwKr0DOOKaoIsUvGiQ3xDRlnJF$akRQPTJA1f5ekvjYTE6SqaoTbOPDy-r4gzSdX4KgFHM6GYcCeKt85++2iY83OctU46kf0W1Vohyq17fC+iemNqV5QtiFXnqcJoKVb0PXQjbIOLoal57dfpFUWpkgdakX5bzQUQtYGLK6m08VlDvaNOchLxH83$OL-40DzihMZkjgZm7FfUSGZFFhW0ysWRf3GvXHxrJh3EghUlXmiSXqYTe8S7CBxaxIWCStD8RX4NeWNBtmHLRe0$8jDawkh2CUPTMegZx$JsrU-GEbe56e8+ySDIsTbxKXf8mwpM+kQqYEuH8vS$iiIW3QoDOu0HaB17BW3EKASdLjreYMWNrvo8FYKEVYeJ1OrGYoSu0X3TqoiPsDdoXPeNbhbeYtq6+8Sx7RE-OZijUmgeFdG$ovBsfOw1Wm4rfgpwZqXYRoRJ553uKS8Dc+bpsc8RHGbcDdj1PsBRUvWHS7NXR7bIfoGCe4hXODYxBi30bWCBO27G5I8YLum-2dAd2dBt6gNispDmrxLcwhzH+Qi+1d2AxkQPVsv8psne0t0GRDJzQZ+P$ua-bzsYjNZX8pUBcvqr5Vq$lkEpKMd03zOLUf3TUHCUVQ7XgkGMz6wGh3jchXfkcglbOUMRQBi3f+lhCCpGNW1E8YDxgjRlO35reLhf8MQujTNEnFq1F3S-wDn+UchlYK7uo4115yvb8bj3f6FBX6kUAQvyZLaiUWbSmlS$3e6wQV5H+FWqY6ax34v7zyF4trhmfy0s$8fhd3blRWIXvpROTb46ZEv7zQt-gxy33PNpRvGV+77WTUUbHHqAjHz6BgWX5jkzcJUIEHZSRdeaGPB2K15i053NfUDwaIZcVP0-4l46KxX8U4JPIUHiuXCcuyurv0JqGcKvR1xv$muHrFBi5A7zhkNDloWgBwD-o8$cWS0xe4iDijjDqLxpDh0IQNvmMDxDdfRHrXPIm2i7cOimQ03uNJj$Z2pCL8yweVYqU03HH8AkehhS1qKz$$Faw2IImbqmzWRMwclxvbMOEOl1u4rb6AvUTf$iGGTJgTxO8xDoXCTy7UUC+c3fvpKaw7tMBkdk0TQ5PPFsGTVsqp4cHjOzcFjk+i2ADnt8MRK$OBJKsNcGUphaToZKxXTgEa8GX8vGzOvyqUIIfIVCgkL8QXA83dDeZ1kIi70QpkfuyNgMi2npbbLkiXEnKPM3KlWl7APgftuSzLv2q-Xiw34VPC+Fpt+bShiPQSN246UcrM8vooweBcTNkOFNPXud2yGRs6X03TqUpqUqW4ZJEF58QTE4Q82r3iUf$F57lm$$kAbNWCpSwkBsV51HRoEXwpBZVYrKXZB43blOYyrfvoba8V3bRVLWYy3F5O0HoCU2oNgenBR3N5kxXhpLi1fjSja-NEuEcevC604Z2bBTjdyigArvWZJ3sHTitmXCmfr4$hSRs-YfjAT3JjIJudnzclmguVOUO5SHTeN$58gbfu2+vV7$Vre0D0dfLvBgzep3$JAFdkxEZrdjbozHluWguCxoBpJ7IKF0ZQqX8VSlAI6zFmEdmPZ1YdSJR1IXZLzXvoAcQlF+BY40Ekxp6NMWiPVi-kgK03PTY$0dxtxWsQkFWYE6i$ty7+5+jluySKvgND7$2Sn+conQWCyq$Fv4p4TfBexVp-8RwovqQpI6tvPgnsgi5evdgWOlTO5k10L-ZiLw1pnDe+B20tHBylgU6NozpK2xVWTo6gjXKBE66Zyn24HAJOi7g3DA4HJTBK3+hEK8yOjAnd+kF7unjyRXxnbTFP0wruwJE7hlR7StO2$xRfNC8yLo3aJdmMxgkS+eG0vxL-yzOlsJJ8CRW4sa0RPRt26$G$tCePbEOs1Tz48pUtWJaoe8+36v80CngLU0E6vet1CyWH0WpxYOuqaCHdmUc+3E-5E0VkLIfU7l6UNVtBlowssavk+LMfcWeL6SDNcGEwSwXD7K5mtjT6DrYNJxlPkk-O8axdH7V1Hm4GOl+shxJSnue$ohiqhedVDeZYY6DKjG7PoEO$eu5p4eE2sNrxDxRrdGjUl"
+   }
+  },
+  {
+   "session": "SID-1",
+   "k": "worker",
+   "url": "blob:https://www.scrapingcourse.com/35b1844f-a706-42b6-98f7-530ea3fdd67a"
+  }
+ ],
+ "blobs": [
+  {
+   "session": "SID-1",
+   "id": "b0",
+   "n": 13,
+   "type": "text/javascript",
+   "srcLen": 13
+  },
+  {
+   "session": "SID-1",
+   "id": "b1",
+   "n": 291,
+   "type": "text/javascript",
+   "srcLen": 291
+  }
+ ],
+ "realms": [
+  {
+   "session": "SID-1",
+   "why": "page",
+   "type": "page",
+   "installed": true,
+   "resumed": true
+  }
+ ],
+ "posts": [
+  {
+   "url": "https://www.scrapingcourse.com/cdn-cgi/challenge-platform/h/b/fo/4168800884:1787475616:wme-ICQFPnJk2hdG3LpDR1BnwQMgoKsdJ",
+   "postLen": 2306,
+   "verdict": "cf-chl-gen"
+  }
+ ],
+ "console": [],
+ "exceptions": [],
+ "version": {
+  "Browser": "Lightpanda/1.0",
+  "Protocol-Version": "1.3",
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+  "Lightpanda-Version": "1.0.0-dev.939+2925032f6",
+  "webSocketDebuggerUrl": "ws://127.0.0.1:9263/"
+ },
+ "final": {
+  "err": "timeout: Runtime.evaluate"
+ },
+ "engineLog": "lf.handle, self.local.handle) orelse {\n                                     ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/js/Local.zig:219:22: 0x106a99cbf in compileAndRun (lightpanda)\n    return script.run();\n                     ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/js/Local.zig:171:30: 0x106a9cc3f in exec (lightpanda)\n    return self.compileAndRun(src, name);\n                             ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/js/Local.zig:167:22: 0x106a9cceb in eval (lightpanda)\n    _ = try self.exec(src, name);\n                     ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/webapi/Worker.zig:234:38: 0x1094ab227 in loadInitialScript (lightpanda)\n        .classic => _ = ls.local.eval(script, self._url) catch |err| {\n                                     ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/webapi/Worker.zig:194:31: 0x1094ab8bb in httpDoneCallback (lightpanda)\n    try self.loadInitialScript(script);\n                              ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/network/HttpClient.zig:3878:38: 0x10706a963 in deliver (lightpanda)\n                    req.done_callback(req.ctx) catch |err| {\n                                     ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/network/HttpClient.zig:918:25: 0x1070650c7 in dispatchCompleted (lightpanda)\n        transfer.deliver();\n                        ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/network/HttpClient.zig:849:31: 0x106ab9f4f in _tick (lightpanda)\n    _ = self.dispatchCompleted(mode);\n                              ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/network/HttpClient.zig:791:22: 0x106aba12f in tick (lightpanda)\n    return self._tick(timeout_ms, .all);\n                     ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/Runner.zig:324:44: 0x1075d9c8b in _tick__anon_1175916 (lightpanda)\n        const waited = try http_client.tick(@intCast(ms_to_wait));\n                                           ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/Runner.zig:150:39: 0x1075da053 in _wait__anon_1175909 (lightpanda)\n        const tick_result = self._tick(is_cdp, 200, conditions) catch |err| {\n                                      ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/browser/Runner.zig:75:23: 0x1075da54b in waitForFrameCDP (lightpanda)\n    _ = try self._wait(true, timeout_ms, &conditions);\n                      ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/cdp/CDP.zig:291:34: 0x1075da6db in pageWait (lightpanda)\n    return runner.waitForFrameCDP(page.frame_id, ms, .done);\n                                 ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/cdp/CDP.zig:268:18: 0x1075da7cf in tick (lightpanda)\n    self.pageWait(wait_ms) catch |wait_err| switch (wait_err) {\n                 ^\n/Users/hoveychen/workspace/stealth/.worktrees/cfsc-computed-style-per-tag/src/Server.zig:288:30: 0x1075db577 in handleConnection (lightpanda)\n        const next = cdp.tick() catch |err| {\n                             ^\n/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std/Thread.zig:422:13: 0x1075d5b7f in callFn__anon_1174967 (lightpanda)\n            @call(.auto, f, args);\n            ^\n/opt/homebrew/Cellar/zig/0.16.0_1/lib/zig/std/Thread.zig:752:30: 0x1075d5a87 in entryFn (lightpanda)\n                return callFn(f, args_ptr.*);\n                             ^\n???:?:?: 0x19293bc07 in __pthread_cond_wait (/usr/lib/system/libsystem_pthread.dylib)\n???:?:?: 0x192936ba7 in _pthread_cond_broadcast (/usr/lib/system/libsystem_pthread.dylib)\n"
+}
