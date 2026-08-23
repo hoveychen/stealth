@@ -712,6 +712,16 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
         }
     }
 
+    // An origin is written with its horizontal axis first, and with the axis
+    // the author left out filled in.
+    if (std.mem.eql(u8, property_name, "transform-origin") or
+        std.mem.eql(u8, property_name, "perspective-origin"))
+    {
+        if (try writeOrigin(arena, value)) |ordered| {
+            return ordered;
+        }
+    }
+
     // Canonicalize anchor-size() function: anchor name (dashed ident) comes before size keyword
     if (std.mem.indexOf(u8, value, "anchor-size(")) |idx| {
         return canonicalizeAnchorSize(arena, value, idx);
@@ -726,6 +736,73 @@ fn normalizePropertyValue(arena: Allocator, property_name: []const u8, raw_value
     }
 
     return value;
+}
+
+/// Which axis an origin component names, or null for a length or a percentage,
+/// which takes whichever axis its slot gives it.
+const OriginAxis = enum { horizontal, vertical, either };
+
+fn originAxis(part: []const u8) ?OriginAxis {
+    if (std.ascii.eqlIgnoreCase(part, "left") or std.ascii.eqlIgnoreCase(part, "right")) {
+        return .horizontal;
+    }
+    if (std.ascii.eqlIgnoreCase(part, "top") or std.ascii.eqlIgnoreCase(part, "bottom")) {
+        return .vertical;
+    }
+    if (std.ascii.eqlIgnoreCase(part, "center")) return .either;
+    return null;
+}
+
+/// `transform-origin` and `perspective-origin` as Chrome writes them. Measured
+/// with tools/fingerprint/probes/expr-transform-serialize.js: both axes are
+/// always written, horizontal first, and a third component -- the z offset --
+/// stays where it is while the first two swap.
+///
+/// A lone component takes `center` on the other axis, and which side it goes
+/// depends on the axis the component itself names: `top` is `center top` where
+/// `right` is `right center` and `50%` is `50% center`.
+///
+/// Answers null for anything not of that shape, which keeps the value as
+/// written. That covers `transform-origin: top 20px`, which Chrome refuses
+/// outright: swapping it would invent `20px top`, a value with a different
+/// meaning that Chrome never writes, and keeping it is the wrong this engine
+/// already had.
+fn writeOrigin(arena: Allocator, value: []const u8) !?[]const u8 {
+    if (hasVerbatimFunction(value)) {
+        return null;
+    }
+
+    var parts: [3][]const u8 = undefined;
+    var count: usize = 0;
+    var walk = shorthand.Components.init(value);
+    while (walk.next()) |part| {
+        if (count == parts.len) return null;
+        parts[count] = part;
+        count += 1;
+    }
+    // A `/` stops the walk, and an origin never carries one.
+    if (walk.stopped or count == 0) return null;
+
+    if (count == 1) {
+        const filled: [2][]const u8 = if (originAxis(parts[0]) == .vertical)
+            .{ "center", parts[0] }
+        else
+            .{ parts[0], "center" };
+        return try std.mem.join(arena, " ", &filled);
+    }
+
+    // Only a vertical keyword in front of something that can hold the
+    // horizontal axis is out of order. A length second -- `top 20px` -- is the
+    // shape Chrome refuses, and is left alone rather than swapped.
+    const lead = originAxis(parts[0]);
+    const follow = originAxis(parts[1]);
+    if (lead != .vertical or (follow != .horizontal and follow != .either)) {
+        return null;
+    }
+
+    var out: [3][]const u8 = .{ parts[1], parts[0], undefined };
+    if (count == 3) out[2] = parts[2];
+    return try std.mem.join(arena, " ", out[0..count]);
 }
 
 /// A shadow layer as Chrome writes it: the colour first, then the lengths in
@@ -2199,6 +2276,18 @@ fn tooManyComponents(name: []const u8, value: []const u8) bool {
     if (std.mem.indexOf(u8, value, "/*") != null) return false;
     if (std.ascii.indexOfIgnoreCase(value, "var(") != null) return false;
 
+    // A `<transform-list>` is one value however many functions it holds. The
+    // arity sweep that built the table never offered `transform` two of them --
+    // only identifier and generic-value pairs -- so it reads as one-component,
+    // and `rotate(0deg) scale(1)` was thrown away as a declaration holding too
+    // much. That is a style the page loses, not only a serialisation
+    // difference. Measured (expr-transform-serialize.js): Chrome keeps a list
+    // of calls and refuses one with anything else in it, which is what the
+    // count below still answers -- `rotate(45deg) 5px` is not exempted here.
+    if (std.mem.eql(u8, name, "transform") and isTransformList(value)) {
+        return false;
+    }
+
     const holds: usize = if (chrome_arity.one_component.has(name))
         1
     else if (twoValueRule(name) != null)
@@ -2217,6 +2306,21 @@ fn tooManyComponents(name: []const u8, value: []const u8) bool {
         if (count > holds) return true;
     }
     return false;
+}
+
+/// Whether every top-level component of the value is a function call, which is
+/// what makes a `transform` a list rather than a declaration holding too much.
+/// Two or more: a single call was never in question, and answering true for one
+/// would exempt `transform: 5px` from the count as well.
+fn isTransformList(value: []const u8) bool {
+    var walk = shorthand.Components.init(value);
+    var count: usize = 0;
+    while (walk.next()) |part| {
+        if (part.len == 0 or part[part.len - 1] != ')') return false;
+        if (std.mem.indexOfScalar(u8, part, '(') == null) return false;
+        count += 1;
+    }
+    return !walk.stopped and count > 1;
 }
 
 fn isLengthProperty(name: []const u8) bool {
@@ -3137,6 +3241,10 @@ test "WebApi: CSSStyleDeclaration serialize" {
 
 test "WebApi: CSSStyleDeclaration value list serialize" {
     try testing.htmlRunner("css/value_list_serialize.html", .{});
+}
+
+test "WebApi: CSSStyleDeclaration transform serialize" {
+    try testing.htmlRunner("css/transform_serialize.html", .{});
 }
 
 test "WebApi: CSSStyleDeclaration border image serialize" {
