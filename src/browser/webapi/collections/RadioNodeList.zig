@@ -126,9 +126,21 @@ pub const JsApi = struct {
     };
 
     pub const length = bridge.accessor(RadioNodeList.getLength, null, .{});
-    pub const @"[]" = bridge.indexed(RadioNodeList.getAtIndex, null, .{ .null_as_undefined = true });
+    pub const @"[]" = bridge.indexed(RadioNodeList.getAtIndex, getIndexes, .{ .null_as_undefined = true });
     pub const item = bridge.function(RadioNodeList.getAtIndex, .{});
     pub const value = bridge.accessor(RadioNodeList.getValue, RadioNodeList.setValue, .{});
+
+    /// Web IDL: an indexed property getter makes the indices own properties.
+    /// Without an enumerator they are reachable and invisible, which a page
+    /// reads by stringifying the list (probes/expr-indexed-own-names.js).
+    fn getIndexes(self: *RadioNodeList, exec: *const js.Execution) !js.Array {
+        const len = try self.getLength();
+        var arr = exec.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
 };
 
 const testing = @import("../../../testing.zig");

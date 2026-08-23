@@ -160,7 +160,21 @@ pub const JsApi = struct {
     };
 
     pub const length = bridge.accessor(HTMLFormControlsCollection.length, null, .{});
-    pub const @"[int]" = bridge.indexed(HTMLFormControlsCollection.getAtIndex, null, .{ .null_as_undefined = true });
+    pub const @"[int]" = bridge.indexed(HTMLFormControlsCollection.getAtIndex, getIndexes, .{ .null_as_undefined = true });
+
+    /// The indices are own properties, as in RadioNodeList -- see the note
+    /// there. The *named* entries are own properties in Chrome too, and
+    /// enumerable here unlike HTMLCollection's, but that half needs the
+    /// supported-property-names machinery HTMLCollection carries and is not
+    /// wired up yet.
+    fn getIndexes(self: *HTMLFormControlsCollection, frame: *Frame) !js.Array {
+        const len = self.length(frame);
+        var arr = frame.js.local.?.newArray(len);
+        for (0..len) |i| {
+            _ = try arr.set(@intCast(i), i, .{});
+        }
+        return arr;
+    }
     pub const @"[str]" = bridge.namedIndexed(HTMLFormControlsCollection.namedItem, null, null, null, null, .{ .null_as_undefined = true });
     pub const namedItem = bridge.function(HTMLFormControlsCollection.namedItem, .{});
 };
