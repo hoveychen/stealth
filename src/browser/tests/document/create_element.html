@@ -17,3 +17,16 @@
   testing.expectEqual(div1, $('#hello'));
 </script>
 
+
+<script id=createElement_missing_argument>
+  // Blink counts the arguments before it converts any of them, and names both
+  // the operation and the interface that declares it (measured on Chrome 151).
+  // The bridge used to answer the generic "invalid argument" here, which no
+  // browser says.
+  testing.expectError(
+    "TypeError: Failed to execute 'createElement' on 'Document': 1 argument required, but only 0 present.",
+    () => document.createElement());
+  testing.expectError(
+    "TypeError: Failed to execute 'createTextNode' on 'Document': 1 argument required, but only 0 present.",
+    () => document.createTextNode());
+</script>

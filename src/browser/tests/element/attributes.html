@@ -281,3 +281,22 @@
     testing.expectEqual('', nsa.getAttribute('arr'));
   }
 </script>
+
+<script id=attribute_missing_argument>
+  {
+    // The interface named is the one that declares the operation, not the class
+    // of the receiver: an HTMLDivElement calling setAttribute is told about
+    // 'Element' (measured on Chrome 151). Two required arguments say
+    // "arguments", one says "argument".
+    const el = document.createElement('div');
+    testing.expectError(
+      "TypeError: Failed to execute 'setAttribute' on 'Element': 2 arguments required, but only 1 present.",
+      () => el.setAttribute('x'));
+    testing.expectError(
+      "TypeError: Failed to execute 'getAttribute' on 'Element': 1 argument required, but only 0 present.",
+      () => el.getAttribute());
+    testing.expectError(
+      "TypeError: Failed to execute 'removeAttribute' on 'Element': 1 argument required, but only 0 present.",
+      () => el.removeAttribute());
+  }
+</script>

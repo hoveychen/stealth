@@ -86,3 +86,22 @@
   testing.expectEqual(true, threw);
 </script>
 
+
+<script id=clear-timer-optional-handle>
+  {
+    // `clearTimeout(optional unsigned long handle = 0)`: Chrome 151 reports
+    // length 0 and accepts a bare call. We made the handle required, so a bare
+    // clearTimeout() threw "invalid argument" -- a throw no browser does.
+    testing.expectEqual(0, window.clearTimeout.length);
+    testing.expectEqual(0, window.clearInterval.length);
+
+    let threw = false;
+    try {
+      clearTimeout();
+      clearInterval();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+  }
+</script>

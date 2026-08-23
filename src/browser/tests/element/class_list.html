@@ -647,3 +647,23 @@
   testing.expectEqual(true, result.done);
 }
 </script>
+
+<script id=class_list_variadic_lengths>
+  {
+    // add() and remove() are variadic, so Chrome 151 reports length 0 and
+    // accepts a call with no tokens.
+    testing.expectEqual(0, DOMTokenList.prototype.add.length);
+    testing.expectEqual(0, DOMTokenList.prototype.remove.length);
+
+    const el = document.createElement('div');
+    let threw = false;
+    try {
+      el.classList.add();
+      el.classList.remove();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+    testing.expectEqual('', el.className);
+  }
+</script>

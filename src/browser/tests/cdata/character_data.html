@@ -728,3 +728,23 @@
   testing.expectEqual(null, comment.previousElementSibling);
 }
 </script>
+
+<script id=character_data_variadic_lengths>
+  {
+    // The ChildNode mixin's three are variadic here too (Chrome 151).
+    for (const name of ['after', 'before', 'replaceWith']) {
+      testing.expectEqual(0, CharacterData.prototype[name].length, { desc: name + '.length' });
+    }
+
+    const text = document.createTextNode('x');
+    let threw = false;
+    try {
+      text.after();
+      text.before();
+      text.replaceWith();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+  }
+</script>

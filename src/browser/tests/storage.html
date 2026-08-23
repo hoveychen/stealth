@@ -100,3 +100,11 @@
   }
   testing.expectError("QuotaExceededError", () => localStorage.setItem("last", "v"));
 </script>
+
+<script id="localstorage_missing_argument">
+  // Storage, not localStorage: Blink names the interface that declares the
+  // operation (measured on Chrome 151).
+  testing.expectError(
+    "TypeError: Failed to execute 'setItem' on 'Storage': 2 arguments required, but only 1 present.",
+    () => localStorage.setItem('k'));
+</script>

@@ -199,3 +199,23 @@
   const dc2 = new DocumentFragment();
   testing.expectEqual(true, dc1.isEqualNode(dc2))
 </script>
+
+<script id=fragment_variadic_lengths>
+  {
+    // Variadic: `length` 0 and a no-argument call accepted (Chrome 151).
+    for (const name of ['append', 'prepend', 'replaceChildren']) {
+      testing.expectEqual(0, DocumentFragment.prototype[name].length, { desc: name + '.length' });
+    }
+
+    const frag = document.createDocumentFragment();
+    let threw = false;
+    try {
+      frag.append();
+      frag.prepend();
+      frag.replaceChildren();
+    } catch (e) {
+      threw = true;
+    }
+    testing.expectEqual(false, threw);
+  }
+</script>

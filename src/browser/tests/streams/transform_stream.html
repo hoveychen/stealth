@@ -162,3 +162,20 @@
     testing.expectEqual(true, result2.done);
   })();
 </script>
+
+<script id=transform_controller_optional_chunk>
+  {
+    // `enqueue(optional any chunk)` and `error(optional any e)`: Chrome 151
+    // reports 0 for both, and 0 for the writer's write(). ReadableStream's own
+    // controller already declared 0 here; TransformStream's did not.
+    testing.expectEqual(0, TransformStreamDefaultController.prototype.enqueue.length);
+    testing.expectEqual(0, TransformStreamDefaultController.prototype.error.length);
+    testing.expectEqual(0, WritableStreamDefaultWriter.prototype.write.length);
+
+    let controller;
+    new TransformStream({ start(c) { controller = c; } });
+    let threw = false;
+    try { controller.enqueue(); } catch (e) { threw = true; }
+    testing.expectEqual(false, threw);
+  }
+</script>
