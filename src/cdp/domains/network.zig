@@ -1529,3 +1529,103 @@ test "cdp.Network: a data: subresource emits the same events a fetched one does"
         .response = .{ .url = image_url, .status = 200 },
     }, .{ .session_id = "SID-SY" });
 }
+
+// The byte counts CDP reports are not constants a subset match could name --
+// they are however many bytes the server actually wrote -- so the assertions
+// have to go find the events and read them. `loadingFinished` names only a
+// request id, so the lookup starts from the `responseReceived` that carries
+// the url.
+const SentBytes = struct {
+    // What `Network.responseReceived` said the response weighed at the moment
+    // its headers were in.
+    at_headers: i64,
+    // What `Network.loadingFinished` said it weighed once the body was in.
+    at_finish: i64,
+};
+
+fn sentBytesFor(ctx: anytype, url: []const u8) !SentBytes {
+    const request_id = blk: {
+        for (ctx.received.items) |msg| {
+            const obj = msg.object;
+            const method = (obj.get("method") orelse continue).string;
+            if (!std.mem.eql(u8, method, "Network.responseReceived")) continue;
+            const params = (obj.get("params") orelse continue).object;
+            const response = (params.get("response") orelse continue).object;
+            if (!std.mem.eql(u8, (response.get("url") orelse continue).string, url)) continue;
+            break :blk .{
+                .id = (params.get("requestId") orelse continue).string,
+                .encoded = (response.get("encodedDataLength") orelse continue).integer,
+            };
+        }
+        return error.NoResponseReceivedForUrl;
+    };
+
+    for (ctx.received.items) |msg| {
+        const obj = msg.object;
+        const method = (obj.get("method") orelse continue).string;
+        if (!std.mem.eql(u8, method, "Network.loadingFinished")) continue;
+        const params = (obj.get("params") orelse continue).object;
+        if (!std.mem.eql(u8, (params.get("requestId") orelse continue).string, request_id.id)) continue;
+        return .{
+            .at_headers = request_id.encoded,
+            .at_finish = (params.get("encodedDataLength") orelse continue).integer,
+        };
+    }
+    return error.NoLoadingFinishedForUrl;
+}
+
+test "cdp.Network: encodedDataLength counts the bytes that crossed the socket" {
+    var ctx = try testing.context();
+    defer ctx.deinit();
+
+    const cdp = ctx.cdp();
+    _ = try cdp.createBrowserContext();
+    var bc = &cdp.browser_context.?;
+    bc.id = "BID-ED";
+    bc.session_id = "SID-ED";
+    bc.target_id = "TID-ED-0000000".*;
+
+    try ctx.processMessage(.{ .id = 1, .method = "Network.enable" });
+    try ctx.expectSentResult(null, .{ .id = 1 });
+
+    const page_url = "http://127.0.0.1:9582/src/browser/tests/cdp/encoded_data_length.html";
+    const chunked_url = "http://127.0.0.1:9582/chunked.js";
+    const gzip_url = "http://127.0.0.1:9582/gzip.js";
+    const page = try bc.session.createPage();
+    try page.navigate(page_url, .{});
+    try testing.waitForPage(bc);
+
+    // Pump the socket until the last of the two scripts has finished, so the
+    // scan below sees a complete trace.
+    try ctx.expectSentEvent("Network.responseReceived", .{
+        .type = "Script",
+        .response = .{ .url = gzip_url, .status = 200 },
+    }, .{ .session_id = "SID-ED" });
+
+    // Measured against Chrome 151 driven over CDP against a server that wrote
+    // each response byte-for-byte (tools/fingerprint/cdp-encoded-data-length.mjs):
+    // `responseReceived` reports the response's header bytes, and
+    // `loadingFinished` reports those plus the encoded body -- the whole
+    // response as it sat on the wire. A chunked reply proved it: 135 header
+    // bytes at responseReceived, 7194 at loadingFinished, for a 7059-byte
+    // framed body.
+    const chunked = try sentBytesFor(&ctx, chunked_url);
+
+    // The regression this pins: /chunked.js sends no Content-Length, so an
+    // engine reading that header answers zero for a response it demonstrably
+    // received.
+    try testing.expect(chunked.at_headers > 0);
+    try testing.expect(chunked.at_finish > chunked.at_headers);
+
+    // 28 body bytes, and the count is of the body as it arrived rather than of
+    // the chunked framing around it -- curl strips the chunk headers before
+    // anything here can see them, which is the one place this engine reads
+    // lower than Chrome does.
+    try testing.expectEqual(chunked.at_headers + 28, chunked.at_finish);
+
+    // A compressed body distinguishes the encoded size from the decoded one:
+    // the script source is 25 bytes, the gzip member that carried it is 45.
+    const gzip = try sentBytesFor(&ctx, gzip_url);
+    try testing.expect(gzip.at_headers > 0);
+    try testing.expectEqual(gzip.at_headers + 45, gzip.at_finish);
+}
