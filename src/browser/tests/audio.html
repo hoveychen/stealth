@@ -1380,6 +1380,221 @@
 }
 </script>
 
+<script id=audio_buffer_source_render type=module>
+{
+  // The third offline context the Turnstile widget builds on every visit:
+  // createBuffer -> createBufferSource -> destination, with no DSP anywhere in
+  // it. Unlike the two compressor graphs above, this one needs no recording —
+  // Chrome hands the page back the very bytes it wrote, so the render is
+  // arithmetic on the page's own buffer and can be computed here exactly.
+  //
+  // Every number below was measured on a headed Chrome 151 by
+  // tools/fingerprint/probes/expr-buffer-source-{render,edges}.js, and none of
+  // it is platform-specific: there is no wavetable and no libm in this graph,
+  // so the same eight frames come back on every machine.
+  const state = await testing.async();
+
+  // Channel c holds (i + 1) * 10^c, so a shift, a repeat, a truncation and a
+  // channel mix all read back differently.
+  const fill = (buffer) => {
+    for (let c = 0; c < buffer.numberOfChannels; c++) {
+      const data = buffer.getChannelData(c);
+      for (let i = 0; i < data.length; i++) data[i] = (i + 1) * 10 ** c;
+    }
+    return buffer;
+  };
+
+  const RATE = 44100;
+  const f = (n) => n / RATE; // frames -> seconds
+
+  // Renders `frames` of one buffer source and returns its channels as strings,
+  // which is what an assertion failure has to be readable as.
+  const render = async (opts = {}) => {
+    const {
+      frames = 8, channels = 1, bufferChannels = 1, bufferFrames = 8,
+      bufferRate = RATE, start = [0], tweak = null,
+    } = opts;
+    const ctx = new OfflineAudioContext(channels, frames, RATE);
+    const src = ctx.createBufferSource();
+    src.buffer = fill(ctx.createBuffer(bufferChannels, bufferFrames, bufferRate));
+    src.connect(ctx.destination);
+    if (tweak) tweak(src, ctx);
+    if (start !== null) src.start(...start);
+    const out = await ctx.startRendering();
+    const rows = [];
+    for (let c = 0; c < out.numberOfChannels; c++) rows.push([...out.getChannelData(c)].join(','));
+    return rows.join(' | ');
+  };
+
+  const SILENT = '0,0,0,0,0,0,0,0';
+
+  // The identity case, at the width the widget actually asks for: 1 000 frames
+  // of a mono buffer must come back sample for sample, not merely summing the
+  // same.
+  const wide = await (async () => {
+    const ctx = new OfflineAudioContext(1, 1000, RATE);
+    const buffer = ctx.createBuffer(1, 1000, RATE);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.fround((i + 1) / data.length);
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    src.start(0);
+    const got = (await ctx.startRendering()).getChannelData(0);
+    let same = 0;
+    for (let i = 0; i < data.length; i++) if (got[i] === data[i]) same++;
+    return same;
+  })();
+
+  const replayed = {
+    // The widget's own graph, and start() with no arguments at all.
+    plain: await render({}),
+    startNoArgs: await render({ start: [] }),
+    // A whole-frame `when` shifts the read; one past the end plays nothing.
+    whenWholeFrame: await render({ start: [f(2)] }),
+    whenLate: await render({ start: [f(99)] }),
+    // offset and duration, both on frame boundaries.
+    offset: await render({ start: [0, f(2)] }),
+    duration: await render({ start: [0, 0, f(3)] }),
+    durationPastEnd: await render({ start: [0, 0, f(99)] }),
+    offsetAtEnd: await render({ start: [0, f(8)] }),
+    // A buffer shorter than the render, looped and not.
+    shortBuffer: await render({ bufferFrames: 4 }),
+    loopWhole: await render({ bufferFrames: 4, tweak: (s) => { s.loop = true; } }),
+    // A loop confined to a window inside the buffer.
+    loopWindow: await render({ tweak: (s) => { s.loop = true; s.loopStart = f(2); s.loopEnd = f(5); } }),
+    // loopEnd past the end clamps; a backwards window is no loop at all.
+    loopEndPastEnd: await render({ bufferFrames: 4, tweak: (s) => { s.loop = true; s.loopEnd = f(99); } }),
+    loopBackwards: await render({ tweak: (s) => { s.loop = true; s.loopStart = f(5); s.loopEnd = f(2); } }),
+    // An offset outside the loop window is pulled back to its start.
+    loopWithOffset: await render({
+      start: [0, f(6)],
+      tweak: (s) => { s.loop = true; s.loopStart = f(2); s.loopEnd = f(5); },
+    }),
+    loopWithDuration: await render({ bufferFrames: 4, start: [0, 0, f(6)], tweak: (s) => { s.loop = true; } }),
+    // stop() truncates at the frame; past the end it changes nothing, and
+    // stop(0) -- which is what a bare stop() means -- plays nothing at all.
+    stopMid: await render({ start: null, tweak: (s) => { s.start(0); s.stop(f(3)); } }),
+    stopPastEnd: await render({ start: null, tweak: (s) => { s.start(0); s.stop(f(99)); } }),
+    stopNoArgs: await render({ start: null, tweak: (s) => { s.start(0); s.stop(); } }),
+    stopBeforeStart: await render({ start: null, tweak: (s) => { s.start(f(4)); s.stop(f(2)); } }),
+    // Writing the two rate knobs their own default values changes nothing.
+    explicitUnityRate: await render({ tweak: (s) => { s.playbackRate.value = 1; s.detune.value = 0; } }),
+    // A unity gain node in the path is transparent, so the match is on what
+    // reaches the destination rather than on the node being wired straight in.
+    throughUnityGain: await render({
+      tweak: (src, ctx) => {
+        const gain = ctx.createGain();
+        src.disconnect(ctx.destination);
+        src.connect(gain);
+        gain.connect(ctx.destination);
+      },
+    }),
+    // Matching channel counts, and the two mixes that were measured: a mono
+    // buffer duplicated into a stereo destination, and a stereo one averaged
+    // down into a mono destination.
+    stereoToStereo: await render({ channels: 2, bufferChannels: 2 }),
+    monoToStereo: await render({ channels: 2 }),
+    stereoToMono: await render({ bufferChannels: 2 }),
+  };
+
+  // Everything this engine cannot reproduce exactly. Silence is a divergence
+  // from Chrome in several of these -- it renders 2x for `doubled` and a
+  // resampled signal for `rateHalf` -- but it is the divergence the rest of
+  // this engine already answers with, and a render that is nearly right is a
+  // louder tell than one that is plainly absent.
+  const silent = {
+    // Never started, no buffer, or connected to nothing.
+    unstarted: await render({ start: null }),
+    noBuffer: await render({ tweak: (s) => { s.buffer = null; } }),
+    unwired: await render({ tweak: (src, ctx) => { src.disconnect(ctx.destination); } }),
+    // Sub-frame scheduling: Chrome interpolates the buffer onto the offset
+    // grid rather than rounding to a frame.
+    whenHalfFrame: await render({ start: [f(2.5)] }),
+    offsetHalfFrame: await render({ start: [0, f(2.5)] }),
+    durationHalfFrame: await render({ start: [0, 0, f(2.5)] }),
+    loopHalfFrame: await render({ tweak: (s) => { s.loop = true; s.loopStart = f(1); s.loopEnd = f(4.5); } }),
+    stopHalfFrame: await render({ start: null, tweak: (s) => { s.start(0); s.stop(f(3.5)); } }),
+    // Resampling, whichever knob asks for it.
+    bufferRateLow: await render({ bufferRate: 22050 }),
+    bufferRateHigh: await render({ bufferRate: 48000 }),
+    playbackRateHalf: await render({ tweak: (s) => { s.playbackRate.value = 0.5; } }),
+    playbackRateDouble: await render({ tweak: (s) => { s.playbackRate.value = 2; } }),
+    reversed: await render({ tweak: (s) => { s.playbackRate.value = -1; } }),
+    detuned: await render({ tweak: (s) => { s.detune.value = 100; } }),
+    // A second source summing into the same destination.
+    doubled: await render({
+      tweak: (src, ctx) => {
+        const other = ctx.createBufferSource();
+        other.buffer = src.buffer;
+        other.connect(ctx.destination);
+        other.start(0);
+      },
+    }),
+    // A gain node that is not unity.
+    throughHalfGain: await render({
+      tweak: (src, ctx) => {
+        const gain = ctx.createGain();
+        gain.gain.value = 0.5;
+        src.disconnect(ctx.destination);
+        src.connect(gain);
+        gain.connect(ctx.destination);
+      },
+    }),
+    // Channel mixes that were never measured.
+    threeToMono: await render({ bufferChannels: 3 }),
+    // A modulated parameter: the engine records no param edges, only counts.
+    modulated: await render({
+      tweak: (src, ctx) => {
+        const lfo = ctx.createOscillator();
+        lfo.connect(src.playbackRate);
+        lfo.start(0);
+      },
+    }),
+  };
+
+  state.resolve();
+  await state.done(() => {
+    // 1 000 frames in, the same 1 000 frames out.
+    testing.expectEqual(1000, wide);
+
+    const expected = {
+      plain: '1,2,3,4,5,6,7,8',
+      startNoArgs: '1,2,3,4,5,6,7,8',
+      whenWholeFrame: '0,0,1,2,3,4,5,6',
+      whenLate: SILENT,
+      offset: '3,4,5,6,7,8,0,0',
+      duration: '1,2,3,0,0,0,0,0',
+      durationPastEnd: '1,2,3,4,5,6,7,8',
+      offsetAtEnd: SILENT,
+      shortBuffer: '1,2,3,4,0,0,0,0',
+      loopWhole: '1,2,3,4,1,2,3,4',
+      loopWindow: '1,2,3,4,5,3,4,5',
+      loopEndPastEnd: '1,2,3,4,1,2,3,4',
+      loopBackwards: '1,2,3,4,5,6,7,8',
+      loopWithOffset: '3,4,5,3,4,5,3,4',
+      loopWithDuration: '1,2,3,4,1,2,0,0',
+      stopMid: '1,2,3,0,0,0,0,0',
+      stopPastEnd: '1,2,3,4,5,6,7,8',
+      stopNoArgs: SILENT,
+      stopBeforeStart: SILENT,
+      explicitUnityRate: '1,2,3,4,5,6,7,8',
+      throughUnityGain: '1,2,3,4,5,6,7,8',
+      stereoToStereo: '1,2,3,4,5,6,7,8 | 10,20,30,40,50,60,70,80',
+      monoToStereo: '1,2,3,4,5,6,7,8 | 1,2,3,4,5,6,7,8',
+      stereoToMono: '5.5,11,16.5,22,27.5,33,38.5,44',
+    };
+    for (const [which, want] of Object.entries(expected)) {
+      testing.expectEqual(`${which}:${want}`, `${which}:${replayed[which]}`);
+    }
+
+    for (const [which, data] of Object.entries(silent)) {
+      testing.expectEqual(`${which}:${SILENT}`, `${which}:${data.split(' | ')[0]}`);
+    }
+  });
+}
+</script>
+
 <script id=audioContext_dictionary_refusal>
   // The options dictionary is named by its IDL name when it is handed a
   // non-object (measured on Chrome 151).
