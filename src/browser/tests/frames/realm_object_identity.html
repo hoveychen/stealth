@@ -78,6 +78,83 @@
 }
 </script>
 
+<script id="realm_screen_and_viewport_are_per_realm">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    // Chrome gives every realm its own Screen, VisualViewport and
+    // ScreenOrientation. They read the same numbers because the numbers belong
+    // to the page, not to the realm.
+    testing.expectTrue(w.screen !== screen);
+    testing.expectTrue(w.visualViewport !== visualViewport);
+    testing.expectTrue(w.screen.orientation !== screen.orientation);
+
+    testing.expectEqual(screen.width, w.screen.width);
+    testing.expectEqual(screen.height, w.screen.height);
+    testing.expectEqual(screen.availWidth, w.screen.availWidth);
+    testing.expectEqual(screen.orientation.type, w.screen.orientation.type);
+    testing.expectEqual(visualViewport.width, w.visualViewport.width);
+    testing.expectEqual(visualViewport.height, w.visualViewport.height);
+    testing.expectEqual(visualViewport.scale, w.visualViewport.scale);
+
+    f.remove();
+}
+</script>
+
+<script id="realm_screen_and_viewport_listeners_do_not_cross">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    // Both are EventTargets, so one shared instance is one shared listener
+    // list: a resize handler installed in the child would hear the parent's
+    // event. Two instances each keep their own.
+    let parent_resize = 0;
+    let child_resize = 0;
+    visualViewport.addEventListener('resize', () => parent_resize++);
+    w.visualViewport.addEventListener('resize', () => child_resize++);
+    visualViewport.dispatchEvent(new Event('resize'));
+    testing.expectEqual(1, parent_resize);
+    testing.expectEqual(0, child_resize);
+
+    let parent_change = 0;
+    let child_change = 0;
+    screen.orientation.addEventListener('change', () => parent_change++);
+    w.screen.orientation.addEventListener('change', () => child_change++);
+    screen.orientation.dispatchEvent(new Event('change'));
+    testing.expectEqual(1, parent_change);
+    testing.expectEqual(0, child_change);
+
+    // And the reverse direction, which is the one a widget in an iframe would
+    // notice: the parent must not hear what the child dispatches.
+    w.visualViewport.dispatchEvent(new Event('resize'));
+    testing.expectEqual(1, parent_resize);
+    testing.expectEqual(1, child_resize);
+
+    f.remove();
+}
+</script>
+
+<script id="realm_screen_patch_does_not_leak">
+{
+    const f = document.createElement('iframe');
+    document.body.appendChild(f);
+    const w = f.contentWindow;
+
+    // An expando put on the child's instance must not appear on the parent's.
+    w.screen.probe = 'child';
+    w.visualViewport.probe = 'child';
+    testing.expectEqual(undefined, screen.probe);
+    testing.expectEqual(undefined, visualViewport.probe);
+    testing.expectEqual('child', w.screen.probe);
+
+    f.remove();
+}
+</script>
+
 <script id="realm_crypto_wrappers_are_stable">
 {
     // The check above is only meaningful if a wrapper is stable within one
