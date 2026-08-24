@@ -289,6 +289,42 @@
 }
 </script>
 
+<script id="OffscreenCanvas#getContextAttributes">
+{
+  // Same echo as the element context, and the refusals name *this* interface.
+  const attrs = (settings) => new OffscreenCanvas(10, 10).getContext('2d', settings)
+    .getContextAttributes();
+
+  testing.expectEqual(false, attrs(undefined).willReadFrequently);
+  testing.expectEqual(true, attrs({ willReadFrequently: true }).willReadFrequently);
+  const all = attrs({
+    alpha: false,
+    colorSpace: 'display-p3',
+    colorType: 'float16',
+    desynchronized: true,
+    willReadFrequently: true,
+  });
+  testing.expectEqual('false,display-p3,float16,true,true',
+    [all.alpha, all.colorSpace, all.colorType, all.desynchronized, all.willReadFrequently].join(','));
+  testing.expectEqual(false, attrs('nonsense').willReadFrequently);
+
+  const P = "Failed to execute 'getContext' on 'OffscreenCanvas': " +
+    "Failed to read the '";
+  const M = "' property from 'CanvasContextCreationAttributesModule': " +
+    "The provided value 'bogus' is not a valid enum value of type ";
+  testing.expectError('TypeError: ' + P + 'colorSpace' + M + 'PredefinedColorSpace.',
+    () => attrs({ colorSpace: 'bogus' }));
+  testing.expectError('TypeError: ' + P + 'colorType' + M + 'CanvasPixelFormat.',
+    () => attrs({ colorType: 'bogus' }));
+  testing.expectError(
+    "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': " +
+    "Failed to read the 'willReadFrequently' property from " +
+    "'CanvasContextCreationAttributesModule': The provided value '1' is not " +
+    'a valid enum value of type CanvasWillReadFrequently.',
+    () => attrs({ willReadFrequently: 1 }));
+}
+</script>
+
 <script id="OffscreenCanvas#drawImage">
 {
   // This member did not exist on the offscreen context at all -- the element

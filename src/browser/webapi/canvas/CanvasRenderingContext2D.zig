@@ -46,6 +46,11 @@ _canvas: *Canvas,
 /// The pixels this context has actually painted. See `raster.zig` for what
 /// this does and does not attempt.
 _surface: Surface,
+/// The settings `getContext` was given, echoed by getContextAttributes.
+/// Fixed at creation: a second getContext call hands back this same context
+/// and its own settings are ignored, and neither reset() nor a resize touches
+/// them.
+_attributes: state.ContextAttributes = .{},
 /// Fill style: a colour, or the gradient/pattern object assigned to it.
 _fill_style: PaintStyle = .{},
 /// Stroke style, same three arms.
@@ -179,8 +184,8 @@ pub fn getImageData(
 }
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getContextAttributes
-pub fn getContextAttributes(_: *const CanvasRenderingContext2D) state.ContextAttributes {
-    return .{};
+pub fn getContextAttributes(self: *const CanvasRenderingContext2D) state.ContextAttributes {
+    return self._attributes;
 }
 
 /// We never lose the context: there is no GPU behind it to lose.

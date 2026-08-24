@@ -33,6 +33,7 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const dictionary = @import("../dictionary.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -154,7 +155,11 @@ pub fn Accessors(comptime T: type) type {
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getContextAttributes
 ///
-/// Chrome's answer for a plain `getContext('2d')`, field for field.
+/// Chrome's answer for a plain `getContext('2d')`, field for field — and, since
+/// `read` below, for one that was given settings: these used to be the defaults
+/// whatever the page asked for, so `getContext('2d', {willReadFrequently:
+/// true})` answered `false`. That one is the reading a detector takes, because
+/// asking for it is how a page says it means to call getImageData.
 pub const ContextAttributes = struct {
     alpha: bool = true,
     colorSpace: []const u8 = "srgb",
@@ -164,8 +169,96 @@ pub const ContextAttributes = struct {
     willReadFrequently: bool = false,
 
     pub const ToneMapping = struct {
+        /// Not read from the settings: Chrome answers `standard` even for
+        /// `{toneMapping: {mode: 'extended'}}` (measured).
         mode: []const u8 = "standard",
     };
+
+    /// The IDL enum. Canvas 2D takes the first two and refuses the rest with a
+    /// different sentence — see `colour_spaces` below.
+    const idl_colour_spaces = [_][]const u8{
+        "srgb",              "display-p3",  "rec2020",    "srgb-linear",
+        "display-p3-linear", "rec2100-hlg", "rec2100-pq",
+    };
+    const colour_spaces = [_][]const u8{ "srgb", "display-p3" };
+    const colour_types = [_][]const u8{ "unorm8", "float16" };
+    /// `willReadFrequently` is an enum of two strings, not a boolean, so a JS
+    /// boolean gets there by stringifying: `true` is the string "true". That is
+    /// why `1` and `null` are refused while `true` is not, and why `[]` is
+    /// refused as the empty string (all measured).
+    const will_read_frequently = [_][]const u8{ "true", "false" };
+
+    /// Reads the `CanvasContextCreationAttributesModule` dictionary that
+    /// `getContext` was handed. `interface` is the receiver's own name, which
+    /// the refusals carry: `HTMLCanvasElement` for the element and
+    /// `OffscreenCanvas` for the other, both measured on Chrome 151.
+    pub fn read(
+        comptime interface: []const u8,
+        settings: ?js.Value,
+        exec: *const js.Execution,
+    ) !ContextAttributes {
+        const Reader = dictionary.MethodReader(interface, "getContext", "CanvasContextCreationAttributesModule");
+        // A settings argument that is not an object is ignored rather than
+        // refused -- `getContext('2d', 'nonsense')` and `getContext('2d', 42)`
+        // both hand back a default context (measured), where the dictionary
+        // reader's own `read` would answer "The provided value is not of type".
+        const object: ?js.Value = if (settings) |value| blk: {
+            break :blk if (value.isObject()) value else null;
+        } else null;
+        const reader = try Reader.read(object, exec);
+
+        // Read in the order the members are declared, which is the order WebIDL
+        // converts them in.
+        const alpha = try reader.boolean("alpha", true);
+        const colour_space = (try reader.enumMember(
+            "colorSpace",
+            "PredefinedColorSpace",
+            &idl_colour_spaces,
+            "srgb",
+            exec,
+        )).?;
+        // In the IDL enum but not one canvas takes. The sentence is not the
+        // dictionary reader's: it names no property, and it says "of the type"
+        // rather than "of type" (measured with `rec2020`).
+        if (!contains(&colour_spaces, colour_space)) {
+            return dictionary.throwTypeError(try std.fmt.allocPrint(
+                exec.call_arena,
+                Reader.message_prefix ++ "The provided value '{s}' is not a valid " ++
+                    "enum value of the type PredefinedColorSpace.",
+                .{colour_space},
+            ), exec);
+        }
+        const colour_type = (try reader.enumMember(
+            "colorType",
+            "CanvasPixelFormat",
+            &colour_types,
+            "unorm8",
+            exec,
+        )).?;
+        const desynchronized = try reader.boolean("desynchronized", false);
+        const frequent = (try reader.enumMember(
+            "willReadFrequently",
+            "CanvasWillReadFrequently",
+            &will_read_frequently,
+            "false",
+            exec,
+        )).?;
+
+        return .{
+            .alpha = alpha,
+            .colorSpace = colour_space,
+            .colorType = colour_type,
+            .desynchronized = desynchronized,
+            .willReadFrequently = std.mem.eql(u8, frequent, "true"),
+        };
+    }
+
+    fn contains(haystack: []const []const u8, needle: []const u8) bool {
+        for (haystack) |candidate| {
+            if (std.mem.eql(u8, candidate, needle)) return true;
+        }
+        return false;
+    }
 };
 
 /// An even-length, non-negative, finite dash list, as `setLineDash` accepts

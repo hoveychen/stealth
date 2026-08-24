@@ -95,6 +95,126 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#getContextAttributes">
+{
+  // These used to be the defaults whatever the page asked for, so
+  // `getContext('2d', {willReadFrequently: true})` reported false -- and asking
+  // for that is how a page says it means to call getImageData. All Chrome 151
+  // readings.
+  const attrs = (settings) => document.createElement('canvas').getContext('2d', settings)
+    .getContextAttributes();
+
+  const fresh = attrs(undefined);
+  testing.expectEqual(true, fresh.alpha);
+  testing.expectEqual('srgb', fresh.colorSpace);
+  testing.expectEqual('unorm8', fresh.colorType);
+  testing.expectEqual(false, fresh.desynchronized);
+  testing.expectEqual('standard', fresh.toneMapping.mode);
+  testing.expectEqual(false, fresh.willReadFrequently);
+  // An empty dictionary is the same as none.
+  testing.expectEqual(false, attrs({}).willReadFrequently);
+
+  testing.expectEqual(true, attrs({ willReadFrequently: true }).willReadFrequently);
+  testing.expectEqual(false, attrs({ willReadFrequently: false }).willReadFrequently);
+  testing.expectEqual(false, attrs({ alpha: false }).alpha);
+  // `alpha` is a plain boolean, so it takes any value's truthiness.
+  testing.expectEqual(false, attrs({ alpha: 0 }).alpha);
+  testing.expectEqual(true, attrs({ desynchronized: true }).desynchronized);
+  testing.expectEqual('display-p3', attrs({ colorSpace: 'display-p3' }).colorSpace);
+  testing.expectEqual('float16', attrs({ colorType: 'float16' }).colorType);
+  // An unknown member is ignored rather than refused.
+  testing.expectEqual(true, attrs({ bogus: true, willReadFrequently: true }).willReadFrequently);
+  // toneMapping is not read: Chrome answers 'standard' either way.
+  testing.expectEqual('standard', attrs({ toneMapping: { mode: 'extended' } }).toneMapping.mode);
+
+  const all = attrs({
+    alpha: false,
+    colorSpace: 'display-p3',
+    colorType: 'float16',
+    desynchronized: true,
+    willReadFrequently: true,
+  });
+  testing.expectEqual('false,display-p3,float16,true,true',
+    [all.alpha, all.colorSpace, all.colorType, all.desynchronized, all.willReadFrequently].join(','));
+
+  // A settings argument that is not an object is ignored, not refused.
+  testing.expectEqual(false, attrs('nonsense').willReadFrequently);
+  testing.expectEqual(false, attrs(42).willReadFrequently);
+  testing.expectEqual(false, attrs(null).willReadFrequently);
+
+  // `willReadFrequently` is an enum of two *strings*, not a boolean, so a JS
+  // boolean only gets there by stringifying -- which is why 1 and null are
+  // refused while true is not.
+  const P = "Failed to execute 'getContext' on 'HTMLCanvasElement': " +
+    "Failed to read the 'willReadFrequently' property from " +
+    "'CanvasContextCreationAttributesModule': The provided value ";
+  const E = " is not a valid enum value of type CanvasWillReadFrequently.";
+  testing.expectEqual(true, attrs({ willReadFrequently: 'true' }).willReadFrequently);
+  testing.expectEqual(false, attrs({ willReadFrequently: 'false' }).willReadFrequently);
+  testing.expectEqual(false, attrs({ willReadFrequently: undefined }).willReadFrequently);
+  testing.expectError('TypeError: ' + P + "'1'" + E, () => attrs({ willReadFrequently: 1 }));
+  testing.expectError('TypeError: ' + P + "'0'" + E, () => attrs({ willReadFrequently: 0 }));
+  testing.expectError('TypeError: ' + P + "'no'" + E, () => attrs({ willReadFrequently: 'no' }));
+  testing.expectError('TypeError: ' + P + "'True'" + E, () => attrs({ willReadFrequently: 'True' }));
+  testing.expectError('TypeError: ' + P + "'null'" + E, () => attrs({ willReadFrequently: null }));
+  testing.expectError('TypeError: ' + P + "''" + E, () => attrs({ willReadFrequently: '' }));
+  // An array stringifies to the empty string; a plain object to [object Object].
+  testing.expectError('TypeError: ' + P + "''" + E, () => attrs({ willReadFrequently: [] }));
+  testing.expectError('TypeError: ' + P + "'[object Object]'" + E,
+    () => attrs({ willReadFrequently: {} }));
+
+  // The two colour enums, and the second sentence for a value that is in the
+  // IDL enum but is not one canvas 2D takes -- it names no property and says
+  // "of the type" rather than "of type".
+  testing.expectError(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': " +
+    "Failed to read the 'colorSpace' property from " +
+    "'CanvasContextCreationAttributesModule': The provided value 'bogus' " +
+    'is not a valid enum value of type PredefinedColorSpace.',
+    () => attrs({ colorSpace: 'bogus' }));
+  testing.expectError(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': " +
+    "Failed to read the 'colorType' property from " +
+    "'CanvasContextCreationAttributesModule': The provided value 'bogus' " +
+    'is not a valid enum value of type CanvasPixelFormat.',
+    () => attrs({ colorType: 'bogus' }));
+  for (const inIdl of ['rec2020', 'srgb-linear', 'display-p3-linear', 'rec2100-hlg', 'rec2100-pq']) {
+    testing.expectError(
+      "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': " +
+      "The provided value '" + inIdl + "' is not a valid enum value of the " +
+      'type PredefinedColorSpace.',
+      () => attrs({ colorSpace: inIdl }));
+  }
+  // Case matters: 'SRGB' is not in the enum at all.
+  testing.expectError('is not a valid enum value of type PredefinedColorSpace.',
+    () => attrs({ colorSpace: 'SRGB' }));
+
+  // The context is created once, so a second call hands back the same object
+  // and keeps the settings the first call made it with.
+  const el = document.createElement('canvas');
+  const first = el.getContext('2d', { willReadFrequently: true });
+  const second = el.getContext('2d', { willReadFrequently: false });
+  testing.expectEqual(true, first === second);
+  testing.expectEqual(true, second.getContextAttributes().willReadFrequently);
+  // The settings are still *read* first, though, so asking again with a bad
+  // enum member throws even though the value would have been ignored.
+  testing.expectError('is not a valid enum value of type PredefinedColorSpace.',
+    () => el.getContext('2d', { colorSpace: 'bogus' }));
+  testing.expectError('is not a valid enum value of type CanvasWillReadFrequently.',
+    () => el.getContext('2d', { willReadFrequently: 1 }));
+
+  // Neither reset() nor a resize touches them.
+  const kept = document.createElement('canvas');
+  const ctx = kept.getContext('2d', { willReadFrequently: true, alpha: false });
+  ctx.reset();
+  testing.expectEqual(true, ctx.getContextAttributes().willReadFrequently);
+  testing.expectEqual(false, ctx.getContextAttributes().alpha);
+  kept.width = 40;
+  testing.expectEqual(true, ctx.getContextAttributes().willReadFrequently);
+  testing.expectEqual(false, ctx.getContextAttributes().alpha);
+}
+</script>
+
 <script id="CanvasRenderingContext2D#gradient factory arguments">
 {
   // All Chrome 151 wording. None of these refused before: every factory took

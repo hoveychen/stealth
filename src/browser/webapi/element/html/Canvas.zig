@@ -28,6 +28,7 @@ const HtmlElement = @import("../Html.zig");
 const Blob = @import("../../Blob.zig");
 const png = @import("../../canvas/png.zig");
 const CanvasRenderingContext2D = @import("../../canvas/CanvasRenderingContext2D.zig");
+const state = @import("../../canvas/context_state.zig");
 const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("../../canvas/WebGL2RenderingContext.zig");
 const ImageBitmapRenderingContext = @import("../../canvas/ImageBitmapRenderingContext.zig");
@@ -99,7 +100,17 @@ const DrawingContext = union(enum) {
     bitmaprenderer: *ImageBitmapRenderingContext,
 };
 
-pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?DrawingContext {
+pub fn getContext(self: *Canvas, context_type: []const u8, settings: ?js.Value, exec: *Execution) !?DrawingContext {
+    const is_2d = std.mem.eql(u8, context_type, "2d");
+    // Read before looking for an existing context, because that is the order
+    // Chrome reads them in: a second `getContext('2d', {colorSpace: 'bogus'})`
+    // on a canvas that already has a 2D context still throws, even though the
+    // settings are then ignored (measured).
+    const attributes: state.ContextAttributes = if (is_2d)
+        try .read("HTMLCanvasElement", settings, exec)
+    else
+        .{};
+
     if (self._cached) |cached| {
         const matches = switch (cached) {
             .@"2d" => std.mem.eql(u8, context_type, "2d"),
@@ -112,10 +123,11 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
     }
 
     const drawing_context: DrawingContext = blk: {
-        if (std.mem.eql(u8, context_type, "2d")) {
-            const ctx = try frame._factory.create(CanvasRenderingContext2D{
+        if (is_2d) {
+            const ctx = try exec._factory.create(CanvasRenderingContext2D{
                 ._canvas = self,
-                ._surface = .{ .arena = frame.arena },
+                ._surface = .{ .arena = exec.arena },
+                ._attributes = attributes,
             });
             break :blk .{ .@"2d" = ctx };
         }
@@ -134,7 +146,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
         // a loud signal — `getContext('webgl') === null` happens on no real
         // browser on this hardware.
         if (std.mem.eql(u8, context_type, "webgl") or std.mem.eql(u8, context_type, "experimental-webgl")) {
-            const ctx = try frame._factory.create(WebGLRenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(frame.arena) });
+            const ctx = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(exec.arena) });
             break :blk .{ .webgl = ctx };
         }
 
@@ -142,12 +154,12 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
         // null for it was the loud answer -- no real Chrome refuses this
         // context type. See canvas/ImageBitmapRenderingContext.zig.
         if (std.mem.eql(u8, context_type, "bitmaprenderer")) {
-            const ctx = try frame._factory.create(ImageBitmapRenderingContext{ ._canvas = self });
+            const ctx = try exec._factory.create(ImageBitmapRenderingContext{ ._canvas = self });
             break :blk .{ .bitmaprenderer = ctx };
         }
 
         if (std.mem.eql(u8, context_type, "webgl2")) {
-            const ctx = try frame._factory.create(WebGL2RenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(frame.arena) });
+            const ctx = try exec._factory.create(WebGL2RenderingContext{ ._canvas = .{ .html = self }, ._gl = .init(exec.arena) });
             break :blk .{ .webgl2 = ctx };
         }
 
@@ -156,7 +168,7 @@ pub fn getContext(self: *Canvas, context_type: []const u8, frame: *Frame) !?Draw
         // handle, its `canvas` back-reference and the texture getCurrentTexture
         // hands out. See webgpu/pipeline.zig.
         if (std.mem.eql(u8, context_type, "webgpu")) {
-            const ctx = try frame._factory.create(GPUCanvasContext{ ._canvas = .{ .html = self } });
+            const ctx = try exec._factory.create(GPUCanvasContext{ ._canvas = .{ .html = self } });
             break :blk .{ .webgpu = ctx };
         }
         return null;
