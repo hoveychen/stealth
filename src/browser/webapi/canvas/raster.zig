@@ -24,11 +24,11 @@
 // strings, the way it would in any real browser. Before this, every canvas in
 // the engine hashed to the same value, which is a signal no browser produces.
 //
-// What is here: an RGBA8 (straight, *not* premultiplied — that is what
-// `getImageData` hands back) buffer, axis-aligned rectangle fills, a scanline
-// fill and stroke for the flattened paths `path.zig` builds, and source-over
-// compositing under the two separable blend modes of `Composite` below. What
-// is still not here: gradients, image decoding, and glyph rasterisation. Text
+// What is here: a *premultiplied* RGBA8 buffer, axis-aligned rectangle fills, a
+// scanline fill and stroke for the flattened paths `path.zig` builds, and
+// source-over compositing under the two separable blend modes of `Composite`
+// below. What is still not here: gradients, image decoding, and glyph
+// rasterisation. Text
 // in particular needs a font rasteriser to land any ink at all, so a text-based
 // canvas fingerprint still will not match Chrome's — see tools/fingerprint.
 //
@@ -46,6 +46,7 @@ const path_mod = @import("path.zig");
 
 const Allocator = std.mem.Allocator;
 const RGBA = color.RGBA;
+const Paint = color.Paint;
 const Path = path_mod.Path;
 const Point = path_mod.Point;
 const FillRule = path_mod.FillRule;
@@ -131,29 +132,34 @@ pub const Filter = struct {
     }
 
     /// The paint after the filter, which for a flat colour is the whole of it.
-    /// The coefficients are the sRGB luminance ones, applied to the bytes
+    /// The coefficients are the sRGB luminance ones, applied to the channels
     /// themselves — CSS filters do not linearise, and every primary confirms it
     /// (255 red reads 54, green 182, blue 18).
-    pub fn applyTo(self: Filter, paint: RGBA) RGBA {
+    ///
+    /// Chrome greys the *premultiplied* bytes rather than these, which is not
+    /// the same arithmetic for a translucent paint — but it reaches the same
+    /// stored byte, because premultiplying an unrounded grey rounds only once
+    /// either way. `rgba(64, 128, 192, 0.5)` under `grayscale(1)` reads back
+    /// 120 on Chrome: greying its premultiplied `{32, 64, 96}` gives 59.5,
+    /// and premultiplying this grey 119.02 gives 59.74 — the same 60 stored,
+    /// and the same 120 back out.
+    pub fn applyTo(self: Filter, paint: Paint) Paint {
         if (self.grayscale <= 0) {
             return paint;
         }
 
-        const r: f64 = @floatFromInt(paint.r);
-        const g: f64 = @floatFromInt(paint.g);
-        const b: f64 = @floatFromInt(paint.b);
-        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const luminance = 0.2126 * paint.r + 0.7152 * paint.g + 0.0722 * paint.b;
         // `grayscale(a)` is the spec's matrix, which for every a is exactly
         // this interpolation towards the luminance. Alpha is untouched.
         const mix = struct {
-            fn towards(from: f64, to: f64, amount: f64) u8 {
-                return @intFromFloat(std.math.clamp(@round(from + (to - from) * amount), 0, 255));
+            fn towards(from: f64, to: f64, amount: f64) f64 {
+                return from + (to - from) * amount;
             }
         }.towards;
         return .{
-            .r = mix(r, luminance, self.grayscale),
-            .g = mix(g, luminance, self.grayscale),
-            .b = mix(b, luminance, self.grayscale),
+            .r = mix(paint.r, luminance, self.grayscale),
+            .g = mix(paint.g, luminance, self.grayscale),
+            .b = mix(paint.b, luminance, self.grayscale),
             .a = paint.a,
         };
     }
@@ -165,9 +171,35 @@ arena: Allocator,
 /// `pixels` is empty.
 width: u32 = 0,
 height: u32 = 0,
-/// Straight (non-premultiplied) RGBA8, row-major, `width * height * 4` long.
-/// Empty until something actually draws.
+/// Premultiplied RGBA8, row-major, `width * height * 4` long. Empty until
+/// something actually draws.
+///
+/// Premultiplied is what Chrome's bitmap is, and it is observable: the colour
+/// has to be un-premultiplied again for `getImageData`, and that does not undo
+/// the rounding storing it did. `rgba(200, 100, 50, 0.3)` reads back
+/// `c763324d`, not the `c864324d` a straight-alpha bitmap would hand back
+/// unchanged (measured -- probes/canvas-alpha-semantics.js). Every consumer
+/// that wants the straight bytes a page sees goes through `readPixels`.
 pixels: []u8 = &.{},
+/// What the bitmap is where nothing has been painted, which `{alpha: false}`
+/// changes from transparent black to opaque black. A page can read that back
+/// without drawing anything, and every paint onto it composites against black
+/// rather than being stored with its own alpha (measured --
+/// probes/canvas-alpha-semantics.js).
+background: Background = .transparent,
+
+pub const Background = enum {
+    transparent,
+    /// `{alpha: false}`.
+    black,
+
+    fn pixel(self: Background) [4]u8 {
+        return switch (self) {
+            .transparent => .{ 0, 0, 0, 0 },
+            .black => .{ 0, 0, 0, 255 },
+        };
+    }
+};
 
 /// Roughly a 2896x2896 canvas. Past this we simply refuse to back the canvas,
 /// and every operation degrades to the old no-op behaviour. Fingerprinting
@@ -202,7 +234,7 @@ pub fn ensure(self: *Surface, width: u32, height: u32) ?[]u8 {
     }
 
     const pixels = self.arena.alloc(u8, @intCast(bytes)) catch return null;
-    @memset(pixels, 0);
+    fill(pixels, self.background);
 
     self.reset();
     self.pixels = pixels;
@@ -270,12 +302,25 @@ const Bounds = struct {
     }
 };
 
+/// `globalAlpha` as the compositor sees it: a byte, not the float a script set.
+///
+/// Measured (probes/expr-globalalpha-quant.js): black over white at
+/// `globalAlpha = 0.5` reads 127. An exact half would store
+/// `255 * (1 - 0.5) = 127.5`, which rounds away from that — every other reading
+/// here pins the rounding as half away from zero, `rgba(255, 255, 255, 0.1)`
+/// answering `1a` for its `25.5` among them — while `128/255` stores
+/// `255 * (1 - 128/255) = 127.0` and lands on it. The neighbours agree: 0.502
+/// is also a 128 and also reads 127, and 0.498 is a 127 and reads 128.
+fn opacity(global_alpha: f64) f64 {
+    return @round(std.math.clamp(global_alpha, 0, 1) * 255) / 255;
+}
+
 /// Composites `paint` over the rectangle, `global_alpha` scaling its opacity.
-pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, paint: RGBA, global_alpha: f64, op: Composite) void {
+pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, paint: Paint, global_alpha: f64, op: Composite) void {
     const bounds = Bounds.clip(x, y, w, h, canvas_width, canvas_height) orelse return;
     const pixels = self.ensure(canvas_width, canvas_height) orelse return;
 
-    const alpha = std.math.clamp(global_alpha, 0, 1) * paint.normalizedAlpha();
+    const alpha = opacity(global_alpha) * paint.a;
     if (alpha <= 0) {
         return;
     }
@@ -300,14 +345,27 @@ pub fn clearRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, 
     while (row < bounds.y1) : (row += 1) {
         const from = (row * canvas_width + bounds.x0) * 4;
         const to = (row * canvas_width + bounds.x1) * 4;
-        @memset(pixels[from..to], 0);
+        fill(pixels[from..to], self.background);
+    }
+}
+
+/// Every pixel of `bytes` set to `background`.
+fn fill(bytes: []u8, background: Background) void {
+    if (background == .transparent) {
+        @memset(bytes, 0);
+        return;
+    }
+    const pixel = background.pixel();
+    var offset: usize = 0;
+    while (offset + 4 <= bytes.len) : (offset += 4) {
+        @memcpy(bytes[offset..][0..4], &pixel);
     }
 }
 
 /// Strokes the rectangle's outline as four bands centred on its edges, which
 /// is what a real stroke of an axis-aligned rectangle degenerates to once
 /// joins and caps have nothing to round off.
-pub fn strokeRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, line_width: f64, paint: RGBA, global_alpha: f64, op: Composite) void {
+pub fn strokeRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, line_width: f64, paint: Paint, global_alpha: f64, op: Composite) void {
     if (!std.math.isFinite(line_width) or line_width <= 0) {
         return;
     }
@@ -414,11 +472,11 @@ fn edgeBounds(edges: []const Edge, width: u32, height: u32) ?Bounds {
 
 /// Fills `p` — already flattened and already in device space — with `paint`.
 /// `scratch` is only used for the edge list and may be a call-lifetime arena.
-pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, rule: FillRule, paint: RGBA, global_alpha: f64, op: Composite) void {
+pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, rule: FillRule, paint: Paint, global_alpha: f64, op: Composite) void {
     const edges = edgesOf(scratch, p) orelse return;
     const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
 
-    const alpha = std.math.clamp(global_alpha, 0, 1) * paint.normalizedAlpha();
+    const alpha = opacity(global_alpha) * paint.a;
     if (alpha <= 0) {
         return;
     }
@@ -454,7 +512,7 @@ pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_he
 /// not what `lineJoin` says, but it is the shape a miter and a bevel both
 /// approach as the segments get short — and a flattened curve's segments are
 /// short by construction.
-pub fn strokePath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, line_width: f64, paint: RGBA, global_alpha: f64, op: Composite) void {
+pub fn strokePath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path, line_width: f64, paint: Paint, global_alpha: f64, op: Composite) void {
     if (!std.math.isFinite(line_width) or line_width <= 0) {
         return;
     }
@@ -530,6 +588,9 @@ pub fn drawSurface(
     src: *const Surface,
     src_width: u32,
     src_height: u32,
+    /// The two bitmaps' colour spaces. Equal for every canvas pair until one of
+    /// them is created display-p3, and then every texel is converted.
+    spaces: color.SpaceChange,
     blit: Blit,
     ctm: path_mod.Transform,
     global_alpha: f64,
@@ -546,7 +607,7 @@ pub fn drawSurface(
     const edges = edgesOf(scratch, &quad_path) orelse return;
     const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
 
-    const alpha = std.math.clamp(global_alpha, 0, 1);
+    const alpha = opacity(global_alpha);
     if (alpha <= 0) return;
     const pixels = self.ensure(canvas_width, canvas_height) orelse return;
 
@@ -573,9 +634,13 @@ pub fn drawSurface(
             const from = (@as(usize, src_y) * src_width + src_x) * 4;
             const texel = source[from..][0..4];
             if (texel[3] == 0) continue;
-            const paint = filter.applyTo(.{ .r = texel[0], .g = texel[1], .b = texel[2], .a = 255 });
+            // The source bitmap is premultiplied too, so the colour has to come
+            // back out of its own alpha before it can be converted or blended.
+            // Then into this bitmap's colour space, then through the filter —
+            // the same order `context_draw`'s `paint` uses for a fill.
+            const paint = filter.applyTo(color.convertCanvasPaint(spaces.from, spaces.to, straight(texel)));
             const at = (row * canvas_width + col) * 4;
-            blend(pixels[at..][0..4], paint, alpha * (@as(f64, @floatFromInt(texel[3])) / 255), op);
+            blend(pixels[at..][0..4], paint, alpha * paint.a, op);
         }
     }
 }
@@ -608,12 +673,22 @@ pub fn clearPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_h
             if (hits == 0) continue;
             const at = (row * canvas_width + col) * 4;
             if (hits == samples * samples) {
-                @memset(pixels[at..][0..4], 0);
+                @memcpy(pixels[at..][0..4], &self.background.pixel());
                 continue;
             }
-            const keep = 1 - @as(f64, @floatFromInt(hits)) / (samples * samples);
-            const alpha: f64 = @floatFromInt(pixels[at + 3]);
-            pixels[at + 3] = @intFromFloat(std.math.clamp(@round(alpha * keep), 0, 255));
+            const covered = @as(f64, @floatFromInt(hits)) / (samples * samples);
+            if (self.background == .black) {
+                // Clearing part of an opaque canvas paints that much black over
+                // it; the pixel stays opaque either way.
+                blend(pixels[at..][0..4], .{ .r = 0, .g = 0, .b = 0 }, covered, .source_over);
+                continue;
+            }
+            // Premultiplied, so scaling the alpha down means scaling the colour
+            // with it — the colour *is* the colour times the alpha.
+            for (pixels[at..][0..4]) |*channel| {
+                const value: f64 = @floatFromInt(channel.*);
+                channel.* = @intFromFloat(std.math.clamp(@round(value * (1 - covered)), 0, 255));
+            }
         }
     }
 }
@@ -642,11 +717,41 @@ fn disc(arena: Allocator, out: *Path, at: Point, radius: f64) void {
     sub.closed = true;
 }
 
+/// One premultiplied pixel as the straight colour a page reads: the channels
+/// divided back out of their own alpha.
+///
+/// The division is the whole of the divergence this bitmap's premultiplication
+/// buys, because it does not undo the rounding that storing the pixel did.
+/// Measured (probes/canvas-alpha-semantics.js): `rgba(200, 100, 50, 0.3)`
+/// stores `{60, 30, 15, 77}` and comes back out as `c76332`, where the 200 that
+/// went in is gone for good.
+fn straight(pixel: *const [4]u8) Paint {
+    const alpha: f64 = @floatFromInt(pixel[3]);
+    if (alpha == 0) {
+        return .{ .r = 0, .g = 0, .b = 0, .a = 0 };
+    }
+    return .{
+        .r = @as(f64, @floatFromInt(pixel[0])) * 255 / alpha,
+        .g = @as(f64, @floatFromInt(pixel[1])) * 255 / alpha,
+        .b = @as(f64, @floatFromInt(pixel[2])) * 255 / alpha,
+        .a = alpha / 255,
+    };
+}
+
 /// Copies a `sw` x `sh` window starting at (`sx`, `sy`) into `out`, which must
-/// be `sw * sh * 4` long and already zeroed. The window may sit partly (or
-/// entirely) outside the canvas; those pixels stay transparent black.
+/// be `sw * sh * 4` long and already zeroed, un-premultiplying on the way: this
+/// is the straight-alpha form `getImageData` and a PNG both want. The window
+/// may sit partly (or entirely) outside the canvas; those pixels stay
+/// transparent black.
 pub fn readPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, sx: i64, sy: i64, sw: u32, sh: u32, out: []u8) void {
-    const pixels = self.peek(canvas_width, canvas_height) orelse return;
+    // An opaque canvas that has never been painted still reads back as opaque
+    // black, so the absence of a buffer is not the absence of pixels. `out`
+    // arrives zeroed, which is already right for a transparent one.
+    const pixels: ?[]const u8 = self.peek(canvas_width, canvas_height);
+    if (pixels == null and self.background == .transparent) {
+        return;
+    }
+    const background = self.background.pixel();
 
     var row: u32 = 0;
     while (row < sh) : (row += 1) {
@@ -661,53 +766,92 @@ pub fn readPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, s
             if (src_x < 0 or src_x >= canvas_width) {
                 continue;
             }
-            const from: usize = (@as(usize, @intCast(src_y)) * canvas_width + @as(usize, @intCast(src_x))) * 4;
             const to: usize = (@as(usize, row) * sw + col) * 4;
-            @memcpy(out[to..][0..4], pixels[from..][0..4]);
+            if (pixels) |have| {
+                const from: usize = (@as(usize, @intCast(src_y)) * canvas_width +
+                    @as(usize, @intCast(src_x))) * 4;
+                const pixel = straight(have[from..][0..4]).toRGBA();
+                out[to] = pixel.r;
+                out[to + 1] = pixel.g;
+                out[to + 2] = pixel.b;
+                out[to + 3] = pixel.a;
+            } else {
+                @memcpy(out[to..][0..4], &background);
+            }
         }
     }
 }
 
-/// Source-over of a straight-alpha `paint` (at effective opacity `alpha`) onto
-/// a straight-alpha destination pixel, `op` deciding what the two overlapping
-/// opaque parts mix to.
-///
-/// Measured against Chrome 151 (probes/expr-composite-blend.js): every cell of
-/// a (backdrop alpha x source alpha x globalAlpha) sweep lands on the byte
-/// Chrome does, bar one channel of one cell — `multiply` with *both* sides
-/// half-transparent, where we give 107 and Chrome 106. That one is structural:
-/// Chrome's backdrop is premultiplied 8-bit, so the colour it un-premultiplies
-/// back out of a half-alpha 128 is 127, not the 128 we still have. Not a bug to
-/// chase without making the whole surface premultiplied.
-fn blend(dst: *[4]u8, paint: RGBA, alpha: f64, op: Composite) void {
-    // A blend mode still needs the backdrop when the source is opaque — but
-    // not when there is no backdrop to blend with.
-    if (alpha >= 1 and (op == .source_over or dst[3] == 0)) {
-        dst.* = .{ paint.r, paint.g, paint.b, 255 };
-        return;
-    }
+/// One straight-alpha pixel in the premultiplied form the bitmap stores, which
+/// is how an ImageData's bytes have to arrive. The rounding is a fill's: a
+/// `blend` of the same colour at the same alpha stores the same byte.
+pub fn premultiply(pixel: *const [4]u8) [4]u8 {
+    const alpha = @as(f64, @floatFromInt(pixel[3])) / 255;
+    return .{
+        RGBA.round255(@as(f64, @floatFromInt(pixel[0])) * alpha),
+        RGBA.round255(@as(f64, @floatFromInt(pixel[1])) * alpha),
+        RGBA.round255(@as(f64, @floatFromInt(pixel[2])) * alpha),
+        pixel[3],
+    };
+}
 
+/// The whole bitmap as the straight-alpha bytes a page reads, allocated on
+/// `arena`. The store is premultiplied, so the two consumers that hand the
+/// pixels straight out — a PNG and a VideoFrame — cannot borrow it the way
+/// `peek` lets a second surface do.
+///
+/// Null when the canvas has no pixels to hand back at all, which every caller
+/// already reads as "every pixel is transparent black".
+pub fn straightPixels(self: *const Surface, arena: Allocator, canvas_width: u32, canvas_height: u32) !?[]u8 {
+    if (self.peek(canvas_width, canvas_height) == null and self.background == .transparent) {
+        return null;
+    }
+    const out = try arena.alloc(u8, @as(usize, canvas_width) * canvas_height * 4);
+    @memset(out, 0);
+    self.readPixels(canvas_width, canvas_height, 0, 0, canvas_width, canvas_height, out);
+    return out;
+}
+
+/// Source-over of `paint` (at effective opacity `alpha`) onto a premultiplied
+/// destination pixel, `op` deciding what the two overlapping opaque parts mix
+/// to. The result is premultiplied too: the compositing spec's `co` and `ao`,
+/// stored as they come out rather than divided back apart.
+///
+/// This is where the bitmap's premultiplication is worth having. Measured
+/// against Chrome 151 (probes/expr-composite-blend.js), a (backdrop alpha x
+/// source alpha x globalAlpha) sweep now lands on Chrome's byte in every cell —
+/// including `multiply` with *both* sides half-transparent, which a
+/// straight-alpha bitmap got wrong: it un-premultiplies a half-alpha 64 back
+/// into 127.5, where a straight bitmap still had the 128 that went in, and the
+/// 106 Chrome reads follows from the 127.5.
+fn blend(dst: *[4]u8, paint: Paint, alpha: f64, op: Composite) void {
     const dst_alpha = @as(f64, @floatFromInt(dst[3])) / 255;
+    // A blend function needs the backdrop's own colour, and there is none to
+    // have when the backdrop is empty: every operator degenerates to
+    // source-over there.
+    const blend_op = if (dst[3] == 0) Composite.source_over else op;
+
     const out_alpha = alpha + dst_alpha * (1 - alpha);
     if (out_alpha <= 0) {
         dst.* = .{ 0, 0, 0, 0 };
         return;
     }
 
-    const src_channels = [3]u8{ paint.r, paint.g, paint.b };
-    for (src_channels, 0..) |channel, i| {
-        const src: f64 = @floatFromInt(channel);
-        const old: f64 = @floatFromInt(dst[i]);
+    const backdrop = straight(dst);
+    const src_channels = [3]f64{ paint.r, paint.g, paint.b };
+    const old_channels = [3]f64{ backdrop.r, backdrop.g, backdrop.b };
+    for (src_channels, old_channels, 0..) |src, old, i| {
+        const stored: f64 = @floatFromInt(dst[i]);
         // The blend function only governs where source and backdrop overlap;
-        // the part of each that the other does not cover stays itself. The two
-        // arms are the same expression for `source_over` — spelled separately
-        // so its arithmetic, and so every pixel we already produce, is
-        // untouched to the last bit.
-        const mixed = switch (op) {
-            .source_over => (src * alpha + old * dst_alpha * (1 - alpha)) / out_alpha,
-            else => (alpha * (1 - dst_alpha) * src +
-                alpha * dst_alpha * op.apply(old, src) +
-                (1 - alpha) * dst_alpha * old) / out_alpha,
+        // the part of each that the other does not cover stays itself. Both
+        // arms are the spec's `co`, and the term the source does not cover is
+        // `(1 - as) * ab * Cb` — which is `(1 - as)` times the premultiplied
+        // byte already sitting there.
+        const mixed = switch (blend_op) {
+            .source_over => alpha * src + (1 - alpha) * stored,
+            else => alpha * (1 - dst_alpha) * src +
+                alpha * dst_alpha * blend_op.apply(old, src) +
+                (1 - alpha) * stored,
         };
         dst[i] = @intFromFloat(std.math.clamp(@round(mixed), 0, 255));
     }
@@ -724,18 +868,63 @@ test "raster: fillRect composites and clips" {
     defer surface.reset();
 
     // A 4x4 canvas, opaque red over the top-left 2x2, spilling out of bounds.
-    surface.fillRect(4, 4, -1, -1, 3, 3, RGBA.Named.red, 1, .source_over);
+    surface.fillRect(4, 4, -1, -1, 3, 3, .fromRGBA(RGBA.Named.red), 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[0..4]);
     try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[4..8]);
     // Third column of the first row is untouched.
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[8..12]);
 
     // Half-opaque white on top of the red.
-    surface.fillRect(4, 4, 0, 0, 1, 1, .{ .r = 255, .g = 255, .b = 255, .a = 128 }, 1, .source_over);
+    surface.fillRect(4, 4, 0, 0, 1, 1, .fromRGBA(.{ .r = 255, .g = 255, .b = 255, .a = 128 }), 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 255, 128, 128, 255 }, surface.pixels[0..4]);
 
     surface.clearRect(4, 4, 0, 0, 2, 2);
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[0..4]);
+}
+
+test "raster: a translucent fill reads back Chrome's bytes" {
+    var buffer: [1024]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+    var surface = Surface{ .arena = fba.allocator() };
+    defer surface.reset();
+
+    // Chrome 151 readbacks (probes/canvas-alpha-semantics.js). Every one of
+    // them is a single fill onto an empty srgb canvas, so nothing here is about
+    // compositing: the colour comes back changed because the bitmap holds it
+    // premultiplied, and un-premultiplying a byte does not undo the rounding
+    // that storing it did.
+    // The alphas are bytes because a legacy notation's alpha already is one:
+    // `rgba(200, 100, 50, 0.3)` is 77/255.
+    const cases = [_]struct {
+        paint: RGBA,
+        global_alpha: f64 = 1,
+        want: [4]u8,
+    }{
+        .{ .paint = .{ .r = 200, .g = 100, .b = 50, .a = 77 }, .want = .{ 0xc7, 0x63, 0x32, 0x4d } },
+        .{ .paint = .{ .r = 1, .g = 2, .b = 3, .a = 1 }, .want = .{ 0x00, 0x00, 0x00, 0x01 } },
+        .{ .paint = .{ .r = 37, .g = 213, .b = 91, .a = 158 }, .want = .{ 0x25, 0xd5, 0x5a, 0x9e } },
+        .{ .paint = .{ .r = 255, .g = 255, .b = 255, .a = 26 }, .want = .{ 0xff, 0xff, 0xff, 0x1a } },
+        .{ .paint = .{ .r = 128, .g = 128, .b = 128, .a = 128 }, .want = .{ 0x80, 0x80, 0x80, 0x80 } },
+        // `globalAlpha` reaches the same place the paint's own alpha does, and
+        // is a byte by the time it gets there: 0.3 is 77/255, so this is the
+        // first case again (probes/expr-globalalpha-quant.js).
+        .{ .paint = .{ .r = 200, .g = 100, .b = 50 }, .global_alpha = 0.3, .want = .{ 0xc7, 0x63, 0x32, 0x4d } },
+        // An opaque fill is stored as itself, premultiplied or not.
+        .{ .paint = .{ .r = 200, .g = 100, .b = 50 }, .want = .{ 200, 100, 50, 255 } },
+    };
+
+    for (cases, 0..) |case, i| {
+        surface.reset();
+        surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(case.paint), case.global_alpha, .source_over);
+
+        var out = [_]u8{0} ** 4;
+        surface.readPixels(1, 1, 0, 0, 1, 1, &out);
+        testing.expectEqualSlices(u8, &case.want, &out) catch |err| {
+            std.debug.print("case {d}\n", .{i});
+            return err;
+        };
+    }
 }
 
 test "raster: readPixels windows out of bounds" {
@@ -745,7 +934,7 @@ test "raster: readPixels windows out of bounds" {
     var surface = Surface{ .arena = fba.allocator() };
     defer surface.reset();
 
-    surface.fillRect(2, 2, 0, 0, 2, 2, RGBA.Named.lime, 1, .source_over);
+    surface.fillRect(2, 2, 0, 0, 2, 2, .fromRGBA(RGBA.Named.lime), 1, .source_over);
 
     var out = [_]u8{0} ** (2 * 2 * 4);
     surface.readPixels(2, 2, 1, 1, 2, 2, &out);
@@ -769,7 +958,7 @@ test "raster: a filled path is ink, and the winding rule decides the hole" {
     try p.arc(alloc, 8, 8, 7, 0, std.math.tau, false, ctm);
     try p.arc(alloc, 8, 8, 3, 0, std.math.tau, false, ctm);
 
-    surface.fillPath(alloc, 16, 16, &p, .evenodd, RGBA.Named.red, 1, .source_over);
+    surface.fillPath(alloc, 16, 16, &p, .evenodd, .fromRGBA(RGBA.Named.red), 1, .source_over);
     // The middle is inside both, so even-odd leaves it alone.
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[(8 * 16 + 8) * 4 ..][0..4]);
     // A point between the two radii is inside exactly one.
@@ -777,7 +966,7 @@ test "raster: a filled path is ink, and the winding rule decides the hole" {
 
     // The same path under the non-zero rule has no hole.
     surface.reset();
-    surface.fillPath(alloc, 16, 16, &p, .nonzero, RGBA.Named.red, 1, .source_over);
+    surface.fillPath(alloc, 16, 16, &p, .nonzero, .fromRGBA(RGBA.Named.red), 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 255, 0, 0, 255 }, surface.pixels[(8 * 16 + 8) * 4 ..][0..4]);
 }
 
@@ -795,7 +984,7 @@ test "raster: a stroke lands on both sides of its path" {
     try p.lineTo(alloc, 8, 4, ctm);
 
     // Two wide, centred on y=4: rows 3 and 4 are covered whole, row 5 is not.
-    surface.strokePath(alloc, 8, 8, &p, 2, RGBA.Named.lime, 1, .source_over);
+    surface.strokePath(alloc, 8, 8, &p, 2, .fromRGBA(RGBA.Named.lime), 1, .source_over);
     try testing.expectEqualSlices(u8, &.{ 0, 255, 0, 255 }, surface.pixels[(3 * 8 + 4) * 4 ..][0..4]);
     try testing.expectEqualSlices(u8, &.{ 0, 255, 0, 255 }, surface.pixels[(4 * 8 + 4) * 4 ..][0..4]);
     try testing.expectEqualSlices(u8, &.{ 0, 0, 0, 0 }, surface.pixels[(6 * 8 + 4) * 4 ..][0..4]);
@@ -812,10 +1001,12 @@ test "raster: the blend modes land on Chrome's bytes" {
     const source = RGBA{ .r = 64, .g = 128, .b = 192, .a = 255 };
     const half_source = RGBA{ .r = 64, .g = 128, .b = 192, .a = 128 };
     const half_backdrop = RGBA{ .r = 255, .g = 128, .b = 0, .a = 128 };
+    const steel = RGBA{ .r = 51, .g = 102, .b = 204, .a = 255 };
 
     // Every expectation below is a Chrome 151 readback
-    // (probes/expr-composite-blend.js), not a hand-derived value — bar the one
-    // cell called out in place, where the comment says what Chrome reads.
+    // (results/expr-composite-blend.chrome.json), not a hand-derived value.
+    // The whole sweep matches now; before the bitmap was premultiplied, the
+    // both-half `multiply` cell did not.
     const cases = [_]struct {
         back: ?RGBA,
         src: RGBA,
@@ -826,41 +1017,45 @@ test "raster: the blend modes land on Chrome's bytes" {
         // Opaque over opaque is the blend function on its own.
         .{ .back = backdrop, .src = source, .op = .multiply, .want = .{ 64, 64, 0, 255 } },
         .{ .back = backdrop, .src = source, .op = .difference, .want = .{ 191, 0, 192, 255 } },
+        // Each mode's fixed points: white and black are `multiply`'s identity
+        // and annihilator, and a colour differenced against itself is black.
+        .{ .back = steel, .src = RGBA.Named.white, .op = .multiply, .want = .{ 51, 102, 204, 255 } },
+        .{ .back = steel, .src = RGBA.Named.black, .op = .multiply, .want = .{ 0, 0, 0, 255 } },
+        .{ .back = steel, .src = steel, .op = .difference, .want = .{ 0, 0, 0, 255 } },
+        .{ .back = steel, .src = RGBA.Named.white, .op = .difference, .want = .{ 204, 153, 51, 255 } },
+        .{ .back = steel, .src = RGBA.Named.black, .op = .difference, .want = .{ 51, 102, 204, 255 } },
         // No backdrop: nothing to blend with, so the source lands as-is.
         .{ .back = null, .src = source, .op = .multiply, .want = .{ 64, 128, 192, 255 } },
         .{ .back = null, .src = source, .op = .difference, .want = .{ 64, 128, 192, 255 } },
         // A half-opaque source only blends over the half it covers.
         .{ .back = backdrop, .src = half_source, .op = .multiply, .want = .{ 159, 96, 0, 255 } },
         .{ .back = backdrop, .src = half_source, .op = .difference, .want = .{ 223, 64, 96, 255 } },
-        // A `globalAlpha` of 0.5 is *not* tested against Chrome here, and it is
-        // the one thing in the sweep that does not line up: Chrome rounds the
-        // paint's alpha to a byte, so its 0.5 is 128/255 and it reads 159 where
-        // we read 160. That is a divergence in the alpha, not in the blending —
-        // it is there under plain source-over too — so it belongs to whatever
-        // fixes the alpha rather than being smuggled in here. Measured in
-        // probes/expr-globalalpha-quant.js.
+        // The same half through `globalAlpha` instead, which Chrome reads
+        // identically — it rounds that to a byte too, so 0.5 is the same
+        // 128/255 the notation above parsed to (see `opacity`).
+        .{ .back = backdrop, .src = source, .op = .multiply, .global_alpha = 0.5, .want = .{ 159, 96, 0, 255 } },
+        .{ .back = backdrop, .src = source, .op = .difference, .global_alpha = 0.5, .want = .{ 223, 64, 96, 255 } },
         // A half-opaque backdrop: the uncovered half of the source stays itself.
         .{ .back = half_backdrop, .src = source, .op = .multiply, .want = .{ 64, 96, 96, 255 } },
         .{ .back = half_backdrop, .src = source, .op = .difference, .want = .{ 128, 64, 192, 255 } },
-        // Both half-opaque — the one cell of the sweep that does not match, and
-        // only under `multiply`: Chrome reads {128, 106, 64, 192} where we read
-        // {127, 107, 64, 192}. Both channels land within half a unit of the
-        // rounding boundary (127.4998 and 106.65), and Chrome is on the other
-        // side of it because its backdrop is premultiplied 8-bit, so what it
-        // un-premultiplies out of a half-alpha 128 is 127 (see `blend`). Chasing
-        // it means making this whole surface premultiplied. `difference` at the
-        // same corner matches whole.
-        .{ .back = half_backdrop, .src = half_source, .op = .multiply, .want = .{ 127, 107, 64, 192 } },
+        // Both half-opaque, which is the corner a straight-alpha bitmap could
+        // not reach: Chrome un-premultiplies its half-alpha green 64 back into
+        // 127.5, where a straight bitmap still held the 128 that went in, and
+        // `multiply` carries that half-unit all the way to a whole one.
+        .{ .back = half_backdrop, .src = half_source, .op = .multiply, .want = .{ 128, 106, 64, 192 } },
         .{ .back = half_backdrop, .src = half_source, .op = .difference, .want = .{ 170, 85, 128, 192 } },
     };
 
     for (cases, 0..) |case, i| {
         surface.reset();
         if (case.back) |back| {
-            surface.fillRect(1, 1, 0, 0, 1, 1, back, 1, .source_over);
+            surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(back), 1, .source_over);
         }
-        surface.fillRect(1, 1, 0, 0, 1, 1, case.src, case.global_alpha, case.op);
-        testing.expectEqualSlices(u8, &case.want, surface.pixels[0..4]) catch |err| {
+        surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(case.src), case.global_alpha, case.op);
+
+        var out = [_]u8{0} ** 4;
+        surface.readPixels(1, 1, 0, 0, 1, 1, &out);
+        testing.expectEqualSlices(u8, &case.want, &out) catch |err| {
             std.debug.print("case {d}: {s}\n", .{ i, @tagName(case.op) });
             return err;
         };
@@ -907,32 +1102,46 @@ test "context filter: what a grayscale() string parses to" {
 
 test "context filter: grayscale lands on Chrome's bytes" {
     // The sRGB luminance of each primary, and the interpolation towards it.
+    // The filter works in floats, so these compare the byte it quantises to.
     const full: Filter = .{ .grayscale = 1 };
-    try testing.expectEqual(RGBA{ .r = 54, .g = 54, .b = 54, .a = 255 }, full.applyTo(RGBA.Named.red));
-    try testing.expectEqual(RGBA{ .r = 182, .g = 182, .b = 182, .a = 255 }, full.applyTo(RGBA.Named.lime));
-    try testing.expectEqual(RGBA{ .r = 18, .g = 18, .b = 18, .a = 255 }, full.applyTo(RGBA.Named.blue));
-    try testing.expectEqual(RGBA{ .r = 255, .g = 255, .b = 255, .a = 255 }, full.applyTo(RGBA.Named.white));
+    const grey = struct {
+        fn of(filter: Filter, rgba: RGBA) RGBA {
+            return filter.applyTo(.fromRGBA(rgba)).toRGBA();
+        }
+    }.of;
+
+    try testing.expectEqual(RGBA{ .r = 54, .g = 54, .b = 54, .a = 255 }, grey(full, RGBA.Named.red));
+    try testing.expectEqual(RGBA{ .r = 182, .g = 182, .b = 182, .a = 255 }, grey(full, RGBA.Named.lime));
+    try testing.expectEqual(RGBA{ .r = 18, .g = 18, .b = 18, .a = 255 }, grey(full, RGBA.Named.blue));
+    try testing.expectEqual(RGBA{ .r = 255, .g = 255, .b = 255, .a = 255 }, grey(full, RGBA.Named.white));
 
     const teal = RGBA{ .r = 64, .g = 128, .b = 192, .a = 255 };
-    try testing.expectEqual(RGBA{ .r = 119, .g = 119, .b = 119, .a = 255 }, full.applyTo(teal));
+    try testing.expectEqual(RGBA{ .r = 119, .g = 119, .b = 119, .a = 255 }, grey(full, teal));
     try testing.expectEqual(
         RGBA{ .r = 92, .g = 124, .b = 156, .a = 255 },
-        (Filter{ .grayscale = 0.5 }).applyTo(teal),
+        grey(.{ .grayscale = 0.5 }, teal),
     );
     try testing.expectEqual(
         RGBA{ .r = 78, .g = 126, .b = 174, .a = 255 },
-        (Filter{ .grayscale = 0.25 }).applyTo(teal),
+        grey(.{ .grayscale = 0.25 }, teal),
     );
     // No filter is the identity, alpha included.
     const translucent = RGBA{ .r = 64, .g = 128, .b = 192, .a = 128 };
-    try testing.expectEqual(translucent, Filter.none.applyTo(translucent));
-    // Alpha survives a filter untouched. Chrome reads 120 rather than our 119
-    // here, having greyed the premultiplied bytes; see `blend` for the same
-    // one-unit gap under `multiply`.
-    try testing.expectEqual(
-        RGBA{ .r = 119, .g = 119, .b = 119, .a = 128 },
-        full.applyTo(translucent),
-    );
+    try testing.expectEqual(translucent, grey(.none, translucent));
+
+    // Alpha survives a filter untouched, and the grey it stores is Chrome's:
+    // greying the *premultiplied* `{32, 64, 96}` the way Chrome does gives
+    // 59.5, and premultiplying this unrounded 119.02 gives 59.74 — the same 60
+    // in the bitmap, and the same 120 back out of it.
+    var buffer: [64]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    var surface = Surface{ .arena = fba.allocator() };
+    defer surface.reset();
+    surface.fillRect(1, 1, 0, 0, 1, 1, full.applyTo(.fromRGBA(translucent)), 1, .source_over);
+
+    var out = [_]u8{0} ** 4;
+    surface.readPixels(1, 1, 0, 0, 1, 1, &out);
+    try testing.expectEqualSlices(u8, &.{ 120, 120, 120, 128 }, &out);
 }
 
 test "raster: a filter greys the source, not the backdrop" {
@@ -945,8 +1154,8 @@ test "raster: a filter greys the source, not the backdrop" {
     // #ff8000, then #4080c0 greyed to 119 and differenced against it. Chrome
     // 151 reads {136, 9, 119, 255}: |255-119|, |128-119|, |0-119| — the filter
     // reached the source only.
-    surface.fillRect(1, 1, 0, 0, 1, 1, .{ .r = 255, .g = 128, .b = 0, .a = 255 }, 1, .source_over);
-    const greyed = (Filter{ .grayscale = 1 }).applyTo(.{ .r = 64, .g = 128, .b = 192, .a = 255 });
+    surface.fillRect(1, 1, 0, 0, 1, 1, .fromRGBA(.{ .r = 255, .g = 128, .b = 0 }), 1, .source_over);
+    const greyed = (Filter{ .grayscale = 1 }).applyTo(.fromRGBA(.{ .r = 64, .g = 128, .b = 192 }));
     surface.fillRect(1, 1, 0, 0, 1, 1, greyed, 1, .difference);
     try testing.expectEqualSlices(u8, &.{ 136, 9, 119, 255 }, surface.pixels[0..4]);
 }
@@ -960,12 +1169,12 @@ test "raster: a blend mode reaches a path's partly covered edge" {
     defer surface.reset();
 
     // 8x1 of #ff8000, then #4080c0 differenced over the left four and a half.
-    surface.fillRect(8, 1, 0, 0, 8, 1, .{ .r = 255, .g = 128, .b = 0, .a = 255 }, 1, .source_over);
+    surface.fillRect(8, 1, 0, 0, 8, 1, .fromRGBA(.{ .r = 255, .g = 128, .b = 0 }), 1, .source_over);
 
     var p: Path = .{};
     const ctm = path_mod.Transform.identity;
     try p.rect(alloc, 0, 0, 4.5, 1, ctm);
-    surface.fillPath(alloc, 8, 1, &p, .nonzero, .{ .r = 64, .g = 128, .b = 192, .a = 255 }, 1, .difference);
+    surface.fillPath(alloc, 8, 1, &p, .nonzero, .fromRGBA(.{ .r = 64, .g = 128, .b = 192 }), 1, .difference);
 
     // Chrome 151 (probes/expr-composite-blend.js `pathEdge`): four whole
     // pixels of the difference, one at half coverage, three untouched.

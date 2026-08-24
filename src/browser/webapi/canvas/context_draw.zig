@@ -37,7 +37,9 @@ const Surface = @import("raster.zig");
 const state = @import("context_state.zig");
 const canvas_objects = @import("canvas_objects.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
+const ImageData = @import("../ImageData.zig");
 const ImageBitmap = @import("ImageBitmap.zig");
+const dictionary = @import("../dictionary.zig");
 const DOMException = @import("../DOMException.zig");
 const CanvasElement = @import("../element/html/Canvas.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
@@ -82,6 +84,12 @@ pub fn Mixin(comptime T: type) type {
             return self._canvas.getHeight();
         }
 
+        /// The bitmap's own colour space, which every colour is resolved into
+        /// on the way in and converted out of on the way back.
+        fn space(self: *const T) color.CanvasSpace {
+            return self._attributes.space();
+        }
+
         /// True when the transform maps axis-aligned rectangles to
         /// axis-aligned rectangles, which is every `scale` and `translate`.
         fn upright(ctm: Transform) bool {
@@ -105,8 +113,13 @@ pub fn Mixin(comptime T: type) type {
         /// everything but `drawImage` the whole of it lands here rather than in
         /// the rasteriser. Chrome runs the filter on fills too, not only on
         /// images (measured, probes/expr-canvas-filter-grayscale.js).
-        fn paint(self: *const T, style: canvas_objects.PaintStyle) color.RGBA {
-            return filter(self).applyTo(style.colour);
+        fn paint(self: *const T, style: canvas_objects.PaintStyle) color.Paint {
+            // Resolved into the bitmap's colour space first, then filtered. The
+            // order is a guess where the space is not: nothing measured says
+            // whether Chrome filters before or after the conversion, and on an
+            // srgb canvas — every canvas until one asks for display-p3 — the
+            // conversion is the identity and the question does not arise.
+            return filter(self).applyTo(style.paint(space(self)));
         }
 
         // --- state stack ---------------------------------------------------
@@ -493,6 +506,11 @@ pub fn Mixin(comptime T: type) type {
                 src.surface,
                 src.width,
                 src.height,
+                // Chrome converts rather than copies when the two bitmaps are
+                // in different spaces: a display-p3 `ff407f` drawn onto an srgb
+                // canvas lands as `ff1c7e` (measured --
+                // probes/canvas-own-color-space.js).
+                .{ .from = src.space, .to = space(self) },
                 blit,
                 self._transform,
                 self._global_alpha,
@@ -505,6 +523,10 @@ pub fn Mixin(comptime T: type) type {
             surface: *const Surface,
             width: u32,
             height: u32,
+            /// The space the source's own bytes are in, which decides whether
+            /// they are copied or converted. An ImageBitmap is srgb because
+            /// nothing here builds one from a display-p3 canvas yet.
+            space: color.CanvasSpace = .srgb,
         };
 
         /// The pixels behind a `CanvasImageSource`, when there are any. Both
@@ -515,14 +537,24 @@ pub fn Mixin(comptime T: type) type {
             if (value.toZig(*CanvasElement)) |canvas| {
                 const cached = canvas._cached orelse return null;
                 return switch (cached) {
-                    .@"2d" => |ctx| .{ .surface = &ctx._surface, .width = canvas.getWidth(), .height = canvas.getHeight() },
+                    .@"2d" => |ctx| .{
+                        .surface = &ctx._surface,
+                        .width = canvas.getWidth(),
+                        .height = canvas.getHeight(),
+                        .space = ctx._attributes.space(),
+                    },
                     else => null,
                 };
             } else |_| {}
             if (value.toZig(*OffscreenCanvas)) |canvas| {
                 const cached = canvas._cached orelse return null;
                 return switch (cached) {
-                    .@"2d" => |ctx| .{ .surface = &ctx._surface, .width = canvas.getWidth(), .height = canvas.getHeight() },
+                    .@"2d" => |ctx| .{
+                        .surface = &ctx._surface,
+                        .width = canvas.getWidth(),
+                        .height = canvas.getHeight(),
+                        .space = ctx._attributes.space(),
+                    },
                     else => null,
                 };
             } else |_| {}
@@ -553,6 +585,121 @@ pub fn Mixin(comptime T: type) type {
             self._transform = Transform.identity;
             self._path.begin();
             self._saved.clearRetainingCapacity();
+        }
+
+        // --- image data ----------------------------------------------------
+
+        /// One dictionary reader per method, differing only in the prefix its
+        /// refusals carry.
+        fn ImageDataSettings(comptime method: []const u8) type {
+            return ImageData.Settings.Reading(dictionary.MethodReader(
+                T.JsApi.Meta.name,
+                method,
+                "ImageDataSettings",
+            ));
+        }
+
+        const WidthOrImageData = union(enum) {
+            width: u32,
+            image_data: *ImageData,
+        };
+
+        pub fn createImageData(
+            self: *const T,
+            width_or_image_data: WidthOrImageData,
+            /// If `ImageData` variant preferred, this is null.
+            maybe_height: ?u32,
+            /// Can be used if width and height provided.
+            settings: ?js.Value,
+            exec: *Execution,
+        ) !*ImageData {
+            switch (width_or_image_data) {
+                .width => |w| {
+                    const read = try ImageDataSettings("createImageData")
+                        .read(settings, space(self), exec);
+                    const h = maybe_height orelse return error.TypeError;
+                    return ImageData.init(w, h, read, exec);
+                },
+                // From a source ImageData the settings are inherited rather
+                // than given: `createImageData(new ImageData(2, 2,
+                // {colorSpace: 'display-p3'}))` answers display-p3 (measured --
+                // probes/canvas-image-data-settings.js).
+                .image_data => |image_data| {
+                    return ImageData.init(
+                        image_data._width,
+                        image_data._height,
+                        image_data._settings,
+                        exec,
+                    );
+                },
+            }
+        }
+
+        pub fn getImageData(
+            self: *const T,
+            sx: i32,
+            sy: i32,
+            sw: i32,
+            sh: i32,
+            settings: ?js.Value,
+            exec: *Execution,
+        ) !*ImageData {
+            // Read before the rect is looked at, which is the order a page can
+            // see: a zero-sized window and a bad member together report the
+            // member (measured).
+            const read = try ImageDataSettings("getImageData").read(settings, space(self), exec);
+            const window = try imageDataWindow(sx, sy, sw, sh, exec);
+
+            const image_data = try ImageData.init(window.width, window.height, read, exec);
+            // Freshly created, so it is already transparent black: `readPixels`
+            // only has to overwrite the part of the window that overlaps the
+            // canvas.
+            const out = image_data._data.local(exec.js.local.?).slice();
+            self._surface.readPixels(
+                width(self),
+                height(self),
+                window.x,
+                window.y,
+                window.width,
+                window.height,
+                out,
+            );
+            // Out of the bitmap's own space and into the one the caller asked
+            // for, which are only the same space by default.
+            color.convertCanvasPixels(space(self), read.color_space, out);
+            return image_data;
+        }
+
+        const Window = struct { x: i32, y: i32, width: u32, height: u32 };
+
+        /// The rect `getImageData` reads. A negative size is not a refusal: the
+        /// window is flipped about the origin, so `getImageData(1, 0, -1, 1)` on
+        /// a painted 2x2 answers the pixel at x=0 and `(0, 0, -1, 1)` answers
+        /// the transparent one off the left edge. A *zero* size is a refusal,
+        /// and it names the dimension (measured --
+        /// probes/canvas-image-data-settings-2.js).
+        fn imageDataWindow(sx: i32, sy: i32, sw: i32, sh: i32, exec: *Execution) !Window {
+            if (sw == 0) {
+                return throwSourceZero("width", exec);
+            }
+            if (sh == 0) {
+                return throwSourceZero("height", exec);
+            }
+            return .{
+                .x = if (sw < 0) sx +% sw else sx,
+                .y = if (sh < 0) sy +% sh else sy,
+                .width = @abs(sw),
+                .height = @abs(sh),
+            };
+        }
+
+        fn throwSourceZero(comptime dimension: []const u8, exec: *Execution) anyerror {
+            return dictionary.throwDom(
+                "IndexSizeError",
+                "Failed to execute 'getImageData' on '" ++ T.JsApi.Meta.name ++
+                    "': The source " ++ dimension ++ " is 0.",
+                exec,
+            );
         }
     };
 }

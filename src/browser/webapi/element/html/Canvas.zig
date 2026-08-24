@@ -38,6 +38,7 @@ const image_capture = @import("../../media/image_capture.zig");
 const MediaStream = @import("../../media/streams.zig").MediaStream;
 
 const Execution = js.Execution;
+const Allocator = std.mem.Allocator;
 
 const Canvas = @This();
 
@@ -127,7 +128,10 @@ pub fn getContext(
         if (std.mem.eql(u8, context_type, "2d")) {
             const ctx = try frame._factory.create(CanvasRenderingContext2D{
                 ._canvas = self,
-                ._surface = .{ .arena = frame.arena },
+                ._surface = .{
+                    .arena = frame.arena,
+                    .background = if (created.two_d.alpha) .transparent else .black,
+                },
                 ._attributes = created.two_d,
             });
             break :blk .{ .@"2d" = ctx };
@@ -178,13 +182,24 @@ pub fn getContext(
     return drawing_context;
 }
 
-/// The painted pixels, when a 2D context exists and has drawn something.
-/// Null means "every pixel is transparent black", which is also what a WebGL
-/// canvas reports here: that context does not rasterise.
+/// The painted pixels *as the bitmap stores them*, which is premultiplied —
+/// only another bitmap should read these. Null means "every pixel is
+/// transparent black", which is also what a WebGL canvas reports here: that
+/// context does not rasterise.
 pub fn pixels(self: *const Canvas) ?[]const u8 {
     const cached = self._cached orelse return null;
     return switch (cached) {
         .@"2d" => |context| context._surface.peek(self.getWidth(), self.getHeight()),
+        .webgl, .webgl2, .webgpu, .bitmaprenderer => null,
+    };
+}
+
+/// The same pixels un-premultiplied onto `arena`, which is the form everything
+/// a page can actually read them through wants. See `raster.straightPixels`.
+pub fn straightPixels(self: *const Canvas, arena: Allocator) !?[]u8 {
+    const cached = self._cached orelse return null;
+    return switch (cached) {
+        .@"2d" => |context| context._surface.straightPixels(arena, self.getWidth(), self.getHeight()),
         .webgl, .webgl2, .webgpu, .bitmaprenderer => null,
     };
 }
@@ -204,7 +219,7 @@ pub fn toDataURL(self: *Canvas, _: ?[]const u8, _: ?f64, frame: *Frame) ![]const
         // What Chrome answers for a canvas with no area.
         return "data:,";
     }
-    return png.dataUrl(frame.local_arena, width, height, self.pixels());
+    return png.dataUrl(frame.local_arena, width, height, try self.straightPixels(frame.local_arena));
 }
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/toBlob
@@ -217,7 +232,7 @@ pub fn toBlob(self: *Canvas, callback: js.Function.Global, _: ?[]const u8, _: ?f
     const height = self.getHeight();
 
     const blob: ?*Blob = if (width == 0 or height == 0) null else blk: {
-        const bytes = try png.encode(exec.call_arena, width, height, self.pixels());
+        const bytes = try png.encode(exec.call_arena, width, height, try self.straightPixels(exec.call_arena));
         // Upstream's Blob.initFromBytes now takes the Execution (it pins its
         // own arena), not the Page.
         break :blk try Blob.initFromBytes(bytes, "image/png", exec);

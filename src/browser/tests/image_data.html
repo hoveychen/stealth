@@ -86,3 +86,73 @@
 <script id=too-large>
   testing.expectError("IndexSizeError", () => new ImageData(2_147_483_648, 2_147_483_648));
 </script>
+
+<script id=settings-dictionary>
+  {
+    // `ImageDataSettings`, the dictionary this constructor shares with
+    // createImageData and getImageData. Readings:
+    // results/canvas-image-data-settings{,-2}.chrome.json.
+    const threw = (f) => { try { f(); return null; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+    testing.expectEqual("display-p3", new ImageData(1, 1, { colorSpace: "display-p3" }).colorSpace);
+    testing.expectEqual("rgba-unorm8", new ImageData(1, 1, { colorSpace: "display-p3" }).pixelFormat);
+    testing.expectEqual("srgb", new ImageData(1, 1, { colorSpace: undefined }).colorSpace);
+    testing.expectEqual("rgba-float16", new ImageData(1, 1, { pixelFormat: "rgba-float16" }).pixelFormat);
+
+    // Two gates, as on getContext's own dictionary: a name outside the IDL enum
+    // is a conversion failure that names the property, while one inside it that
+    // no ImageData can be in names no property and says "of the type".
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ImageData': Failed to read the 'colorSpace' property " +
+        "from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of " +
+        "type PredefinedColorSpace.",
+      threw(() => new ImageData(1, 1, { colorSpace: "nonesuch" })));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ImageData': Failed to read the 'colorSpace' property " +
+        "from 'ImageDataSettings': The provided value 'null' is not a valid enum value of " +
+        "type PredefinedColorSpace.",
+      threw(() => new ImageData(1, 1, { colorSpace: null })));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ImageData': The provided value 'rec2020' is not a valid " +
+        "enum value of the type PredefinedColorSpace.",
+      threw(() => new ImageData(1, 1, { colorSpace: "rec2020" })));
+    // A member of PredefinedColorSpace no other colour API here takes, so it is
+    // the one most easily given the wrong refusal of the two.
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ImageData': The provided value 'display-p3-linear' is " +
+        "not a valid enum value of the type PredefinedColorSpace.",
+      threw(() => new ImageData(1, 1, { colorSpace: "display-p3-linear" })));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ImageData': Failed to read the 'pixelFormat' property " +
+        "from 'ImageDataSettings': The provided value 'rgba-uint8' is not a valid enum value of " +
+        "type ImageDataPixelFormat.",
+      threw(() => new ImageData(1, 1, { pixelFormat: "rgba-uint8" })));
+
+    // A non-object argument *is* refused here, which is where this dictionary
+    // parts company with getContext's — that one takes the defaults.
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+      threw(() => new ImageData(1, 1, "nope")));
+    testing.expectEqual(
+      "TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+      threw(() => new ImageData(1, 1, 42)));
+    // An array and a null are objects enough to be read as an empty dictionary.
+    testing.expectEqual("srgb", new ImageData(1, 1, []).colorSpace);
+    testing.expectEqual("srgb", new ImageData(1, 1, null).colorSpace);
+  }
+</script>
+
+<script id=settings-members-live-on-the-prototype>
+  {
+    // Both are prototype getters, not own values: a page reads the descriptor
+    // without ever building an ImageData.
+    const colorSpace = Object.getOwnPropertyDescriptor(ImageData.prototype, "colorSpace");
+    testing.expectEqual(true, typeof colorSpace.get === "function");
+    testing.expectEqual(true, colorSpace.enumerable);
+    testing.expectEqual(true, colorSpace.value === undefined);
+    const pixelFormat = Object.getOwnPropertyDescriptor(ImageData.prototype, "pixelFormat");
+    testing.expectEqual(true, typeof pixelFormat.get === "function");
+    testing.expectEqual(
+      true, Object.getOwnPropertyDescriptor(new ImageData(1, 1), "colorSpace") === undefined);
+  }
+</script>

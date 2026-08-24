@@ -1,0 +1,50 @@
+{
+ "stored": {
+  "srgb | #ff0000": "default=ff0000ff srgb=ff0000ff p3=ea3323ff fillStyle=#ff0000",
+  "srgb | color(display-p3 1 0.25 0.5)": "default=ff1b7fff srgb=ff1b7fff p3=ea3b7fff fillStyle=color(display-p3 1 0.25 0.5)",
+  "srgb | rgb(255, 27, 127)": "default=ff1b7fff srgb=ff1b7fff p3=ea3b7fff fillStyle=#ff1b7f",
+  "srgb | rgba(255, 0, 0, 0.5)": "default=ff000080 srgb=ff000080 p3=ea332380 fillStyle=rgba(255, 0, 0, 0.5)",
+  "srgb | lab(50% 40 59.5)": "default=bf5700ff srgb=bf5700ff p3=b25d22ff fillStyle=lab(50 40 59.5)",
+  "srgb | oklch(0.7 0.1 200)": "default=40b1b7ff srgb=40b1b7ff p3=61afb5ff fillStyle=oklch(0.7 0.1 200)",
+  "srgb | color(srgb 1 0.25 0.5)": "default=ff4080ff srgb=ff4080ff p3=eb5180ff fillStyle=color(srgb 1 0.25 0.5)",
+  "srgb | color(rec2020 1 0.25 0.5)": "default=ff008dff srgb=ff008dff p3=ea338bff fillStyle=color(rec2020 1 0.25 0.5)",
+  "srgb | white": "default=ffffffff srgb=ffffffff p3=ffffffff fillStyle=#ffffff",
+  "display-p3 | #ff0000": "default=ea3323ff srgb=ff0000ff p3=ea3323ff fillStyle=#ff0000",
+  "display-p3 | color(display-p3 1 0.25 0.5)": "default=ff407fff srgb=ff1c7eff p3=ff407fff fillStyle=color(display-p3 1 0.25 0.5)",
+  "display-p3 | rgb(255, 27, 127)": "default=ea3b7fff srgb=ff1b7fff p3=ea3b7fff fillStyle=#ff1b7f",
+  "display-p3 | rgba(255, 0, 0, 0.5)": "default=e9342480 srgb=fe050280 p3=e9342480 fillStyle=rgba(255, 0, 0, 0.5)",
+  "display-p3 | lab(50% 40 59.5)": "default=b25d22ff srgb=bf5701ff p3=b25d22ff fillStyle=lab(50 40 59.5)",
+  "display-p3 | oklch(0.7 0.1 200)": "default=61afb5ff srgb=3fb1b7ff p3=61afb5ff fillStyle=oklch(0.7 0.1 200)",
+  "display-p3 | color(srgb 1 0.25 0.5)": "default=eb5180ff srgb=ff4080ff p3=eb5180ff fillStyle=color(srgb 1 0.25 0.5)",
+  "display-p3 | color(rec2020 1 0.25 0.5)": "default=ff228dff srgb=ff008eff p3=ff228dff fillStyle=color(rec2020 1 0.25 0.5)",
+  "display-p3 | white": "default=ffffffff srgb=ffffffff p3=ffffffff fillStyle=#ffffff"
+ },
+ "rest": {
+  "strokeStyle": "ea3323ff strokeStyle=#ff0000",
+  "clearRect": "00000000",
+  "untouched": "00000000",
+  "globalAlpha": "e9342480",
+  "save/restore": "ff407fff fillStyle=color(display-p3 1 0.25 0.5)",
+  "resize keeps the space": "ea3323ff display-p3"
+ },
+ "crossing": {
+  "drawImage p3 -> srgb": "ff1c7eff",
+  "drawImage srgb -> p3": "ea3323ff"
+ },
+ "defaults": {
+  "getImageData no settings": "ea3323ff display-p3 rgba-unorm8",
+  "getImageData {}": "ea3323ff display-p3 rgba-unorm8",
+  "getImageData {colorSpace: undefined}": "ea3323ff display-p3 rgba-unorm8",
+  "getImageData []": "ea3323ff display-p3 rgba-unorm8",
+  "getImageData null": "ea3323ff display-p3 rgba-unorm8",
+  "getImageData {colorSpace: srgb}": "ff0000ff srgb rgba-unorm8",
+  "getImageData {pixelFormat only}": "ea3323ff display-p3 rgba-unorm8",
+  "createImageData no settings": "display-p3 rgba-unorm8 len=4",
+  "createImageData {}": "display-p3",
+  "createImageData {colorSpace: srgb}": "srgb",
+  "createImageData from srgb ImageData": "srgb",
+  "new ImageData no settings": "srgb",
+  "srgb canvas getImageData no settings": "00000000 srgb rgba-unorm8",
+  "srgb canvas createImageData no settings": "srgb"
+ }
+}

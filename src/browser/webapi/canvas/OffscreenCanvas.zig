@@ -32,6 +32,7 @@ const attributes = @import("context_attributes.zig");
 const dictionary = @import("../dictionary.zig");
 
 const Execution = js.Execution;
+const Allocator = std.mem.Allocator;
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/OffscreenCanvas
 const OffscreenCanvas = @This();
@@ -141,7 +142,10 @@ pub fn getContext(
     self._cached = switch (requested) {
         .@"2d" => .{ .@"2d" = try exec._factory.create(OffscreenCanvasRenderingContext2D{
             ._canvas = self,
-            ._surface = .{ .arena = exec.arena },
+            ._surface = .{
+                .arena = exec.arena,
+                .background = if (created.two_d.alpha) .transparent else .black,
+            },
             ._attributes = created.two_d,
         }) },
         .webgl => .{ .webgl = try exec._factory.create(WebGLRenderingContext{ ._canvas = .{ .offscreen = self }, ._gl = .init(exec.arena), ._attributes = created.gl }) },
@@ -156,13 +160,24 @@ pub fn getContext(
     return self._cached;
 }
 
-/// The painted pixels, when a 2D context exists and has drawn something. Null
-/// means "every pixel is transparent black", which is also what a WebGL or
-/// WebGPU canvas reports: neither rasterises.
+/// The painted pixels *as the bitmap stores them*, which is premultiplied —
+/// only another bitmap should read these. Null means "every pixel is
+/// transparent black", which is also what a WebGL or WebGPU canvas reports:
+/// neither rasterises.
 pub fn pixels(self: *const OffscreenCanvas) ?[]const u8 {
     const cached = self._cached orelse return null;
     return switch (cached) {
         .@"2d" => |context| context._surface.peek(self._width, self._height),
+        .webgl, .webgl2, .webgpu => null,
+    };
+}
+
+/// The same pixels un-premultiplied onto `arena`, which is the form everything
+/// a page can actually read them through wants. See `raster.straightPixels`.
+pub fn straightPixels(self: *const OffscreenCanvas, arena: Allocator) !?[]u8 {
+    const cached = self._cached orelse return null;
+    return switch (cached) {
+        .@"2d" => |context| context._surface.straightPixels(arena, self._width, self._height),
         .webgl, .webgl2, .webgpu => null,
     };
 }
@@ -174,7 +189,7 @@ pub fn convertToBlob(self: *OffscreenCanvas, _: ?js.Value, exec: *Execution) !js
         return exec.js.local.?.rejectPromise(.{ .dom_exception = .{ .err = error.IndexSizeError } });
     }
 
-    const bytes = try png.encode(exec.call_arena, self._width, self._height, self.pixels());
+    const bytes = try png.encode(exec.call_arena, self._width, self._height, try self.straightPixels(exec.call_arena));
     // Upstream's Blob.initFromBytes now takes the Execution (it pins its own
     // arena), not the Page.
     const blob = try Blob.initFromBytes(bytes, "image/png", exec);
@@ -223,7 +238,9 @@ pub fn transferToImageBitmap(self: *OffscreenCanvas, exec: *Execution) !*ImageBi
             // context's state — transform, paint, path — is untouched; only
             // resizing resets that.
             taken = context._surface;
-            context._surface = .{ .arena = taken.arena };
+            // The emptied surface keeps the canvas opaque, so a transferred
+            // opaque canvas reads back as opaque black rather than transparent.
+            context._surface = .{ .arena = taken.arena, .background = taken.background };
         },
         // Chrome's bitmap carries the cleared colour off a WebGL canvas, but
         // nothing is rasterised behind one here — the same gap

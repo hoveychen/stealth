@@ -1,0 +1,64 @@
+{
+ "nonObject": {
+  "new ImageData \"nope\"": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "createImageData \"nope\"": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': The provided value is not of type 'ImageDataSettings'.",
+  "new ImageData 42": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "createImageData 42": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': The provided value is not of type 'ImageDataSettings'.",
+  "new ImageData true": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "createImageData true": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': The provided value is not of type 'ImageDataSettings'.",
+  "new ImageData []": "srgb rgba-unorm8",
+  "createImageData []": "srgb rgba-unorm8",
+  "new ImageData null": "srgb rgba-unorm8",
+  "createImageData null": "srgb rgba-unorm8",
+  "new ImageData undefined": "srgb rgba-unorm8",
+  "createImageData undefined": "srgb rgba-unorm8"
+ },
+ "arity": {
+  "ImageData": 2,
+  "getImageData": 4,
+  "createImageData": 1,
+  "putImageData": 3
+ },
+ "descriptors": {
+  "colorSpace": "own=absent proto=get enumerable=true",
+  "pixelFormat": "own=absent proto=get enumerable=true",
+  "data": "own=absent proto=get enumerable=true"
+ },
+ "order": {
+  "colorSpace vs pixelFormat": "colorSpace,pixelFormat",
+  "zero rect vs bad colorSpace": "throw:TypeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+  "zero rect alone": "throw:IndexSizeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': The source width is 0.",
+  "bad colorSpace with good rect": "throw:TypeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+  "createImageData bad colorSpace": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+  "createImageData gate two": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+  "createImageData from float16": "display-p3 rgba-float16 Uint8ClampedArray",
+  "HTMLCanvasElement getImageData": "throw:TypeError: Failed to execute 'getImageData' on 'CanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+  "HTMLCanvasElement createImageData": "throw:TypeError: Failed to execute 'createImageData' on 'CanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace."
+ },
+ "converted": {
+  "#ff0000": "ff0000ff -> ea3323ff",
+  "#00ff00": "00ff00ff -> 75fb4cff",
+  "#0000ff": "0000ffff -> 0000f5ff",
+  "#808080": "808080ff -> 808080ff",
+  "rgba(255, 27, 127, 1)": "ff1b7fff -> ea3b7fff",
+  "#ffffff": "ffffffff -> ffffffff",
+  "#000000": "000000ff -> 000000ff",
+  "half alpha": "ff000080 -> ea332380",
+  "untouched": "00000000 -> 00000000",
+  "partly off canvas": "ea3323ff00000000"
+ },
+ "rect": {
+  "0x1": "throw:IndexSizeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': The source width is 0.",
+  "1x0": "throw:IndexSizeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': The source height is 0.",
+  "0x0": "throw:IndexSizeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': The source width is 0.",
+  "-1x1": "1x1 len=4",
+  "1x-1": "1x1 len=4",
+  "-1x-1": "1x1 len=4"
+ },
+ "rectPixels": {
+  "1,0,-1,1": "1x1 ff0000ff",
+  "0,0,-1,1": "1x1 00000000",
+  "2,0,-1,1": "1x1 ff0000ff",
+  "0,1,1,-1": "1x1 ff0000ff"
+ }
+}
