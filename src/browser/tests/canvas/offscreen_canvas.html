@@ -1357,6 +1357,132 @@
 }
 </script>
 
+<script id="OffscreenCanvasRenderingContext2D#eight-bit srgb paints the byte">
+{
+  // An eight-bit srgb bitmap is the one combination Blink can hand Skia as a
+  // plain eight-bit colour, and there the colour is quantised *before* it is
+  // premultiplied. So a notation whose channels are not byte-valued paints
+  // exactly what the `rgb()` form it answers back paints.
+  //
+  // The knife edge decides it on its own: `hsl(30 60% 40%)`'s blue is 40.8,
+  // which premultiplies to 20 and reads back 40, where the 41 it rounds to
+  // premultiplies to 21 and reads back 42. Chrome answers 42 for both arms.
+  // Fourteen pairs measured on headed Chrome, thirteen of them agreeing
+  // (probes/canvas-legacy-premultiply.js, readings in
+  // results/canvas-legacy-premultiply.chrome.json).
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const paint = (notation) => {
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = notation;
+    ctx.fillRect(0, 0, 1, 1);
+    return hex(ctx.getImageData(0, 0, 1, 1).data);
+  };
+
+  // The three rows the byte moves. Each one is a channel whose float and its
+  // rounded byte fall on opposite sides of a premultiply boundary.
+  testing.expectEqual('a3662a80', paint('hsl(30 60% 40% / 0.5)'));
+  testing.expectEqual('839bb380', paint('hsl(210 25% 61% / 0.5)'));
+  testing.expectEqual('f10ef180', paint('hwb(300 5% 5% / 0.5)'));
+  // And the same three painted as the bytes they answer back, which is the
+  // claim: on this bitmap the two arms are one colour.
+  testing.expectEqual(paint('rgba(163, 102, 41, 0.5)'), paint('hsl(30 60% 40% / 0.5)'));
+  testing.expectEqual(paint('rgba(131, 156, 180, 0.5)'), paint('hsl(210 25% 61% / 0.5)'));
+  testing.expectEqual(paint('rgba(242, 13, 242, 0.5)'), paint('hwb(300 5% 5% / 0.5)'));
+
+  // The other nine legacy rows of the same sweep, which already agreed — they
+  // pin that quantising first did not move what the float already had right.
+  testing.expectEqual('a3682840', paint('hsl(30 60% 40% / 0.25)'));
+  testing.expectEqual('a36529bf', paint('hsl(30 60% 40% / 0.75)'));
+  testing.expectEqual('1a91cb80', paint('hwb(200 10% 20% / 0.5)'));
+  testing.expectEqual('1a8fc980', paint('hwb(200 10% 21% / 0.5)'));
+  testing.expectEqual('5e188180', paint('hsl(280 70% 30% / 0.5)'));
+  testing.expectEqual('91b56e80', paint('hsl(90 33% 57% / 0.5)'));
+  testing.expectEqual('a5852680', paint('hwb(45 15% 35% / 0.5)'));
+  testing.expectEqual('46a17480', paint('hsl(150 40% 45% / 0.5)'));
+  testing.expectEqual('80808080', paint('hsl(0 0% 50% / 0.5)'));
+
+  // The bound. A wide notation is not quantised here — its red is outside
+  // sRGB's gamut, and the byte arm has already thrown that part away, so the
+  // two land a byte apart where every legacy row above lands on one.
+  testing.expectEqual('ff1c7e80', paint('color(display-p3 1 0.25 0.5 / 0.5)'));
+  testing.expectEqual('ff1c8080', paint('rgba(255, 27, 127, 0.5)'));
+  testing.expectEqual('bb584680', paint('lab(50 40 30 / 0.5)'));
+}
+</script>
+
+<script id="OffscreenCanvasRenderingContext2D#a modern alpha stays a float">
+{
+  // CSS Color 4 splits the notations into *legacy* ones — a hex, a name,
+  // `rgb()`, `rgba()`, `hsl()`, `hsla()` — and modern ones, `hwb()` among
+  // them. A legacy colour's alpha is a byte by the time it is parsed; a modern
+  // one's stays the float it was written as. A float16 bitmap keeps whatever
+  // it is handed, so it answers the question on sight: 0.5 and 0.501953125
+  // (half precision's neighbour of 128/255) are distinct halves. Measured on
+  // headed Chrome, both spaces agreeing (probes/canvas-nonlegacy-alpha.js).
+  const alpha = (notation) => {
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorType: 'float16',
+      willReadFrequently: true,
+    });
+    ctx.fillStyle = notation;
+    ctx.fillRect(0, 0, 1, 1);
+    return String([...ctx.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float16' }).data][3]);
+  };
+  testing.expectEqual('0.501953125', alpha('#ff000080'));
+  testing.expectEqual('0.501953125', alpha('rgba(255, 0, 0, 0.5)'));
+  testing.expectEqual('0.501953125', alpha('rgb(255 0 0 / 0.5)'));
+  testing.expectEqual('0.501953125', alpha('hsl(30 60% 40% / 0.5)'));
+  testing.expectEqual('0.501953125', alpha('hsla(30, 60%, 40%, 0.5)'));
+  testing.expectEqual('0.5', alpha('hwb(200 10% 20% / 0.5)'));
+  testing.expectEqual('0.5', alpha('lab(50 40 30 / 0.5)'));
+  testing.expectEqual('0.5', alpha('oklch(0.7 0.1 200 / 0.5)'));
+  testing.expectEqual('0.5', alpha('color(display-p3 1 0.25 0.5 / 0.5)'));
+  // Two more alphas, where the byte and the float part further: 0.3 is 76.5
+  // of a byte and 0.7 is 178.5, both of them exactly half.
+  testing.expectEqual('0.302001953125', alpha('rgba(255, 0, 0, 0.3)'));
+  testing.expectEqual('0.300048828125', alpha('hwb(200 10% 20% / 0.3)'));
+  testing.expectEqual('0.7021484375', alpha('rgba(255, 0, 0, 0.7)'));
+  testing.expectEqual('0.7001953125', alpha('hwb(200 10% 20% / 0.7)'));
+
+  // Which is what the display-p3 eight-bit bitmap sees. There the colour is
+  // *not* quantised — the conversion's output is not byte-valued and the
+  // bitmap premultiplies it as it stands — so the alpha it is multiplied by is
+  // the only thing left to tell the two families apart, and it does: the four
+  // `hwb()` rows below are the ones a byte alpha lands one step off.
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const p3 = (notation) => {
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorSpace: 'display-p3',
+      willReadFrequently: true,
+    });
+    ctx.fillStyle = notation;
+    ctx.fillRect(0, 0, 1, 1);
+    return hex(ctx.getImageData(0, 0, 1, 1).data);
+  };
+  testing.expectEqual('448dc580', p3('hwb(200 10% 20% / 0.5)'));
+  testing.expectEqual('448bc380', p3('hwb(200 10% 21% / 0.5)'));
+  testing.expectEqual('9f873a80', p3('hwb(45 15% 35% / 0.5)'));
+  testing.expectEqual('dd34e980', p3('hwb(300 5% 5% / 0.5)'));
+  // The `hsl()` rows of the same sweep, which keep the byte alpha and must not
+  // move. Together with the four above they are why this is an alpha rule and
+  // not a colour one: one sweep, one bitmap, two answers.
+  testing.expectEqual('9b6a3680', p3('hsl(30 60% 40% / 0.5)'));
+  testing.expectEqual('9b683440', p3('hsl(30 60% 40% / 0.25)'));
+  testing.expectEqual('9b6835bf', p3('hsl(30 60% 40% / 0.75)'));
+  testing.expectEqual('561c7e80', p3('hsl(280 70% 30% / 0.5)'));
+  testing.expectEqual('99b57680', p3('hsl(90 33% 57% / 0.5)'));
+  testing.expectEqual('879bb180', p3('hsl(210 25% 61% / 0.5)'));
+  testing.expectEqual('5e9f7680', p3('hsl(150 40% 45% / 0.5)'));
+  testing.expectEqual('80808080', p3('hsl(0 0% 50% / 0.5)'));
+  // And on this bitmap the byte arm is a *different* colour from the float
+  // arm, which is what makes the block above specific to eight-bit srgb.
+  testing.expectEqual('996a3680', p3('rgba(163, 102, 41, 0.5)'));
+  testing.expectEqual('448fc780', p3('rgba(26, 145, 204, 0.5)'));
+  testing.expectEqual('fd408080', p3('color(display-p3 1 0.25 0.5 / 0.5)'));
+  testing.expectEqual('ad5e4c80', p3('lab(50 40 30 / 0.5)'));
+}
+</script>
+
 <script id="OffscreenCanvasRenderingContext2D#float32 pixel format">
 {
   // `ImageDataPixelFormat` has a third member. Chrome's own refusal for a
