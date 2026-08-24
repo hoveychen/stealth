@@ -34,6 +34,7 @@ const WorkerGlobalScope = @import("WorkerGlobalScope.zig");
 const MessageEvent = @import("event/MessageEvent.zig");
 const handler_property = @import("handler_property.zig");
 const EventTarget = @import("EventTarget.zig");
+const filesystem = @import("filesystem.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
 /// function is a listener like any other, so it lives in the event manager's
@@ -261,6 +262,17 @@ pub const JsApi = struct {
     pub const requestAnimationFrame = bridge.function(DedicatedWorkerGlobalScope.requestAnimationFrame, .{});
     pub const cancelAnimationFrame = bridge.function(DedicatedWorkerGlobalScope.cancelAnimationFrame, .{});
     pub const name = bridge.accessor(DedicatedWorkerGlobalScope.getName, null, .{});
+
+    // The sandboxed filesystem entry points, and they belong here rather than
+    // on WorkerGlobalScope for a measurable reason: Chrome's blob worker holds
+    // both as own properties of the global, and only a [Global] interface's own
+    // members land there -- WorkerGlobalScope's stay on its prototype, where
+    // these two are absent. The two quota constants they take live here too.
+    // Arity 2 for the request operation where the Window's is 3 (measured); the
+    // error callback is optional in both, so that is Chrome's inconsistency.
+    // A shared worker was not measured, so it does not get them.
+    pub const webkitRequestFileSystem = bridge.function(filesystem.workerRequestFileSystem, .{ .arity = 2 });
+    pub const webkitResolveLocalFileSystemURL = bridge.function(filesystem.workerResolveLocalFileSystemURL, .{ .arity = 2 });
 
     // The two deprecated quota constants Chrome still carries. [Global] moves
     // operations and attributes onto the global object; constants stay on the

@@ -70,8 +70,50 @@
      "Float16Array",
      "Float32Array",
      "Float64Array",
+     "FontFace",
+     "FontFaceSet",
      "FormData",
      "Function",
+     "GPU",
+     "GPUAdapter",
+     "GPUAdapterInfo",
+     "GPUBindGroup",
+     "GPUBindGroupLayout",
+     "GPUBuffer",
+     "GPUBufferUsage",
+     "GPUCanvasContext",
+     "GPUColorWrite",
+     "GPUCommandBuffer",
+     "GPUCommandEncoder",
+     "GPUCompilationInfo",
+     "GPUCompilationMessage",
+     "GPUComputePassEncoder",
+     "GPUComputePipeline",
+     "GPUDevice",
+     "GPUDeviceLostInfo",
+     "GPUError",
+     "GPUExternalTexture",
+     "GPUInternalError",
+     "GPUMapMode",
+     "GPUOutOfMemoryError",
+     "GPUPipelineError",
+     "GPUPipelineLayout",
+     "GPUQuerySet",
+     "GPUQueue",
+     "GPURenderBundle",
+     "GPURenderBundleEncoder",
+     "GPURenderPassEncoder",
+     "GPURenderPipeline",
+     "GPUSampler",
+     "GPUShaderModule",
+     "GPUShaderStage",
+     "GPUSupportedFeatures",
+     "GPUSupportedLimits",
+     "GPUTexture",
+     "GPUTextureUsage",
+     "GPUTextureView",
+     "GPUUncapturedErrorEvent",
+     "GPUValidationError",
      "HID",
      "HIDConnectionEvent",
      "HIDDevice",
@@ -108,6 +150,8 @@
      "Map",
      "Math",
      "MediaCapabilities",
+     "MediaSource",
+     "MediaSourceHandle",
      "MessageChannel",
      "MessageEvent",
      "MessagePort",
@@ -166,6 +210,10 @@
      "SerialPort",
      "ServiceWorkerRegistration",
      "Set",
+     "SourceBuffer",
+     "SourceBufferList",
+     "StorageBucket",
+     "StorageBucketManager",
      "StorageManager",
      "String",
      "SubtleCrypto",
@@ -272,7 +320,9 @@
      "postMessage",
      "requestAnimationFrame",
      "undefined",
-     "unescape"
+     "unescape",
+     "webkitRequestFileSystem",
+     "webkitResolveLocalFileSystemURL"
     ]
    },
    {
@@ -294,6 +344,7 @@
      "crossOriginIsolated",
      "crypto",
      "fetch",
+     "fonts",
      "importScripts",
      "indexedDB",
      "isSecureContext",
@@ -408,8 +459,50 @@
    "Float16Array": "function/3 c w",
    "Float32Array": "function/3 c w",
    "Float64Array": "function/3 c w",
+   "FontFace": "function/2 c w",
+   "FontFaceSet": "function/0 c w",
    "FormData": "function/0 c w",
    "Function": "function/1 c w",
+   "GPU": "function/0 c w",
+   "GPUAdapter": "function/0 c w",
+   "GPUAdapterInfo": "function/0 c w",
+   "GPUBindGroup": "function/0 c w",
+   "GPUBindGroupLayout": "function/0 c w",
+   "GPUBuffer": "function/0 c w",
+   "GPUBufferUsage": "object c w",
+   "GPUCanvasContext": "function/0 c w",
+   "GPUColorWrite": "object c w",
+   "GPUCommandBuffer": "function/0 c w",
+   "GPUCommandEncoder": "function/0 c w",
+   "GPUCompilationInfo": "function/0 c w",
+   "GPUCompilationMessage": "function/0 c w",
+   "GPUComputePassEncoder": "function/0 c w",
+   "GPUComputePipeline": "function/0 c w",
+   "GPUDevice": "function/0 c w",
+   "GPUDeviceLostInfo": "function/0 c w",
+   "GPUError": "function/0 c w",
+   "GPUExternalTexture": "function/0 c w",
+   "GPUInternalError": "function/1 c w",
+   "GPUMapMode": "object c w",
+   "GPUOutOfMemoryError": "function/1 c w",
+   "GPUPipelineError": "function/1 c w",
+   "GPUPipelineLayout": "function/0 c w",
+   "GPUQuerySet": "function/0 c w",
+   "GPUQueue": "function/0 c w",
+   "GPURenderBundle": "function/0 c w",
+   "GPURenderBundleEncoder": "function/0 c w",
+   "GPURenderPassEncoder": "function/0 c w",
+   "GPURenderPipeline": "function/0 c w",
+   "GPUSampler": "function/0 c w",
+   "GPUShaderModule": "function/0 c w",
+   "GPUShaderStage": "object c w",
+   "GPUSupportedFeatures": "function/0 c w",
+   "GPUSupportedLimits": "function/0 c w",
+   "GPUTexture": "function/0 c w",
+   "GPUTextureUsage": "object c w",
+   "GPUTextureView": "function/0 c w",
+   "GPUUncapturedErrorEvent": "function/2 c w",
+   "GPUValidationError": "function/1 c w",
    "HID": "function/0 c w",
    "HIDConnectionEvent": "function/2 c w",
    "HIDDevice": "function/0 c w",
@@ -446,6 +539,8 @@
    "Map": "function/0 c w",
    "Math": "object c w",
    "MediaCapabilities": "function/0 c w",
+   "MediaSource": "function/0 c w",
+   "MediaSourceHandle": "function/0 c w",
    "MessageChannel": "function/0 c w",
    "MessageEvent": "function/1 c w",
    "MessagePort": "function/0 c w",
@@ -504,6 +599,10 @@
    "SerialPort": "function/0 c w",
    "ServiceWorkerRegistration": "function/0 c w",
    "Set": "function/0 c w",
+   "SourceBuffer": "function/0 c w",
+   "SourceBufferList": "function/0 c w",
+   "StorageBucket": "function/0 c w",
+   "StorageBucketManager": "function/0 c w",
    "StorageManager": "function/0 c w",
    "String": "function/1 c w",
    "SubtleCrypto": "function/0 c w",
@@ -610,7 +709,9 @@
    "postMessage": "function/1 e c w",
    "requestAnimationFrame": "function/1 e c w",
    "undefined": "undefined",
-   "unescape": "function/1 c w"
+   "unescape": "function/1 c w",
+   "webkitRequestFileSystem": "function/2 e c w",
+   "webkitResolveLocalFileSystemURL": "function/2 e c w"
   },
   "ctors": {
    "AbortController": {
@@ -938,6 +1039,16 @@
     "length": 3,
     "proto_own": 2
    },
+   "FontFace": {
+    "name": "FontFace",
+    "length": 2,
+    "proto_own": 12
+   },
+   "FontFaceSet": {
+    "name": "FontFaceSet",
+    "length": 0,
+    "proto_own": 7
+   },
    "FormData": {
     "name": "FormData",
     "length": 0,
@@ -947,6 +1058,181 @@
     "name": "Function",
     "length": 1,
     "proto_own": 9
+   },
+   "GPU": {
+    "name": "GPU",
+    "length": 0,
+    "proto_own": 4
+   },
+   "GPUAdapter": {
+    "name": "GPUAdapter",
+    "length": 0,
+    "proto_own": 5
+   },
+   "GPUAdapterInfo": {
+    "name": "GPUAdapterInfo",
+    "length": 0,
+    "proto_own": 8
+   },
+   "GPUBindGroup": {
+    "name": "GPUBindGroup",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUBindGroupLayout": {
+    "name": "GPUBindGroupLayout",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUBuffer": {
+    "name": "GPUBuffer",
+    "length": 0,
+    "proto_own": 9
+   },
+   "GPUCanvasContext": {
+    "name": "GPUCanvasContext",
+    "length": 0,
+    "proto_own": 6
+   },
+   "GPUCommandBuffer": {
+    "name": "GPUCommandBuffer",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUCommandEncoder": {
+    "name": "GPUCommandEncoder",
+    "length": 0,
+    "proto_own": 14
+   },
+   "GPUCompilationInfo": {
+    "name": "GPUCompilationInfo",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUCompilationMessage": {
+    "name": "GPUCompilationMessage",
+    "length": 0,
+    "proto_own": 7
+   },
+   "GPUComputePassEncoder": {
+    "name": "GPUComputePassEncoder",
+    "length": 0,
+    "proto_own": 12
+   },
+   "GPUComputePipeline": {
+    "name": "GPUComputePipeline",
+    "length": 0,
+    "proto_own": 3
+   },
+   "GPUDevice": {
+    "name": "GPUDevice",
+    "length": 0,
+    "proto_own": 26
+   },
+   "GPUDeviceLostInfo": {
+    "name": "GPUDeviceLostInfo",
+    "length": 0,
+    "proto_own": 3
+   },
+   "GPUError": {
+    "name": "GPUError",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUExternalTexture": {
+    "name": "GPUExternalTexture",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUInternalError": {
+    "name": "GPUInternalError",
+    "length": 1,
+    "proto_own": 1
+   },
+   "GPUOutOfMemoryError": {
+    "name": "GPUOutOfMemoryError",
+    "length": 1,
+    "proto_own": 1
+   },
+   "GPUPipelineError": {
+    "name": "GPUPipelineError",
+    "length": 1,
+    "proto_own": 2
+   },
+   "GPUPipelineLayout": {
+    "name": "GPUPipelineLayout",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUQuerySet": {
+    "name": "GPUQuerySet",
+    "length": 0,
+    "proto_own": 5
+   },
+   "GPUQueue": {
+    "name": "GPUQueue",
+    "length": 0,
+    "proto_own": 7
+   },
+   "GPURenderBundle": {
+    "name": "GPURenderBundle",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPURenderBundleEncoder": {
+    "name": "GPURenderBundleEncoder",
+    "length": 0,
+    "proto_own": 15
+   },
+   "GPURenderPassEncoder": {
+    "name": "GPURenderPassEncoder",
+    "length": 0,
+    "proto_own": 23
+   },
+   "GPURenderPipeline": {
+    "name": "GPURenderPipeline",
+    "length": 0,
+    "proto_own": 3
+   },
+   "GPUSampler": {
+    "name": "GPUSampler",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUShaderModule": {
+    "name": "GPUShaderModule",
+    "length": 0,
+    "proto_own": 3
+   },
+   "GPUSupportedFeatures": {
+    "name": "GPUSupportedFeatures",
+    "length": 0,
+    "proto_own": 7
+   },
+   "GPUSupportedLimits": {
+    "name": "GPUSupportedLimits",
+    "length": 0,
+    "proto_own": 37
+   },
+   "GPUTexture": {
+    "name": "GPUTexture",
+    "length": 0,
+    "proto_own": 13
+   },
+   "GPUTextureView": {
+    "name": "GPUTextureView",
+    "length": 0,
+    "proto_own": 2
+   },
+   "GPUUncapturedErrorEvent": {
+    "name": "GPUUncapturedErrorEvent",
+    "length": 2,
+    "proto_own": 2
+   },
+   "GPUValidationError": {
+    "name": "GPUValidationError",
+    "length": 1,
+    "proto_own": 1
    },
    "HID": {
     "name": "HID",
@@ -1107,6 +1393,16 @@
     "name": "MediaCapabilities",
     "length": 0,
     "proto_own": 3
+   },
+   "MediaSource": {
+    "name": "MediaSource",
+    "length": 0,
+    "proto_own": 13
+   },
+   "MediaSourceHandle": {
+    "name": "MediaSourceHandle",
+    "length": 0,
+    "proto_own": 1
    },
    "MessageChannel": {
     "name": "MessageChannel",
@@ -1387,6 +1683,26 @@
     "name": "Set",
     "length": 0,
     "proto_own": 17
+   },
+   "SourceBuffer": {
+    "name": "SourceBuffer",
+    "length": 0,
+    "proto_own": 16
+   },
+   "SourceBufferList": {
+    "name": "SourceBufferList",
+    "length": 0,
+    "proto_own": 4
+   },
+   "StorageBucket": {
+    "name": "StorageBucket",
+    "length": 0,
+    "proto_own": 10
+   },
+   "StorageBucketManager": {
+    "name": "StorageBucketManager",
+    "length": 0,
+    "proto_own": 4
    },
    "StorageManager": {
     "name": "StorageManager",
@@ -1771,7 +2087,7 @@
    "WorkerGlobalScope": {
     "name": "WorkerGlobalScope",
     "length": 0,
-    "proto_own": 26
+    "proto_own": 27
    },
    "WorkerLocation": {
     "name": "WorkerLocation",
@@ -1781,7 +2097,7 @@
    "WorkerNavigator": {
     "name": "WorkerNavigator",
     "length": 0,
-    "proto_own": 15
+    "proto_own": 17
    },
    "WritableStream": {
     "name": "WritableStream",
@@ -1887,22 +2203,32 @@
     "name": "unescape",
     "length": 1,
     "proto_own": null
+   },
+   "webkitRequestFileSystem": {
+    "name": "webkitRequestFileSystem",
+    "length": 2,
+    "proto_own": null
+   },
+   "webkitResolveLocalFileSystemURL": {
+    "name": "webkitResolveLocalFileSystemURL",
+    "length": 2,
+    "proto_own": null
    }
   },
   "values": {
    "location": {
-    "href": "blob:http://127.0.0.1:60826/8b10461c-62a3-4473-b99c-447954f4fb82",
-    "origin": "http://127.0.0.1:60826",
+    "href": "blob:http://127.0.0.1:49319/5ad36d91-788e-4d36-875b-dfc7ff6be03f",
+    "origin": "http://127.0.0.1:49319",
     "protocol": "blob:",
     "host": "",
     "hostname": "",
     "port": "",
-    "pathname": "http://127.0.0.1:60826/8b10461c-62a3-4473-b99c-447954f4fb82",
+    "pathname": "http://127.0.0.1:49319/5ad36d91-788e-4d36-875b-dfc7ff6be03f",
     "search": "",
     "hash": ""
    },
-   "location_string": "blob:http://127.0.0.1:60826/8b10461c-62a3-4473-b99c-447954f4fb82",
-   "origin": "http://127.0.0.1:60826",
+   "location_string": "blob:http://127.0.0.1:49319/5ad36d91-788e-4d36-875b-dfc7ff6be03f",
+   "origin": "http://127.0.0.1:49319",
    "isSecureContext": true,
    "crossOriginIsolated": false,
    "self_name": "",
@@ -1964,7 +2290,9 @@
     "permissions": "accessor/get e c",
     "deviceMemory": "accessor/get e c",
     "userAgentData": "accessor/get e c",
-    "storage": "accessor/get e c"
+    "storage": "accessor/get e c",
+    "gpu": "accessor/get e c",
+    "storageBuckets": "accessor/get e c"
    },
    "location": {
     "href": "accessor/get e c",
@@ -9447,18 +9775,18 @@
   },
   "values": {
    "location": {
-    "href": "http://127.0.0.1:60826/",
-    "origin": "http://127.0.0.1:60826",
+    "href": "http://127.0.0.1:49319/",
+    "origin": "http://127.0.0.1:49319",
     "protocol": "http:",
-    "host": "127.0.0.1:60826",
+    "host": "127.0.0.1:49319",
     "hostname": "127.0.0.1",
-    "port": "60826",
+    "port": "49319",
     "pathname": "/",
     "search": "",
     "hash": ""
    },
-   "location_string": "http://127.0.0.1:60826/",
-   "origin": "http://127.0.0.1:60826",
+   "location_string": "http://127.0.0.1:49319/",
+   "origin": "http://127.0.0.1:49319",
    "isSecureContext": true,
    "crossOriginIsolated": false,
    "self_name": "",
@@ -9502,7 +9830,7 @@
     "mobile": false,
     "platform": "macOS"
    },
-   "clock_clamp": 0.09999999999999787,
+   "clock_clamp": 0.09999999999999432,
    "performance_now_typeof": "number",
    "timeOrigin_typeof": "number",
    "toString_self": "[object Window]",

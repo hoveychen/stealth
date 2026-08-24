@@ -50,8 +50,6 @@ const js = @import("../../js/js.zig");
 
 const EventTarget = @import("../EventTarget.zig");
 const DOMException = @import("../DOMException.zig");
-const Page = @import("../../Page.zig");
-const Frame = @import("../../Frame.zig");
 const TimeRanges = @import("TimeRanges.zig");
 const mime = @import("mime.zig");
 const handler_property = @import("../handler_property.zig");
@@ -136,22 +134,22 @@ pub fn setDuration(_: *MediaSource, _: f64, exec: *const Execution) !void {
     );
 }
 
-fn list(slot: *?*SourceBufferList, page: *Page) !*SourceBufferList {
+fn list(slot: *?*SourceBufferList, exec: *Execution) !*SourceBufferList {
     if (slot.*) |existing| {
         return existing;
     }
-    const created = try page.factory.eventTarget(SourceBufferList{ ._proto = undefined });
+    const created = try exec._factory.eventTarget(SourceBufferList{ ._proto = undefined });
     created._proto._type = .source_buffer_list;
     slot.* = created;
     return created;
 }
 
-pub fn getSourceBuffers(self: *MediaSource, page: *Page) !*SourceBufferList {
-    return list(&self._source_buffers, page);
+pub fn getSourceBuffers(self: *MediaSource, exec: *Execution) !*SourceBufferList {
+    return list(&self._source_buffers, exec);
 }
 
-pub fn getActiveSourceBuffers(self: *MediaSource, page: *Page) !*SourceBufferList {
-    return list(&self._active_source_buffers, page);
+pub fn getActiveSourceBuffers(self: *MediaSource, exec: *Execution) !*SourceBufferList {
+    return list(&self._active_source_buffers, exec);
 }
 
 // Every mutator needs an open source, and this one is never open -- which is
@@ -291,8 +289,8 @@ pub const SourceBuffer = struct {
         return false;
     }
 
-    pub fn getBuffered(_: *const SourceBuffer, frame: *Frame) !*TimeRanges {
-        return frame._factory.create(TimeRanges{});
+    pub fn getBuffered(_: *const SourceBuffer, exec: *Execution) !*TimeRanges {
+        return exec._factory.create(TimeRanges{});
     }
 
     pub fn getTimestampOffset(self: *const SourceBuffer) f64 {
@@ -426,8 +424,8 @@ pub const SourceBufferList = struct {
 
         pub const Prototype = EventTarget;
 
-        fn getIndexes(self: *SourceBufferList, frame: *Frame) !js.Array {
-            var arr = frame.js.local.?.newArray(self.getLength());
+        fn getIndexes(self: *SourceBufferList, exec: *Execution) !js.Array {
+            var arr = exec.js.local.?.newArray(self.getLength());
             for (0..self._items.len) |i| {
                 _ = try arr.set(@intCast(i), i, .{});
             }

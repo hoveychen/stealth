@@ -37,7 +37,6 @@ const js = @import("../../js/js.zig");
 const mime = @import("../media/mime.zig");
 const MediaMetadata = @import("../media/MediaMetadata.zig").MediaMetadata;
 const chrome_sdp = @import("../webrtc/chrome_sdp.zig");
-const Frame = @import("../../Frame.zig");
 const StorageManager = @import("../StorageManager.zig");
 const idb = @import("../storage/idb/idb.zig");
 const webgpu_adapter = @import("../webgpu/adapter.zig");
@@ -407,11 +406,11 @@ pub const GPU = struct {
     // owner.
     _features: ?*WGSLLanguageFeatures = null,
 
-    pub fn getWgslLanguageFeatures(self: *GPU, frame: *Frame) !*WGSLLanguageFeatures {
+    pub fn getWgslLanguageFeatures(self: *GPU, exec: *Execution) !*WGSLLanguageFeatures {
         if (self._features) |features| {
             return features;
         }
-        const created = try frame._factory.create(WGSLLanguageFeatures{});
+        const created = try exec._factory.create(WGSLLanguageFeatures{});
         self._features = created;
         return created;
     }
@@ -817,9 +816,14 @@ pub const StorageBucket = struct {
     // The bucket shares the page's IDB factory rather than getting one of its
     // own — a separate database namespace would be a difference a page could
     // observe, and we have none to give it.
+    // The realm's own factory, whichever realm that is: both globals answer
+    // `getIndexedDB`, and reaching past the union to `.frame` was the only
+    // thing keeping the bucket family out of a worker.
     pub fn getIndexedDB(_: *const StorageBucket, exec: *Execution) !*idb.IDBFactory {
-        // Window-only, so the global is always a Frame.
-        return exec.js.global.frame.window.getIndexedDB(exec);
+        return switch (exec.js.global) {
+            .frame => |frame| frame.window.getIndexedDB(exec),
+            .worker => |worker| worker.getIndexedDB(exec),
+        };
     }
 
     pub fn getCaches(self: *StorageBucket) *cache_storage.CacheStorage {

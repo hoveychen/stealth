@@ -61,6 +61,7 @@ const dictionary = @import("dictionary.zig");
 const mime = @import("../mime.zig");
 const Factory = @import("../Factory.zig");
 const Window = @import("Window.zig");
+const DedicatedWorkerGlobalScope = @import("DedicatedWorkerGlobalScope.zig");
 const handler_property = @import("handler_property.zig");
 
 /// The getter/setter pair for one of `T`'s `on*` properties. Per DOM the
@@ -1012,17 +1013,46 @@ fn failLater(exec: *Execution, failure: ?js.Function, comptime name: []const u8,
 }
 
 /// window.webkitRequestFileSystem. Arity 3: the error callback is the only
-/// optional argument.
+/// optional argument. Chrome reports 2 for the same operation on a worker
+/// global (measured) -- its own inconsistency, mirrored where it is registered.
 pub fn requestFileSystem(
     _: *Window,
+    kind_: ?u32,
+    size: ?f64,
+    success_: ?js.Function,
+    failure: ?js.Function,
+    exec: *Execution,
+) !void {
+    return request("Window", 3, kind_, size, success_, failure, exec);
+}
+
+/// The same operation on a dedicated worker global -- own on the global there,
+/// not on WorkerGlobalScope.prototype, which is why the self type is the
+/// [Global] interface. Chrome's blob worker carries both of these as own
+/// enumerable functions and names none of the entry interfaces, the same shape
+/// its Window has (measured).
+pub fn workerRequestFileSystem(
+    _: *DedicatedWorkerGlobalScope,
+    kind_: ?u32,
+    size: ?f64,
+    success_: ?js.Function,
+    failure: ?js.Function,
+    exec: *Execution,
+) !void {
+    return request("WorkerGlobalScope", 2, kind_, size, success_, failure, exec);
+}
+
+fn request(
+    comptime iface: []const u8,
+    comptime arity: usize,
     kind_: ?u32,
     _: ?f64,
     success_: ?js.Function,
     failure: ?js.Function,
     exec: *Execution,
 ) !void {
-    const kind_value = kind_ orelse return windowMissing("webkitRequestFileSystem", 3, 0, exec);
-    const success = success_ orelse return windowMissing("webkitRequestFileSystem", 3, 2, exec);
+    const kind_value = kind_ orelse return missingArgs(iface, "webkitRequestFileSystem", arity, 0, exec);
+    const success = success_ orelse return missingArgs(iface, "webkitRequestFileSystem", arity, 2, exec);
 
     const kind: Kind = switch (kind_value) {
         0 => .temporary,
@@ -1042,8 +1072,28 @@ pub fn resolveLocalFileSystemURL(
     failure: ?js.Function,
     exec: *Execution,
 ) !void {
-    const url_value = url_ orelse return windowMissing("webkitResolveLocalFileSystemURL", 2, 0, exec);
-    const success = success_ orelse return windowMissing("webkitResolveLocalFileSystemURL", 2, 1, exec);
+    return resolveURL("Window", url_, success_, failure, exec);
+}
+
+pub fn workerResolveLocalFileSystemURL(
+    _: *DedicatedWorkerGlobalScope,
+    url_: ?String.Global,
+    success_: ?js.Function,
+    failure: ?js.Function,
+    exec: *Execution,
+) !void {
+    return resolveURL("WorkerGlobalScope", url_, success_, failure, exec);
+}
+
+fn resolveURL(
+    comptime iface: []const u8,
+    url_: ?String.Global,
+    success_: ?js.Function,
+    failure: ?js.Function,
+    exec: *Execution,
+) !void {
+    const url_value = url_ orelse return missingArgs(iface, "webkitResolveLocalFileSystemURL", 2, 0, exec);
+    const success = success_ orelse return missingArgs(iface, "webkitResolveLocalFileSystemURL", 2, 1, exec);
 
     const url = url_value.str.str();
     const prefix = "filesystem:";
@@ -1051,7 +1101,7 @@ pub fn resolveLocalFileSystemURL(
         return failLater(exec, failure, "EncodingError", messages.encoding);
     }
 
-    const origin = exec.js.global.frame.origin orelse "null";
+    const origin = originFor(exec);
     const rest = url[prefix.len..];
     if (std.mem.startsWith(u8, rest, origin) == false) {
         return failLater(exec, failure, "SecurityError", messages.security);
@@ -1086,23 +1136,44 @@ pub fn resolveLocalFileSystemURL(
     return callLater(exec, success, entry);
 }
 
-fn windowMissing(
+// Chrome names the interface the operation is on, the way `missing` above does.
+// Only the Window wording is measured; the worker one follows that pattern
+// rather than a reading.
+fn missingArgs(
+    comptime iface: []const u8,
     comptime operation: []const u8,
     comptime required: usize,
     comptime got: usize,
     exec: *const Execution,
 ) anyerror {
     return dictionary.throwTypeError(std.fmt.comptimePrint(
-        "Failed to execute '{s}' on 'Window': {d} arguments required, but only {d} present.",
-        .{ operation, required, got },
+        "Failed to execute '{s}' on '{s}': {d} arguments required, but only {d} present.",
+        .{ operation, iface, required, got },
     ), exec);
 }
 
-/// The two filesystems are per-origin and live as long as the page: a second
+/// The two slots this realm keeps its filesystems in. A worker gets its own
+/// pair rather than the owner window's: the objects are branded in the realm
+/// that asked for them, so handing back the window's would be a cross-realm
+/// object -- and the realm is also what the name below is derived from.
+fn slotsFor(exec: *Execution) *[2]?*DOMFileSystem {
+    return switch (exec.js.global) {
+        .frame => |frame| &frame.window._filesystems,
+        .worker => |worker| &worker._filesystems,
+    };
+}
+
+fn originFor(exec: *const Execution) []const u8 {
+    return switch (exec.js.global) {
+        .frame => |frame| frame.origin,
+        .worker => |worker| worker.origin,
+    } orelse "null";
+}
+
+/// The two filesystems are per-origin and live as long as the realm: a second
 /// request hands back the same object (measured, `===` holds).
 fn forKind(kind: Kind, exec: *Execution) !*DOMFileSystem {
-    const window = exec.js.global.frame.window;
-    const slot = &window._filesystems[@intFromEnum(kind)];
+    const slot = &slotsFor(exec)[@intFromEnum(kind)];
     if (slot.*) |existing| {
         return existing;
     }
@@ -1110,7 +1181,7 @@ fn forKind(kind: Kind, exec: *Execution) !*DOMFileSystem {
     const arena = exec._factory._arena;
     const root = try createRoot(arena);
 
-    const origin = exec.js.global.frame.origin orelse "null";
+    const origin = originFor(exec);
     const filesystem = try exec._factory.create(DOMFileSystem{
         ._name = try filesystemName(arena, origin, kind),
         ._kind = kind,

@@ -33,10 +33,13 @@ in results/probes/expr-worker-surface.chrome.json).
 
       // Chrome's WorkerNavigator.prototype, minus the ones this engine cannot
       // serve without a Frame (connection, hid, mediaCapabilities, serial, usb,
-      // locks, gpu, storageBuckets).
+      // locks). `gpu` and `storageBuckets` are here because the only thing
+      // either service wanted a Frame for was the object factory, which every
+      // Execution carries.
       testing.expectEqual(
-        'appCodeName,appName,appVersion,constructor,deviceMemory,hardwareConcurrency,' +
-        'language,languages,onLine,permissions,platform,product,storage,userAgent,userAgentData',
+        'appCodeName,appName,appVersion,constructor,deviceMemory,gpu,hardwareConcurrency,' +
+        'language,languages,onLine,permissions,platform,product,storage,storageBuckets,' +
+        'userAgent,userAgentData',
         data.wn_proto_own);
 
       // An unnamed worker's name is the empty string, and it is own on the
@@ -73,6 +76,59 @@ in results/probes/expr-worker-surface.chrome.json).
       // Still missing, and not by an oversight in a list: see the comment on
       // getGlobalArg in js/Caller.zig.
       testing.expectEqual('', data.frame_bound);
+
+      // WebGPU. All 40 interface objects, and a live round trip through the
+      // realm's own factory: `navigator.gpu` and the set behind
+      // wgslLanguageFeatures are created here, by this context's Execution.
+      testing.expectEqual('', data.gpu_family);
+      testing.expectEqual('object,object,object,object,object', data.gpu_namespaces);
+      testing.expectEqual('', data.gpu_interfaces);
+      testing.expectEqual('[object GPU]', data.nav_gpu_brand);
+      testing.expectEqual('bgra8unorm', data.gpu_canvas_format);
+      testing.expectEqual('[object WGSLLanguageFeatures]', data.wgsl_brand);
+      testing.expectEqual(true, data.wgsl_identity);
+      testing.expectEqual(true, data.wgsl_has_f16);
+
+      // MSE-in-Worker, which is the whole point of the feature: a dedicated
+      // worker is where Chrome lets a MediaSource be constructed at all.
+      testing.expectEqual('', data.mse_family);
+      testing.expectEqual(true, data.mse_can_construct);
+      testing.expectEqual('[object SourceBufferList]', data.mse_buffers_brand);
+      testing.expectEqual(true, data.mse_buffers_identity);
+      testing.expectEqual(0, data.mse_buffers_length);
+
+      // Storage buckets, and the bucket's IDB factory being this realm's rather
+      // than the owner window's.
+      testing.expectEqual('', data.bucket_family);
+      testing.expectEqual('[object StorageBucketManager]', data.bucket_manager_brand);
+      testing.expectEqual('[object StorageBucket]', data.bucket_brand);
+      testing.expectEqual('kssz-bucket', data.bucket_name);
+      testing.expectEqual('[object IDBFactory]', data.bucket_idb_brand);
+      testing.expectEqual(true, data.bucket_idb_is_realms);
+
+      // The font families, and `self.fonts` dispatching its `loading` event
+      // into this realm's own listener list.
+      testing.expectEqual('', data.font_family);
+      testing.expectEqual('undefined', data.typeof_FontFaceSetLoadEvent);
+      testing.expectEqual('WorkerGlobalScope.prototype', data.fonts_holder);
+      testing.expectEqual('[object FontFaceSet]', data.fonts_brand);
+      testing.expectEqual(true, data.fonts_identity);
+      testing.expectEqual('loaded', data.fonts_status);
+      testing.expectEqual(0, data.fonts_size);
+      testing.expectEqual('ok:loading', data.fonts_loaded);
+      testing.expectEqual('Kssz', data.font_face_family);
+      testing.expectEqual('normal', data.font_face_style);
+
+      // The sandboxed filesystem. Both operations are own enumerable
+      // configurable functions of the worker global, and Chrome's arity for
+      // `webkitRequestFileSystem` there is 2 where the window's is 3 (measured
+      // -- the error callback is optional in both, so this is Chrome's own
+      // inconsistency, not ours). The name is built from this realm's origin.
+      testing.expectEqual('function e c function e c', data.webkit_fs);
+      testing.expectEqual('2,2', data.webkit_fs_arity);
+      testing.expectEqual('http_127_0_0_1_9582:Temporary', data.webkit_fs_name);
+      testing.expectEqual(true, data.webkit_fs_identity);
+      testing.expectEqual('/:true', data.webkit_fs_resolved);
 
       // Trusted Types. Chrome holds `trustedTypes` on WorkerGlobalScope
       // .prototype, and everything the factory does in a worker it also does on

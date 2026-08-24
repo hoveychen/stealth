@@ -45,6 +45,10 @@ pub const PaintStyle = struct {
     /// replaced keeps getting painted, which is what happened before this
     /// too. Giving them real paint is the `cfsc-gradient-paint-source` plan.
     colour: color.RGBA = color.RGBA.Named.black,
+    /// The source notation, when the colour was written in one of the five
+    /// functions a browser answers back as *itself* rather than as hex. See
+    /// `color.Wide`.
+    wide: ?color.Wide = null,
     /// Set when the last assignment was a gradient or a pattern, in which case
     /// that object — not `colour` — is what a script reads back.
     object: ?Object = null,
@@ -79,16 +83,36 @@ pub const PaintStyle = struct {
             .gradient => |gradient| self.object = .{ .gradient = gradient },
             .pattern => |pattern| self.object = .{ .pattern = pattern },
             .text => |text| {
-                self.colour = color.RGBA.parse(text) catch return;
+                const style = parseColour(text) orelse return;
+                self.colour = style.rgba;
+                self.wide = style.wide;
                 self.object = null;
             },
         }
     }
 
+    /// What `fillStyle` and `strokeStyle` accept. `currentColor` is the
+    /// element's `color`, and neither context tracks one of its own, so it
+    /// resolves to that property's initial value — measured on Chrome as
+    /// `#000000`. Everything else is color.zig's grammar.
+    pub fn parseColour(value: []const u8) ?color.Style {
+        if (std.ascii.eqlIgnoreCase(std.mem.trim(u8, value, &std.ascii.whitespace), "currentcolor")) {
+            return .{ .rgba = color.RGBA.Named.black };
+        }
+        return color.parseStyle(value);
+    }
+
+    /// The colour arm answers with the source notation when the colour was
+    /// written in one of the five functions that keep it, and with the hex or
+    /// `rgba()` form otherwise.
     pub fn read(self: *const PaintStyle, arena: Allocator) !Read {
         const object = self.object orelse {
             var w = std.Io.Writer.Allocating.init(arena);
-            try self.colour.format(&w.writer);
+            if (self.wide) |source| {
+                try source.format(&w.writer);
+            } else {
+                try self.colour.format(&w.writer);
+            }
             return .{ .text = w.written() };
         };
         return switch (object) {

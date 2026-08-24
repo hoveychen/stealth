@@ -970,7 +970,9 @@ pub fn setFormNoValidate(self: *Input, value: bool, frame: *Frame) !void {
 /// What `type=color` accepts. The spec's sanitizer only takes the 7-character
 /// lowercase hex "simple color", but Chrome runs the CSS color parser and
 /// serializes back to that form, so the short and alpha hex forms, the named
-/// colors and `rgb()`/`hsl()` all come through.
+/// colors and every color function come through -- including the wide-gamut
+/// ones, converted into sRGB: measured, `lab(50% 40 30)` reads `#bb5846` and
+/// `color(display-p3 1 0 0)` reads `#ff0000`.
 ///
 /// Surrounding whitespace is tolerated around the hex and function forms but
 /// *not* around a bare name — `"#aabbcc "` reads `#aabbcc` while `"red "` reads
@@ -984,7 +986,9 @@ fn parseColorValue(value: []const u8) ?color.RGBA {
         return color.RGBA.parse(trimmed) catch null;
     }
     if (std.mem.indexOfScalar(u8, trimmed, '(') != null) {
-        return color.RGBA.parseFunction(trimmed);
+        // Measured: the wide-gamut functions come through here too, converted
+        // into sRGB -- `lab(50% 40 30)` reads `#bb5846`.
+        return (color.parseStyle(trimmed) orelse return null).rgba;
     }
 
     // A name, which the trim must not have changed.
