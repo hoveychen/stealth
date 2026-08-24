@@ -34,6 +34,220 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#fillStyle colour functions">
+{
+  // Every colour notation a 2D context accepts, and the string it answers.
+  // All of it measured on headed Chrome by
+  // tools/fingerprint/probes/canvas-color-notation.js, whose readings are in
+  // tools/fingerprint/results/canvas-color-notation.chrome.json.
+  //
+  // The split that shapes the code: hex, a name, `rgb()`, `hsl()` and `hwb()`
+  // all collapse to hex (or `rgba()` when translucent), while `lab()`,
+  // `lch()`, `oklab()`, `oklch()` and `color()` are answered as *themselves*,
+  // canonicalised. A context therefore has to keep the source of those five.
+  const element = document.createElement("canvas");
+  const ctx = element.getContext("2d");
+  // The previous colour is blue, so a notation the engine drops shows up as
+  // blue rather than as silence -- which is exactly how the bug read.
+  const read = (v) => { ctx.fillStyle = "#0000ff"; ctx.fillStyle = v; return ctx.fillStyle; };
+
+  // --- the collapsing family -------------------------------------------
+  testing.expectEqual("#ff0000", read("rgb(255,0,0)"));
+  testing.expectEqual("#ff0000", read("rgb(255 0 0)"));
+  testing.expectEqual("rgba(255, 0, 0, 0.5)", read("rgba(255,0,0,0.5)"));
+  testing.expectEqual("rgba(255, 0, 0, 0.5)", read("rgb(255 0 0 / 0.5)"));
+  testing.expectEqual("#800000", read("rgb(50% 0% 0%)"));
+  testing.expectEqual("#000000", read("rgb(none 0 0)"));
+  testing.expectEqual("#ff0000", read("hsl(0,100%,50%)"));
+  testing.expectEqual("#ff0000", read("hsl(0 100% 50%)"));
+  testing.expectEqual("rgba(255, 0, 0, 0.5)", read("hsla(0,100%,50%,0.5)"));
+  testing.expectEqual("#a36629", read("hsl(30 60% 40%)"));
+  testing.expectEqual("#ff0000", read("hwb(0 0% 0%)"));
+  testing.expectEqual("#33b333", read("hwb(120 20% 30%)"));
+  // A whiteness and blackness summing past 100% is the grey between them.
+  testing.expectEqual("#747474", read("hwb(120 50% 60%)"));
+  // An alpha of exactly one, or one that clamps to it, answers as opaque.
+  testing.expectEqual("#ff0000", read("hsl(0 100% 50% / 200%)"));
+  testing.expectEqual("rgba(255, 0, 0, 0.5)", read("#ff000080"));
+  testing.expectEqual("rgba(0, 0, 0, 0)", read("transparent"));
+
+  // `currentColor` is the element's `color`, whose initial value is black.
+  testing.expectEqual("#000000", read("currentColor"));
+
+  // Surrounding whitespace and the case of a name are both tolerated: the
+  // `<input type=color>` sanitiser's asymmetry there is its own, not CSS's.
+  testing.expectEqual("#ff0000", read(" red "));
+  testing.expectEqual("#ff0000", read("RED"));
+  testing.expectEqual("#010203", read(" rgb(1,2,3) "));
+  testing.expectEqual("#0000ff", read("red x"));
+  testing.expectEqual("#0000ff", read(""));
+
+  // --- the family answered as itself -----------------------------------
+  testing.expectEqual("lab(50 40 30)", read("lab(50% 40 30)"));
+  testing.expectEqual("lab(50 40 30)", read("lab(50 40 30)"));
+  testing.expectEqual("lab(50 40 30)", read("LAB(50 40 30)"));
+  testing.expectEqual("lab(50 40 30)", read("lab( 50  40  30 )"));
+  testing.expectEqual("lab(50 40 30)", read("lab(5e1 40 30)"));
+  testing.expectEqual("lab(50 40 30)", read("lab(+50 40 30)"));
+  testing.expectEqual("lab(50 40 30 / 0.5)", read("lab(50 40 30 / 0.5)"));
+  testing.expectEqual("lab(50 40 30 / 0.5)", read("lab(50 40 30 / 50%)"));
+  // An alpha of one is dropped from the string; a `none` alpha is not.
+  testing.expectEqual("lab(50 40 30)", read("lab(50 40 30 / 1)"));
+  testing.expectEqual("lab(50 40 30)", read("lab(50 40 30 / 1.5)"));
+  testing.expectEqual("lab(none 40 30)", read("lab(none 40 30)"));
+  // Lightness clamps, and a lab percentage is 125 per hundred on a and b.
+  testing.expectEqual("lab(100 40 30)", read("lab(150 40 30)"));
+  testing.expectEqual("lab(0 40 30)", read("lab(-50 40 30)"));
+  testing.expectEqual("lab(50 62.5 62.5)", read("lab(50% 50% 50%)"));
+
+  testing.expectEqual("lch(50 40 30)", read("lch(50% 40 30)"));
+  testing.expectEqual("lch(50 40 30)", read("lch(50 40 30deg)"));
+  testing.expectEqual("lch(50 40 180)", read("lch(50 40 0.5turn)"));
+  // The hue wraps in both directions; chroma clamps at zero, and 100% is 150.
+  testing.expectEqual("lch(50 40 40)", read("lch(50 40 400)"));
+  testing.expectEqual("lch(50 40 330)", read("lch(50 40 -30)"));
+  testing.expectEqual("lch(50 0 30)", read("lch(50 -40 30)"));
+  testing.expectEqual("lch(50 150 30)", read("lch(50 100% 30)"));
+
+  testing.expectEqual("oklab(0.7 0.1 0.05)", read("oklab(0.7 0.1 0.05)"));
+  // An oklab percentage is 0.4 per hundred, and its lightness 1 per hundred.
+  testing.expectEqual("oklab(0.7 0.1 0.02)", read("oklab(0.7 25% 5%)"));
+  testing.expectEqual("oklab(none none none)", read("oklab(none none none)"));
+  testing.expectEqual("oklch(0.7 0.1 20)", read("oklch(0.7 0.1 20)"));
+  testing.expectEqual("oklch(0.7 0.1 20)", read("oklch(70% 0.1 20)"));
+  testing.expectEqual("oklch(0.7 0.1 20)", read("oklch(0.7 25% 20)"));
+  testing.expectEqual("oklch(0.7 0.1 20)", read("oklch(0.70 0.10 20.0)"));
+  testing.expectEqual("oklch(1 0.1 20)", read("oklch(1.5 0.1 20)"));
+  testing.expectEqual("oklch(0.7 0 20)", read("oklch(0.7 -0.1 20)"));
+
+  // `color()` keeps its colour space, lowercased, with `xyz` spelled out.
+  testing.expectEqual("color(display-p3 1 0 0)", read("color(display-p3 1 0 0)"));
+  testing.expectEqual("color(display-p3 1 0 0)", read("COLOR(DISPLAY-P3 1 0 0)"));
+  testing.expectEqual("color(display-p3 1 0.25 0.5)", read("color(display-p3 1 0.25 0.5)"));
+  testing.expectEqual("color(display-p3 0.5 0.25 0.5)", read("color(display-p3 50% 25% 50%)"));
+  testing.expectEqual("color(display-p3 1 0.25 0.5 / 0.5)", read("color(display-p3 1 0.25 0.5 / 0.5)"));
+  testing.expectEqual("color(display-p3 1 0.25 0.5 / none)", read("color(display-p3 1 0.25 0.5 / none)"));
+  testing.expectEqual("color(display-p3 1 0 0 / 0)", read("color(display-p3 1 0 0 / -1)"));
+  testing.expectEqual("color(display-p3 1 0 0)", read("color(display-p3 1 0 0 / 1)"));
+  testing.expectEqual("color(display-p3 none none none)", read("color(display-p3 none none none)"));
+  testing.expectEqual("color(xyz-d65 0.5 0.25 0.1)", read("color(xyz 0.5 0.25 0.1)"));
+  testing.expectEqual("color(xyz-d65 0.5 0.25 0.1)", read("color(xyz-d65 0.5 0.25 0.1)"));
+  testing.expectEqual("color(xyz-d50 0.5 0.25 0.1)", read("color(xyz-d50 0.5 0.25 0.1)"));
+  // `color()` channels are not clamped in the string, unlike a lightness.
+  testing.expectEqual("color(srgb 1.5 -0.5 0.5)", read("color(srgb 1.5 -0.5 0.5)"));
+  testing.expectEqual("color(rec2020 -0.5 0.25 1.5)", read("color(rec2020 -0.5 0.25 1.5)"));
+
+  // Rejections: the wrong arity, a comma anywhere, an unknown colour space.
+  testing.expectEqual("#0000ff", read("lab(50)"));
+  testing.expectEqual("#0000ff", read("lab(50 40 30 40)"));
+  testing.expectEqual("#0000ff", read("lab(50, 40, 30)"));
+  testing.expectEqual("#0000ff", read("color(display-p3 1 0.25)"));
+  testing.expectEqual("#0000ff", read("color(display-p3 1 0.25 0.5 0.5)"));
+  testing.expectEqual("#0000ff", read("color(display-p3, 1, 0, 0)"));
+  testing.expectEqual("#0000ff", read("color(nonesuch 1 0 0)"));
+  testing.expectEqual("#0000ff", read("rgb(1,2,3,)"));
+
+  // strokeStyle is the same parser.
+  ctx.strokeStyle = "oklch(0.7 0.1 20)";
+  testing.expectEqual("oklch(0.7 0.1 20)", ctx.strokeStyle);
+  ctx.strokeStyle = "red";
+  testing.expectEqual("#ff0000", ctx.strokeStyle);
+}
+</script>
+
+<script id="CanvasRenderingContext2D#fillStyle colour function pixels">
+{
+  // The bytes each notation actually paints, on an srgb/unorm8 canvas read
+  // back in srgb -- the first of the four readings the Turnstile widget takes
+  // (results/ibt2-oracle.json). Chrome's values, same probe as above.
+  const hex = (data) => [...data].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const paint = (v) => {
+    const canvas = new OffscreenCanvas(2, 2);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#0000ff";
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, 2, 2);
+    return hex(ctx.getImageData(0, 0, 1, 1).data);
+  };
+
+  testing.expectEqual("ff0000ff", paint("rgb(255,0,0)"));
+  testing.expectEqual("ff000080", paint("rgba(255,0,0,0.5)"));
+  testing.expectEqual("ff0000ff", paint("hsl(0,100%,50%)"));
+  testing.expectEqual("33b333ff", paint("hwb(120 20% 30%)"));
+  testing.expectEqual("000000ff", paint("currentColor"));
+  testing.expectEqual("00000000", paint("transparent"));
+
+  // The wide-gamut families, converted through XYZ into srgb and clipped.
+  testing.expectEqual("bb5846ff", paint("lab(50% 40 30)"));
+  testing.expectEqual("bb584680", paint("lab(50 40 30 / 0.5)"));
+  testing.expectEqual("380000ff", paint("lab(none 40 30)"));
+  testing.expectEqual("db3702ff", paint("lab(50% 50% 50%)"));
+  testing.expectEqual("ffe0c7ff", paint("lab(150 40 30)"));
+  testing.expectEqual("b25d57ff", paint("lch(50% 40 30)"));
+  testing.expectEqual("008875ff", paint("lch(50 40 0.5turn)"));
+  testing.expectEqual("ff0011ff", paint("lch(50 100% 30)"));
+  testing.expectEqual("777777ff", paint("lch(50 -40 30)"));
+  testing.expectEqual("db8279ff", paint("oklab(0.7 0.1 0.05)"));
+  testing.expectEqual("d5838eff", paint("oklab(0.7 25% 5%)"));
+  testing.expectEqual("d68585ff", paint("oklch(0.7 0.1 20)"));
+  testing.expectEqual("9e9e9eff", paint("oklch(0.7 -0.1 20)"));
+  testing.expectEqual("ffe5e3ff", paint("oklch(1.5 0.1 20)"));
+
+  // Every colour space `color()` takes, one reading each.
+  testing.expectEqual("ff0000ff", paint("color(display-p3 1 0 0)"));
+  testing.expectEqual("ff1b7fff", paint("color(display-p3 1 0.25 0.5)"));
+  testing.expectEqual("ff1b7f80", paint("color(display-p3 1 0.25 0.5 / 0.5)"));
+  testing.expectEqual("00000000", paint("color(display-p3 1 0.25 0.5 / none)"));
+  testing.expectEqual("004184ff", paint("color(display-p3 none 0.25 0.5)"));
+  testing.expectEqual("893b83ff", paint("color(display-p3 50% 25% 50%)"));
+  testing.expectEqual("ff4080ff", paint("color(srgb 1 0.25 0.5)"));
+  testing.expectEqual("ff0080ff", paint("color(srgb 1.5 -0.5 0.5)"));
+  testing.expectEqual("ff89bcff", paint("color(srgb-linear 1 0.25 0.5)"));
+  testing.expectEqual("ff3d82ff", paint("color(a98-rgb 1 0.25 0.5)"));
+  testing.expectEqual("ff0098ff", paint("color(prophoto-rgb 1 0.25 0.5)"));
+  testing.expectEqual("ff008dff", paint("color(rec2020 1 0.25 0.5)"));
+  testing.expectEqual("005affff", paint("color(rec2020 -0.5 0.25 1.5)"));
+  testing.expectEqual("ff0051ff", paint("color(xyz 0.5 0.25 0.1)"));
+  testing.expectEqual("ff0061ff", paint("color(xyz-d50 0.5 0.25 0.1)"));
+
+  // A second and third reading per space, in gamut this time, so the transfer
+  // function each one uses is pinned by more than a single point. That matters:
+  // a98-rgb turned out to use a plain 2.2 rather than CSS Color 4's 563/256,
+  // and one reading alone could not have told the two apart.
+  testing.expectEqual("56c100ff", paint("color(a98-rgb 0.5 0.75 0.1)"));
+  testing.expectEqual("00669cff", paint("color(a98-rgb 0.2 0.4 0.6)"));
+  testing.expectEqual("ff135aff", paint("color(a98-rgb 0.9 0.1 0.35)"));
+  testing.expectEqual("6bd500ff", paint("color(prophoto-rgb 0.5 0.75 0.1)"));
+  // Below 16/512 the prophoto transfer function is its linear segment.
+  testing.expectEqual("0085b0ff", paint("color(prophoto-rgb 0.02 0.4 0.6)"));
+  testing.expectEqual("58cc00ff", paint("color(rec2020 0.5 0.75 0.1)"));
+  testing.expectEqual("0079a8ff", paint("color(rec2020 0.05 0.4 0.6)"));
+  // The one reading in this block that is not Chrome's. Its red lands at
+  // 26.5344, four hundredths of a byte over the rounding boundary, and Chrome
+  // answers `1a` where the spec's matrices answer `1b` -- Skia carries its
+  // gamut matrices as D50 fixed point, so its arithmetic sits a ten-thousandth
+  // away from CSS Color 4's rationals and a knife-edge channel can fall either
+  // side. Thirty-nine of the forty readings measured for this are exact; this
+  // is the fortieth, and a one-LSB channel is a reading a real browser produces
+  // too, so it is recorded rather than chased.
+  testing.expectEqual("1b689dff", paint("color(display-p3 0.2 0.4 0.6)"));
+  testing.expectEqual("7caacbff", paint("color(srgb-linear 0.2 0.4 0.6)"));
+  testing.expectEqual("00c89fff", paint("color(xyz-d50 0.2 0.4 0.3)"));
+  testing.expectEqual("00c788ff", paint("color(xyz-d65 0.2 0.4 0.3)"));
+  testing.expectEqual("89b949ff", paint("lab(70 -30 50)"));
+  testing.expectEqual("00e2ebff", paint("lch(80 60 200)"));
+  testing.expectEqual("115705ff", paint("oklab(0.4 -0.1 0.08)"));
+  testing.expectEqual("773ac1ff", paint("oklch(0.5 0.2 300)"));
+  // The second of the two non-Chrome readings, and the same shape as the
+  // display-p3 one above: green lands on 144.49999999999997 where Chrome
+  // answers 145, so the byte falls the other side of a boundary the two arms
+  // approach from opposite directions. Both hsl formulations land under it.
+  testing.expectEqual("1a90ccff", paint("hwb(200 10% 20%)"));
+  testing.expectEqual("5e1782ff", paint("hsl(280 70% 30%)"));
+  testing.expectEqual("1a334dff", paint("rgb(10% 20% 30%)"));
+}
+</script>
+
 <script id="CanvasRenderingContext2D#createImageData(width, height)">
 {
   const element = document.createElement("canvas");

@@ -38,6 +38,7 @@ const chrome_properties = @import("chrome_properties.zig");
 const chrome_value_case = @import("chrome_value_case.zig");
 const shorthand = @import("shorthand.zig");
 const typed_om = @import("typed_om.zig");
+const color = @import("../../color.zig");
 
 const CSSStyleDeclaration = @This();
 
@@ -1668,9 +1669,9 @@ fn parseColourFunction(
                 };
             }
             const unit = if (kind == .hsl)
-                hslToRgb(hue, pair[0], pair[1])
+                color.hslToRgb(hue, pair[0], pair[1])
             else
-                hwbToRgb(hue, pair[0], pair[1]);
+                color.hwbToRgb(hue, pair[0], pair[1]);
             break :blk .{ unit[0] * 255.0, unit[1] * 255.0, unit[2] * 255.0 };
         },
     };
@@ -1724,76 +1725,14 @@ fn alphaByte(channel: Channel) ?u8 {
     return colourByte(std.math.clamp(alpha, 0, 1) * 255.0);
 }
 
-fn hslToRgb(hue: f64, saturation: f64, lightness: f64) [3]f64 {
-    const h = @mod(hue, 360.0);
-    const c = (1 - @abs(2 * lightness - 1)) * saturation;
-    const segment = h / 60.0;
-    const x = c * (1 - @abs(@mod(segment, 2.0) - 1));
-    const m = lightness - c / 2;
-    const triple: [3]f64 = switch (@as(u8, @intFromFloat(@min(5, @floor(segment))))) {
-        0 => .{ c, x, 0 },
-        1 => .{ x, c, 0 },
-        2 => .{ 0, c, x },
-        3 => .{ 0, x, c },
-        4 => .{ x, 0, c },
-        else => .{ c, 0, x },
-    };
-    return .{ triple[0] + m, triple[1] + m, triple[2] + m };
-}
-
-fn hwbToRgb(hue: f64, whiteness: f64, blackness: f64) [3]f64 {
-    // Measured: a whiteness and blackness summing past 100% is the grey
-    // between them -- `hwb(120 50% 60%)` answers `rgb(116, 116, 116)`.
-    if (whiteness + blackness >= 1) {
-        const grey = whiteness / (whiteness + blackness);
-        return .{ grey, grey, grey };
-    }
-    const base = hslToRgb(hue, 1, 0.5);
-    var out: [3]f64 = undefined;
-    for (base, 0..) |channel, at| {
-        out[at] = channel * (1 - whiteness - blackness) + whiteness;
-    }
-    return out;
-}
-
 fn writeColour(writer: *std.Io.Writer, colour: Colour) !void {
     const rgb = colour.rgb;
     if (colour.alpha == 255) {
         return writer.print("rgb({d}, {d}, {d})", .{ rgb[0], rgb[1], rgb[2] });
     }
     try writer.print("rgba({d}, {d}, {d}, ", .{ rgb[0], rgb[1], rgb[2] });
-    try writeAlpha(writer, colour.alpha);
+    try color.writeAlpha(writer, colour.alpha);
     try writer.writeByte(')');
-}
-
-/// The alpha Chrome answers with is the shortest one, two or three decimal
-/// number that rounds back to the same alpha byte -- measured over fifty
-/// alphas, which is what makes 221/255 `0.867`, 158/255 `0.62`, 128/255 `0.5`
-/// and anything under half a byte a plain `0`. Three decimals always round-trip
-/// (their spacing is finer than a byte), so the loop always answers.
-fn writeAlpha(writer: *std.Io.Writer, alpha: u8) !void {
-    if (alpha == 0) {
-        return writer.writeByte('0');
-    }
-    const exact = @as(f64, @floatFromInt(alpha)) / 255.0;
-    for ([_]f64{ 10, 100, 1000 }, 1..) |scale, places| {
-        const rounded = @round(exact * scale);
-        if (rounded >= scale) {
-            // Would answer `1`, which no alpha under 255 can round back to.
-            continue;
-        }
-        if (colourByte(rounded / scale * 255.0) != alpha) {
-            continue;
-        }
-        const digits: u32 = @intFromFloat(rounded);
-        switch (places) {
-            1 => try writer.print("0.{d}", .{digits}),
-            2 => try writer.print("0.{d:0>2}", .{digits}),
-            else => try writer.print("0.{d:0>3}", .{digits}),
-        }
-        return;
-    }
-    unreachable;
 }
 
 // Canonicalize anchor-size() so that the dashed ident (anchor name) comes before the size keyword.

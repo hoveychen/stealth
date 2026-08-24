@@ -52,8 +52,12 @@ _surface: Surface,
 /// Fill color.
 /// TODO: Add support for `CanvasGradient` and `CanvasPattern`.
 _fill_style: color.RGBA = color.RGBA.Named.black,
+/// Set when the fill was written in one of the five colour functions a browser
+/// answers back as itself, which is the only thing the getter needs it for.
+_fill_style_wide: ?color.Wide = null,
 /// Stroke color, same caveat.
 _stroke_style: color.RGBA = color.RGBA.Named.black,
+_stroke_style_wide: ?color.Wide = null,
 _line_width: f64 = 1,
 _global_alpha: f64 = 1,
 /// The parsed `font` attribute. Drives measureText; see font.zig.
@@ -73,9 +77,7 @@ pub fn getCanvas(self: *const CanvasRenderingContext2D) *Canvas {
 }
 
 pub fn getFillStyle(self: *const CanvasRenderingContext2D, exec: *Execution) ![]const u8 {
-    var w = std.Io.Writer.Allocating.init(exec.local_arena);
-    try self._fill_style.format(&w.writer);
-    return w.written();
+    return context_draw.styleString(exec.local_arena, self._fill_style, self._fill_style_wide);
 }
 
 pub fn setFillStyle(
@@ -83,17 +85,19 @@ pub fn setFillStyle(
     value: []const u8,
 ) !void {
     // Prefer the same fill_style if fails.
-    self._fill_style = color.RGBA.parse(value) catch self._fill_style;
+    const style = context_draw.parseStyle(value) orelse return;
+    self._fill_style = style.rgba;
+    self._fill_style_wide = style.wide;
 }
 
 pub fn getStrokeStyle(self: *const CanvasRenderingContext2D, exec: *Execution) ![]const u8 {
-    var w = std.Io.Writer.Allocating.init(exec.local_arena);
-    try self._stroke_style.format(&w.writer);
-    return w.written();
+    return context_draw.styleString(exec.local_arena, self._stroke_style, self._stroke_style_wide);
 }
 
 pub fn setStrokeStyle(self: *CanvasRenderingContext2D, value: []const u8) void {
-    self._stroke_style = color.RGBA.parse(value) catch self._stroke_style;
+    const style = context_draw.parseStyle(value) orelse return;
+    self._stroke_style = style.rgba;
+    self._stroke_style_wide = style.wide;
 }
 
 pub fn getLineWidth(self: *const CanvasRenderingContext2D) f64 {
@@ -214,7 +218,9 @@ pub const getTransform = draw.getTransform;
 pub fn reset(self: *CanvasRenderingContext2D) void {
     self._surface.reset();
     self._fill_style = color.RGBA.Named.black;
+    self._fill_style_wide = null;
     self._stroke_style = color.RGBA.Named.black;
+    self._stroke_style_wide = null;
     self._line_width = 1;
     self._global_alpha = 1;
     self._font = Font.default;
