@@ -937,8 +937,9 @@ fn elementFromPointImpl(self: *Document, x: f64, y: f64, ignore_x: bool, frame: 
     // (which itself is O(N)). Once the counter's y passes the query y, no
     // later element can contain the point, and we can return.
     //
-    // We also share a single VisibilityCache across all elements so the
-    // ancestor-walk inside isHidden gets amortized.
+    // The elements whose box contains the point share one VisibilityCache, so
+    // the ancestor walk inside isHidden is paid once per ancestor rather than
+    // once per candidate.
     var topmost: ?*Element = null;
 
     const root = self.asNode();
@@ -959,15 +960,19 @@ fn elementFromPointImpl(self: *Document, x: f64, y: f64, ignore_x: bool, frame: 
 
         preorder_index += 1;
         if (node.is(Element)) |element| {
-            if (element.checkVisibilityCached(&visibility_cache, frame)) {
-                const dims = element.getElementDimensions(frame);
-                // x and y both come from preorder position in our faux layout.
-                const left = pos;
-                const top = pos;
-                const right = pos + dims.width;
-                const bottom = pos + dims.height;
-                const x_contained = ignore_x or (x >= left and x <= right);
-                if (x_contained and y >= top and y <= bottom) {
+            const dims = element.getElementDimensions(frame);
+            // x and y both come from preorder position in our faux layout.
+            const left = pos;
+            const top = pos;
+            const right = pos + dims.width;
+            const bottom = pos + dims.height;
+            const x_contained = ignore_x or (x >= left and x <= right);
+            if (x_contained and y >= top and y <= bottom) {
+                // Both conditions have to hold, so the cascade goes behind the
+                // box test: a box costs a couple of microseconds and a computed
+                // visibility a couple of hundred, and of the thousands of
+                // elements walked here only a handful contain the point.
+                if (element.checkVisibilityCached(&visibility_cache, frame)) {
                     topmost = element;
                 }
             }

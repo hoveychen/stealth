@@ -110,6 +110,87 @@
 }
 </script>
 
+<script id="hidden_is_never_the_answer">
+{
+  // The hit test has two conditions -- the box contains the point, and the
+  // element is visible -- and it is free to check them in either order, so
+  // this pins the answer rather than the order. An inline display:none beats
+  // anything a stylesheet says, which is why it is what the box below uses.
+  const box = document.createElement('div');
+  box.style.width = '100px';
+  box.style.height = '50px';
+  box.textContent = 'Invisible';
+  document.body.appendChild(box);
+
+  const rect = box.getBoundingClientRect();
+  const cx = (rect.left + rect.right) / 2;
+  const cy = (rect.top + rect.bottom) / 2;
+
+  // Sanity: while it is visible it is the answer, so the query really does
+  // land on this element and the assertion below is about visibility alone.
+  testing.expectEqual(box, document.elementFromPoint(cx, cy));
+
+  box.style.display = 'none';
+  const hit = document.elementFromPoint(cx, cy);
+  testing.expectTrue(hit === null || hit !== box);
+  for (const el of document.elementsFromPoint(cx, cy)) {
+    testing.expectTrue(el !== box);
+  }
+
+  box.remove();
+}
+</script>
+
+<script id="hit_test_does_not_cascade_every_element">
+{
+  // elementFromPoint walks the document in preorder, and under the faux layout
+  // it has to ask every element it passes for a box. Asking each of them for a
+  // computed visibility as well -- a CSS cascade plus selector matching, per
+  // element, per call -- is what makes this quadratic in practice: kohls.com
+  // calls it a few hundred times per load from an IntersectionObserver
+  // handler, and at a cascade per element it never gets through them.
+  //
+  // Only the handful of boxes that contain the point can be the answer, so the
+  // cascade belongs behind the box test rather than in front of it. Measured
+  // here (debug build, Apple silicon): 5.0s for the loop below with the
+  // cascade first, 0.04s with the box first.
+  const sheet = document.createElement('style');
+  let rules = '';
+  for (let i = 0; i < 400; i++) {
+    rules += '.c' + i + ' .d' + (i % 37) + ' span{display:block}\n';
+  }
+  sheet.textContent = rules;
+  document.head.appendChild(sheet);
+
+  const host = document.createElement('div');
+  for (let i = 0; i < 400; i++) {
+    const row = document.createElement('div');
+    row.className = 'c' + i + ' c' + ((i * 7) % 400);
+    const label = document.createElement('span');
+    label.className = 'd' + (i % 37);
+    label.textContent = 'row ' + i;
+    row.appendChild(label);
+    host.appendChild(row);
+  }
+  document.body.appendChild(host);
+
+  const started = Date.now();
+  for (let i = 0; i < 40; i++) {
+    document.elementFromPoint(4000 + i, 4000);
+  }
+  const elapsed = Date.now() - started;
+
+  host.remove();
+  sheet.remove();
+
+  if (elapsed >= 1500) {
+    testing.fail('40 elementFromPoint calls over 800 elements took ' + elapsed + 'ms');
+  }
+  // Reached the end of the block, and the tree it built is gone again.
+  testing.expectEqual(null, document.querySelector('.d36'));
+}
+</script>
+
 <script id="elementsFromPoint_basic">
 {
   // Test that elementsFromPoint returns array of element and its ancestors
