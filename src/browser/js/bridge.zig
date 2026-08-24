@@ -1578,12 +1578,30 @@ const worker_common_apis = [_]type{
     // handed its owner's Frame -- see the comment on getGlobalArg in Caller.zig,
     // which is a live SIGABRT on the Cloudflare station and not a style
     // preference -- so the Frame-taking families stay out even though Chrome's
-    // worker has them: the font families and the typed-OM transform
-    // components. Trusted Types, WebGPU and MSE were all on that list
-    // until their members were converted to take an `*Execution`, which is the
-    // escape hatch every one of the rest should be re-audited against. The
-    // question to ask of a `*Frame` is never "can a worker have one" -- it
-    // cannot -- but "what is this member reaching through it for".
+    // worker has them: the typed-OM transform components and nested Worker.
+    // Trusted Types, WebGPU, MSE, the storage buckets, the font families and the
+    // sandboxed filesystem were all on that list until their members were
+    // converted to take an `*Execution`. The question to ask of a `*Frame` is
+    // never "can a worker have one" -- it cannot -- but "what is this member
+    // reaching through it for": a factory, an arena, the isolate, a local
+    // handle, a listener list and a global's own slots are all per-realm and all
+    // reachable from the Execution, and only a member that wants the DOM, the
+    // frame's navigation state or its loader is really blocked.
+    //
+    // What that audit left out, and why:
+    //
+    // - `Worker` (nested workers). Genuinely frame-scoped: `Worker.init` takes
+    //   the session off the frame, resolves against the frame's base URL, calls
+    //   `frame.newRequest` to fetch the script and `frame.trackWorker` to
+    //   register it. Spawning from a worker needs a worker-side spawn path, not
+    //   an argument change.
+    // - `CSSSkewX`/`CSSSkewY`. Convertible in principle -- typed_om.zig's 112
+    //   `frame: *Frame` signatures want `js`, `local_arena`, `_factory`,
+    //   `dupeString`, `arena`, `call_arena` and `_page`, every one of which is
+    //   on the Execution -- but Chrome exposes exactly these two of the whole
+    //   typed-OM family in a worker and none of their prototype chain
+    //   (CSSTransformComponent, CSSStyleValue), so matching it is not just a
+    //   mechanical conversion of the largest file in the audit.
     //
     // WebCodecs: the encode/decode pipeline is the reason a page moves media
     // work into a worker at all, so all four codecs and every chunk and frame

@@ -107,12 +107,12 @@ self.onmessage = async () => {
       'PushManager', 'Lock', 'LockManager', 'MediaCapabilities',
       'UserActivation', 'WGSLLanguageFeatures',
     ].filter((n) => typeof self[n] !== 'function').join(','),
-    // The families that have to stay out: a member of each wants the owner's
-    // Frame -- most of them take one outright, StorageBucket.indexedDB reaches
-    // for it through the Execution -- and a worker realm cannot be handed one.
-    // Chrome's worker has all of these, so this is a measured shortfall rather
-    // than a match: closing it needs worker-owned state, not another name in a
-    // list.
+    // The two that stay out, and for two different reasons. `Worker` is
+    // genuinely frame-scoped -- spawning one goes through the frame's loader and
+    // worker registry. `CSSSkewX` is not, but Chrome exposes it and CSSSkewY
+    // without their prototype chain, so matching it is more than the mechanical
+    // conversion the rest of this file's families got. Both are a measured
+    // shortfall against Chrome's worker, not a match.
     frame_bound: ['CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
 
     // The sandboxed filesystem. Chrome's worker carries the two async
