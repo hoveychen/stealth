@@ -886,6 +886,169 @@ fn straightHalf(pixel: *const [4]f16) [4]f32 {
     };
 }
 
+/// What a draw op casts before it puts the shape down: the shape's own
+/// coverage, blurred, tinted with `shadowColor` and moved by the offset.
+///
+/// Measured on headed Chrome (probes/canvas-shadow-blur.js). The shadow's
+/// alpha is the shape's coverage times the shape's own alpha times this
+/// colour's — a translucent shape and a translucent `shadowColor` land on the
+/// same bytes — and it goes *under* the shape, so with no offset the shape
+/// wins its own pixels and the blur only shows either side.
+pub const Shadow = struct {
+    /// `shadowColor`, unpremultiplied, on `Paint`'s scale. A zero alpha here
+    /// is the default state and draws nothing at all.
+    color: Paint,
+    /// `shadowBlur`, in *device* pixels: the transform does not reach it.
+    /// The same shape under a `scale(0.384, 0.384)`, its coordinates divided
+    /// out so the device shape is identical, blurs byte-identically.
+    blur: f64,
+    /// `shadowOffsetX` / `shadowOffsetY`, device pixels and untransformed too.
+    dx: f64,
+    dy: f64,
+
+    pub fn draws(self: Shadow) bool {
+        return self.color.a > 0;
+    }
+};
+
+/// The box window Skia picks for a sigma. Three passes of it approximate a
+/// Gaussian, and the approximation is what Chrome puts on the bitmap: at nine
+/// radii from 4 to 32 three box convolutions reproduce its bytes with no
+/// residual at all (results/canvas-shadow-blur.chrome.json).
+///
+/// Below sigma 2 that stops being true — blur 3 is 28 off across the profile,
+/// blur 2 is 104 off — because Skia takes a small-sigma path there instead.
+/// What that path *is* has not been measured, so this stays on the box triple
+/// everywhere: wrong by a few units a pixel under sigma 2, against wrong by
+/// the whole shadow before.
+fn blurWindow(sigma: f64) u32 {
+    const scaled = @floor(sigma * 3 * @sqrt(2 * std.math.pi) / 4 + 0.5);
+    if (!(scaled >= 2)) return 1;
+    if (scaled > 512) return 512;
+    return @intFromFloat(scaled);
+}
+
+/// The three passes as (width, left offset) pairs. An odd window is three
+/// equal centred boxes; an even one is (w, w, w+1) with the first shifted one
+/// to the left, which is how Skia keeps an even box centred — both measured
+/// byte-exact, the even arrangement at blurs 4, 6, 8, 11 and 32.
+fn blurPasses(window: u32) [3][2]u32 {
+    if (window % 2 == 1) {
+        const half = (window - 1) / 2;
+        return .{ .{ window, half }, .{ window, half }, .{ window, half } };
+    }
+    const half = window / 2;
+    return .{ .{ window, half - 1 }, .{ window, half }, .{ window + 1, half } };
+}
+
+/// How much room a shadow's mask needs on every side of the canvas: the blur
+/// reaches past the edge, and a shape that is itself off-canvas can still cast
+/// onto it.
+pub fn shadowMargin(blur: f64) u32 {
+    const window = blurWindow(blur / 2);
+    if (window <= 1) return 0;
+    return window * 3 / 2 + 2;
+}
+
+/// One box pass along a line, `out[i]` being the mean of the `n` samples
+/// starting `off` back from `i`. Everything past either end reads as zero,
+/// which is what an empty bitmap is.
+fn boxLine(out: []f64, in: []const f64, n: u32, off: u32) void {
+    const len: isize = @intCast(in.len);
+    const width: isize = @intCast(n);
+    const back: isize = @intCast(off);
+    var sum: f64 = 0;
+    var k: isize = -back;
+    while (k < -back + width) : (k += 1) {
+        if (k >= 0 and k < len) sum += in[@intCast(k)];
+    }
+    const scale = 1 / @as(f64, @floatFromInt(n));
+    var i: isize = 0;
+    while (i < len) : (i += 1) {
+        out[@intCast(i)] = sum * scale;
+        const leaves = i - back;
+        const enters = leaves + width;
+        if (leaves >= 0 and leaves < len) sum -= in[@intCast(leaves)];
+        if (enters >= 0 and enters < len) sum += in[@intCast(enters)];
+    }
+}
+
+/// Three box passes on each axis, in place, on a mask of whole 0..255 values.
+/// Separable, so the two axes are independent — which a 4x4 square proves by
+/// handing back the product of the two and a full-height bar proves by handing
+/// back one of them alone.
+///
+/// The mask is rounded back to whole values *between* the axes, which is Skia
+/// writing its eight-bit intermediate out before the second pass reads it. It
+/// is worth a byte: on the square above, carrying full precision across lands
+/// 16 where Chrome has 15, and rounding between the two axes reproduces the
+/// whole profile exactly. Rounding after every individual pass does not.
+fn blurMask(scratch: Allocator, mask: []f64, width: u32, height: u32, sigma: f64) void {
+    const window = blurWindow(sigma);
+    if (window <= 1) return;
+    const passes = blurPasses(window);
+    const line = scratch.alloc(f64, @max(width, height)) catch return;
+    defer scratch.free(line);
+    const into = scratch.alloc(f64, @max(width, height)) catch return;
+    defer scratch.free(into);
+
+    var y: u32 = 0;
+    while (y < height) : (y += 1) {
+        const row = mask[y * width ..][0..width];
+        for (passes) |pass| {
+            boxLine(into[0..width], row, pass[0], pass[1]);
+            @memcpy(row, into[0..width]);
+        }
+        for (row) |*cell| cell.* = @round(cell.*);
+    }
+    var x: u32 = 0;
+    while (x < width) : (x += 1) {
+        for (line[0..height], 0..) |*cell, at| cell.* = mask[at * width + x];
+        for (passes) |pass| {
+            boxLine(into[0..height], line[0..height], pass[0], pass[1]);
+            @memcpy(line[0..height], into[0..height]);
+        }
+        for (line[0..height], 0..) |cell, at| mask[at * width + x] = cell;
+    }
+}
+
+/// Composites `shadow` onto the canvas from `mask`, which the caller has
+/// already drawn the shape into: a bitmap `2 * margin` wider and taller than
+/// the canvas, with the shape moved by the offset *and* the margin, so mask
+/// pixel `(x + margin, y + margin)` is already the shadow's own pixel.
+///
+/// Drawing the shape into a mask rather than tracking coverage inside every op
+/// is what keeps this one function: whatever the op can rasterise, it can cast.
+pub fn castShadow(
+    self: *Surface,
+    scratch: Allocator,
+    canvas_width: u32,
+    canvas_height: u32,
+    mask: *const Surface,
+    margin: u32,
+    shadow: Shadow,
+    op: Composite,
+) void {
+    if (mask.width != canvas_width + 2 * margin or mask.height != canvas_height + 2 * margin) return;
+    if (!mask.backed(mask.width, mask.height)) return;
+    const cover = scratch.alloc(f64, mask.width * mask.height) catch return;
+    defer scratch.free(cover);
+    for (cover, 0..) |*cell, at| cell.* = mask.load(at)[3];
+    blurMask(scratch, cover, mask.width, mask.height, shadow.blur / 2);
+    if (!self.ensure(canvas_width, canvas_height)) return;
+
+    var row: u32 = 0;
+    while (row < canvas_height) : (row += 1) {
+        var col: u32 = 0;
+        while (col < canvas_width) : (col += 1) {
+            const alpha = cover[(row + margin) * mask.width + col + margin] / 255 * shadow.color.a;
+            if (alpha <= 0) continue;
+            const at = row * canvas_width + col;
+            self.store(at, blended(self.load(at), shadow.color, alpha, op));
+        }
+    }
+}
+
 /// Copies a `sw` x `sh` window starting at (`sx`, `sy`) into `out`, which must
 /// be `sw * sh * 4` long and already zeroed, un-premultiplying on the way: this
 /// is the straight-alpha form `getImageData` and a PNG both want. The window

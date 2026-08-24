@@ -1410,6 +1410,138 @@
 }
 </script>
 
+<script id="OffscreenCanvasRenderingContext2D#shadowBlur">
+{
+  // A shadow is the shape's own coverage, blurred, tinted with `shadowColor`
+  // and drawn *under* the shape at `shadowOffsetX/Y`. Every reading here is
+  // headed Chrome's (probes/canvas-shadow-blur.js, results in
+  // results/canvas-shadow-blur.chrome.json).
+  //
+  // The kernel is Skia's three box passes, not a Gaussian: with
+  // sigma = shadowBlur / 2 and window = max(1, floor(sigma * 3*sqrt(2pi)/4 +
+  // 0.5)), three box convolutions reproduce Chrome's bytes with no residual at
+  // all -- measured at nine radii from 4 to 32. An odd window is three equal
+  // centred boxes; an even one is (w, w, w+1) with the first shifted one to
+  // the left, which is how Skia centres an even box.
+  const W = 96, H = 32;
+  const ctx = (build) => {
+    const c = new OffscreenCanvas(W, H).getContext('2d', { willReadFrequently: true });
+    build(c);
+    return c;
+  };
+  const row = (c) => {
+    const d = c.getImageData(0, 16, W, 1).data;
+    const a = [];
+    for (let x = 0; x < W; x++) a.push(d[x * 4 + 3]);
+    let lo = 0;
+    while (lo < W && a[lo] === 0) lo++;
+    let hi = W - 1;
+    while (hi >= 0 && a[hi] === 0) hi--;
+    return lo > hi ? 'empty' : lo + ':' + a.slice(lo, hi + 1).join(',');
+  };
+  // A bar the full height of the bitmap, so the vertical factor is 1 down the
+  // middle and the row *is* the one-dimensional kernel.
+  const bar = (blur) => row(ctx((c) => {
+    c.shadowColor = '#ff0000';
+    c.shadowBlur = blur;
+    c.shadowOffsetX = 48;
+    c.fillStyle = '#000000';
+    c.fillRect(4, -32, 4, H + 64);
+  }));
+
+  // An even window: 8 -> boxes (8,8,9).
+  testing.expectEqual(
+    '4:255,255,255,255' + ',0'.repeat(34) +
+    ',2,4,9,15,23,33,44,57,69,79,86,89,89,86,79,69,57,44,33,23,15,9,4,2',
+    bar(8));
+  // Another even one, and the smallest radius where the box triple is exact.
+  testing.expectEqual(
+    '4:255,255,255,255' + ',0'.repeat(39) +
+    ',3,13,32,64,102,137,159,159,137,102,64,32,13,3',
+    bar(4));
+  // An odd window: 14 -> boxes (13,13,13), three equal and centred.
+  testing.expectEqual(
+    '4:255,255,255,255' + ',0'.repeat(28) +
+    ',1,2,4,6,9,12,15,19,23,28,34,39,44,49,53,55,57,58,58,57,55,53,49,44,39,34,28,23,19,15,12,9,6,4,2,1',
+    bar(14));
+
+  // A 4x4 square rather than a bar. A separable blur hands back the product of
+  // the two axes, so this row is the kernel squared -- which is the check that
+  // the pass runs on both.
+  const square = (blur) => row(ctx((c) => {
+    c.shadowColor = '#ff0000';
+    c.shadowBlur = blur;
+    c.shadowOffsetX = 48;
+    c.fillStyle = '#000000';
+    c.fillRect(4, 14, 4, 4);
+  }));
+  testing.expectEqual(
+    '4:255,255,255,255' + ',0'.repeat(32) +
+    ',1,1,2,3,5,7,9,11,13,15,18,19,20,21,21,20,19,18,15,13,11,9,7,5,3,2,1,1',
+    square(11));
+
+  // The radius is in *device* space: the same shape under the widget's own
+  // transform, its coordinates divided out so the device shape is identical,
+  // is byte-identical. The offset is not transformed either.
+  testing.expectEqual(square(11), row(ctx((c) => {
+    c.scale(0.384, 0.384);
+    c.shadowColor = '#ff0000';
+    c.shadowBlur = 11;
+    c.shadowOffsetX = 48;
+    c.fillStyle = '#000000';
+    c.fillRect(4 / 0.384, 14 / 0.384, 4 / 0.384, 4 / 0.384);
+  })));
+
+  // The rest of the shadow state, five pixels of one row each.
+  const px = (c) => {
+    const d = c.getImageData(0, 16, W, 1).data;
+    return [6, 40, 48, 54, 60].map((x) =>
+      [...d.slice(x * 4, x * 4 + 4)].map((b) => b.toString(16).padStart(2, '0')).join('')
+    ).join(' ');
+  };
+  const shadowed = (build) => px(ctx((c) => {
+    c.shadowColor = '#ff0000';
+    c.shadowBlur = 8;
+    c.shadowOffsetX = 48;
+    c.fillStyle = '#000000';
+    build(c);
+    c.fillRect(4, 14, 4, 4);
+  }));
+  // The reference the rows below are read against.
+  testing.expectEqual('000000ff 00000000 ff00000f ff00001f ff00000c', shadowed(() => {}));
+  // `shadowColor`'s alpha multiplies the coverage.
+  testing.expectEqual('000000ff 00000000 ff000008 ff000010 ff000006',
+    shadowed((c) => { c.shadowColor = 'rgba(255, 0, 0, 0.5)'; }));
+  // So does the shape's, to the same bytes.
+  testing.expectEqual('00000080 00000000 ff000008 ff000010 ff000006',
+    shadowed((c) => { c.fillStyle = 'rgba(0, 0, 0, 0.5)'; }));
+  // A transparent `shadowColor` draws nothing, which is the default and is why
+  // an unshadowed canvas is unchanged by any of this.
+  testing.expectEqual('000000ff 00000000 00000000 00000000 00000000',
+    shadowed((c) => { c.shadowColor = 'transparent'; }));
+  // A zero radius is the silhouette itself, in `shadowColor`, at the offset.
+  testing.expectEqual('000000ff 00000000 00000000 ff0000ff 00000000',
+    shadowed((c) => { c.shadowBlur = 0; }));
+  // The shadow goes under the shape: with no offset the two overlap and the
+  // shape wins its own pixels while the blur still shows either side.
+  testing.expectEqual('00000000 00000000 ff00000f 000000ff ff00000c', px(ctx((c) => {
+    c.shadowColor = '#ff0000';
+    c.shadowBlur = 8;
+    c.fillStyle = '#000000';
+    c.fillRect(52, 14, 4, 4);
+  })));
+  // A stroke casts one too, which is four of the widget's five shadowed ops.
+  testing.expectEqual('00000000 00000000 ff00001f ff00003a ff000017', px(ctx((c) => {
+    c.shadowColor = '#ff0000';
+    c.shadowBlur = 8;
+    c.shadowOffsetX = 48;
+    c.strokeStyle = '#000000';
+    c.lineWidth = 2;
+    c.strokeRect(4, 14, 4, 4);
+  })));
+}
+</script>
+
 <script id="OffscreenCanvasRenderingContext2D#a modern alpha stays a float">
 {
   // CSS Color 4 splits the notations into *legacy* ones — a hex, a name,

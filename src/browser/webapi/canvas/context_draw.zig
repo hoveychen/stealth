@@ -128,6 +128,61 @@ pub fn Mixin(comptime T: type) type {
             return filter(self).applyTo(style.paint(space(self), channels(self)));
         }
 
+        /// The shadow the current state casts, or null when there is none to
+        /// cast — a transparent `shadowColor`, which is the default, and an
+        /// unparseable one, which the setter has already refused.
+        ///
+        /// Neither the radius nor the offset is transformed: both are device
+        /// pixels (measured, probes/canvas-shadow-blur.js).
+        fn shadow(self: *const T) ?Surface.Shadow {
+            const style = color.parseStyle(self._state.shadow_color) orelse return null;
+            const cast: Surface.Shadow = .{
+                .color = style.paint(space(self), channels(self)),
+                .blur = if (std.math.isFinite(self._state.shadow_blur) and self._state.shadow_blur > 0)
+                    self._state.shadow_blur
+                else
+                    0,
+                .dx = if (std.math.isFinite(self._state.shadow_offset_x)) @round(self._state.shadow_offset_x) else 0,
+                .dy = if (std.math.isFinite(self._state.shadow_offset_y)) @round(self._state.shadow_offset_y) else 0,
+            };
+            return if (cast.draws()) cast else null;
+        }
+
+        /// Draws the shadow a rectangle casts, before the rectangle itself
+        /// goes down. `line_width` picks the stroke arm.
+        fn castRect(self: *T, scratch: std.mem.Allocator, cast: Surface.Shadow, x: f64, y: f64, w: f64, h: f64, line_width: ?f64) void {
+            const margin = Surface.shadowMargin(cast.blur);
+            const mw = width(self) + 2 * margin;
+            const mh = height(self) + 2 * margin;
+            const at: f64 = @floatFromInt(margin);
+            var mask: Surface = .{ .arena = arena(self) };
+            defer mask.reset();
+            if (line_width) |lw| {
+                mask.strokeRect(mw, mh, x + at + cast.dx, y + at + cast.dy, w, h, lw, paint(self, self._stroke_style), self._global_alpha, .source_over);
+            } else {
+                mask.fillRect(mw, mh, x + at + cast.dx, y + at + cast.dy, w, h, paint(self, self._fill_style), self._global_alpha, .source_over);
+            }
+            self._surface.castShadow(scratch, width(self), height(self), &mask, margin, cast, composite(self));
+        }
+
+        /// The same for a path. `line_width` picks the stroke arm; `rule` the
+        /// fill one.
+        fn castPath(self: *T, scratch: std.mem.Allocator, cast: Surface.Shadow, p: *const path.Path, rule: FillRule, line_width: ?f64) void {
+            const margin = Surface.shadowMargin(cast.blur);
+            const mw = width(self) + 2 * margin;
+            const mh = height(self) + 2 * margin;
+            const at: f64 = @floatFromInt(margin);
+            const moved = p.translated(scratch, at + cast.dx, at + cast.dy) catch return;
+            var mask: Surface = .{ .arena = arena(self) };
+            defer mask.reset();
+            if (line_width) |lw| {
+                mask.strokePath(scratch, mw, mh, &moved, lw, paint(self, self._stroke_style), self._global_alpha, .source_over);
+            } else {
+                mask.fillPath(scratch, mw, mh, &moved, rule, paint(self, self._fill_style), self._global_alpha, .source_over);
+            }
+            self._surface.castShadow(scratch, width(self), height(self), &mask, margin, cast, composite(self));
+        }
+
         // --- state stack ---------------------------------------------------
 
         pub fn save(self: *T) void {
@@ -279,6 +334,9 @@ pub fn Mixin(comptime T: type) type {
         /// not one of the two rule names is ignored rather than refused.
         pub fn fill(self: *T, first: ?js.Value, second: ?js.Value, exec: *Execution) void {
             const rule = ruleOf(second, exec) orelse ruleOf(first, exec) orelse .nonzero;
+            if (shadow(self)) |cast| {
+                castPath(self, exec.call_arena, cast, &self._path, rule, null);
+            }
             self._surface.fillPath(
                 exec.call_arena,
                 width(self),
@@ -292,12 +350,16 @@ pub fn Mixin(comptime T: type) type {
         }
 
         pub fn stroke(self: *T, _: ?js.Value, exec: *Execution) void {
+            const line_width = self._line_width * self._transform.meanScale();
+            if (shadow(self)) |cast| {
+                castPath(self, exec.call_arena, cast, &self._path, .nonzero, line_width);
+            }
             self._surface.strokePath(
                 exec.call_arena,
                 width(self),
                 height(self),
                 &self._path,
-                self._line_width * self._transform.meanScale(),
+                line_width,
                 paint(self, self._stroke_style),
                 self._global_alpha,
                 composite(self),
@@ -426,26 +488,40 @@ pub fn Mixin(comptime T: type) type {
 
         pub fn fillRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
             const ctm = self._transform;
+            const cast = shadow(self);
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
+                if (cast) |sh| {
+                    castRect(self, exec.call_arena, sh, at.x, at.y, w * ctm.a, h * ctm.d, null);
+                }
                 self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, paint(self, self._fill_style), self._global_alpha, composite(self));
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
+            if (cast) |sh| {
+                castPath(self, exec.call_arena, sh, &quad, .nonzero, null);
+            }
             self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, paint(self, self._fill_style), self._global_alpha, composite(self));
         }
 
         pub fn strokeRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
             const ctm = self._transform;
             const line_width = self._line_width * ctm.meanScale();
+            const cast = shadow(self);
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
+                if (cast) |sh| {
+                    castRect(self, exec.call_arena, sh, at.x, at.y, w * ctm.a, h * ctm.d, line_width);
+                }
                 self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, paint(self, self._stroke_style), self._global_alpha, composite(self));
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
+            if (cast) |sh| {
+                castPath(self, exec.call_arena, sh, &quad, .nonzero, line_width);
+            }
             self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, paint(self, self._stroke_style), self._global_alpha, composite(self));
         }
 
