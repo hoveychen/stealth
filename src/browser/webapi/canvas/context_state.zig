@@ -33,6 +33,7 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
+const dictionary = @import("../dictionary.zig");
 
 const Allocator = std.mem.Allocator;
 
