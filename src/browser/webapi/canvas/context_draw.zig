@@ -30,11 +30,11 @@
 const std = @import("std");
 
 const js = @import("../../js/js.zig");
-const color = @import("../../color.zig");
 
 const path = @import("path.zig");
 const Surface = @import("raster.zig");
 const state = @import("context_state.zig");
+const canvas_objects = @import("canvas_objects.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
 const ImageBitmap = @import("ImageBitmap.zig");
 const DOMException = @import("../DOMException.zig");
@@ -50,8 +50,8 @@ const FillRule = path.FillRule;
 pub fn Saved(comptime Font: type) type {
     return struct {
         transform: Transform,
-        fill_style: color.RGBA,
-        stroke_style: color.RGBA,
+        fill_style: canvas_objects.PaintStyle,
+        stroke_style: canvas_objects.PaintStyle,
         line_width: f64,
         global_alpha: f64,
         font: Font,
@@ -237,7 +237,7 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 rule,
-                self._fill_style,
+                self._fill_style.colour,
                 self._global_alpha,
             );
         }
@@ -249,7 +249,7 @@ pub fn Mixin(comptime T: type) type {
                 height(self),
                 &self._path,
                 self._line_width * self._transform.meanScale(),
-                self._stroke_style,
+                self._stroke_style.colour,
                 self._global_alpha,
             );
         }
@@ -267,12 +267,12 @@ pub fn Mixin(comptime T: type) type {
             const ctm = self._transform;
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, self._fill_style, self._global_alpha);
+                self._surface.fillRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, self._fill_style.colour, self._global_alpha);
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, self._fill_style, self._global_alpha);
+            self._surface.fillPath(exec.call_arena, width(self), height(self), &quad, .nonzero, self._fill_style.colour, self._global_alpha);
         }
 
         pub fn strokeRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {
@@ -280,12 +280,12 @@ pub fn Mixin(comptime T: type) type {
             const line_width = self._line_width * ctm.meanScale();
             if (upright(ctm)) {
                 const at = ctm.apply(x, y);
-                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, self._stroke_style, self._global_alpha);
+                self._surface.strokeRect(width(self), height(self), at.x, at.y, w * ctm.a, h * ctm.d, line_width, self._stroke_style.colour, self._global_alpha);
                 return;
             }
             var quad: path.Path = .{};
             quad.rect(exec.call_arena, x, y, w, h, ctm) catch return;
-            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, self._stroke_style, self._global_alpha);
+            self._surface.strokePath(exec.call_arena, width(self), height(self), &quad, line_width, self._stroke_style.colour, self._global_alpha);
         }
 
         pub fn clearRect(self: *T, x: f64, y: f64, w: f64, h: f64, exec: *Execution) void {

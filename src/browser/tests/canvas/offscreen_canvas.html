@@ -225,6 +225,33 @@
 }
 </script>
 
+<script id="OffscreenCanvas#fillStyle(gradient)">
+{
+  // Same union as the element context: a gradient reads back as itself. Chrome
+  // 151 readings.
+  const canvas = new OffscreenCanvas(20, 20);
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#123456';
+  const gradient = ctx.createLinearGradient(0, 0, 5, 5);
+  ctx.fillStyle = gradient;
+  testing.expectEqual('object', typeof ctx.fillStyle);
+  testing.expectEqual(true, ctx.fillStyle === gradient);
+  testing.expectEqual('[object CanvasGradient]', String(ctx.fillStyle));
+
+  ctx.strokeStyle = gradient;
+  testing.expectEqual(true, ctx.strokeStyle === gradient);
+
+  ctx.fillStyle = '#ff0000';
+  testing.expectEqual('#ff0000', ctx.fillStyle);
+
+  // The resize reset drops the gradient along with everything else.
+  ctx.fillStyle = gradient;
+  canvas.width = 20;
+  testing.expectEqual('#000000', ctx.fillStyle);
+}
+</script>
+
 <script id="OffscreenCanvas#drawImage">
 {
   // This member did not exist on the offscreen context at all -- the element

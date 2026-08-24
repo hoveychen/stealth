@@ -34,6 +34,67 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#fillStyle(gradient)">
+{
+  // The attribute is `(DOMString or CanvasGradient or CanvasPattern)`, so a
+  // gradient assigned to it reads back as the same object — not as the string
+  // it would stringify to. Every expectation below is a Chrome 151 reading.
+  const element = document.createElement("canvas");
+  const ctx = element.getContext("2d");
+
+  ctx.fillStyle = "#123456";
+  const gradient = ctx.createLinearGradient(0, 0, 10, 10);
+  ctx.fillStyle = gradient;
+  testing.expectEqual("object", typeof ctx.fillStyle);
+  testing.expectEqual(true, ctx.fillStyle === gradient);
+  testing.expectEqual("[object CanvasGradient]", String(ctx.fillStyle));
+
+  // A colour string after a gradient replaces it.
+  ctx.fillStyle = "#ff0000";
+  testing.expectEqual("#ff0000", ctx.fillStyle);
+
+  const radial = ctx.createRadialGradient(0, 0, 1, 0, 0, 2);
+  ctx.strokeStyle = radial;
+  testing.expectEqual("object", typeof ctx.strokeStyle);
+  testing.expectEqual(true, ctx.strokeStyle === radial);
+  testing.expectEqual("[object CanvasGradient]", String(ctx.strokeStyle));
+
+  // A pattern is the third arm of the same union.
+  const pattern = ctx.createPattern(element, "repeat");
+  ctx.fillStyle = pattern;
+  testing.expectEqual(true, ctx.fillStyle === pattern);
+  testing.expectEqual("[object CanvasPattern]", String(ctx.fillStyle));
+
+  // Neither a string nor either object: the previous value survives, the same
+  // way an unparseable colour does.
+  ctx.fillStyle = {};
+  testing.expectEqual(true, ctx.fillStyle === pattern);
+  ctx.fillStyle = 42;
+  testing.expectEqual(true, ctx.fillStyle === pattern);
+  ctx.fillStyle = null;
+  testing.expectEqual(true, ctx.fillStyle === pattern);
+
+  // save()/restore() carries the object, not a stringification of it.
+  ctx.fillStyle = gradient;
+  ctx.save();
+  ctx.fillStyle = "#00ff00";
+  testing.expectEqual("#00ff00", ctx.fillStyle);
+  ctx.restore();
+  testing.expectEqual(true, ctx.fillStyle === gradient);
+
+  // reset() drops back to the default colour.
+  ctx.reset();
+  testing.expectEqual("#000000", ctx.fillStyle);
+
+  // A gradient is not bound to the context that made it, and two gradients
+  // are distinct objects.
+  const other = document.createElement("canvas").getContext("2d");
+  other.fillStyle = gradient;
+  testing.expectEqual(true, other.fillStyle === gradient);
+  testing.expectEqual(true, gradient !== ctx.createLinearGradient(0, 0, 10, 10));
+}
+</script>
+
 <script id="CanvasRenderingContext2D#createImageData(width, height)">
 {
   const element = document.createElement("canvas");

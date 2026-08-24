@@ -20,8 +20,6 @@ const std = @import("std");
 
 const js = @import("../../js/js.zig");
 
-const color = @import("../../color.zig");
-
 const Canvas = @import("../element/html/Canvas.zig");
 const Font = @import("font.zig");
 const state = @import("context_state.zig");
@@ -32,6 +30,7 @@ const DOMMatrix = @import("../DOMMatrix.zig");
 
 const CanvasGradient = canvas_objects.CanvasGradient;
 const CanvasPattern = canvas_objects.CanvasPattern;
+const PaintStyle = canvas_objects.PaintStyle;
 const TextMetrics = @import("TextMetrics.zig");
 const text_measure = @import("../../text_measure.zig");
 const ImageData = @import("../ImageData.zig");
@@ -49,11 +48,10 @@ _canvas: *Canvas,
 /// The pixels this context has actually painted. See `raster.zig` for what
 /// this does and does not attempt.
 _surface: Surface,
-/// Fill color.
-/// TODO: Add support for `CanvasGradient` and `CanvasPattern`.
-_fill_style: color.RGBA = color.RGBA.Named.black,
-/// Stroke color, same caveat.
-_stroke_style: color.RGBA = color.RGBA.Named.black,
+/// Fill style: a colour, or the gradient/pattern object assigned to it.
+_fill_style: PaintStyle = .{},
+/// Stroke style, same three arms.
+_stroke_style: PaintStyle = .{},
 _line_width: f64 = 1,
 _global_alpha: f64 = 1,
 /// The parsed `font` attribute. Drives measureText; see font.zig.
@@ -72,28 +70,20 @@ pub fn getCanvas(self: *const CanvasRenderingContext2D) *Canvas {
     return self._canvas;
 }
 
-pub fn getFillStyle(self: *const CanvasRenderingContext2D, exec: *Execution) ![]const u8 {
-    var w = std.Io.Writer.Allocating.init(exec.local_arena);
-    try self._fill_style.format(&w.writer);
-    return w.written();
+pub fn getFillStyle(self: *const CanvasRenderingContext2D, exec: *Execution) !PaintStyle.Read {
+    return self._fill_style.read(exec.local_arena);
 }
 
-pub fn setFillStyle(
-    self: *CanvasRenderingContext2D,
-    value: []const u8,
-) !void {
-    // Prefer the same fill_style if fails.
-    self._fill_style = color.RGBA.parse(value) catch self._fill_style;
+pub fn setFillStyle(self: *CanvasRenderingContext2D, value: PaintStyle.Assigned) void {
+    self._fill_style.assign(value);
 }
 
-pub fn getStrokeStyle(self: *const CanvasRenderingContext2D, exec: *Execution) ![]const u8 {
-    var w = std.Io.Writer.Allocating.init(exec.local_arena);
-    try self._stroke_style.format(&w.writer);
-    return w.written();
+pub fn getStrokeStyle(self: *const CanvasRenderingContext2D, exec: *Execution) !PaintStyle.Read {
+    return self._stroke_style.read(exec.local_arena);
 }
 
-pub fn setStrokeStyle(self: *CanvasRenderingContext2D, value: []const u8) void {
-    self._stroke_style = color.RGBA.parse(value) catch self._stroke_style;
+pub fn setStrokeStyle(self: *CanvasRenderingContext2D, value: PaintStyle.Assigned) void {
+    self._stroke_style.assign(value);
 }
 
 pub fn getLineWidth(self: *const CanvasRenderingContext2D) f64 {
@@ -213,8 +203,8 @@ pub const getTransform = draw.getTransform;
 /// Drops the bitmap and every piece of drawing state, as `reset()` does.
 pub fn reset(self: *CanvasRenderingContext2D) void {
     self._surface.reset();
-    self._fill_style = color.RGBA.Named.black;
-    self._stroke_style = color.RGBA.Named.black;
+    self._fill_style = .{};
+    self._stroke_style = .{};
     self._line_width = 1;
     self._global_alpha = 1;
     self._font = Font.default;
