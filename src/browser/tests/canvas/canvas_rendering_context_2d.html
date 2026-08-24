@@ -1223,7 +1223,10 @@
     threw(() => attrs({ colorSpace: 'nonesuch' })));
   // ...while one inside it that a canvas cannot be is refused afterwards, by a
   // message with no property in it and "the type" rather than "type".
-  for (const inEnum of ['rec2020', 'srgb-linear', 'rec2100-hlg', 'rec2100-pq']) {
+  // `display-p3-linear` belongs in this list and in no other colour API here,
+  // so leaving it out gives it the wrong one of the two refusals.
+  for (const inEnum of ['rec2020', 'srgb-linear', 'display-p3-linear',
+                        'rec2100-hlg', 'rec2100-pq']) {
     testing.expectEqual(
       "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value '" +
         inEnum + "' is not a valid enum value of the type PredefinedColorSpace.",

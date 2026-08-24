@@ -107,10 +107,14 @@ pub const Created = struct {
     gl: Gl = .{},
 };
 
-/// The IDL enum's own members. Four of them clear the dictionary conversion and
+/// The IDL enum's own members. Five of them clear the dictionary conversion and
 /// are then refused by the canvas itself, with a different message — see `read`.
+/// `display-p3-linear` is one of those five and is easy to miss: it is not a
+/// name any other colour API here takes, and leaving it out would have given it
+/// the wrong one of the two refusals.
 const predefined_color_spaces = [_][]const u8{
-    "srgb", "display-p3", "rec2020", "srgb-linear", "rec2100-hlg", "rec2100-pq",
+    "srgb",              "display-p3",  "rec2020",    "srgb-linear",
+    "display-p3-linear", "rec2100-hlg", "rec2100-pq",
 };
 
 /// The two a canvas can actually be.
