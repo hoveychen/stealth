@@ -52,6 +52,7 @@ const ErrorEvent = @import("event/ErrorEvent.zig");
 const Fetch = @import("net/Fetch.zig");
 const idb = @import("storage/idb/idb.zig");
 const FontFaceSet = @import("css/FontFaceSet.zig");
+const filesystem = @import("filesystem.zig");
 const CookieStore = @import("storage/CookieStore.zig");
 const MessagePort = @import("MessagePort.zig");
 const SharedWorkerGlobalScope = @import("SharedWorkerGlobalScope.zig");
@@ -119,6 +120,10 @@ _idb_factory: ?*idb.IDBFactory = null,
 // for the same reason the trusted-types factory below is: the set is an
 // EventTarget, and its listener list has to be this realm's.
 _fonts: ?*FontFaceSet = null,
+// The two sandboxed filesystems `webkitRequestFileSystem` hands out, this
+// realm's own for the same reason -- see slotsFor in filesystem.zig. Chrome's
+// worker carries both operations (measured).
+_filesystems: [2]?*filesystem.DOMFileSystem = .{ null, null },
 _on_error: ?JS.Function.Global = null,
 _on_rejection_handled: ?JS.Function.Global = null,
 _on_unhandled_rejection: ?JS.Function.Global = null,

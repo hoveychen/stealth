@@ -18,6 +18,23 @@ self.onmessage = async () => {
     bucket = await navigator.storageBuckets.open('kssz-bucket');
   } catch { /* left null, and reported as such */ }
 
+  // The sandboxed filesystem answers through callbacks, so it needs a turn too.
+  // Two requests for the same quota type hand back the same object, and the
+  // name it reports is built from this realm's origin.
+  let fs_name = 'threw';
+  let fs_identity = 'threw';
+  let fs_resolved = 'threw';
+  try {
+    const ask1 = new Promise((ok, no) => self.webkitRequestFileSystem(0, 0, ok, no));
+    const ask2 = new Promise((ok, no) => self.webkitRequestFileSystem(0, 0, ok, no));
+    const [fs1, fs2] = await Promise.all([ask1, ask2]);
+    fs_name = fs1.name;
+    fs_identity = fs1 === fs2;
+    const entry = await new Promise((ok, no) =>
+      self.webkitResolveLocalFileSystemURL(fs1.root.toURL(), ok, no));
+    fs_resolved = entry.fullPath + ':' + entry.isDirectory;
+  } catch (e) { fs_name = 'threw: ' + e.name; }
+
   // Same, for the two font promises. `fonts.load` is the member that dispatches
   // into this realm's listener list rather than the owner's.
   let fonts_loaded = 'threw';
@@ -97,6 +114,19 @@ self.onmessage = async () => {
     // than a match: closing it needs worker-owned state, not another name in a
     // list.
     frame_bound: ['CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+
+    // The sandboxed filesystem. Chrome's worker carries the two async
+    // operations as own enumerable functions of the global and names none of
+    // the entry interfaces -- neither realm does, there or here. `forKind` kept
+    // its two filesystems on `exec.js.global.frame.window`, which is the reach
+    // that had to go.
+    webkit_fs: ['webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL']
+      .map((n) => kindOf(self, n)).join(' '),
+    webkit_fs_arity: ask(() => ['webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL']
+      .map((n) => self[n].length).join(',')),
+    webkit_fs_name: fs_name,
+    webkit_fs_identity: fs_identity,
+    webkit_fs_resolved: fs_resolved,
 
     // The font families. What they wanted the Frame for was an arena, the
     // factory and -- in `FontFaceSet.load` -- somewhere to dispatch two events;

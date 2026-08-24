@@ -98,9 +98,14 @@ the worker global surface follows (336 own names vs 243). This test page is on
       // wanted the Frame for was an arena, the factory, and a listener list to
       // dispatch `loading`/`loadingdone` into -- and the listener list a set
       // exposed in two realms needs is the asking realm's.
+      //
+      // 319 with the two sandboxed-filesystem operations, which are own members
+      // of the global rather than interface objects -- `forKind` kept its two
+      // filesystems on `exec.js.global.frame.window`, and a realm's
+      // filesystems have to be the realm's. Neither is [SecureContext].
       testing.expectEqual(13, data.gated.length);
       testing.expectEqual(6, data.ungated.length);
-      testing.expectEqual(317, data.count);
+      testing.expectEqual(319, data.count);
     });
   }
 </script>
