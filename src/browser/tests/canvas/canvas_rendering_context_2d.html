@@ -95,6 +95,104 @@
 }
 </script>
 
+<script id="CanvasGradient#addColorStop">
+{
+  // Chrome 151 wording throughout. Before this only the range was checked, and
+  // it answered an IndexSizeError with the generic DOMException sentence for a
+  // non-finite offset too -- where Chrome raises a TypeError.
+  const ctx = document.createElement("canvas").getContext("2d");
+  const grad = () => ctx.createLinearGradient(0, 0, 10, 10);
+  const P = "Failed to execute 'addColorStop' on 'CanvasGradient': ";
+
+  // The WebIDL `double` conversion runs first, so a non-finite offset is a
+  // TypeError even when the colour is also unparseable.
+  const nonFinite = "TypeError: " + P + "The provided double value is non-finite.";
+  testing.expectError(nonFinite, () => grad().addColorStop(NaN, "#fff"));
+  testing.expectError(nonFinite, () => grad().addColorStop(Infinity, "#fff"));
+  testing.expectError(nonFinite, () => grad().addColorStop(-Infinity, "#fff"));
+  testing.expectError(nonFinite, () => grad().addColorStop(NaN, "notacolour"));
+  // An unconvertible string and an explicit `undefined` both become NaN.
+  testing.expectError(nonFinite, () => grad().addColorStop("abc", "#fff"));
+  testing.expectError(nonFinite, () => grad().addColorStop(undefined, "#fff"));
+
+  // Then the range, which also beats the colour check.
+  testing.expectError(
+    "IndexSizeError: " + P + "The provided value (2) is outside the range (0.0, 1.0).",
+    () => grad().addColorStop(2, "#fff"));
+  testing.expectError(
+    "IndexSizeError: " + P + "The provided value (-1) is outside the range (0.0, 1.0).",
+    () => grad().addColorStop(-1, "#fff"));
+  testing.expectError(
+    "IndexSizeError: " + P + "The provided value (1.5) is outside the range (0.0, 1.0).",
+    () => grad().addColorStop(1.5, "#fff"));
+  testing.expectError(
+    "IndexSizeError: " + P + "The provided value (2) is outside the range (0.0, 1.0).",
+    () => grad().addColorStop(2, "notacolour"));
+  // Six significant digits, and the exponential form past 999999.
+  testing.expectError(
+    "IndexSizeError: " + P + "The provided value (1) is outside the range (0.0, 1.0).",
+    () => grad().addColorStop(1.0000001, "#fff"));
+  testing.expectError(
+    "IndexSizeError: " + P + "The provided value (1.00000e+6) is outside the range (0.0, 1.0).",
+    () => grad().addColorStop(1000000, "#fff"));
+  testing.expectError(
+    "IndexSizeError: " + P + "The provided value (-1.00000e-7) is outside the range (0.0, 1.0).",
+    () => grad().addColorStop(-1e-7, "#fff"));
+
+  // Then the colour. A non-string arrives as whatever it stringifies to.
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('notacolour') could not be parsed as a color.",
+    () => grad().addColorStop(0, "notacolour"));
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('') could not be parsed as a color.",
+    () => grad().addColorStop(0, ""));
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('42') could not be parsed as a color.",
+    () => grad().addColorStop(0, 42));
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('null') could not be parsed as a color.",
+    () => grad().addColorStop(0, null));
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('inherit') could not be parsed as a color.",
+    () => grad().addColorStop(0, "inherit"));
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('rgb(1,2)') could not be parsed as a color.",
+    () => grad().addColorStop(0, "rgb(1,2)"));
+
+  // What must NOT throw. The colour notations here are the ones Chrome accepts;
+  // several of them we cannot yet convert to a colour, and accepting them
+  // without a colour is the point -- refusing a value every browser takes
+  // would be a worse divergence than the silence this replaces.
+  const accepted = [
+    "#fff", "#ffffffff", "red", "RED", "  red  ", "rebeccapurple",
+    "transparent", "currentColor", "rgb(1,2,3)", "rgb(1 2 3)",
+    "rgba(1,2,3,0.5)", "rgb(1 2 3 / 50%)", "hsl(120,50%,50%)",
+    "hsla(120,50%,50%,0.5)", "hwb(120 30% 40%)", "lab(50% 40 59.5)",
+    "oklch(0.7 0.1 200)", "color(display-p3 1 0 0)",
+    "color-mix(in srgb, red, blue)", "rgb(300,0,0)", "ButtonFace",
+  ];
+  for (const colour of accepted) {
+    grad().addColorStop(0, colour);
+  }
+  // The offset boundaries are inclusive, a string offset coerces, and `null`
+  // coerces to 0 rather than failing the conversion.
+  grad().addColorStop(0, "#fff");
+  grad().addColorStop(1, "#fff");
+  grad().addColorStop("0.5", "#fff");
+  grad().addColorStop(null, "#fff");
+  // A repeated offset is kept, not refused.
+  const repeated = grad();
+  repeated.addColorStop(0.5, "red");
+  repeated.addColorStop(0.5, "blue");
+
+  // The shape Chrome exposes: two arguments, and no own enumerable state.
+  testing.expectEqual(2, repeated.addColorStop.length);
+  testing.expectEqual(0, Object.keys(repeated).length);
+  testing.expectEqual("addColorStop,constructor",
+    Object.getOwnPropertyNames(Object.getPrototypeOf(repeated)).sort().join(","));
+}
+</script>
+
 <script id="CanvasRenderingContext2D#createImageData(width, height)">
 {
   const element = document.createElement("canvas");
@@ -743,7 +841,12 @@
   const gradient = ctx.createLinearGradient(0, 0, 1, 1);
   testing.expectEqual(true, gradient instanceof CanvasGradient);
   testing.expectEqual(undefined, gradient.addColorStop(0.5, 'red'));
-  testing.expectError('Index or size', () => gradient.addColorStop(2, 'red'));
+  // The wording is Chrome's; the CanvasGradient#addColorStop block above has
+  // the rest of the sentences and the order the checks run in.
+  testing.expectError(
+    "IndexSizeError: Failed to execute 'addColorStop' on 'CanvasGradient': " +
+    'The provided value (2) is outside the range (0.0, 1.0).',
+    () => gradient.addColorStop(2, 'red'));
   testing.expectEqual(true, ctx.createRadialGradient(0, 0, 0, 1, 1, 1) instanceof CanvasGradient);
   testing.expectEqual(true, ctx.createConicGradient(0, 0, 0) instanceof CanvasGradient);
   testing.expectEqual(true, ctx.createPattern(document.createElement('canvas'), 'repeat') instanceof CanvasPattern);

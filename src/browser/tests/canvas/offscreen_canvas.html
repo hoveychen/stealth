@@ -249,6 +249,18 @@
   ctx.fillStyle = gradient;
   canvas.width = 20;
   testing.expectEqual('#000000', ctx.fillStyle);
+
+  // addColorStop refuses the same three ways here as on the element context.
+  const P = "Failed to execute 'addColorStop' on 'CanvasGradient': ";
+  testing.expectError('TypeError: ' + P + 'The provided double value is non-finite.',
+    () => ctx.createLinearGradient(0, 0, 5, 5).addColorStop(NaN, '#fff'));
+  testing.expectError(
+    'IndexSizeError: ' + P + 'The provided value (2) is outside the range (0.0, 1.0).',
+    () => ctx.createLinearGradient(0, 0, 5, 5).addColorStop(2, '#fff'));
+  testing.expectError(
+    "SyntaxError: " + P + "The value provided ('notacolour') could not be parsed as a color.",
+    () => ctx.createLinearGradient(0, 0, 5, 5).addColorStop(0, 'notacolour'));
+  ctx.createLinearGradient(0, 0, 5, 5).addColorStop(0, 'rgba(1,2,3,0.5)');
 }
 </script>
 

@@ -37,6 +37,83 @@ pub fn isHexColor(value: []const u8) bool {
     return true;
 }
 
+/// Whether Chrome's CSS colour parser would accept `value` as a colour, and
+/// nothing more — no conversion. `parse` answers the narrower question "can we
+/// turn this into an RGBA today", which is a strict subset: it takes hex and
+/// named colours only, and `RGBA.parseFunction` (the `rgb()`/`hsl()` families)
+/// is not wired into it yet.
+///
+/// The two questions have to be asked separately because a caller that
+/// *refuses* an unrecognised colour needs the full acceptance set. Canvas'
+/// `addColorStop` throws a SyntaxError, and refusing `rgba(1, 2, 3, 0.5)` —
+/// which every browser takes — would be a worse lie than the silence it
+/// replaces. So where the two disagree this errs towards accepting: a colour
+/// we recognise but cannot convert stores no RGBA rather than throwing.
+///
+/// Measured on Chrome 151 through `addColorStop`, which shares its parser with
+/// `fillStyle`: of 40 notations tried, every one `addColorStop` accepted also
+/// moved `fillStyle`, and every one it refused left `fillStyle` untouched.
+/// Refused there and so refused here: `inherit` / `initial` / `unset` /
+/// `revert`, `rgb(1,2)`, `rgb()`, `red red`, `#ff`, `#fffff`, `light-dark(red,
+/// blue)` and `contrast-color(red)`.
+pub fn isColor(value: []const u8) bool {
+    const trimmed = std.mem.trim(u8, value, &std.ascii.whitespace);
+    if (trimmed.len == 0) return false;
+    if (isHexColor(trimmed)) return true;
+
+    // Long enough for every named colour (`lightgoldenrodyellow`, 20) and every
+    // system colour; anything longer is not one of them.
+    var buf: [24]u8 = undefined;
+    if (std.mem.indexOfScalar(u8, trimmed, '(') == null) {
+        if (trimmed.len > buf.len) return false;
+        const lower = std.ascii.lowerString(buf[0..trimmed.len], trimmed);
+        if (RGBA.find(lower) != null) return true;
+        // Not a named colour: canvas resolves it against a context that has no
+        // element behind it, so it is always the initial `black`.
+        if (std.mem.eql(u8, lower, "currentcolor")) return true;
+        for (system_colors) |name| {
+            if (std.mem.eql(u8, name, lower)) return true;
+        }
+        return false;
+    }
+
+    // A colour function. The two families `parseFunction` converts must
+    // convert, which is how `rgb(1,2)` and `rgb()` get refused the way Chrome
+    // refuses them. The colour-space families it declines are accepted on
+    // their name alone: we cannot yet tell a well-formed `oklch()` from a
+    // malformed one, and only a name Chrome was measured to accept is listed,
+    // so an unmeasured function is refused rather than guessed at.
+    const open = std.mem.indexOfScalar(u8, trimmed, '(').?;
+    if (open > buf.len) return false;
+    const name = std.ascii.lowerString(buf[0..open], trimmed[0..open]);
+    for ([_][]const u8{ "rgb", "rgba", "hsl", "hsla" }) |converted| {
+        if (std.mem.eql(u8, name, converted)) return RGBA.parseFunction(trimmed) != null;
+    }
+    for ([_][]const u8{ "hwb", "lab", "lch", "oklab", "oklch", "color", "color-mix" }) |recognised| {
+        if (std.mem.eql(u8, name, recognised)) return true;
+    }
+    return false;
+}
+
+/// The CSS system colours, current set and the deprecated CSS2 one, lowercased.
+/// Chrome takes `ButtonFace` here and refuses `AccentColor` (measured), which
+/// is a distinction this does not draw: accepting one Chrome refuses only
+/// leaves today's silence in place, while refusing one Chrome accepts would
+/// throw on a valid colour.
+const system_colors = [_][]const u8{
+    "accentcolor",         "accentcolortext",   "activetext",       "buttonborder",
+    "buttonface",          "buttontext",        "canvas",           "canvastext",
+    "field",               "fieldtext",         "graytext",         "highlight",
+    "highlighttext",       "linktext",          "mark",             "marktext",
+    "selecteditem",        "selecteditemtext",  "visitedtext",      "activeborder",
+    "activecaption",       "appworkspace",      "background",       "buttonhighlight",
+    "buttonshadow",        "captiontext",       "inactiveborder",   "inactivecaption",
+    "inactivecaptiontext", "infobackground",    "infotext",         "menu",
+    "menutext",            "scrollbar",         "threeddarkshadow", "threedface",
+    "threedhighlight",     "threedlightshadow", "threedshadow",     "window",
+    "windowframe",         "windowtext",
+};
+
 pub const RGBA = packed struct(u32) {
     r: u8,
     g: u8,
@@ -476,3 +553,56 @@ pub const RGBA = packed struct(u32) {
         return @as(f32, @floatFromInt(self.a)) / 255;
     }
 };
+
+const testing = std.testing;
+
+test "color: isColor accepts what Chrome accepts" {
+    // Every case here is a Chrome 151 reading through `addColorStop`.
+    const accepted = [_][]const u8{
+        "#fff",                "#ffffff",                 "#ffffffff",
+        "red",                 "rebeccapurple",           "transparent",
+        "currentColor",        "rgb(1,2,3)",              "rgb(1 2 3)",
+        "rgba(1,2,3,0.5)",     "rgb(1 2 3 / 50%)",        "hsl(120,50%,50%)",
+        "hsl(120deg 50% 50%)", "hsla(120,50%,50%,0.5)",   "hwb(120 30% 40%)",
+        "lab(50% 40 59.5)",    "lch(52.2% 72.2 50)",      "oklab(0.4 0.1 0.1)",
+        "oklch(0.7 0.1 200)",  "color(display-p3 1 0 0)", "color-mix(in srgb, red, blue)",
+        // Case and surrounding whitespace are both ignored.
+        "RED",                 "  red  ",
+        // Out-of-range channels clamp rather than refuse.
+                        "rgb(300,0,0)",
+        "rgb(-5,0,0)",
+        // A system colour.
+                "ButtonFace",
+    };
+    for (accepted) |value| {
+        testing.expect(isColor(value)) catch |err| {
+            std.debug.print("isColor({s}) should be true\n", .{value});
+            return err;
+        };
+    }
+
+    const refused = [_][]const u8{
+        "",                      " ",                   "notacolour", "red red", "#ff",   "#fffff",
+        "rgb(1,2)",              "rgb()",               "inherit",    "initial", "unset", "revert",
+        "light-dark(red, blue)", "contrast-color(red)",
+        // A stringified non-string, which is how a script's `null` or `42`
+        // reaches the parser.
+        "null",       "42",
+    };
+    for (refused) |value| {
+        testing.expect(!isColor(value)) catch |err| {
+            std.debug.print("isColor({s}) should be false\n", .{value});
+            return err;
+        };
+    }
+}
+
+test "color: isColor does not widen what parse converts" {
+    // The recogniser is deliberately broader than the converter. Keeping the
+    // difference visible here means a later widening of `parse` cannot quietly
+    // change what `isColor` refuses.
+    try testing.expect(isColor("rgba(1,2,3,0.5)"));
+    try testing.expectError(error.Invalid, RGBA.parse("rgba(1,2,3,0.5)"));
+    try testing.expect(isColor("oklch(0.7 0.1 200)"));
+    try testing.expectError(error.Invalid, RGBA.parse("oklch(0.7 0.1 200)"));
+}
