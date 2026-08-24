@@ -28,6 +28,7 @@ const HtmlElement = @import("../Html.zig");
 const Blob = @import("../../Blob.zig");
 const attributes = @import("../../canvas/context_attributes.zig");
 const png = @import("../../canvas/png.zig");
+const Surface = @import("../../canvas/raster.zig");
 const CanvasRenderingContext2D = @import("../../canvas/CanvasRenderingContext2D.zig");
 const WebGLRenderingContext = @import("../../canvas/WebGLRenderingContext.zig");
 const WebGL2RenderingContext = @import("../../canvas/WebGL2RenderingContext.zig");
@@ -131,6 +132,7 @@ pub fn getContext(
                 ._surface = .{
                     .arena = frame.arena,
                     .background = if (created.two_d.alpha) .transparent else .black,
+                    .channels = created.two_d.channels(),
                 },
                 ._attributes = created.two_d,
             });
@@ -182,14 +184,14 @@ pub fn getContext(
     return drawing_context;
 }
 
-/// The painted pixels *as the bitmap stores them*, which is premultiplied —
-/// only another bitmap should read these. Null means "every pixel is
-/// transparent black", which is also what a WebGL canvas reports here: that
-/// context does not rasterise.
-pub fn pixels(self: *const Canvas) ?[]const u8 {
+/// The bitmap behind the canvas, *as it stores its pixels* — premultiplied, and
+/// in whichever channel type `colorType` asked for, so only another bitmap
+/// should read it. Null means "every pixel is transparent black", which is also
+/// what a WebGL canvas reports here: that context does not rasterise.
+pub fn bitmap(self: *const Canvas) ?*const Surface {
     const cached = self._cached orelse return null;
     return switch (cached) {
-        .@"2d" => |context| context._surface.peek(self.getWidth(), self.getHeight()),
+        .@"2d" => |context| &context._surface,
         .webgl, .webgl2, .webgpu, .bitmaprenderer => null,
     };
 }
