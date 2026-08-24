@@ -85,6 +85,14 @@ pub fn deinit(self: *DedicatedWorkerGlobalScope) void {
     self._proto.deinit();
 }
 
+// A dedicated worker's name is the one the `new Worker(url, {name})` option
+// gave it, and the empty string when the option was left out -- which is what a
+// Chrome blob worker answers (measured, probes/expr-worker-surface.js). The
+// property was missing here entirely, so `self.name` read `undefined`.
+pub fn getName(self: *const DedicatedWorkerGlobalScope) []const u8 {
+    return self._worker._name;
+}
+
 pub fn postMessage(self: *DedicatedWorkerGlobalScope, data: js.Value) !void {
     try self._worker.receiveMessage(data);
 }
@@ -252,4 +260,13 @@ pub const JsApi = struct {
     pub const onmessageerror = bridge.accessor(handlerPropertyLenient(DedicatedWorkerGlobalScope, .onmessageerror).get, handlerPropertyLenient(DedicatedWorkerGlobalScope, .onmessageerror).set, .{});
     pub const requestAnimationFrame = bridge.function(DedicatedWorkerGlobalScope.requestAnimationFrame, .{});
     pub const cancelAnimationFrame = bridge.function(DedicatedWorkerGlobalScope.cancelAnimationFrame, .{});
+    pub const name = bridge.accessor(DedicatedWorkerGlobalScope.getName, null, .{});
+
+    // The two deprecated quota constants Chrome still carries. [Global] moves
+    // operations and attributes onto the global object; constants stay on the
+    // interface prototype, which is why Chrome's
+    // getOwnPropertyNames(DedicatedWorkerGlobalScope.prototype) is exactly
+    // TEMPORARY, PERSISTENT, constructor -- in that order.
+    pub const TEMPORARY = bridge.property(0, .{ .template = true });
+    pub const PERSISTENT = bridge.property(1, .{ .template = true });
 };

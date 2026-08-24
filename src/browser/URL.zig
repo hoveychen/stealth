@@ -181,6 +181,34 @@ pub fn isCompleteHTTPUrl(url: []const u8) bool {
     return true;
 }
 
+// Where the path starts for a URL that has an opaque one, or null if the URL
+// has an authority. Per the URL standard a scheme that is not followed by "//"
+// takes everything after the colon as one opaque path string, with no host, no
+// port and nothing to parse inside it.
+//
+// `blob:` is why this exists. `blob:http://127.0.0.1:9701/<uuid>` contains
+// "://", so every helper below that looks for that substring finds the *inner*
+// URL's authority and answers as though the blob URL had a host of its own.
+// Measured on Chrome 151, in a blob worker and through `new URL()` alike:
+// host, hostname and port are all empty, pathname is the whole inner URL, and
+// only the origin comes from inside. `data:` has the same shape and the same
+// bug -- `data:text/html,<a href="http://x">` would otherwise report `x` as its
+// host.
+fn opaquePathStart(raw: []const u8) ?usize {
+    const colon = std.mem.indexOfScalar(u8, raw, ':') orelse return null;
+    if (colon == 0) return null;
+    if (colon + 2 < raw.len and raw[colon + 1] == '/' and raw[colon + 2] == '/') return null;
+
+    // Everything before the colon has to actually be a scheme, or a relative
+    // reference that happens to carry a colon would be read as one.
+    const scheme = raw[0..colon];
+    if (!std.ascii.isAlphabetic(scheme[0])) return null;
+    for (scheme[1..]) |c| {
+        if (!std.ascii.isAlphanumeric(c) and c != '+' and c != '-' and c != '.') return null;
+    }
+    return colon + 1;
+}
+
 pub fn getUsername(raw: [:0]const u8) []const u8 {
     const user_info = getUserInfo(raw) orelse return "";
     const pos = std.mem.indexOfScalarPos(u8, user_info, 0, ':') orelse return user_info;
@@ -194,6 +222,14 @@ pub fn getPassword(raw: [:0]const u8) []const u8 {
 }
 
 pub fn getPathname(raw: [:0]const u8) []const u8 {
+    // An opaque path is the whole rest of the URL, including any "://" inside
+    // it: about:blank, data:text/plain,hi, blob:http://host/uuid.
+    if (opaquePathStart(raw)) |start| {
+        const path = raw[start..];
+        const query_or_hash = std.mem.indexOfAny(u8, path, "?#") orelse path.len;
+        return path[0..query_or_hash];
+    }
+
     const protocol_end = std.mem.indexOf(u8, raw, "://");
 
     // Handle scheme:path URLs like about:blank (no "://")
@@ -323,6 +359,16 @@ pub fn getHash(raw: [:0]const u8) []const u8 {
 }
 
 pub fn getOrigin(allocator: Allocator, raw: [:0]const u8) !?[]const u8 {
+    // A blob URL's origin is the origin it was minted from, which is the whole
+    // of its opaque path (measured on Chrome 151: `new URL('blob:http://h/u')
+    // .origin` is `http://h`). Every other opaque path -- data:, about:,
+    // javascript: -- has no origin, and answering with something found inside
+    // the path would be worse than answering "null".
+    if (opaquePathStart(raw)) |start| {
+        if (!std.mem.startsWith(u8, raw, "blob:")) return null;
+        return getOrigin(allocator, raw[start..]);
+    }
+
     const scheme_end = std.mem.indexOf(u8, raw, "://") orelse return null;
 
     // Only HTTP and HTTPS schemes have origins
@@ -701,6 +747,10 @@ const AuthorityInfo = struct {
 // SECURITY: Only looks for @ within the authority portion (before /?#)
 // to prevent path-based @ injection attacks.
 fn parseAuthority(raw: []const u8) ?AuthorityInfo {
+    // No "//" after the scheme means no authority at all, whatever the rest of
+    // the string looks like.
+    if (opaquePathStart(raw) != null) return null;
+
     const scheme_end = std.mem.indexOf(u8, raw, "://") orelse return null;
     const authority_start = scheme_end + 3;
 

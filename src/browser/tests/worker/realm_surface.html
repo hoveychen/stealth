@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+The realm a Cloudflare challenge asks its questions in is a blob worker, not the
+page. Everything asserted here was read off a headless Chrome 151 blob worker on
+a loopback http origin (tools/fingerprint/probes/expr-worker-surface.js, readings
+in results/probes/expr-worker-surface.chrome.json).
+-->
+
+<script id=worker_realm_surface type=module>
+  {
+    const state = await testing.async();
+    const worker = new Worker('./realm-surface-worker.js');
+    worker.onmessage = (e) => state.resolve(e.data);
+    // No delay: a dedicated worker buffers messages posted before its script
+    // has finished evaluating, and this block has to report before the two
+    // below finish or its failures never get printed.
+    worker.postMessage(0);
+
+    await state.done((data) => {
+      // A worker's navigator is a WorkerNavigator. Chrome has no `Navigator`
+      // interface object in this realm at all.
+      testing.expectEqual('[object WorkerNavigator]', data.navigator_brand);
+      testing.expectEqual('WorkerNavigator', data.navigator_ctor_name);
+      testing.expectEqual(true, data.navigator_proto_is_wn);
+      testing.expectEqual('function', data.typeof_WorkerNavigator);
+      testing.expectEqual('undefined', data.typeof_Navigator);
+
+      // None of these exist on a Chrome WorkerNavigator. `webdriver` least of
+      // all: it is absent, not false.
+      testing.expectEqual('', data.window_only_in_navigator);
+
+      // Chrome's WorkerNavigator.prototype, minus the ones this engine cannot
+      // serve without a Frame (connection, hid, mediaCapabilities, serial, usb,
+      // locks, gpu, storageBuckets).
+      testing.expectEqual(
+        'appCodeName,appName,appVersion,constructor,deviceMemory,hardwareConcurrency,' +
+        'language,languages,onLine,permissions,platform,product,storage,userAgent,userAgentData',
+        data.wn_proto_own);
+
+      // An unnamed worker's name is the empty string, and it is own on the
+      // global because `name` is DedicatedWorkerGlobalScope's own member.
+      testing.expectEqual('', data.self_name);
+      testing.expectEqual('self', data.holder_name);
+
+      // origin and crossOriginIsolated are WorkerGlobalScope's, so they answer
+      // from its prototype. Chrome holds origin as a [Replaceable] accessor:
+      // enumerable, configurable, with both halves.
+      testing.expectEqual('accessor/get/set e c', data.kind_origin);
+      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_origin);
+      testing.expectEqual('http://127.0.0.1:9582', data.origin);
+      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_crossOriginIsolated);
+      testing.expectEqual('boolean', data.typeof_crossOriginIsolated);
+
+      // The station's own trampoline worker feature-detects trustedTypes in its
+      // first statement, and a Chrome worker carries caches next to it.
+      testing.expectEqual('object', data.typeof_trustedTypes);
+      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_trustedTypes);
+      testing.expectEqual('object', data.typeof_caches);
+      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_caches);
+
+      // The cookie store is Window and ServiceWorker; a dedicated worker has
+      // neither the interface objects nor the member.
+      testing.expectEqual('undefined', data.typeof_CookieStore);
+      testing.expectEqual('undefined', data.typeof_CookieChangeEvent);
+      testing.expectEqual(false, data.has_cookieStore);
+
+      // console is an own data property of the global and is not on the
+      // interface prototype behind it.
+      testing.expectEqual('self', data.holder_console);
+      testing.expectEqual(false, data.console_on_wgs_proto);
+
+      // [Global] moves operations and attributes onto the global; constants
+      // stay behind. Chrome's own order.
+      testing.expectEqual('TEMPORARY,PERSISTENT,constructor', data.dwgs_proto_own);
+    });
+  }
+</script>
+
+<script id=blob_worker_location type=module>
+  {
+    // A blob URL has an opaque path -- the whole inner URL -- and no host of
+    // its own, while its origin is the inner URL's. Measured on Chrome 151:
+    // location.host/hostname/port are empty and pathname is the inner URL.
+    const state = await testing.async();
+    const src = `postMessage({
+      href: location.href, origin: location.origin, protocol: location.protocol,
+      host: location.host, hostname: location.hostname, port: location.port,
+      pathname: location.pathname, search: location.search, hash: location.hash,
+    })`;
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    const worker = new Worker(url);
+    worker.onmessage = (e) => state.resolve(e.data);
+
+    await state.done((data) => {
+      testing.expectEqual(true, data.href.startsWith('blob:http://127.0.0.1:9582/'));
+      testing.expectEqual('http://127.0.0.1:9582', data.origin);
+      testing.expectEqual('blob:', data.protocol);
+      testing.expectEqual('', data.host);
+      testing.expectEqual('', data.hostname);
+      testing.expectEqual('', data.port);
+      testing.expectEqual(data.href.slice('blob:'.length), data.pathname);
+      testing.expectEqual('', data.search);
+      testing.expectEqual('', data.hash);
+    });
+  }
+</script>
+
+<script id=blob_url_object type=module>
+  {
+    // The same parse, reached through the URL constructor rather than a
+    // worker's location. Chrome 151, measured.
+    const u = new URL('blob:http://127.0.0.1:9701/8e0e0a1a-1111-2222-3333-444455556666');
+    testing.expectEqual('http://127.0.0.1:9701', u.origin);
+    testing.expectEqual('blob:', u.protocol);
+    testing.expectEqual('', u.host);
+    testing.expectEqual('', u.hostname);
+    testing.expectEqual('', u.port);
+    testing.expectEqual('http://127.0.0.1:9701/8e0e0a1a-1111-2222-3333-444455556666', u.pathname);
+
+    // A data URL is the same opaque-path shape, but nothing inside it is an
+    // origin, so it stays "null".
+    const d = new URL('data:text/plain,hi');
+    testing.expectEqual('null', d.origin);
+    testing.expectEqual('data:', d.protocol);
+    testing.expectEqual('', d.host);
+    testing.expectEqual('text/plain,hi', d.pathname);
+  }
+</script>

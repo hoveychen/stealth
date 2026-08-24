@@ -1454,7 +1454,10 @@ pub const PageJsApis = flattenTypes(&.{
 const worker_common_apis = [_]type{
     @import("../webapi/WorkerGlobalScope.zig"),
     @import("../webapi/WorkerLocation.zig"),
-    @import("../webapi/Navigator.zig"),
+    // A worker's navigator is a WorkerNavigator, and Chrome has no `Navigator`
+    // interface object in this realm at all (measured,
+    // probes/expr-worker-surface.js).
+    @import("../webapi/WorkerNavigator.zig"),
     @import("../webapi/NavigatorUAData.zig"),
     @import("../webapi/Permissions.zig"),
     @import("../webapi/StorageManager.zig"),
@@ -1535,9 +1538,9 @@ const worker_common_apis = [_]type{
     // else in that cut is window-only (measured, probe-shapes-worker).
     @import("../webapi/Origin.zig"),
     @import("../webapi/canvas/webgl_objects.zig").WebGLObject,
-    @import("../webapi/storage/CookieStore.zig"),
+    // CookieStore and CookieChangeEvent are Window and ServiceWorker; a
+    // dedicated worker carries neither (measured).
     @import("../webapi/storage/idb/idb.zig"),
-    @import("../webapi/event/CookieChangeEvent.zig"),
     @import("../webapi/BroadcastChannel.zig"),
     @import("../webapi/event/CustomEvent.zig"),
     @import("../webapi/event/ProgressEvent.zig"),
@@ -1564,6 +1567,10 @@ const worker_common_apis = [_]type{
     // there. FileSystemSyncAccessHandle itself is Exposed=DedicatedWorker, so it
     // is named in DedicatedWorkerJsApis alone rather than here.
     @import("../webapi/file_system_access.zig"),
+    // The station's trampoline worker feature-detects `self.trustedTypes` in
+    // its first statement, and a Chrome worker carries `caches` beside it.
+    @import("../webapi/trusted_types.zig"),
+    @import("../webapi/storage/cache_storage.zig"),
 };
 
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{
@@ -1588,6 +1595,7 @@ pub const JsApis = blk: {
         @import("../webapi/SharedWorkerGlobalScope.zig").JsApi,
         @import("../webapi/WorkerGlobalScope.zig").JsApi,
         @import("../webapi/WorkerLocation.zig").JsApi,
+        @import("../webapi/WorkerNavigator.zig").JsApi,
     };
     if (lp.build_config.wpt_extensions == false) {
         break :blk base;

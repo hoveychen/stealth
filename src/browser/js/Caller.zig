@@ -952,7 +952,15 @@ fn getGlobalArg(comptime T: type, ctx: *Context) T {
     if (comptime isFrame(T)) {
         return switch (ctx.global) {
             .frame => |frame| frame,
-            .worker => unreachable,
+            // A worker's frame is the one that created it -- the same frame its
+            // origin, secure-context bit and cross-origin isolation already come
+            // from. This used to be `unreachable`, which meant any member taking
+            // a Frame could not be exposed in a worker realm at all: reaching one
+            // was undefined behaviour rather than a compile error, so the gap only
+            // showed up as an absent name. `trustedTypes.createPolicy` is the one
+            // that matters -- a Cloudflare challenge's trampoline worker calls it
+            // in its first statement.
+            .worker => |worker| worker._frame,
         };
     }
 

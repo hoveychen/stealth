@@ -37,7 +37,9 @@ const Event = @import("Event.zig");
 const global_event_handlers = @import("global_event_handlers.zig");
 const Crypto = @import("Crypto.zig");
 const Console = @import("Console.zig");
-const Navigator = @import("Navigator.zig");
+const WorkerNavigator = @import("WorkerNavigator.zig");
+const trusted_types = @import("trusted_types.zig");
+const cache_storage = @import("storage/cache_storage.zig");
 const Timers = @import("Timers.zig");
 // This fork keeps Scheduler, TaskSignal, TaskController and
 // TaskPriorityChangeEvent in one module; `Scheduler.zig` and `scheduler.zig`
@@ -110,7 +112,9 @@ _message_ports: std.DoublyLinkedList = .{},
 _proto: *EventTarget,
 _console: Console = .init,
 _crypto: Crypto = .init,
-_navigator: Navigator = .init,
+_navigator: WorkerNavigator = .{},
+_trusted_types: trusted_types.TrustedTypePolicyFactory = .{},
+_caches: cache_storage.CacheStorage = .{},
 _performance: Performance,
 _idb_factory: ?*idb.IDBFactory = null,
 _on_error: ?JS.Function.Global = null,
@@ -342,8 +346,38 @@ pub fn getCrypto(self: *WorkerGlobalScope) *Crypto {
     return &self._crypto;
 }
 
-pub fn getNavigator(self: *WorkerGlobalScope) *Navigator {
+pub fn getNavigator(self: *WorkerGlobalScope) *WorkerNavigator {
     return &self._navigator;
+}
+
+pub fn getTrustedTypes(self: *WorkerGlobalScope) *trusted_types.TrustedTypePolicyFactory {
+    return &self._trusted_types;
+}
+
+pub fn getCaches(self: *WorkerGlobalScope) *cache_storage.CacheStorage {
+    return &self._caches;
+}
+
+// The worker's own origin when it has one, otherwise the frame it was created
+// from -- a worker inherits its owner's origin and a blob: worker has no other.
+// Chrome holds this as a [Replaceable] accessor on WorkerGlobalScope.prototype:
+// enumerable, configurable, with a setter that defines an own property over it
+// (measured, probes/expr-worker-surface.js).
+pub fn getOrigin(self: *const WorkerGlobalScope) []const u8 {
+    return self.origin orelse (self._frame.origin orelse "null");
+}
+
+pub fn setOrigin(self: *WorkerGlobalScope, value: JS.Value) void {
+    self.replaceGlobalProperty(value, "origin");
+}
+
+// COOP+COEP isolation belongs to the agent cluster, not to the document, so a
+// worker answers what its owner answers. The window realm already reads this
+// off the committing response (Frame.commitCrossOriginIsolated); the worker was
+// left without the property at all, which on a Cloudflare challenge means the
+// page says true and the thread one over says undefined.
+pub fn getCrossOriginIsolated(self: *const WorkerGlobalScope) bool {
+    return self._frame.cross_origin_isolated;
 }
 
 pub fn getScheduler(self: *WorkerGlobalScope) *scheduler.Scheduler {
@@ -647,7 +681,6 @@ pub const JsApi = struct {
         pub var class_id: bridge.ClassId = undefined;
     };
 
-    pub const console = bridge.accessor(WorkerGlobalScope.getConsole, WorkerGlobalScope.setConsole, .{});
     pub const crypto = bridge.accessor(WorkerGlobalScope.getCrypto, null, .{});
     pub const navigator = bridge.accessor(WorkerGlobalScope.getNavigator, null, .{});
     pub const scheduler = bridge.accessor(WorkerGlobalScope.getScheduler, null, .{});
@@ -662,7 +695,6 @@ pub const JsApi = struct {
     }.wrap, null, .{});
     pub const self = bridge.accessor(WorkerGlobalScope.getSelf, WorkerGlobalScope.setSelf, .{});
     pub const location = bridge.accessor(WorkerGlobalScope.getLocation, null, .{});
-    pub const cookieStore = bridge.accessor(WorkerGlobalScope.getCookieStore, null, .{});
     pub const indexedDB = bridge.accessor(WorkerGlobalScope.getIndexedDB, null, .{});
 
     pub const onerror = bridge.accessor(WorkerGlobalScope.getOnError, WorkerGlobalScope.setOnError, .{});
@@ -688,4 +720,12 @@ pub const JsApi = struct {
     // enumerable, configurable getter on WorkerGlobalScope.prototype, which is
     // an accessor here rather than the read-only data property it used to be.
     pub const isSecureContext = bridge.accessor(WorkerGlobalScope.getIsSecureContext, null, .{});
+
+    // Measured on a headless Chrome 151 blob worker (probes/expr-worker-surface
+    // .js): all four answer from WorkerGlobalScope.prototype, and `origin` is
+    // [Replaceable], so it has a setter as well as a getter.
+    pub const origin = bridge.accessor(WorkerGlobalScope.getOrigin, WorkerGlobalScope.setOrigin, .{});
+    pub const crossOriginIsolated = bridge.accessor(WorkerGlobalScope.getCrossOriginIsolated, null, .{});
+    pub const trustedTypes = bridge.accessor(WorkerGlobalScope.getTrustedTypes, null, .{});
+    pub const caches = bridge.accessor(WorkerGlobalScope.getCaches, null, .{});
 };

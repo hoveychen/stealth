@@ -18,12 +18,12 @@
      "Boolean",
      "BroadcastChannel",
      "ByteLengthQueuingStrategy",
+     "Cache",
+     "CacheStorage",
      "CanvasGradient",
      "CanvasPattern",
      "CloseEvent",
      "CompressionStream",
-     "CookieChangeEvent",
-     "CookieStore",
      "CountQueuingStrategy",
      "CropTarget",
      "Crypto",
@@ -92,7 +92,6 @@
      "MessageEvent",
      "MessagePort",
      "NaN",
-     "Navigator",
      "NavigatorUAData",
      "Notification",
      "Number",
@@ -150,6 +149,11 @@
      "TextMetrics",
      "TransformStream",
      "TransformStreamDefaultController",
+     "TrustedHTML",
+     "TrustedScript",
+     "TrustedScriptURL",
+     "TrustedTypePolicy",
+     "TrustedTypePolicyFactory",
      "TypeError",
      "URIError",
      "URL",
@@ -189,6 +193,7 @@
      "WebTransportError",
      "WorkerGlobalScope",
      "WorkerLocation",
+     "WorkerNavigator",
      "WritableStream",
      "WritableStreamDefaultController",
      "WritableStreamDefaultWriter",
@@ -207,6 +212,7 @@
      "globalThis",
      "isFinite",
      "isNaN",
+     "name",
      "onmessage",
      "onmessageerror",
      "parseFloat",
@@ -221,6 +227,8 @@
    {
     "level": "DedicatedWorkerGlobalScope.prototype",
     "names": [
+     "PERSISTENT",
+     "TEMPORARY",
      "constructor"
     ]
    },
@@ -229,11 +237,11 @@
     "names": [
      "atob",
      "btoa",
+     "caches",
      "clearInterval",
      "clearTimeout",
-     "console",
      "constructor",
-     "cookieStore",
+     "crossOriginIsolated",
      "crypto",
      "fetch",
      "importScripts",
@@ -244,6 +252,7 @@
      "onerror",
      "onrejectionhandled",
      "onunhandledrejection",
+     "origin",
      "performance",
      "queueMicrotask",
      "reportError",
@@ -251,7 +260,8 @@
      "self",
      "setInterval",
      "setTimeout",
-     "structuredClone"
+     "structuredClone",
+     "trustedTypes"
     ]
    },
    {
@@ -296,12 +306,12 @@
    "Boolean": "function/1 c w",
    "BroadcastChannel": "function/1 c w",
    "ByteLengthQueuingStrategy": "function/1 c w",
+   "Cache": "function/0 c w",
+   "CacheStorage": "function/0 c w",
    "CanvasGradient": "function/0 c w",
    "CanvasPattern": "function/0 c w",
    "CloseEvent": "function/1 c w",
    "CompressionStream": "function/1 c w",
-   "CookieChangeEvent": "function/1 c w",
-   "CookieStore": "function/0 c w",
    "CountQueuingStrategy": "function/1 c w",
    "CropTarget": "function/0 c w",
    "Crypto": "function/0 c w",
@@ -370,7 +380,6 @@
    "MessageEvent": "function/1 c w",
    "MessagePort": "function/0 c w",
    "NaN": "number",
-   "Navigator": "function/0 c w",
    "NavigatorUAData": "function/0 c w",
    "Notification": "function/1 c w",
    "Number": "function/1 c w",
@@ -428,6 +437,11 @@
    "TextMetrics": "function/0 c w",
    "TransformStream": "function/0 c w",
    "TransformStreamDefaultController": "function/0 c w",
+   "TrustedHTML": "function/0 c w",
+   "TrustedScript": "function/0 c w",
+   "TrustedScriptURL": "function/0 c w",
+   "TrustedTypePolicy": "function/0 c w",
+   "TrustedTypePolicyFactory": "function/0 c w",
    "TypeError": "function/1 c w",
    "URIError": "function/1 c w",
    "URL": "function/1 c w",
@@ -467,6 +481,7 @@
    "WebTransportError": "function/0 c w",
    "WorkerGlobalScope": "function/0 c w",
    "WorkerLocation": "function/0 c w",
+   "WorkerNavigator": "function/0 c w",
    "WritableStream": "function/0 c w",
    "WritableStreamDefaultController": "function/0 c w",
    "WritableStreamDefaultWriter": "function/1 c w",
@@ -485,6 +500,7 @@
    "globalThis": "object c w",
    "isFinite": "function/1 c w",
    "isNaN": "function/1 c w",
+   "name": "accessor/get e c",
    "onmessage": "accessor/get/set e c",
    "onmessageerror": "accessor/get/set e c",
    "parseFloat": "function/1 c w",
@@ -561,6 +577,16 @@
     "length": 1,
     "proto_own": 3
    },
+   "Cache": {
+    "name": "Cache",
+    "length": 0,
+    "proto_own": 8
+   },
+   "CacheStorage": {
+    "name": "CacheStorage",
+    "length": 0,
+    "proto_own": 6
+   },
    "CanvasGradient": {
     "name": "CanvasGradient",
     "length": 0,
@@ -580,16 +606,6 @@
     "name": "CompressionStream",
     "length": 1,
     "proto_own": 3
-   },
-   "CookieChangeEvent": {
-    "name": "CookieChangeEvent",
-    "length": 1,
-    "proto_own": 3
-   },
-   "CookieStore": {
-    "name": "CookieStore",
-    "length": 0,
-    "proto_own": 6
    },
    "CountQueuingStrategy": {
     "name": "CountQueuingStrategy",
@@ -679,7 +695,7 @@
    "DedicatedWorkerGlobalScope": {
     "name": "DedicatedWorkerGlobalScope",
     "length": 0,
-    "proto_own": 1
+    "proto_own": 3
    },
    "DisposableStack": {
     "name": "DisposableStack",
@@ -905,11 +921,6 @@
     "name": "MessagePort",
     "length": 0,
     "proto_own": 6
-   },
-   "Navigator": {
-    "name": "Navigator",
-    "length": 0,
-    "proto_own": 24
    },
    "NavigatorUAData": {
     "name": "NavigatorUAData",
@@ -1191,6 +1202,31 @@
     "length": 0,
     "proto_own": 4
    },
+   "TrustedHTML": {
+    "name": "TrustedHTML",
+    "length": 0,
+    "proto_own": 3
+   },
+   "TrustedScript": {
+    "name": "TrustedScript",
+    "length": 0,
+    "proto_own": 3
+   },
+   "TrustedScriptURL": {
+    "name": "TrustedScriptURL",
+    "length": 0,
+    "proto_own": 3
+   },
+   "TrustedTypePolicy": {
+    "name": "TrustedTypePolicy",
+    "length": 0,
+    "proto_own": 5
+   },
+   "TrustedTypePolicyFactory": {
+    "name": "TrustedTypePolicyFactory",
+    "length": 0,
+    "proto_own": 11
+   },
    "TypeError": {
     "name": "TypeError",
     "length": 1,
@@ -1374,12 +1410,17 @@
    "WorkerGlobalScope": {
     "name": "WorkerGlobalScope",
     "length": 0,
-    "proto_own": 25
+    "proto_own": 27
    },
    "WorkerLocation": {
     "name": "WorkerLocation",
     "length": 0,
     "proto_own": 11
+   },
+   "WorkerNavigator": {
+    "name": "WorkerNavigator",
+    "length": 0,
+    "proto_own": 15
    },
    "WritableStream": {
     "name": "WritableStream",
@@ -1494,18 +1535,21 @@
   },
   "values": {
    "location": {
-    "href": "blob:http://127.0.0.1:58749/38cdadbc-3a47-4c07-8f4a-f0829550e1e9",
-    "origin": "null",
+    "href": "blob:http://127.0.0.1:57445/376fe819-5235-451a-899a-d34b98f77d3a",
+    "origin": "http://127.0.0.1:57445",
     "protocol": "blob:",
-    "host": "127.0.0.1:58749",
-    "hostname": "127.0.0.1",
-    "port": "58749",
-    "pathname": "/38cdadbc-3a47-4c07-8f4a-f0829550e1e9",
+    "host": "",
+    "hostname": "",
+    "port": "",
+    "pathname": "http://127.0.0.1:57445/376fe819-5235-451a-899a-d34b98f77d3a",
     "search": "",
     "hash": ""
    },
-   "location_string": "blob:http://127.0.0.1:58749/38cdadbc-3a47-4c07-8f4a-f0829550e1e9",
+   "location_string": "blob:http://127.0.0.1:57445/376fe819-5235-451a-899a-d34b98f77d3a",
+   "origin": "http://127.0.0.1:57445",
    "isSecureContext": true,
+   "crossOriginIsolated": false,
+   "self_name": "",
    "navigator_values": {
     "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
     "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
@@ -1520,14 +1564,9 @@
     ],
     "onLine": true,
     "hardwareConcurrency": 10,
-    "deviceMemory": 16,
-    "webdriver": false,
-    "vendor": "Google Inc.",
-    "vendorSub": "",
-    "productSub": "20030107",
-    "doNotTrack": null
+    "deviceMemory": 16
    },
-   "navigator_ctor_name": "Navigator",
+   "navigator_ctor_name": "WorkerNavigator",
    "userAgentData": {
     "brands": [
      {
@@ -1546,23 +1585,17 @@
     "mobile": false,
     "platform": "macOS"
    },
-   "clock_clamp": 0.09999999999999787,
+   "clock_clamp": 0.09999999999999964,
    "performance_now_typeof": "number",
    "timeOrigin_typeof": "number",
    "toString_self": "[object DedicatedWorkerGlobalScope]",
-   "toString_navigator": "[object Navigator]",
+   "toString_navigator": "[object WorkerNavigator]",
    "toString_location": "[object WorkerLocation]",
    "self_is_globalThis": true
   },
   "surfaces": {
    "navigator": {
-    "vendorSub": "accessor/get e c",
-    "productSub": "accessor/get e c",
-    "vendor": "accessor/get e c",
-    "maxTouchPoints": "accessor/get e c",
-    "doNotTrack": "accessor/get e c",
     "hardwareConcurrency": "accessor/get e c",
-    "cookieEnabled": "accessor/get e c",
     "appCodeName": "accessor/get e c",
     "appName": "accessor/get e c",
     "appVersion": "accessor/get e c",
@@ -1572,13 +1605,10 @@
     "language": "accessor/get e c",
     "languages": "accessor/get e c",
     "onLine": "accessor/get e c",
-    "webdriver": "accessor/get e c",
-    "pdfViewerEnabled": "accessor/get e c",
-    "javaEnabled": "function/0 e c w",
+    "permissions": "accessor/get e c",
     "deviceMemory": "accessor/get e c",
     "userAgentData": "accessor/get e c",
-    "storage": "accessor/get e c",
-    "permissions": "accessor/get e c"
+    "storage": "accessor/get e c"
    },
    "location": {
     "href": "accessor/get e c",
@@ -9061,18 +9091,18 @@
   },
   "values": {
    "location": {
-    "href": "http://127.0.0.1:58749/",
-    "origin": "http://127.0.0.1:58749",
+    "href": "http://127.0.0.1:57445/",
+    "origin": "http://127.0.0.1:57445",
     "protocol": "http:",
-    "host": "127.0.0.1:58749",
+    "host": "127.0.0.1:57445",
     "hostname": "127.0.0.1",
-    "port": "58749",
+    "port": "57445",
     "pathname": "/",
     "search": "",
     "hash": ""
    },
-   "location_string": "http://127.0.0.1:58749/",
-   "origin": "http://127.0.0.1:58749",
+   "location_string": "http://127.0.0.1:57445/",
+   "origin": "http://127.0.0.1:57445",
    "isSecureContext": true,
    "crossOriginIsolated": false,
    "self_name": "",
