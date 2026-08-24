@@ -665,14 +665,14 @@ pub fn Mixin(comptime T: type) type {
                 // one: the un-premultiplication and the colour conversion both
                 // happen in floating point, and neither is rounded into a byte
                 // on the way. See `readFloatInto`.
-                .@"rgba-float16" => |data| {
+                inline .@"rgba-float16", .@"rgba-float32" => |data| {
                     try readFloatInto(self, window, read.color_space, data.local(exec.js.local.?).slice(), exec);
                 },
             }
             return image_data;
         }
 
-        /// The float formats' read: one `Paint` a pixel out of the bitmap,
+        /// The float formats' read: normalised f32 channels out of the bitmap,
         /// converted unclipped, and only then narrowed to the format's element.
         ///
         /// Two bytes the byte path would have gone through are missing here, and
@@ -695,25 +695,25 @@ pub fn Mixin(comptime T: type) type {
             out: anytype,
             exec: *Execution,
         ) !void {
-            const paints = try exec.arena.alloc(color.Paint, out.len / 4);
+            const units = try exec.arena.alloc([4]f32, out.len / 4);
             // The read overwrites only the part of the window that overlaps the
             // canvas, and this buffer is not the fresh array the byte arm has.
-            @memset(paints, .{ .r = 0, .g = 0, .b = 0, .a = 0 });
-            self._surface.readPaints(
+            @memset(units, .{ 0, 0, 0, 0 });
+            self._surface.readUnitPixels(
                 width(self),
                 height(self),
                 window.x,
                 window.y,
                 window.width,
                 window.height,
-                paints,
+                units,
             );
-            for (paints, 0..) |pixel, i| {
-                const converted = color.convertCanvasPaintUnclipped(space(self), to, pixel);
-                out[i * 4 + 0] = @floatCast(converted.r / 255);
-                out[i * 4 + 1] = @floatCast(converted.g / 255);
-                out[i * 4 + 2] = @floatCast(converted.b / 255);
-                out[i * 4 + 3] = @floatCast(converted.a);
+            for (units, 0..) |pixel, i| {
+                const rgb = color.convertCanvasUnit(space(self), to, pixel[0..3].*);
+                out[i * 4 + 0] = @floatCast(rgb[0]);
+                out[i * 4 + 1] = @floatCast(rgb[1]);
+                out[i * 4 + 2] = @floatCast(rgb[2]);
+                out[i * 4 + 3] = @floatCast(pixel[3]);
             }
         }
 

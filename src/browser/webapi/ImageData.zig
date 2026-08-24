@@ -39,15 +39,37 @@ _data: Data,
 
 /// The pixels, in the typed array the settings' `pixelFormat` calls for.
 ///
-/// The two formats carry the same four channels per pixel in the same order,
-/// so `data.length` is the same either way and the array's *type* is the whole
-/// of what a page sees: `rgba-unorm8` is a Uint8ClampedArray of 0..255 bytes,
-/// `rgba-float16` a Float16Array of 0..1 floats (measured --
-/// results/canvas-image-data-settings.chrome.json, where a red pixel read back
-/// as float16 reports `Float16Array` and `len=4`).
+/// All three formats carry the same four channels per pixel in the same order,
+/// so `data.length` is the same whichever it is and the array's *type* is the
+/// whole of what a page sees: `rgba-unorm8` is a Uint8ClampedArray of 0..255
+/// bytes, `rgba-float16` a Float16Array and `rgba-float32` a Float32Array of
+/// floats around 0..1 (measured --
+/// results/canvas-image-data-construct.chrome.json, where each of the three
+/// reports its own constructor's name and `len=4`).
 pub const Data = union(Settings.PixelFormat) {
     @"rgba-unorm8": js.ArrayBufferRef(.uint8_clamped).Global,
     @"rgba-float16": js.ArrayBufferRef(.float16).Global,
+    @"rgba-float32": js.ArrayBufferRef(.float32).Global,
+
+    /// The typed array kind one arm hands out, for the code that is written
+    /// once over all three.
+    pub fn kind(comptime format: Settings.PixelFormat) js.ArrayType {
+        return switch (format) {
+            .@"rgba-unorm8" => .uint8_clamped,
+            .@"rgba-float16" => .float16,
+            .@"rgba-float32" => .float32,
+        };
+    }
+
+    /// One channel of that array, which is what says how many bytes an element
+    /// takes on the wire.
+    pub fn Element(comptime format: Settings.PixelFormat) type {
+        return switch (format) {
+            .@"rgba-unorm8" => u8,
+            .@"rgba-float16" => f16,
+            .@"rgba-float32" => f32,
+        };
+    }
 };
 
 /// `ImageDataSettings`: the dictionary this constructor shares with
@@ -67,16 +89,22 @@ pub const Settings = struct {
     color_space: color.CanvasSpace = .srgb,
     pixel_format: PixelFormat = .@"rgba-unorm8",
 
-    /// `ImageDataPixelFormat`, whose two members are the whole enum, and which
-    /// picks the typed array `data` hands out — see `Data`. A widget that asks
-    /// for float16 canvases (the Turnstile one asks for two of its four) reads
-    /// the format off `data.constructor.name` without looking at a pixel.
+    /// `ImageDataPixelFormat`, which picks the typed array `data` hands out —
+    /// see `Data`. A widget that asks for float16 canvases (the Turnstile one
+    /// asks for two of its four) reads the format off `data.constructor.name`
+    /// without looking at a pixel.
+    ///
+    /// Three members, not two: `rgba-float32` is accepted by every entry point
+    /// that takes this dictionary and hands out a Float32Array (measured --
+    /// results/canvas-image-data-construct.chrome.json, and Chrome names it
+    /// itself when refusing a Float32Array under another format).
     pub const PixelFormat = enum {
         @"rgba-unorm8",
         @"rgba-float16",
+        @"rgba-float32",
     };
 
-    const pixel_formats = [_][]const u8{ "rgba-unorm8", "rgba-float16" };
+    const pixel_formats = [_][]const u8{ "rgba-unorm8", "rgba-float16", "rgba-float32" };
 
     /// The reader for one entry point. `Reader` carries the prefix that says
     /// where the call came from — "Failed to construct 'ImageData': " against
@@ -170,15 +198,14 @@ pub fn init(width: u32, height: u32, settings: Settings, exec: *Execution) !*Ima
         ._width = width,
         ._height = height,
         ._settings = settings,
-        // `size` is the channel count, which is the element count in both
-        // formats -- only the bytes behind an element differ.
+        // `size` is the channel count, which is the element count in every
+        // format -- only the bytes behind an element differ.
         ._data = switch (settings.pixel_format) {
-            .@"rgba-unorm8" => .{
-                .@"rgba-unorm8" = try local.createTypedArray(.uint8_clamped, size).persist(),
-            },
-            .@"rgba-float16" => .{
-                .@"rgba-float16" = try local.createTypedArray(.float16, size).persist(),
-            },
+            inline else => |format| @unionInit(
+                Data,
+                @tagName(format),
+                try local.createTypedArray(Data.kind(format), size).persist(),
+            ),
         },
     });
 }
@@ -207,8 +234,7 @@ pub fn structuredSerialize(self: *const ImageData, writer: *js.StructuredWriter)
     writer.writeUint32(@intFromEnum(self._settings.color_space));
     writer.writeUint32(@intFromEnum(self._settings.pixel_format));
     switch (self._data) {
-        .@"rgba-unorm8" => |data| writer.writeBytes(data.local(writer.local).slice()),
-        .@"rgba-float16" => |data| writer.writeBytes(
+        inline else => |data| writer.writeBytes(
             std.mem.sliceAsBytes(data.local(writer.local).slice()),
         ),
     }
@@ -223,17 +249,15 @@ pub fn structuredDeserialize(reader: *js.StructuredReader, page: *Page) !*ImageD
 
     const format = std.enums.fromInt(Settings.PixelFormat, pixel_format) orelse .@"rgba-unorm8";
     const data: Data = switch (format) {
-        .@"rgba-unorm8" => blk: {
-            const array = reader.local.createTypedArray(.uint8_clamped, bytes.len);
-            @memcpy(array.slice(), bytes);
-            break :blk .{ .@"rgba-unorm8" = try array.persist() };
-        },
-        .@"rgba-float16" => blk: {
-            // Two bytes an element, and the serialiser wrote the elements out
-            // whole, so the count divides.
-            const array = reader.local.createTypedArray(.float16, bytes.len / 2);
+        inline else => |tag| blk: {
+            // The serialiser wrote whole elements out, so the byte count
+            // divides by however wide this format's element is.
+            const array = reader.local.createTypedArray(
+                Data.kind(tag),
+                bytes.len / @sizeOf(Data.Element(tag)),
+            );
             @memcpy(std.mem.sliceAsBytes(array.slice()), bytes);
-            break :blk .{ .@"rgba-float16" = try array.persist() };
+            break :blk @unionInit(Data, @tagName(tag), try array.persist());
         },
     };
 
@@ -263,9 +287,11 @@ pub fn getData(self: *const ImageData) Data {
 /// The pixels as the straight-alpha RGBA8 every rasteriser entry point here
 /// takes, whichever format they are stored in.
 ///
-/// A unorm8 object hands over its own storage; a float16 one is quantised into
+/// A unorm8 object hands over its own storage; a float one is quantised into
 /// `arena` on the way, because the `Surface` behind all of this is eight bits a
-/// channel and has nowhere to put the extra range.
+/// channel and has nowhere to put the extra range. `round255` clamps, which is
+/// what a channel outside 0..1 does: `[2, -1, 0.5, 1]` writes `ff0080ff`
+/// (measured -- probes/canvas-image-data-construct.js).
 pub fn straightBytes(
     self: *const ImageData,
     local: *const js.Local,
@@ -273,7 +299,7 @@ pub fn straightBytes(
 ) ![]const u8 {
     return switch (self._data) {
         .@"rgba-unorm8" => |data| data.local(local).slice(),
-        .@"rgba-float16" => |data| blk: {
+        inline .@"rgba-float16", .@"rgba-float32" => |data| blk: {
             const from = data.local(local).slice();
             const into = try arena.alloc(u8, from.len);
             for (into, from) |*byte, channel| {

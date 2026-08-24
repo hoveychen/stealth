@@ -44,5 +44,16 @@
  },
  "created": {
   "createImageData(data, w, h)": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': The provided value is not of type 'ImageDataSettings'."
+ },
+ "float32": {
+  "new ImageData(w, h, float32)": "srgb rgba-float32 1x1 Float32Array len=4",
+  "new ImageData(data, w, h, float32)": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'.",
+  "createImageData float32": "srgb rgba-float32 1x1 Float32Array len=4",
+  "createImageData from float32": "srgb rgba-float32 1x1 Float32Array len=4",
+  "getImageData float32": "0.7792208194732666 0.3896104097366333 0.19480520486831665 0.3019607961177826 rgba-float32 Float32Array",
+  "getImageData float32 display-p3": "0.9174875020980835 0.2002868354320526 0.13856059312820435 1 display-p3",
+  "putImageData float32": "ff8033ff",
+  "putImageData float32 out of range": "ff0080ff",
+  "structuredClone": "display-p3 rgba-float32 1x1 Float32Array len=4 0.25 0.5 0.75 1"
  }
 }

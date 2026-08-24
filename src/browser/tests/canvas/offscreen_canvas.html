@@ -1218,3 +1218,89 @@
     () => ctx(1, 1).putImageData());
 }
 </script>
+
+<script id="OffscreenCanvasRenderingContext2D#float32 pixel format">
+{
+  // `ImageDataPixelFormat` has a third member. Chrome's own refusal for a
+  // Float32Array in the data constructor names it — "Float32Array must use
+  // rgba-float32 pixelFormat." — and every entry point that takes the
+  // dictionary accepts it. Readings from probes/canvas-image-data-construct.js.
+  const shape = (d) => `${d.colorSpace} ${d.pixelFormat} ${d.width}x${d.height} ` +
+    `${d.data.constructor.name} len=${d.data.length}`;
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const ctx = (settings) => new OffscreenCanvas(1, 1)
+    .getContext('2d', { willReadFrequently: true, ...settings });
+
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(new ImageData(1, 1, { pixelFormat: 'rgba-float32' })));
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(ctx().createImageData(1, 1, { pixelFormat: 'rgba-float32' })));
+  // From a source ImageData the format is inherited, as the space is.
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(ctx().createImageData(new ImageData(1, 1, { pixelFormat: 'rgba-float32' }))));
+
+  // A read holds the same unquantised value the float16 format does, at the
+  // width that can show all of it: the premultiplied {60, 30, 15, 77} this
+  // pixel stores is 60 / 77 exactly, not the 199 / 255 of its unorm8 byte.
+  {
+    const c = ctx();
+    c.fillStyle = 'rgba(200, 100, 50, 0.3)';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('199,99,50,77', [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual(
+      '0.7792208194732666,0.3896104097366333,0.19480520486831665,0.3019607961177826',
+      [...c.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  }
+  // An opaque pixel is its byte over 255 at this width too, since dividing by
+  // an alpha of 255 is not dividing at all.
+  {
+    const c = ctx({ colorSpace: 'display-p3' });
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('234,51,35,255', [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual(
+      '0.917647123336792,0.20000001788139343,0.13725490868091583,1',
+      [...c.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  }
+  // A window off the canvas is transparent black, and an opaque canvas that has
+  // never been painted is opaque black.
+  {
+    const c = ctx();
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('1,0,0,1,0,0,0,0',
+      [...c.getImageData(0, 0, 2, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  }
+  testing.expectEqual('0,0,0,1', [...ctx({ alpha: false })
+    .getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  testing.expectEqual('0,0,0,0',
+    [...ctx().getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+
+  // And a write through the format's own array, which quantises into the
+  // eight-bit bitmap and clamps outside 0..1.
+  {
+    const c = ctx();
+    const d = new ImageData(1, 1, { pixelFormat: 'rgba-float32' });
+    d.data.set([1, 0.5, 0.2, 1]);
+    c.putImageData(d, 0, 0);
+    testing.expectEqual('ff8033ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+  {
+    const c = ctx();
+    const d = new ImageData(1, 1, { pixelFormat: 'rgba-float32' });
+    d.data.set([2, -1, 0.5, 1]);
+    c.putImageData(d, 0, 0);
+    testing.expectEqual('ff0080ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+
+  // A clone carries the format, since the bytes alone would not say which array
+  // to rebuild.
+  {
+    const d = new ImageData(1, 1, { pixelFormat: 'rgba-float32', colorSpace: 'display-p3' });
+    d.data.set([0.25, 0.5, 0.75, 1]);
+    const back = structuredClone(d);
+    testing.expectEqual('display-p3 rgba-float32 1x1 Float32Array len=4', shape(back));
+    testing.expectEqual('0.25,0.5,0.75,1', [...back.data].join(','));
+  }
+}
+</script>
