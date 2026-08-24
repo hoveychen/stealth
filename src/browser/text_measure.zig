@@ -73,7 +73,7 @@ pub const Metrics = struct {
 ///     the sum of the two advances is 13.33984375. Only pairs the font kerns
 ///     differ, which for the strings fingerprinters actually use — 'mmmmmmm-
 ///     mmlli', 'Cwm fjordbank glyphs vext quiz' — is none of them.
-///   * outside U+0020..U+007E and the colour emoji we have no table, so each
+///   * above U+00FF, outside the colour emoji, we have no table, so each
 ///     glyph is charged the family's mean ASCII advance and contributes no
 ///     ink. That is a guess, not a measurement — and a visible one: Chrome
 ///     makes a bare U+2600 16 at 16px sans-serif, where we say 8.431.
@@ -114,6 +114,22 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
     var descent: f64 = 0;
     var any_ink = false;
 
+    // Blink chooses one fallback font per run, seeded by the first character
+    // the primary font cannot draw, and keeps it for the whole run. Which of
+    // the three states we are in decides what a character the primary font
+    // cannot draw costs. Measured at 16px sans-serif, not reasoned about:
+    //
+    //   U+0098 U+0080         32      -- U+0080 alone is 8.898. The glyph-less
+    //                                    U+0098 went to the last resort font
+    //                                    first, and U+0080 followed it there.
+    //   U+0080 U+0098 U+0080  33.797  -- both U+0080 keep their 8.898: the
+    //                                    first one seeded a font that draws
+    //                                    them, and U+0098 does not reseed.
+    //   U+0098 'a' U+0080     40.898  -- still 16 for the U+0080. A character
+    //                                    the primary font *does* draw sits in
+    //                                    between and changes nothing.
+    var fallback: enum { none, own, last_resort } = .none;
+
     var offset: usize = 0;
     while (offset < text.len) {
         // Only the boundary is taken from the cluster; what it costs is a
@@ -127,26 +143,55 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
         if (isColourEmoji(shaped)) {
             const glyph = emojiBox(size);
             const pen = toPixels(pen_basis, size) + pen_pixels;
+            const first = !any_ink;
             foldInk(&ink_min, &ink_max, &any_ink, pen - glyph.left, pen + glyph.right);
-            ascent = @max(ascent, glyph.ascent);
-            descent = @max(descent, glyph.descent);
+            ascent = if (first) glyph.ascent else @max(ascent, glyph.ascent);
+            descent = if (first) glyph.descent else @max(descent, glyph.descent);
             pen_pixels += glyph.advance;
             continue;
         }
 
         var codepoints = std.unicode.Utf8Iterator{ .bytes = shaped, .i = 0 };
         while (codepoints.nextCodepoint()) |codepoint| {
-            const glyph = font_metrics.glyph(family, codepoint) orelse {
+            var glyph = font_metrics.glyph(family, codepoint) orelse {
                 // A joiner, a variation selector or a combining mark rides on
                 // the glyph before it: Chrome makes 'a' and 'a' U+0301 both
                 // 8.898 at 16px sans-serif, and a lone U+FE0F zero.
+                //
+                // Whether an untabulated codepoint would seed the fallback is
+                // not something we have measured, so it leaves the state alone.
                 if (!isZeroWidth(codepoint)) pen_basis += meanAdvance(family);
                 continue;
             };
 
+            if (font_metrics.afterFallback(family, codepoint)) |on_last_resort| {
+                // A codepoint the primary font cannot draw but some fallback
+                // font can, so what it costs depends on which font the run
+                // already settled on.
+                switch (fallback) {
+                    .last_resort => glyph = on_last_resort,
+                    // Only a codepoint that draws something seeds a font.
+                    // U+007F draws nothing and does not: Chrome makes U+007F
+                    // U+0098 U+0080 32 at 16px sans-serif, so the U+0098 still
+                    // got to seed the last resort from behind it, where
+                    // U+007F U+0080 is 8.898 and the U+0080 seeded its own.
+                    .none => if (!isBlank(glyph)) {
+                        fallback = .own;
+                    },
+                    .own => {},
+                }
+            } else if (fallback == .none and font_metrics.seedsLastResort(family, codepoint)) {
+                fallback = .last_resort;
+            }
+
             // A blank glyph (the space) has no ink box to fold in.
-            const blank = glyph.left == 0 and glyph.right == 0 and glyph.ascent == 0 and glyph.descent == 0;
-            if (!blank) {
+            if (!isBlank(glyph)) {
+                // Seeded from the first inked glyph rather than from zero: an
+                // ink boundary is signed, and a running max that starts at
+                // zero can never report a negative one. Chrome makes U+0022's
+                // descent -6.883 at 16px sans-serif — its ink is wholly above
+                // the baseline — and U+0084's ascent -1.594.
+                const first = !any_ink;
                 foldInk(
                     &ink_min,
                     &ink_max,
@@ -154,8 +199,10 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
                     toPixels(pen_basis - glyph.left, size) + pen_pixels,
                     toPixels(pen_basis + glyph.right, size) + pen_pixels,
                 );
-                ascent = @max(ascent, toPixels(glyph.ascent, size));
-                descent = @max(descent, toPixels(glyph.descent, size));
+                const glyph_ascent = toPixels(glyph.ascent, size);
+                const glyph_descent = toPixels(glyph.descent, size);
+                ascent = if (first) glyph_ascent else @max(ascent, glyph_ascent);
+                descent = if (first) glyph_descent else @max(descent, glyph_descent);
             }
 
             pen_basis += glyph.advance;
@@ -170,6 +217,12 @@ pub fn measure(family: font_metrics.Family, text: []const u8, size: f64) Metrics
         metrics.actualBoundingBoxRight = ink_max;
     }
     return metrics;
+}
+
+/// Whether a glyph draws nothing — the space, a zero-width control, or a
+/// character the last resort font stands in for.
+fn isBlank(glyph: font_metrics.Glyph) bool {
+    return glyph.left == 0 and glyph.right == 0 and glyph.ascent == 0 and glyph.descent == 0;
 }
 
 /// Widens the ink box to hold one more glyph's edges, in pixels.
@@ -300,10 +353,16 @@ fn isColourEmoji(text: []const u8) bool {
 }
 
 /// What an unmeasured glyph is charged. Not a Chrome number.
+///
+/// The mean is over printable ASCII, not over the whole table. The table
+/// reaches U+00FF now, and averaging the C1 controls in — each a flat em —
+/// would move this number for every codepoint above U+00FF, a surface we have
+/// not measured and did not mean to change.
 fn meanAdvance(family: font_metrics.Family) f64 {
+    const ascii = family.glyphs[0 .. font_metrics.last_ascii_codepoint - font_metrics.first_codepoint + 1];
     var total: f64 = 0;
-    for (family.glyphs) |glyph| total += glyph.advance;
-    return total / @as(f64, @floatFromInt(family.glyphs.len));
+    for (ascii) |glyph| total += glyph.advance;
+    return total / @as(f64, @floatFromInt(ascii.len));
 }
 
 test "text_measure: reproduces Chrome's measureText" {
@@ -353,6 +412,140 @@ test "text_measure: reproduces Chrome's measureText" {
     // and 10.5615234375 because it kerns; we report the plain sums.
     try std.testing.expectEqual(@as(f64, 13.33984375), measure(font_metrics.sans_serif, "AV", 10).width);
     try std.testing.expectEqual(@as(f64, 11.669921875), measure(font_metrics.sans_serif, "To", 10).width);
+}
+
+test "text_measure: the ten strings the Turnstile widget actually measures" {
+    // Not emoji. The widget hands measureText the UTF-8 bytes of each emoji
+    // read back as Latin-1, so U+1F600 arrives as U+00F0 U+009F U+0098 U+0080
+    // -- traced live on the challenge page, where both engines record the same
+    // four code points, so it is the page's own mojibake and not a decoding
+    // bug on either side.
+    //
+    // Every number is headed Chrome's, from the `strings` block of
+    // results/probes/expr-turnstile-mojibake-metrics.chrome.json at
+    // 16px sans-serif.
+    const sans = font_metrics.sans_serif;
+    const cases = [_]struct { text: []const u8, width: f64, ascent: f64, descent: f64 }{
+        // All three land on 56.898, by two different routes. U+1F44D is
+        // F0 9F 91 8D, where the last three code points have no glyph in any
+        // font and cost an em each outright. U+1F600 and U+1F680 end in 0x80,
+        // which some fallback font *does* draw at 8.898 -- but by then the run
+        // is on the last resort, so it costs an em too.
+        .{ .text = "\u{f0}\u{9f}\u{98}\u{80}", .width = 56.8984375, .ascent = 12.6796875, .descent = 0.2890625 },
+        .{ .text = "\u{f0}\u{9f}\u{91}\u{8d}", .width = 56.8984375, .ascent = 12.6796875, .descent = 0.2890625 },
+        .{ .text = "\u{f0}\u{9f}\u{9a}\u{80}", .width = 56.8984375, .ascent = 12.6796875, .descent = 0.2890625 },
+        // A4 and A3 are Latin-1 letters the primary font draws, so they cost
+        // their own 8.898 rather than the fallback's em.
+        .{ .text = "\u{f0}\u{9f}\u{a4}\u{a3}", .width = 42.6953125, .ascent = 12.6796875, .descent = 0.2890625 },
+        .{ .text = "\u{f0}\u{9f}\u{98}\u{b1}", .width = 49.6796875, .ascent = 12.6796875, .descent = 0.2890625 },
+        .{ .text = "\u{f0}\u{9f}\u{94}\u{a5}", .width = 49.796875, .ascent = 12.6796875, .descent = 0.2890625 },
+        // A7 (section sign) is what drops below the baseline here.
+        .{ .text = "\u{f0}\u{9f}\u{a7}\u{a0}", .width = 38.2421875, .ascent = 12.6796875, .descent = 3.375 },
+        .{ .text = "\u{f0}\u{9f}\u{90}\u{b6}", .width = 49.4921875, .ascent = 12.6796875, .descent = 2.8359375 },
+        .{ .text = "\u{f0}\u{9f}\u{8f}\u{a0}", .width = 45.34375, .ascent = 12.6796875, .descent = 0.2890625 },
+        // Six code points, not four: U+2600 U+FE0F is E2 98 80 EF B8 8F. The
+        // ink is â's and ¸'s, which is why this one alone reports a different
+        // ascent from the other nine.
+        .{
+            .text = "\u{e2}\u{98}\u{80}\u{ef}\u{b8}\u{8f}",
+            .width = 66.671875,
+            .ascent = 11.734375,
+            .descent = 3.6015625,
+        },
+    };
+    for (cases) |case| {
+        const metrics = measure(sans, case.text, 16);
+        try std.testing.expectEqual(case.width, metrics.width);
+        try std.testing.expectEqual(case.ascent, metrics.actualBoundingBoxAscent);
+        try std.testing.expectEqual(case.descent, metrics.actualBoundingBoxDescent);
+    }
+}
+
+test "text_measure: one fallback font per run, seeded by the first character that needs it" {
+    // From the `runs` and `battery` blocks of
+    // results/probes/expr-latin1-context-advance.js's headed Chrome reading.
+    // U+0080 is the interesting one: the primary font does not draw it, some
+    // fallback font does, and whether it gets that font depends on what the
+    // run already settled on.
+    const width = struct {
+        fn f(text: []const u8) f64 {
+            return measure(font_metrics.sans_serif, text, 16).width;
+        }
+    }.f;
+
+    // Alone, and beside characters the primary font draws, it is 8.898.
+    try std.testing.expectEqual(@as(f64, 8.8984375), width("\u{80}"));
+    try std.testing.expectEqual(@as(f64, 17.796875), width("\u{80}\u{80}"));
+    try std.testing.expectEqual(@as(f64, 17.796875), width("a\u{80}"));
+    try std.testing.expectEqual(@as(f64, 17.796875), width("\u{80}a"));
+
+    // Behind a character no font draws, it is a flat em instead -- U+0098 went
+    // to the last resort font and U+0080 followed it there.
+    try std.testing.expectEqual(@as(f64, 32), width("\u{98}\u{80}"));
+    try std.testing.expectEqual(@as(f64, 32), width("\u{9f}\u{80}"));
+    try std.testing.expectEqual(@as(f64, 48), width("\u{98}\u{80}\u{80}"));
+    // Whereas in front of one it keeps its glyph: nothing had reseeded yet.
+    try std.testing.expectEqual(@as(f64, 24.8984375), width("\u{80}\u{98}"));
+
+    // The seed is chosen once, for the whole run. A character the primary font
+    // *does* draw in between does not give the glyph back...
+    try std.testing.expectEqual(@as(f64, 40.8984375), width("\u{98}a\u{80}"));
+    try std.testing.expectEqual(@as(f64, 40.8984375), width("\u{98}\u{f0}\u{80}"));
+    try std.testing.expectEqual(@as(f64, 36.4453125), width("\u{98}\u{a0}\u{80}"));
+    // ... and a glyph-less character *after* the seeding does not take it away.
+    try std.testing.expectEqual(@as(f64, 33.796875), width("\u{80}\u{98}\u{80}"));
+
+    // The other three C1 controls with a glyph move the same way, so this is
+    // about the fallback font rather than about U+0080.
+    try std.testing.expectEqual(@as(f64, 6.4375), width("\u{81}"));
+    try std.testing.expectEqual(@as(f64, 7.046875), width("\u{82}"));
+    try std.testing.expectEqual(@as(f64, 15.203125), width("\u{84}"));
+    try std.testing.expectEqual(@as(f64, 64), width("\u{98}\u{81}\u{82}\u{84}"));
+
+    // U+00C6 is an em wide and is *not* one of them: it has ink, the primary
+    // font draws it, and it neither seeds the last resort nor loses anything
+    // behind it. That is what keeps "an em wide" from being the test.
+    try std.testing.expectEqual(@as(f64, 16), width("\u{c6}"));
+    try std.testing.expectEqual(@as(f64, 24.8984375), width("\u{c6}\u{80}"));
+
+    // U+007F draws nothing, and a character that draws nothing does not get to
+    // pick the run's font. So it is transparent: U+0080 behind it still seeds
+    // its own, and a U+0098 behind it still seeds the last resort.
+    try std.testing.expectEqual(@as(f64, 0), width("\u{7f}"));
+    try std.testing.expectEqual(@as(f64, 8.8984375), width("\u{7f}\u{80}"));
+    try std.testing.expectEqual(@as(f64, 32), width("\u{7f}\u{98}\u{80}"));
+    // Behind the last resort it is not zero any more, but half an em.
+    try std.testing.expectEqual(@as(f64, 24), width("\u{98}\u{7f}"));
+}
+
+test "text_measure: an ink boundary can be negative" {
+    // A running max seeded at zero can only ever report a positive boundary,
+    // and Chrome reports both signs: a quotation mark's ink is wholly above
+    // the baseline, so its descent is negative, and U+0084's is wholly below,
+    // so its ascent is. Headed Chrome at 16px sans-serif, from the
+    // perCodePoint block of expr-turnstile-mojibake-metrics.chrome.json.
+    const sans = font_metrics.sans_serif;
+    const quote = measure(sans, "\"", 16);
+    try std.testing.expectEqual(@as(f64, 11.4765625), quote.actualBoundingBoxAscent);
+    try std.testing.expectEqual(@as(f64, -6.8828125), quote.actualBoundingBoxDescent);
+
+    const underscore = measure(sans, "_", 16);
+    try std.testing.expectEqual(@as(f64, -1.2109375), underscore.actualBoundingBoxAscent);
+    try std.testing.expectEqual(@as(f64, 2), underscore.actualBoundingBoxDescent);
+
+    const c1 = measure(sans, "\u{84}", 16);
+    try std.testing.expectEqual(@as(f64, -1.59375), c1.actualBoundingBoxAscent);
+    try std.testing.expectEqual(@as(f64, 2), c1.actualBoundingBoxDescent);
+
+    // Still a max once there is more than one glyph: the quotation mark's
+    // negative descent loses to the comma's positive one, and the underscore's
+    // negative ascent loses to the quotation mark's.
+    const both = measure(sans, "\",", 16);
+    try std.testing.expectEqual(@as(f64, 11.4765625), both.actualBoundingBoxAscent);
+    try std.testing.expectEqual(@as(f64, 2.375), both.actualBoundingBoxDescent);
+    const pair = measure(sans, "_\"", 16);
+    try std.testing.expectEqual(@as(f64, 11.4765625), pair.actualBoundingBoxAscent);
+    try std.testing.expectEqual(@as(f64, 2), pair.actualBoundingBoxDescent);
 }
 
 test "text_measure: a colour emoji measures the strike Chrome picked" {

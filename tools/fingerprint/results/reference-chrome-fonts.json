@@ -154,6 +154,10 @@
    "resolved": "100px BiauKaiHK"
   },
   {
+   "family": "BiauKaiTC",
+   "resolved": "100px BiauKaiTC"
+  },
+  {
    "family": "Big Caslon",
    "resolved": "100px \"Big Caslon\""
   },
@@ -278,6 +282,10 @@
    "resolved": "100px \"Hannotate SC\""
   },
   {
+   "family": "Hannotate TC",
+   "resolved": "100px \"Hannotate TC\""
+  },
+  {
    "family": "HanziPen SC",
    "resolved": "100px \"HanziPen SC\""
   },
@@ -292,6 +300,10 @@
   {
    "family": "Heiti SC",
    "resolved": "100px \"Heiti SC\""
+  },
+  {
+   "family": "Heiti TC",
+   "resolved": "100px \"Heiti TC\""
   },
   {
    "family": "Helvetica Neue",
@@ -312,6 +324,10 @@
   {
    "family": "Hiragino Sans",
    "resolved": "100px \"Hiragino Sans\""
+  },
+  {
+   "family": "Hiragino Sans GB",
+   "resolved": "100px \"Hiragino Sans GB\""
   },
   {
    "family": "Hoefler Text",
@@ -374,6 +390,10 @@
    "resolved": "100px \"Lantinghei SC\""
   },
   {
+   "family": "Lantinghei TC",
+   "resolved": "100px \"Lantinghei TC\""
+  },
+  {
    "family": "Lao MN",
    "resolved": "100px \"Lao MN\""
   },
@@ -398,12 +418,20 @@
    "resolved": "100px \"LingWai SC\""
   },
   {
+   "family": "LingWai TC",
+   "resolved": "100px \"LingWai TC\""
+  },
+  {
    "family": "Luminari",
    "resolved": "100px Luminari"
   },
   {
    "family": "Malayalam MN",
    "resolved": "100px \"Malayalam MN\""
+  },
+  {
+   "family": "Malayalam Sangam MN",
+   "resolved": "100px \"Malayalam Sangam MN\""
   },
   {
    "family": "Marker Felt",
@@ -694,6 +722,10 @@
    "resolved": "100px \"Yuppy SC\""
   },
   {
+   "family": "Yuppy TC",
+   "resolved": "100px \"Yuppy TC\""
+  },
+  {
    "family": "Zapfino",
    "resolved": "100px Zapfino"
   }
@@ -720,28 +752,12 @@
    "Baoli SC"
   ],
   [
-   "BiauKaiTC",
-   "BiauKaiHK"
-  ],
-  [
-   "Hannotate TC",
-   "Hannotate SC"
-  ],
-  [
    "HanziPen TC",
    "HanziPen SC"
   ],
   [
-   "Heiti TC",
-   "Heiti SC"
-  ],
-  [
    "Helvetica",
    "sans-serif"
-  ],
-  [
-   "Hiragino Sans GB",
-   "Hiragino Sans"
   ],
   [
    "Kaiti TC",
@@ -752,20 +768,8 @@
    "Kohinoor Bangla"
   ],
   [
-   "Lantinghei TC",
-   "Lantinghei SC"
-  ],
-  [
    "Libian TC",
    "Libian SC"
-  ],
-  [
-   "LingWai TC",
-   "LingWai SC"
-  ],
-  [
-   "Malayalam Sangam MN",
-   "Bangla Sangam MN"
   ],
   [
    "Menlo",
@@ -814,10 +818,6 @@
   [
    "Yuanti TC",
    "Yuanti SC"
-  ],
-  [
-   "Yuppy TC",
-   "Yuppy SC"
   ]
  ],
  "unresolved": [
