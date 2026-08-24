@@ -22,7 +22,7 @@
  "descriptors": {
   "colorSpace": "own=absent proto=get enumerable=true",
   "pixelFormat": "own=absent proto=get enumerable=true",
-  "data": "own=absent proto=get enumerable=true"
+  "data": "own=value enumerable=true writable=false proto=get enumerable=true"
  },
  "order": {
   "colorSpace vs pixelFormat": "colorSpace,pixelFormat",

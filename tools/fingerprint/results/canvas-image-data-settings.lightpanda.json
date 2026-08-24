@@ -49,7 +49,7 @@
   "createImageData cs=display-p3": "display-p3 rgba-unorm8 len=4",
   "createImageData pf=rgba-float16": "srgb rgba-float16 len=4 Float16Array",
   "createImageData from ImageData": "display-p3 rgba-unorm8 2x2",
-  "new ImageData(data, w, h, settings)": "throw:TypeError: Failed to construct 'ImageData': The provided value is not of type 'ImageDataSettings'."
+  "new ImageData(data, w, h, settings)": "display-p3 rgba-unorm8 len=4"
  },
- "roundTrip": "00000000 display-p3"
+ "roundTrip": "ea3323ff display-p3"
 }
