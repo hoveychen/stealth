@@ -90,13 +90,6 @@ pub fn Mixin(comptime T: type) type {
             return self._attributes.space();
         }
 
-        /// That space and the bitmap's channel type together, which is what a
-        /// colour has to be resolved against: `colorType: 'float16'` has room
-        /// for a channel that is neither byte-valued nor in gamut.
-        fn format(self: *const T) color.CanvasFormat {
-            return self._attributes.format();
-        }
-
         /// True when the transform maps axis-aligned rectangles to
         /// axis-aligned rectangles, which is every `scale` and `translate`.
         fn upright(ctm: Transform) bool {
@@ -126,7 +119,7 @@ pub fn Mixin(comptime T: type) type {
             // whether Chrome filters before or after the conversion, and on an
             // srgb canvas — every canvas until one asks for display-p3 — the
             // conversion is the identity and the question does not arise.
-            return filter(self).applyTo(style.paint(format(self)));
+            return filter(self).applyTo(style.paint(space(self)));
         }
 
         // --- state stack ---------------------------------------------------
@@ -665,7 +658,7 @@ pub fn Mixin(comptime T: type) type {
                 // will be handed *is* the read's destination.
                 .@"rgba-unorm8" => |data| {
                     const out = data.local(exec.js.local.?).slice();
-                    readInto(self, window, read.color_space, out);
+                    try readInto(self, window, read.color_space, out, exec);
                 },
                 // A float pixel format is a finer *read*, not a finer bitmap:
                 // the un-premultiplication and the colour conversion both
@@ -814,25 +807,62 @@ pub fn Mixin(comptime T: type) type {
             );
         }
 
-        /// The read both pixel formats share: the window's overlap with the
-        /// bitmap, converted out of the bitmap's own space and into the one the
-        /// caller asked for — which are only the same space by default.
+        /// The byte format's read: the window's overlap with the bitmap, in the
+        /// space the caller asked for — which is the bitmap's own only by
+        /// default.
+        ///
+        /// When the two spaces differ the quantisation waits until the end. The
+        /// bitmap is premultiplied, so the read divides the alpha back out
+        /// first, and that quotient is not a byte: rounding it to one before
+        /// converting loses both a fraction and — where the un-premultiplied
+        /// channel lands outside the gamut, which is the whole reason the
+        /// premultiply kept it — the clip. Measured
+        /// (results/canvas-color-notation.chrome.json): `color(display-p3 1
+        /// 0.25 0.5 / 0.5)` on an srgb bitmap stores a red of 139, which is
+        /// 276.8 of 255 once divided back out, and reads `fe407e80` as
+        /// display-p3 where rounding first clamps it to 255 and answers
+        /// `ea3b7e80`.
         fn readInto(
             self: *const T,
             window: Window,
             to: color.CanvasSpace,
             out: []u8,
-        ) void {
-            self._surface.readPixels(
+            exec: *Execution,
+        ) !void {
+            const from = space(self);
+            if (from == to) {
+                self._surface.readPixels(
+                    width(self),
+                    height(self),
+                    window.x,
+                    window.y,
+                    window.width,
+                    window.height,
+                    out,
+                );
+                return;
+            }
+
+            const units = try exec.arena.alloc([4]f32, out.len / 4);
+            // `out` is the fresh array the page will be handed and so already
+            // transparent black; this buffer is not.
+            @memset(units, .{ 0, 0, 0, 0 });
+            self._surface.readUnitPixels(
                 width(self),
                 height(self),
                 window.x,
                 window.y,
                 window.width,
                 window.height,
-                out,
+                units,
             );
-            color.convertCanvasPixels(space(self), to, out);
+            for (units, 0..) |pixel, i| {
+                const rgb = color.convertCanvasUnit(from, to, pixel[0..3].*);
+                out[i * 4 + 0] = color.RGBA.round255(@as(f64, rgb[0]) * 255);
+                out[i * 4 + 1] = color.RGBA.round255(@as(f64, rgb[1]) * 255);
+                out[i * 4 + 2] = color.RGBA.round255(@as(f64, rgb[2]) * 255);
+                out[i * 4 + 3] = color.RGBA.round255(@as(f64, pixel[3]) * 255);
+            }
         }
 
         const Window = struct { x: i32, y: i32, width: u32, height: u32 };
