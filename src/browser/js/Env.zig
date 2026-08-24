@@ -493,6 +493,14 @@ pub fn runMicrotasks(self: *Env) void {
             const ctx = self.contexts.items[i];
             v8.v8__MicrotaskQueue__PerformCheckpoint(ctx.microtask_queue, v8_isolate);
 
+            // The checkpoint is where "still unhandled" becomes knowable: every
+            // handler that was going to arrive in this turn has arrived. A
+            // listener that runs here can queue microtasks of its own, so the
+            // queue gets one more pass.
+            if (ctx.notifyRejectedPromises()) {
+                v8.v8__MicrotaskQueue__PerformCheckpoint(ctx.microtask_queue, v8_isolate);
+            }
+
             if (self.terminatePending()) {
                 if (v8.v8__Isolate__IsExecutionTerminating(v8_isolate)) {
                     for (self.contexts.items) |c| {
@@ -731,21 +739,34 @@ fn promiseRejectCallback(message_handle: v8.PromiseRejectMessage) callconv(.c) v
         .call_arena = ctx.call_arena,
     };
 
-    const no_handler = promise_event == v8.kPromiseRejectWithNoHandler;
+    const rejection: js.PromiseRejection = .{ .local = &local, .handle = &message_handle };
+
+    if (promise_event == v8.kPromiseRejectWithNoHandler) {
+        // Deliberately silent here. The spec announces at the end of the
+        // microtask checkpoint, and a handler attached before then takes the
+        // promise back off the list -- see Context.notifyRejectedPromises.
+        ctx.queueRejection(rejection.promise(), rejection.reason()) catch |err| {
+            log.warn(.browser, "queue promise rejection", .{ .err = err });
+        };
+        return;
+    }
+
+    // A handler arrived. If it beat the drain the announcement is cancelled and
+    // there is nothing to say; otherwise this is the retraction, and it carries
+    // the reason V8 no longer hands back on this event.
+    const announced = ctx.retractRejection(rejection.promise()) orelse return;
+    defer announced.release();
+
+    const promise = announced.promise.local(&local);
+    const reason: ?js.Value = if (announced.reason) |r| r.local(&local) else null;
     switch (ctx.global) {
         .frame => |frame| {
-            frame.window.unhandledPromiseRejection(no_handler, .{
-                .local = &local,
-                .handle = &message_handle,
-            }, frame) catch |err| {
+            frame.window.unhandledPromiseRejection(false, promise, reason, frame) catch |err| {
                 log.warn(.browser, "unhandled rejection handler", .{ .err = err, .target = "window" });
             };
         },
         .worker => |wsg| {
-            wsg.unhandledPromiseRejection(no_handler, .{
-                .local = &local,
-                .handle = &message_handle,
-            }) catch |err| {
+            wsg.unhandledPromiseRejection(false, promise, reason) catch |err| {
                 log.warn(.browser, "unhandled rejection handler", .{ .err = err, .target = "worker" });
             };
         },

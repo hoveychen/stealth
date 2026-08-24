@@ -1336,12 +1336,12 @@ pub fn getWebDriver(_: *const Window) @import("WebDriver.zig") {
     return .{};
 }
 
-pub fn unhandledPromiseRejection(self: *Window, no_handler: bool, rejection: js.PromiseRejection, frame: *Frame) !void {
+pub fn unhandledPromiseRejection(self: *Window, no_handler: bool, promise: js.Promise, reason: ?js.Value, frame: *Frame) !void {
     if (comptime lp.IS_DEBUG) {
         log.debug(.js, "unhandled rejection", .{
             .target = "window",
-            .value = rejection.reason(),
-            .stack = rejection.local.stackTrace() catch |err| @errorName(err) orelse "???",
+            .value = reason,
+            .stack = promise.local.stackTrace() catch |err| @errorName(err) orelse "???",
         });
     }
 
@@ -1354,8 +1354,8 @@ pub fn unhandledPromiseRejection(self: *Window, no_handler: bool, rejection: js.
     const target = self.asEventTarget();
     if (frame._event_manager.hasDirectListeners(target, event_name, null)) {
         const event = (try @import("event/PromiseRejectionEvent.zig").init(event_name, .{
-            .reason = if (rejection.reason()) |r| try r.persist() else null,
-            .promise = try rejection.promise().persist(),
+            .reason = if (reason) |r| try r.persist() else null,
+            .promise = try promise.persist(),
         }, frame._page)).asEvent();
         try frame._event_manager.dispatchDirect(target, event, null, .{ .context = "window.unhandledrejection" });
     }

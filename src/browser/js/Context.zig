@@ -185,6 +185,38 @@ unknown_properties: (if (lp.IS_DEBUG) std.StringHashMapUnmanaged(UnknownProperty
 // CountQueuingStrategy (measured on Chrome 150, win26-chrome.json).
 queuing_strategy_size: [2]?js.Function.Global = .{ null, null },
 
+// Rejected promises V8 has told us about but nobody has heard of yet. The spec
+// keeps this list and drains it at the end of the microtask checkpoint, which
+// is why `Promise.reject(x)` followed one statement later by `.catch()` fires
+// nothing at all: the handler takes the promise back off the list before the
+// drain reaches it. Announcing from the V8 callback instead turns every
+// deliberately-caught rejection into an event, and pages that reject on purpose
+// to read the message back -- a Kasada interstitial does it twenty-five times in
+// a row -- can see the difference.
+pending_rejections: std.ArrayListUnmanaged(Rejection) = .empty,
+
+// Announced, and still unhandled. A handler arriving now is too late to cancel
+// anything, so it produces `rejectionhandled` instead -- carrying the reason
+// kept here, because V8's handler-added callback no longer supplies one.
+announced_rejections: std.ArrayListUnmanaged(Rejection) = .empty,
+
+pub const Rejection = struct {
+    promise: js.Promise.Global,
+    reason: ?js.Value.Global,
+
+    pub fn release(self: Rejection) void {
+        self.promise.release();
+        if (self.reason) |reason| {
+            reason.release();
+        }
+    }
+};
+
+// Chrome holds the announced set weakly, so a promise nothing else references
+// stops being able to produce a `rejectionhandled` at all. We have no weak
+// handle to hold it with; an oldest-first cap bounds the list the same way.
+const max_announced_rejections = 64;
+
 const ModuleEntry = struct {
     // Can be null if we're asynchronously loading the module, in
     // which case resolver_promise cannot be null.
@@ -1188,6 +1220,84 @@ const Entered = struct {
         self.handle_scope.deinit();
     }
 };
+
+/// V8 saw a promise reject with nobody listening. Record it; whether anyone
+/// hears about it is decided at the end of the microtask checkpoint.
+pub fn queueRejection(self: *Context, promise: js.Promise, reason: ?js.Value) !void {
+    const rejection: Rejection = .{
+        .promise = try promise.persist(),
+        .reason = if (reason) |r| try r.persist() else null,
+    };
+    errdefer rejection.release();
+    try self.pending_rejections.append(self.arena.allocator(), rejection);
+}
+
+/// A handler showed up for an already-rejected promise. Before the drain that
+/// cancels the announcement outright and returns null; after it, the
+/// announcement stands and the caller owes the page a `rejectionhandled` built
+/// from the returned record (which it must then `release`).
+pub fn retractRejection(self: *Context, promise: js.Promise) ?Rejection {
+    for (self.pending_rejections.items, 0..) |rejection, i| {
+        if (rejection.promise.isEqual(promise)) {
+            _ = self.pending_rejections.orderedRemove(i);
+            rejection.release();
+            return null;
+        }
+    }
+    for (self.announced_rejections.items, 0..) |rejection, i| {
+        if (rejection.promise.isEqual(promise)) {
+            _ = self.announced_rejections.orderedRemove(i);
+            return rejection;
+        }
+    }
+    return null;
+}
+
+/// The event loop's "notify about rejected promises" step. Anything still on
+/// the list once the checkpoint has drained really is unhandled. Returns true
+/// if a listener ran, so the caller knows another checkpoint is owed.
+pub fn notifyRejectedPromises(self: *Context) bool {
+    if (self.pending_rejections.items.len == 0) {
+        return false;
+    }
+
+    var ls: js.Local.Scope = undefined;
+    self.localScope(&ls);
+    defer ls.deinit();
+
+    // Take the list rather than walking it in place: a listener can reject
+    // another promise, which appends to the very list we are draining.
+    var pending = self.pending_rejections;
+    self.pending_rejections = .empty;
+
+    for (pending.items) |rejection| {
+        const promise = rejection.promise.local(&ls.local);
+        const reason: ?js.Value = if (rejection.reason) |r| r.local(&ls.local) else null;
+        switch (self.global) {
+            .frame => |frame| frame.window.unhandledPromiseRejection(true, promise, reason, frame) catch |err| {
+                log.warn(.browser, "unhandled rejection handler", .{ .err = err, .target = "window" });
+            },
+            .worker => |wsg| wsg.unhandledPromiseRejection(true, promise, reason) catch |err| {
+                log.warn(.browser, "unhandled rejection handler", .{ .err = err, .target = "worker" });
+            },
+        }
+        self.rememberAnnounced(rejection);
+    }
+    pending.deinit(self.arena.allocator());
+    return true;
+}
+
+fn rememberAnnounced(self: *Context, rejection: Rejection) void {
+    if (self.announced_rejections.items.len >= max_announced_rejections) {
+        self.announced_rejections.orderedRemove(0).release();
+    }
+    self.announced_rejections.append(self.arena.allocator(), rejection) catch {
+        // Nothing is lost that the page can observe except a `rejectionhandled`
+        // for a promise handled much later, which Chrome also drops once the
+        // promise is collected.
+        rejection.release();
+    };
+}
 
 pub fn queueMutationDelivery(self: *Context) !void {
     self.enqueueMicrotask(struct {

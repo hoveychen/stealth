@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<script src="../testing.js"></script>
+
+<!--
+  When a rejected promise announces itself is not a detail. The spec keeps a
+  list of about-to-be-notified rejected promises and drains it at the end of the
+  microtask checkpoint, so a promise that picks up a handler before the drain
+  never produces an event at all. Announcing at the moment of rejection instead
+  turns every deliberately-caught rejection into an `unhandledrejection` the
+  page never asked for -- and code that rejects on purpose to read the error
+  message back is not rare: a Kasada interstitial does it twenty-five times in a
+  row, which is twenty-five events Chrome does not fire.
+-->
+
+<script id=rejection_handled_same_turn type=module>
+  {
+    const state = await testing.async();
+
+    const seen = [];
+    const record = (e) => {
+      const m = e.reason && e.reason.message;
+      if (m === 'same-turn' || m === 'await-catch') seen.push([e.type, m]);
+    };
+    addEventListener('unhandledrejection', record);
+    addEventListener('rejectionhandled', record);
+
+    // The handler is one statement later -- still the same turn.
+    const a = Promise.reject(new Error('same-turn'));
+    a.catch(() => {});
+
+    // The shape a rejecting web API call takes in real code: an
+    // already-rejected promise, awaited inside try/catch.
+    (async () => { try { await Promise.reject(new Error('await-catch')); } catch (e) {} })();
+
+    setTimeout(() => state.resolve(), 30);
+    await state.done(() => {
+      removeEventListener('unhandledrejection', record);
+      removeEventListener('rejectionhandled', record);
+      testing.expectEqual('[]', JSON.stringify(seen));
+    });
+  }
+</script>
+
+<script id=rejection_unhandled_and_late_handler type=module>
+  {
+    const state = await testing.async();
+
+    const seen = [];
+    const record = (e) => {
+      const m = e.reason && e.reason.message;
+      if (m === 'never-handled' || m === 'next-task') seen.push([e.type, m]);
+    };
+    addEventListener('unhandledrejection', record);
+    addEventListener('rejectionhandled', record);
+
+    // Nobody ever handles this one: the case that must announce.
+    Promise.reject(new Error('never-handled'));
+
+    // A handler a whole task later is too late to cancel the announcement, so
+    // this one announces and is then retracted -- and the retraction carries
+    // the same reason the announcement did.
+    const d = Promise.reject(new Error('next-task'));
+    setTimeout(() => d.catch(() => {}), 10);
+
+    setTimeout(() => state.resolve(), 40);
+    await state.done(() => {
+      removeEventListener('unhandledrejection', record);
+      removeEventListener('rejectionhandled', record);
+      testing.expectEqual(
+        '[["unhandledrejection","never-handled"],["unhandledrejection","next-task"],["rejectionhandled","next-task"]]',
+        JSON.stringify(seen));
+    });
+  }
+</script>
