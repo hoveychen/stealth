@@ -31,7 +31,7 @@
   "bad colorSpace with good rect": "throw:TypeError: Failed to execute 'getImageData' on 'OffscreenCanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
   "createImageData bad colorSpace": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
   "createImageData gate two": "throw:TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
-  "createImageData from float16": "display-p3 rgba-float16 Uint8ClampedArray",
+  "createImageData from float16": "display-p3 rgba-float16 Float16Array",
   "HTMLCanvasElement getImageData": "throw:TypeError: Failed to execute 'getImageData' on 'CanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
   "HTMLCanvasElement createImageData": "throw:TypeError: Failed to execute 'createImageData' on 'CanvasRenderingContext2D': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace."
  },
