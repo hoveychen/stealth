@@ -131,13 +131,12 @@ insecure origin this suite can reach without a second listener.
       testing.expectEqual(false, w.secure);
       testing.expectEqual('', w.gated.join(' '));
       testing.expectEqual(6, w.ungated.length);
-      // 218 own names on a secure owner (worker/secure_context.html), less the
-      // gated ones this engine has in the worker realm. It was 219 while
-      // WorkerGlobalScope's members were also mirrored onto the global: 22
-      // fewer here against 23 on a secure owner, because the 23rd was the own
-      // copy of cookieStore, which this origin never had -- and cookieStore is
-      // gone from the worker realm entirely now (worker/realm_surface.html).
-      testing.expectEqual(203, w.count);
+      // 211 own names on a secure owner (worker/secure_context.html), less the
+      // 13 gated ones this engine has in the worker realm. The gap to the
+      // secure count is 13 now rather than 14: cookieStore used to be the
+      // fourteenth, and the worker realm does not carry it at all any more
+      // (worker/realm_surface.html).
+      testing.expectEqual(198, w.count);
     });
   }
 </script>

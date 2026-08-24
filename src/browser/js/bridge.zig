@@ -1567,10 +1567,6 @@ const worker_common_apis = [_]type{
     // there. FileSystemSyncAccessHandle itself is Exposed=DedicatedWorker, so it
     // is named in DedicatedWorkerJsApis alone rather than here.
     @import("../webapi/file_system_access.zig"),
-    // The station's trampoline worker feature-detects `self.trustedTypes` in
-    // its first statement, and a Chrome worker carries `caches` beside it.
-    @import("../webapi/trusted_types.zig"),
-    @import("../webapi/storage/cache_storage.zig"),
 };
 
 pub const DedicatedWorkerJsApis = flattenTypes(&([_]type{

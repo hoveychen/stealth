@@ -53,13 +53,6 @@ in results/probes/expr-worker-surface.chrome.json).
       testing.expectEqual('WorkerGlobalScope.prototype', data.holder_crossOriginIsolated);
       testing.expectEqual('boolean', data.typeof_crossOriginIsolated);
 
-      // The station's own trampoline worker feature-detects trustedTypes in its
-      // first statement, and a Chrome worker carries caches next to it.
-      testing.expectEqual('object', data.typeof_trustedTypes);
-      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_trustedTypes);
-      testing.expectEqual('object', data.typeof_caches);
-      testing.expectEqual('WorkerGlobalScope.prototype', data.holder_caches);
-
       // The cookie store is Window and ServiceWorker; a dedicated worker has
       // neither the interface objects nor the member.
       testing.expectEqual('undefined', data.typeof_CookieStore);

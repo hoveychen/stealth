@@ -11685,3 +11685,61 @@ chases them here: `performance` lacks the three `EventTarget` methods in both
 realms (this engine's `Performance` does not inherit `EventTarget`), and the
 `HeadlessChrome`/`Chrome` split in the user agent is this fork's deliberate
 disguise, not a gap.
+
+### What the seven cost, and the one that could not be paid (P3, 2026-08-23)
+
+All seven are closed. Rerun of the same probe against the engine built from this
+branch, worker realm, both arms in one sitting:
+
+| | before | after | Chrome 151 |
+|---|---|---|---|
+| `self` own names | 212 | 211 | 336 |
+| `DedicatedWorkerGlobalScope.prototype` | 1 | **3** | 3 |
+| names our worker has and Chrome's does not | 8 | **4** | — |
+| `navigator` brand | `[object Navigator]` | `[object WorkerNavigator]` | `[object WorkerNavigator]` |
+| window-only members on `navigator` | 9 | **0** | 0 |
+| `self.origin` / `self.name` / `self.crossOriginIsolated` | all `undefined` | the owner's origin / `""` / `false` | same |
+| `location.origin` in a blob worker | `"null"` | the inner origin | the inner origin |
+| `location.host` / `port` / `pathname` | inner URL's | `""` / `""` / whole inner URL | same |
+
+`self` going *down* by one while all of that was added is the leak count paying
+for it: `Navigator`, `CookieStore` and `CookieChangeEvent` left, `WorkerNavigator`
+arrived, `cookieStore` came off the global, and `name` went on.
+
+The four names still ours alone are the two that ride in on a flattened type
+list (`PerformanceNavigation`, `PerformanceTiming`, behind `Performance.zig`) and
+the two `constructor_aliases` (`WebKitCSSMatrix`, `webkitURL`). Neither
+mechanism has a realm gate, which is a bridge change rather than a list edit.
+
+#### A worker realm cannot borrow its owner's Frame
+
+Trusted Types was going to come with this pass, because the station's own
+trampoline worker feature-detects `self.trustedTypes` in its first statement.
+It cannot, and the reason is worth recording as a rule rather than a note.
+
+`Caller.getGlobalArg` answers `unreachable` when a bound member wants a `*Frame`
+and the realm is a worker. A worker *has* a frame — the one that created it, the
+same one its origin, secure-context bit and cross-origin isolation already come
+from — so returning it looks like the obvious repair, and it behaves: the engine
+builds, all 1433 tests pass, and a local page whose blob worker calls
+`trustedTypes.createPolicy('Kssz2', {createScript: …})` gets a policy back.
+
+Against the live station it aborts. With that one line changed and
+`trustedTypes`/`caches` exposed on top of it, `antibot-sweep --only
+cf-scrapingcourse` went from `cf-challenge / 47 nodes / "Just a moment…"` to
+**`CRASHED SIGABRT`**, twice, with the stack ending in the trampoline worker's
+own `onmessage` dispatch. Reverting the line — and only that line, plus the two
+accessors that needed it — restored the control reading exactly: `cf-challenge`,
+`doc=403->200`, 47 nodes. The frame's factory and arenas belong to the page
+thread, and a worker running on its own thread reaching through them is a race
+that a local single-page probe does not provoke.
+
+So: **a member that takes a `*Frame` stays out of the worker realm.** That is
+also the ceiling on the 122-name shortfall — the families in it that resolve
+through a Frame (`gpu`, `usb`, `hid`, `serial`, `locks`, `connection`,
+`mediaCapabilities`, `storageBuckets`, and Trusted Types) need worker-owned state
+before they can be named, not a line in a list.
+
+The challenge still refuses (`cf-challenge`, same verdict as the control), so
+none of this was the deciding property. The realm it asks its questions in now
+answers as a worker rather than as a borrowed window.

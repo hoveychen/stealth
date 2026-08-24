@@ -38,8 +38,6 @@ const global_event_handlers = @import("global_event_handlers.zig");
 const Crypto = @import("Crypto.zig");
 const Console = @import("Console.zig");
 const WorkerNavigator = @import("WorkerNavigator.zig");
-const trusted_types = @import("trusted_types.zig");
-const cache_storage = @import("storage/cache_storage.zig");
 const Timers = @import("Timers.zig");
 // This fork keeps Scheduler, TaskSignal, TaskController and
 // TaskPriorityChangeEvent in one module; `Scheduler.zig` and `scheduler.zig`
@@ -113,8 +111,6 @@ _proto: *EventTarget,
 _console: Console = .init,
 _crypto: Crypto = .init,
 _navigator: WorkerNavigator = .{},
-_trusted_types: trusted_types.TrustedTypePolicyFactory = .{},
-_caches: cache_storage.CacheStorage = .{},
 _performance: Performance,
 _idb_factory: ?*idb.IDBFactory = null,
 _on_error: ?JS.Function.Global = null,
@@ -348,14 +344,6 @@ pub fn getCrypto(self: *WorkerGlobalScope) *Crypto {
 
 pub fn getNavigator(self: *WorkerGlobalScope) *WorkerNavigator {
     return &self._navigator;
-}
-
-pub fn getTrustedTypes(self: *WorkerGlobalScope) *trusted_types.TrustedTypePolicyFactory {
-    return &self._trusted_types;
-}
-
-pub fn getCaches(self: *WorkerGlobalScope) *cache_storage.CacheStorage {
-    return &self._caches;
 }
 
 // The worker's own origin when it has one, otherwise the frame it was created
@@ -726,6 +714,4 @@ pub const JsApi = struct {
     // [Replaceable], so it has a setter as well as a getter.
     pub const origin = bridge.accessor(WorkerGlobalScope.getOrigin, WorkerGlobalScope.setOrigin, .{});
     pub const crossOriginIsolated = bridge.accessor(WorkerGlobalScope.getCrossOriginIsolated, null, .{});
-    pub const trustedTypes = bridge.accessor(WorkerGlobalScope.getTrustedTypes, null, .{});
-    pub const caches = bridge.accessor(WorkerGlobalScope.getCaches, null, .{});
 };

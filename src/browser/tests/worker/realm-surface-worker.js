@@ -52,11 +52,6 @@ self.onmessage = () => {
     origin: self.origin,
     holder_crossOriginIsolated: holderOf('crossOriginIsolated'),
     typeof_crossOriginIsolated: typeof self.crossOriginIsolated,
-    typeof_trustedTypes: typeof self.trustedTypes,
-    holder_trustedTypes: holderOf('trustedTypes'),
-    typeof_caches: typeof self.caches,
-    holder_caches: holderOf('caches'),
-
     // Window-only names that were leaking in.
     typeof_CookieStore: typeof CookieStore,
     typeof_CookieChangeEvent: typeof CookieChangeEvent,

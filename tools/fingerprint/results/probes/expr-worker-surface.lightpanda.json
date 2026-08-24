@@ -18,8 +18,6 @@
      "Boolean",
      "BroadcastChannel",
      "ByteLengthQueuingStrategy",
-     "Cache",
-     "CacheStorage",
      "CanvasGradient",
      "CanvasPattern",
      "CloseEvent",
@@ -149,11 +147,6 @@
      "TextMetrics",
      "TransformStream",
      "TransformStreamDefaultController",
-     "TrustedHTML",
-     "TrustedScript",
-     "TrustedScriptURL",
-     "TrustedTypePolicy",
-     "TrustedTypePolicyFactory",
      "TypeError",
      "URIError",
      "URL",
@@ -237,7 +230,6 @@
     "names": [
      "atob",
      "btoa",
-     "caches",
      "clearInterval",
      "clearTimeout",
      "constructor",
@@ -260,8 +252,7 @@
      "self",
      "setInterval",
      "setTimeout",
-     "structuredClone",
-     "trustedTypes"
+     "structuredClone"
     ]
    },
    {
@@ -306,8 +297,6 @@
    "Boolean": "function/1 c w",
    "BroadcastChannel": "function/1 c w",
    "ByteLengthQueuingStrategy": "function/1 c w",
-   "Cache": "function/0 c w",
-   "CacheStorage": "function/0 c w",
    "CanvasGradient": "function/0 c w",
    "CanvasPattern": "function/0 c w",
    "CloseEvent": "function/1 c w",
@@ -437,11 +426,6 @@
    "TextMetrics": "function/0 c w",
    "TransformStream": "function/0 c w",
    "TransformStreamDefaultController": "function/0 c w",
-   "TrustedHTML": "function/0 c w",
-   "TrustedScript": "function/0 c w",
-   "TrustedScriptURL": "function/0 c w",
-   "TrustedTypePolicy": "function/0 c w",
-   "TrustedTypePolicyFactory": "function/0 c w",
    "TypeError": "function/1 c w",
    "URIError": "function/1 c w",
    "URL": "function/1 c w",
@@ -576,16 +560,6 @@
     "name": "ByteLengthQueuingStrategy",
     "length": 1,
     "proto_own": 3
-   },
-   "Cache": {
-    "name": "Cache",
-    "length": 0,
-    "proto_own": 8
-   },
-   "CacheStorage": {
-    "name": "CacheStorage",
-    "length": 0,
-    "proto_own": 6
    },
    "CanvasGradient": {
     "name": "CanvasGradient",
@@ -1202,31 +1176,6 @@
     "length": 0,
     "proto_own": 4
    },
-   "TrustedHTML": {
-    "name": "TrustedHTML",
-    "length": 0,
-    "proto_own": 3
-   },
-   "TrustedScript": {
-    "name": "TrustedScript",
-    "length": 0,
-    "proto_own": 3
-   },
-   "TrustedScriptURL": {
-    "name": "TrustedScriptURL",
-    "length": 0,
-    "proto_own": 3
-   },
-   "TrustedTypePolicy": {
-    "name": "TrustedTypePolicy",
-    "length": 0,
-    "proto_own": 5
-   },
-   "TrustedTypePolicyFactory": {
-    "name": "TrustedTypePolicyFactory",
-    "length": 0,
-    "proto_own": 11
-   },
    "TypeError": {
     "name": "TypeError",
     "length": 1,
@@ -1410,7 +1359,7 @@
    "WorkerGlobalScope": {
     "name": "WorkerGlobalScope",
     "length": 0,
-    "proto_own": 27
+    "proto_own": 25
    },
    "WorkerLocation": {
     "name": "WorkerLocation",
@@ -1535,18 +1484,18 @@
   },
   "values": {
    "location": {
-    "href": "blob:http://127.0.0.1:57445/376fe819-5235-451a-899a-d34b98f77d3a",
-    "origin": "http://127.0.0.1:57445",
+    "href": "blob:http://127.0.0.1:61099/a4b40a4b-8a96-4358-ba45-7da77ff9b218",
+    "origin": "http://127.0.0.1:61099",
     "protocol": "blob:",
     "host": "",
     "hostname": "",
     "port": "",
-    "pathname": "http://127.0.0.1:57445/376fe819-5235-451a-899a-d34b98f77d3a",
+    "pathname": "http://127.0.0.1:61099/a4b40a4b-8a96-4358-ba45-7da77ff9b218",
     "search": "",
     "hash": ""
    },
-   "location_string": "blob:http://127.0.0.1:57445/376fe819-5235-451a-899a-d34b98f77d3a",
-   "origin": "http://127.0.0.1:57445",
+   "location_string": "blob:http://127.0.0.1:61099/a4b40a4b-8a96-4358-ba45-7da77ff9b218",
+   "origin": "http://127.0.0.1:61099",
    "isSecureContext": true,
    "crossOriginIsolated": false,
    "self_name": "",
@@ -9091,18 +9040,18 @@
   },
   "values": {
    "location": {
-    "href": "http://127.0.0.1:57445/",
-    "origin": "http://127.0.0.1:57445",
+    "href": "http://127.0.0.1:61099/",
+    "origin": "http://127.0.0.1:61099",
     "protocol": "http:",
-    "host": "127.0.0.1:57445",
+    "host": "127.0.0.1:61099",
     "hostname": "127.0.0.1",
-    "port": "57445",
+    "port": "61099",
     "pathname": "/",
     "search": "",
     "hash": ""
    },
-   "location_string": "http://127.0.0.1:57445/",
-   "origin": "http://127.0.0.1:57445",
+   "location_string": "http://127.0.0.1:61099/",
+   "origin": "http://127.0.0.1:61099",
    "isSecureContext": true,
    "crossOriginIsolated": false,
    "self_name": "",
