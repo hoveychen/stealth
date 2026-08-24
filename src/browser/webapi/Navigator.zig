@@ -278,53 +278,53 @@ pub fn getUserAgentData(self: *Navigator) *NavigatorUAData {
 
 // Creates the service object on first read and hands back the same one after
 // that, the way Chrome does.
-fn service(comptime T: type, slot: *?*T, frame: *Frame) !*T {
+fn service(comptime T: type, slot: *?*T, exec: *Execution) !*T {
     if (slot.*) |existing| {
         return existing;
     }
-    const created = try frame._factory.create(T{});
+    const created = try exec._factory.create(T{});
     slot.* = created;
     return created;
 }
 
-pub fn getScheduling(self: *Navigator, frame: *Frame) !*services.Scheduling {
-    return service(services.Scheduling, &self._scheduling, frame);
+pub fn getScheduling(self: *Navigator, exec: *Execution) !*services.Scheduling {
+    return service(services.Scheduling, &self._scheduling, exec);
 }
 
-pub fn getUserActivation(self: *Navigator, frame: *Frame) !*services.UserActivation {
-    return service(services.UserActivation, &self._user_activation, frame);
+pub fn getUserActivation(self: *Navigator, exec: *Execution) !*services.UserActivation {
+    return service(services.UserActivation, &self._user_activation, exec);
 }
 
-pub fn getGeolocation(self: *Navigator, frame: *Frame) !*geo.Geolocation {
-    return service(geo.Geolocation, &self._geolocation, frame);
+pub fn getGeolocation(self: *Navigator, exec: *Execution) !*geo.Geolocation {
+    return service(geo.Geolocation, &self._geolocation, exec);
 }
 
-pub fn getProtectedAudience(self: *Navigator, frame: *Frame) !*services.ProtectedAudience {
-    return service(services.ProtectedAudience, &self._protected_audience, frame);
+pub fn getProtectedAudience(self: *Navigator, exec: *Execution) !*services.ProtectedAudience {
+    return service(services.ProtectedAudience, &self._protected_audience, exec);
 }
 
-pub fn getCredentials(self: *Navigator, frame: *Frame) !*credential.CredentialsContainer {
-    return service(credential.CredentialsContainer, &self._credentials, frame);
+pub fn getCredentials(self: *Navigator, exec: *Execution) !*credential.CredentialsContainer {
+    return service(credential.CredentialsContainer, &self._credentials, exec);
 }
 
-pub fn getLogin(self: *Navigator, frame: *Frame) !*services.NavigatorLogin {
-    return service(services.NavigatorLogin, &self._login, frame);
+pub fn getLogin(self: *Navigator, exec: *Execution) !*services.NavigatorLogin {
+    return service(services.NavigatorLogin, &self._login, exec);
 }
 
-pub fn getMediaCapabilities(self: *Navigator, frame: *Frame) !*services.MediaCapabilities {
-    return service(services.MediaCapabilities, &self._media_capabilities, frame);
+pub fn getMediaCapabilities(self: *Navigator, exec: *Execution) !*services.MediaCapabilities {
+    return service(services.MediaCapabilities, &self._media_capabilities, exec);
 }
 
-pub fn getMediaSession(self: *Navigator, frame: *Frame) !*services.MediaSession {
-    return service(services.MediaSession, &self._media_session, frame);
+pub fn getMediaSession(self: *Navigator, exec: *Execution) !*services.MediaSession {
+    return service(services.MediaSession, &self._media_session, exec);
 }
 
-pub fn getPresentation(self: *Navigator, frame: *Frame) !*presentation.Presentation {
-    return service(presentation.Presentation, &self._presentation, frame);
+pub fn getPresentation(self: *Navigator, exec: *Execution) !*presentation.Presentation {
+    return service(presentation.Presentation, &self._presentation, exec);
 }
 
-pub fn getGpu(self: *Navigator, frame: *Frame) !*services.GPU {
-    return service(services.GPU, &self._gpu, frame);
+pub fn getGpu(self: *Navigator, exec: *Execution) !*services.GPU {
+    return service(services.GPU, &self._gpu, exec);
 }
 
 // Same lazy caching as `service`, but through the factory's prototype-chain
@@ -338,8 +338,8 @@ fn device(comptime T: type, slot: *?*T, frame: *Frame) !*T {
     return created;
 }
 
-pub fn getWakeLock(self: *Navigator, frame: *Frame) !*devices.WakeLock {
-    return service(devices.WakeLock, &self._wake_lock, frame);
+pub fn getWakeLock(self: *Navigator, exec: *Execution) !*devices.WakeLock {
+    return service(devices.WakeLock, &self._wake_lock, exec);
 }
 
 pub fn getWindowControlsOverlay(self: *Navigator, frame: *Frame) !*devices.WindowControlsOverlay {
@@ -386,20 +386,20 @@ pub fn getXr(self: *Navigator, frame: *Frame) !*devices.XRSystem {
     return device(devices.XRSystem, &self._xr, frame);
 }
 
-pub fn getKeyboard(self: *Navigator, frame: *Frame) !*services.Keyboard {
-    return service(services.Keyboard, &self._keyboard, frame);
+pub fn getKeyboard(self: *Navigator, exec: *Execution) !*services.Keyboard {
+    return service(services.Keyboard, &self._keyboard, exec);
 }
 
-pub fn getLocks(self: *Navigator, frame: *Frame) !*services.LockManager {
-    return service(services.LockManager, &self._locks, frame);
+pub fn getLocks(self: *Navigator, exec: *Execution) !*services.LockManager {
+    return service(services.LockManager, &self._locks, exec);
 }
 
-pub fn getInk(self: *Navigator, frame: *Frame) !*services.Ink {
-    return service(services.Ink, &self._ink, frame);
+pub fn getInk(self: *Navigator, exec: *Execution) !*services.Ink {
+    return service(services.Ink, &self._ink, exec);
 }
 
-pub fn getStorageBuckets(self: *Navigator, frame: *Frame) !*services.StorageBucketManager {
-    return service(services.StorageBucketManager, &self._storage_buckets, frame);
+pub fn getStorageBuckets(self: *Navigator, exec: *Execution) !*services.StorageBucketManager {
+    return service(services.StorageBucketManager, &self._storage_buckets, exec);
 }
 
 // Two distinct objects, one per quota pool, as on Chrome — but both quoting the

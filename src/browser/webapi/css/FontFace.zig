@@ -20,7 +20,8 @@ const lp = @import("lightpanda");
 
 const js = @import("../../js/js.zig");
 const Page = @import("../../Page.zig");
-const Frame = @import("../../Frame.zig");
+
+const Execution = js.Execution;
 
 const FontFace = @This();
 
@@ -42,10 +43,10 @@ _variant: []const u8 = "normal",
 _feature_settings: []const u8 = "normal",
 _display: []const u8 = "auto",
 
-pub fn init(family: []const u8, source: []const u8, frame: *Frame) !*FontFace {
+pub fn init(family: []const u8, source: []const u8, exec: *const Execution) !*FontFace {
     _ = source;
 
-    const arena = try frame.getArena(.tiny, "FontFace");
+    const arena = try exec.getArena(.tiny, "FontFace");
     errdefer arena.release();
 
     const self = try arena.create(FontFace);
@@ -155,13 +156,13 @@ pub fn getStatus(_: *const FontFace) []const u8 {
 }
 
 // load() - resolves immediately; headless browser has no real font loading.
-pub fn load(_: *FontFace, frame: *Frame) !js.Promise {
-    return frame.js.local.?.resolvePromise({});
+pub fn load(_: *FontFace, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
 }
 
 // loaded - returns an already-resolved Promise.
-pub fn getLoaded(_: *FontFace, frame: *Frame) !js.Promise {
-    return frame.js.local.?.resolvePromise({});
+pub fn getLoaded(_: *FontFace, exec: *const Execution) !js.Promise {
+    return exec.js.local.?.resolvePromise({});
 }
 
 pub const JsApi = struct {

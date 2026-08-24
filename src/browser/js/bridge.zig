@@ -1578,10 +1578,30 @@ const worker_common_apis = [_]type{
     // handed its owner's Frame -- see the comment on getGlobalArg in Caller.zig,
     // which is a live SIGABRT on the Cloudflare station and not a style
     // preference -- so the Frame-taking families stay out even though Chrome's
-    // worker has them: WebGPU (GPU.wgslLanguageFeatures), the font families,
-    // MediaSource, and the typed-OM transform components. Trusted Types was in
-    // that list until its members were converted to take an `*Execution`, which
-    // is the escape hatch every one of the rest should be re-audited against.
+    // worker has them: the typed-OM transform components and nested Worker.
+    // Trusted Types, WebGPU, MSE, the storage buckets, the font families and the
+    // sandboxed filesystem were all on that list until their members were
+    // converted to take an `*Execution`. The question to ask of a `*Frame` is
+    // never "can a worker have one" -- it cannot -- but "what is this member
+    // reaching through it for": a factory, an arena, the isolate, a local
+    // handle, a listener list and a global's own slots are all per-realm and all
+    // reachable from the Execution, and only a member that wants the DOM, the
+    // frame's navigation state or its loader is really blocked.
+    //
+    // What that audit left out, and why:
+    //
+    // - `Worker` (nested workers). Genuinely frame-scoped: `Worker.init` takes
+    //   the session off the frame, resolves against the frame's base URL, calls
+    //   `frame.newRequest` to fetch the script and `frame.trackWorker` to
+    //   register it. Spawning from a worker needs a worker-side spawn path, not
+    //   an argument change.
+    // - `CSSSkewX`/`CSSSkewY`. Convertible in principle -- typed_om.zig's 112
+    //   `frame: *Frame` signatures want `js`, `local_arena`, `_factory`,
+    //   `dupeString`, `arena`, `call_arena` and `_page`, every one of which is
+    //   on the Execution -- but Chrome exposes exactly these two of the whole
+    //   typed-OM family in a worker and none of their prototype chain
+    //   (CSSTransformComponent, CSSStyleValue), so matching it is not just a
+    //   mechanical conversion of the largest file in the audit.
     //
     // WebCodecs: the encode/decode pipeline is the reason a page moves media
     // work into a worker at all, so all four codecs and every chunk and frame
@@ -1590,6 +1610,22 @@ const worker_common_apis = [_]type{
     @import("../webapi/webcodecs/codecs.zig"),
     @import("../webapi/webcodecs/frames.zig"),
     @import("../webapi/webcodecs/image_decoder.zig"),
+    // MSE-in-Worker. A dedicated worker is the only realm Chrome lets a
+    // MediaSource be constructed in at all -- `canConstructInDedicatedWorker`
+    // is a static that exists to say so -- so this family being absent here was
+    // the surface contradicting its own static. Its two list accessors took a
+    // `*Page`, which a worker realm *can* be handed, and that was the trap: the
+    // page's factory is the page's, so the SourceBufferList would have come
+    // back branded in the owner's realm. Through the Execution it is this
+    // realm's.
+    @import("../webapi/media/MediaSource.zig"),
+    // The font families. `FontFaceSet.load` dispatches two events, and the
+    // listener list it dispatched into was the frame's -- through
+    // `GlobalScope.eventManagerBase()` it is this realm's, which is what an
+    // EventTarget exposed in two realms needs. FontFaceSetLoadEvent is
+    // Window-only and lives in event/css_events.zig, so it does not travel.
+    @import("../webapi/css/FontFace.zig"),
+    @import("../webapi/css/FontFaceSet.zig"),
     // An ImageBitmap is the transferable image handle a worker decodes into,
     // and its canvas context comes along with it.
     @import("../webapi/canvas/ImageBitmap.zig"),
@@ -1629,21 +1665,37 @@ const worker_common_apis = [_]type{
     @import("../webapi/service_worker.zig").SyncManager,
     @import("../webapi/service_worker.zig").PeriodicSyncManager,
     @import("../webapi/service_worker.zig").NavigationPreloadManager,
-    // Five of navigator/services.zig's seventeen. The file is not importable
-    // whole for two separate reasons, and both are the Frame rule: `GPU` has
-    // `wgslLanguageFeatures`, which takes one outright, and `StorageBucket` has
-    // `indexedDB`, which reaches `global.frame` through the Execution on the
-    // stated assumption that the global is a Frame -- so its bucket manager
-    // stays out with it. The other twelve types the file registers are
-    // window-only anyway.
+    // Eight of navigator/services.zig's seventeen. The other nine the file
+    // registers are window-only, which is the only reason it is still named
+    // type by type rather than imported whole.
     @import("../webapi/navigator/services.zig").Lock,
     @import("../webapi/navigator/services.zig").LockManager,
     @import("../webapi/navigator/services.zig").MediaCapabilities,
     @import("../webapi/navigator/services.zig").UserActivation,
+    // The bucket family. `StorageBucket.indexedDB` used to reach
+    // `exec.js.global.frame.window` -- past the union, on the stated assumption
+    // that the global is always a Frame. Both arms of that union answer
+    // `getIndexedDB`, so switching on it is the whole fix, and a bucket in a
+    // worker now shares the worker's factory rather than the owner window's.
+    @import("../webapi/navigator/services.zig").StorageBucket,
+    @import("../webapi/navigator/services.zig").StorageBucketManager,
+    // `GPU` was the seventh reason this file could not travel whole: its
+    // `wgslLanguageFeatures` took a `*Frame`. It wanted the Frame's `_factory`
+    // and nothing else, and every Execution carries one, so the accessor takes
+    // an `*Execution` now and the whole WebGPU family comes with it. A worker is
+    // where a page does its GPU compute, and Chrome exposes all 40 interface
+    // objects plus `navigator.gpu` here (measured).
+    @import("../webapi/navigator/services.zig").GPU,
     @import("../webapi/navigator/services.zig").WGSLLanguageFeatures,
     @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.KeyIterator,
     @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.ValueIterator,
     @import("../webapi/navigator/services.zig").WGSLLanguageFeatures.EntryIterator,
+    @import("../webapi/webgpu/constants.zig"),
+    @import("../webapi/webgpu/adapter.zig"),
+    @import("../webapi/webgpu/device.zig"),
+    @import("../webapi/webgpu/resources.zig"),
+    @import("../webapi/webgpu/pipeline.zig"),
+    @import("../webapi/webgpu/errors.zig"),
     // Trusted Types, which used to be the ceiling: every member of the factory
     // took a `*Frame`, and a worker cannot be handed one. They take an
     // `*Execution` now, which Env.zig builds per context out of that context's

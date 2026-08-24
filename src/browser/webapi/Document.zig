@@ -802,11 +802,11 @@ pub fn getStyleSheets(self: *Document, frame: *Frame) !*StyleSheetList {
     return sheets;
 }
 
-pub fn getFonts(self: *Document, frame: *Frame) !*FontFaceSet {
+pub fn getFonts(self: *Document, exec: *const js.Execution) !*FontFaceSet {
     if (self._fonts) |fonts| {
         return fonts;
     }
-    const fonts = try FontFaceSet.init(frame);
+    const fonts = try FontFaceSet.init(exec);
     fonts.acquireRef();
     self._fonts = fonts;
     return fonts;

@@ -7,8 +7,43 @@
 // under test: an unguarded `WorkerNavigator.prototype` would throw before the
 // message is posted and the failure would arrive as a timeout instead of as an
 // assertion.
-self.onmessage = () => {
+self.onmessage = async () => {
   const ask = (fn) => { try { return fn(); } catch (e) { return 'threw: ' + e.name; } };
+
+  // The one reading here that needs a turn of the microtask queue: a bucket
+  // arrives through a promise, and `bucket.indexedDB` is the member that used
+  // to assume the global was a Frame.
+  let bucket = null;
+  try {
+    bucket = await navigator.storageBuckets.open('kssz-bucket');
+  } catch { /* left null, and reported as such */ }
+
+  // The sandboxed filesystem answers through callbacks, so it needs a turn too.
+  // Two requests for the same quota type hand back the same object, and the
+  // name it reports is built from this realm's origin.
+  let fs_name = 'threw';
+  let fs_identity = 'threw';
+  let fs_resolved = 'threw';
+  try {
+    const ask1 = new Promise((ok, no) => self.webkitRequestFileSystem(0, 0, ok, no));
+    const ask2 = new Promise((ok, no) => self.webkitRequestFileSystem(0, 0, ok, no));
+    const [fs1, fs2] = await Promise.all([ask1, ask2]);
+    fs_name = fs1.name;
+    fs_identity = fs1 === fs2;
+    const entry = await new Promise((ok, no) =>
+      self.webkitResolveLocalFileSystemURL(fs1.root.toURL(), ok, no));
+    fs_resolved = entry.fullPath + ':' + entry.isDirectory;
+  } catch (e) { fs_name = 'threw: ' + e.name; }
+
+  // Same, for the two font promises. `fonts.load` is the member that dispatches
+  // into this realm's listener list rather than the owner's.
+  let fonts_loaded = 'threw';
+  try {
+    self.fonts.addEventListener('loading', () => { fonts_loaded += ':loading'; });
+    await self.fonts.load('12px Kssz');
+    await self.fonts.ready;
+    fonts_loaded = 'ok' + fonts_loaded.slice('threw'.length);
+  } catch (e) { fonts_loaded = 'threw: ' + e.name; }
 
   const holderOf = (name) => {
     if (Object.prototype.hasOwnProperty.call(self, name)) return 'self';
@@ -72,14 +107,113 @@ self.onmessage = () => {
       'PushManager', 'Lock', 'LockManager', 'MediaCapabilities',
       'UserActivation', 'WGSLLanguageFeatures',
     ].filter((n) => typeof self[n] !== 'function').join(','),
-    // The families that have to stay out: a member of each wants the owner's
-    // Frame -- most of them take one outright, StorageBucket.indexedDB reaches
-    // for it through the Execution -- and a worker realm cannot be handed one.
-    // Chrome's worker has all of these, so this is a measured shortfall rather
-    // than a match: closing it needs worker-owned state, not another name in a
-    // list.
-    frame_bound: ['GPU', 'StorageBucket', 'FontFace',
-      'MediaSource', 'CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+    // The two that stay out, and for two different reasons. `Worker` is
+    // genuinely frame-scoped -- spawning one goes through the frame's loader and
+    // worker registry. `CSSSkewX` is not, but Chrome exposes it and CSSSkewY
+    // without their prototype chain, so matching it is more than the mechanical
+    // conversion the rest of this file's families got. Both are a measured
+    // shortfall against Chrome's worker, not a match.
+    frame_bound: ['CSSSkewX', 'Worker'].filter((n) => n in self).join(','),
+
+    // The sandboxed filesystem. Chrome's worker carries the two async
+    // operations as own enumerable functions of the global and names none of
+    // the entry interfaces -- neither realm does, there or here. `forKind` kept
+    // its two filesystems on `exec.js.global.frame.window`, which is the reach
+    // that had to go.
+    webkit_fs: ['webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL']
+      .map((n) => kindOf(self, n)).join(' '),
+    webkit_fs_arity: ask(() => ['webkitRequestFileSystem', 'webkitResolveLocalFileSystemURL']
+      .map((n) => self[n].length).join(',')),
+    webkit_fs_name: fs_name,
+    webkit_fs_identity: fs_identity,
+    webkit_fs_resolved: fs_resolved,
+
+    // The font families. What they wanted the Frame for was an arena, the
+    // factory and -- in `FontFaceSet.load` -- somewhere to dispatch two events;
+    // an Execution has the first two and `GlobalScope.eventManagerBase()` is
+    // the listener list of whichever realm is asking. `self.fonts` is a
+    // WorkerGlobalScope.prototype member on Chrome.
+    font_family: ['FontFace', 'FontFaceSet']
+      .filter((n) => typeof self[n] !== 'function').join(','),
+    // FontFaceSetLoadEvent is Window-only: it must not travel with them.
+    typeof_FontFaceSetLoadEvent: typeof FontFaceSetLoadEvent,
+    fonts_holder: holderOf('fonts'),
+    fonts_brand: ask(() => Object.prototype.toString.call(self.fonts)),
+    fonts_identity: ask(() => self.fonts === self.fonts),
+    fonts_status: ask(() => self.fonts.status),
+    fonts_size: ask(() => self.fonts.size),
+    // The load path, which is the one that reaches for a listener list.
+    fonts_loaded: fonts_loaded,
+    font_face_family: ask(() => new FontFace('Kssz', 'local(Arial)').family),
+    font_face_style: ask(() => new FontFace('Kssz', 'local(Arial)').style),
+
+    // Storage buckets. Only one member of the family reached for the owner --
+    // `StorageBucket.indexedDB`, through `exec.js.global.frame.window` on the
+    // stated assumption that the global is always a Frame. Both globals answer
+    // `getIndexedDB`, so the assumption was the bug: a bucket in a worker
+    // shares the worker's factory, which is what `self.indexedDB` is.
+    bucket_family: ['StorageBucket', 'StorageBucketManager']
+      .filter((n) => typeof self[n] !== 'function').join(','),
+    bucket_manager_brand: ask(() =>
+      Object.prototype.toString.call(navigator.storageBuckets)),
+    bucket_brand: bucket === null ? 'null' : Object.prototype.toString.call(bucket),
+    bucket_name: ask(() => bucket.name),
+    bucket_idb_brand: ask(() => Object.prototype.toString.call(bucket.indexedDB)),
+    bucket_idb_is_realms: ask(() => bucket.indexedDB === self.indexedDB),
+
+    // Media Source Extensions. Its accessors wanted a `*Page` rather than a
+    // `*Frame`, which a worker realm can be handed -- but the page's factory is
+    // the page's, and an object branded there and handed back here would be the
+    // cross-realm bug the Frame rule exists to prevent. Through the Execution
+    // the source buffer list is this realm's own. `MediaSource
+    // .canConstructInDedicatedWorker` is the static that says so.
+    mse_family: ['MediaSource', 'MediaSourceHandle', 'SourceBuffer',
+      'SourceBufferList'].filter((n) => typeof self[n] !== 'function').join(','),
+    mse_can_construct: ask(() => MediaSource.canConstructInDedicatedWorker),
+    mse_buffers_brand: ask(() =>
+      Object.prototype.toString.call(new MediaSource().sourceBuffers)),
+    mse_buffers_identity: ask(() => {
+      const ms = new MediaSource();
+      return ms.sourceBuffers === ms.sourceBuffers
+        && ms.sourceBuffers !== ms.activeSourceBuffers;
+    }),
+    mse_buffers_length: ask(() => new MediaSource().sourceBuffers.length),
+
+    // WebGPU, all 40 interface objects Chrome's worker carries. The family used
+    // to be Frame-bound off a single member -- GPU.wgslLanguageFeatures created
+    // through `frame._factory` -- and a worker realm cannot be handed a Frame.
+    // The factory it wanted is on the Execution, which Env builds per context,
+    // so the whole family travels once that one signature changes.
+    gpu_family: ['GPU', 'GPUAdapter', 'GPUAdapterInfo', 'GPUBindGroup',
+      'GPUBindGroupLayout', 'GPUBuffer', 'GPUBufferUsage', 'GPUCanvasContext',
+      'GPUColorWrite', 'GPUCommandBuffer', 'GPUCommandEncoder',
+      'GPUCompilationInfo', 'GPUCompilationMessage', 'GPUComputePassEncoder',
+      'GPUComputePipeline', 'GPUDevice', 'GPUDeviceLostInfo', 'GPUError',
+      'GPUExternalTexture', 'GPUInternalError', 'GPUMapMode',
+      'GPUOutOfMemoryError', 'GPUPipelineError', 'GPUPipelineLayout',
+      'GPUQuerySet', 'GPUQueue', 'GPURenderBundle', 'GPURenderBundleEncoder',
+      'GPURenderPassEncoder', 'GPURenderPipeline', 'GPUSampler',
+      'GPUShaderModule', 'GPUShaderStage', 'GPUSupportedFeatures',
+      'GPUSupportedLimits', 'GPUTexture', 'GPUTextureUsage', 'GPUTextureView',
+      'GPUUncapturedErrorEvent', 'GPUValidationError',
+    ].filter((n) => !(n in self)).join(','),
+    // Five of the 40 are namespace objects holding the bitflag constants rather
+    // than interface objects, on Chrome as much as here.
+    gpu_namespaces: ['GPUBufferUsage', 'GPUColorWrite', 'GPUMapMode',
+      'GPUShaderStage', 'GPUTextureUsage'].map((n) => typeof self[n]).join(','),
+    gpu_interfaces: ['GPU', 'GPUAdapter', 'GPUDevice', 'GPUQueue', 'GPUBuffer',
+      'GPUTexture', 'GPUCommandEncoder', 'GPUShaderModule', 'GPUValidationError',
+    ].filter((n) => typeof self[n] !== 'function').join(','),
+    // And the round trip that proves the factory is the worker's own: reading
+    // `navigator.gpu` creates a GPU here, and reading its wgslLanguageFeatures
+    // creates a branded set that keeps its identity across reads.
+    nav_gpu_brand: ask(() => Object.prototype.toString.call(navigator.gpu)),
+    gpu_canvas_format: ask(() => navigator.gpu.getPreferredCanvasFormat()),
+    wgsl_brand: ask(() =>
+      Object.prototype.toString.call(navigator.gpu.wgslLanguageFeatures)),
+    wgsl_identity: ask(() =>
+      navigator.gpu.wgslLanguageFeatures === navigator.gpu.wgslLanguageFeatures),
+    wgsl_has_f16: ask(() => navigator.gpu.wgslLanguageFeatures.has('readonly_and_readwrite_storage_textures')),
 
     // Trusted Types, which is the one the station reads: its trampoline
     // worker's first statement is `if (self.trustedTypes)`. The whole round
