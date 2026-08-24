@@ -37,6 +37,21 @@ const jsonPath = path.join(repo, 'tools/fingerprint/results/reference-chrome-fon
 const GENERICS = ['sans-serif', 'serif', 'monospace'];
 const SWEPT_SIZES = 120;
 
+// The tabulated range. It used to stop at U+007E; the Turnstile widget measures
+// the UTF-8 bytes of an emoji read back as Latin-1, so U+0080..U+00FF is a
+// fingerprint surface too and every code point up to U+00FF is measured now.
+//
+// The three tests below that decide *which families are in the table at all* --
+// resolves, fullCoverage, and the alias key -- stay on the ASCII prefix. That
+// is deliberate: the font list is what a probe enumerates, it was settled
+// against the 65-name fingerprintjs list on the ASCII range, and widening the
+// comparison would silently move it. ASCII decides who is in; the whole range
+// is what they report.
+const FIRST = 32;
+const LAST = 255;
+const ASCII_LAST = 126;
+const ASCII_COUNT = ASCII_LAST - FIRST + 1;
+
 // Names a stylesheet or a probe can resolve that are not installed *families*:
 // the remaining CSS generics, the ui-* keywords, the two system-font aliases
 // every framework ships, and the legacy PostScript-era names Chrome still maps.
@@ -78,15 +93,17 @@ async function installedFamilies() {
     return [...families].sort();
 }
 
-// One family's whole table. Runs in the page so the 95 advances, their ink
-// boxes and the 120-size sweep are one round trip rather than 335.
+// One family's whole table. Runs in the page so the 224 advances, their ink
+// boxes and the 120-size sweep are one round trip rather than 464.
 const measure = (family, quoted) => `(() => {
   const ctx = document.createElement('canvas').getContext('2d');
+  const EM = 100;
+  const chr = (c) => String.fromCharCode(c);
   const advances = (font) => {
     ctx.font = font;
     const out = [];
-    for (let c = 32; c < 127; c++) {
-      const m = ctx.measureText(String.fromCharCode(c));
+    for (let c = ${FIRST}; c <= ${LAST}; c++) {
+      const m = ctx.measureText(chr(c));
       out.push([m.width, m.actualBoundingBoxLeft, m.actualBoundingBoxRight, m.actualBoundingBoxAscent, m.actualBoundingBoxDescent]);
     }
     return out;
@@ -105,6 +122,60 @@ const measure = (family, quoted) => `(() => {
     'sans-serif': advances('100px ${quoted}, sans-serif'),
     serif: advances('100px ${quoted}, serif'),
   };
+  // Blink chooses one fallback font per run, seeded by the first character the
+  // primary font cannot draw, and keeps it for the whole run. A character no
+  // font on the host draws at all seeds the last resort font, which then
+  // covers every later fallback-drawn character at a flat em apiece -- so a
+  // code point's advance is not always the one it has alone. At 16px
+  // sans-serif U+0098 U+0080 is 32 where U+0080 alone is 8.898, and that 7.102
+  // is what made three of the Turnstile widget's ten strings wider than the
+  // sum of their parts.
+  //
+  // Two passes, both measurements. The leader is bootstrapped by shape --
+  // within this range only a glyph-less C1 control is an em wide with no ink,
+  // where U+00C6 is an em wide but has ink -- and everything after that is
+  // read off the canvas.
+  ctx.font = '100px ${quoted}';
+  const blank = (g) => Math.abs(g[0] - EM) < 1e-6 && !g[1] && !g[2] && !g[3] && !g[4];
+  let leader = -1;
+  for (let c = 0x80; c <= 0x9f; c++) if (blank(glyphs[c - ${FIRST}])) { leader = c; break; }
+
+  // Pass one: what every code point costs behind that leader, which is to say
+  // once the run is already on the last resort font.
+  let behind = null, seeds = null, witness = -1;
+  if (leader >= 0) {
+    const lead = chr(leader);
+    const leadWidth = ctx.measureText(lead).width;
+    behind = [];
+    for (let c = ${FIRST}; c <= ${LAST}; c++) {
+      const m = ctx.measureText(lead + chr(c));
+      // Advance is the pair less the leader; the ink box is shifted back over
+      // the leader's advance so it means the same thing as a lone glyph's.
+      behind.push([
+        m.width - leadWidth,
+        m.actualBoundingBoxLeft + leadWidth,
+        m.actualBoundingBoxRight - leadWidth,
+        m.actualBoundingBoxAscent,
+        m.actualBoundingBoxDescent,
+      ]);
+    }
+    // Pass two: which code points seed the last resort. The witness is any
+    // code point that just proved its advance moves behind the leader, so
+    // asking "does putting c in front of the witness cost the witness its
+    // glyph" measures the property directly instead of inferring it.
+    witness = behind.findIndex((b, i) => Math.abs(b[0] - glyphs[i][0]) > 1e-6);
+    if (witness >= 0) {
+      const mark = chr(witness + ${FIRST});
+      const markAlone = glyphs[witness][0];
+      seeds = [];
+      for (let c = ${FIRST}; c <= ${LAST}; c++) {
+        const own = ctx.measureText(chr(c)).width;
+        const pair = ctx.measureText(chr(c) + mark).width;
+        seeds.push(Math.abs(pair - own - markAlone) > 1e-6);
+      }
+    }
+  }
+
   const ascents = [], descents = [];
   for (let size = 1; size <= ${SWEPT_SIZES}; size++) {
     ctx.font = size + 'px ${quoted}';
@@ -112,7 +183,7 @@ const measure = (family, quoted) => `(() => {
     ascents.push(m.fontBoundingBoxAscent);
     descents.push(m.fontBoundingBoxDescent);
   }
-  return JSON.stringify({ family: ${JSON.stringify(family)}, resolved, glyphs, probed, ascents, descents });
+  return JSON.stringify({ family: ${JSON.stringify(family)}, resolved, glyphs, probed, ascents, descents, leader, witness, behind, seeds });
 })()`;
 
 // A CSS family name needs quoting unless it is a keyword. Quoting a keyword
@@ -170,7 +241,11 @@ if (!tables.find((t) => t.family === 'sans-serif')) throw new Error('sans-serif 
 // A face is identified by everything a probe can read off it, not just the
 // advances: two families can share a Latin subset and still report different
 // fontBoundingBox sweeps, and that difference is measurable.
-const key = (t) => JSON.stringify([t.glyphs, t.ascents, t.descents]);
+// Deliberately the whole range, unlike `widths` below: two families that share
+// a Latin subset can still differ over Latin-1, and a probe that measures there
+// reads two faces rather than one. Aliasing is about what a name reports, not
+// about whether it is installed, so widening this cannot move the font list.
+const key = (t) => JSON.stringify([t.glyphs, t.ascents, t.descents, t.behind, t.seeds]);
 // Installed iff listing the name ahead of a generic moves that generic's own
 // measurement, for at least one of the three.
 const sans = tables.find((t) => t.family === 'sans-serif');
@@ -181,7 +256,9 @@ const sans = tables.find((t) => t.family === 'sans-serif');
 // still differ. A probe reads the width, so the width is the test: comparing ink
 // boxes as well made the engine detect one font (Arial Hebrew) that the real
 // Chrome does not, on the same 65-name list.
-const widths = (glyphs) => JSON.stringify(glyphs.map((g) => g[0]));
+// ASCII only, per the note on FIRST/LAST: this is the comparison that decides
+// membership of the font list, and it was settled on that range.
+const widths = (glyphs) => JSON.stringify(glyphs.slice(0, ASCII_COUNT).map((g) => g[0]));
 const baseWidths = {
     monospace: widths(mono.glyphs),
     'sans-serif': widths(sans.glyphs),
@@ -204,6 +281,28 @@ const fullCoverage = (t) => {
     const alone = widths(t.glyphs);
     return Object.keys(baseWidths).every((base) => widths(t.probed[base]) === alone);
 };
+
+// The two sparse tables the run rule needs, both read straight off the
+// measurement rather than classified by hand.
+//
+//   after_fallback -- code points some fallback font draws, whose advance
+//                     therefore moves once the run is on the last resort.
+//   seeds          -- code points no font draws, which is what puts a run
+//                     there in the first place.
+const afterFallbackOf = (t) => {
+    if (!t.behind) return [];
+    const out = [];
+    for (let i = 0; i < t.glyphs.length; i++) {
+        if (Math.abs(t.behind[i][0] - t.glyphs[i][0]) < 1e-9) continue;
+        const [advance, left, right, ascent, descent] = t.behind[i];
+        // Ink and bearings only mean anything if there is ink; the last resort
+        // draws nothing, and every family measured so far reports exactly that.
+        const inked = ascent !== 0 || descent !== 0;
+        out.push([i + FIRST, advance, inked ? left : 0, inked ? right : 0, ascent, descent]);
+    }
+    return out;
+};
+const seedsOf = (t) => (t.seeds ? t.seeds.map((s, i) => (s ? i + FIRST : -1)).filter((c) => c >= 0) : []);
 
 // Two families that resolve to the same face are one reading to a probe, but
 // both names have to answer, so the duplicates become aliases of the first.
@@ -241,9 +340,31 @@ process.stderr.write(
     `${tables.length} measured -> ${kept.length} distinct faces, ${aliases.length} aliases, ` +
         `${tables.length - kept.length - aliases.length} unresolved\n`,
 );
+// The run rule, per generic, so a run that finds no fallback at all says so
+// rather than quietly emitting empty tables.
+const fallbackSummary = (t) =>
+    `${t.family}: leader ${t.leader < 0 ? 'none' : `U+${t.leader.toString(16).toUpperCase().padStart(4, '0')}`}` +
+    `, ${seedsOf(t).length} seed the last resort, ${afterFallbackOf(t).length} move behind it`;
+for (const generic of GENERICS) {
+    const t = tables.find((x) => x.family === generic);
+    if (t) process.stderr.write(`  ${fallbackSummary(t)}\n`);
+}
 
 if (surveyOnly) {
-    await fs.writeFile(jsonPath, JSON.stringify({ kept: kept.map((t) => t.family), aliases, unresolved, partial }, null, 1));
+    await fs.writeFile(
+        jsonPath,
+        JSON.stringify(
+            {
+                kept: kept.map((t) => t.family),
+                aliases,
+                unresolved,
+                partial,
+                fallback: tables.filter((t) => GENERICS.includes(t.family)).map(fallbackSummary),
+            },
+            null,
+            1,
+        ),
+    );
     process.stderr.write(`wrote ${path.relative(repo, jsonPath)}\n`);
     process.exit(0);
 }
@@ -263,8 +384,21 @@ const num = (v) => {
     const s = String(v);
     return s.includes('.') || s.includes('e') ? s : `${s}.0`;
 };
-const CHAR_NAMES = { 32: 'space' };
-const label = (c) => CHAR_NAMES[c] ?? String.fromCharCode(c);
+// Only printable ASCII names itself in a comment. A C1 control written out
+// would put a raw control byte in the source, and a Latin-1 letter would make
+// the file's encoding load-bearing, so both are spelled as code points.
+// Ten to a line, floats through `num` and code points as plain integers.
+const inRows = (vals, render) => {
+    const out = [];
+    for (let i = 0; i < vals.length; i += 10) out.push('    ' + vals.slice(i, i + 10).map(render).join(', ') + ',');
+    return out.join('\n');
+};
+const intRows = (vals) => inRows(vals, String);
+
+const CHAR_NAMES = { 32: 'space', 127: 'U+007F' };
+const label = (c) =>
+    CHAR_NAMES[c] ?? (c > 32 && c < 127 ? String.fromCharCode(c) : `U+${c.toString(16).toUpperCase().padStart(4, '0')}`);
+
 
 const parts = [];
 parts.push(`// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
@@ -313,8 +447,20 @@ parts.push(`// Copyright (C) 2023-2026  Lightpanda (Selecy SAS)
 // sans-serif reports an ascent of 14 where scaling 100px's 92 would say 15),
 // so it is stored as a swept table for 1..${SWEPT_SIZES}px and extrapolated above that.
 //
-// Only U+0020..U+007E is tabulated. Anything else falls back to the family's
-// mean advance, which is a guess and marked as one at the call site.
+// U+0020..U+00FF is tabulated. Anything above that falls back to the family's
+// mean ASCII advance, which is a guess and marked as one at the call site.
+//
+// Latin-1 is here because the Turnstile widget measures it: it hands
+// measureText the UTF-8 bytes of an emoji read back as Latin-1, so U+00F0
+// U+009F U+0098 U+0080 rather than U+1F600. Which is also why the C1 controls
+// are tabulated, and why they need the run rule \`after_fallback\` and
+// \`seeds_last_resort\` carry — see the comment on those fields.
+//
+// Membership of this table is still decided on U+0020..U+007E alone. The font
+// list is what a probe enumerates, it was settled against the 65-name
+// fingerprintjs list on the ASCII range, and widening the comparison would
+// silently move it: ASCII decides who is in, the whole range is what they
+// report.
 
 const std = @import("std");
 
@@ -329,8 +475,18 @@ pub const Glyph = struct {
     descent: f64,
 };
 
-pub const first_codepoint = 32;
-pub const last_codepoint = 126;
+/// What a code point costs once the run has fallen back to the last resort
+/// font, for the code points where that differs from what it costs alone.
+pub const Override = struct {
+    codepoint: u21,
+    glyph: Glyph,
+};
+
+pub const first_codepoint = ${FIRST};
+pub const last_codepoint = ${LAST};
+/// The end of the ASCII prefix: the range membership of this table is decided
+/// on, and the range \`meanAdvance\` averages over.
+pub const last_ascii_codepoint = ${ASCII_LAST};
 /// The size every table below is measured at.
 pub const basis = 100.0;
 
@@ -343,6 +499,21 @@ pub const Family = struct {
     glyphs: []const Glyph,
     ascents: []const f64,
     descents: []const f64,
+    /// Blink chooses one fallback font per run, seeded by the first character
+    /// the primary font cannot draw, and keeps it for the whole run. These two
+    /// fields are what that costs, both measured rather than reasoned about.
+    ///
+    /// A character no font on the host draws at all lands on the last resort
+    /// font — those are \`seeds_last_resort\` — and the last resort then covers
+    /// every later fallback-drawn character in the run at a flat em apiece,
+    /// with no ink. \`after_fallback\` is what those characters cost there,
+    /// listed only where it differs from what they cost alone.
+    ///
+    /// At 16px sans-serif that makes U+0098 U+0080 32 where U+0080 alone is
+    /// 8.898 — and it is why three of the ten strings the Turnstile widget
+    /// measures come out wider than the sum of their code points.
+    seeds_last_resort: []const u21,
+    after_fallback: []const Override,
 };
 `);
 
@@ -365,24 +536,35 @@ const ${name} = [_]Glyph{`);
         );
     });
     parts.push('};');
-    const rows = (vals) => {
-        const out = [];
-        for (let i = 0; i < vals.length; i += 10) out.push('    ' + vals.slice(i, i + 10).map(num).join(', ') + ',');
-        return out.join('\n');
-    };
-    parts.push(`const ascents_${name.replace(/^glyphs_/, '')} = [_]f64{
+    const rows = (vals) => inRows(vals, num);
+    const bare = name.replace(/^glyphs_/, '');
+    parts.push(`const ascents_${bare} = [_]f64{
 ${rows(t.ascents)}
 };
-const descents_${name.replace(/^glyphs_/, '')} = [_]f64{
+const descents_${bare} = [_]f64{
 ${rows(t.descents)}
 };`);
+    const seeds = seedsOf(t);
+    parts.push(
+        `const seeds_${bare} = [_]u21{${seeds.length ? '\n' + intRows(seeds) + '\n' : ''}};`,
+    );
+    const overrides = afterFallbackOf(t);
+    parts.push(`const after_${bare} = [_]Override{`);
+    for (const [codepoint, advance, left, right, ascent, descent] of overrides) {
+        parts.push(
+            `    .{ .codepoint = ${codepoint}, .glyph = .{ .advance = ${num(advance)}, .left = ${num(left)}, ` +
+                `.right = ${num(right)}, .ascent = ${num(ascent)}, .descent = ${num(descent)} } }, // ${label(codepoint)}`,
+        );
+    }
+    parts.push('};');
 }
 
 parts.push('');
 for (const [name, t] of names) {
     const bare = name.replace(/^glyphs_/, '');
     parts.push(
-        `pub const ${bare}: Family = .{ .glyphs = &${name}, .ascents = &ascents_${bare}, .descents = &descents_${bare} };`,
+        `pub const ${bare}: Family = .{ .glyphs = &${name}, .ascents = &ascents_${bare}, ` +
+            `.descents = &descents_${bare}, .seeds_last_resort = &seeds_${bare}, .after_fallback = &after_${bare} };`,
     );
 }
 
@@ -437,14 +619,33 @@ pub fn findInList(list: []const u8) Family {
     return fallback;
 }
 
-/// The glyph for a codepoint at the table's 100px basis. Outside the
-/// tabulated ASCII range we have no measurement, so this returns null and the
-/// caller charges the family's mean advance instead.
+/// The glyph for a codepoint at the table's 100px basis. Above U+00FF we have
+/// no measurement, so this returns null and the caller charges the family's
+/// mean ASCII advance instead.
 pub fn glyph(family: Family, codepoint: u21) ?Glyph {
     if (codepoint < first_codepoint or codepoint > last_codepoint) {
         return null;
     }
     return family.glyphs[codepoint - first_codepoint];
+}
+
+/// Whether this codepoint is one no font on the host draws, which is what puts
+/// a run on the last resort font for the rest of its length.
+pub fn seedsLastResort(family: Family, codepoint: u21) bool {
+    for (family.seeds_last_resort) |seed| {
+        if (seed == codepoint) return true;
+    }
+    return false;
+}
+
+/// What this codepoint costs once the run is on the last resort font, for the
+/// codepoints where that is not what it costs alone. Null means the codepoint
+/// does not care what came before it.
+pub fn afterFallback(family: Family, codepoint: u21) ?Glyph {
+    for (family.after_fallback) |entry| {
+        if (entry.codepoint == codepoint) return entry.glyph;
+    }
+    return null;
 }
 
 /// \`fontBoundingBoxAscent\` / \`Descent\` at a size, from the swept table where
@@ -464,6 +665,14 @@ pub fn boundingBox(family: Family, size: f64) struct { ascent: f64, descent: f64
 }`);
 
 await fs.writeFile(outPath, parts.join('\n') + '\n');
+// `zig build` depends on a fmt check, so an unformatted table fails the build
+// rather than the review. Emitting the columns pre-aligned is not something a
+// template can do — zig fmt aligns the numeric rows itself — so run it.
+await new Promise((resolve, reject) => {
+    const p = spawn('zig', ['fmt', outPath], { stdio: ['ignore', 'ignore', 'inherit'] });
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`zig fmt exited ${code}`))));
+});
 await fs.writeFile(
     jsonPath,
     JSON.stringify(
