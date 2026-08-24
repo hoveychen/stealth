@@ -95,6 +95,105 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#gradient factory arguments">
+{
+  // All Chrome 151 wording. None of these refused before: every factory took
+  // NaN, Infinity and a negative radius and handed back a gradient.
+  const ctx = document.createElement("canvas").getContext("2d");
+  const on = (op) => "Failed to execute '" + op +
+    "' on 'CanvasRenderingContext2D': ";
+
+  // A WebIDL `double` is restricted, so a non-finite coordinate is a TypeError
+  // before the operation's own steps run.
+  const linear = "TypeError: " + on('createLinearGradient') +
+    "The provided double value is non-finite.";
+  testing.expectError(linear, () => ctx.createLinearGradient(NaN, 0, 10, 10));
+  testing.expectError(linear, () => ctx.createLinearGradient(0, 0, NaN, 0));
+  testing.expectError(linear, () => ctx.createLinearGradient(0, 0, Infinity, 0));
+  testing.expectError(linear, () => ctx.createLinearGradient(-Infinity, 0, 0, 0));
+  // A string that will not convert, and an explicit `undefined`, both become NaN.
+  testing.expectError(linear, () => ctx.createLinearGradient('abc', 0, 0, 0));
+  testing.expectError(linear, () => ctx.createLinearGradient(undefined, 0, 0, 0));
+  // `null` converts to 0, and a zero-length gradient is fine.
+  testing.expectEqual('CanvasGradient', ctx.createLinearGradient(null, 0, 0, 0).constructor.name);
+  testing.expectEqual('CanvasGradient', ctx.createLinearGradient(5, 5, 5, 5).constructor.name);
+
+  const radial = "TypeError: " + on('createRadialGradient') +
+    "The provided double value is non-finite.";
+  testing.expectError(radial, () => ctx.createRadialGradient(0, 0, 0, 0, 0, Infinity));
+  testing.expectError(radial, () => ctx.createRadialGradient(0, 0, NaN, 0, 0, 1));
+  // Both radii must be non-negative, and r0 is checked first -- so two
+  // negative radii name r0, not r1.
+  testing.expectError(
+    "IndexSizeError: " + on('createRadialGradient') + 'The r0 provided is less than 0.',
+    () => ctx.createRadialGradient(0, 0, -1, 0, 0, 1));
+  testing.expectError(
+    "IndexSizeError: " + on('createRadialGradient') + 'The r1 provided is less than 0.',
+    () => ctx.createRadialGradient(0, 0, 0, 0, 0, -1));
+  testing.expectError(
+    "IndexSizeError: " + on('createRadialGradient') + 'The r0 provided is less than 0.',
+    () => ctx.createRadialGradient(0, 0, -2, 0, 0, -3));
+  testing.expectError(
+    "IndexSizeError: " + on('createRadialGradient') + 'The r0 provided is less than 0.',
+    () => ctx.createRadialGradient(0, 0, -0.5, 0, 0, 1));
+  // The conversion wins over the radius: a non-finite coordinate is refused
+  // even when a radius is also negative.
+  testing.expectError(radial, () => ctx.createRadialGradient(NaN, 0, -1, 0, 0, 1));
+  // Negative zero is not negative, and two zero radii are allowed.
+  testing.expectEqual('CanvasGradient',
+    ctx.createRadialGradient(0, 0, -0, 0, 0, 1).constructor.name);
+  testing.expectEqual('CanvasGradient',
+    ctx.createRadialGradient(0, 0, 0, 0, 0, 0).constructor.name);
+
+  const conic = "TypeError: " + on('createConicGradient') +
+    "The provided double value is non-finite.";
+  testing.expectError(conic, () => ctx.createConicGradient(NaN, 0, 0));
+  testing.expectError(conic, () => ctx.createConicGradient(0, Infinity, 0));
+  // The angle is neither wrapped nor bounded.
+  testing.expectEqual('CanvasGradient', ctx.createConicGradient(1e6, 0, 0).constructor.name);
+
+  // createPattern's repetition is one of four keywords; null, undefined and the
+  // empty string all mean 'repeat'.
+  const image = document.createElement('canvas');
+  testing.expectError(
+    "SyntaxError: " + on('createPattern') +
+    "The provided type ('bogus') is not one of 'repeat', 'no-repeat', " +
+    "'repeat-x', or 'repeat-y'.",
+    () => ctx.createPattern(image, 'bogus'));
+  for (const repetition of ['repeat', 'no-repeat', 'repeat-x', 'repeat-y', '', null, undefined]) {
+    testing.expectEqual('CanvasPattern', ctx.createPattern(image, repetition).constructor.name);
+  }
+
+  // The image is an eight-member IDL union, converted before the operation
+  // runs, so anything that is none of the eight is refused -- a plain object
+  // just as much as a primitive.
+  const notAnImage = "TypeError: " + on('createPattern') +
+    "The provided value is not of type '(CSSImageValue or HTMLCanvasElement " +
+    "or HTMLImageElement or HTMLVideoElement or ImageBitmap or OffscreenCanvas " +
+    "or SVGImageElement or VideoFrame)'.";
+  for (const bad of [null, undefined, 42, 'x', {}]) {
+    testing.expectError(notAnImage, () => ctx.createPattern(bad, 'repeat'));
+  }
+  // Four of the eight we can build here. An `<img>` is a valid argument even
+  // though it has no pixels behind it yet.
+  testing.expectEqual('CanvasPattern',
+    ctx.createPattern(document.createElement('img'), 'repeat').constructor.name);
+  testing.expectEqual('CanvasPattern',
+    ctx.createPattern(document.createElement('video'), 'repeat').constructor.name);
+  testing.expectEqual('CanvasPattern',
+    ctx.createPattern(new OffscreenCanvas(2, 2), 'repeat').constructor.name);
+  testing.expectEqual('CanvasPattern',
+    ctx.createPattern(document.createElementNS('http://www.w3.org/2000/svg', 'image'), 'repeat')
+      .constructor.name);
+
+  // Arity is unchanged by any of the above.
+  testing.expectEqual(4, ctx.createLinearGradient.length);
+  testing.expectEqual(6, ctx.createRadialGradient.length);
+  testing.expectEqual(3, ctx.createConicGradient.length);
+  testing.expectEqual(2, ctx.createPattern.length);
+}
+</script>
+
 <script id="CanvasGradient#addColorStop">
 {
   // Chrome 151 wording throughout. Before this only the range was checked, and

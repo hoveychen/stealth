@@ -29,8 +29,6 @@ const context_draw = @import("context_draw.zig");
 const canvas_objects = @import("canvas_objects.zig");
 const DOMMatrix = @import("../DOMMatrix.zig");
 
-const CanvasGradient = canvas_objects.CanvasGradient;
-const CanvasPattern = canvas_objects.CanvasPattern;
 const PaintStyle = canvas_objects.PaintStyle;
 const TextMetrics = @import("TextMetrics.zig");
 const text_measure = @import("../../text_measure.zig");
@@ -219,24 +217,13 @@ pub fn isPointInStroke(_: *const OffscreenCanvasRenderingContext2D, _: js.Value,
     return false;
 }
 
-// The gradient and pattern handles. They carry no paint — see
-// canvas_objects.zig — but a script that builds one gets an object back
-// rather than a TypeError.
-pub fn createLinearGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
-    return exec._factory.create(CanvasGradient{});
-}
-
-pub fn createRadialGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
-    return exec._factory.create(CanvasGradient{});
-}
-
-pub fn createConicGradient(_: *OffscreenCanvasRenderingContext2D, _: f64, _: f64, _: f64, exec: *Execution) !*CanvasGradient {
-    return exec._factory.create(CanvasGradient{});
-}
-
-pub fn createPattern(_: *OffscreenCanvasRenderingContext2D, _: js.Value, _: js.Value, exec: *Execution) !*CanvasPattern {
-    return exec._factory.create(CanvasPattern{});
-}
+// The gradient and pattern handles, shared with the other 2D context: the
+// sentences they refuse with name the interface, so they are written once and
+// take the name from `T`.
+pub const createLinearGradient = draw.createLinearGradient;
+pub const createRadialGradient = draw.createRadialGradient;
+pub const createConicGradient = draw.createConicGradient;
+pub const createPattern = draw.createPattern;
 
 pub const save = draw.save;
 pub const restore = draw.restore;
