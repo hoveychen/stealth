@@ -715,6 +715,53 @@
       ctx.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float16' }).data.constructor.name);
     testing.expectEqual(
       'Uint8ClampedArray', ctx.getImageData(0, 0, 1, 1).data.constructor.name);
+  }
+
+  // What a float16 read *holds*. The bitmap behind a canvas is eight bits a
+  // channel in Chrome too, so this format is not a finer read but the same one
+  // scaled: every entry is the unorm8 byte over 255, rounded to half
+  // precision. Every number below is that of the byte on the line above it,
+  // and both columns are measured
+  // (results/canvas-image-data-settings.chrome.json).
+  {
+    const f16 = { pixelFormat: 'rgba-float16' };
+    const read = (canvasSpace, notation, settings) => {
+      const ctx = new OffscreenCanvas(1, 1).getContext('2d', { colorSpace: canvasSpace });
+      ctx.fillStyle = notation;
+      ctx.fillRect(0, 0, 1, 1);
+      return [...ctx.getImageData(0, 0, 1, 1, settings).data].join(',');
+    };
+    const p3 = 'color(display-p3 1 0.25 0.5)';
+
+    // ff0000ff
+    testing.expectEqual('255,0,0,255', read('srgb', '#ff0000', undefined));
+    testing.expectEqual('1,0,0,1', read('srgb', '#ff0000', f16));
+    // ff1b7fff
+    testing.expectEqual('255,27,127,255', read('srgb', p3, undefined));
+    testing.expectEqual('1,0.10589599609375,0.498046875,1', read('srgb', p3, f16));
+    // ea3323ff -- the canvas's own space is what an absent colorSpace means,
+    // so the float16 read is in display-p3 as the unorm8 one is.
+    testing.expectEqual('234,51,35,255', read('display-p3', '#ff0000', undefined));
+    testing.expectEqual('0.91748046875,0.199951171875,0.13720703125,1', read('display-p3', '#ff0000', f16));
+    // ff407fff
+    testing.expectEqual('255,64,127,255', read('display-p3', p3, undefined));
+    testing.expectEqual('1,0.2509765625,0.498046875,1', read('display-p3', p3, f16));
+
+    // An explicit space still converts under this format: the two axes of the
+    // dictionary do not interfere.
+    testing.expectEqual(
+      '0.91748046875,0.199951171875,0.13720703125,1',
+      read('srgb', '#ff0000', { colorSpace: 'display-p3', pixelFormat: 'rgba-float16' }));
+
+    // A window that runs off the canvas is transparent black where it missed,
+    // and 0.0 is how this format spells that.
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d');
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(0, 0, 1, 1);
+    testing.expectEqual(
+      '1,0,0,1,0,0,0,0', [...ctx.getImageData(0, 0, 2, 1, f16).data].join(','));
+    testing.expectEqual(
+      '0,0,0,0', [...ctx.getImageData(5, 5, 1, 1, f16).data].join(','));
     testing.expectEqual(
       "TypeError: Failed to execute 'createImageData' on 'OffscreenCanvasRenderingContext2D': " +
         "The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
