@@ -1,0 +1,58 @@
+{
+ "willReadFrequently": {
+  "0": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value '0' is not a valid enum value of type CanvasWillReadFrequently.",
+  "1": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value '1' is not a valid enum value of type CanvasWillReadFrequently.",
+  "true": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":true}",
+  "false": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",
+  "\"true\"": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":true}",
+  "\"false\"": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",
+  "\"auto\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value 'auto' is not a valid enum value of type CanvasWillReadFrequently.",
+  "\"TRUE\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value 'TRUE' is not a valid enum value of type CanvasWillReadFrequently.",
+  "\"\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value '' is not a valid enum value of type CanvasWillReadFrequently.",
+  "null": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided value 'null' is not a valid enum value of type CanvasWillReadFrequently.",
+  "undefined": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}"
+ },
+ "colorSpace": {
+  "\"srgb\"": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",
+  "\"display-p3\"": "{\"alpha\":true,\"colorSpace\":\"display-p3\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",
+  "\"rec2020\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+  "\"srgb-linear\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value 'srgb-linear' is not a valid enum value of the type PredefinedColorSpace.",
+  "\"a98-rgb\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'a98-rgb' is not a valid enum value of type PredefinedColorSpace.",
+  "\"prophoto-rgb\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'prophoto-rgb' is not a valid enum value of type PredefinedColorSpace.",
+  "\"rec2100-hlg\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value 'rec2100-hlg' is not a valid enum value of the type PredefinedColorSpace.",
+  "\"rec2100-pq\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value 'rec2100-pq' is not a valid enum value of the type PredefinedColorSpace.",
+  "\"xyz\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'xyz' is not a valid enum value of type PredefinedColorSpace.",
+  "\"xyz-d50\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'xyz-d50' is not a valid enum value of type PredefinedColorSpace.",
+  "\"xyz-d65\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'xyz-d65' is not a valid enum value of type PredefinedColorSpace.",
+  "\"hsl\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'hsl' is not a valid enum value of type PredefinedColorSpace.",
+  "\"hwb\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'hwb' is not a valid enum value of type PredefinedColorSpace.",
+  "\"lab\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'lab' is not a valid enum value of type PredefinedColorSpace.",
+  "\"oklab\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'oklab' is not a valid enum value of type PredefinedColorSpace.",
+  "\"lch\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'lch' is not a valid enum value of type PredefinedColorSpace.",
+  "\"oklch\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'oklch' is not a valid enum value of type PredefinedColorSpace."
+ },
+ "colorType": {
+  "\"unorm8\"": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"unorm8\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",
+  "\"float16\"": "{\"alpha\":true,\"colorSpace\":\"srgb\",\"colorType\":\"float16\",\"desynchronized\":false,\"toneMapping\":{\"mode\":\"standard\"},\"willReadFrequently\":false}",
+  "\"uint8\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorType' property from 'CanvasContextCreationAttributesModule': The provided value 'uint8' is not a valid enum value of type CanvasPixelFormat.",
+  "\"float32\"": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorType' property from 'CanvasContextCreationAttributesModule': The provided value 'float32' is not a valid enum value of type CanvasPixelFormat."
+ },
+ "imageDataColorSpace": {
+  "srgb": "srgb",
+  "display-p3": "display-p3",
+  "rec2020": "throw:TypeError: Failed to construct 'ImageData': The provided value 'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+  "srgb-linear": "throw:TypeError: Failed to construct 'ImageData': The provided value 'srgb-linear' is not a valid enum value of the type PredefinedColorSpace.",
+  "nonesuch": "throw:TypeError: Failed to construct 'ImageData': Failed to read the 'colorSpace' property from 'ImageDataSettings': The provided value 'nonesuch' is not a valid enum value of type PredefinedColorSpace."
+ },
+ "unknownType": {
+  "nonesuch + bad colorSpace": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace.",
+  "webgl + bad colorSpace": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace.",
+  "2d after webgl, bad colorSpace": "throw:TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace."
+ },
+ "opaque": {
+  "alpha:false initial pixel": "0,0,0,255",
+  "alpha:true initial pixel": "0,0,0,0",
+  "alpha:false semi-transparent fill": "128,0,0,255",
+  "alpha:false clearRect": "0,0,0,255"
+ }
+}

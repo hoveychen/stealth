@@ -23,6 +23,7 @@ const Canvas = @import("../element/html/Canvas.zig");
 const OffscreenCanvas = @import("OffscreenCanvas.zig");
 const objects = @import("webgl_objects.zig");
 const gl_state = @import("webgl_state.zig");
+const attributes = @import("context_attributes.zig");
 const gpu_table = @import("gpu.zig");
 const gpu = gpu_table.gpu;
 const DOMException = @import("../DOMException.zig");
@@ -57,6 +58,9 @@ _gl: gl_state,
 /// descriptor (see src/browser/tests/descriptor_kind.html).
 _drawing_buffer_color_space: ColorSpace = .srgb,
 _unpack_color_space: ColorSpace = .srgb,
+/// The dictionary this context was created from. See context_attributes.zig
+/// for the two members WebGL is asked for and never grants.
+_attributes: attributes.Gl = .{},
 
 /// WebIDL `PredefinedColorSpace`, whose only two members these attributes take.
 /// Chrome *ignores* an out-of-range string rather than throwing the TypeError a
@@ -992,19 +996,6 @@ pub fn getFramebufferAttachmentParameter(_: *const WebGLRenderingContext, _: u32
 
 /// The attributes of a context created with no options, measured from Chrome.
 /// Field order is the key order a script sees from JSON.stringify.
-const ContextAttributes = struct {
-    alpha: bool = true,
-    antialias: bool = true,
-    depth: bool = true,
-    desynchronized: bool = false,
-    failIfMajorPerformanceCaveat: bool = false,
-    powerPreference: []const u8 = "default",
-    premultipliedAlpha: bool = true,
-    preserveDrawingBuffer: bool = false,
-    stencil: bool = false,
-    xrCompatible: bool = false,
-};
-
 /// WebXR's hook into a WebGL context. Chrome rejects with a bare
 /// InvalidStateError -- "An attempt was made to use an object that is not, or
 /// is no longer, usable." -- when there is no XR device to make the context
@@ -1019,8 +1010,8 @@ pub fn makeXRCompatible(_: *const WebGLRenderingContext, exec: *const js.Executi
     return resolver.promise();
 }
 
-pub fn getContextAttributes(_: *const WebGLRenderingContext) ContextAttributes {
-    return .{};
+pub fn getContextAttributes(self: *const WebGLRenderingContext) attributes.Gl {
+    return self._attributes;
 }
 
 // The state setters. Their arguments are never read — the parameter count is

@@ -407,3 +407,76 @@
   testing.expectEqual(4.445, round(ask(() => ctx.measureText(' ').width)));
 }
 </script>
+
+<script id="OffscreenCanvas#creation_attributes">
+{
+  // The same dictionary as on an HTMLCanvasElement, differing only in the
+  // interface its refusals name. Readings from
+  // probes/canvas-context-settings{,-2,-3,-4}.js.
+  const attrs = (settings) => {
+    const c = new OffscreenCanvas(2, 2);
+    const ctx = settings === undefined ? c.getContext('2d') : c.getContext('2d', settings);
+    return ctx.getContextAttributes();
+  };
+  const threw = (f) => { try { f(); return null; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  // The widget builds all four of its contexts on offscreen canvases.
+  const widget = attrs({ colorSpace: 'display-p3', colorType: 'float16', willReadFrequently: true });
+  testing.expectEqual('display-p3', widget.colorSpace);
+  testing.expectEqual('float16', widget.colorType);
+  testing.expectEqual(true, widget.willReadFrequently);
+
+  testing.expectEqual(false, attrs({ alpha: false }).alpha);
+  testing.expectEqual(true, attrs({ desynchronized: true }).desynchronized);
+  testing.expectEqual('srgb', attrs(undefined).colorSpace);
+  testing.expectEqual(false, attrs(undefined).willReadFrequently);
+  testing.expectEqual('standard', attrs(undefined).toneMapping.mode);
+  testing.expectEqual('srgb', attrs('nope').colorSpace);
+
+  // The refusals name OffscreenCanvas where the element's name
+  // HTMLCanvasElement, and the dictionary itself is the same one.
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': Failed to read the " +
+      "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+      "'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => attrs({ colorSpace: 'nonesuch' })));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': The provided value " +
+      "'rec2020' is not a valid enum value of the type PredefinedColorSpace.",
+    threw(() => attrs({ colorSpace: 'rec2020' })));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': Failed to read the " +
+      "'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided " +
+      "value 'auto' is not a valid enum value of type CanvasWillReadFrequently.",
+    threw(() => attrs({ willReadFrequently: 'auto' })));
+
+  // Unlike the element, an OffscreenCanvas validates the context *type* first:
+  // a bad name and a bad member together report the name. Note "of type" here
+  // against the colour space's "of the type" above.
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': The provided value " +
+      "'nonesuch' is not a valid enum value of type OffscreenRenderingContextType.",
+    threw(() => new OffscreenCanvas(2, 2).getContext('nonesuch', { colorSpace: 'bad' })));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': The provided value " +
+      "'experimental-webgl' is not a valid enum value of type OffscreenRenderingContextType.",
+    threw(() => new OffscreenCanvas(2, 2).getContext('experimental-webgl')));
+
+  // Held for the context's whole life, and a later call's dictionary is dropped
+  // while still being converted.
+  {
+    const c = new OffscreenCanvas(2, 2);
+    const first = c.getContext('2d', { colorSpace: 'display-p3', willReadFrequently: true });
+    const second = c.getContext('2d', { colorSpace: 'srgb' });
+    testing.expectEqual(true, first === second);
+    testing.expectEqual('display-p3', second.getContextAttributes().colorSpace);
+    c.width = 4;
+    testing.expectEqual('display-p3', first.getContextAttributes().colorSpace);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': Failed to read the " +
+        "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+        "'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+      threw(() => c.getContext('2d', { colorSpace: 'nonesuch' })));
+  }
+}
+</script>

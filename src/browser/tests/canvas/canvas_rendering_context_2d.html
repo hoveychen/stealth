@@ -1149,3 +1149,161 @@
   testing.expectEqual([0, 0, 0, 0], at(7, 7));
 }
 </script>
+
+<script id="CanvasRenderingContext2D#creation_attributes">
+{
+  // getContext's second argument. Every reading below is Chrome's, from
+  // probes/canvas-context-settings{,-2,-3,-4}.js -- the Turnstile widget passes
+  // `{colorSpace, colorType, willReadFrequently: true}` to all four of the 2D
+  // contexts it builds, and we used to answer the same default context for
+  // every one of them.
+  const attrs = (settings) => {
+    const c = document.createElement('canvas');
+    const ctx = settings === undefined ? c.getContext('2d') : c.getContext('2d', settings);
+    return ctx.getContextAttributes();
+  };
+  const threw = (f) => { try { f(); return null; } catch (e) { return `${e.name}: ${e.message}`; } };
+
+  // The widget's own dictionary, which is the whole point of this test.
+  const widget = attrs({ colorSpace: 'display-p3', colorType: 'float16', willReadFrequently: true });
+  testing.expectEqual('display-p3', widget.colorSpace);
+  testing.expectEqual('float16', widget.colorType);
+  testing.expectEqual(true, widget.willReadFrequently);
+  testing.expectEqual(true, widget.alpha);
+  testing.expectEqual(false, widget.desynchronized);
+
+  // Each member on its own.
+  testing.expectEqual(false, attrs({ alpha: false }).alpha);
+  testing.expectEqual(true, attrs({ desynchronized: true }).desynchronized);
+  testing.expectEqual('display-p3', attrs({ colorSpace: 'display-p3' }).colorSpace);
+  testing.expectEqual('float16', attrs({ colorType: 'float16' }).colorType);
+
+  // `alpha` and `desynchronized` are plain WebIDL booleans, so ToBoolean: a
+  // truthy string is true and 0 is false.
+  testing.expectEqual(false, attrs({ alpha: 0 }).alpha);
+  testing.expectEqual(true, attrs({ alpha: 'false' }).alpha);
+
+  // `willReadFrequently` is not a boolean at all but an enum whose members are
+  // "true", "false" and "undefined" -- the JS boolean only works because it
+  // stringifies onto one. 1 and "auto" are refused.
+  testing.expectEqual(true, attrs({ willReadFrequently: 'true' }).willReadFrequently);
+  testing.expectEqual(false, attrs({ willReadFrequently: 'false' }).willReadFrequently);
+  testing.expectEqual(false, attrs({ willReadFrequently: 'undefined' }).willReadFrequently);
+  testing.expectEqual(false, attrs({ willReadFrequently: false }).willReadFrequently);
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided " +
+      "value 'auto' is not a valid enum value of type CanvasWillReadFrequently.",
+    threw(() => attrs({ willReadFrequently: 'auto' })));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'willReadFrequently' property from 'CanvasContextCreationAttributesModule': The provided " +
+      "value '1' is not a valid enum value of type CanvasWillReadFrequently.",
+    threw(() => attrs({ willReadFrequently: 1 })));
+
+  // A non-object second argument is not a dictionary-conversion failure here:
+  // it takes the defaults, where WebIDL's own rule would have been a TypeError.
+  for (const bad of [null, undefined, 'srgb', 42, true, false, []]) {
+    const a = attrs(bad);
+    testing.expectEqual('srgb', a.colorSpace);
+    testing.expectEqual(false, a.willReadFrequently);
+  }
+  testing.expectEqual('srgb', attrs({ nonesuch: 1 }).colorSpace);
+
+  // `toneMapping` is answered but never read: asking for another mode changes
+  // nothing.
+  testing.expectEqual('standard', attrs({ toneMapping: { mode: 'extended' } }).toneMapping.mode);
+
+  // colorSpace has two gates. PredefinedColorSpace has six members, so a name
+  // outside it fails the dictionary conversion and names the property...
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+      "'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => attrs({ colorSpace: 'nonesuch' })));
+  // ...while one inside it that a canvas cannot be is refused afterwards, by a
+  // message with no property in it and "the type" rather than "type".
+  // `display-p3-linear` belongs in this list and in no other colour API here,
+  // so leaving it out gives it the wrong one of the two refusals.
+  for (const inEnum of ['rec2020', 'srgb-linear', 'display-p3-linear',
+                        'rec2100-hlg', 'rec2100-pq']) {
+    testing.expectEqual(
+      "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': The provided value '" +
+        inEnum + "' is not a valid enum value of the type PredefinedColorSpace.",
+      threw(() => attrs({ colorSpace: inEnum })));
+  }
+  // Case matters, and so does a non-string: both are stringified into the
+  // dictionary message.
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+      "'DISPLAY-P3' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => attrs({ colorSpace: 'DISPLAY-P3' })));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+      "'null' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => attrs({ colorSpace: null })));
+  // An explicitly undefined member is an absent one, and takes the default.
+  testing.expectEqual('srgb', attrs({ colorSpace: undefined }).colorSpace);
+
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'colorType' property from 'CanvasContextCreationAttributesModule': The provided value " +
+      "'float32' is not a valid enum value of type CanvasPixelFormat.",
+    threw(() => attrs({ colorType: 'float32' })));
+
+  // Members are read in alphabetical order, so a throwing `alpha` getter beats
+  // a bad `colorSpace` and a throwing `xrCompatible` one does not.
+  testing.expectEqual('TypeError: boom', threw(() => attrs({
+    get alpha() { throw new TypeError('boom'); },
+    colorSpace: 'bad',
+  })));
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+      "'bad' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => attrs({
+      get xrCompatible() { throw new TypeError('boom'); },
+      colorSpace: 'bad',
+    })));
+
+  // A canvas answers its first context forever, and the later call's dictionary
+  // is dropped rather than applied -- but it is still *converted*, so a bad
+  // value in it throws even though the settings could not have been used.
+  {
+    const c = document.createElement('canvas');
+    const first = c.getContext('2d', { colorSpace: 'display-p3', willReadFrequently: true });
+    const second = c.getContext('2d', { colorSpace: 'srgb', willReadFrequently: false });
+    testing.expectEqual(true, first === second);
+    testing.expectEqual('display-p3', second.getContextAttributes().colorSpace);
+    testing.expectEqual(true, second.getContextAttributes().willReadFrequently);
+    // Resetting the bitmap keeps them too.
+    c.width = 3;
+    testing.expectEqual('display-p3', first.getContextAttributes().colorSpace);
+    testing.expectEqual(true, first.getContextAttributes().willReadFrequently);
+    testing.expectEqual(
+      "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+        "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+        "'nonesuch' is not a valid enum value of type PredefinedColorSpace.",
+      threw(() => c.getContext('2d', { colorSpace: 'nonesuch' })));
+  }
+
+  // The conversion runs before the context type is dispatched, so an unknown
+  // type with a bad dictionary throws rather than answering null -- and an
+  // unknown type with a good one still answers null.
+  testing.expectEqual(
+    "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the " +
+      "'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value " +
+      "'bad' is not a valid enum value of type PredefinedColorSpace.",
+    threw(() => document.createElement('canvas').getContext('nonesuch', { colorSpace: 'bad' })));
+  testing.expectEqual(
+    null, document.createElement('canvas').getContext('nonesuch', { colorSpace: 'srgb' }));
+
+  // The key set and its order, which a script can read without touching a
+  // single value.
+  testing.expectEqual(
+    'alpha,colorSpace,colorType,desynchronized,toneMapping,willReadFrequently',
+    Object.keys(attrs(undefined)).join(','));
+}
+</script>

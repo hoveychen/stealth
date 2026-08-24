@@ -152,22 +152,6 @@ pub fn Accessors(comptime T: type) type {
     };
 }
 
-/// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/getContextAttributes
-///
-/// Chrome's answer for a plain `getContext('2d')`, field for field.
-pub const ContextAttributes = struct {
-    alpha: bool = true,
-    colorSpace: []const u8 = "srgb",
-    colorType: []const u8 = "unorm8",
-    desynchronized: bool = false,
-    toneMapping: ToneMapping = .{},
-    willReadFrequently: bool = false,
-
-    pub const ToneMapping = struct {
-        mode: []const u8 = "standard",
-    };
-};
-
 /// An even-length, non-negative, finite dash list, as `setLineDash` accepts
 /// it: an odd-length list is doubled, and anything invalid is dropped whole.
 pub fn normaliseLineDash(arena: Allocator, input: []const f64) ?[]const f64 {

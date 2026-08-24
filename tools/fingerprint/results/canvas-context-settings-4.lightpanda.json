@@ -1,0 +1,19 @@
+{
+ "memberOrder": {
+  "colorType+colorSpace": "colorSpace",
+  "colorSpace+colorType (reversed literal)": "colorSpace",
+  "willReadFrequently+colorSpace": "colorSpace",
+  "powerPreference+colorSpace": "colorSpace",
+  "throwing alpha getter + bad colorSpace": "TypeError: alpha-getter",
+  "throwing xrCompatible getter + bad colorSpace": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace."
+ },
+ "dispatchOrder": {
+  "offscreen bad type + bad colorSpace": "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': The provided value 'nonesuch' is not a valid enum value of type OffscreenRenderingContextType.",
+  "offscreen bad type + good settings": "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': The provided value 'nonesuch' is not a valid enum value of type OffscreenRenderingContextType.",
+  "element bad type + bad colorSpace": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace.",
+  "element bad type + good settings": "null",
+  "element cached 2d + bad colorSpace": "TypeError: Failed to execute 'getContext' on 'HTMLCanvasElement': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace.",
+  "offscreen cached 2d + bad colorSpace": "TypeError: Failed to execute 'getContext' on 'OffscreenCanvas': Failed to read the 'colorSpace' property from 'CanvasContextCreationAttributesModule': The provided value 'bad' is not a valid enum value of type PredefinedColorSpace.",
+  "element cached 2d then webgl": "null"
+ }
+}
