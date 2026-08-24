@@ -732,13 +732,9 @@ pub fn drawSurface(
             if (texel[3] == 0) continue;
             // The source bitmap is premultiplied too, so the colour has to come
             // back out of its own alpha before it can be converted or blended.
-            // Then into this bitmap's format, then through the filter — the
+            // Then into this bitmap's colour space, then through the filter — the
             // same order `context_draw`'s `paint` uses for a fill.
-            const paint = filter.applyTo(color.convertCanvasFormat(
-                spaces.from,
-                .{ .space = spaces.to, .channels = self.channels },
-                straight(texel),
-            ));
+            const paint = filter.applyTo(color.convertCanvasPaint(spaces.from, spaces.to, straight(texel)));
             const at = row * canvas_width + col;
             self.store(at, blended(self.load(at), paint, alpha * paint.a, op));
         }

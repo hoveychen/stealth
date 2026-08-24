@@ -12477,3 +12477,46 @@ file's `color(display-p3 1 0.25 0.5 / 0.5)` demands, since premultiplying its
 rounded byte would store `ff1c8080` and Chrome stores `ff1c7e80`. One reading is
 not enough to build that split on; it needs a sweep of legacy notations at half
 alpha on both engines before anything is written.
+
+## A translucent pixel read across spaces: quantise once, clip at the store (2026-08-24)
+
+The ten readings the float16 round left were one axis, and closing it turned out
+to need two clips moved rather than one.
+
+**The read.** `getImageData` into the other colour space rounded each channel to
+a byte and converted that byte. The bitmap is premultiplied, so the read divides
+the alpha back out first — and that quotient is not a byte. Worse, where it
+lands *outside* the gamut, which is the whole reason the premultiply preserved
+it, rounding first throws the excess away. The cross-space arm now reads through
+`readUnitPixels`, converts unclipped, and quantises once at the end.
+
+**The paint.** `Wide.toPaint` clipped the colour into the destination gamut
+before the bitmap ever saw it. On an srgb canvas `color(display-p3 1 0.25 0.5 /
+0.5)` has a red of 277.6; clipped to 255 it premultiplies to 128, unclipped to
+139 — and 139 is what fits in the byte, because the alpha is what brought it back
+into range. An eight-bit bitmap does clip, but at the *store*, after the
+premultiply, which `RGBA.round255` was already doing. So the clip is gone from
+the paint, and with it the paint's dependence on the bitmap's channel type:
+`CanvasFormat` is removed and `Style.paint` takes a `CanvasSpace` again.
+
+Read as display-p3, that pixel is `fe407e80` on Chrome; before this it was
+`ea3b7e80` here, which is what the srgb red clamped to 255 converts to.
+
+### What it moved
+
+| probe | before | after |
+|---|---|---|
+| `canvas-color-notation` (432 readings) | 10 diff | **0 diff** |
+| `canvas-float-source-channels` (126 readings) | 3 diff | **0 diff** |
+| `canvas-own-color-space` (40 readings) | 1 diff | **0 diff** |
+| `canvas-premultiplied-encode` (25 readings) | 4 diff | 3 diff |
+
+Ten other canvas probes are bit-identical to their committed readings —
+`canvas-space-{matrix,float-decode,float-matrix,float-sweep}` and
+`expr-composite-blend` among them, 1354 readings between them. The widget's own
+four rows still answer the live-site oracle (`ff1b7fff`, `ff407fff`,
+`5b3cc92ef537003c`, `003c00340038003c`).
+
+`canvas-premultiplied-encode`'s remaining three are the legacy-notation
+premultiply described in the section above (`hsl(30 60% 40% / 0.5)`), an
+`oklch()` row, and `globalAlpha 0.5` on a p3 canvas. None of them is this axis.

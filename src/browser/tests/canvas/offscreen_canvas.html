@@ -1308,6 +1308,55 @@
 }
 </script>
 
+<script id="OffscreenCanvasRenderingContext2D#premultiplied cross-space read">
+{
+  // Reading a *translucent* pixel out of one space and into the other is the
+  // one place the order of the two steps shows. The bitmap holds the colour
+  // premultiplied, so a read has to divide the alpha back out — and that
+  // quotient is not a byte. Chrome converts it as it stands and quantises once,
+  // at the end; rounding it to a byte first and converting that lands a
+  // different byte. Every reading here is Chrome's
+  // (results/canvas-color-notation.chrome.json, the two cross-space pixel
+  // axes).
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const read = (canvasSpace, readSpace, notation) => {
+    const ctx = new OffscreenCanvas(1, 1).getContext('2d', {
+      colorSpace: canvasSpace,
+      willReadFrequently: true,
+    });
+    ctx.fillStyle = notation;
+    ctx.fillRect(0, 0, 1, 1);
+    return hex(ctx.getImageData(0, 0, 1, 1, { colorSpace: readSpace }).data);
+  };
+
+  // An srgb bitmap read as display-p3. The opaque rows are the control: with an
+  // alpha of 255 there is no division to do, so both orders agree and these
+  // already passed.
+  testing.expectEqual('ea3b7fff', read('srgb', 'display-p3', 'color(display-p3 1 0.25 0.5)'));
+  testing.expectEqual('af5e4cff', read('srgb', 'display-p3', 'lab(50 40 30)'));
+  // At half alpha they part. The first is the widest gap in the set: the stored
+  // red is 139, and 139 of 128 un-premultiplies to 276.8 — which the byte order
+  // clamps to 255 before converting, throwing away the whole out-of-gamut part
+  // the premultiply had preserved.
+  testing.expectEqual('fe407e80', read('srgb', 'display-p3', 'color(display-p3 1 0.25 0.5 / 0.5)'));
+  testing.expectEqual('af5d4b80', read('srgb', 'display-p3', 'lab(50 40 30 / 0.5)'));
+  testing.expectEqual('af5d4b80', read('srgb', 'display-p3', 'lab(50 40 30 / 50%)'));
+
+  // And the other direction, a display-p3 bitmap read as srgb.
+  testing.expectEqual('ff0000ff', read('display-p3', 'srgb', '#ff0000'));
+  testing.expectEqual('bc5747ff', read('display-p3', 'srgb', 'lab(50 40 30)'));
+  // Four notations for the same half-transparent red, which all reach the
+  // bitmap as the same premultiplied bytes and so all read back the same.
+  testing.expectEqual('fe040280', read('display-p3', 'srgb', '#ff000080'));
+  testing.expectEqual('fe040280', read('display-p3', 'srgb', 'rgba(255,0,0,0.5)'));
+  testing.expectEqual('fe040280', read('display-p3', 'srgb', 'rgb(255 0 0 / 0.5)'));
+  testing.expectEqual('fe040280', read('display-p3', 'srgb', 'hsla(0,100%,50%,0.5)'));
+  testing.expectEqual('ff1c7f80', read('display-p3', 'srgb', 'color(display-p3 1 0.25 0.5 / 0.5)'));
+  testing.expectEqual('ba584680', read('display-p3', 'srgb', 'lab(50 40 30 / 0.5)'));
+  testing.expectEqual('ba584680', read('display-p3', 'srgb', 'lab(50 40 30 / 50%)'));
+}
+</script>
+
 <script id="OffscreenCanvasRenderingContext2D#float32 pixel format">
 {
   // `ImageDataPixelFormat` has a third member. Chrome's own refusal for a

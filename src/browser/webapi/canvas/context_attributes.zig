@@ -96,11 +96,6 @@ pub const TwoD = struct {
     pub fn channels(self: TwoD) color.CanvasChannels {
         return std.meta.stringToEnum(color.CanvasChannels, self.colorType) orelse .unorm8;
     }
-
-    /// The two together, which is what a colour is resolved against.
-    pub fn format(self: TwoD) color.CanvasFormat {
-        return .{ .space = self.space(), .channels = self.channels() };
-    }
 };
 
 /// https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/getContextAttributes
