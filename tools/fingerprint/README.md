@@ -12429,3 +12429,51 @@ Every one of them is a translucent pixel read *across* spaces:
 Chrome un-premultiplies in floating point, converts, and quantises once at the
 end. Modelled offline against all ten, the float order lands on Chrome's byte in
 every one.
+
+### The widget's own four rows, against the live-site oracle
+
+`results/ibt2-oracle.json` records what Turnstile actually read on
+challenges.cloudflare.com: four offscreen 2×2 canvases, `{srgb, display-p3}` ×
+`{unorm8, float16}`, each filled with `color(display-p3 1 0.25 0.5)` and read 1×1
+back through the matching pixel format. Run against this engine, all four now
+answer the oracle's bytes; two of them did not before.
+
+| context | oracle | this engine |
+|---|---|---|
+| srgb / unorm8 | `ff1b7fff` | `ff1b7fff` |
+| display-p3 / unorm8 | `ff407fff` | `ff407fff` |
+| srgb / float16 | `5b3cc92ef537003c` | `5b3cc92ef537003c` |
+| display-p3 / float16 | `003c00340038003c` | `003c00340038003c` |
+
+The two float16 rows decode to `1.0888671875 0.10601806640625 0.497314453125 1`
+and `1 0.25 0.5 1` — the out-of-gamut red and the lossless identity from the
+section above, which is why both legs of the paint had to be right for either
+row to land.
+
+### Re-measured next door: fourteen canvas probes, one row worse
+
+Every other canvas probe was re-run against this build and diffed twice — against
+its committed lightpanda arm and against Chrome. Nine are bit-identical to
+before, `canvas-space-{matrix,float-decode,float-matrix,float-sweep}` and
+`expr-composite-blend` included (1354 readings between them, all still exact).
+Two files had drifted and were stale rather than wrong: they predate the
+`hsl()`-is-a-float commit, and refreshing them shows three readings that moved
+onto Chrome (`canvas-premultiplied-encode`'s two p3 `hsl()` rows and
+`canvas-image-data-construct`'s float32 p3 read) and one that moved off it.
+
+The one that moved off is worth naming, because it is a live lead and not a
+rounding shrug. On an **srgb unorm8** canvas, `hsl(30 60% 40% / 0.5)` reads
+`a3662a80` on Chrome and `a3662880` here. The blue is 40.8, and it is the alpha
+that separates the arms: premultiplying the float gives `round(40.8 × 128/255) =
+20`, which reads back 40; premultiplying the *byte* the same colour rounds to
+gives `round(41 × 128/255) = 21`, which reads back 42 — Chrome's answer. The
+opaque row agrees either way (`a36629`), and a float16 canvas says the colour
+itself is still 0.16 rather than 41/255, so this is not the source channel
+coming back: it is the premultiply alone.
+
+That would mean an eight-bit canvas quantises a *legacy* colour before it
+premultiplies, while `color()`/`lab()`/`oklch()` keep the float — which the same
+file's `color(display-p3 1 0.25 0.5 / 0.5)` demands, since premultiplying its
+rounded byte would store `ff1c8080` and Chrome stores `ff1c7e80`. One reading is
+not enough to build that split on; it needs a sweep of legacy notations at half
+alpha on both engines before anything is written.
