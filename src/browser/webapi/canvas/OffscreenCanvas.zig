@@ -145,6 +145,7 @@ pub fn getContext(
             ._surface = .{
                 .arena = exec.arena,
                 .background = if (created.two_d.alpha) .transparent else .black,
+                .channels = created.two_d.channels(),
             },
             ._attributes = created.two_d,
         }) },
@@ -160,14 +161,14 @@ pub fn getContext(
     return self._cached;
 }
 
-/// The painted pixels *as the bitmap stores them*, which is premultiplied —
-/// only another bitmap should read these. Null means "every pixel is
-/// transparent black", which is also what a WebGL or WebGPU canvas reports:
-/// neither rasterises.
-pub fn pixels(self: *const OffscreenCanvas) ?[]const u8 {
+/// The bitmap behind the canvas, *as it stores its pixels* — premultiplied, and
+/// in whichever channel type `colorType` asked for, so only another bitmap
+/// should read it. Null means "every pixel is transparent black", which is also
+/// what a WebGL or WebGPU canvas reports: neither rasterises.
+pub fn bitmap(self: *const OffscreenCanvas) ?*const Surface {
     const cached = self._cached orelse return null;
     return switch (cached) {
-        .@"2d" => |context| context._surface.peek(self._width, self._height),
+        .@"2d" => |context| &context._surface,
         .webgl, .webgl2, .webgpu => null,
     };
 }
@@ -240,7 +241,7 @@ pub fn transferToImageBitmap(self: *OffscreenCanvas, exec: *Execution) !*ImageBi
             taken = context._surface;
             // The emptied surface keeps the canvas opaque, so a transferred
             // opaque canvas reads back as opaque black rather than transparent.
-            context._surface = .{ .arena = taken.arena, .background = taken.background };
+            context._surface = .{ .arena = taken.arena, .background = taken.background, .channels = taken.channels };
         },
         // Chrome's bitmap carries the cleared colour off a WebGL canvas, but
         // nothing is rasterised behind one here — the same gap

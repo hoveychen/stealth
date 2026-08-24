@@ -101,12 +101,13 @@ pub const PaintStyle = struct {
     /// The colour the rasteriser writes, in the bitmap's own colour space and
     /// still unquantised. This is where the two halves of a paint style come
     /// apart: what a script reads back is the notation (see `read`), and what
-    /// goes into the bitmap is that notation resolved into `space`.
+    /// goes into the bitmap is that notation resolved into `format`.
     ///
     /// It stays a float because the bitmap premultiplies before it rounds, and
-    /// the two orders do not agree to the byte — see `color.Paint`.
-    pub fn paint(self: *const PaintStyle, space: color.CanvasSpace) color.Paint {
-        return self.style.paint(space);
+    /// the two orders do not agree to the byte — see `color.Paint`. On a
+    /// float16 bitmap it is never rounded at all.
+    pub fn paint(self: *const PaintStyle, format: color.CanvasFormat) color.Paint {
+        return self.style.paint(format);
     }
 
     /// The colour arm answers with the source notation when the colour was

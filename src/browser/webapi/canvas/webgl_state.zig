@@ -268,7 +268,8 @@ pub fn setViewport(self: *State, x: i32, y: i32, w: i32, h: i32) void {
 /// nothing sets it -- so there is no rectangle to honour.
 pub fn clear(self: *State, mask: u32, width: u32, height: u32) void {
     if (mask & COLOR_BUFFER_BIT == 0) return;
-    const pixels = self.surface.ensure(width, height) orelse return;
+    if (!self.surface.ensure(width, height)) return;
+    const pixels = self.surface.pixels;
     const rgba: [4]u8 = .{
         glsl.quantise(self.clear_color[0]),
         glsl.quantise(self.clear_color[1]),
@@ -377,7 +378,8 @@ pub fn drawArrays(self: *State, mode: u32, first: i32, count: i32, width: u32, h
         positions[i] = clip.v;
     }
 
-    const pixels = self.surface.ensure(width, height) orelse return;
+    if (!self.surface.ensure(width, height)) return;
+    const pixels = self.surface.pixels;
 
     var budget: usize = max_fragments;
     var triangle: usize = 0;

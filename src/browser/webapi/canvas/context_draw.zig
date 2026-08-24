@@ -90,6 +90,13 @@ pub fn Mixin(comptime T: type) type {
             return self._attributes.space();
         }
 
+        /// That space and the bitmap's channel type together, which is what a
+        /// colour has to be resolved against: `colorType: 'float16'` has room
+        /// for a channel that is neither byte-valued nor in gamut.
+        fn format(self: *const T) color.CanvasFormat {
+            return self._attributes.format();
+        }
+
         /// True when the transform maps axis-aligned rectangles to
         /// axis-aligned rectangles, which is every `scale` and `translate`.
         fn upright(ctm: Transform) bool {
@@ -119,7 +126,7 @@ pub fn Mixin(comptime T: type) type {
             // whether Chrome filters before or after the conversion, and on an
             // srgb canvas — every canvas until one asks for display-p3 — the
             // conversion is the identity and the question does not arise.
-            return filter(self).applyTo(style.paint(space(self)));
+            return filter(self).applyTo(style.paint(format(self)));
         }
 
         // --- state stack ---------------------------------------------------
@@ -660,11 +667,15 @@ pub fn Mixin(comptime T: type) type {
                     const out = data.local(exec.js.local.?).slice();
                     readInto(self, window, read.color_space, out);
                 },
-                // The bitmap is eight bits a channel in Chrome too, so a float
-                // format is not a finer *bitmap* — but it is a finer read of
-                // one: the un-premultiplication and the colour conversion both
+                // A float pixel format is a finer *read*, not a finer bitmap:
+                // the un-premultiplication and the colour conversion both
                 // happen in floating point, and neither is rounded into a byte
-                // on the way. See `readFloatInto`.
+                // on the way. Off a `colorType: 'unorm8'` bitmap — which is
+                // every canvas that did not ask otherwise — the channel it
+                // answers is still the neighbour of some `n / 255`, because
+                // that is all the bitmap held. The finer *bitmap* is the other
+                // axis, and it is `colorType` that picks it. See
+                // `readFloatInto` and `raster.Surface.channels`.
                 inline .@"rgba-float16", .@"rgba-float32" => |data| {
                     try readFloatInto(self, window, read.color_space, data.local(exec.js.local.?).slice(), exec);
                 },

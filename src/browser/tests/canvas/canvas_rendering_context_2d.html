@@ -574,18 +574,14 @@
   // Every colour space `color()` takes, one reading each.
   testing.expectEqual("ff0000ff", paint("color(display-p3 1 0 0)"));
   testing.expectEqual("ff1b7fff", paint("color(display-p3 1 0.25 0.5)"));
-  // ⚠️ Blue is Chrome's; green is one byte short of it. Chrome answers
-  // `ff1c7e80` (results/canvas-premultiplied-encode.chrome.json). The bitmap
-  // premultiplies the *float* colour and divides it back out on the way to a
-  // page, which is why the blue moved: 126.78 * 0.5 stores 63, and 63 of 128
-  // reads back as 126 rather than the 127 the opaque row stores. The green is
-  // the one channel that lands on the wrong side of a rounding boundary — ours
-  // is 26.998, Chrome's is just over 27, so half of each stores 13 against 14.
-  // The gap is 1e-5 in the colour-space transform, and it is *not* a choice
-  // between the two published matrix sets: measured over 24 colours the two
-  // disagree about, Chrome sides with neither (probes/canvas-space-matrix.js).
-  // The un-premultiplication doubles that 1e-5 into the two bytes seen here.
-  testing.expectEqual("ff1a7e80", paint("color(display-p3 1 0.25 0.5 / 0.5)"));
+  // The same notation at half alpha, which moves two channels rather than
+  // none: the bitmap premultiplies the *float* colour and divides it back out
+  // on the way to a page, so the blue's 126.78 stores 63 and 63 of 128 reads
+  // back 126 where the opaque row above reads 127. The green is the knife edge
+  // that says which conversion the notation took — 27.03 halves to 13.5 and
+  // stores 14, where the 26.998 an XYZ D50 route gives halves to 13.4985 and
+  // stores 13. Chrome's byte is the first (see `Wide.toSrgbUnit`).
+  testing.expectEqual("ff1c7e80", paint("color(display-p3 1 0.25 0.5 / 0.5)"));
   testing.expectEqual("00000000", paint("color(display-p3 1 0.25 0.5 / none)"));
   testing.expectEqual("004184ff", paint("color(display-p3 none 0.25 0.5)"));
   testing.expectEqual("893b83ff", paint("color(display-p3 50% 25% 50%)"));
@@ -611,15 +607,12 @@
   testing.expectEqual("0085b0ff", paint("color(prophoto-rgb 0.02 0.4 0.6)"));
   testing.expectEqual("58cc00ff", paint("color(rec2020 0.5 0.75 0.1)"));
   testing.expectEqual("0079a8ff", paint("color(rec2020 0.05 0.4 0.6)"));
-  // The one reading in this block that is not Chrome's. Its red lands at
-  // 26.5344, four hundredths of a byte over the rounding boundary, and Chrome
-  // answers `1a` where the spec's matrices answer `1b` -- Skia carries its
-  // gamut matrices as D50 fixed point, so its arithmetic sits a ten-thousandth
-  // away from CSS Color 4's rationals and a knife-edge channel can fall either
-  // side. Thirty-nine of the forty readings measured for this are exact; this
-  // is the fortieth, and a one-LSB channel is a reading a real browser produces
-  // too, so it is recorded rather than chased.
-  testing.expectEqual("1b689dff", paint("color(display-p3 0.2 0.4 0.6)"));
+  // The knife edge that says which gamut matrix a display-p3 notation takes.
+  // Its red lands within four hundredths of a byte of the rounding boundary,
+  // and the two candidates fall on opposite sides: CSS Color 4's rationals
+  // through XYZ D50 answer `1b`, Skia's own D50 fixed-point pair answers `1a`,
+  // and Chrome answers `1a` (see `Wide.toSrgbUnit`).
+  testing.expectEqual("1a689dff", paint("color(display-p3 0.2 0.4 0.6)"));
   testing.expectEqual("7caacbff", paint("color(srgb-linear 0.2 0.4 0.6)"));
   testing.expectEqual("00c89fff", paint("color(xyz-d50 0.2 0.4 0.3)"));
   testing.expectEqual("00c788ff", paint("color(xyz-d65 0.2 0.4 0.3)"));

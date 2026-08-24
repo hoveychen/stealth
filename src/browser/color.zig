@@ -597,15 +597,17 @@ pub const Style = struct {
     /// come back out: on a display-p3 canvas Chrome stores `ff228d` for
     /// `color(rec2020 1 0.25 0.5)`, where converting the sRGB bytes it also
     /// reports would give `ea338b` (probes/canvas-own-color-space.js).
-    pub fn paint(self: Style, space: CanvasSpace) Paint {
+    pub fn paint(self: Style, format: CanvasFormat) Paint {
         if (self.wide) |source| {
-            return source.toPaint(space);
+            return source.toPaint(format);
         }
         const unit = self.float orelse {
-            if (space == .srgb) {
+            if (format.space == .srgb) {
+                // Byte-valued and already in the bitmap's space, so there is
+                // nothing to convert and nothing to clip either way.
                 return .fromRGBA(self.rgba);
             }
-            return convertCanvasPaint(.srgb, space, .fromRGBA(self.rgba));
+            return convertCanvasFormat(.srgb, format, .fromRGBA(self.rgba));
         };
         // A legacy alpha is a byte by the time it is parsed, whichever notation
         // carried it — only `Wide`'s is a float. See `Paint`.
@@ -615,8 +617,8 @@ pub const Style = struct {
             @floatCast(unit[1]),
             @floatCast(unit[2]),
         };
-        const converted = convertCanvasUnit(.srgb, space, rgb);
-        return .clip(
+        const converted = convertCanvasUnit(.srgb, format.space, rgb);
+        return format.fit(
             converted[0] * 255,
             converted[1] * 255,
             converted[2] * 255,
@@ -895,7 +897,7 @@ pub const Wide = struct {
     /// measured against Chrome — `color(display-p3 1 0.25 0.5)` is `ff1b7f`,
     /// `lab(50% 40 30)` is `bb5846`, `oklch(0.7 0.1 20)` is `d68585`.
     pub fn toRGBA(self: Wide, target: CanvasSpace) RGBA {
-        return self.toPaint(target).toRGBA();
+        return self.toPaint(.{ .space = target }).toRGBA();
     }
 
     /// The same colour unquantised, which is the form a canvas paints with: the
@@ -912,27 +914,71 @@ pub const Wide = struct {
     ///
     /// The alpha a wide notation carries stays a float here — it is the one
     /// alpha in the whole pipeline that is not already a byte.
-    pub fn toPaint(self: Wide, target: CanvasSpace) Paint {
+    ///
+    /// The colour reaches the bitmap in two legs and they are not the same
+    /// arithmetic. Blink resolves the notation into *extended* sRGB first
+    /// (`toSrgbUnit`), and Skia then converts that into the bitmap's own space
+    /// (`convertCanvasUnit`) — so a display-p3 notation on a display-p3 canvas
+    /// goes p3 to sRGB and back rather than straight through, and the round
+    /// trip is observable: `color(display-p3 1 0.25 0.5)` stores `ff407f`
+    /// there, not the `ff4080` an exact `round(0.5 * 255)` would.
+    pub fn toPaint(self: Wide, into: CanvasFormat) Paint {
+        const alpha: f64 = switch (self.alpha orelse Channel{ .number = 1 }) {
+            .none => 0,
+            .number => |a| a,
+        };
+        const srgb = self.toSrgbUnit();
+        const converted = convertCanvasUnit(.srgb, into.space, .{
+            @floatCast(srgb[0]),
+            @floatCast(srgb[1]),
+            @floatCast(srgb[2]),
+        });
+        return into.fit(
+            converted[0] * 255,
+            converted[1] * 255,
+            converted[2] * 255,
+            alpha,
+        );
+    }
+
+    /// The notation as *extended* sRGB: encoded sRGB channels on the 0..1
+    /// scale, unclipped, which is the form every CSS colour is resolved into
+    /// before a bitmap's own space is reached. See `toPaint`.
+    ///
+    /// The display-p3 leg does not go through CIE XYZ the way the rest of the
+    /// family does. Measured against Chrome's own float16 readings
+    /// (results/canvas-float-source-channels.chrome.json), which answer the
+    /// converted channel rather than a byte of it: `color(display-p3 1 0.25
+    /// 0.5)` on an srgb canvas reads `1.0888671875 0.10601806640625
+    /// 0.497314453125`, and only the exact transfer function over *Skia's*
+    /// composed matrix lands on all three. The XYZ D50 route this used to take
+    /// puts the green at 0.10587, which is two half-precision steps out — and
+    /// visible as a whole byte once the fill is translucent.
+    fn toSrgbUnit(self: Wide) [3]f64 {
         const c: [3]f64 = .{
             self.channels[0].value(),
             self.channels[1].value(),
             self.channels[2].value(),
         };
-        const alpha: f64 = switch (self.alpha orelse Channel{ .number = 1 }) {
-            .none => 0,
-            .number => |a| a,
-        };
-
-        // `color(srgb ...)` is already the encoded form of an srgb bitmap, so
-        // it skips the round trip through linear light that would only add
-        // rounding error. A display-p3 notation on a display-p3 bitmap does
-        // *not* get the same shortcut, because Chrome does not take it either:
-        // `color(display-p3 1 0.25 0.5)` stores `ff407f` there, where the
-        // shortcut's exact `round(0.5 * 255)` would store `ff4080` — the same
-        // notation's `0.5` in `color(srgb ...)` on an srgb bitmap does store
-        // `80`. So the round trip, and its drift, are observable.
-        if (self.function == .color and self.space == .srgb and target == .srgb) {
-            return .clip(c[0] * 255, c[1] * 255, c[2] * 255, alpha);
+        if (self.function == .color) {
+            switch (self.space) {
+                // Already the encoded form: nothing to do, and the round trip
+                // through linear light would only add rounding error.
+                .srgb => return c,
+                .@"display-p3" => {
+                    const linear = matrixApplyFused(p3_linear_to_srgb_linear, .{
+                        @floatCast(srgbToLinear64(c[0])),
+                        @floatCast(srgbToLinear64(c[1])),
+                        @floatCast(srgbToLinear64(c[2])),
+                    });
+                    return .{
+                        srgbFromLinear(linear[0]),
+                        srgbFromLinear(linear[1]),
+                        srgbFromLinear(linear[2]),
+                    };
+                },
+                else => {},
+            }
         }
 
         const linear: [3]f64 = switch (self.function) {
@@ -941,11 +987,9 @@ pub const Wide = struct {
             .oklab => oklabToSrgbLinear(c[0], c[1], c[2]),
             .oklch => polar(oklabToSrgbLinear, c),
             .color => switch (self.space) {
-                // Only reached with a display-p3 target: an srgb target takes
-                // the encoded shortcut above.
-                .srgb => .{ srgbToLinear(c[0]), srgbToLinear(c[1]), srgbToLinear(c[2]) },
+                // The two canvas spaces are answered above.
+                .srgb, .@"display-p3" => unreachable,
                 .@"srgb-linear" => c,
-                .@"display-p3" => rgbSpaceToSrgbLinear(display_p3_to_xyz, srgbToLinear64, c),
                 .@"a98-rgb" => rgbSpaceToSrgbLinear(a98_rgb_to_xyz, a98ToLinear, c),
                 .@"prophoto-rgb" => xyzD50ToSrgbLinear(matrixApply(prophoto_rgb_to_xyz_d50, .{
                     prophotoToLinear(c[0]),
@@ -957,29 +1001,13 @@ pub const Wide = struct {
                 .@"xyz-d50" => xyzD50ToSrgbLinear(c),
             },
         };
-        // Every branch above lands in linear sRGB, which is a way station and
-        // not a gamut: the channels are still unclipped, so moving on to
-        // display-p3 from here loses nothing that going direct would have kept.
-        // The last leg is f32, for the reason `convertCanvasRGBA` gives.
-        if (target == .@"display-p3") {
-            const p3 = matrixApply(srgb_linear_to_p3_linear, .{
-                @floatCast(linear[0]),
-                @floatCast(linear[1]),
-                @floatCast(linear[2]),
-            });
-            return .clip(
-                srgbFromLinear(p3[0]) * 255,
-                srgbFromLinear(p3[1]) * 255,
-                srgbFromLinear(p3[2]) * 255,
-                alpha,
-            );
-        }
-        return .clip(
-            srgbFromLinear(linear[0]) * 255,
-            srgbFromLinear(linear[1]) * 255,
-            srgbFromLinear(linear[2]) * 255,
-            alpha,
-        );
+        // Linear sRGB is a way station and not a gamut, so the channels are
+        // still unclipped here and the encode keeps them that way.
+        return .{
+            srgbFromLinear(linear[0]),
+            srgbFromLinear(linear[1]),
+            srgbFromLinear(linear[2]),
+        };
     }
 
     /// Formats the colour the way Chrome answers it: the function lowercased,
@@ -1202,6 +1230,43 @@ pub const CanvasSpace = enum {
     @"display-p3",
 };
 
+/// `colorType`: what one channel of a canvas bitmap *is*. This is not the axis
+/// an ImageData's pixel format is on — that one is a finer *read* of whatever
+/// the bitmap holds, so every channel it answers off an eight-bit bitmap is the
+/// neighbour of some `n / 255`. This is the bitmap.
+///
+/// An eight-bit channel has room for `n / 255` and nothing else, so a colour
+/// that is not byte-valued is gone the moment it is stored and one outside the
+/// gamut is clipped there. A half float holds the paint as it came. Measured
+/// (results/canvas-float-source-channels.chrome.json): `hsl(30 60% 40%)` reads
+/// 0.64013671875 off a float16 bitmap, half precision's neighbour of 0.64,
+/// where the same fill on an eight-bit one reads 0.63916015625 — the neighbour
+/// of the 163/255 it had to round to.
+pub const CanvasChannels = enum {
+    unorm8,
+    float16,
+};
+
+/// A canvas bitmap's two axes together, which is the pair a colour has to be
+/// resolved against: the space says what the numbers mean, the channel type
+/// says what room there is to hold them.
+pub const CanvasFormat = struct {
+    space: CanvasSpace = .srgb,
+    channels: CanvasChannels = .unorm8,
+
+    /// A converted colour fitted to the bitmap. The clip is only an eight-bit
+    /// bitmap's: a float one keeps a channel outside the destination gamut, and
+    /// a page can read it back. Measured: `color(display-p3 1 0.25 0.5)` on an
+    /// *srgb* float16 canvas reads a red of 1.0888671875, where the same fill
+    /// on the eight-bit canvas clamps to 255.
+    fn fit(self: CanvasFormat, r: f64, g: f64, b: f64, a: f64) Paint {
+        return switch (self.channels) {
+            .unorm8 => .clip(r, g, b, a),
+            .float16 => .{ .r = r, .g = g, .b = b, .a = std.math.clamp(a, 0, 1) },
+        };
+    }
+};
+
 /// A colour on its way into a canvas bitmap, before it is quantised: RGB on the
 /// 0..255 scale and alpha on 0..1, both as floats.
 ///
@@ -1303,11 +1368,17 @@ pub fn convertCanvasRGBA(from: CanvasSpace, to: CanvasSpace, rgba: RGBA) RGBA {
 /// The same conversion left unquantised, for the callers that go on to
 /// premultiply it into a bitmap rather than answer it as bytes. See `Paint`.
 pub fn convertCanvasPaint(from: CanvasSpace, to: CanvasSpace, paint: Paint) Paint {
-    const out = convertCanvasPaintUnclipped(from, to, paint);
-    if (from == to) {
+    return convertCanvasFormat(from, .{ .space = to }, paint);
+}
+
+/// The same conversion against a whole bitmap format, so a float bitmap keeps
+/// the channels an eight-bit one would have clipped. See `CanvasFormat.fit`.
+pub fn convertCanvasFormat(from: CanvasSpace, to: CanvasFormat, paint: Paint) Paint {
+    const out = convertCanvasPaintUnclipped(from, to.space, paint);
+    if (from == to.space) {
         return out;
     }
-    return .clip(out.r, out.g, out.b, out.a);
+    return to.fit(out.r, out.g, out.b, out.a);
 }
 
 /// The same conversion with the gamut clip left off, for the one caller that
@@ -1752,9 +1823,9 @@ test "color: hsl and hwb reach a canvas as floats, legacy rgb as bytes" {
     };
     for (cases) |case| {
         const style = parseStyle(case.notation) orelse return error.Unparseable;
-        const srgb = style.paint(.srgb).toRGBA();
+        const srgb = style.paint(.{ .space = .srgb }).toRGBA();
         try std.testing.expectEqualSlices(u8, &case.srgb, &.{ srgb.r, srgb.g, srgb.b });
-        const p3 = style.paint(.@"display-p3").toRGBA();
+        const p3 = style.paint(.{ .space = .@"display-p3" }).toRGBA();
         try std.testing.expectEqualSlices(u8, &case.p3, &.{ p3.r, p3.g, p3.b });
         var read: [4]u8 = .{ p3.r, p3.g, p3.b, p3.a };
         convertCanvasPixels(.@"display-p3", .srgb, &read);

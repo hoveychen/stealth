@@ -31,7 +31,7 @@
 //!
 //! The one source Chrome carries pixels for and this does not is a canvas that
 //! only ever had a WebGL context: Chrome's bitmap holds the cleared colour
-//! (measured), while `Canvas.pixels()` rasterises nothing there.
+//! (measured), while `Canvas.bitmap()` rasterises nothing there.
 
 const std = @import("std");
 
@@ -104,16 +104,18 @@ const SOURCE_TYPES = "(Blob or HTMLCanvasElement or HTMLImageElement or " ++
     "HTMLVideoElement or ImageBitmap or ImageData or OffscreenCanvas or " ++
     "SVGImageElement or VideoFrame)";
 
-/// A usable source: how big it is, and its pixels when it has any. `pixels` is
-/// null for a canvas nobody drew into, which reads as fully transparent.
+/// A usable source: how big it is, and its pixels when it has any. Both arms
+/// are null for a canvas nobody drew into, which reads as fully transparent.
 const Usable = struct {
     width: u32,
     height: u32,
-    pixels: ?[]const u8,
-    /// Whether `pixels` is already in the premultiplied form a `Surface`
-    /// stores. Another bitmap's are; an ImageData's are not — that object is
-    /// the straight-alpha view a page gets handed.
-    premultiplied: bool = true,
+    /// Another bitmap, read through its own accessors — so a source whose
+    /// channels are half floats is copied as such rather than reinterpreted.
+    bitmap: ?*const Surface = null,
+    /// Straight-alpha RGBA8, which is what an ImageData hands over: that object
+    /// is the un-premultiplied view a page holds, so these are premultiplied on
+    /// the way in.
+    straight: ?[]const u8 = null,
 };
 
 const Source = union(enum) {
@@ -134,14 +136,14 @@ fn classify(value: js.Value, arena: Allocator) !Source {
         return .{ .usable = .{
             .width = canvas.getWidth(),
             .height = canvas.getHeight(),
-            .pixels = canvas.pixels(),
+            .bitmap = canvas.bitmap(),
         } };
     } else |_| {}
     if (value.toZig(*OffscreenCanvas)) |canvas| {
         return .{ .usable = .{
             .width = canvas.getWidth(),
             .height = canvas.getHeight(),
-            .pixels = canvas.pixels(),
+            .bitmap = canvas.bitmap(),
         } };
     } else |_| {}
     if (value.toZig(*ImageData)) |data| {
@@ -152,8 +154,7 @@ fn classify(value: js.Value, arena: Allocator) !Source {
         return .{ .usable = .{
             .width = data.getWidth(),
             .height = data.getHeight(),
-            .pixels = try data.straightBytes(value.local, arena),
-            .premultiplied = false,
+            .straight = try data.straightBytes(value.local, arena),
         } };
     } else |_| {}
     if (value.toZig(*ImageBitmap)) |bitmap| {
@@ -161,7 +162,7 @@ fn classify(value: js.Value, arena: Allocator) !Source {
         return .{ .usable = .{
             .width = bitmap._width,
             .height = bitmap._height,
-            .pixels = bitmap._surface.peek(bitmap._width, bitmap._height),
+            .bitmap = &bitmap._surface,
         } };
     } else |_| {}
     if (value.toZig(*Image)) |_| {
@@ -186,8 +187,16 @@ fn classify(value: js.Value, arena: Allocator) !Source {
 /// non-overlapping part needs no work.
 fn snapshot(arena: Allocator, source: Usable, left: i64, top: i64, width: u32, height: u32) Surface {
     var copy = Surface{ .arena = arena };
-    const from = source.pixels orelse return copy;
-    const into = copy.ensure(width, height) orelse return copy;
+    // The copy is the source's own kind of bitmap: an ImageBitmap taken off a
+    // float16 canvas holds half floats too, so drawing it back onto one loses
+    // nothing on the way through.
+    if (source.bitmap) |bitmap| {
+        if (!bitmap.backed(source.width, source.height)) return copy;
+        copy.channels = bitmap.channels;
+    } else if (source.straight == null) {
+        return copy;
+    }
+    if (!copy.ensure(width, height)) return copy;
 
     var row: u32 = 0;
     while (row < height) : (row += 1) {
@@ -197,12 +206,12 @@ fn snapshot(arena: Allocator, source: Usable, left: i64, top: i64, width: u32, h
         while (col < width) : (col += 1) {
             const sx = left + @as(i64, col);
             if (sx < 0 or sx >= @as(i64, source.width)) continue;
-            const at = (@as(usize, @intCast(sy)) * source.width + @as(usize, @intCast(sx))) * 4;
-            const to = (@as(usize, row) * width + col) * 4;
-            if (source.premultiplied) {
-                @memcpy(into[to..][0..4], from[at..][0..4]);
+            const at = @as(usize, @intCast(sy)) * source.width + @as(usize, @intCast(sx));
+            const to = @as(usize, row) * width + col;
+            if (source.bitmap) |bitmap| {
+                copy.copyPixel(to, bitmap, at);
             } else {
-                into[to..][0..4].* = Surface.premultiply(from[at..][0..4]);
+                copy.pixels[to * 4 ..][0..4].* = Surface.premultiply(source.straight.?[at * 4 ..][0..4]);
             }
         }
     }

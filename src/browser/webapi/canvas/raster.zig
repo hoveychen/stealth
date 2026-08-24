@@ -167,12 +167,15 @@ pub const Filter = struct {
 
 /// Frame-lifetime arena. The buffer is only reclaimed with the frame.
 arena: Allocator,
-/// Dimensions the current buffer was allocated for. Meaningless when
-/// `pixels` is empty.
+/// Dimensions the current buffer was allocated for. Meaningless when the
+/// bitmap is empty.
 width: u32 = 0,
 height: u32 = 0,
-/// Premultiplied RGBA8, row-major, `width * height * 4` long. Empty until
-/// something actually draws.
+/// What one channel of this bitmap is, which `colorType` picks and which
+/// decides which of the two buffers below is the live one.
+channels: color.CanvasChannels = .unorm8,
+/// Premultiplied RGBA8, row-major, `width * height * 4` long. The `unorm8`
+/// store, and empty until something actually draws.
 ///
 /// Premultiplied is what Chrome's bitmap is, and it is observable: the colour
 /// has to be un-premultiplied again for `getImageData`, and that does not undo
@@ -181,6 +184,14 @@ height: u32 = 0,
 /// unchanged (measured -- probes/canvas-alpha-semantics.js). Every consumer
 /// that wants the straight bytes a page sees goes through `readPixels`.
 pixels: []u8 = &.{},
+/// The `float16` store: the same premultiplied RGBA, four half floats a pixel
+/// and on the 0..1 scale, `width * height * 4` long.
+///
+/// Premultiplied all the same — but not rounded, so here the round trip *is*
+/// lossless: `color(display-p3 1 0.25 0.5 / 0.5)` comes back as itself, where
+/// the eight-bit store moves two of its channels (measured --
+/// results/canvas-float-source-channels.chrome.json).
+halves: []f16 = &.{},
 /// What the bitmap is where nothing has been painted, which `{alpha: false}`
 /// changes from transparent black to opaque black. A page can read that back
 /// without drawing anything, and every paint onto it composites against black
@@ -201,9 +212,10 @@ pub const Background = enum {
     }
 };
 
-/// Roughly a 2896x2896 canvas. Past this we simply refuse to back the canvas,
-/// and every operation degrades to the old no-op behaviour. Fingerprinting
-/// canvases are tiny; this only guards against a page asking for gigabytes.
+/// Roughly a 2896x2896 canvas, and half that many pixels in the float16 store,
+/// which is twice as wide. Past this we simply refuse to back the canvas, and
+/// every operation degrades to the old no-op behaviour. Fingerprinting canvases
+/// are tiny; this only guards against a page asking for gigabytes.
 pub const max_bytes = 32 * 1024 * 1024;
 
 /// Drops the backing store. Assigning to `canvas.width` / `canvas.height`
@@ -212,53 +224,153 @@ pub fn reset(self: *Surface) void {
     if (self.pixels.len != 0) {
         self.arena.free(self.pixels);
     }
+    if (self.halves.len != 0) {
+        self.arena.free(self.halves);
+    }
     self.pixels = &.{};
+    self.halves = &.{};
     self.width = 0;
     self.height = 0;
 }
 
-/// The buffer for a `width` x `height` canvas, allocating (zeroed) or
-/// reallocating it as needed. Null when the canvas is degenerate or too big
-/// to back, in which case callers should behave as if nothing was drawn.
-pub fn ensure(self: *Surface, width: u32, height: u32) ?[]u8 {
+/// How many pixels the live store holds, which is zero until something draws.
+fn count(self: *const Surface) usize {
+    return switch (self.channels) {
+        .unorm8 => self.pixels.len / 4,
+        .float16 => self.halves.len / 4,
+    };
+}
+
+/// Backs a `width` x `height` canvas, allocating (as the background colour) or
+/// reallocating as needed. False when the canvas is degenerate or too big to
+/// back, in which case callers should behave as if nothing was drawn.
+pub fn ensure(self: *Surface, width: u32, height: u32) bool {
     if (width == 0 or height == 0) {
-        return null;
+        return false;
     }
-    if (self.pixels.len != 0 and self.width == width and self.height == height) {
-        return self.pixels;
-    }
-
-    const bytes = @as(u64, width) * @as(u64, height) * 4;
-    if (bytes > max_bytes) {
-        return null;
+    if (self.count() != 0 and self.width == width and self.height == height) {
+        return true;
     }
 
-    const pixels = self.arena.alloc(u8, @intCast(bytes)) catch return null;
-    fill(pixels, self.background);
-
-    self.reset();
-    self.pixels = pixels;
+    const pixels = @as(u64, width) * @as(u64, height);
+    switch (self.channels) {
+        .unorm8 => {
+            if (pixels * 4 > max_bytes) return false;
+            const buffer = self.arena.alloc(u8, @intCast(pixels * 4)) catch return false;
+            self.reset();
+            self.pixels = buffer;
+        },
+        .float16 => {
+            if (pixels * @sizeOf(f16) * 4 > max_bytes) return false;
+            const buffer = self.arena.alloc(f16, @intCast(pixels * 4)) catch return false;
+            self.reset();
+            self.halves = buffer;
+        },
+    }
     self.width = width;
     self.height = height;
-    return pixels;
+    self.clear(0, @intCast(pixels));
+    return true;
 }
 
-/// The buffer as it stands, without allocating. Null when nothing has been
-/// drawn yet or the canvas has since been resized, both of which mean "every
-/// pixel is transparent black".
+/// True when there is a buffer of this size to read or write through.
+pub fn backed(self: *const Surface, width: u32, height: u32) bool {
+    return self.count() != 0 and self.width == width and self.height == height;
+}
+
+/// The eight-bit buffer as it stands, without allocating. Null when nothing has
+/// been drawn yet, when the canvas has since been resized — both of which mean
+/// "every pixel is transparent black" — and when this bitmap is not eight bits
+/// a channel at all, since then there are no such bytes to borrow.
 pub fn peek(self: *const Surface, width: u32, height: u32) ?[]const u8 {
-    if (self.pixels.len == 0 or self.width != width or self.height != height) {
+    if (self.channels != .unorm8 or !self.backed(width, height)) {
         return null;
     }
     return self.pixels;
 }
 
-/// `peek`, for the callers that write back.
-fn peekMut(self: *Surface, width: u32, height: u32) ?[]u8 {
-    if (self.pixels.len == 0 or self.width != width or self.height != height) {
-        return null;
+// --- the store, one pixel at a time ----------------------------------------
+//
+// Everything below the two functions here works in one currency: premultiplied
+// RGBA on the 0..255 scale, alpha included, as f64. That is the eight-bit
+// store's own scale, so its arithmetic is unchanged to the byte; the float16
+// store's channels are 0..1, and the factor of 255 goes on and comes back off
+// exactly at f64. What the two stores do *not* share is the quantisation —
+// which is the whole of the difference a page can see.
+
+/// One stored pixel, premultiplied, on the 0..255 scale.
+fn load(self: *const Surface, at: usize) [4]f64 {
+    switch (self.channels) {
+        .unorm8 => {
+            const stored = self.pixels[at * 4 ..][0..4];
+            return .{
+                @floatFromInt(stored[0]),
+                @floatFromInt(stored[1]),
+                @floatFromInt(stored[2]),
+                @floatFromInt(stored[3]),
+            };
+        },
+        .float16 => {
+            const stored = self.halves[at * 4 ..][0..4];
+            return .{
+                @as(f64, stored[0]) * 255,
+                @as(f64, stored[1]) * 255,
+                @as(f64, stored[2]) * 255,
+                @as(f64, stored[3]) * 255,
+            };
+        },
     }
-    return self.pixels;
+}
+
+/// The same pixel written back. An eight-bit channel rounds and clips here; a
+/// half float takes the value as it came, out-of-gamut channels included.
+fn store(self: *Surface, at: usize, pixel: [4]f64) void {
+    switch (self.channels) {
+        .unorm8 => {
+            const into = self.pixels[at * 4 ..][0..4];
+            for (into, pixel) |*byte, value| byte.* = RGBA.round255(value);
+        },
+        .float16 => {
+            const into = self.halves[at * 4 ..][0..4];
+            for (into, pixel) |*half, value| half.* = @floatCast(value / 255);
+        },
+    }
+}
+
+/// Every pixel in `[from, to)` set to the background, which `{alpha: false}`
+/// makes opaque black rather than transparent.
+fn clear(self: *Surface, from: usize, to: usize) void {
+    const pixel = self.background.pixel();
+    switch (self.channels) {
+        .unorm8 => {
+            if (self.background == .transparent) {
+                @memset(self.pixels[from * 4 .. to * 4], 0);
+                return;
+            }
+            var at = from;
+            while (at < to) : (at += 1) {
+                @memcpy(self.pixels[at * 4 ..][0..4], &pixel);
+            }
+        },
+        .float16 => {
+            if (self.background == .transparent) {
+                @memset(self.halves[from * 4 .. to * 4], 0);
+                return;
+            }
+            var at = from;
+            while (at < to) : (at += 1) {
+                self.halves[at * 4 ..][0..4].* = .{ 0, 0, 0, 1 };
+            }
+        },
+    }
+}
+
+/// One pixel copied out of another bitmap, which is what a snapshot is made of.
+/// Both sides are premultiplied, so nothing is divided out on the way — but the
+/// two need not be the same channel type, and a float16 source landing in an
+/// eight-bit copy quantises here.
+pub fn copyPixel(self: *Surface, at: usize, src: *const Surface, src_at: usize) void {
+    self.store(at, src.load(src_at));
 }
 
 /// A rectangle snapped to whole pixels and clipped to the canvas, as a
@@ -318,7 +430,7 @@ fn opacity(global_alpha: f64) f64 {
 /// Composites `paint` over the rectangle, `global_alpha` scaling its opacity.
 pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64, paint: Paint, global_alpha: f64, op: Composite) void {
     const bounds = Bounds.clip(x, y, w, h, canvas_width, canvas_height) orelse return;
-    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+    if (!self.ensure(canvas_width, canvas_height)) return;
 
     const alpha = opacity(global_alpha) * paint.a;
     if (alpha <= 0) {
@@ -329,8 +441,8 @@ pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y
     while (row < bounds.y1) : (row += 1) {
         var col = bounds.x0;
         while (col < bounds.x1) : (col += 1) {
-            const at = (row * canvas_width + col) * 4;
-            blend(pixels[at..][0..4], paint, alpha, op);
+            const at = row * canvas_width + col;
+            self.store(at, blended(self.load(at), paint, alpha, op));
         }
     }
 }
@@ -339,26 +451,11 @@ pub fn fillRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y
 /// composite, so it does not need a buffer that does not already exist.
 pub fn clearRect(self: *Surface, canvas_width: u32, canvas_height: u32, x: f64, y: f64, w: f64, h: f64) void {
     const bounds = Bounds.clip(x, y, w, h, canvas_width, canvas_height) orelse return;
-    const pixels = self.peekMut(canvas_width, canvas_height) orelse return;
+    if (!self.backed(canvas_width, canvas_height)) return;
 
     var row = bounds.y0;
     while (row < bounds.y1) : (row += 1) {
-        const from = (row * canvas_width + bounds.x0) * 4;
-        const to = (row * canvas_width + bounds.x1) * 4;
-        fill(pixels[from..to], self.background);
-    }
-}
-
-/// Every pixel of `bytes` set to `background`.
-fn fill(bytes: []u8, background: Background) void {
-    if (background == .transparent) {
-        @memset(bytes, 0);
-        return;
-    }
-    const pixel = background.pixel();
-    var offset: usize = 0;
-    while (offset + 4 <= bytes.len) : (offset += 4) {
-        @memcpy(bytes[offset..][0..4], &pixel);
+        self.clear(row * canvas_width + bounds.x0, row * canvas_width + bounds.x1);
     }
 }
 
@@ -480,7 +577,7 @@ pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_he
     if (alpha <= 0) {
         return;
     }
-    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+    if (!self.ensure(canvas_width, canvas_height)) return;
 
     const step: f64 = 1.0 / @as(f64, samples);
     const per_sample = step / 2;
@@ -501,8 +598,8 @@ pub fn fillPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_he
             }
             if (hits == 0) continue;
             const coverage = @as(f64, @floatFromInt(hits)) / (samples * samples);
-            const at = (row * canvas_width + col) * 4;
-            blend(pixels[at..][0..4], paint, alpha * coverage, op);
+            const at = row * canvas_width + col;
+            self.store(at, blended(self.load(at), paint, alpha * coverage, op));
         }
     }
 }
@@ -597,7 +694,7 @@ pub fn drawSurface(
     op: Composite,
     filter: Filter,
 ) void {
-    const source = src.peek(src_width, src_height) orelse return;
+    if (!src.backed(src_width, src_height)) return;
     if (blit.dw == 0 or blit.dh == 0 or blit.sw == 0 or blit.sh == 0) return;
     const inverse = ctm.invert() orelse return;
 
@@ -609,7 +706,7 @@ pub fn drawSurface(
 
     const alpha = opacity(global_alpha);
     if (alpha <= 0) return;
-    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+    if (!self.ensure(canvas_width, canvas_height)) return;
 
     const left = @min(blit.dx, blit.dx + blit.dw);
     const top = @min(blit.dy, blit.dy + blit.dh);
@@ -631,16 +728,19 @@ pub fn drawSurface(
             const src_y: u32 = @intFromFloat(@floor(fy));
             if (src_x >= src_width or src_y >= src_height) continue;
 
-            const from = (@as(usize, src_y) * src_width + src_x) * 4;
-            const texel = source[from..][0..4];
+            const texel = src.load(@as(usize, src_y) * src_width + src_x);
             if (texel[3] == 0) continue;
             // The source bitmap is premultiplied too, so the colour has to come
             // back out of its own alpha before it can be converted or blended.
-            // Then into this bitmap's colour space, then through the filter —
-            // the same order `context_draw`'s `paint` uses for a fill.
-            const paint = filter.applyTo(color.convertCanvasPaint(spaces.from, spaces.to, straight(texel)));
-            const at = (row * canvas_width + col) * 4;
-            blend(pixels[at..][0..4], paint, alpha * paint.a, op);
+            // Then into this bitmap's format, then through the filter — the
+            // same order `context_draw`'s `paint` uses for a fill.
+            const paint = filter.applyTo(color.convertCanvasFormat(
+                spaces.from,
+                .{ .space = spaces.to, .channels = self.channels },
+                straight(texel),
+            ));
+            const at = row * canvas_width + col;
+            self.store(at, blended(self.load(at), paint, alpha * paint.a, op));
         }
     }
 }
@@ -651,7 +751,7 @@ pub fn drawSurface(
 pub fn clearPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_height: u32, p: *const Path) void {
     const edges = edgesOf(scratch, p) orelse return;
     const bounds = edgeBounds(edges, canvas_width, canvas_height) orelse return;
-    const pixels = self.peekMut(canvas_width, canvas_height) orelse return;
+    if (!self.backed(canvas_width, canvas_height)) return;
 
     const step: f64 = 1.0 / @as(f64, samples);
     const per_sample = step / 2;
@@ -671,24 +771,23 @@ pub fn clearPath(self: *Surface, scratch: Allocator, canvas_width: u32, canvas_h
                 }
             }
             if (hits == 0) continue;
-            const at = (row * canvas_width + col) * 4;
+            const at = row * canvas_width + col;
             if (hits == samples * samples) {
-                @memcpy(pixels[at..][0..4], &self.background.pixel());
+                self.clear(at, at + 1);
                 continue;
             }
             const covered = @as(f64, @floatFromInt(hits)) / (samples * samples);
             if (self.background == .black) {
                 // Clearing part of an opaque canvas paints that much black over
                 // it; the pixel stays opaque either way.
-                blend(pixels[at..][0..4], .{ .r = 0, .g = 0, .b = 0 }, covered, .source_over);
+                self.store(at, blended(self.load(at), .{ .r = 0, .g = 0, .b = 0 }, covered, .source_over));
                 continue;
             }
             // Premultiplied, so scaling the alpha down means scaling the colour
             // with it — the colour *is* the colour times the alpha.
-            for (pixels[at..][0..4]) |*channel| {
-                const value: f64 = @floatFromInt(channel.*);
-                channel.* = @intFromFloat(std.math.clamp(@round(value * (1 - covered)), 0, 255));
-            }
+            var faded = self.load(at);
+            for (&faded) |*channel| channel.* *= 1 - covered;
+            self.store(at, faded);
         }
     }
 }
@@ -725,15 +824,15 @@ fn disc(arena: Allocator, out: *Path, at: Point, radius: f64) void {
 /// Measured (probes/canvas-alpha-semantics.js): `rgba(200, 100, 50, 0.3)`
 /// stores `{60, 30, 15, 77}` and comes back out as `c76332`, where the 200 that
 /// went in is gone for good.
-fn straight(pixel: *const [4]u8) Paint {
-    const alpha: f64 = @floatFromInt(pixel[3]);
+fn straight(pixel: [4]f64) Paint {
+    const alpha = pixel[3];
     if (alpha == 0) {
         return .{ .r = 0, .g = 0, .b = 0, .a = 0 };
     }
     return .{
-        .r = @as(f64, @floatFromInt(pixel[0])) * 255 / alpha,
-        .g = @as(f64, @floatFromInt(pixel[1])) * 255 / alpha,
-        .b = @as(f64, @floatFromInt(pixel[2])) * 255 / alpha,
+        .r = pixel[0] * 255 / alpha,
+        .g = pixel[1] * 255 / alpha,
+        .b = pixel[2] * 255 / alpha,
         .a = alpha / 255,
     };
 }
@@ -770,6 +869,27 @@ fn straightUnit(pixel: *const [4]u8) [4]f32 {
     };
 }
 
+/// The float16 store's own un-premultiplication, which has no normalising step
+/// to do: the channels are already 0..1, so the whole of it is the division by
+/// the alpha *as stored*. Measured
+/// (results/canvas-float-source-channels.chrome.json): `rgba(255, 0, 0, 0.5)`
+/// on a display-p3 float16 bitmap reads a red of 0.91796875 where the opaque
+/// fill reads 0.91748046875 — the round trip through a half-precision 128/255
+/// moved it, and dividing by anything but that same stored alpha does not land
+/// there.
+fn straightHalf(pixel: *const [4]f16) [4]f32 {
+    const alpha: f32 = pixel[3];
+    if (alpha == 0) {
+        return .{ 0, 0, 0, 0 };
+    }
+    return .{
+        @as(f32, pixel[0]) / alpha,
+        @as(f32, pixel[1]) / alpha,
+        @as(f32, pixel[2]) / alpha,
+        alpha,
+    };
+}
+
 /// Copies a `sw` x `sh` window starting at (`sx`, `sy`) into `out`, which must
 /// be `sw * sh * 4` long and already zeroed, un-premultiplying on the way: this
 /// is the straight-alpha form `getImageData` and a PNG both want. The window
@@ -779,8 +899,8 @@ pub fn readPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, s
     // An opaque canvas that has never been painted still reads back as opaque
     // black, so the absence of a buffer is not the absence of pixels. `out`
     // arrives zeroed, which is already right for a transparent one.
-    const pixels: ?[]const u8 = self.peek(canvas_width, canvas_height);
-    if (pixels == null and self.background == .transparent) {
+    const painted = self.backed(canvas_width, canvas_height);
+    if (!painted and self.background == .transparent) {
         return;
     }
     const background = self.background.pixel();
@@ -799,17 +919,17 @@ pub fn readPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, s
                 continue;
             }
             const to: usize = (@as(usize, row) * sw + col) * 4;
-            if (pixels) |have| {
-                const from: usize = (@as(usize, @intCast(src_y)) * canvas_width +
-                    @as(usize, @intCast(src_x))) * 4;
-                const pixel = straight(have[from..][0..4]).toRGBA();
-                out[to] = pixel.r;
-                out[to + 1] = pixel.g;
-                out[to + 2] = pixel.b;
-                out[to + 3] = pixel.a;
-            } else {
+            if (!painted) {
                 @memcpy(out[to..][0..4], &background);
+                continue;
             }
+            const from: usize = @as(usize, @intCast(src_y)) * canvas_width +
+                @as(usize, @intCast(src_x));
+            const pixel = straight(self.load(from)).toRGBA();
+            out[to] = pixel.r;
+            out[to + 1] = pixel.g;
+            out[to + 2] = pixel.b;
+            out[to + 3] = pixel.a;
         }
     }
 }
@@ -841,8 +961,8 @@ pub fn premultiply(pixel: *const [4]u8) [4]u8 {
 /// same quotient at half precision rather than `199 / 255`. See `straightUnit`
 /// for the arithmetic that last bit needs.
 pub fn readUnitPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, sx: i64, sy: i64, sw: u32, sh: u32, out: [][4]f32) void {
-    const pixels: ?[]const u8 = self.peek(canvas_width, canvas_height);
-    if (pixels == null and self.background == .transparent) {
+    const painted = self.backed(canvas_width, canvas_height);
+    if (!painted and self.background == .transparent) {
         return;
     }
     const background = straightUnit(&self.background.pixel());
@@ -861,13 +981,16 @@ pub fn readUnitPixels(self: *const Surface, canvas_width: u32, canvas_height: u3
                 continue;
             }
             const to: usize = @as(usize, row) * sw + col;
-            if (pixels) |have| {
-                const from: usize = (@as(usize, @intCast(src_y)) * canvas_width +
-                    @as(usize, @intCast(src_x))) * 4;
-                out[to] = straightUnit(have[from..][0..4]);
-            } else {
+            if (!painted) {
                 out[to] = background;
+                continue;
             }
+            const from: usize = @as(usize, @intCast(src_y)) * canvas_width +
+                @as(usize, @intCast(src_x));
+            out[to] = switch (self.channels) {
+                .unorm8 => straightUnit(self.pixels[from * 4 ..][0..4]),
+                .float16 => straightHalf(self.halves[from * 4 ..][0..4]),
+            };
         }
     }
 }
@@ -888,7 +1011,7 @@ pub fn readUnitPixels(self: *const Surface, canvas_width: u32, canvas_height: u3
 /// `{alpha: false}` canvas read `ffffa64d`, and `{100, 50, 25, 128}` reads
 /// `c7643280` where premultiplying would have read `64321a80`.
 pub fn writePixels(self: *Surface, canvas_width: u32, canvas_height: u32, dx: i64, dy: i64, sw: u32, sh: u32, bytes: []const u8) void {
-    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+    if (!self.ensure(canvas_width, canvas_height)) return;
 
     var row: u32 = 0;
     while (row < sh) : (row += 1) {
@@ -904,13 +1027,23 @@ pub fn writePixels(self: *Surface, canvas_width: u32, canvas_height: u32, dx: i6
                 continue;
             }
             const from: usize = (@as(usize, row) * sw + col) * 4;
-            const to: usize = (@as(usize, @intCast(dst_y)) * canvas_width +
-                @as(usize, @intCast(dst_x))) * 4;
+            const to: usize = @as(usize, @intCast(dst_y)) * canvas_width +
+                @as(usize, @intCast(dst_x));
             const pixel = bytes[from..][0..4];
-            pixels[to..][0..4].* = switch (self.background) {
-                .transparent => premultiply(pixel),
-                .black => pixel.*,
+            const straight_alpha: f64 = @floatFromInt(pixel[3]);
+            // The eight-bit store rounds each of these back to the byte
+            // `premultiply` would have handed it; the float one keeps the
+            // product.
+            const scale: f64 = switch (self.background) {
+                .transparent => straight_alpha / 255,
+                .black => 1,
             };
+            self.store(to, .{
+                @as(f64, @floatFromInt(pixel[0])) * scale,
+                @as(f64, @floatFromInt(pixel[1])) * scale,
+                @as(f64, @floatFromInt(pixel[2])) * scale,
+                straight_alpha,
+            });
         }
     }
 }
@@ -923,7 +1056,7 @@ pub fn writePixels(self: *Surface, canvas_width: u32, canvas_height: u32, dx: i6
 /// Null when the canvas has no pixels to hand back at all, which every caller
 /// already reads as "every pixel is transparent black".
 pub fn straightPixels(self: *const Surface, arena: Allocator, canvas_width: u32, canvas_height: u32) !?[]u8 {
-    if (self.peek(canvas_width, canvas_height) == null and self.background == .transparent) {
+    if (!self.backed(canvas_width, canvas_height) and self.background == .transparent) {
         return null;
     }
     const out = try arena.alloc(u8, @as(usize, canvas_width) * canvas_height * 4);
@@ -944,8 +1077,8 @@ pub fn straightPixels(self: *const Surface, arena: Allocator, canvas_width: u32,
 /// straight-alpha bitmap got wrong: it un-premultiplies a half-alpha 64 back
 /// into 127.5, where a straight bitmap still had the 128 that went in, and the
 /// 106 Chrome reads follows from the 127.5.
-fn blend(dst: *[4]u8, paint: Paint, alpha: f64, op: Composite) void {
-    const dst_alpha = @as(f64, @floatFromInt(dst[3])) / 255;
+fn blended(dst: [4]f64, paint: Paint, alpha: f64, op: Composite) [4]f64 {
+    const dst_alpha = dst[3] / 255;
     // A blend function needs the backdrop's own colour, and there is none to
     // have when the backdrop is empty: every operator degenerates to
     // source-over there.
@@ -953,29 +1086,27 @@ fn blend(dst: *[4]u8, paint: Paint, alpha: f64, op: Composite) void {
 
     const out_alpha = alpha + dst_alpha * (1 - alpha);
     if (out_alpha <= 0) {
-        dst.* = .{ 0, 0, 0, 0 };
-        return;
+        return .{ 0, 0, 0, 0 };
     }
 
     const backdrop = straight(dst);
     const src_channels = [3]f64{ paint.r, paint.g, paint.b };
     const old_channels = [3]f64{ backdrop.r, backdrop.g, backdrop.b };
+    var out: [4]f64 = .{ 0, 0, 0, out_alpha * 255 };
     for (src_channels, old_channels, 0..) |src, old, i| {
-        const stored: f64 = @floatFromInt(dst[i]);
         // The blend function only governs where source and backdrop overlap;
         // the part of each that the other does not cover stays itself. Both
         // arms are the spec's `co`, and the term the source does not cover is
         // `(1 - as) * ab * Cb` — which is `(1 - as)` times the premultiplied
-        // byte already sitting there.
-        const mixed = switch (blend_op) {
-            .source_over => alpha * src + (1 - alpha) * stored,
+        // channel already sitting there.
+        out[i] = switch (blend_op) {
+            .source_over => alpha * src + (1 - alpha) * dst[i],
             else => alpha * (1 - dst_alpha) * src +
                 alpha * dst_alpha * blend_op.apply(old, src) +
-                (1 - alpha) * stored,
+                (1 - alpha) * dst[i],
         };
-        dst[i] = @intFromFloat(std.math.clamp(@round(mixed), 0, 255));
     }
-    dst[3] = @intFromFloat(std.math.clamp(@round(out_alpha * 255), 0, 255));
+    return out;
 }
 
 const testing = std.testing;
