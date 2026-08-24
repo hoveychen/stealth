@@ -11891,3 +11891,100 @@ and the next pass should re-audit rather than trust it: WebGPU wants one Frame
 for one accessor, `StorageBucket.indexedDB` reaches `global.frame.window`, and
 the MediaSource and font families want a Page. Those are three different
 distances from possible.
+
+### The re-audit, and what a `*Frame` actually costs (worker-frame-to-execution, 2026-08-23)
+
+The section above ended by asking for a re-audit of the remaining 67 names
+rather than trusting its own table. Here it is. Of the 53 that this engine had
+in the window realm and not the worker, **50 were reachable** and are now
+exposed; 3 stay out. The worker realm's own-name count went 269 → **319**
+against Chrome 151's 336, the names Chrome's worker has and ours does not went
+67 → **17**, and the names we have and Chrome does not stayed at **0**. The
+window realm did not move (1203 vs 1237, the same two deliberate `ModelContext`
+extras).
+
+| | before | after | Chrome 151 |
+|---|---|---|---|
+| `self` own names | 269 | **319** | 336 |
+| `WorkerGlobalScope.prototype` | 26 | **27** | 30 |
+| names Chrome's worker has and ours does not | 67 | **17** | — |
+| names ours has and Chrome's does not | 0 | **0** | — |
+
+**The question that did the work.** Not "does this member take a `*Frame`" but
+"what is it reaching through the Frame *for*". Every answer that came back was
+per-realm state the Execution already carries:
+
+| what it wanted | where it is on `*Execution` | families |
+|---|---|---|
+| object factory | `exec._factory` | WebGPU (40 names), the storage buckets, the fonts, MSE |
+| pooled arena | `exec.getArena` | FontFace, FontFaceSet |
+| local handle / isolate | `exec.js.local`, `exec.js` | all of them |
+| the realm's IDB factory | `switch (exec.js.global)` | `StorageBucket.indexedDB` |
+| the realm's listener list | `switch (exec.js.global)` | `FontFaceSet.load` |
+| the realm's own slots | `switch (exec.js.global)` | the two sandboxed filesystems |
+
+The last three are the interesting ones, because they are not a signature change
+— they are a member that had hard-coded *which* realm it belonged to.
+`StorageBucket.indexedDB` read `exec.js.global.frame.window`, with a comment
+saying "Window-only, so the global is always a Frame". Both arms of that union
+answer `getIndexedDB`. `FontFaceSet.load` dispatched into the frame's event
+manager; a FontFaceSet is an EventTarget, and an EventTarget exposed in two
+realms has to dispatch into the asking realm's list. `filesystem.forKind` kept
+its two DOMFileSystem objects on `window._filesystems` and read the origin off
+the frame — both per-realm, and the filesystem *name* is built from the origin,
+so a worker borrowing the window's would have been observably wrong rather than
+merely borrowed.
+
+**One trap worth naming: `*Page` is not safer than `*Frame`.** MSE's two list
+accessors took `page: *Page`, and `getGlobalArg` *does* answer `ctx.page` in a
+worker realm — so they looked exposable as they stood. They were not:
+`page.factory` is the owner's, so the SourceBufferList would have come back
+branded in the wrong realm. That is the same bug the Frame rule exists to
+prevent, arriving through a type the rule does not mention. The rule is about
+per-realm state, not about the word `Frame`.
+
+**Where the ground truth had to be read rather than reasoned.** Three readings
+changed the implementation:
+
+- `MediaSource.canConstructInDedicatedWorker` is a static that exists to say a
+  dedicated worker is the only realm Chrome constructs a MediaSource in. Ours
+  answered true in a realm with no MediaSource — the surface contradicting its
+  own static.
+- Five of the 40 WebGPU names (`GPUBufferUsage`, `GPUColorWrite`, `GPUMapMode`,
+  `GPUShaderStage`, `GPUTextureUsage`) are namespace objects, not interface
+  objects, on Chrome as much as here. A `typeof === 'function'` check over the
+  family fails on exactly those five.
+- `webkitRequestFileSystem` and `webkitResolveLocalFileSystemURL` are **own
+  properties of the worker global**, not `WorkerGlobalScope.prototype` members.
+  Only a `[Global]` interface's own members land there, so they belong on
+  `DedicatedWorkerGlobalScope` — next to the `TEMPORARY`/`PERSISTENT` constants
+  they take, which were already there. Chrome also reports arity **2** for the
+  request operation in a worker where its Window reports **3**, with the same
+  optional error callback in both. That is Chrome's inconsistency; both numbers
+  are mirrored where they were read.
+
+**What stays out, and the two reasons are different.** Of the 17 remaining, 11
+are interfaces neither realm implements (`BarcodeDetector`, `CreateMonitor`,
+`FileSystemObserver`, `Observable`, `PressureObserver`, `PressureRecord`,
+`RestrictionTarget`, `Subscriber`, `Temporal`, `WebSocketError`,
+`WebSocketStream`), 2 are the sync filesystem operations, 1 is `onrtctransform`,
+and 3 are the audit's leftovers:
+
+- **`Worker` (nested workers)** is genuinely frame-scoped. `Worker.init` takes
+  the session off the frame, resolves against the frame's base URL, fetches
+  through `frame.newRequest` and registers with `frame.trackWorker`. This is
+  what the rule's exception actually looks like: it needs a worker-side spawn
+  path, not an argument change.
+- **`CSSSkewX`/`CSSSkewY`** are not blocked at all. typed_om.zig's 112
+  `frame: *Frame` signatures want `js`, `local_arena`, `_factory`,
+  `dupeString`, `arena`, `call_arena` and `_page` — every one on the Execution.
+  What stops them is the other end: Chrome exposes exactly those two of the
+  whole typed-OM family in a worker and *none of their prototype chain*
+  (`CSSTransformComponent`, `CSSStyleValue`). Matching that is not the
+  mechanical conversion the rest of the audit was.
+
+**The A/B, three batches deep.** `cf-scrapingcourse` after WebGPU, after
+MSE+buckets+fonts, and after the filesystem: `cf-challenge`, `doc=403->200`,
+47 nodes, `"Just a moment..."` — **two consecutive runs at each of the three
+checkpoints, six in total**, which is the control reading exactly. `make test`
+1435/1435 at each. The verdict has not moved; the surface it is reading has.
