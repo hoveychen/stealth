@@ -22,6 +22,13 @@
 //     redirecting -- looks identical to a plain pass on status alone, and the
 //     interstitial's own DOM is what tells the two apart.
 //
+// Same route also means the same CDP domains. A guard can see the inspector:
+// Kasada withholds ks-canadagoose's clearance from any client that has sent
+// Runtime.enable, headed Chrome included. Chrome answers Runtime.evaluate with
+// the domain off and lightpanda does not, so the obvious setup -- enable it for
+// the engine that needs it -- quietly compares an observed client against an
+// unobserved one. Neither column has it on while the guard runs.
+//
 // Both engines are driven over the same route, in the same run, minutes apart,
 // because the one thing that moves a guard's verdict as much as the fingerprint
 // is the IP asking. A pass measured from a residential address says nothing
@@ -245,6 +252,9 @@ const onEvent = (msg) => {
     if (msg.method === 'Target.attachedToTarget' && attachFrames && p.sessionId) {
         frameSessions.add(p.sessionId);
         liveCdp?.send('Network.enable', { maxPostDataSize: 65536 }, p.sessionId).catch(() => { });
+        // Detectable, and a challenge often lives in exactly this iframe -- see
+        // the note at the station loop. --attach-frames is a diagnostic mode, so
+        // it buys the frame's events at the price of a verdict worth less.
         liveCdp?.send('Runtime.enable', undefined, p.sessionId).catch(() => { });
         // Nested iframes are targets of the target, not of the page.
         liveCdp?.send('Target.setAutoAttach',
@@ -423,7 +433,6 @@ try {
             // One page reused for every station: lightpanda rejects a second
             // concurrent browser context.
             ({ sessionId } = await newPage(cdp));
-            await cdp.send('Runtime.enable', {}, sessionId);
         }
         // maxPostDataSize is what makes `request.postData` arrive on
         // requestWillBeSent at all; without it every POST reports only
@@ -456,8 +465,24 @@ try {
             const { cdp, sessionId } = live;
             const settleMs = settleOverride ? Number(settleOverride) : station.settleMs;
             row.settleMs = settleMs;
-            await goto(cdp, sessionId, station.url, { settleMs });
+            // Runtime has to be off while the guard runs, in both columns. The
+            // domain is detectable: Kasada withholds the x-kpsdk-r that clears
+            // ks-canadagoose from any client that has enabled it, headed Chrome
+            // included -- the same binary passes the station seconds later with
+            // the domain left alone. Chrome answers Runtime.evaluate anyway, so
+            // it never needed it; lightpanda does need it, and enabling it
+            // before the navigation is what made the two columns disagree about
+            // this station for most of a month. Enable it after the settle,
+            // read the page, and put it back.
+            if (engine === 'lightpanda') {
+                await cdp.send('Page.navigate', { url: station.url }, sessionId);
+                await sleep(settleMs);
+                await cdp.send('Runtime.enable', {}, sessionId);
+            } else {
+                await goto(cdp, sessionId, station.url, { settleMs });
+            }
             reading = await evaluate(cdp, sessionId, extractAntibot);
+            if (engine === 'lightpanda') await cdp.send('Runtime.disable', {}, sessionId);
         } catch (e) {
             row.error = String((e && e.message) || e).slice(0, 200);
         } finally {
