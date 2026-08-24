@@ -83,6 +83,82 @@ pub const Composite = enum {
     }
 };
 
+/// The part of `ctx.filter` the rasteriser can act on: a lone `grayscale()`.
+///
+/// A filter applies to the *source* graphic before it is composited, and never
+/// to the backdrop — which is why it lives next to `Composite` and is applied
+/// to the paint on its way in rather than to the pixels already there. That
+/// order is measured, not assumed: `grayscale(1)` under `difference` reads
+/// `|backdrop - luminance(source)|` on Chrome 151, to the byte.
+///
+/// A string that is anything other than one `grayscale()` — a chain, a filter
+/// we do not implement, junk — leaves the paint alone. Honouring the half of a
+/// `grayscale(1) blur(2px)` we understand would land further from Chrome than
+/// honouring none of it: Chrome reads `{128, 128, 128, 8}` there, because the
+/// blur is most of what happened.
+pub const Filter = struct {
+    /// 0 leaves the colour alone; 1 replaces it with its own luminance.
+    grayscale: f64 = 0,
+
+    pub const none: Filter = .{};
+
+    /// `ctx.filter` as the paint should read it. Chrome's own parse is
+    /// case-insensitive, tolerates whitespace inside the parentheses, takes a
+    /// number or a percentage, defaults an empty argument to 1, clamps above 1,
+    /// and — measured — accepts an unclosed `grayscale(1`. It rejects a
+    /// negative amount outright at the setter, so one can only reach us on a
+    /// context that never had it, and reads as no filter here.
+    pub fn parse(text: []const u8) Filter {
+        const trimmed = std.mem.trim(u8, text, &std.ascii.whitespace);
+        const open = std.mem.indexOfScalar(u8, trimmed, '(') orelse return .none;
+        if (!std.ascii.eqlIgnoreCase(std.mem.trim(u8, trimmed[0..open], &std.ascii.whitespace), "grayscale")) {
+            return .none;
+        }
+
+        var argument = trimmed[open + 1 ..];
+        if (std.mem.endsWith(u8, argument, ")")) {
+            argument = argument[0 .. argument.len - 1];
+        }
+        // A second function would have left its own parenthesis behind.
+        if (std.mem.indexOfScalar(u8, argument, '(') != null) return .none;
+        argument = std.mem.trim(u8, argument, &std.ascii.whitespace);
+        if (argument.len == 0) return .{ .grayscale = 1 };
+
+        const percent = std.mem.endsWith(u8, argument, "%");
+        const number = std.fmt.parseFloat(f64, if (percent) argument[0 .. argument.len - 1] else argument) catch return .none;
+        if (!std.math.isFinite(number) or number < 0) return .none;
+        return .{ .grayscale = @min(1, if (percent) number / 100 else number) };
+    }
+
+    /// The paint after the filter, which for a flat colour is the whole of it.
+    /// The coefficients are the sRGB luminance ones, applied to the bytes
+    /// themselves — CSS filters do not linearise, and every primary confirms it
+    /// (255 red reads 54, green 182, blue 18).
+    pub fn applyTo(self: Filter, paint: RGBA) RGBA {
+        if (self.grayscale <= 0) {
+            return paint;
+        }
+
+        const r: f64 = @floatFromInt(paint.r);
+        const g: f64 = @floatFromInt(paint.g);
+        const b: f64 = @floatFromInt(paint.b);
+        const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        // `grayscale(a)` is the spec's matrix, which for every a is exactly
+        // this interpolation towards the luminance. Alpha is untouched.
+        const mix = struct {
+            fn towards(from: f64, to: f64, amount: f64) u8 {
+                return @intFromFloat(std.math.clamp(@round(from + (to - from) * amount), 0, 255));
+            }
+        }.towards;
+        return .{
+            .r = mix(r, luminance, self.grayscale),
+            .g = mix(g, luminance, self.grayscale),
+            .b = mix(b, luminance, self.grayscale),
+            .a = paint.a,
+        };
+    }
+};
+
 /// Frame-lifetime arena. The buffer is only reclaimed with the frame.
 arena: Allocator,
 /// Dimensions the current buffer was allocated for. Meaningless when
@@ -458,6 +534,7 @@ pub fn drawSurface(
     ctm: path_mod.Transform,
     global_alpha: f64,
     op: Composite,
+    filter: Filter,
 ) void {
     const source = src.peek(src_width, src_height) orelse return;
     if (blit.dw == 0 or blit.dh == 0 or blit.sw == 0 or blit.sh == 0) return;
@@ -496,7 +573,7 @@ pub fn drawSurface(
             const from = (@as(usize, src_y) * src_width + src_x) * 4;
             const texel = source[from..][0..4];
             if (texel[3] == 0) continue;
-            const paint = RGBA{ .r = texel[0], .g = texel[1], .b = texel[2], .a = 255 };
+            const paint = filter.applyTo(.{ .r = texel[0], .g = texel[1], .b = texel[2], .a = 255 });
             const at = (row * canvas_width + col) * 4;
             blend(pixels[at..][0..4], paint, alpha * (@as(f64, @floatFromInt(texel[3])) / 255), op);
         }
@@ -788,6 +865,90 @@ test "raster: the blend modes land on Chrome's bytes" {
             return err;
         };
     }
+}
+
+test "context filter: what a grayscale() string parses to" {
+    // Chrome 151 keeps or rejects each of these at the setter, and paints the
+    // amount below (scratch/expr-canvas-filter-grayscale.js).
+    for ([_]struct { text: []const u8, want: f64 }{
+        .{ .text = "grayscale(1)", .want = 1 },
+        .{ .text = "grayscale(0)", .want = 0 },
+        .{ .text = "grayscale(0.5)", .want = 0.5 },
+        .{ .text = "grayscale(.5)", .want = 0.5 },
+        .{ .text = "grayscale(+1)", .want = 1 },
+        .{ .text = "grayscale(1e0)", .want = 1 },
+        .{ .text = "grayscale(50%)", .want = 0.5 },
+        .{ .text = "grayscale(100%)", .want = 1 },
+        // An empty argument means 1, and anything above 1 clamps to it.
+        .{ .text = "grayscale()", .want = 1 },
+        .{ .text = "grayscale(2)", .want = 1 },
+        // Case-insensitive, and whitespace anywhere is fine.
+        .{ .text = "GRAYSCALE(1)", .want = 1 },
+        .{ .text = " grayscale( 1 ) ", .want = 1 },
+        // Chrome takes an unclosed function; so do we.
+        .{ .text = "grayscale(1", .want = 1 },
+        // A negative amount never reaches a real context — Chrome's setter
+        // drops it — so it reads as no filter rather than as a clamp to 0.
+        .{ .text = "grayscale(-1)", .want = 0 },
+        // Not a filter we act on: the default, junk, a bare keyword, a chain.
+        .{ .text = "none", .want = 0 },
+        .{ .text = "", .want = 0 },
+        .{ .text = "grayscale", .want = 0 },
+        .{ .text = "notafilter(1)", .want = 0 },
+        .{ .text = "blur(2px)", .want = 0 },
+        .{ .text = "grayscale(1) blur(2px)", .want = 0 },
+    }) |case| {
+        testing.expectEqual(case.want, Filter.parse(case.text).grayscale) catch |err| {
+            std.debug.print("filter '{s}'\n", .{case.text});
+            return err;
+        };
+    }
+}
+
+test "context filter: grayscale lands on Chrome's bytes" {
+    // The sRGB luminance of each primary, and the interpolation towards it.
+    const full: Filter = .{ .grayscale = 1 };
+    try testing.expectEqual(RGBA{ .r = 54, .g = 54, .b = 54, .a = 255 }, full.applyTo(RGBA.Named.red));
+    try testing.expectEqual(RGBA{ .r = 182, .g = 182, .b = 182, .a = 255 }, full.applyTo(RGBA.Named.lime));
+    try testing.expectEqual(RGBA{ .r = 18, .g = 18, .b = 18, .a = 255 }, full.applyTo(RGBA.Named.blue));
+    try testing.expectEqual(RGBA{ .r = 255, .g = 255, .b = 255, .a = 255 }, full.applyTo(RGBA.Named.white));
+
+    const teal = RGBA{ .r = 64, .g = 128, .b = 192, .a = 255 };
+    try testing.expectEqual(RGBA{ .r = 119, .g = 119, .b = 119, .a = 255 }, full.applyTo(teal));
+    try testing.expectEqual(
+        RGBA{ .r = 92, .g = 124, .b = 156, .a = 255 },
+        (Filter{ .grayscale = 0.5 }).applyTo(teal),
+    );
+    try testing.expectEqual(
+        RGBA{ .r = 78, .g = 126, .b = 174, .a = 255 },
+        (Filter{ .grayscale = 0.25 }).applyTo(teal),
+    );
+    // No filter is the identity, alpha included.
+    const translucent = RGBA{ .r = 64, .g = 128, .b = 192, .a = 128 };
+    try testing.expectEqual(translucent, Filter.none.applyTo(translucent));
+    // Alpha survives a filter untouched. Chrome reads 120 rather than our 119
+    // here, having greyed the premultiplied bytes; see `blend` for the same
+    // one-unit gap under `multiply`.
+    try testing.expectEqual(
+        RGBA{ .r = 119, .g = 119, .b = 119, .a = 128 },
+        full.applyTo(translucent),
+    );
+}
+
+test "raster: a filter greys the source, not the backdrop" {
+    var buffer: [1024]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+    var surface = Surface{ .arena = fba.allocator() };
+    defer surface.reset();
+
+    // #ff8000, then #4080c0 greyed to 119 and differenced against it. Chrome
+    // 151 reads {136, 9, 119, 255}: |255-119|, |128-119|, |0-119| — the filter
+    // reached the source only.
+    surface.fillRect(1, 1, 0, 0, 1, 1, .{ .r = 255, .g = 128, .b = 0, .a = 255 }, 1, .source_over);
+    const greyed = (Filter{ .grayscale = 1 }).applyTo(.{ .r = 64, .g = 128, .b = 192, .a = 255 });
+    surface.fillRect(1, 1, 0, 0, 1, 1, greyed, 1, .difference);
+    try testing.expectEqualSlices(u8, &.{ 136, 9, 119, 255 }, surface.pixels[0..4]);
 }
 
 test "raster: a blend mode reaches a path's partly covered edge" {

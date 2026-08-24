@@ -990,6 +990,112 @@
 }
 </script>
 
+<script id="CanvasRenderingContext2D#filter grayscale">
+{
+  // Every expectation is a Chrome 151 readback
+  // (scratch/expr-canvas-filter-grayscale.js).
+  const fill = (filter, colour) => {
+    const element = document.createElement('canvas');
+    element.width = 1;
+    element.height = 1;
+    const ctx = element.getContext('2d');
+    ctx.filter = filter;
+    ctx.fillStyle = colour;
+    ctx.fillRect(0, 0, 1, 1);
+    return Array.from(ctx.getImageData(0, 0, 1, 1).data);
+  };
+
+  // The filter reaches a plain fill, not only drawImage.
+  testing.expectEqual([119, 119, 119, 255], fill('grayscale(1)', '#4080c0'));
+  // sRGB luminance on the bytes themselves — a CSS filter does not linearise.
+  testing.expectEqual([54, 54, 54, 255], fill('grayscale(1)', '#ff0000'));
+  testing.expectEqual([182, 182, 182, 255], fill('grayscale(1)', '#00ff00'));
+  testing.expectEqual([18, 18, 18, 255], fill('grayscale(1)', '#0000ff'));
+  testing.expectEqual([255, 255, 255, 255], fill('grayscale(1)', '#ffffff'));
+  // A partial amount interpolates towards that luminance.
+  testing.expectEqual([92, 124, 156, 255], fill('grayscale(0.5)', '#4080c0'));
+  testing.expectEqual([92, 124, 156, 255], fill('grayscale(50%)', '#4080c0'));
+  testing.expectEqual([78, 126, 174, 255], fill('grayscale(25%)', '#4080c0'));
+  // An empty argument is 1; above 1 clamps; 0 and 'none' change nothing.
+  testing.expectEqual([119, 119, 119, 255], fill('grayscale()', '#4080c0'));
+  testing.expectEqual([119, 119, 119, 255], fill('grayscale(2)', '#4080c0'));
+  testing.expectEqual([64, 128, 192, 255], fill('grayscale(0)', '#4080c0'));
+  testing.expectEqual([64, 128, 192, 255], fill('none', '#4080c0'));
+  // Case and whitespace are not significant, and Chrome takes an unclosed one.
+  testing.expectEqual([119, 119, 119, 255], fill('GRAYSCALE(1)', '#4080c0'));
+  testing.expectEqual([119, 119, 119, 255], fill(' grayscale( 1 ) ', '#4080c0'));
+  testing.expectEqual([119, 119, 119, 255], fill('grayscale(1', '#4080c0'));
+
+  // Two divergences, both deliberate. A translucent paint: Chrome greys the
+  // premultiplied bytes and reads 120, we grey the straight ones and read 119.
+  testing.expectEqual([119, 119, 119, 128], fill('grayscale(1)', 'rgba(64,128,192,0.5)'));
+  // And a chain whose other half we do not implement paints unfiltered, since
+  // honouring only the grey would land further from Chrome's {128,128,128,8}
+  // than honouring none of it — the blur is most of what happened there.
+  testing.expectEqual([64, 128, 192, 255], fill('grayscale(1) blur(2px)', '#4080c0'));
+
+  // The filter applies to the source, never to the backdrop: greyed #4080c0 is
+  // 119 all over, and differencing that against #ff8000 gives |255-119| etc.
+  {
+    const element = document.createElement('canvas');
+    element.width = 1;
+    element.height = 1;
+    const ctx = element.getContext('2d');
+    ctx.fillStyle = '#ff8000';
+    ctx.fillRect(0, 0, 1, 1);
+    ctx.filter = 'grayscale(1)';
+    ctx.globalCompositeOperation = 'difference';
+    ctx.fillStyle = '#4080c0';
+    ctx.fillRect(0, 0, 1, 1);
+    testing.expectEqual([136, 9, 119, 255], Array.from(ctx.getImageData(0, 0, 1, 1).data));
+  }
+
+  // drawImage greys every texel it takes, and the filter is saved state.
+  {
+    const src = document.createElement('canvas');
+    src.width = 4;
+    src.height = 1;
+    const cs = src.getContext('2d');
+    ['#ff0000', '#00ff00', '#0000ff', '#4080c0'].forEach((colour, i) => {
+      cs.fillStyle = colour;
+      cs.fillRect(i, 0, 1, 1);
+    });
+
+    const row = (filter) => {
+      const element = document.createElement('canvas');
+      element.width = 4;
+      element.height = 1;
+      const ctx = element.getContext('2d');
+      ctx.filter = 'none';
+      ctx.save();
+      ctx.filter = filter;
+      ctx.drawImage(src, 0, 0);
+      const got = Array.from(ctx.getImageData(0, 0, 4, 1).data);
+      ctx.restore();
+      testing.expectEqual('none', ctx.filter);
+      return got;
+    };
+
+    testing.expectEqual(
+      [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 64, 128, 192, 255],
+      row('none'),
+    );
+    testing.expectEqual(
+      [54, 54, 54, 255, 182, 182, 182, 255, 18, 18, 18, 255, 119, 119, 119, 255],
+      row('grayscale(1)'),
+    );
+    testing.expectEqual(
+      [155, 27, 27, 255, 91, 219, 91, 255, 9, 9, 137, 255, 92, 124, 156, 255],
+      row('grayscale(0.5)'),
+    );
+    testing.expectEqual(
+      [205, 14, 14, 255, 46, 237, 46, 255, 5, 5, 196, 255, 78, 126, 174, 255],
+      row('grayscale(25%)'),
+    );
+  }
+}
+</script>
+
 <script id="CanvasRenderingContext2D#strokeRect">
 {
   const element = document.createElement('canvas');
