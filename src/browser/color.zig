@@ -1234,27 +1234,61 @@ pub fn convertCanvasRGBA(from: CanvasSpace, to: CanvasSpace, rgba: RGBA) RGBA {
 /// The same conversion left unquantised, for the callers that go on to
 /// premultiply it into a bitmap rather than answer it as bytes. See `Paint`.
 pub fn convertCanvasPaint(from: CanvasSpace, to: CanvasSpace, paint: Paint) Paint {
+    const out = convertCanvasPaintUnclipped(from, to, paint);
+    if (from == to) {
+        return out;
+    }
+    return .clip(out.r, out.g, out.b, out.a);
+}
+
+/// The same conversion with the gamut clip left off, for the one caller that
+/// has room for a channel outside the destination gamut: a float pixel format.
+/// Measured (results/canvas-image-data-construct.chrome.json): a display-p3 red
+/// read back as srgb answers `1.0930633544921875 -0.22672080993652344` through
+/// `rgba-float32`, where the same read through `rgba-unorm8` clamps to
+/// `255 0 0`.
+pub fn convertCanvasPaintUnclipped(from: CanvasSpace, to: CanvasSpace, paint: Paint) Paint {
     if (from == to) {
         return paint;
+    }
+    // The whole leg is f32, narrowing on the way in rather than dividing in
+    // f64 first: a byte-valued channel narrows exactly, so this is the same
+    // arithmetic the byte entry point always did.
+    const unit = convertCanvasUnit(from, to, .{
+        @as(f32, @floatCast(paint.r)) / 255,
+        @as(f32, @floatCast(paint.g)) / 255,
+        @as(f32, @floatCast(paint.b)) / 255,
+    });
+    return .{
+        .r = unit[0] * 255,
+        .g = unit[1] * 255,
+        .b = unit[2] * 255,
+        .a = paint.a,
+    };
+}
+
+/// The same conversion on channels that are already 0..1, which is the form a
+/// float pixel format holds them in: it normalises before this and is not
+/// clipped after, so routing it through `Paint`'s 0..255 convention would put a
+/// multiply and a divide either side of the matrix that Chrome does not have.
+pub fn convertCanvasUnit(from: CanvasSpace, to: CanvasSpace, rgb: [3]f32) [3]f32 {
+    if (from == to) {
+        return rgb;
     }
     const matrix: CanvasMatrix = switch (from) {
         .srgb => srgb_linear_to_p3_linear,
         .@"display-p3" => p3_linear_to_srgb_linear,
     };
-    // The whole leg is f32, narrowing on the way in rather than dividing in
-    // f64 first: a byte-valued channel narrows exactly, so this is the same
-    // arithmetic the byte entry point always did.
     const linear = matrixApply(matrix, .{
-        srgbToLinear(@as(f32, @floatCast(paint.r)) / 255),
-        srgbToLinear(@as(f32, @floatCast(paint.g)) / 255),
-        srgbToLinear(@as(f32, @floatCast(paint.b)) / 255),
+        srgbToLinear(rgb[0]),
+        srgbToLinear(rgb[1]),
+        srgbToLinear(rgb[2]),
     });
-    return .clip(
-        srgbFromLinear(linear[0]) * 255,
-        srgbFromLinear(linear[1]) * 255,
-        srgbFromLinear(linear[2]) * 255,
-        paint.a,
-    );
+    return .{
+        srgbFromLinear(linear[0]),
+        srgbFromLinear(linear[1]),
+        srgbFromLinear(linear[2]),
+    };
 }
 
 /// A canvas matrix is f32, where every other matrix here is f64 — see

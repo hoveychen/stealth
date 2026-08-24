@@ -718,11 +718,39 @@
   }
 
   // What a float16 read *holds*. The bitmap behind a canvas is eight bits a
-  // channel in Chrome too, so this format is not a finer read but the same one
-  // scaled: every entry is the unorm8 byte over 255, rounded to half
-  // precision. Every number below is that of the byte on the line above it,
-  // and both columns are measured
-  // (results/canvas-image-data-settings.chrome.json).
+  // channel in Chrome too, so this is not a finer *bitmap* — but it is a finer
+  // read of it: the un-premultiplication happens in floating point and is not
+  // rounded into a byte on the way. Measured
+  // (probes/canvas-image-data-construct.js): a `rgba(200, 100, 50, 0.3)` pixel
+  // stores the premultiplied {60, 30, 15, 77} and reads
+  //
+  //   unorm8   199              = round(60 * 255 / 77)
+  //   float16  0.779296875      = round_f16(60 / 77)
+  //   float32  0.7792208194732666 = 60 / 77
+  //
+  // and not round_f16(199 / 255), which is a different half-precision value
+  // (0.78027). Every opaque row below cannot tell the two apart, because
+  // dividing by an alpha of 255 is the same as not dividing at all — which is
+  // why they read as if the byte were the source.
+  {
+    const f16 = { pixelFormat: 'rgba-float16' };
+    const c = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    c.fillStyle = 'rgba(200, 100, 50, 0.3)';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('199,99,50,77',
+      [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual('0.779296875,0.3896484375,0.19482421875,0.302001953125',
+      [...c.getImageData(0, 0, 1, 1, f16).data].join(','));
+  }
+  {
+    const f16 = { pixelFormat: 'rgba-float16' };
+    const c = new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+    c.fillStyle = 'rgba(1, 2, 3, 0.01)';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('0,0,0,3', [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual('0,0,0,0.0117645263671875',
+      [...c.getImageData(0, 0, 1, 1, f16).data].join(','));
+  }
   {
     const f16 = { pixelFormat: 'rgba-float16' };
     const read = (canvasSpace, notation, settings) => {
@@ -748,9 +776,15 @@
     testing.expectEqual('1,0.2509765625,0.498046875,1', read('display-p3', p3, f16));
 
     // An explicit space still converts under this format: the two axes of the
-    // dictionary do not interfere.
+    // dictionary do not interfere. This is *not* the reading two lines above,
+    // even though both end up in display-p3: there the p3 bytes were already in
+    // the bitmap and the read only divided them by 255, here the conversion
+    // runs unquantised and only the result is narrowed to half precision.
+    // Chrome 151 reads 0.2003173828125 against that one's 0.199951171875
+    // (measured; the reading this line carried before was the other row's,
+    // copied across).
     testing.expectEqual(
-      '0.91748046875,0.199951171875,0.13720703125,1',
+      '0.91748046875,0.2003173828125,0.1385498046875,1',
       read('srgb', '#ff0000', { colorSpace: 'display-p3', pixelFormat: 'rgba-float16' }));
 
     // A window that runs off the canvas is transparent black where it missed,
@@ -991,5 +1025,497 @@
     hex(ctx({ alpha: false, colorSpace: 'display-p3' }).getImageData(0, 0, 1, 1).data));
   testing.expectEqual('751a12ff',
     filled({ alpha: false, colorSpace: 'display-p3' }, 'rgba(255, 0, 0, 0.5)'));
+}
+</script>
+
+<script id="OffscreenCanvasRenderingContext2D#putImageData">
+{
+  // The one way pixels go back *into* a canvas, and the only paint that skips
+  // the whole drawing state. Readings from probes/canvas-put-image-data.js.
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const ctx = (w, h, settings) => new OffscreenCanvas(w, h)
+    .getContext('2d', { willReadFrequently: true, ...settings });
+  const read = (c, w, h, space) => hex(c.getImageData(0, 0, w, h,
+    space ? { colorSpace: space } : undefined).data);
+  // A `w` x `h` ImageData whose pixels are all distinguishable.
+  const ramp = (w, h) => {
+    const d = new ImageData(w, h);
+    for (let i = 0; i < w * h; i++) {
+      d.data.set([255, i * 16, 0, 255], i * 4);
+    }
+    return d;
+  };
+  const one = (channels, settings) => {
+    const d = new ImageData(1, 1, settings);
+    d.data.set(channels);
+    return d;
+  };
+
+  // The store is premultiplied, so a translucent pixel does not come back as
+  // the bytes that went in — the divergence a translucent fill has.
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([200, 100, 50, 77]), 0, 0);
+    testing.expectEqual('c763324d', read(c, 1, 1));
+  }
+  // An opaque canvas does not premultiply on the way in — and still divides on
+  // the way out, so the colour comes back *brighter* than it went in. Two
+  // alphas pin it: premultiplying would read 64321a80 for the second.
+  {
+    const c = ctx(1, 1, { alpha: false });
+    c.putImageData(one([200, 100, 50, 77]), 0, 0);
+    testing.expectEqual('ffffa64d', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1, { alpha: false });
+    c.putImageData(one([100, 50, 25, 128]), 0, 0);
+    testing.expectEqual('c7643280', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1, { alpha: false });
+    c.putImageData(one([200, 100, 50, 255]), 0, 0);
+    testing.expectEqual('c86432ff', read(c, 1, 1));
+  }
+  // Transparent black over a painted pixel erases it: a replace, not a
+  // composite.
+  {
+    const c = ctx(1, 1);
+    c.fillStyle = '#00ff00';
+    c.fillRect(0, 0, 1, 1);
+    c.putImageData(new ImageData(1, 1), 0, 0);
+    testing.expectEqual('00000000', read(c, 1, 1));
+  }
+  // globalAlpha, the composite operator and the transform are all ignored.
+  {
+    const c = ctx(1, 1);
+    c.globalAlpha = 0.5;
+    c.globalCompositeOperation = 'destination-atop';
+    c.translate(5, 5);
+    c.scale(2, 2);
+    c.putImageData(one([255, 0, 0, 255]), 0, 0);
+    testing.expectEqual('ff0000ff', read(c, 1, 1));
+  }
+
+  // Where the pixels land. A fractional destination truncates toward zero.
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(2, 1), 0, 0);
+    testing.expectEqual('ff0000ffff1000ff', read(c, 2, 1));
+  }
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(1, 1), 0.9, 0);
+    testing.expectEqual('ff0000ff00000000', read(c, 2, 1));
+  }
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(1, 1), -0.9, 0);
+    testing.expectEqual('ff0000ff00000000', read(c, 2, 1));
+  }
+  // Partly off an edge: the part that overlaps lands, the rest is dropped.
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(2, 1), -1, 0);
+    testing.expectEqual('ff1000ff00000000', read(c, 2, 1));
+  }
+  {
+    const c = ctx(2, 1);
+    c.putImageData(ramp(2, 1), 1, 0);
+    testing.expectEqual('00000000ff0000ff', read(c, 2, 1));
+  }
+
+  // The dirty rectangle, in the ImageData's own coordinates.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 0, 0, 1, 1);
+    testing.expectEqual('ff0000ff000000000000000000000000', read(c, 2, 2));
+  }
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 1, 1, 1, 1);
+    testing.expectEqual('000000000000000000000000ff3000ff', read(c, 2, 2));
+  }
+  // A negative extent flips the rectangle rather than being refused, the way
+  // getImageData's window does.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 1, 1, -1, -1);
+    testing.expectEqual('ff0000ff000000000000000000000000', read(c, 2, 2));
+  }
+  // Oversized clips to the source.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, -5, -5, 20, 20);
+    testing.expectEqual('ff0000ffff1000ffff2000ffff3000ff', read(c, 2, 2));
+  }
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 0, 0, 0, 0, 0, 2);
+    testing.expectEqual('00000000000000000000000000000000', read(c, 2, 2));
+  }
+  // The destination offset moves where that piece of the source lands.
+  {
+    const c = ctx(2, 2);
+    c.putImageData(ramp(2, 2), 1, 1, 0, 0, 1, 1);
+    testing.expectEqual('000000000000000000000000ff0000ff', read(c, 2, 2));
+  }
+
+  // The ImageData carries its own colour space, so crossing into the canvas's
+  // one converts the bytes.
+  {
+    const c = ctx(1, 1, { colorSpace: 'display-p3' });
+    c.putImageData(one([255, 0, 0, 255], { colorSpace: 'srgb' }), 0, 0);
+    testing.expectEqual('ea3323ff', read(c, 1, 1, 'display-p3'));
+    testing.expectEqual('ff0000ff', read(c, 1, 1, 'srgb'));
+  }
+  // The other way the conversion leaves the srgb gamut and clamps.
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([255, 0, 0, 255], { colorSpace: 'display-p3' }), 0, 0);
+    testing.expectEqual('ff0000ff', read(c, 1, 1, 'srgb'));
+    testing.expectEqual('ea3323ff', read(c, 1, 1, 'display-p3'));
+  }
+  {
+    const c = ctx(1, 1, { colorSpace: 'display-p3' });
+    c.putImageData(one([255, 0, 0, 255], { colorSpace: 'display-p3' }), 0, 0);
+    testing.expectEqual('ff0000ff', read(c, 1, 1, 'display-p3'));
+  }
+
+  // A float16 ImageData's channels are 0..1 floats over a bitmap that is still
+  // eight bits, so they quantise on the way in and clamp outside 0..1.
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([1, 0.5, 0.2, 1], { pixelFormat: 'rgba-float16' }), 0, 0);
+    testing.expectEqual('ff8033ff', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([2, -1, 0.5, 1], { pixelFormat: 'rgba-float16' }), 0, 0);
+    testing.expectEqual('ff0080ff', read(c, 1, 1));
+  }
+  {
+    const c = ctx(1, 1);
+    c.putImageData(one([200 / 255, 100 / 255, 50 / 255, 77 / 255],
+      { pixelFormat: 'rgba-float16' }), 0, 0);
+    testing.expectEqual('c763324d', read(c, 1, 1));
+  }
+
+  // The call itself: three required arguments, and the dirty rectangle is a
+  // whole overload rather than four optional arguments.
+  testing.expectEqual(3, OffscreenCanvasRenderingContext2D.prototype.putImageData.length);
+  testing.expectEqual(undefined, ctx(1, 1).putImageData(new ImageData(1, 1), 0, 0));
+  testing.expectError(
+    "TypeError: Failed to execute 'putImageData' on " +
+      "'OffscreenCanvasRenderingContext2D': Overload resolution failed.",
+    () => ctx(1, 1).putImageData(new ImageData(1, 1), 0, 0, 0));
+  testing.expectError(
+    "TypeError: Failed to execute 'putImageData' on " +
+      "'OffscreenCanvasRenderingContext2D': parameter 1 is not of type 'ImageData'.",
+    () => ctx(1, 1).putImageData({ width: 1, height: 1, data: new Uint8ClampedArray(4) }, 0, 0));
+  testing.expectError(
+    "TypeError: Failed to execute 'putImageData' on " +
+      "'OffscreenCanvasRenderingContext2D': 3 arguments required, but only 0 present.",
+    () => ctx(1, 1).putImageData());
+}
+</script>
+
+<script id="OffscreenCanvasRenderingContext2D#float32 pixel format">
+{
+  // `ImageDataPixelFormat` has a third member. Chrome's own refusal for a
+  // Float32Array in the data constructor names it — "Float32Array must use
+  // rgba-float32 pixelFormat." — and every entry point that takes the
+  // dictionary accepts it. Readings from probes/canvas-image-data-construct.js.
+  const shape = (d) => `${d.colorSpace} ${d.pixelFormat} ${d.width}x${d.height} ` +
+    `${d.data.constructor.name} len=${d.data.length}`;
+  const hex = (d) => [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const ctx = (settings) => new OffscreenCanvas(1, 1)
+    .getContext('2d', { willReadFrequently: true, ...settings });
+
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(new ImageData(1, 1, { pixelFormat: 'rgba-float32' })));
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(ctx().createImageData(1, 1, { pixelFormat: 'rgba-float32' })));
+  // From a source ImageData the format is inherited, as the space is.
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(ctx().createImageData(new ImageData(1, 1, { pixelFormat: 'rgba-float32' }))));
+
+  // A read holds the same unquantised value the float16 format does, at the
+  // width that can show all of it: the premultiplied {60, 30, 15, 77} this
+  // pixel stores is 60 / 77 exactly, not the 199 / 255 of its unorm8 byte.
+  {
+    const c = ctx();
+    c.fillStyle = 'rgba(200, 100, 50, 0.3)';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('199,99,50,77', [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual(
+      '0.7792208194732666,0.3896104097366333,0.19480520486831665,0.3019607961177826',
+      [...c.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  }
+  // An opaque pixel is its byte over 255 at this width too, since dividing by
+  // an alpha of 255 is not dividing at all.
+  {
+    const c = ctx({ colorSpace: 'display-p3' });
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('234,51,35,255', [...c.getImageData(0, 0, 1, 1).data].join(','));
+    testing.expectEqual(
+      '0.917647123336792,0.20000001788139343,0.13725490868091583,1',
+      [...c.getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  }
+  // A window off the canvas is transparent black, and an opaque canvas that has
+  // never been painted is opaque black.
+  {
+    const c = ctx();
+    c.fillStyle = '#ff0000';
+    c.fillRect(0, 0, 1, 1);
+    testing.expectEqual('1,0,0,1,0,0,0,0',
+      [...c.getImageData(0, 0, 2, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  }
+  testing.expectEqual('0,0,0,1', [...ctx({ alpha: false })
+    .getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+  testing.expectEqual('0,0,0,0',
+    [...ctx().getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float32' }).data].join(','));
+
+  // And a write through the format's own array, which quantises into the
+  // eight-bit bitmap and clamps outside 0..1.
+  {
+    const c = ctx();
+    const d = new ImageData(1, 1, { pixelFormat: 'rgba-float32' });
+    d.data.set([1, 0.5, 0.2, 1]);
+    c.putImageData(d, 0, 0);
+    testing.expectEqual('ff8033ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+  {
+    const c = ctx();
+    const d = new ImageData(1, 1, { pixelFormat: 'rgba-float32' });
+    d.data.set([2, -1, 0.5, 1]);
+    c.putImageData(d, 0, 0);
+    testing.expectEqual('ff0080ff', hex(c.getImageData(0, 0, 1, 1).data));
+  }
+
+  // A clone carries the format, since the bytes alone would not say which array
+  // to rebuild.
+  {
+    const d = new ImageData(1, 1, { pixelFormat: 'rgba-float32', colorSpace: 'display-p3' });
+    d.data.set([0.25, 0.5, 0.75, 1]);
+    const back = structuredClone(d);
+    testing.expectEqual('display-p3 rgba-float32 1x1 Float32Array len=4', shape(back));
+    testing.expectEqual('0.25,0.5,0.75,1', [...back.data].join(','));
+  }
+}
+</script>
+
+<script id="OffscreenCanvasRenderingContext2D#ImageData data constructor">
+{
+  // `new ImageData(data, sw)` / `(data, sw, sh)` / `(data, sw, sh, settings)`:
+  // the three forms that hand it pixels rather than a size. They can disagree
+  // with themselves in ways the size forms cannot, and each disagreement has
+  // its own sentence. Readings from probes/canvas-image-data-construct.js.
+  const shape = (d) => `${d.colorSpace} ${d.pixelFormat} ${d.width}x${d.height} ` +
+    `${d.data.constructor.name} len=${d.data.length}`;
+  const threw = (f) => { try { f(); return 'no throw'; } catch (e) { return `${e.name}: ${e.message}`; } };
+  const P = "Failed to construct 'ImageData': ";
+
+  // The height is inferred from what is left of the array.
+  testing.expectEqual('srgb rgba-unorm8 1x2 Uint8ClampedArray len=8',
+    shape(new ImageData(new Uint8ClampedArray(8), 1)));
+  testing.expectEqual('srgb rgba-unorm8 1x2 Uint8ClampedArray len=8',
+    shape(new ImageData(new Uint8ClampedArray(8), 1, 2)));
+  testing.expectEqual('display-p3 rgba-unorm8 1x1 Uint8ClampedArray len=4',
+    shape(new ImageData(new Uint8ClampedArray(4), 1, 1, { colorSpace: 'display-p3' })));
+  testing.expectEqual('srgb rgba-unorm8 1x1 Uint8ClampedArray len=4',
+    shape(new ImageData(new Uint8ClampedArray(4), 1, 1, undefined)));
+  testing.expectEqual('srgb rgba-unorm8 1x2 Uint8ClampedArray len=8',
+    shape(new ImageData(new Uint8ClampedArray(8), 1, undefined)));
+  // With a fourth argument the height is converted rather than inferred, so an
+  // undefined one is a zero.
+  testing.expectEqual(`IndexSizeError: ${P}The source height is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(8), 1, undefined, { colorSpace: 'display-p3' })));
+
+  // The array is taken over rather than copied: it is the same object, writes
+  // go both ways, and a view onto part of a buffer keeps its offset.
+  {
+    const array = new Uint8ClampedArray(4);
+    const d = new ImageData(array, 1, 1);
+    testing.expectEqual(true, d.data === array);
+    array[0] = 200;
+    d.data[1] = 100;
+    testing.expectEqual('200,100', `${d.data[0]},${array[1]}`);
+  }
+  {
+    const array = new Uint8ClampedArray(new ArrayBuffer(12), 4, 4);
+    const d = new ImageData(array, 1, 1);
+    testing.expectEqual('4 4 12',
+      `${d.data.length} ${d.data.byteOffset} ${d.data.buffer.byteLength}`);
+  }
+
+  // The array's type has to be the one the pixelFormat names, and each of the
+  // three names itself when it is not.
+  testing.expectEqual('srgb rgba-float16 1x1 Float16Array len=4',
+    shape(new ImageData(new Float16Array(4), 1, 1, { pixelFormat: 'rgba-float16' })));
+  testing.expectEqual('srgb rgba-float32 1x1 Float32Array len=4',
+    shape(new ImageData(new Float32Array(4), 1, 1, { pixelFormat: 'rgba-float32' })));
+  testing.expectEqual('srgb rgba-unorm8 1x1 Uint8ClampedArray len=4',
+    shape(new ImageData(new Uint8ClampedArray(4), 1, 1, { pixelFormat: 'rgba-unorm8' })));
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(4), 1, 1)));
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(4), 1, 1, { pixelFormat: 'rgba-unorm8' })));
+  testing.expectEqual(`InvalidStateError: ${P}Uint8ClampedArray must use rgba-unorm8 pixelFormat.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 1, 1, { pixelFormat: 'rgba-float16' })));
+  testing.expectEqual(`InvalidStateError: ${P}Float32Array must use rgba-float32 pixelFormat.`,
+    threw(() => new ImageData(new Float32Array(4), 1, 1)));
+
+  // Any other first argument is not this overload at all: it is a width, and
+  // the arguments after it move up a slot — so a third argument that is a
+  // number is read as the settings dictionary and refused for being one.
+  for (const notAnArray of [new Uint8Array(4), [0, 0, 0, 0], new ArrayBuffer(4), null]) {
+    testing.expectEqual(`TypeError: ${P}The provided value is not of type 'ImageDataSettings'.`,
+      threw(() => new ImageData(notAnArray, 1, 1)));
+  }
+
+  // Every way the arguments can disagree, each with its own sentence.
+  testing.expectEqual(`InvalidStateError: ${P}The input data length is not a multiple of 4.`,
+    threw(() => new ImageData(new Uint8ClampedArray(5), 1, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The input data length is not a multiple of (4 * width).`,
+    threw(() => new ImageData(new Uint8ClampedArray(8), 3)));
+  testing.expectEqual(
+    `IndexSizeError: ${P}The input data length is not equal to (4 * width * height).`,
+    threw(() => new ImageData(new Uint8ClampedArray(8), 1, 3)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source height is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 1, 0)));
+  testing.expectEqual(`InvalidStateError: ${P}The input data has zero elements.`,
+    threw(() => new ImageData(new Uint8ClampedArray(0), 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), -1, 1)));
+  testing.expectEqual(`TypeError: ${P}The provided value is not of type 'ImageDataSettings'.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 1, 1, 'nope')));
+  testing.expectEqual(`TypeError: ${P}2 arguments required, but only 0 present.`,
+    threw(() => new ImageData()));
+  testing.expectEqual(`TypeError: ${P}2 arguments required, but only 1 present.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4))));
+  testing.expectEqual(`TypeError: ${P}2 arguments required, but only 1 present.`,
+    threw(() => new ImageData(1)));
+
+  // Which refusal wins, for the calls that earn two at once.
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(5), 1, 1)));
+  testing.expectEqual(`InvalidStateError: ${P}Float16Array must use rgba-float16 pixelFormat.`,
+    threw(() => new ImageData(new Float16Array(0), 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Float16Array(4), 0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(5), 0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(new Uint8ClampedArray(5), -1, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(new Uint8ClampedArray(4), 0, 0)));
+
+  // And the size forms reach the same sentences without a data array.
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(0, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The source height is zero or not a number.`,
+    threw(() => new ImageData(1, 0)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(0, 0)));
+  testing.expectEqual(`IndexSizeError: ${P}The source width is zero or not a number.`,
+    threw(() => new ImageData(NaN, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(-1, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(1, -1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(1e10, 1)));
+  testing.expectEqual(`IndexSizeError: ${P}The requested image size exceeds the supported range.`,
+    threw(() => new ImageData(65536, 65536)));
+  // Both arguments are `unsigned long`, so these truncate rather than refuse.
+  testing.expectEqual('srgb rgba-unorm8 1x1 Uint8ClampedArray len=4', shape(new ImageData(1.9, 1.9)));
+  testing.expectEqual('srgb rgba-unorm8 2x3 Uint8ClampedArray len=24', shape(new ImageData('2', '3')));
+
+  // A detached array has no elements at all, so it reaches the zero-elements
+  // refusal above. There is no assertion for it here: `structuredClone`'s
+  // `transfer` option does not detach the buffer in this engine yet, so the
+  // array a test could build is never actually detached. The probe carries that
+  // row (`refusals | detached buffer`) and it is the transfer that is missing,
+  // not this constructor.
+}
+</script>
+
+<script id="OffscreenCanvasRenderingContext2D#ImageData data is cached">
+{
+  // `data` is `[Cached]` in Blink, which makes it an own value property on the
+  // instance *as well as* the prototype getter — and it is there before
+  // anything reads it. So an ImageData is the one object on this interface with
+  // an own key, which `Object.keys`, `JSON.stringify` and `Object.hasOwn` all
+  // see. Readings from probes/canvas-image-data-settings-2.js.
+  const desc = (o, k) => {
+    const d = Object.getOwnPropertyDescriptor(o, k);
+    if (!d) return 'absent';
+    if ('value' in d) return `value writable=${d.writable} enumerable=${d.enumerable} configurable=${d.configurable}`;
+    return `get enumerable=${d.enumerable} configurable=${d.configurable}`;
+  };
+  const ctx = () => new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true });
+
+  const d0 = new ImageData(1, 1);
+  testing.expectEqual('value writable=false enumerable=true configurable=true', desc(d0, 'data'));
+  testing.expectEqual('get enumerable=true configurable=true', desc(ImageData.prototype, 'data'));
+  // The other three attributes are prototype getters and nothing more.
+  testing.expectEqual('absent', desc(d0, 'colorSpace'));
+  testing.expectEqual('absent', desc(d0, 'pixelFormat'));
+  testing.expectEqual('absent', desc(d0, 'width'));
+  testing.expectEqual('absent', desc(d0, 'height'));
+
+  testing.expectEqual('data', Object.keys(d0).join(','));
+  testing.expectEqual('data', Object.getOwnPropertyNames(d0).join(','));
+  testing.expectEqual(true, Object.hasOwn(d0, 'data'));
+  testing.expectEqual('{"data":{"0":0,"1":0,"2":0,"3":0}}', JSON.stringify(d0));
+  // The own value is the array the getter answers, not a second copy of it.
+  testing.expectEqual(true, Object.getOwnPropertyDescriptor(d0, 'data').value === d0.data);
+
+  // Present on a fresh object, before `data` has been read through anything.
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(new ImageData(1, 1), 'data'));
+  // And on one from every entry point that hands an ImageData out.
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(ctx().getImageData(0, 0, 1, 1), 'data'));
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(ctx().createImageData(1, 1), 'data'));
+  testing.expectEqual('value writable=false enumerable=true configurable=true',
+    desc(structuredClone(new ImageData(1, 1)), 'data'));
+
+  // Only the unorm8 arm has one. The cached attribute in Blink's IDL is the
+  // Uint8ClampedArray one, so a float ImageData reaches `data` through the
+  // prototype getter alone (measured).
+  testing.expectEqual('absent', desc(new ImageData(1, 1, { pixelFormat: 'rgba-float16' }), 'data'));
+  testing.expectEqual('absent', desc(new ImageData(1, 1, { pixelFormat: 'rgba-float32' }), 'data'));
+  testing.expectEqual('absent',
+    desc(ctx().getImageData(0, 0, 1, 1, { pixelFormat: 'rgba-float16' }), 'data'));
+
+  // writable=false, so an assignment is dropped; configurable=true, so a
+  // delete and a redefinition are not.
+  {
+    const d = new ImageData(1, 1);
+    const before = d.data;
+    d.data = 5;
+    testing.expectEqual(true, d.data === before);
+  }
+  {
+    const d = new ImageData(1, 1);
+    testing.expectEqual(true, delete d.data);
+    testing.expectEqual('absent', desc(d, 'data'));
+    // The prototype getter is still there underneath.
+    testing.expectEqual(4, d.data.length);
+  }
+  {
+    const d = new ImageData(1, 1);
+    Object.defineProperty(d, 'data', { value: 7 });
+    testing.expectEqual(7, d.data);
+  }
+
+  // The prototype's own keys, in Blink's order.
+  testing.expectEqual('width,height,colorSpace,data,pixelFormat,constructor',
+    Object.getOwnPropertyNames(ImageData.prototype).join(','));
 }
 </script>

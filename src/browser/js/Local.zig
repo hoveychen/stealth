@@ -388,6 +388,16 @@ pub fn mapZigInstanceToJs(self: *const Local, js_obj_handle: ?*const v8.Object, 
 
                 v8.v8__Global__SetWeakFinalizer(gop.value_ptr, identity_finalizer, finalizer.release_ref, v8.kParameter);
             }
+
+            // A WebIDL `[Cached]` attribute is an own value property on the
+            // instance and not only a prototype getter, and it is there before
+            // anything has read it — so it cannot be a template property (the
+            // value is per instance) nor a lazy one (a fresh object already has
+            // it). A type that has one defines it here, the moment its JS object
+            // exists. See `ImageData.cacheOwnProperties`.
+            if (comptime @hasDecl(ptr.child, "cacheOwnProperties")) {
+                try value.cacheOwnProperties(js_obj);
+            }
             return js_obj;
         },
         else => @compileError("Expected a struct or pointer, got " ++ @typeName(T) ++ " (constructors must return struct or pointers)"),

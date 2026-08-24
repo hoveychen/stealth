@@ -738,6 +738,38 @@ fn straight(pixel: *const [4]u8) Paint {
     };
 }
 
+/// `straight`, in the arithmetic a float read has to be done in: normalised
+/// channels, and every step in f32.
+///
+/// The value is the same one; the width and the order it is reached in are not,
+/// and at f32 they are visible. Chrome normalises by a reciprocal — `channel *
+/// (1 / 255)` — and then un-premultiplies by a second one, `1 / alpha`, both in
+/// f32. Measured (probes/canvas-image-data-construct.js) against two pixels
+/// that between them rule out every neighbouring order:
+///
+///   {60, 30, 15, 77}    0.7792208194732666  0.3896104097366333  0.19480520486831665
+///   {234, 51, 35, 255}  0.917647123336792   0.20000001788139343 0.13725490868091583
+///
+/// Dividing by 255 instead of multiplying by its reciprocal lands one ULP low
+/// on the second row; dividing by the alpha byte before normalising lands one
+/// ULP high on the first. An alpha of 3 pins the alpha channel the same way:
+/// `3 * (1 / 255)` is `0.011764707043766975` where `3 / 255` is
+/// `0.0117647061124444`.
+fn straightUnit(pixel: *const [4]u8) [4]f32 {
+    const inv255: f32 = 1.0 / 255.0;
+    const alpha = @as(f32, @floatFromInt(pixel[3])) * inv255;
+    if (alpha == 0) {
+        return .{ 0, 0, 0, 0 };
+    }
+    const inv_alpha = 1 / alpha;
+    return .{
+        @as(f32, @floatFromInt(pixel[0])) * inv255 * inv_alpha,
+        @as(f32, @floatFromInt(pixel[1])) * inv255 * inv_alpha,
+        @as(f32, @floatFromInt(pixel[2])) * inv255 * inv_alpha,
+        alpha,
+    };
+}
+
 /// Copies a `sw` x `sh` window starting at (`sx`, `sy`) into `out`, which must
 /// be `sw * sh * 4` long and already zeroed, un-premultiplying on the way: this
 /// is the straight-alpha form `getImageData` and a PNG both want. The window
@@ -793,6 +825,94 @@ pub fn premultiply(pixel: *const [4]u8) [4]u8 {
         RGBA.round255(@as(f64, @floatFromInt(pixel[2])) * alpha),
         pixel[3],
     };
+}
+
+/// The same window `readPixels` copies, left unquantised: four normalised f32
+/// channels a pixel rather than four bytes, so the un-premultiplication is not
+/// rounded into a byte on the way out. `out` must be `sw * sh` long and already
+/// transparent black; the window may hang off any edge, and those pixels stay as
+/// they came.
+///
+/// This is what the float pixel formats read through, and the byte in between is
+/// observable. Measured (probes/canvas-image-data-construct.js): a premultiplied
+/// `{60, 30, 15, 77}` pixel is `199` through `rgba-unorm8` —
+/// `round(60 * 255 / 77)` — but `0.7792208194732666` through `rgba-float32`,
+/// which is `60 / 77`, and `0.779296875` through `rgba-float16`, which is that
+/// same quotient at half precision rather than `199 / 255`. See `straightUnit`
+/// for the arithmetic that last bit needs.
+pub fn readUnitPixels(self: *const Surface, canvas_width: u32, canvas_height: u32, sx: i64, sy: i64, sw: u32, sh: u32, out: [][4]f32) void {
+    const pixels: ?[]const u8 = self.peek(canvas_width, canvas_height);
+    if (pixels == null and self.background == .transparent) {
+        return;
+    }
+    const background = straightUnit(&self.background.pixel());
+
+    var row: u32 = 0;
+    while (row < sh) : (row += 1) {
+        const src_y = sy + @as(i64, row);
+        if (src_y < 0 or src_y >= canvas_height) {
+            continue;
+        }
+
+        var col: u32 = 0;
+        while (col < sw) : (col += 1) {
+            const src_x = sx + @as(i64, col);
+            if (src_x < 0 or src_x >= canvas_width) {
+                continue;
+            }
+            const to: usize = @as(usize, row) * sw + col;
+            if (pixels) |have| {
+                const from: usize = (@as(usize, @intCast(src_y)) * canvas_width +
+                    @as(usize, @intCast(src_x))) * 4;
+                out[to] = straightUnit(have[from..][0..4]);
+            } else {
+                out[to] = background;
+            }
+        }
+    }
+}
+
+/// The other direction: overwrites a `sw` x `sh` window at (`dx`, `dy`) with
+/// `bytes`, which are the straight-alpha RGBA8 an ImageData carries and must be
+/// `sw * sh * 4` long. Nothing is composited — the destination pixels are
+/// replaced, alpha and all — and the window may hang off any edge, those pixels
+/// simply being dropped.
+///
+/// On a transparent canvas the bytes are premultiplied on the way in, which is
+/// the whole of why `putImageData` does not round-trip: `{200, 100, 50, 77}`
+/// stores `{60, 30, 15, 77}` and reads back `c763324d`.
+///
+/// An opaque canvas does *not* premultiply them, and since the read divides by
+/// the alpha either way, a translucent pixel comes back brighter than it went
+/// in. Measured (probes/canvas-put-image-data.js): the same bytes on an
+/// `{alpha: false}` canvas read `ffffa64d`, and `{100, 50, 25, 128}` reads
+/// `c7643280` where premultiplying would have read `64321a80`.
+pub fn writePixels(self: *Surface, canvas_width: u32, canvas_height: u32, dx: i64, dy: i64, sw: u32, sh: u32, bytes: []const u8) void {
+    const pixels = self.ensure(canvas_width, canvas_height) orelse return;
+
+    var row: u32 = 0;
+    while (row < sh) : (row += 1) {
+        const dst_y = dy + @as(i64, row);
+        if (dst_y < 0 or dst_y >= canvas_height) {
+            continue;
+        }
+
+        var col: u32 = 0;
+        while (col < sw) : (col += 1) {
+            const dst_x = dx + @as(i64, col);
+            if (dst_x < 0 or dst_x >= canvas_width) {
+                continue;
+            }
+            const from: usize = (@as(usize, row) * sw + col) * 4;
+            const to: usize = (@as(usize, @intCast(dst_y)) * canvas_width +
+                @as(usize, @intCast(dst_x))) * 4;
+            const pixel = bytes[from..][0..4];
+            pixels[to..][0..4].* = switch (self.background) {
+                .transparent => premultiply(pixel),
+                .black => pixel.*,
+            };
+        }
+    }
 }
 
 /// The whole bitmap as the straight-alpha bytes a page reads, allocated on

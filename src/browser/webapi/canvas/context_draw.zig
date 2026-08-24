@@ -660,25 +660,147 @@ pub fn Mixin(comptime T: type) type {
                     const out = data.local(exec.js.local.?).slice();
                     readInto(self, window, read.color_space, out);
                 },
-                // The bitmap is eight bits a channel in Chrome too, so float16
-                // is not a finer read but the same one scaled: every entry is
-                // the unorm8 byte over 255, rounded to half precision. All four
-                // float16 rows of probes/canvas-image-data-settings.js come out
-                // of the bytes of their unorm8 rows that way, to the digit --
-                // a display-p3 red reads 0.eae/0.333/0.232 against ea/33/23.
-                .@"rgba-float16" => |data| {
-                    const out = data.local(exec.js.local.?).slice();
-                    const bytes = try exec.arena.alloc(u8, out.len);
-                    // The read leaves whatever it did not overlap alone, and
-                    // this buffer is not the fresh array the other arm has.
-                    @memset(bytes, 0);
-                    readInto(self, window, read.color_space, bytes);
-                    for (out, bytes) |*channel, byte| {
-                        channel.* = @floatCast(@as(f64, @floatFromInt(byte)) / 255);
-                    }
+                // The bitmap is eight bits a channel in Chrome too, so a float
+                // format is not a finer *bitmap* — but it is a finer read of
+                // one: the un-premultiplication and the colour conversion both
+                // happen in floating point, and neither is rounded into a byte
+                // on the way. See `readFloatInto`.
+                inline .@"rgba-float16", .@"rgba-float32" => |data| {
+                    try readFloatInto(self, window, read.color_space, data.local(exec.js.local.?).slice(), exec);
                 },
             }
             return image_data;
+        }
+
+        /// The float formats' read: normalised f32 channels out of the bitmap,
+        /// converted unclipped, and only then narrowed to the format's element.
+        ///
+        /// Two bytes the byte path would have gone through are missing here, and
+        /// both are observable (measured --
+        /// probes/canvas-image-data-construct.js):
+        ///
+        ///   - The un-premultiplication. A premultiplied `{60, 30, 15, 77}`
+        ///     pixel is `0.7792208194732666` = `60 / 77` as float32, not the
+        ///     `199 / 255` its unorm8 byte would give. Every opaque pixel hides
+        ///     this, since dividing by an alpha of 255 is not dividing at all —
+        ///     which is why the float16 rows measured before this all agreed
+        ///     with the byte path.
+        ///   - The gamut clip. A display-p3 red read back as srgb answers
+        ///     `1.0930633544921875 -0.22672080993652344`, where the unorm8 read
+        ///     of the same pixel clamps to `255 0 0`.
+        fn readFloatInto(
+            self: *const T,
+            window: Window,
+            to: color.CanvasSpace,
+            out: anytype,
+            exec: *Execution,
+        ) !void {
+            const units = try exec.arena.alloc([4]f32, out.len / 4);
+            // The read overwrites only the part of the window that overlaps the
+            // canvas, and this buffer is not the fresh array the byte arm has.
+            @memset(units, .{ 0, 0, 0, 0 });
+            self._surface.readUnitPixels(
+                width(self),
+                height(self),
+                window.x,
+                window.y,
+                window.width,
+                window.height,
+                units,
+            );
+            for (units, 0..) |pixel, i| {
+                const rgb = color.convertCanvasUnit(space(self), to, pixel[0..3].*);
+                out[i * 4 + 0] = @floatCast(rgb[0]);
+                out[i * 4 + 1] = @floatCast(rgb[1]);
+                out[i * 4 + 2] = @floatCast(rgb[2]);
+                out[i * 4 + 3] = @floatCast(pixel[3]);
+            }
+        }
+
+        /// https://developer.mozilla.org/en-US/docs/Web/API/CanvasRenderingContext2D/putImageData
+        ///
+        /// The one paint that ignores the drawing state whole: the transform,
+        /// `globalAlpha` and the composite operator set together still land the
+        /// ImageData's own bytes, and transparent black over a painted pixel
+        /// erases it rather than leaving it alone (measured --
+        /// probes/canvas-put-image-data.js). So this reaches past every helper
+        /// the drawing calls share and writes the bitmap directly.
+        ///
+        /// The dirty rectangle is a whole WebIDL overload rather than four
+        /// optional arguments, so a call carrying some of it is refused the way
+        /// an unmatched overload is.
+        pub fn putImageData(
+            self: *T,
+            image_data: *ImageData,
+            dx: i32,
+            dy: i32,
+            dirty_x: ?i32,
+            dirty_y: ?i32,
+            dirty_width: ?i32,
+            dirty_height: ?i32,
+            exec: *Execution,
+        ) !void {
+            const given: u3 = @as(u3, @intFromBool(dirty_x != null)) +
+                @intFromBool(dirty_y != null) +
+                @intFromBool(dirty_width != null) +
+                @intFromBool(dirty_height != null);
+            if (given != 0 and given != 4) {
+                return dictionary.throwTypeError(
+                    "Failed to execute 'putImageData' on '" ++ T.JsApi.Meta.name ++
+                        "': Overload resolution failed.",
+                    exec,
+                );
+            }
+
+            // The dirty rectangle is in the ImageData's own coordinates, and it
+            // is a window rather than a demand: a negative extent flips it
+            // about its origin and an oversized one clips to the source, the
+            // way getImageData's window does.
+            const source_width: i64 = image_data._width;
+            const source_height: i64 = image_data._height;
+            var x0: i64 = 0;
+            var y0: i64 = 0;
+            var x1: i64 = source_width;
+            var y1: i64 = source_height;
+            if (given == 4) {
+                const ox: i64 = dirty_x.?;
+                const oy: i64 = dirty_y.?;
+                const ow: i64 = dirty_width.?;
+                const oh: i64 = dirty_height.?;
+                x0 = @max(0, @min(ox, ox + ow));
+                x1 = @min(source_width, @max(ox, ox + ow));
+                y0 = @max(0, @min(oy, oy + oh));
+                y1 = @min(source_height, @max(oy, oy + oh));
+            }
+            if (x0 >= x1 or y0 >= y1) {
+                return;
+            }
+
+            const window_width: u32 = @intCast(x1 - x0);
+            const window_height: u32 = @intCast(y1 - y0);
+            const source = try image_data.straightBytes(exec.js.local.?, exec.arena);
+
+            // Copied out row by row rather than converted in place: the unorm8
+            // arm of `straightBytes` hands over the array the page itself holds,
+            // and the conversion below writes into what it is given.
+            const stride = @as(usize, window_width) * 4;
+            const window = try exec.arena.alloc(u8, stride * window_height);
+            for (0..window_height) |row| {
+                const from = ((@as(usize, @intCast(y0)) + row) * image_data._width +
+                    @as(usize, @intCast(x0))) * 4;
+                @memcpy(window[row * stride ..][0..stride], source[from..][0..stride]);
+            }
+            color.convertCanvasPixels(image_data._settings.color_space, space(self), window);
+
+            self._surface.writePixels(
+                width(self),
+                height(self),
+                dx + x0,
+                dy + y0,
+                window_width,
+                window_height,
+                window,
+            );
         }
 
         /// The read both pixel formats share: the window's overlap with the
