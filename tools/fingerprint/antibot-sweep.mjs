@@ -322,6 +322,7 @@ function verdict(station, r, documents) {
     const dd = r.dd ?? {};
     const px = r.px ?? {};
     const akamai = r.akamai ?? {};
+    const kasada = r.kasada ?? {};
     const jsDetect = !!(cf.chlOpt || cf.platformScript);
     const out = { ...base, jsDetect };
     if (cf.blocked) return { verdict: 'cf-blocked', ...out };
@@ -338,6 +339,15 @@ function verdict(station, r, documents) {
     if (px.pressAndHold || px.captchaDom || (px.deniedTitle && px.refId)) {
         return { verdict: 'px-challenge', ...out };
     }
+    // Kasada is deliberately *not* judged here, only recorded. Its marks ride
+    // along on pages it served: headed Chrome came back from canadagoose with
+    // `429 -> 200`, 1849 nodes of the real storefront and its real title, and
+    // `window.KPSDK` still defined — the SDK stays loaded once it has let you
+    // in. A rule on the marks scored that pass as a challenge. This is the same
+    // trap the DataDome comment above describes, and the reason its rule needs
+    // the first document to be a 4xx. Kasada does not need even that: an
+    // unsolved interstitial is 681 bytes with no text, which `empty` and the
+    // status rule below already catch between them.
     // No interstitial. A 4xx/5xx document with nothing rendered over it is still
     // a refusal -- some guards answer a bare 403 with no page at all -- and an
     // empty document behind a 200 is the engine failing to render, not a pass.
@@ -469,7 +479,7 @@ try {
             row.nodes = reading.nodes;
             row.textLength = reading.textLength;
             row.snippet = reading.text.replace(/\s+/g, ' ').slice(0, 200);
-            row.marks = { ...reading.cf, ...reading.dd, ...reading.px, ...reading.akamai };
+            row.marks = { ...reading.cf, ...reading.dd, ...reading.px, ...reading.akamai, ...reading.kasada };
         }
         row.ms = Date.now() - started;
         snapshot.stations.push(row);
